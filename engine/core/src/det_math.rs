@@ -20,10 +20,13 @@
 //! przybliżeń o błędzie < 1 ULP. Port jest dosłowny, bo każde „uproszczenie" w tym
 //! kodzie to utrata bitów w miejscu, którego test nie pokaże od razu.
 //!
-//! Czego tu nie ma i dlaczego: `sin`/`cos`/`atan2` (geometria i ruch żyją w `render`/`voxel`,
-//! gdzie float wolno), `tanh`/`sigmoid` (wyprowadzalne z `exp` — dokłada pierwszy konsument),
-//! wersji `f32` (symulacja nie używa `f32`). Faza, która potrzebuje którejś z nich
-//! w kodzie wpływającym na stan trwały, dopisuje ją **tutaj**, z wektorem testowym.
+//! Czego tu nie ma i dlaczego: `atan2` (geometria i ruch żyją w `render`/`voxel`, gdzie float
+//! wolno), `tanh`/`sigmoid` (wyprowadzalne z `exp` — dokłada pierwszy konsument), wersji `f32`
+//! (symulacja nie używa `f32`). Faza, która potrzebuje którejś z nich w kodzie wpływającym
+//! na stan trwały, dopisuje ją **tutaj**, z wektorem testowym.
+//!
+//! `sin`/`cos`/`tan` dopisała **M1**: roczny cykl temperatury (`ClimateCell`) i kąt usypu
+//! w erozji wchodzą do stanu trwałego świata, więc nie mogły zostać po stronie renderu.
 
 // Stałe fdlibm zapisujemy z pełną liczbą cyfr źródła, także gdy `f64` nie unosi
 // ostatnich — to dokumentacja zamierzonej wartości, nie pomyłka.
@@ -683,6 +686,126 @@ fn is_odd_integer(y: f64) -> bool {
 #[must_use]
 pub fn sqrt(x: f64) -> f64 {
     x.sqrt()
+}
+
+// ── Funkcje trygonometryczne (dopisane przez M1) ────────────────────────────────
+
+// Redukcja argumentu Cody'ego–Waite'a: π/2 rozbite na trzy części o rozłącznych bitach,
+// żeby iloczyn przez małą liczbę całkowitą był dokładny (fdlibm `__rem_pio2`).
+// Clippy proponuje tu `FRAC_2_PI` ze `std`. Odmawiamy świadomie: redukcja Cody'ego–Waite'a
+// wymaga, żeby ta stała i trójka `PIO2_*` pochodziły z **jednego** rozbicia π/2 o rozłącznych
+// bitach. Podmiana jednej z nich na stałą biblioteczną rozspójnia rozbicie i psuje ogon
+// redukcji — czego test dokładności nie pokaże na małych argumentach, a pokaże na dużych.
+#[allow(clippy::approx_constant)]
+const INVPIO2: f64 = 6.366_197_723_675_813_824_33e-01;
+const PIO2_1: f64 = 1.570_796_326_734_125_614_17e+00;
+const PIO2_1T: f64 = 6.077_100_506_506_192_249_32e-11;
+const PIO2_2: f64 = 6.077_100_506_303_965_976_60e-11;
+const PIO2_2T: f64 = 2.022_266_248_795_950_631_54e-21;
+
+// Wielomian minimaksowy dla sin na [−π/4, π/4] (fdlibm S1..S6).
+const S1: f64 = -1.666_666_666_666_663_243_48e-01;
+const S2: f64 = 8.333_333_333_322_489_461_24e-03;
+const S3: f64 = -1.984_126_982_985_794_931_34e-04;
+const S4: f64 = 2.755_731_370_707_006_767_89e-06;
+const S5: f64 = -2.505_076_025_340_686_341_95e-08;
+const S6: f64 = 1.589_690_995_211_550_102_21e-10;
+
+// Wielomian minimaksowy dla cos na [−π/4, π/4] (fdlibm C1..C6).
+const C1: f64 = 4.166_666_666_666_660_190_37e-02;
+const C2: f64 = -1.388_888_888_887_410_957_49e-03;
+const C3: f64 = 2.480_158_728_947_672_941_78e-05;
+const C4: f64 = -2.755_731_435_139_066_330_35e-07;
+const C5: f64 = 2.087_572_321_298_174_827_90e-09;
+const C6: f64 = -1.135_964_755_778_819_482_65e-11;
+
+/// Największy argument, dla którego redukcja dwuczłonowa trzyma deklarowaną dokładność.
+/// Powyżej trzeba by Payne'a–Hanka — i wtedy warto zapytać, po co komuś sinus z argumentu
+/// o dziesięciu cyfrach przed przecinkiem, zamiast cicho zwracać liczbę bez znaczenia.
+pub const TRIG_ARG_LIMIT: f64 = 1.0e6;
+
+/// Jądro sinusa na zredukowanym argumencie `x + y`, gdzie `|x| ≤ π/4`, a `y` to ogon redukcji.
+#[inline]
+fn kernel_sin(x: f64, y: f64) -> f64 {
+    let z = x * x;
+    let v = z * x;
+    let r = S2 + z * (S3 + z * (S4 + z * (S5 + z * S6)));
+    x - ((z * (0.5 * y - v * r) - y) - v * S1)
+}
+
+/// Jądro cosinusa na zredukowanym argumencie `x + y`.
+#[inline]
+fn kernel_cos(x: f64, y: f64) -> f64 {
+    let z = x * x;
+    let r = z * (C1 + z * (C2 + z * (C3 + z * (C4 + z * (C5 + z * C6)))));
+    let hz = 0.5 * z;
+    let w = 1.0 - hz;
+    // Rozbicie na `w` i resztę zachowuje bity, które `1 − z/2` samo w sobie by zgubiło.
+    w + (((1.0 - w) - hz) + (z * r - x * y))
+}
+
+/// Redukcja `x` do `(n, y0, y1)`, gdzie `x ≈ n·π/2 + y0 + y1` i `|y0| ≤ π/4`.
+fn rem_pio2(x: f64) -> (i64, f64, f64) {
+    let fnv = round_to_nearest(x * INVPIO2);
+    let mut r = x - fnv * PIO2_1;
+    let mut w = fnv * PIO2_1T;
+    let mut y0 = r - w;
+
+    // Druga runda redukcji, gdy pierwsza zjadła zbyt wiele bitów znaczących.
+    let exp_x = ((x.to_bits() >> 52) & 0x7ff) as i32;
+    let exp_y = ((y0.to_bits() >> 52) & 0x7ff) as i32;
+    if exp_x - exp_y > 16 {
+        let t = r;
+        w = fnv * PIO2_2;
+        r = t - w;
+        w = fnv * PIO2_2T - ((t - r) - w);
+        y0 = r - w;
+    }
+    let y1 = (r - y0) - w;
+    (fnv as i64, y0, y1)
+}
+
+/// Sinus. Deterministyczny na każdej platformie; błąd ≤ 2 ULP dla `|x| ≤ TRIG_ARG_LIMIT`.
+/// Poza tym zakresem zwraca `NaN` — cicha utrata znaczenia byłaby gorsza niż jawny błąd.
+#[must_use]
+pub fn sin(x: f64) -> f64 {
+    if !x.is_finite() || x.abs() > TRIG_ARG_LIMIT {
+        return f64::NAN;
+    }
+    let (n, y0, y1) = rem_pio2(x);
+    match n & 3 {
+        0 => kernel_sin(y0, y1),
+        1 => kernel_cos(y0, y1),
+        2 => -kernel_sin(y0, y1),
+        _ => -kernel_cos(y0, y1),
+    }
+}
+
+/// Cosinus. Ograniczenia jak w [`sin`].
+#[must_use]
+pub fn cos(x: f64) -> f64 {
+    if !x.is_finite() || x.abs() > TRIG_ARG_LIMIT {
+        return f64::NAN;
+    }
+    let (n, y0, y1) = rem_pio2(x);
+    match n & 3 {
+        0 => kernel_cos(y0, y1),
+        1 => -kernel_sin(y0, y1),
+        2 => -kernel_cos(y0, y1),
+        _ => kernel_sin(y0, y1),
+    }
+}
+
+/// Tangens jako iloraz. Osobne jądro tangensa dałoby ułamek ULP dokładności więcej
+/// za drugi wielomian do utrzymania — nieopłacalne, dopóki nikt nie liczy tangensa
+/// w gorącej pętli.
+#[must_use]
+pub fn tan(x: f64) -> f64 {
+    let c = cos(x);
+    if c == 0.0 {
+        return f64::NAN;
+    }
+    sin(x) / c
 }
 
 // ── Softmax ─────────────────────────────────────────────────────────────────────

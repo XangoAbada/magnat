@@ -1,0 +1,54 @@
+// Parametry erozji (M1 §5.7). Strojone bez rekompilacji, bo strojenie idzie przez
+// oglądanie wyniku i powtarzanie — to jest dokładnie ten rodzaj danych, o którym mówi 00 §5.
+//
+// ODSTĘPSTWO OD LICZB W PLANIE — odnotowane świadomie:
+// M1 §5.7 podaje dt = 5000 lat i 40/80 iteracji, czyli 200–400 tys. lat modelowanych.
+// Te wartości pochodzą z literatury opisującej pasma o reliefie kilometrowym. Świat gry ma
+// zakres pionowy 256 m (§5.1: −64 m … +192 m), więc przy dt = 5000 samo wypiętrzenie
+// (U·dt = 8 m na krok, 640 m przez 80 kroków) wyjeżdża poza sufit świata trzykrotnie,
+// a erozja i tak ścina wszystko do zaciśnięcia. Liczby poniżej są **harmonogramem
+// kształtowania skalibrowanym do świata 256 m**, nie geochronologią: kształt sieci dolin
+// zależy od iloczynu K·dt·A^m, a nie od tego, ile lat mu przypiszemy.
+(
+    schema_version: 1,
+
+    // Wykładniki równania stream-power: ∂h/∂t = U − K·A^m·S^n.
+    // n = 1 ma skutek, dla którego został wybrany: schemat niejawny Brauna–Willetta
+    // redukuje się wtedy do wzoru jawnego, przechodzonego po stosie odbiorników w jednym
+    // przebiegu O(n), i jest bezwarunkowo stabilny przy dużym dt.
+    // m = 0,5 daje A^0,5 = sqrt, czyli jedyną funkcję nieelementarną w gorącej pętli —
+    // a sqrt jest w IEEE-754 dokładnie zaokrąglane, więc identyczne na każdej platformie (00 §K-6).
+    stream_power_m: 0.5,
+    stream_power_n: 1.0,
+
+    // Krok czasowy w latach.
+    dt_years: 150.0,
+
+    // Dyfuzja zboczowa w m²/rok.
+    //
+    // Ograniczeniem nie jest stabilność (D·dt/dx² ≤ 0,25 dopuszcza D ≤ 0,027), tylko
+    // **rozdzielczość siatki**. Zasięg wygładzania to sqrt(D·T); przy T = dt·iteracje
+    // = 150·80 = 12 000 lat wartość D = 0,01 daje 11 m, czyli prawie trzy komórki —
+    // a koryto na siatce 4 m jest szerokie na jedną. Dyfuzja zacierała wtedy dokładnie
+    // tę sieć dolin, którą stream-power właśnie wyciął (objaw: wcięcie koryt malało
+    // zamiast rosnąć). D = 0,001 daje zasięg 3,5 m, czyli poniżej komórki: zaokrągla
+    // krawędzie, nie kasuje struktury.
+    //
+    // Literatura podaje 0,01–0,1 m²/rok dla siatek 30–90 m, gdzie ten sam zasięg jest
+    // ułamkiem komórki. Nasze 4 m to inna skala, więc i liczba musi być inna.
+    hillslope_diffusion: 0.001,
+
+    // Co ile iteracji erozji rzecznej uruchamiać dyfuzję i erozję termiczną.
+    // Oba procesy są wolne i gładkie, więc rzadsze wywołanie z podkrokami wewnętrznymi
+    // daje ten sam wynik taniej niż liczenie ich w każdej iteracji.
+    slope_every: 4,
+
+    // Kąt usypu w stopniach — powyżej niego materiał się osuwa (erozja termiczna).
+    // Jedna wartość, nie osobna dla gruntu i skały: P8 (geologia) biegnie PO erozji,
+    // więc na tym etapie nie wiadomo jeszcze, co gdzie leży. 42° to kompromis między
+    // 33° gruntu a 55° skały; różnicowanie ma sens dopiero, gdy geologia wyprzedzi erozję.
+    repose_angle_deg: 42.0,
+
+    // Udział nadmiaru nachylenia usuwany w jednym podkroku erozji termicznej.
+    repose_relaxation: 0.5,
+)

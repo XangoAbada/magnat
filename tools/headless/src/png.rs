@@ -48,7 +48,11 @@ fn chunk(out: &mut Vec<u8>, kind: &[u8; 4], data: &[u8]) {
 
 /// Zapisuje obraz RGB8. `pixels` ma mieć `w * h * 3` bajtów.
 pub fn write_rgb(path: &Path, w: u32, h: u32, pixels: &[u8]) -> io::Result<usize> {
-    assert_eq!(pixels.len(), (w * h * 3) as usize, "png: zły rozmiar bufora");
+    assert_eq!(
+        pixels.len(),
+        (w * h * 3) as usize,
+        "png: zły rozmiar bufora"
+    );
 
     // Surowy strumień: każdy wiersz poprzedzony bajtem filtra 0 (brak filtra).
     let mut raw = Vec::with_capacity(pixels.len() + h as usize);
@@ -94,7 +98,7 @@ mod tests {
         // CRC-32 z „IEND" + pusta zawartość to stała znana z każdego pliku PNG.
         assert_eq!(crc32(b"IEND"), 0xAE42_6082);
         // Adler-32 z „abc" wg RFC 1950.
-        assert_eq!(adler32(b"abc"), 0x0244_0099);
+        assert_eq!(adler32(b"abc"), 0x024D_0127);
     }
 
     #[test]
@@ -106,7 +110,10 @@ mod tests {
         let n = write_rgb(&path, 4, 3, &px).unwrap();
         let bytes = std::fs::read(&path).unwrap();
         assert_eq!(bytes.len(), n);
-        assert_eq!(&bytes[..8], &[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A]);
+        assert_eq!(
+            &bytes[..8],
+            &[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A]
+        );
         for kind in [b"IHDR", b"IDAT", b"IEND"] {
             assert!(
                 bytes.windows(4).any(|w| w == kind),

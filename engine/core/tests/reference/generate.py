@@ -55,6 +55,53 @@ def args_exp():
     return out
 
 
+def args_trig():
+    """Argumenty dla sin/cos/tan: gęsto wokół zera i wokół wielokrotności pi/2,
+    bo tam redukcja argumentu Cody'ego-Waite'a jest najbardziej narazona na utrate bitow."""
+    out = [0.0, 1.0, -1.0, 0.5, -0.5]
+    pi = Decimal(
+        "3.14159265358979323846264338327950288419716939937510582097494"
+    )
+    for k in range(-64, 65):
+        out.append(float(Decimal(k) * pi / 2))
+        out.append(float(Decimal(k) * pi / 2 + Decimal("1e-9")))
+        out.append(float(Decimal(k) * pi / 2 - Decimal("1e-9")))
+    for k in range(-200, 201, 3):
+        out.append(k * 0.37)
+    for k in range(-30, 31):
+        out.append(k * 1e-7)
+    # Duze argumenty w granicach TRIG_ARG_LIMIT.
+    for k in range(1, 20):
+        out.append(k * 5e4)
+        out.append(-k * 5e4)
+    return out
+
+
+def dec_sin(d: Decimal) -> Decimal:
+    """Sinus z szeregu Taylora po redukcji do [-pi, pi]. 60 cyfr kontekstu wystarcza,
+    bo argumenty sa ograniczone do 1e6, a redukcja idzie w pelnej precyzji Decimal."""
+    pi = Decimal(
+        "3.14159265358979323846264338327950288419716939937510582097494459230781640628620899862803482534211706798"
+    )
+    two_pi = 2 * pi
+    d = d - (d / two_pi).to_integral_value(rounding="ROUND_HALF_EVEN") * two_pi
+    term = d
+    total = d
+    k = 1
+    while abs(term) > Decimal(10) ** -70 and k < 200:
+        term = -term * d * d / ((2 * k) * (2 * k + 1))
+        total += term
+        k += 1
+    return total
+
+
+def dec_cos(d: Decimal) -> Decimal:
+    pi = Decimal(
+        "3.14159265358979323846264338327950288419716939937510582097494459230781640628620899862803482534211706798"
+    )
+    return dec_sin(d + pi / 2)
+
+
 def emit(name, values, fn):
     for x in values:
         try:
@@ -88,6 +135,10 @@ def main():
         lambda d: d.exp() - 1,
     )
     emit_pow()
+    # Dopisane przez M1: cykl roczny klimatu i kat usypu wchodza do stanu trwalego.
+    emit("sin", args_trig(), dec_sin)
+    emit("cos", args_trig(), dec_cos)
+    emit("tan", [x for x in args_trig() if abs(dec_cos(Decimal(x))) > Decimal("1e-6")], lambda d: dec_sin(d) / dec_cos(d))
 
 
 def emit_pow():

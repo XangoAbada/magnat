@@ -39,6 +39,13 @@ fn limit_ulp(name: &str, wykladnik: f64) -> f64 {
     match name {
         "pow" if wykladnik.abs() > 256.0 => 8.0,
         "pow" => 2.0,
+        // Trygonometria: 2 ULP, zgodnie z granicą z 00 §K-6. Błąd bierze się nie
+        // z wielomianu (ten ma < 0,6 ULP), tylko z redukcji argumentu: przy argumencie
+        // rzędu 10⁵ odjęcie wielokrotności π/2 zjada ~17 bitów, a odbudowuje je dopiero
+        // trójczłonowa stała π/2. Osobna granica dla `tan`, bo iloraz kumuluje błąd
+        // licznika i mianownika, a w pobliżu π/2 mianownik sam w sobie jest mały.
+        "sin" | "cos" => 2.0,
+        "tan" => 4.0,
         _ => 1.0,
     }
 }
@@ -71,6 +78,9 @@ fn dokladnosc_wzgledem_referencji_wysokiej_precyzji() {
                 "exp2" => dm::exp2(x),
                 "ln1p" => dm::ln1p(x),
                 "exp_m1" => dm::exp_m1(x),
+                "sin" => dm::sin(x),
+                "cos" => dm::cos(x),
+                "tan" => dm::tan(x),
                 inne => panic!("nieznana funkcja w tabeli referencyjnej: {inne}"),
             };
             (got, want, format!("{nazwa}({x:e})"))
@@ -177,10 +187,58 @@ fn odcisk_det_math() -> u64 {
     h.digest()
 }
 
+/// T-D9 dla trygonometrii dopisanej przez M1. **Osobny odcisk, nie rozszerzenie
+/// poprzedniego**: złota wartość M0 została zatwierdzona jako część bramki tamtej fazy
+/// i jej zmiana zacierałaby różnicę między „doszła nowa funkcja" a „stara przestała być
+/// deterministyczna". Dwa odciski mówią to jednoznacznie.
+#[test]
+fn zloty_odcisk_trygonometrii() {
+    const ZLOTY_HASH_TRIG: u64 = 0x1DA7_1D49_A4E1_0414;
+    let odcisk = odcisk_trig();
+    assert_eq!(
+        odcisk, ZLOTY_HASH_TRIG,
+        "sin/cos/tan dały inny wynik niż złota wartość — patrz komentarz przy teście"
+    );
+}
+
+fn odcisk_trig() -> u64 {
+    use xxhash_rust::xxh3::Xxh3;
+    let mut h = Xxh3::new();
+    let mut dodaj = |v: f64| h.update(&v.to_bits().to_le_bytes());
+
+    // Gęsto wokół zera i wokół wielokrotności π/2, bo tam redukcja argumentu jest krucha.
+    for i in -200_000..=200_000i32 {
+        let x = f64::from(i) / 1000.0;
+        dodaj(dm::sin(x));
+        dodaj(dm::cos(x));
+    }
+    for i in -2_000..=2_000i32 {
+        let x = f64::from(i) * 500.0;
+        dodaj(dm::sin(x));
+        dodaj(dm::cos(x));
+        dodaj(dm::tan(x));
+    }
+    for x in [
+        0.0f64,
+        -0.0,
+        f64::MIN_POSITIVE,
+        f64::INFINITY,
+        f64::NAN,
+        dm::TRIG_ARG_LIMIT,
+        dm::TRIG_ARG_LIMIT * 1.000_001,
+    ] {
+        dodaj(dm::sin(x));
+        dodaj(dm::cos(x));
+        dodaj(dm::tan(x));
+    }
+    h.digest()
+}
+
 /// Wypisuje bieżący odcisk — używane przy świadomej zmianie implementacji.
 /// `cargo test -p magnat-core --test det_math_accuracy -- --ignored --nocapture`
 #[test]
 #[ignore = "narzędzie, nie test: wypisuje bieżący odcisk do zatwierdzenia"]
 fn wypisz_odcisk() {
     println!("odcisk det_math = 0x{:016X}", odcisk_det_math());
+    println!("odcisk trig     = 0x{:016X}", odcisk_trig());
 }

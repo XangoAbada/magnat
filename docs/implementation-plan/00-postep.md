@@ -79,7 +79,7 @@ z szablonu w `00-konwencje-i-kontrakty.md` §8 i są identyczne dla każdej fazy
 ### M1 — Świat statyczny
 `M1-swiat-statyczny.md` · wymaga: M0
 
-- [~] 1. Pakiety robocze — zamknięte W1, W2, V1 (statusy w `M1-swiat-statyczny.md` §4) · [ ] 2. Determinizm · [ ] 3. Własnościowe · [ ] 4. Budżety
+- [~] 1. Pakiety robocze — zamknięte W1, W2, W3, V1 (statusy w `M1-swiat-statyczny.md` §4) · [ ] 2. Determinizm · [ ] 3. Własnościowe · [ ] 4. Budżety
 - [ ] 5. Wyjaśnialność · [ ] 6. Kontrakty · [ ] 7. Decyzje otwarte
 - [ ] **Faza ukończona** — artefakt: oglądalny krajobraz z seeda, rzeki z ujściem, cykl dobowy
 
@@ -168,6 +168,8 @@ Jedna linia na zamknięty pakiet roboczy lub bramkę. Najnowsze na górze.
 
 | Data | Faza | Co zamknięto | Uwagi |
 |---|---|---|---|
+| 2026-09-13 | M1 | W3: hydrologia w całości — priority-flood + ε, D8 z porządkiem topologicznym, erozja stream-power (Braun–Willett, n = 1) z równoległością po zlewniach, dyfuzja zboczowa, erozja termiczna, klasyfikacja wód, rząd Strahlera, geometria hydrauliczna, wektorowa sieć koryt | **Pięć odstępstw od liczb w planie, każde z uzasadnieniem w kodzie lub w `data/geology/erosion.ron`:** (1) `dt` 150 lat zamiast 5000 i `K` rząd wyżej — przy planowych wartościach nachylenie koryta w stanie ustalonym wychodzi 20 %, czyli 800 m różnicy na rzece w świecie o zakresie 256 m; (2) dyfuzja 0,001 zamiast 0,01 — zasięg wygładzania musi zostać poniżej komórki 4 m, inaczej kasuje sieć dolin wyciętą przez stream-power; (3) próg rzeki 0,1 km² zamiast 0,25 — przy planowym mapa 4 km ma sieć rzędu 2, czyli bez rozgałęzień; (4) erozja pracuje na powierzchni **wypełnionej**, a zagłębienia wracają pomniejszone o wcięcie progu odpływowego — bez tego misy bezodpływowe w ogóle nie były rzeźbione; (5) regiony śródlądowe dostały regionalne nachylenie `tilt_m`, bez którego ridged multifractal daje jeziora na jednej trzeciej mapy. Budżety §5.9 dla 16 km: generacja 8,3–8,9 s (cel ≤ 10 s), P4 1,2 s (cel ≤ 1,5 s), stan trwały 50–59 MB (limit 60 MB), `.mgw` 14–21 MB (limit 25 MB). P6 7,5 s wobec prognozy 5–6 s — ryzyko R3 zmaterializowane w przewidzianej skali, mieści się w limicie CI |
+| 2026-09-13 | M0 | `core::det_math` rozszerzony o `sin`/`cos`/`tan` (redukcja Cody'ego–Waite'a + jądra fdlibm), tabela referencyjna 60-cyfrowa i osobny złoty odcisk T-D9 dla trygonometrii | Dopisane przez M1 wg procedury z 00 §K-6: roczny cykl `ClimateCell` i kąt usypu wchodzą do stanu trwałego, więc nie mogły zostać po stronie renderu. Odcisk M0 celowo **nietknięty** |
 | 2026-09-13 | M1 | W2: przebiegi P1–P3 (maska lądu i profil brzegowy, baza wysokości z domain warpingiem, pola `U` i `K`); podgląd PNG w headless | Budżet §5.9 dla 16 km: P1+P2 = 178 ms wobec celu 400 ms. Dwie poprawki wyszły z podglądu, nie z testów: waga oktaw w ridged zapadała się po pierwszej oktawie, a szum wartościowy zostawiał kratownicę — stąd przejście na szum gradientowy |
 | 2026-09-13 | M1 | W1: `WorldGenParams` z walidacją, `Grid2`, potok 12 nazwanych przebiegów z profilem czasu, `WorldGenReport`, `StreamId` 100–110, `.mgw`, `headless generate/verify/preview` | Decyzje D1–D11 przyjęte wg propozycji domyślnych M1 (D3 potwierdza rezerwację strumieni w 00 §K-4) |
 | 2026-09-13 | M1 | V1: `engine/voxel` — chunk 32³, paleta lokalna, `Uniform`/`Rle`/`Dense`, `ColumnSource`, rejestr materiałów z `data/materials/` | Round-trip Dense→Rle→Dense bit w bit; `Uniform` w 32 B |

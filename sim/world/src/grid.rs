@@ -28,7 +28,11 @@ impl<T: Clone> Grid2<T> {
 impl<T> Grid2<T> {
     #[must_use]
     pub fn from_vec(dim: usize, cells: Vec<T>) -> Grid2<T> {
-        assert_eq!(cells.len(), dim * dim, "Grid2: rozmiar nie zgadza się z bokiem");
+        assert_eq!(
+            cells.len(),
+            dim * dim,
+            "Grid2: rozmiar nie zgadza się z bokiem"
+        );
         Grid2 { dim, cells }
     }
 
@@ -118,7 +122,12 @@ impl<T> Grid2<T> {
     pub fn map<U>(&self, f: impl Fn(usize, &T) -> U) -> Grid2<U> {
         Grid2 {
             dim: self.dim,
-            cells: self.cells.iter().enumerate().map(|(i, v)| f(i, v)).collect(),
+            cells: self
+                .cells
+                .iter()
+                .enumerate()
+                .map(|(i, v)| f(i, v))
+                .collect(),
         }
     }
 }

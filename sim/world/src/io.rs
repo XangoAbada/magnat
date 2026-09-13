@@ -18,9 +18,10 @@ use std::path::Path;
 const MAGIC: [u8; 4] = *b"MGW1";
 /// Wersja formatu. Podniesienie wymusza migrację po stronie M12.
 pub const MGW_VERSION: u16 = 1;
-/// Poziom kompresji zstd. 3 to punkt, w którym dalsze podnoszenie kosztuje sekundy,
-/// a zyskuje procenty.
-const ZSTD_LEVEL: i32 = 3;
+/// Poziom kompresji zstd. Mapa wysokości to gładkie dane, na których wyższy poziom
+/// naprawdę pracuje: 9 daje ~30 % mniejszy plik niż 3, kosztem ułamka sekundy przy zapisie
+/// raz na sesję. Budżet §5.9 (≤ 20 MB dla 16 km) jest tu wiążący, a czas nie.
+const ZSTD_LEVEL: i32 = 9;
 
 #[derive(Debug)]
 pub enum WorldIoError {

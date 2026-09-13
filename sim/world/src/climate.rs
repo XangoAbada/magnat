@@ -64,7 +64,7 @@ impl ClimateCell {
         // Pozycja względem środków miesięcy, przesunięta o 15 dni.
         let shifted = d - 15;
         let (m0, frac) = if shifted < 0 {
-            (11i32, (shifted + 30) as i32)
+            (11i32, shifted + 30)
         } else {
             (shifted / 30, shifted % 30)
         };
@@ -94,10 +94,11 @@ mod tests {
 
     fn cela() -> ClimateCell {
         // Roczny przebieg zbliżony do klimatu umiarkowanego: styczeń −20 dC, lipiec 180 dC.
-        let mut c = ClimateCell::default();
-        c.temp_monthly_dc = [-20, -10, 30, 80, 130, 170, 180, 175, 130, 80, 30, 0];
-        c.precip_monthly_mm = [30, 28, 34, 40, 58, 72, 80, 70, 50, 42, 40, 36];
-        c
+        ClimateCell {
+            temp_monthly_dc: [-20, -10, 30, 80, 130, 170, 180, 175, 130, 80, 30, 0],
+            precip_monthly_mm: [30, 28, 34, 40, 58, 72, 80, 70, 50, 42, 40, 36],
+            ..ClimateCell::default()
+        }
     }
 
     #[test]
@@ -117,7 +118,10 @@ mod tests {
         let grudzien = c.temp_at_day_dc(345);
         let styczen = c.temp_at_day_dc(15);
         let koniec = c.temp_at_day_dc(359);
-        assert!(koniec <= grudzien && koniec >= styczen, "{grudzien} {koniec} {styczen}");
+        assert!(
+            koniec <= grudzien && koniec >= styczen,
+            "{grudzien} {koniec} {styczen}"
+        );
         // Dzień 0 i dzień 360 to ten sam punkt cyklu.
         assert_eq!(c.temp_at_day_dc(0), c.temp_at_day_dc(360));
     }

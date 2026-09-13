@@ -72,7 +72,10 @@ impl IVec3 {
     #[inline]
     #[must_use]
     pub const fn xy(self) -> IVec2 {
-        IVec2 { x: self.x, y: self.y }
+        IVec2 {
+            x: self.x,
+            y: self.y,
+        }
     }
 
     #[inline]

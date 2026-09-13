@@ -13,6 +13,7 @@ magnat-voxel = { workspace = true }
 serde = { workspace = true }
 bincode = { workspace = true }
 zstd = { workspace = true }
+ron = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }

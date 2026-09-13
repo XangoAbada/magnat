@@ -255,15 +255,15 @@ impl WorldGenParams {
     /// rozjechałyby się o pół komórki, a objaw wyszedłby dopiero jako artefakt na brzegu mapy.
     pub fn validate(&self) -> Result<(), ParamError> {
         let m = self.size.meters();
-        if m % WORK_CELL_M != 0 {
+        if !m.is_multiple_of(WORK_CELL_M) {
             return Err(ParamError::Geometry("bok mapy niepodzielny przez 4 m"));
         }
-        if m % CLIMATE_CELL_M != 0 {
+        if !m.is_multiple_of(CLIMATE_CELL_M) {
             return Err(ParamError::Geometry("bok mapy niepodzielny przez 256 m"));
         }
         // Chunk voxelowy ma 32 m boku (M1 §5.1); mapa musi się z nich składać bez reszty,
         // inaczej ostatni rząd chunków wystaje poza świat i `ColumnSource` czyta poza zakresem.
-        if m % 32 != 0 {
+        if !m.is_multiple_of(32) {
             return Err(ParamError::Geometry("bok mapy niepodzielny przez 32 m"));
         }
         Ok(())
@@ -347,7 +347,8 @@ mod tests {
                 size,
                 ..WorldGenParams::default()
             };
-            p.validate().unwrap_or_else(|e| panic!("{}: {e}", size.key()));
+            p.validate()
+                .unwrap_or_else(|e| panic!("{}: {e}", size.key()));
             assert_eq!(p.size.work_dim() * WORK_CELL_M, p.size.meters());
             assert_eq!(p.size.climate_dim() * CLIMATE_CELL_M, p.size.meters());
         }

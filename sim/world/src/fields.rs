@@ -39,6 +39,12 @@ pub struct WorkFields {
     pub basin: Grid2<u32>,
     /// Indeksy komórek będących ujściami, w kolejności rosnących indeksów.
     pub outlets: Vec<u32>,
+    /// Zakres `[start, end)` w `stack` dla każdej zlewni — podstawa równoległości erozji.
+    pub basin_ranges: Vec<(u32, u32)>,
+    /// Listy donorów w postaci CSR: `donors[donor_start[c]..donor_start[c + 1]]`.
+    /// Jedna alokacja zamiast 16,8 mln małych wektorów.
+    pub donor_start: Vec<u32>,
+    pub donors: Vec<u32>,
 }
 
 impl WorkFields {
@@ -55,6 +61,9 @@ impl WorkFields {
             flow_acc: Grid2::filled(dim, 0.0),
             basin: Grid2::filled(dim, 0),
             outlets: Vec::new(),
+            basin_ranges: Vec::new(),
+            donor_start: Vec::new(),
+            donors: Vec::new(),
         }
     }
 

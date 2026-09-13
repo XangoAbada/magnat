@@ -142,7 +142,6 @@ pub fn verify(a: &VerifyArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
     }
 }
 
-
 #[derive(ClapArgs, Debug)]
 pub struct PreviewArgs {
     #[arg(long, default_value = "1")]
@@ -217,16 +216,28 @@ fn color_at(
             if h <= 0 {
                 // Morze: głębiej = ciemniej.
                 let t = (f32::from(-h) / 600.0).clamp(0.0, 1.0);
-                [(20.0 + 30.0 * (1.0 - t)) as u8, (60.0 + 60.0 * (1.0 - t)) as u8, (110.0 + 80.0 * (1.0 - t)) as u8]
+                [
+                    (20.0 + 30.0 * (1.0 - t)) as u8,
+                    (60.0 + 60.0 * (1.0 - t)) as u8,
+                    (110.0 + 80.0 * (1.0 - t)) as u8,
+                ]
             } else {
                 // Ląd: zieleń → brąz → biel, skala 0…192 m.
                 let t = (f32::from(h) / 1920.0).clamp(0.0, 1.0);
                 if t < 0.5 {
                     let k = t * 2.0;
-                    [(70.0 + 110.0 * k) as u8, (120.0 + 40.0 * k) as u8, (60.0 + 30.0 * k) as u8]
+                    [
+                        (70.0 + 110.0 * k) as u8,
+                        (120.0 + 40.0 * k) as u8,
+                        (60.0 + 30.0 * k) as u8,
+                    ]
                 } else {
                     let k = (t - 0.5) * 2.0;
-                    [(180.0 + 70.0 * k) as u8, (160.0 + 90.0 * k) as u8, (90.0 + 160.0 * k) as u8]
+                    [
+                        (180.0 + 70.0 * k) as u8,
+                        (160.0 + 90.0 * k) as u8,
+                        (90.0 + 160.0 * k) as u8,
+                    ]
                 }
             }
         }

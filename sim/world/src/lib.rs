@@ -24,7 +24,7 @@ pub mod pipeline;
 
 pub use climate::ClimateCell;
 pub use data::{
-    HeightDm, LakeCell, RiverCell, RiverNetwork, RiverSegment, WaterBits, WaterClass, WorldData,
+    HeightDm, LakeCells, RiverCell, RiverNetwork, RiverSegment, WaterBits, WaterClass, WorldData,
     SEA_LEVEL_DM,
 };
 pub use deposit::{Deposit, DepositId, DepositShape};

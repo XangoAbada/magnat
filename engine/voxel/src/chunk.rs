@@ -124,7 +124,10 @@ impl Palette {
     #[inline]
     #[must_use]
     pub fn local_of(&self, m: MaterialId) -> Option<LocalIdx> {
-        self.entries.iter().position(|e| *e == m).map(|i| LocalIdx(i as u8))
+        self.entries
+            .iter()
+            .position(|e| *e == m)
+            .map(|i| LocalIdx(i as u8))
     }
 
     #[inline]
@@ -250,7 +253,9 @@ impl Chunk {
     pub fn material_at(&self, x: u32, y: u32, z: u32) -> MaterialId {
         match &self.storage {
             ChunkStorage::Uniform(m) => *m,
-            other => self.palette.resolve(other.get_local(lin(x, y, z), &self.palette)),
+            other => self
+                .palette
+                .resolve(other.get_local(lin(x, y, z), &self.palette)),
         }
     }
 
@@ -459,7 +464,11 @@ mod tests {
     fn paleta_zaczyna_od_powietrza_i_zglasza_przepelnienie() {
         let mut p = Palette::new();
         assert_eq!(p.resolve(LocalIdx::AIR), MaterialId::AIR);
-        assert_eq!(p.intern(MaterialId::AIR), Some(LocalIdx(0)), "powietrze już jest");
+        assert_eq!(
+            p.intern(MaterialId::AIR),
+            Some(LocalIdx(0)),
+            "powietrze już jest"
+        );
         assert_eq!(p.intern(MaterialId(7)), Some(LocalIdx(1)));
         assert_eq!(p.intern(MaterialId(7)), Some(LocalIdx(1)), "bez duplikatów");
 
@@ -468,7 +477,11 @@ mod tests {
             assert!(p.intern(MaterialId(m)).is_some(), "m = {m}");
         }
         assert_eq!(p.len(), 256);
-        assert_eq!(p.intern(MaterialId(9999)), None, "257. materiał nie wchodzi");
+        assert_eq!(
+            p.intern(MaterialId(9999)),
+            None,
+            "257. materiał nie wchodzi"
+        );
     }
 
     /// Kryterium ukończenia WP-V1: round-trip bit w bit.
@@ -492,7 +505,10 @@ mod tests {
             pal.intern(MaterialId(m));
         }
         let packed = pack(&cells, &pal);
-        assert!(matches!(packed, ChunkStorage::Rle(_)), "teren ma się mieścić w RLE");
+        assert!(
+            matches!(packed, ChunkStorage::Rle(_)),
+            "teren ma się mieścić w RLE"
+        );
 
         let mut out = [LocalIdx::AIR; CHUNK_VOXELS];
         packed.decompress_into(&pal, &mut out);
@@ -507,9 +523,7 @@ mod tests {
     #[test]
     fn szum_nie_miesci_sie_w_rle_i_ladnie_spada_do_dense() {
         // Najgorszy przypadek: sąsiednie voxele zawsze różne → runów tyle, co voxeli.
-        let cells: Vec<LocalIdx> = (0..CHUNK_VOXELS)
-            .map(|i| LocalIdx((i % 7) as u8))
-            .collect();
+        let cells: Vec<LocalIdx> = (0..CHUNK_VOXELS).map(|i| LocalIdx((i % 7) as u8)).collect();
         let mut pal = Palette::new();
         for m in 1..8u16 {
             pal.intern(MaterialId(m));
@@ -526,7 +540,11 @@ mod tests {
     fn uniform_jest_tani() {
         let c = Chunk::uniform(ChunkCoord::new(0, 0, 0), 0, MaterialId::AIR);
         assert!(c.is_empty_air());
-        assert!(c.bytes() <= 32, "Uniform ma się mieścić w 32 B, ma {}", c.bytes());
+        assert!(
+            c.bytes() <= 32,
+            "Uniform ma się mieścić w 32 B, ma {}",
+            c.bytes()
+        );
     }
 
     #[test]
@@ -534,14 +552,22 @@ mod tests {
         let mut b = ChunkBuilder::new(ChunkCoord::new(1, 2, 0), 0, 1);
         b.fill_column(-1, -1, -1, 4, MaterialId(3)); // wyłącznie otoczka
         b.fill_column(0, 0, 0, 4, MaterialId(3));
-        assert_eq!(b.material_at(-1, -1, 0), MaterialId(3), "otoczka widoczna dla meshingu");
+        assert_eq!(
+            b.material_at(-1, -1, 0),
+            MaterialId(3),
+            "otoczka widoczna dla meshingu"
+        );
 
         let (pal, st) = b.finish();
         assert_eq!(pal.resolve(LocalIdx(1)), MaterialId(3));
         let mut out = [LocalIdx::AIR; CHUNK_VOXELS];
         st.decompress_into(&pal, &mut out);
         assert_eq!(out[lin(0, 0, 0)], LocalIdx(1));
-        assert_eq!(out[lin(0, 0, 4)], LocalIdx::AIR, "kolumna kończy się na z = 4");
+        assert_eq!(
+            out[lin(0, 0, 4)],
+            LocalIdx::AIR,
+            "kolumna kończy się na z = 4"
+        );
         // W wyniku nie ma śladu po otoczce: liczba niepustych voxeli to dokładnie 4.
         assert_eq!(out.iter().filter(|c| **c != LocalIdx::AIR).count(), 4);
     }

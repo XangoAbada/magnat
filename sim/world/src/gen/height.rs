@@ -102,7 +102,8 @@ mod tests {
     fn gory_sa_wyzsze_od_niziny() {
         let g = teren(Region::Mountain, WorldSize::Small4km, 11);
         let n = teren(Region::Lowland, WorldSize::Small4km, 11);
-        let max = |g: &crate::grid::Grid2<f32>| g.as_slice().iter().fold(f32::MIN, |a, b| a.max(*b));
+        let max =
+            |g: &crate::grid::Grid2<f32>| g.as_slice().iter().fold(f32::MIN, |a, b| a.max(*b));
         assert!(
             max(&g) > max(&n) * 2.0,
             "góry {} m vs nizina {} m",

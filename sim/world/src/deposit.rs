@@ -270,10 +270,18 @@ mod tests {
         let mut d = zloze(1_000, 50);
         assert_eq!(d.extract(Mass(400)), Mass(400));
         assert_eq!(d.remaining(), Mass(600));
-        assert_eq!(d.extract(Mass(10_000)), Mass(600), "dostajemy tylko to, co zostało");
+        assert_eq!(
+            d.extract(Mass(10_000)),
+            Mass(600),
+            "dostajemy tylko to, co zostało"
+        );
         assert_eq!(d.remaining(), Mass(0));
         assert_eq!(d.depletion(), Q::MAX);
-        assert_eq!(d.extract(Mass(1)), Mass(0), "z pustego złoża nic nie wychodzi");
+        assert_eq!(
+            d.extract(Mass(1)),
+            Mass(0),
+            "z pustego złoża nic nie wychodzi"
+        );
         // Żądanie ujemne nie może dopisać masy do złoża.
         assert_eq!(d.extract(Mass(-500)), Mass(0));
         assert_eq!(d.extracted, Mass(1_000));
@@ -287,7 +295,10 @@ mod tests {
             yaw_deg: 0,
         };
         assert!(s.contains(IVec3::ZERO));
-        assert!(s.contains(IVec3::new(10, 0, 0)), "punkt na promieniu należy");
+        assert!(
+            s.contains(IVec3::new(10, 0, 0)),
+            "punkt na promieniu należy"
+        );
         assert!(!s.contains(IVec3::new(11, 0, 0)));
         assert!(s.contains(IVec3::new(0, 20, 0)));
         assert!(!s.contains(IVec3::new(0, 0, 6)));

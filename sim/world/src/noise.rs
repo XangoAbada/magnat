@@ -84,8 +84,8 @@ impl NoiseField {
 
 /// Osiem kierunków gradientu: cztery osiowe i cztery po przekątnej. Stały zbiór zamiast
 /// losowego kąta, bo kąt wymagałby `sin`/`cos`, a te są zakazane w kodzie symulacji (00 §K-6).
-const S: f32 = 0.707_106_77;
-const SQRT_2: f32 = 1.414_213_6;
+const S: f32 = std::f32::consts::FRAC_1_SQRT_2;
+const SQRT_2: f32 = std::f32::consts::SQRT_2;
 /// Wzmocnienie sumy oktaw przed zaciśnięciem do `[-1, 1]`.
 ///
 /// Suma oktaw szumu gradientowego ma odchylenie standardowe rzędu 0,25 i sięga ±1 tylko
@@ -219,7 +219,7 @@ mod tests {
     use super::*;
 
     fn pole() -> NoiseField {
-        NoiseField::new(0xC0FF_EE, StreamId::WorldHeightBase, 0)
+        NoiseField::new(0x00C0_FFEE, StreamId::WorldHeightBase, 0)
     }
 
     #[test]
@@ -230,7 +230,7 @@ mod tests {
         let g = NoiseField::new(1, StreamId::WorldHeightBase, 0);
         assert_ne!(f.noise2(3.25, -7.5), g.noise2(3.25, -7.5));
         // Inna sól = inne pole, przy tym samym ziarnie i strumieniu.
-        let h = NoiseField::new(0xC0FF_EE, StreamId::WorldHeightBase, 1);
+        let h = NoiseField::new(0x00C0_FFEE, StreamId::WorldHeightBase, 1);
         assert_ne!(f.noise2(3.25, -7.5), h.noise2(3.25, -7.5));
     }
 

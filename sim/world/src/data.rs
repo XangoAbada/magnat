@@ -100,11 +100,49 @@ pub struct RiverCell {
     pub surface_dm: HeightDm,
 }
 
-/// Jezioro: rzędna zwierciadła przy komórce. Też rzadkie — jeziora zajmują procenty mapy.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
-pub struct LakeCell {
-    pub cell: u32,
-    pub surface_dm: HeightDm,
+/// Komórki jeziorne w układzie „struktura tablic": osobno indeksy, osobno rzędne.
+///
+/// Wyglądałoby to naturalniej jako `Vec<(u32, i16)>`, ale `u32` wymusza wyrównanie do 4 B,
+/// więc para zajmuje 8 B zamiast 6 — dwa bajty wyrzucone na każdą komórkę jeziora.
+/// Przy 1,5 mln komórek na mapie 16 km to 2,9 MB, czyli różnica między zmieszczeniem się
+/// w budżecie §5.9 a jego przekroczeniem. Tam, gdzie liczba elementów idzie w miliony,
+/// wyrównanie przestaje być szczegółem.
+#[derive(Clone, Default, PartialEq, Eq, Debug, Serialize, Deserialize)]
+pub struct LakeCells {
+    /// Indeksy komórek, rosnąco — klucz wyszukiwania binarnego.
+    pub cell: Vec<u32>,
+    /// Rzędna zwierciadła, równolegle do `cell`.
+    pub surface_dm: Vec<HeightDm>,
+}
+
+impl LakeCells {
+    pub fn push(&mut self, cell: u32, surface_dm: HeightDm) {
+        self.cell.push(cell);
+        self.surface_dm.push(surface_dm);
+    }
+
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.cell.len()
+    }
+
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.cell.is_empty()
+    }
+
+    #[must_use]
+    pub fn surface_of(&self, cell: usize) -> Option<HeightDm> {
+        self.cell
+            .binary_search(&(cell as u32))
+            .ok()
+            .map(|i| self.surface_dm[i])
+    }
+
+    #[must_use]
+    pub fn bytes(&self) -> usize {
+        self.cell.len() * 4 + self.surface_dm.len() * 2
+    }
 }
 
 /// Odcinek wektorowej sieci koryt. To **wektor jest źródłem prawdy** o rzece, nie raster:
@@ -155,8 +193,8 @@ pub struct WorldData {
     pub water: Grid2<WaterBits>,
     /// Komórki rzeczne, posortowane po `cell` — wyszukiwanie binarne.
     pub river_cells: Vec<RiverCell>,
-    /// Komórki jeziorne, posortowane po `cell`.
-    pub lake_cells: Vec<LakeCell>,
+    /// Komórki jeziorne, posortowane po indeksie.
+    pub lake_cells: LakeCells,
     pub rivers: RiverNetwork,
     pub deposits: Vec<crate::deposit::Deposit>,
     /// Siatka klimatu 256 m.
@@ -174,7 +212,7 @@ impl WorldData {
             height: Grid2::filled(n, SEA_LEVEL_DM),
             water: Grid2::filled(n, WaterBits::default()),
             river_cells: Vec::new(),
-            lake_cells: Vec::new(),
+            lake_cells: LakeCells::default(),
             rivers: RiverNetwork::default(),
             deposits: Vec::new(),
             climate: Grid2::filled(c, crate::climate::ClimateCell::default()),
@@ -187,11 +225,7 @@ impl WorldData {
         match self.water[cell].class() {
             WaterClass::Dry => None,
             WaterClass::Sea => Some(SEA_LEVEL_DM),
-            WaterClass::Lake => self
-                .lake_cells
-                .binary_search_by_key(&(cell as u32), |l| l.cell)
-                .ok()
-                .map(|i| self.lake_cells[i].surface_dm),
+            WaterClass::Lake => self.lake_cells.surface_of(cell),
             WaterClass::River => self
                 .river_cells
                 .binary_search_by_key(&(cell as u32), |r| r.cell)
@@ -204,8 +238,9 @@ impl WorldData {
     #[must_use]
     pub fn water_depth_dm(&self, cell: usize) -> u16 {
         match self.water_surface_dm(cell) {
-            Some(s) => (i32::from(s) - i32::from(self.height[cell])).clamp(0, i32::from(u16::MAX))
-                as u16,
+            Some(s) => {
+                (i32::from(s) - i32::from(self.height[cell])).clamp(0, i32::from(u16::MAX)) as u16
+            }
             None => 0,
         }
     }
@@ -236,9 +271,9 @@ impl WorldData {
             h.write_u16(r.width_dm);
             h.write_u16(r.surface_dm as u16);
         }
-        for l in &self.lake_cells {
-            h.write_u32(l.cell);
-            h.write_u16(l.surface_dm as u16);
+        for (c, s) in self.lake_cells.cell.iter().zip(&self.lake_cells.surface_dm) {
+            h.write_u32(*c);
+            h.write_u16(*s as u16);
         }
         for d in &self.deposits {
             d.hash_state(h);
@@ -255,7 +290,7 @@ impl WorldData {
         self.height.len() * size_of::<HeightDm>()
             + self.water.len() * size_of::<WaterBits>()
             + self.river_cells.len() * size_of::<RiverCell>()
-            + self.lake_cells.len() * size_of::<LakeCell>()
+            + self.lake_cells.bytes()
             + self
                 .rivers
                 .segments

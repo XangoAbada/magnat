@@ -94,7 +94,8 @@ impl VoxelMaterial {
     #[inline]
     #[must_use]
     pub fn is_opaque(&self) -> bool {
-        self.flags.contains(MaterialFlags::SOLID) && !self.flags.contains(MaterialFlags::TRANSPARENT)
+        self.flags.contains(MaterialFlags::SOLID)
+            && !self.flags.contains(MaterialFlags::TRANSPARENT)
     }
 }
 
@@ -157,7 +158,10 @@ impl fmt::Display for MaterialError {
                 write!(f, "materiał `{key}`: nieznana flaga `{flag}`")
             }
             MaterialError::MissingAir => {
-                write!(f, "brak materiału `air` — indeks 0 jest dla niego zarezerwowany")
+                write!(
+                    f,
+                    "brak materiału `air` — indeks 0 jest dla niego zarezerwowany"
+                )
             }
             MaterialError::TooMany(n) => write!(f, "{n} materiałów, limit to 65536"),
         }
@@ -331,7 +335,11 @@ mod tests {
                 albedo: (90, 70, 50),
                 roughness: 220,
                 emissive: 0,
-                flags: vec!["SOLID".into(), "DIGGABLE".into(), "SUPPORTS_VEGETATION".into()],
+                flags: vec![
+                    "SOLID".into(),
+                    "DIGGABLE".into(),
+                    "SUPPORTS_VEGETATION".into(),
+                ],
                 hardness: 20,
                 density_kg_m3: 1500,
                 bearing_capacity: 80,

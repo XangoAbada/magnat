@@ -50,10 +50,15 @@ fn continental_form(
     let mx = (x as f32) * WORK_CELL_M as f32;
 
     if !params.region.has_sea() {
-        // Ląd w całości. Delikatne pochylenie mapy nadaje kierunek odpływu — bez niego
-        // rzeki nie mają dokąd płynąć i cała hydrologia kończy się w jeziorach.
-        let tilt = 1.0 - (y as f32) / (dim as f32); // 1 na północy, 0 na południu
-        return shape.base_m * 0.5 + tilt * shape.base_m * 0.5 + 1.0;
+        // Ląd w całości, z regionalnym spadkiem z północy na południe. Dwie krzywe zamiast
+        // prostej: `k²` przy górze mapy daje strome pogórze, `k` przy dole równinę — czyli
+        // profil, który ma każde pasmo górskie schodzące ku nizinie.
+        // Oś Y rośnie ku północy — ta sama konwencja co w profilu brzegowym, gdzie morze
+        // leży na południu (małe `y`). Wysoko na północy, nizina na południu.
+        let k = (y as f32) / (dim as f32);
+        return shape.base_m
+            + shape.tilt_m * k * k * (3.0 - 2.0 * k) * 0.5
+            + shape.tilt_m * k * 0.5;
     }
 
     // Wybrzeże: morze na południu (małe `y`), ląd na północy. Linia brzegowa faluje.
@@ -93,7 +98,12 @@ mod tests {
 
     #[test]
     fn region_bez_morza_jest_w_calosci_ladem() {
-        for r in [Region::Lowland, Region::Mountain, Region::River, Region::Desert] {
+        for r in [
+            Region::Lowland,
+            Region::Mountain,
+            Region::River,
+            Region::Desert,
+        ] {
             let (_, work) = ctx_dla(r);
             assert!(
                 work.land.as_slice().iter().all(|l| *l),

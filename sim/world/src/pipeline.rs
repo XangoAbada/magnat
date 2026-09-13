@@ -107,7 +107,10 @@ impl WorldGenReport {
             .map(|t| format!("{:<28} {:>9.1} ms", t.name, t.millis))
             .collect();
         out.push(format!("{:<28} {:>9.1} ms", "RAZEM", self.total_millis));
-        out.push(format!("hash terenu                  {:032x}", self.terrain_hash.0));
+        out.push(format!(
+            "hash terenu                  {:032x}",
+            self.terrain_hash.0
+        ));
         out.push(format!(
             "ląd/morze/jezioro/rzeka      {} / {} / {} / {}",
             self.stats.land_cells,
@@ -266,7 +269,10 @@ mod tests {
     fn kazdy_przebieg_ma_wlasny_strumien() {
         // Dwa przebiegi dzielące strumień losowałyby z tej samej sekwencji i zmiana
         // jednego przesuwałaby drugi — dokładnie to, czemu zapobiega 00 §3.1.
-        let mut uzyte: Vec<u16> = PASSES.iter().filter_map(|p| p.stream.map(|s| s as u16)).collect();
+        let mut uzyte: Vec<u16> = PASSES
+            .iter()
+            .filter_map(|p| p.stream.map(|s| s as u16))
+            .collect();
         let ile = uzyte.len();
         uzyte.sort_unstable();
         uzyte.dedup();
