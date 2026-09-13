@@ -79,9 +79,38 @@ z szablonu w `00-konwencje-i-kontrakty.md` §8 i są identyczne dla każdej fazy
 ### M1 — Świat statyczny
 `M1-swiat-statyczny.md` · wymaga: M0
 
-- [x] 1. Pakiety robocze — wszystkie: W1–W7, V1–V4, R1–R6, C1, X1 · [ ] 2. Determinizm · [ ] 3. Własnościowe · [ ] 4. Budżety
-- [ ] 5. Wyjaśnialność · [ ] 6. Kontrakty · [ ] 7. Decyzje otwarte
-- [ ] **Faza ukończona** — artefakt: oglądalny krajobraz z seeda, rzeki z ujściem, cykl dobowy
+- [x] **1. Pakiety robocze** — W1–W7, V1–V4, R1–R6, C1, X1 zamknięte wg własnych kryteriów
+  (statusy przy pakietach w `M1-swiat-statyczny.md` §4)
+- [x] **2. Determinizm** — `terrain_hash_stable`, `terrain_thread_invariant` (1/2/8/16 wątków)
+  i `terrain_hash_matrix` (32 seedy × 5 regionów, tabela zatwierdzona w repo) zielone;
+  `tools/headless verify --runs 2` daje identyczny hash terenu. Hash obejmuje wysokość,
+  wody, sieć rzeczną, złoża, klimat i odległość od wody — czyli wszystko, co faza dokłada
+  do stanu trwałego
+- [x] **3. Własnościowe** — `deposit_ledger`: 10 tys. losowań ciągów `extract()`, zero ubytku
+  masy, `extracted ≤ reserves`, brak przepełnienia przy zasobach do 2⁶³ g. Pieniądza M1 nie
+  dotyka, bo nie ma jeszcze transakcji
+- [x] **4. Budżety** — wszystkie progi §7.3 zmierzone i spełnione: generacja 16 km ≤ 20 s,
+  P4 1,0–1,2 s wobec 1,5 s, stan trwały 53 MB wobec 60 MB, meshing 0,54–0,59 ms wobec 0,8 ms,
+  agregat LOD3 poniżej 1,5 ms, pula chunków i arena GPU w zadeklarowanych limitach.
+  Render (§7.4, RTX 4070 Ti): mediana 860–1537 FPS na etap, 1 % low 114–974, **0 zacięć**
+  wobec progu ≤ 2 na 60 s
+- [x] **5. Wyjaśnialność** — M1 nie podejmuje decyzji agentowych (generacja jest funkcją
+  seeda, nie wyborem), więc `DecisionReason` nie ma tu czego opisywać. Odpowiednikiem karty
+  inspekcji jest **karta terenu**: klik prawym w oknie albo `magnat --inspect x,y` wypisuje
+  kolumnę geologiczną, wody gruntowe, klimat, przydatność pod zabudowę i złoża — i robi to
+  wyłącznie przez `TerrainQuery`, czyli przez ten sam interfejs, który dostanie M2
+- [~] **6. Kontrakty** — dostarczone i używane wewnątrz fazy: `TerrainQuery` (wszystkie pięć
+  grup z §6.1, konsumowane przez inspektor i nakładki), `ColumnSource`, `sim-snapshot`,
+  `RenderGraph::register` + `GraphSlot`, `TerrainOverlay`, `ClusterOccupancy`, `EditReport`.
+  Bramka domknie się dopiero wtedy, gdy **M2 ich faktycznie użyje** — tego M1 nie jest
+  w stanie sprawdzić sam za siebie
+- [~] **7. Decyzje otwarte** — D1–D11 przyjęte zgodnie ze stanowiskiem M1 (D9 rozstrzygnięte
+  wcześniej z M11). Wymagają potwierdzenia adresatów: D1 (pule priorytetów w `engine/jobs`)
+  i D2 (własność `wgpu`) — M0; D4, D5, D8, D11 — M2; D6 — M6; D7 — M8. W M1 żadna z nich
+  nie zablokowała pakietu, bo faza nie ma jeszcze drugiego konsumenta
+- [~] **Faza ukończona** — artefakt działa: `magnat --seed … --region …` pokazuje krajobraz
+  z seeda, rzeki z ujściem, jeziora, cykl dobowy z cieniami kaskadowymi i nakładki `F3`.
+  Zostaje potwierdzenie bramek 6 i 7 przez fazy zależne
 
 ### M2 — Miasto statyczne
 `M2-miasto-statyczne.md` · wymaga: M1
@@ -278,6 +307,7 @@ Jedna linia na zamknięty pakiet roboczy lub bramkę. Najnowsze na górze.
 
 | Data | Faza | Co zamknięto | Uwagi |
 |---|---|---|---|
+| 2026-09-14 | M1 | Domknięcie bramek fazy: macierz 32 seedów × 5 regionów zatwierdzona w repo, `deposit_ledger` na 10 tys. losowań, karta inspekcji terenu (`--inspect x,y` i prawy przycisk w oknie) | **Korekta wobec §7.1:** macierz hashy obejmuje jeden rozmiar (4 km), a nie cztery — 640 generacji to dwie godziny na przebieg i tabela, której nikt nie zatwierdzi świadomie; wpływ rozmiaru pilnuje `seed_i_region_zmieniaja_swiat`. Przy okazji wyszła regresja budżetu: agregat LOD3 urósł do 1,79 ms, bo materializacja liczyła szum detalu i rozmycie biomu na każdą próbkę — detal pomijany od LOD2 (amplituda 0,35 m wobec voxela 2 m), biom próbkowany na siatce 8 m jak geologia; z powrotem poniżej 1,5 ms przy niezmienionym błędzie agregatu (1 voxel LOD0) |
 | 2026-09-14 | M1 | X1: benchmarki `criterion` dla generacji, meshingu i agregacji LOD (klucze `m1-1`…`m1-4` w linii bazowej), scena pomiarowa §7.4 z pięcioma etapami i metryką 1 % low, asercje `bench_priority_flood_16km` i `mem_voxel_budget`, `dep_isolation` i raport budżetów jako artefakt w CI | Przelot 60 s (RTX 4070 Ti, 1600×900, region rzeczny): widok miasta 860 FPS / 1 % low 114, dzielnica 1272 / 816, ulica 1537 / 974, przelot 2 km 1081 / 259, **0 zacięć > 33 ms** wobec progu ≤ 2 na 60 s. P4 na 16 km: 1008–1234 ms wobec 1500 ms. Przy okazji naprawione `cargo bench --workspace`, które od M0 przewracało się na bibliotekach uruchamianych jako bench target — bramka regresji D-8 nie działała |
 | 2026-09-14 | M1 | R5, R6: przebieg wody (fresnel, mgła głębinowa z bufora głębi, fale, miękki brzeg), siatka dalekiego terenu z mapy 4 m, bufor HDR z ekspozycją i ACES w post-processingu, FXAA, `TerrainOverlay` i dziewięć nakładek pod `F3` | **Korekta wobec §1:** nakładka „akumulacja spływu" pokazuje rząd Strahlera, bo sama akumulacja nie jest stanem trwałym — cztery bajty na komórkę to 64 MB na mapie 16 km wobec całego budżetu 60 MB z §5.9. Przy okazji wyszedł błąd, którego nie widać w testach: `struct Frame` w `sky.wgsl` został przy układzie sprzed kaskad i czytał barwę nieba z macierzy światła (niebo wychodziło białawe) — teraz strzeże tego test porównujący deklaracje we wszystkich shaderach. Przelot 2 km z pełnym potokiem: 183 FPS średnio, GPU 0,29 ms na wszystkie przebiegi (p95 0,63 ms) |
 | 2026-09-14 | M1 | R3, R4: cienie kaskadowe (4 kaskady, sfera otaczająca + zatrzask do texela, PCF 3×3 na sprzętowym porównaniu), przypisanie świateł do froxeli 16×9×24 w compute, `ClusterOccupancy` w devtools | Cienie 0,18 ms (p95 0,29) w scenie z pierścieniami LOD wobec limitu 2 ms; 4096 świateł: przypisanie 0,26 ms (p95 0,52) wobec 0,4 ms — mediana w budżecie, ogon poza nim, bo pomiar obejmuje klatki z materializacją chunków. Trzy błędy wyłapane przez podgląd, nie przez testy: pass cienia nie może widzieć własnej mapy w grupie wiązań, kafel klastra we fragmencie liczy się po **odbitej** osi Y, a warstwa klastra po **głębokości widoku**, nie po odległości od oka |

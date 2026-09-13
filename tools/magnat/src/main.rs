@@ -12,6 +12,7 @@
 #![forbid(unsafe_code)]
 
 mod bench;
+mod inspect;
 mod overlay;
 mod stream;
 
@@ -88,6 +89,12 @@ struct Args {
     #[arg(long)]
     bench: Option<f32>,
 
+    /// Wypisuje kartę inspekcji punktu `x,y` zaraz po generacji i kończy — ta sama karta,
+    /// którą w oknie pokazuje klik prawym przyciskiem. Istnieje, bo kontrakt `TerrainQuery`
+    /// da się wtedy sprawdzić bez GPU i bez rąk (§7.5).
+    #[arg(long)]
+    inspect: Option<String>,
+
     /// Nakładka debug na starcie: `height`, `flow`, `water`, `biome`, `temp-jan`,
     /// `temp-jul`, `precip`, `geology`, `deposits`. W oknie przełącza je `F3`.
     #[arg(long)]
@@ -150,6 +157,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "materials",
     ))?);
     let terrain = Arc::new(magnat_world::Terrain::new(data, materials.clone()));
+
+    // Inspekcja punktu bez otwierania okna — ta sama karta co po kliknięciu prawym.
+    if let Some(punkt) = args.inspect.as_deref() {
+        let (a, b) = punkt
+            .split_once(',')
+            .ok_or("--inspect oczekuje `x,y` w metrach")?;
+        print!(
+            "{}",
+            inspect::karta(&terrain, a.trim().parse()?, b.trim().parse()?)
+        );
+        return Ok(());
+    }
 
     let event_loop = EventLoop::new()?;
     event_loop.set_control_flow(ControlFlow::Poll);
@@ -442,6 +461,12 @@ impl ApplicationHandler for App {
                 }
             }
             WindowEvent::MouseInput { state, button, .. } => {
+                // Prawy przycisk to inspekcja (§1 pkt 5): promień przez kursor w teren
+                // i karta na konsolę. Konsola, bo UI dokłada dopiero M11 — a inspektor
+                // ma działać teraz, żeby było czym sprawdzić kontrakt `TerrainQuery`.
+                if button == MouseButton::Right && state == ElementState::Pressed {
+                    self.inspekcja();
+                }
                 if button == MouseButton::Left {
                     self.obrot = state == ElementState::Pressed;
                     if !self.obrot {
@@ -612,6 +637,37 @@ impl App {
             None => renderer.set_overlay(None),
         }
         eprintln!("nakładka: {}", self.nakladka.nazwa());
+    }
+
+    /// Wypisuje kartę inspekcji punktu pod kursorem.
+    fn inspekcja(&mut self) {
+        let Some((mx, my)) = self.ostatnia_mysz else {
+            return;
+        };
+        let Some(renderer) = self.renderer.as_ref() else {
+            return;
+        };
+        let (w, h) = (
+            f64::from(renderer.gpu.config.width),
+            f64::from(renderer.gpu.config.height),
+        );
+        // Kierunek promienia z odwróconej macierzy kamery. Macierz jest **względem oka**,
+        // więc wynik jest od razu kierunkiem w świecie, bez odejmowania pozycji.
+        let vp = self
+            .camera
+            .view_proj_relative((w / h.max(1.0)) as f32)
+            .as_dmat4();
+        let ndc = glam::DVec4::new(2.0 * mx / w - 1.0, 1.0 - 2.0 * my / h, 1.0, 1.0);
+        let p = vp.inverse() * ndc;
+        if p.w.abs() < 1e-9 {
+            return;
+        }
+        let kierunek = (p.truncate() / p.w).normalize_or_zero();
+
+        match inspect::trafienie(&self.terrain, self.camera.eye(), kierunek, 4000.0) {
+            Some((x, y)) => eprint!("{}", inspect::karta(&self.terrain, x, y)),
+            None => eprintln!("inspekcja: promień nie trafił w teren"),
+        }
     }
 
     fn lec(&mut self, klawisz: &str) {

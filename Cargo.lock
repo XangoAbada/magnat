@@ -1305,6 +1305,7 @@ dependencies = [
  "magnat-core",
  "magnat-jobs",
  "magnat-voxel",
+ "proptest",
  "ron",
  "serde",
  "smallvec",

@@ -97,7 +97,25 @@ impl Terrain {
     /// Wysokość terenu w decymetrach, w rozdzielczości 1 m. Rdzeń materializacji.
     #[must_use]
     pub fn height_dm(&self, x: i32, y: i32) -> i32 {
+        self.height_dm_z_detalem(x, y, true)
+    }
+
+    /// Wysokość z możliwością pominięcia szumu detalu.
+    ///
+    /// Detal ma amplitudę 3,5 dm i istnieje po to, żeby płaski teren nie był idealnie gładki
+    /// z bliska. Przy agregacie LOD2 jeden voxel ma 2 m wysokości, a przy LOD3 — 4 m, więc
+    /// szum mieści się w ułamku voxela i nie zmienia wyniku, a kosztuje trzy oktawy szumu
+    /// na każdą z czterech próbek komórki. To była różnica między 1,2 a 1,8 ms na chunk
+    /// LOD3, czyli między budżetem z §7.3 a jego przekroczeniem.
+    fn height_dm_z_detalem(&self, x: i32, y: i32, detal: bool) -> i32 {
         let (wciecie_dm, udzial) = self.carve_river(x, y);
+        if !detal {
+            let h = self.bicubic_dm(x, y) - wciecie_dm;
+            return match self.data.water_surface_dm(self.work_index(x, y)) {
+                Some(zwierciadlo) => h.min(i32::from(zwierciadlo) - VOXEL_DM),
+                None => h,
+            };
+        }
         // Szum detalu jest **wygaszany w korycie**, a nie dokładany do niego.
         // Powód jest mierzalny: amplituda szumu to 3,5 dm, a małe koryto ma 3 dm głębokości,
         // więc szum całkowicie zjadał wcięcie — rzeka wyglądała jak rowek, który raz jest,
@@ -347,7 +365,13 @@ impl TerrainQuery for Terrain {
         // rozbieżność, którą ma wyłapywać `column_matches_voxels` (§7.1). Zgadzało się
         // dopóty, dopóki biom pokrywał się z wierzchnią warstwą geologiczną, czyli
         // przypadkiem.
-        if let Some(m) = SurfaceCover::new(&self.materials).material(self.biome_at(x, y)) {
+        // Biom na siatce `GEOLOGY_SAMPLE_M`, dokładnie jak w `fill_chunk` — inaczej
+        // inspektor pokazywałby inną pokrywę niż widać w wykopie (`column_matches_voxels`).
+        let (bx, by) = (
+            (x / GEOLOGY_SAMPLE_M) * GEOLOGY_SAMPLE_M,
+            (y / GEOLOGY_SAMPLE_M) * GEOLOGY_SAMPLE_M,
+        );
+        if let Some(m) = SurfaceCover::new(&self.materials).material(self.biome_at(bx, by)) {
             stack
                 .layers
                 .insert(0, (m, stack.surface_z - SURFACE_COVER_VOXELS + 1));
@@ -636,14 +660,18 @@ impl ColumnSource for Terrain {
                 }
 
                 // Powierzchnia: jedna próbka w LOD0, średnia z czterech w agregacie.
+                // Od LOD2 wzwyż bez szumu detalu — jego amplituda jest mniejsza niż
+                // wysokość voxela agregatu (patrz `height_dm_z_detalem`).
+                let detal = skala < 4;
                 let surface_dm = if skala == 1 {
                     self.height_dm(wx, wy)
                 } else {
                     let p = skala / 2;
-                    let s = i64::from(self.height_dm(wx, wy))
-                        + i64::from(self.height_dm((wx + p).min(size - 1), wy))
-                        + i64::from(self.height_dm(wx, (wy + p).min(size - 1)))
-                        + i64::from(self.height_dm((wx + p).min(size - 1), (wy + p).min(size - 1)));
+                    let h = |x: i32, y: i32| i64::from(self.height_dm_z_detalem(x, y, detal));
+                    let s = h(wx, wy)
+                        + h((wx + p).min(size - 1), wy)
+                        + h(wx, (wy + p).min(size - 1))
+                        + h((wx + p).min(size - 1), (wy + p).min(size - 1));
                     (s / 4) as i32
                 };
 
@@ -703,8 +731,17 @@ impl ColumnSource for Terrain {
                     top = *bottom - 1;
                 }
 
-                // Pokrywa biomu na wierzchu — darń, piasek, skała albo śnieg.
-                if let Some(m) = pokrywa.material(self.biome_at(wx, wy)) {
+                // Pokrywa biomu na wierzchu — darń, piasek, skała albo śnieg. Biom
+                // próbkowany na tej samej rzadkiej siatce co geologia: komórka klimatu ma
+                // 256 m, a rozmycie granicy działa w skali ~140 m, więc pytanie o biom co
+                // metr liczy ten sam szum sześćdziesiąt cztery razy. Przy LOD3 to była
+                // różnica między 1,2 a 1,8 ms na chunk, czyli między budżetem a jego
+                // przekroczeniem (§7.3).
+                let (bx, by) = (
+                    (wx / GEOLOGY_SAMPLE_M) * GEOLOGY_SAMPLE_M,
+                    (wy / GEOLOGY_SAMPLE_M) * GEOLOGY_SAMPLE_M,
+                );
+                if let Some(m) = pokrywa.material(self.biome_at(bx, by)) {
                     let hi = to_local(column.surface_z, origin.z, skala);
                     let lo = to_local(column.surface_z - SURFACE_COVER_VOXELS + 1, origin.z, skala);
                     out.fill_column(lx, ly, lo, hi + 1, m);

@@ -23,6 +23,7 @@ zstd = { workspace = true }
 ron = { workspace = true }
 
 [dev-dependencies]
+proptest = { workspace = true }
 criterion = { workspace = true }
 
 [lints]
