@@ -1,0 +1,117 @@
+# CI Magnata (M0 WP-14). Cztery joby, bo cztery różne rzeczy mogą się zepsuć:
+# kompilacja i styl, pamięć (Miri), determinizm i wydajność.
+#
+# Faza dopisuje do tego pliku **przypadki**, nie buduje własnego CI (00 §6).
+
+name: check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Przebieg nocny: to w nim biegnie ARM przez QEMU (D-10). Rozjazd wykryty nocą
+    # jest tani, wykryty przed premierą — nie.
+    - cron: "0 2 * * *"
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
+
+jobs:
+  check:
+    name: fmt + clippy + test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: fmt
+        run: cargo fmt --all --check
+      - name: clippy
+        # Zakaz libm (00 §K-6) i zakaz HashMap w symulacji (00 §3.2) są egzekwowane
+        # przez clippy.toml — dlatego clippy jest bramką, nie ozdobą.
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: test
+        run: cargo test --workspace
+      - name: brak wgpu poza voxelview (R-5)
+        shell: bash
+        run: |
+          if cargo tree -p magnat-headless | grep -q wgpu; then
+            echo "wgpu przeniknął do headless" && exit 1
+          fi
+
+  miri:
+    name: miri (ecs + core)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: miri
+      - uses: Swatinem/rust-cache@v2
+      # Miri jest wolne, więc obejmuje wyłącznie crate'y z `unsafe` i z arytmetyką
+      # bitową — czyli dokładnie te, w których UB byłoby możliwe.
+      - name: miri ecs
+        run: cargo +nightly miri test -p magnat-ecs --lib
+      - name: miri core
+        run: cargo +nightly miri test -p magnat-core --lib
+
+  determinism:
+    name: determinizm (T-D1, T-D2, T-D8)
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Determinizm musi być sprawdzany na obu platformach: rozjazd libm
+        # glibc vs MSVC jest najczęstszym przypadkiem (ryzyko R-9).
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: build
+        run: cargo build --release -p magnat-headless
+      - name: T-D1/T-D2 — ten sam seed, różna liczba wątków
+        shell: bash
+        run: |
+          ./target/release/magnat-headless --seed 42 --entities 100000 --ticks 20000 \
+            --hash-every 1000 --threads 1 --out run_1.hashes
+          ./target/release/magnat-headless --seed 42 --entities 100000 --ticks 20000 \
+            --hash-every 1000 --threads 16 --expect run_1.hashes
+      - name: T-D4 — zapis i wznowienie
+        shell: bash
+        run: |
+          ./target/release/magnat-headless --seed 42 --entities 100000 --ticks 10000 \
+            --hash-every 1000 --save world.mgs
+          ./target/release/magnat-headless --load world.mgs --ticks 10000 \
+            --hash-every 1000 --out resumed.hashes
+          tail -n 10 run_1.hashes > expected_tail.txt
+          tail -n 10 resumed.hashes > actual_tail.txt
+          diff expected_tail.txt actual_tail.txt
+      - name: T-D8 — test negatywny (chaos musi zawieść)
+        shell: bash
+        run: |
+          cargo build --release -p magnat-headless --features chaos
+          if ./target/release/magnat-headless --seed 42 --entities 100000 --ticks 20000 \
+              --hash-every 1000 --threads 8 --expect run_1.hashes; then
+            echo "build chaos przeszedł test determinizmu — testy nie działają" && exit 1
+          fi
+
+  bench-guard:
+    name: benchmarki (próg regresji)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: bench
+        run: cargo bench --workspace -- --warm-up-time 1 --measurement-time 3
+      - name: porównanie z linią bazową (10 % ostrzeżenie, 25 % błąd — D-8)
+        run: python3 scripts/bench_guard.py benches/baseline.json

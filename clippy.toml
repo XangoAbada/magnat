@@ -1,0 +1,38 @@
+# Zakaz libm w kodzie symulacji (00 §K-6, M0 §2).
+# Clippy szuka clippy.toml w górę od katalogu crate'a, więc lokalny clippy.toml
+# w engine/render, engine/ui i tools/voxelview NADPISUJE ten plik (tam float wolno).
+disallowed-methods = [
+    { path = "f64::ln", reason = "użyj magnat_core::det_math::ln (00 §K-6)" },
+    { path = "f64::ln_1p", reason = "użyj det_math::ln1p" },
+    { path = "f64::log", reason = "użyj det_math::ln / log2" },
+    { path = "f64::log2", reason = "użyj det_math::log2" },
+    { path = "f64::log10", reason = "użyj det_math::log2 i przeskaluj" },
+    { path = "f64::exp", reason = "użyj det_math::exp" },
+    { path = "f64::exp_m1", reason = "użyj det_math::exp_m1" },
+    { path = "f64::exp2", reason = "użyj det_math::exp2" },
+    { path = "f64::powf", reason = "użyj det_math::pow" },
+    { path = "f64::powi", reason = "niedeterministyczny między platformami; det_math::pow" },
+    { path = "f64::sin", reason = "brak w det_math — dopisz z wektorem testowym (00 §K-6)" },
+    { path = "f64::cos", reason = "brak w det_math — dopisz z wektorem testowym" },
+    { path = "f64::tan", reason = "brak w det_math — dopisz z wektorem testowym" },
+    { path = "f64::asin", reason = "brak w det_math" },
+    { path = "f64::acos", reason = "brak w det_math" },
+    { path = "f64::atan", reason = "brak w det_math" },
+    { path = "f64::atan2", reason = "brak w det_math" },
+    { path = "f64::sinh", reason = "brak w det_math" },
+    { path = "f64::cosh", reason = "brak w det_math" },
+    { path = "f64::tanh", reason = "wyprowadź z det_math::exp" },
+    { path = "f64::cbrt", reason = "brak w det_math" },
+    { path = "f64::hypot", reason = "sqrt(x*x + y*y) przez det_math::sqrt" },
+    { path = "f64::mul_add", reason = "FMA vs emulacja libm: dwa wyniki tej samej linii (M0 §2)" },
+    { path = "f32::ln", reason = "symulacja nie używa f32 (00 §2)" },
+    { path = "f32::exp", reason = "symulacja nie używa f32" },
+    { path = "f32::powf", reason = "symulacja nie używa f32" },
+    { path = "f32::mul_add", reason = "symulacja nie używa f32" },
+]
+
+# Zakaz iteracji po HashMap/HashSet w kodzie symulacji (00 §3.2).
+disallowed-types = [
+    { path = "std::collections::HashMap", reason = "niedeterministyczna kolejność iteracji; użyj SeededMap lub BTreeMap (00 §3.2)" },
+    { path = "std::collections::HashSet", reason = "niedeterministyczna kolejność iteracji; użyj SeededSet lub BTreeSet (00 §3.2)" },
+]

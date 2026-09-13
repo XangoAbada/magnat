@@ -1,0 +1,241 @@
+//! RNG ze strumieniami (00 §3.1, PRD §18.2).
+//!
+//! Brak globalnego stanu. Generator jest wyprowadzany **czystą funkcją czterech
+//! argumentów** i żyje tylko w obrębie jednego wywołania systemu dla jednej encji.
+//! Dzięki temu wynik nie zależy od kolejności wywołań ani od liczby wątków — dołożenie
+//! systemu w M7 nie przesuwa sekwencji widzianej przez system z M5.
+
+use crate::types::{Tick, Q};
+use serde::{Deserialize, Serialize};
+
+/// Strumień RNG. Wartości liczbowe są **wieczne**: faza dopisuje warianty w swoim
+/// zakresie, nigdy nie zmienia i nie usuwa istniejących (00 §3.1, §K-4).
+/// Zmiana numeru strumienia zmienia każdy świat wygenerowany wcześniej z tego samego seeda.
+///
+/// Siatka zakresów (00 §K-4): M0 0–19, M1 100–119, M2 120–139, M3 140–159, M4 160–179,
+/// M5 180–199, M6 200–219, M7 220–239, M8 240–259, M9 260–279, M10 280–299, M11 300–319,
+/// M12 320–339. Fazie, której 20 wartości nie wystarcza, przysługuje blok `baza + 1000`.
+/// Zakresy 20–99 i 340–999 pozostają wolne.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Serialize, Deserialize)]
+#[repr(u16)]
+pub enum StreamId {
+    // ── M0: 0..=19 ───────────────────────────────────────────────────────────────
+    // 0 zarezerwowane — brak strumienia; użycie to błąd, nie wartość domyślna.
+    /// Testy silnika i świat syntetyczny `tools/headless`. Poza silnikiem nieużywany.
+    EngineSelfTest = 1,
+    // ── M1: 100..=119 ──  Terrain = 100, Hydrology = 101, Climate = 102, ...
+    // ── M2: 120..=139 ──  dalej wg siatki wyżej
+}
+
+/// Encja zastępcza dla losowania bez encji (zdarzenie globalne, generator świata).
+/// System, który jej potrzebuje, podaje właśnie tę wartość — nie wymyśla własnego
+/// mechanizmu (M0 §5.2).
+pub const NO_ENTITY: u32 = u32::MAX;
+
+/// xoshiro256++ — stan 256-bitowy, okres 2^256−1.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Rng {
+    s: [u64; 4],
+}
+
+/// Mieszalnik SplitMix64 — rozprasza słabe ziarna (np. `world_seed = 1`), zanim trafią
+/// do xoshiro. Bez tego kolejne encje z sąsiednimi indeksami dają skorelowane sekwencje.
+#[inline]
+const fn splitmix64(mut z: u64) -> u64 {
+    z = z.wrapping_add(0x9E37_79B9_7F4A_7C15);
+    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    z ^ (z >> 31)
+}
+
+/// Jedyny sposób utworzenia generatora. Czysta funkcja czterech argumentów (00 §3.1).
+#[must_use]
+pub fn rng(world_seed: u64, stream: StreamId, entity_index: u32, tick: Tick) -> Rng {
+    let mut acc = world_seed;
+    acc = splitmix64(acc ^ (stream as u64).wrapping_mul(0x2545_F491_4F6C_DD1D));
+    acc = splitmix64(acc ^ u64::from(entity_index));
+    acc = splitmix64(acc ^ tick.0);
+
+    let mut s = [0u64; 4];
+    for slot in &mut s {
+        acc = acc.wrapping_add(0x9E37_79B9_7F4A_7C15);
+        *slot = splitmix64(acc);
+    }
+    // Stan zerowy jest jedynym punktem stałym xoshiro. Praktycznie nieosiągalny,
+    // ale „praktycznie" nie jest gwarancją, a koszt zabezpieczenia to jedna gałąź.
+    if s == [0; 4] {
+        s[0] = 1;
+    }
+    Rng { s }
+}
+
+impl Rng {
+    /// Generator o zadanym stanie — wyłącznie do wektorów testowych i odtwarzania
+    /// sekwencji w narzędziach. Kod symulacji tworzy generator przez `rng()`.
+    #[must_use]
+    pub const fn from_state(s: [u64; 4]) -> Rng {
+        Rng { s }
+    }
+
+    #[inline]
+    pub fn next_u64(&mut self) -> u64 {
+        let result = self.s[0]
+            .wrapping_add(self.s[3])
+            .rotate_left(23)
+            .wrapping_add(self.s[0]);
+        let t = self.s[1] << 17;
+        self.s[2] ^= self.s[0];
+        self.s[3] ^= self.s[1];
+        self.s[1] ^= self.s[2];
+        self.s[0] ^= self.s[3];
+        self.s[2] ^= t;
+        self.s[3] = self.s[3].rotate_left(45);
+        result
+    }
+
+    /// Starsze 32 bity — u xoshiro++ są lepszej jakości niż młodsze.
+    #[inline]
+    pub fn next_u32(&mut self) -> u32 {
+        (self.next_u64() >> 32) as u32
+    }
+
+    /// Losowa liczba z `0..end_exclusive`, **bez obciążenia modulo**
+    /// (metoda Lemire'a z odrzucaniem). Panika przy `end_exclusive == 0`.
+    pub fn gen_range_u32(&mut self, end_exclusive: u32) -> u32 {
+        assert!(end_exclusive > 0, "gen_range_u32: pusty zakres");
+        let bound = u64::from(end_exclusive);
+        let mut m = u64::from(self.next_u32()) * bound;
+        let mut low = m as u32;
+        if low < end_exclusive {
+            // 2^32 mod bound, liczone bez 64-bitowego dzielenia.
+            let threshold = end_exclusive.wrapping_neg() % end_exclusive;
+            while low < threshold {
+                m = u64::from(self.next_u32()) * bound;
+                low = m as u32;
+            }
+        }
+        (m >> 32) as u32
+    }
+
+    /// Wartość w skali 0..=100.
+    #[inline]
+    pub fn gen_q(&mut self) -> Q {
+        Q::new(self.gen_range_u32(101) as u8)
+    }
+
+    /// Prawda z prawdopodobieństwem `p/1000`. Promile, bo procent bywa za gruby
+    /// dla zdarzeń rzadkich, a float w symulacji nie wchodzi w grę.
+    #[inline]
+    pub fn gen_bool_permille(&mut self, p: u16) -> bool {
+        u32::from(p) > self.gen_range_u32(1000)
+    }
+
+    /// Tasowanie Fishera–Yatesa — jedyny dopuszczony sposób losowej permutacji.
+    /// Kolejność wejścia jest kontraktem wywołującego: wynik zależy od niej,
+    /// więc tasowanie listy zbudowanej z iteracji po `HashMap` nadal jest błędem.
+    pub fn shuffle<T>(&mut self, slice: &mut [T]) {
+        for i in (1..slice.len()).rev() {
+            let j = self.gen_range_u32(i as u32 + 1) as usize;
+            slice.swap(i, j);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn wektor_referencyjny_xoshiro256pp() {
+        // Wartości z referencyjnej implementacji xoshiro256++ dla stanu [1,2,3,4].
+        let mut r = Rng::from_state([1, 2, 3, 4]);
+        let oczekiwane: [u64; 6] = [
+            0x0280_0001,
+            0x0380_0067,
+            0x000C_C000_0380_0067,
+            0x000C_C201_9944_00B2,
+            0x8012_A201_9AC4_33CD,
+            0x8A69_978A_CDEE_33BA,
+        ];
+        for (i, want) in oczekiwane.iter().enumerate() {
+            assert_eq!(r.next_u64(), *want, "wyraz {i}");
+        }
+    }
+
+    #[test]
+    fn wektor_referencyjny_splitmix64() {
+        assert_eq!(splitmix64(0), 0xE220_A839_7B1D_CDAF);
+        assert_eq!(splitmix64(1), 0x910A_2DEC_8902_5CC1);
+    }
+
+    #[test]
+    fn strumien_jest_czysta_funkcja() {
+        let a = rng(42, StreamId::EngineSelfTest, 7, Tick(100));
+        let b = rng(42, StreamId::EngineSelfTest, 7, Tick(100));
+        assert_eq!(a, b, "ten sam zestaw argumentów = ten sam generator");
+
+        // Zmiana któregokolwiek argumentu zmienia strumień.
+        assert_ne!(a, rng(43, StreamId::EngineSelfTest, 7, Tick(100)));
+        assert_ne!(a, rng(42, StreamId::EngineSelfTest, 8, Tick(100)));
+        assert_ne!(a, rng(42, StreamId::EngineSelfTest, 7, Tick(101)));
+    }
+
+    #[test]
+    fn kolejnosc_wywolan_nie_ma_znaczenia() {
+        // Ten sam zbiór encji odpytany w dwóch różnych kolejnościach daje te same
+        // wartości per encja — to jest warunek niezależności od liczby wątków.
+        let w_przod: Vec<u64> = (0..100)
+            .map(|e| rng(1, StreamId::EngineSelfTest, e, Tick(5)).next_u64())
+            .collect();
+        let mut w_tyl: Vec<u64> = (0..100)
+            .rev()
+            .map(|e| rng(1, StreamId::EngineSelfTest, e, Tick(5)).next_u64())
+            .collect();
+        w_tyl.reverse();
+        assert_eq!(w_przod, w_tyl);
+    }
+
+    #[test]
+    fn zakres_bez_obciazenia_modulo() {
+        let mut r = rng(7, StreamId::EngineSelfTest, 0, Tick(0));
+        let mut liczniki = [0u32; 3];
+        for _ in 0..30_000 {
+            let v = r.gen_range_u32(3);
+            assert!(v < 3);
+            liczniki[v as usize] += 1;
+        }
+        // Odchylenie od 10 000 na koszyk większe niż 5 % oznaczałoby obciążenie.
+        for c in liczniki {
+            assert!((9_500..10_500).contains(&c), "koszyki: {liczniki:?}");
+        }
+    }
+
+    #[test]
+    fn promile_trafiaja_w_zadeklarowana_czestosc() {
+        let mut r = rng(9, StreamId::EngineSelfTest, 0, Tick(0));
+        let trafienia = (0..100_000).filter(|_| r.gen_bool_permille(250)).count();
+        assert!(
+            (24_000..26_000).contains(&trafienia),
+            "trafienia: {trafienia}"
+        );
+        // Skraje są absolutne, nie „prawie".
+        assert!(!r.gen_bool_permille(0));
+        assert!(r.gen_bool_permille(1000));
+    }
+
+    #[test]
+    fn tasowanie_zachowuje_zawartosc() {
+        let mut r = rng(3, StreamId::EngineSelfTest, 0, Tick(0));
+        let mut v: Vec<u32> = (0..1000).collect();
+        r.shuffle(&mut v);
+        assert_ne!(v, (0..1000).collect::<Vec<_>>(), "nic się nie przetasowało");
+        v.sort_unstable();
+        assert_eq!(v, (0..1000).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn wartosci_stream_id_sa_wieczne() {
+        // Test strażniczy: dopisanie wariantu nie może zmienić istniejących wartości.
+        assert_eq!(StreamId::EngineSelfTest as u16, 1);
+    }
+}

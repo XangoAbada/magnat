@@ -1,0 +1,47 @@
+error[E0308]: mismatched types
+  --> tests/ui/arena_handle_nie_myli_typow.rs:14:16
+   |
+14 |     wez_oferte(uchwyt_partii);
+   |     ---------- ^^^^^^^^^^^^^ expected `ArenaHandle<Offer>`, found `ArenaHandle<Batch>`
+   |     |
+   |     arguments to this function are incorrect
+   |
+   = note: expected struct `ArenaHandle<Offer>`
+              found struct `ArenaHandle<Batch>`
+note: function defined here
+  --> tests/ui/arena_handle_nie_myli_typow.rs:7:4
+   |
+ 7 | fn wez_oferte(_h: ArenaHandle<Offer>) {}
+   |    ^^^^^^^^^^ ----------------------
+
+error[E0308]: mismatched types
+  --> tests/ui/arena_handle_nie_myli_typow.rs:18:16
+   |
+18 |     wez_oferte(e);
+   |     ---------- ^ expected `ArenaHandle<Offer>`, found `Entity`
+   |     |
+   |     arguments to this function are incorrect
+   |
+   = note: expected struct `ArenaHandle<Offer>`
+              found struct `Entity`
+note: function defined here
+  --> tests/ui/arena_handle_nie_myli_typow.rs:7:4
+   |
+ 7 | fn wez_oferte(_h: ArenaHandle<Offer>) {}
+   |    ^^^^^^^^^^ ----------------------
+
+error[E0308]: mismatched types
+  --> tests/ui/arena_handle_nie_myli_typow.rs:22:24
+   |
+22 |     let _ = oferty.get(uchwyt_partii);
+   |                    --- ^^^^^^^^^^^^^ expected `ArenaHandle<Offer>`, found `ArenaHandle<Batch>`
+   |                    |
+   |                    arguments to this method are incorrect
+   |
+   = note: expected struct `ArenaHandle<Offer>`
+              found struct `ArenaHandle<Batch>`
+note: method defined here
+  --> src/arena.rs
+   |
+   |     pub fn get(&self, h: ArenaHandle<T>) -> Option<&T> {
+   |            ^^^

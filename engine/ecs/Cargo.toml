@@ -1,0 +1,24 @@
+[package]
+name = "magnat-ecs"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+magnat-core = { workspace = true }
+magnat-jobs = { workspace = true }
+fixedbitset = { workspace = true }
+xxhash-rust = { workspace = true }
+
+[dev-dependencies]
+trybuild = { workspace = true }
+criterion = { workspace = true }
+
+[lints]
+workspace = true
+
+[[bench]]
+name = "ecs_bench"
+harness = false

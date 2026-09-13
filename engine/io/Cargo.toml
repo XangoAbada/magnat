@@ -1,0 +1,25 @@
+[package]
+name = "magnat-io"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+magnat-core = { workspace = true }
+magnat-ecs = { workspace = true }
+bincode = { workspace = true }
+zstd = { workspace = true }
+xxhash-rust = { workspace = true }
+serde = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+
+[lints]
+workspace = true
+
+[[bench]]
+name = "io_bench"
+harness = false

@@ -1,0 +1,22 @@
+{
+  "b-1 iteracja 400k (2 komponenty)": 226370.54621848738,
+  "b-1b iteracja 400k (6 komponentów, filtry)": 69582.71103896105,
+  "b-1c par_for_each 400k, 16 wątków": 13255.884277134277,
+  "b-2 zgłoszenie komendy (spawn+insert)": 5.639249457626789,
+  "b-2b flush 100k komend": 12825766.666666668,
+  "b-3 zmiana archetypu (wiersz 400 b)": 3480800.0,
+  "b-4 world_state_hash 400k encji": 11584590.0,
+  "b-5 tick z 60 pustymi systemami, 16 wątków": 19977.571972092846,
+  "b-6 snapshot/odczyt 400k": 356901700.0,
+  "b-6 snapshot/zapis 400k": 976764800.0,
+  "b-8 det_math/exp (det_math)": 2926794.117647059,
+  "b-8 det_math/exp (libm platformy)": 2503575.0,
+  "b-8 det_math/ln (det_math)": 4513991.666666666,
+  "b-8 det_math/ln (libm platformy)": 2659334.210526316,
+  "b-8 det_math/pow (det_math)": 23234116.666666664,
+  "b-8 det_math/softmax 16 opcji": 128.41152317302232,
+  "b-9 arena/get po uchwycie": 2.6334644609983187,
+  "b-9 arena/insert + remove": 4.690691661898565,
+  "b-9 arena/insert 600k": 1291699.879951981,
+  "b-9 arena/pełna iteracja (30 % dziur)": 218673.61393323657
+}

@@ -1,0 +1,197 @@
+//! Typy bazowe z `00-konwencje-i-kontrakty.md` §2 — kontrakt nienegocjowalny.
+//!
+//! Wszystkie wielkości są całkowitoliczbowe. Zakaz `f32`/`f64` w pieniądzu,
+//! księgowości, stanach magazynowych i podatkach obowiązuje przez konstrukcję:
+//! te typy po prostu nie mają wariantu zmiennoprzecinkowego.
+
+use serde::{Deserialize, Serialize};
+
+/// Makro definiujące newtype nad liczbą całkowitą wraz ze standardowym zestawem cech.
+macro_rules! scalar_newtype {
+    ($(#[$meta:meta])* $name:ident($inner:ty)) => {
+        $(#[$meta])*
+        #[derive(
+            Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Default,
+            Serialize, Deserialize,
+        )]
+        #[repr(transparent)]
+        pub struct $name(pub $inner);
+
+        impl $name {
+            pub const ZERO: $name = $name(0);
+
+            #[inline]
+            #[must_use]
+            pub const fn get(self) -> $inner {
+                self.0
+            }
+        }
+    };
+}
+
+scalar_newtype! {
+    /// Pieniądz: zawsze `i64` w groszach, nigdy float (00 §2).
+    /// Arytmetyka wyłącznie przez `core::money` — `checked_*`, `mul_ratio`,
+    /// `div_round_half_up`, `split_proportional`.
+    Money(i64)
+}
+
+scalar_newtype! {
+    /// Minuty od startu świata. Tick ekonomiczny = 1 minuta gry.
+    SimMinute(u64)
+}
+
+scalar_newtype! {
+    /// Milisekundy czasu gry. Tick ruchu mikro = 100 ms (`time::MICRO_TICK_MS`).
+    SimInstant(u64)
+}
+
+scalar_newtype! {
+    /// Licznik ticków ekonomicznych, monotoniczny. Rośnie wyłącznie w `App::tick`.
+    Tick(u64)
+}
+
+scalar_newtype! {
+    /// Masa w gramach.
+    Mass(i64)
+}
+
+scalar_newtype! {
+    /// Objętość w mililitrach.
+    Volume(i64)
+}
+
+scalar_newtype! {
+    /// Energia w watogodzinach.
+    Energy(i64)
+}
+
+scalar_newtype! {
+    /// Ilość w milisztukach (sztuki × 1000).
+    Qty(i64)
+}
+
+scalar_newtype! {
+    /// Gęsty indeks dzielnicy.
+    DistrictId(u16)
+}
+
+scalar_newtype! {
+    /// Indeks do katalogu towarów, stabilny w obrębie wersji danych (00 §5).
+    GoodId(u16)
+}
+
+scalar_newtype! {
+    /// Indeks do katalogu receptur.
+    RecipeId(u16)
+}
+
+scalar_newtype! {
+    /// Indeks do katalogu ról zawodowych.
+    JobRoleId(u16)
+}
+
+/// Skala 0..=100: jakość, zaspokojenie potrzeby, poziom umiejętności.
+/// Konstruktor przycina do zakresu — wartość spoza skali nigdy nie powstaje.
+#[derive(
+    Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Default, Serialize, Deserialize,
+)]
+#[repr(transparent)]
+pub struct Q(u8);
+
+impl Q {
+    pub const MIN: Q = Q(0);
+    pub const MAX: Q = Q(100);
+
+    /// Przycina do 0..=100. Świadomie bez wariantu panikującego: dane wejściowe
+    /// spoza skali są błędem kalibracji, nie błędem programu.
+    #[inline]
+    #[must_use]
+    pub const fn new(v: u8) -> Q {
+        Q(if v > 100 { 100 } else { v })
+    }
+
+    #[inline]
+    #[must_use]
+    pub const fn get(self) -> u8 {
+        self.0
+    }
+
+    /// Nasycone dodawanie w obrębie skali.
+    #[inline]
+    #[must_use]
+    pub const fn saturating_add(self, rhs: u8) -> Q {
+        Q::new(self.0.saturating_add(rhs))
+    }
+
+    #[inline]
+    #[must_use]
+    pub const fn saturating_sub(self, rhs: u8) -> Q {
+        Q(self.0.saturating_sub(rhs))
+    }
+}
+
+/// Nastrój w skali -100..=100.
+#[derive(
+    Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Default, Serialize, Deserialize,
+)]
+#[repr(transparent)]
+pub struct Mood(i8);
+
+impl Mood {
+    pub const MIN: Mood = Mood(-100);
+    pub const NEUTRAL: Mood = Mood(0);
+    pub const MAX: Mood = Mood(100);
+
+    #[inline]
+    #[must_use]
+    pub const fn new(v: i8) -> Mood {
+        Mood(if v > 100 {
+            100
+        } else if v < -100 {
+            -100
+        } else {
+            v
+        })
+    }
+
+    #[inline]
+    #[must_use]
+    pub const fn get(self) -> i8 {
+        self.0
+    }
+
+    #[inline]
+    #[must_use]
+    pub const fn saturating_add(self, rhs: i8) -> Mood {
+        Mood::new(self.0.saturating_add(rhs))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn q_przycina_do_skali() {
+        assert_eq!(Q::new(200), Q::MAX);
+        assert_eq!(Q::new(0), Q::MIN);
+        assert_eq!(Q::new(50).saturating_add(200), Q::MAX);
+        assert_eq!(Q::new(3).saturating_sub(10), Q::MIN);
+    }
+
+    #[test]
+    fn mood_przycina_obustronnie() {
+        assert_eq!(Mood::new(-128), Mood::MIN);
+        assert_eq!(Mood::new(127), Mood::MAX);
+        assert_eq!(Mood::new(-100).saturating_add(-50), Mood::MIN);
+    }
+
+    #[test]
+    fn rozmiary_typow_bazowych() {
+        assert_eq!(size_of::<Money>(), 8);
+        assert_eq!(size_of::<Q>(), 1);
+        assert_eq!(size_of::<Mood>(), 1);
+        assert_eq!(size_of::<GoodId>(), 2);
+    }
+}
