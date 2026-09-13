@@ -100,48 +100,81 @@ pub struct RiverCell {
     pub surface_dm: HeightDm,
 }
 
-/// Komórki jeziorne w układzie „struktura tablic": osobno indeksy, osobno rzędne.
+/// Komórki jezior: `(indeks komórki → rzędna zwierciadła)` w postaci **odcinków RLE**.
 ///
-/// Wyglądałoby to naturalniej jako `Vec<(u32, i16)>`, ale `u32` wymusza wyrównanie do 4 B,
-/// więc para zajmuje 8 B zamiast 6 — dwa bajty wyrzucone na każdą komórkę jeziora.
-/// Przy 1,5 mln komórek na mapie 16 km to 2,9 MB, czyli różnica między zmieszczeniem się
-/// w budżecie §5.9 a jego przekroczeniem. Tam, gdzie liczba elementów idzie w miliony,
-/// wyrównanie przestaje być szczegółem.
+/// Jezioro jest obszarem zwartym, a komórki idą wierszami, więc w jednym wierszu jezioro
+/// to ciągły przedział indeksów o **jednej** rzędnej zwierciadła — z definicji, bo lustro
+/// jest poziome. Trzymanie każdej komórki osobno kosztowało 6 B; na mapie 16 km w regionie
+/// górskim jest ich 1,5 mln, czyli 9 MB z budżetu 60 MB (§5.9) na powtórzenie tej samej
+/// liczby trzydzieści razy z rzędu. Odcinek kosztuje 8 B i pokrywa średnio kilkadziesiąt
+/// komórek.
+///
+/// Struktura równoległych wektorów, nie `Vec<(u32, u16, i16)>`: `u32` wymusiłby wyrównanie
+/// krotki do 4 B, czyli 12 B zamiast 8. Tam, gdzie elementów są setki tysięcy, wyrównanie
+/// przestaje być szczegółem.
 #[derive(Clone, Default, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct LakeCells {
-    /// Indeksy komórek, rosnąco — klucz wyszukiwania binarnego.
-    pub cell: Vec<u32>,
-    /// Rzędna zwierciadła, równolegle do `cell`.
-    pub surface_dm: Vec<HeightDm>,
+    /// Pierwszy indeks odcinka, rosnąco — klucz wyszukiwania binarnego.
+    start: Vec<u32>,
+    /// Długość odcinka w komórkach.
+    len: Vec<u16>,
+    /// Rzędna zwierciadła odcinka.
+    surface_dm: Vec<HeightDm>,
+    /// Liczba komórek łącznie — sumowanie `len` przy każdym pytaniu byłoby liczeniem
+    /// tego samego w pętli, a statystyki pytają o to raz na region.
+    cells: u32,
 }
 
 impl LakeCells {
+    /// Dopisuje komórkę. Wywołania muszą iść po **rosnących** indeksach — tak powstaje
+    /// klasyfikacja wody (jeden przebieg po siatce) i tak samo działa wyszukiwanie.
     pub fn push(&mut self, cell: u32, surface_dm: HeightDm) {
-        self.cell.push(cell);
-        self.surface_dm.push(surface_dm);
+        let ostatni = self.start.len().wrapping_sub(1);
+        let dopisz = !self.start.is_empty()
+            && self.surface_dm[ostatni] == surface_dm
+            && self.start[ostatni] + u32::from(self.len[ostatni]) == cell
+            && self.len[ostatni] < u16::MAX;
+        if dopisz {
+            self.len[ostatni] += 1;
+        } else {
+            self.start.push(cell);
+            self.len.push(1);
+            self.surface_dm.push(surface_dm);
+        }
+        self.cells += 1;
     }
 
+    /// Liczba komórek jeziornych (nie odcinków).
     #[must_use]
     pub fn len(&self) -> usize {
-        self.cell.len()
+        self.cells as usize
     }
 
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.cell.is_empty()
+        self.cells == 0
     }
 
     #[must_use]
     pub fn surface_of(&self, cell: usize) -> Option<HeightDm> {
-        self.cell
-            .binary_search(&(cell as u32))
-            .ok()
-            .map(|i| self.surface_dm[i])
+        let cell = cell as u32;
+        // Ostatni odcinek zaczynający się nie później niż `cell`.
+        let i = self.start.partition_point(|s| *s <= cell).checked_sub(1)?;
+        (cell < self.start[i] + u32::from(self.len[i])).then(|| self.surface_dm[i])
     }
 
     #[must_use]
     pub fn bytes(&self) -> usize {
-        self.cell.len() * 4 + self.surface_dm.len() * 2
+        self.start.len() * 4 + self.len.len() * 2 + self.surface_dm.len() * 2
+    }
+
+    /// Odcinki `(pierwsza komórka, długość, zwierciadło)` — do hasza stanu i zapisu.
+    pub fn segments(&self) -> impl Iterator<Item = (u32, u16, HeightDm)> + '_ {
+        self.start
+            .iter()
+            .zip(&self.len)
+            .zip(&self.surface_dm)
+            .map(|((s, l), h)| (*s, *l, *h))
     }
 }
 
@@ -279,9 +312,10 @@ impl WorldData {
             h.write_u16(r.width_dm);
             h.write_u16(r.surface_dm as u16);
         }
-        for (c, s) in self.lake_cells.cell.iter().zip(&self.lake_cells.surface_dm) {
-            h.write_u32(*c);
-            h.write_u16(*s as u16);
+        for (start, len, surface) in self.lake_cells.segments() {
+            h.write_u32(start);
+            h.write_u16(len);
+            h.write_u16(surface as u16);
         }
         for d in &self.deposits {
             d.hash_state(h);

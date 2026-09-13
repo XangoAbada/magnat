@@ -1,6 +1,6 @@
 //! Czas symulacji: kalendarz 360-dniowy (00 §K-1) i częstotliwość systemów (00 §4).
 
-use crate::types::Tick;
+use crate::types::{SimMinute, Tick};
 use serde::{Deserialize, Serialize};
 
 pub const MINUTES_PER_HOUR: u64 = 60;
@@ -80,6 +80,29 @@ impl SimCalendar {
     #[inline]
     const fn minutes(self) -> u64 {
         self.tick.0
+    }
+
+    /// Widok na `SimMinute`. Tick ekonomiczny **jest** minutą gry (00 §4), więc to
+    /// przeliczenie jest tożsamością — istnieje po to, żeby konsument nie musiał sam
+    /// zakładać, że nią jest.
+    #[inline]
+    #[must_use]
+    pub const fn from_minute(m: SimMinute) -> SimCalendar {
+        SimCalendar { tick: Tick(m.0) }
+    }
+
+    /// Minuta doby, 0..1439. Podstawa kąta godzinnego słońca (M1 §5.8).
+    #[inline]
+    #[must_use]
+    pub const fn minute_of_day(self) -> u16 {
+        (self.minutes() % MINUTES_PER_DAY) as u16
+    }
+
+    /// Dzień roku, 0..359. Podstawa deklinacji słońca i sezonowości (00 §K-1).
+    #[inline]
+    #[must_use]
+    pub const fn day_of_year(self) -> u16 {
+        (self.day_index() % (DAYS_PER_MONTH * MONTHS_PER_YEAR)) as u16
     }
 
     #[inline]

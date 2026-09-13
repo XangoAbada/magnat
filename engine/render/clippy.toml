@@ -1,0 +1,10 @@
+# W renderze float wolno bez ograniczeń (00 §K-6): wynik nie wchodzi do stanu trwałego
+# symulacji, a pozycja słońca czy macierz widoku liczone przez `det_math` kosztowałyby
+# dokładność i czas bez żadnego zysku. Ten plik **nadpisuje** zakaz z korzenia repozytorium.
+#
+# Zakaz iterowania po HashMap zostaje: kolejność passów w grafie i kolejność chunków
+# w arenie GPU wpływają na to, co widać, więc mają być powtarzalne.
+disallowed-types = [
+    { path = "std::collections::HashMap", reason = "niedeterministyczna kolejność iteracji; BTreeMap (00 §3.2)" },
+    { path = "std::collections::HashSet", reason = "niedeterministyczna kolejność iteracji; BTreeSet (00 §3.2)" },
+]

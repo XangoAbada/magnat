@@ -1,5 +1,5 @@
 [package]
-name = "magnat-voxelview"
+name = "magnat-render"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -7,13 +7,15 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+magnat-core = { workspace = true }
+magnat-voxel = { workspace = true }
+magnat-sim-snapshot = { workspace = true }
 wgpu = { workspace = true }
 winit = { workspace = true }
 glam = { workspace = true }
 pollster = { workspace = true }
-env_logger = { workspace = true }
-log = "0.4"
 bytemuck = { workspace = true }
+log = "0.4"
 
 [lints]
 workspace = true

@@ -7,7 +7,6 @@
 
 #![forbid(unsafe_code)]
 
-mod png;
 mod testworld;
 mod worldgen;
 

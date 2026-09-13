@@ -6,10 +6,12 @@ members = [
     "engine/jobs",
     "engine/io",
     "engine/devtools",
+    "engine/render",
     "engine/voxel",
+    "sim/snapshot",
     "sim/world",
     "tools/headless",
-    "tools/voxelview",
+    "tools/magnat",
 ]
 
 [workspace.package]
@@ -26,6 +28,8 @@ magnat-ecs = { path = "engine/ecs" }
 magnat-jobs = { path = "engine/jobs" }
 magnat-io = { path = "engine/io" }
 magnat-devtools = { path = "engine/devtools" }
+magnat-render = { path = "engine/render" }
+magnat-sim-snapshot = { path = "sim/snapshot" }
 magnat-voxel = { path = "engine/voxel" }
 magnat-world = { path = "sim/world" }
 

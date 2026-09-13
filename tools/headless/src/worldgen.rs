@@ -3,8 +3,8 @@
 //! Headless-first jest kontraktem (00 §6): cała `sim/world` musi dać się uruchomić
 //! i przetestować na maszynie CI bez karty graficznej. To jest to miejsce.
 
-use crate::png;
 use clap::Args as ClapArgs;
+use magnat_devtools::png;
 use magnat_jobs::JobPool;
 use magnat_world::{generate as generate_world, Difficulty, WorldData, WorldGenParams};
 use std::path::PathBuf;

@@ -1,6 +1,6 @@
 # Zakaz libm w kodzie symulacji (00 §K-6, M0 §2).
 # Clippy szuka clippy.toml w górę od katalogu crate'a, więc lokalny clippy.toml
-# w engine/render, engine/ui i tools/voxelview NADPISUJE ten plik (tam float wolno).
+# w engine/render i engine/ui NADPISUJE ten plik (tam float wolno).
 disallowed-methods = [
     { path = "f64::ln", reason = "użyj magnat_core::det_math::ln (00 §K-6)" },
     { path = "f64::ln_1p", reason = "użyj det_math::ln1p" },

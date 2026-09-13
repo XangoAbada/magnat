@@ -92,6 +92,15 @@ fn mem_world_persistent_16km() {
     let pool = JobPool::new(0);
     for region in Region::ALL {
         let (w, r) = generate(params(WorldSize::Metropolis16km, *region), &pool).unwrap();
+        // Wypisane, nie tylko sprawdzone: raport budżetów z §7.4 ma pokazywać zapas,
+        // a nie wyłącznie fakt, że limit nie pękł.
+        println!(
+            "{}: {:.1} MB stanu trwałego z {:.0} MB ({} komórek jezior)",
+            region.key(),
+            r.stats.persistent_bytes as f64 / (1024.0 * 1024.0),
+            LIMIT_PERSISTENT_16KM as f64 / (1024.0 * 1024.0),
+            r.stats.lake_cells,
+        );
         assert!(
             r.stats.persistent_bytes <= LIMIT_PERSISTENT_16KM,
             "{}: {:.1} MB stanu trwałego wobec limitu {:.0} MB (jeziora: {} komórek)",

@@ -11,6 +11,7 @@ magnat-core = { workspace = true }
 magnat-jobs = { workspace = true }
 smallvec = { workspace = true }
 parking_lot = { workspace = true }
+bytemuck = { workspace = true }
 serde = { workspace = true }
 ron = { workspace = true }
 

@@ -196,19 +196,18 @@ impl VoxelWorld {
         &self.overlay
     }
 
-    /// LOD, w jakim chunk ma być rezydentny przy danym obserwatorze.
-    /// `None` = poza zasięgiem strumieniowania (tam rysuje clipmapa terenu).
+    /// LOD dla zadanej **odległości w metrach**, z histerezą.
     ///
-    /// `current` to LOD, w którym chunk jest teraz — histereza działa tylko wtedy,
-    /// gdy jest z czego przechodzić.
+    /// Odległość, a nie współrzędna chunka — i to jest istotna różnica. Współrzędna chunka
+    /// jest **względna dla poziomu szczegółowości**: `ChunkCoord(1, 0, 0)` przy LOD0 leży
+    /// 32 m od początku układu, a przy LOD3 — 256 m. Funkcja przyjmująca samą współrzędną
+    /// musiałaby zgadywać, o który poziom chodzi, i myliła się dokładnie tam, gdzie pomyłki
+    /// nie widać: strumieniowanie prosiło o warstwy pionowe policzone dla LOD0, dostawało je
+    /// jako LOD1 i teren nie pojawiał się w ogóle.
+    ///
+    /// `None` = poza zasięgiem strumieniowania (tam rysuje clipmapa terenu).
     #[must_use]
-    pub fn desired_lod(
-        &self,
-        coord: ChunkCoord,
-        view: ViewPoint,
-        current: Option<u8>,
-    ) -> Option<u8> {
-        let dist_m = self.distance_m(coord, view);
+    pub fn lod_for_distance(&self, dist_m: i32, current: Option<u8>) -> Option<u8> {
         for (lod, r) in LOD_RADII_M.iter().enumerate() {
             let promien = if lod == 0 { self.lod0_radius_m } else { *r };
             // Histereza: chunk już będący w tym LOD trzyma się go dłużej, chunk spoza
@@ -226,18 +225,38 @@ impl VoxelWorld {
         None
     }
 
-    fn distance_m(&self, coord: ChunkCoord, view: ViewPoint) -> i32 {
-        // Odległość do środka chunka w metrach. Pion liczy się w jednostkach 0,5 m,
-        // więc przed porównaniem trzeba go sprowadzić do metrów — inaczej pionowe
-        // pierścienie byłyby dwa razy za ciasne.
-        let d = CHUNK_DIM as i32;
-        let cx = coord.x * d + d / 2;
-        let cy = coord.y * d + d / 2;
-        let cz = (i32::from(coord.z) * d + d / 2) / 2;
+    /// LOD, w jakim chunk ma być rezydentny. `lod_of_coord` mówi, w jakiej skali podana
+    /// jest współrzędna — patrz [`VoxelWorld::lod_for_distance`].
+    #[must_use]
+    pub fn desired_lod(
+        &self,
+        coord: ChunkCoord,
+        lod_of_coord: u8,
+        view: ViewPoint,
+        current: Option<u8>,
+    ) -> Option<u8> {
+        self.lod_for_distance(self.distance_m(coord, lod_of_coord, view), current)
+    }
+
+    /// Środek chunka w voxelach świata, dla współrzędnej w skali `lod`.
+    #[must_use]
+    pub fn chunk_center(coord: ChunkCoord, lod: u8) -> IVec3 {
+        let d = (CHUNK_DIM as i32) << lod;
+        IVec3::new(
+            coord.x * d + d / 2,
+            coord.y * d + d / 2,
+            i32::from(coord.z) * d + d / 2,
+        )
+    }
+
+    fn distance_m(&self, coord: ChunkCoord, lod: u8, view: ViewPoint) -> i32 {
+        // Pion liczy się w jednostkach 0,5 m, więc przed porównaniem trzeba go sprowadzić
+        // do metrów — inaczej pionowe pierścienie byłyby dwa razy za ciasne.
+        let c = Self::chunk_center(coord, lod);
         let (dx, dy, dz) = (
-            i64::from(cx - view.pos.x),
-            i64::from(cy - view.pos.y),
-            i64::from(cz - view.pos.z / 2),
+            i64::from(c.x - view.pos.x),
+            i64::from(c.y - view.pos.y),
+            i64::from(c.z - view.pos.z) / 2,
         );
         magnat_core::det_math::sqrt((dx * dx + dy * dy + dz * dz) as f64) as i32
     }
@@ -254,7 +273,9 @@ impl VoxelWorld {
         let mut kolejka: BinaryHeap<Request> = BinaryHeap::new();
         for coord in wanted {
             let obecny = self.resident.get(coord).map(|c| c.lod);
-            let Some(lod) = self.desired_lod(*coord, view, obecny) else {
+            // Współrzędne w `wanted` są w skali LOD, w jakiej chunk już jest, albo LOD0
+            // dla nowych — wywołujący przechodzi po pierścieniach, więc zna ją z góry.
+            let Some(lod) = self.desired_lod(*coord, obecny.unwrap_or(0), view, obecny) else {
                 continue;
             };
             if obecny == Some(lod) {
@@ -263,7 +284,7 @@ impl VoxelWorld {
             }
             kolejka.push(Request {
                 lod,
-                dist_sq: i64::from(self.distance_m(*coord, view)),
+                dist_sq: Self::chunk_center(*coord, lod).distance_sq(view.pos),
                 coord: *coord,
             });
         }
@@ -555,20 +576,32 @@ mod tests {
             pos: IVec3::new(0, 0, 32),
         };
         // Chunk pod kamerą: LOD0. Coraz dalej: coraz grubszy agregat, aż poza zasięg.
-        assert_eq!(w.desired_lod(ChunkCoord::new(0, 0, 0), view, None), Some(0));
         assert_eq!(
-            w.desired_lod(ChunkCoord::new(10, 0, 0), view, None),
+            w.desired_lod(ChunkCoord::new(0, 0, 0), 0, view, None),
+            Some(0)
+        );
+        assert_eq!(
+            w.desired_lod(ChunkCoord::new(10, 0, 0), 0, view, None),
             Some(1)
         );
         assert_eq!(
-            w.desired_lod(ChunkCoord::new(30, 0, 0), view, None),
+            w.desired_lod(ChunkCoord::new(30, 0, 0), 0, view, None),
             Some(2)
         );
         assert_eq!(
-            w.desired_lod(ChunkCoord::new(100, 0, 0), view, None),
+            w.desired_lod(ChunkCoord::new(100, 0, 0), 0, view, None),
             Some(3)
         );
-        assert_eq!(w.desired_lod(ChunkCoord::new(300, 0, 0), view, None), None);
+        assert_eq!(
+            w.desired_lod(ChunkCoord::new(300, 0, 0), 0, view, None),
+            None
+        );
+
+        // Ta sama współrzędna w innej skali leży gdzie indziej — i dostaje inny LOD.
+        assert_eq!(
+            w.desired_lod(ChunkCoord::new(10, 0, 0), 3, view, None),
+            Some(3)
+        );
     }
 
     #[test]
@@ -580,8 +613,8 @@ mod tests {
         // Chunk tuż za progiem LOD0 (192 m): wchodząc, jeszcze nie dostaje LOD0;
         // będąc w LOD0, jeszcze go nie traci. To jest cały sens histerezy.
         let przy_progu = ChunkCoord::new(6, 0, 0); // środek ~208 m
-        let wchodzacy = w.desired_lod(przy_progu, view, None);
-        let trwajacy = w.desired_lod(przy_progu, view, Some(0));
+        let wchodzacy = w.desired_lod(przy_progu, 0, view, None);
+        let trwajacy = w.desired_lod(przy_progu, 0, view, Some(0));
         assert_eq!(wchodzacy, Some(1), "chunk wszedł do LOD0 za wcześnie");
         assert_eq!(trwajacy, Some(0), "chunk wypadł z LOD0 za wcześnie");
     }

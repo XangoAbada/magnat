@@ -1174,6 +1174,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "magnat"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "env_logger",
+ "glam",
+ "log",
+ "magnat-core",
+ "magnat-devtools",
+ "magnat-jobs",
+ "magnat-render",
+ "magnat-sim-snapshot",
+ "magnat-voxel",
+ "magnat-world",
+ "winit",
+]
+
+[[package]]
 name = "magnat-core"
 version = "0.1.0"
 dependencies = [
@@ -1242,9 +1260,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "magnat-render"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "glam",
+ "log",
+ "magnat-core",
+ "magnat-sim-snapshot",
+ "magnat-voxel",
+ "pollster",
+ "wgpu",
+ "winit",
+]
+
+[[package]]
+name = "magnat-sim-snapshot"
+version = "0.1.0"
+dependencies = [
+ "magnat-core",
+]
+
+[[package]]
 name = "magnat-voxel"
 version = "0.1.0"
 dependencies = [
+ "bytemuck",
  "criterion",
  "magnat-core",
  "magnat-jobs",
@@ -1252,19 +1293,6 @@ dependencies = [
  "ron",
  "serde",
  "smallvec",
-]
-
-[[package]]
-name = "magnat-voxelview"
-version = "0.1.0"
-dependencies = [
- "bytemuck",
- "env_logger",
- "glam",
- "log",
- "pollster",
- "wgpu",
- "winit",
 ]
 
 [[package]]

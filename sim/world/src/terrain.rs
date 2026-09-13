@@ -107,7 +107,18 @@ impl Terrain {
         } else {
             self.detail_dm(x, y)
         };
-        self.bicubic_dm(x, y) + detal - wciecie_dm
+        let h = self.bicubic_dm(x, y) + detal - wciecie_dm;
+
+        // Dno wody nie ma prawa wystawać ponad jej zwierciadło. Interpolacja 4 m → 1 m
+        // i szum detalu obie działają w obie strony, więc na płytkim obrzeżu jeziora
+        // podnosiły dno o kilka decymetrów ponad lustro: komórka nadal była wodna, więc
+        // nie dostawała pokrywy biomu, ale wody też już w niej nie było — i na ekranie
+        // brzegi jezior były obwiedzione gołym bazaltem. Przycięcie jest jednostronne,
+        // więc nigdzie nie podnosi terenu, a zostawia co najmniej jedną warstwę wody.
+        match self.data.water_surface_dm(self.work_index(x, y)) {
+            Some(zwierciadlo) => h.min(i32::from(zwierciadlo) - VOXEL_DM),
+            None => h,
+        }
     }
 
     /// Interpolacja Catmulla–Roma siatki 4 m. W punktach siatki zwraca **dokładnie**
@@ -157,6 +168,24 @@ impl Terrain {
             FbmSpec::new(3, 24.0),
         );
         (n * DETAIL_AMPLITUDE_M * tlumienie * 10.0) as i32
+    }
+
+    /// Rozmycie granicy biomu: punkt próbkowania przesuwany szumem o ± ~110 m.
+    ///
+    /// Komórka klimatu ma 256 m i biom jest w niej stały, więc granica biegnie dokładnie
+    /// po jej boku. Przy sąsiedztwie o kontrastowej pokrywie — bagno przy jeziorze, skała
+    /// przy lesie — wychodzi z tego na ekranie kwadrat 256 × 256 m z ostrymi bokami,
+    /// widoczny z kilometra. Przesunięcie punktu próbkowania nie zmienia **udziału**
+    /// biomów (klasyfikacja Whittakera zostaje ta sama), tylko łamie granicę na
+    /// nieregularną linię — tę samą sztuczkę stosuje domain warp w generatorze wysokości.
+    fn biome_warp(&self, x: i32, y: i32) -> (i32, i32) {
+        const AMP_M: f32 = 110.0;
+        let spec = FbmSpec::new(2, 140.0);
+        // Przesunięcia próbkowania rozsunięte w dziedzinie, żeby `dx` i `dy` nie były
+        // tą samą liczbą — inaczej warp działa wyłącznie po przekątnej.
+        let dx = fbm(&self.detail_noise, x as f32 + 3300.0, y as f32, spec) * AMP_M;
+        let dy = fbm(&self.detail_noise, x as f32, y as f32 + 7700.0, spec) * AMP_M;
+        (x + dx as i32, y + dy as i32)
     }
 
     /// Wcięcie koryta z **wektorowej** sieci (ryzyko R2).
@@ -307,12 +336,23 @@ impl TerrainQuery for Terrain {
             self.water_dist_m(gx, gy),
         );
         // Powierzchnia i zwierciadło wód gruntowych — już w pełnej rozdzielczości 1 m.
-        self.data.geology.stack_from(
+        let mut stack = self.data.geology.stack_from(
             &t,
             self.height_dm(x, y),
             self.slope_at(x, y),
             self.water_dist_m(x, y),
-        )
+        );
+        // Pokrywa biomu wchodzi też tutaj, nie tylko do voxeli. Bez tego inspektor
+        // pokazywałby piasek tam, gdzie w wykopie widać darń — a to jest dokładnie ta
+        // rozbieżność, którą ma wyłapywać `column_matches_voxels` (§7.1). Zgadzało się
+        // dopóty, dopóki biom pokrywał się z wierzchnią warstwą geologiczną, czyli
+        // przypadkiem.
+        if let Some(m) = SurfaceCover::new(&self.materials).material(self.biome_at(x, y)) {
+            stack
+                .layers
+                .insert(0, (m, stack.surface_z - SURFACE_COVER_VOXELS + 1));
+        }
+        stack
     }
 
     fn water_at(&self, x: i32, y: i32) -> WaterCell {
@@ -500,7 +540,10 @@ impl TerrainQuery for Terrain {
             WaterClass::Sea => Biome::Sea,
             WaterClass::Lake => Biome::Lake,
             WaterClass::River => Biome::River,
-            WaterClass::Dry => self.climate_at(x, y).biome,
+            WaterClass::Dry => {
+                let (wx, wy) = self.biome_warp(x, y);
+                self.climate_at(wx, wy).biome
+            }
         }
     }
 
@@ -533,6 +576,18 @@ fn deposit_center(d: &Deposit) -> IVec3 {
 /// mierzalna: chunk LOD0 to 1156 kolumn, a przy kroku 8 m — 25 próbek geologii zamiast 1156.
 const GEOLOGY_SAMPLE_M: i32 = 8;
 
+/// Grubość pokrywy biomu w voxelach 0,5 m.
+///
+/// Geologia nie zna biomu i nie powinna: warstwy skalne zależą od wypiętrzenia i erozji,
+/// a darń od klimatu. Pokrywa jest więc **nakładana na wierzch** przy materializacji.
+///
+/// Cztery voxele, nie jeden. Przy upsamplingu 4 m → 1 m zbocze ma stopnie po 1–2 m, a ściana
+/// stopnia pokazuje to, co leży pod pokrywą. Przy pokrywie jednovoxelowej każdy stopień
+/// odsłaniał piasek i mapa pokrywała się siatką jasnych poziomic — widać to na zrzutach
+/// z pierwszej wersji. Dwa metry darni zakrywają typowy stopień i nie zmieniają niczego
+/// poza wyglądem: kolumna geologiczna pod spodem zostaje ta sama.
+const SURFACE_COVER_VOXELS: i32 = 4;
+
 impl ColumnSource for Terrain {
     /// Materializacja chunka. Wołana z dowolnego workera — i dlatego nie ma tu ani jednego
     /// zapisu do `self` (M1 §5.2: źródło musi być czyste, bo kolejność ładowania chunków
@@ -549,6 +604,7 @@ impl ColumnSource for Terrain {
         let zakres = out.range();
         let water = self.materials.id_of("water").unwrap_or(MaterialId::AIR);
         let size = self.size_m();
+        let pokrywa = SurfaceCover::new(&self.materials);
 
         // Geologia na rzadszej siatce: jedna próbka na `GEOLOGY_SAMPLE_M` metrów obszaru chunka.
         let span = CHUNK_DIM as i32 * skala;
@@ -591,6 +647,34 @@ impl ColumnSource for Terrain {
                     (s / 4) as i32
                 };
 
+                // Zwierciadło wody dla tej kolumny. W agregacie **najwyższe** z tych samych
+                // czterech próbek, nie jedno z lewego górnego rogu: kolumna LOD2 opisuje
+                // 4 m terenu, a jezioro albo w niej jest, albo go nie ma — uśrednianie
+                // lustra dałoby brzeg schodzący pod wodę w połowie voxela.
+                let woda_dm = if skala == 1 {
+                    self.data
+                        .water_surface_dm(self.work_index(wx, wy))
+                        .map(i32::from)
+                } else {
+                    let p = skala / 2;
+                    [(0, 0), (p, 0), (0, p), (p, p)]
+                        .iter()
+                        .filter_map(|(dx, dy)| {
+                            let i =
+                                self.work_index((wx + dx).min(size - 1), (wy + dy).min(size - 1));
+                            self.data.water_surface_dm(i).map(i32::from)
+                        })
+                        .max()
+                };
+                // Uśredniona powierzchnia potrafi wyjść **ponad** lustro — i wtedy komórka
+                // jest nadal wodna (więc bez pokrywy biomu), ale wody w niej nie ma:
+                // z daleka jezioro dostawało łatę gołego bazaltu wielkości chunka.
+                // Przycięcie jest jednostronne, dokładnie jak w `height_dm`.
+                let surface_dm = match woda_dm {
+                    Some(w) => surface_dm.min(w - VOXEL_DM),
+                    None => surface_dm,
+                };
+
                 let gx = ((lx * skala).clamp(0, span) / krok).clamp(0, n_geo as i32 - 1) as usize;
                 let gy = ((ly * skala).clamp(0, span) / krok).clamp(0, n_geo as i32 - 1) as usize;
                 let column = self.data.geology.stack_from(
@@ -619,10 +703,16 @@ impl ColumnSource for Terrain {
                     top = *bottom - 1;
                 }
 
+                // Pokrywa biomu na wierzchu — darń, piasek, skała albo śnieg.
+                if let Some(m) = pokrywa.material(self.biome_at(wx, wy)) {
+                    let hi = to_local(column.surface_z, origin.z, skala);
+                    let lo = to_local(column.surface_z - SURFACE_COVER_VOXELS + 1, origin.z, skala);
+                    out.fill_column(lx, ly, lo, hi + 1, m);
+                }
+
                 // Woda: od powierzchni terenu do zwierciadła.
-                let i = self.work_index(wx, wy);
-                if let Some(surface) = self.data.water_surface_dm(i) {
-                    let z_wody = i32::from(surface) / VOXEL_DM;
+                if let Some(surface) = woda_dm {
+                    let z_wody = surface / VOXEL_DM;
                     if z_wody > column.surface_z {
                         let lo = to_local(column.surface_z + 1, origin.z, skala);
                         let hi = to_local(z_wody, origin.z, skala);
@@ -630,6 +720,41 @@ impl ColumnSource for Terrain {
                     }
                 }
             }
+        }
+    }
+}
+
+/// Materiały pokrywy terenu, rozwiązane raz zamiast po kluczu tekstowym na każdą kolumnę.
+struct SurfaceCover {
+    grass: Option<MaterialId>,
+    sand: Option<MaterialId>,
+    rock: Option<MaterialId>,
+    snow: Option<MaterialId>,
+    peat: Option<MaterialId>,
+}
+
+impl SurfaceCover {
+    fn new(reg: &MaterialRegistry) -> SurfaceCover {
+        SurfaceCover {
+            grass: reg.id_of("grass"),
+            sand: reg.id_of("sand"),
+            rock: reg.id_of("granite"),
+            snow: reg.id_of("snow"),
+            peat: reg.id_of("peat"),
+        }
+    }
+
+    /// `None` dla biomów wodnych — tam powierzchnią jest dno, a wodę kładzie osobny krok.
+    fn material(&self, biome: Biome) -> Option<MaterialId> {
+        match biome {
+            Biome::Sea | Biome::Lake | Biome::River => None,
+            Biome::Sand => self.sand,
+            Biome::Rock => self.rock,
+            Biome::Snow => self.snow,
+            Biome::Marsh => self.peat,
+            // Las, step, pole i zarośla mają darń — różnią się roślinnością, a ta jest
+            // zadaniem M11 (modele), nie kolorem gruntu.
+            _ => self.grass,
         }
     }
 }
@@ -767,6 +892,82 @@ mod tests {
                 "kafel rozjechał się z zapytaniem punktowym w ({lx}, {ly})"
             );
         }
+    }
+
+    #[test]
+    fn kazda_komorka_wodna_ma_wode_na_wierzchu_kolumny() {
+        // Regresja z podglądu: interpolacja 1 m i uśrednianie w agregacie LOD potrafiły
+        // wypchnąć dno ponad zwierciadło. Komórka zostawała wodna (więc bez pokrywy
+        // biomu), ale wody w niej nie było — na ekranie jezioro dostawało łatę gołej
+        // skały. Sprawdzamy oba tryby materializacji: dokładny i agregat.
+        let t = teren(Region::Mountain, 0x1CE);
+        let reg = t.materials();
+        let woda = reg.expect_id("water");
+        let dim = t.data().height.dim();
+        for lod in [0u8, 2] {
+            let span = (CHUNK_DIM as i32) << lod;
+            let skala = 1i32 << lod;
+            let mut sprawdzonych = 0;
+            for gy in (0..dim).step_by(11) {
+                for gx in (0..dim).step_by(11) {
+                    let i = gy * dim + gx;
+                    let Some(surf) = t.data().water_surface_dm(i) else {
+                        continue;
+                    };
+                    let (x, y) = (
+                        (gx * WORK_CELL_M as usize) as i32,
+                        (gy * WORK_CELL_M as usize) as i32,
+                    );
+                    let z = i32::from(surf) / VOXEL_DM;
+                    let coord = ChunkCoord::new(
+                        x.div_euclid(span),
+                        y.div_euclid(span),
+                        z.div_euclid(span) as i16,
+                    );
+                    let mut b = ChunkBuilder::new(coord, lod, 1);
+                    t.fill_chunk(coord, lod, &mut b);
+                    let m = b.material_at(
+                        (x - coord.x * span) / skala,
+                        (y - coord.y * span) / skala,
+                        (z - i32::from(coord.z) * span) / skala,
+                    );
+                    assert_eq!(
+                        m, woda,
+                        "brak wody na zwierciadle w ({x}, {y}) przy LOD{lod}"
+                    );
+                    sprawdzonych += 1;
+                }
+            }
+            assert!(sprawdzonych > 50, "za mało komórek wodnych do sprawdzenia");
+        }
+    }
+
+    #[test]
+    fn granica_biomu_nie_biegnie_po_siatce_klimatu() {
+        // Biom jest stały w komórce 256 m, więc bez rozmycia jego granica to bok tej
+        // komórki — a przy kontrastowej pokrywie (torf przy jeziorze) widać z kilometra
+        // kwadrat. Po warpie przejścia mają wypadać **między** wielokrotnościami 256 m.
+        let t = teren(Region::Mountain, 0x1CE);
+        let mut przejsc = 0;
+        let mut na_siatce = 0;
+        for y in (256..3800).step_by(256) {
+            let mut poprzedni = t.biome_at(0, y);
+            for x in 1..t.size_m() {
+                let b = t.biome_at(x, y);
+                if b != poprzedni {
+                    przejsc += 1;
+                    if x % (CLIMATE_CELL_M as i32) == 0 {
+                        na_siatce += 1;
+                    }
+                    poprzedni = b;
+                }
+            }
+        }
+        assert!(przejsc > 50, "za mało granic biomów do oceny: {przejsc}");
+        assert!(
+            na_siatce * 4 < przejsc,
+            "granice biomów wciąż trzymają się siatki klimatu: {na_siatce} z {przejsc}"
+        );
     }
 
     #[test]

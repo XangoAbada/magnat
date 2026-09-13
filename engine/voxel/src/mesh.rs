@@ -22,7 +22,10 @@ use crate::material::{MaterialId, MaterialRegistry};
 ///
 /// Pozycja bazowa chunka i skala LOD idą w per-chunk SSBO, nie w wierzchołku — inaczej
 /// każdy wierzchołek nosiłby 8 bajtów tej samej liczby.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+/// `Pod` i `repr(C)`, bo ten typ trafia **bez konwersji** do bufora GPU. Gdyby układ pól
+/// zależał od kompilatora, format wierzchołka z §5.3 przestałby być kontraktem z shaderem.
+#[repr(C)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct PackedVertex {
     pub lo: u32,
     pub hi: u32,
@@ -135,6 +138,18 @@ pub fn build_mesh(b: &ChunkBuilder, reg: &MaterialRegistry) -> ChunkMesh {
     let dim = CHUNK_DIM as i32;
     let mut mesh = ChunkMesh::default();
 
+    // Czy voxel w ogóle daje geometrię. Powietrze nie daje; woda **daje** —
+    // bez tego jeziora i rzeki są dziurami, przez które widać niebo, i wygląda to
+    // dokładnie tak, jak brzmi.
+    let renders = |x: i32, y: i32, z: i32| -> MaterialId { b.material_at(x, y, z) };
+    // Czy sąsiad zasłania ścianę. Zasłania materiał nieprzezroczysty oraz **ten sam
+    // materiał** — dzięki temu tafla wody nie produkuje ściany na każdej granicy voxela,
+    // a dno pod wodą nadal istnieje i przegrywa z nią na buforze głębi.
+    let blocks = |wlasny: MaterialId, x: i32, y: i32, z: i32| -> bool {
+        let n = b.material_at(x, y, z);
+        n == wlasny || (!n.is_air() && reg.get(n).is_opaque())
+    };
+    // Zasłanianie na potrzeby AO: liczy się to, co blokuje światło, czyli nieprzezroczyste.
     let solid = |x: i32, y: i32, z: i32| -> bool {
         let m = b.material_at(x, y, z);
         !m.is_air() && reg.get(m).is_opaque()
@@ -149,10 +164,15 @@ pub fn build_mesh(b: &ChunkBuilder, reg: &MaterialRegistry) -> ChunkMesh {
         } else {
             2
         };
+        // Osie płaszczyzny przekroju muszą tworzyć z normalną układ **prawoskrętny**,
+        // inaczej quad wychodzi nawinięty odwrotnie i wypada przy odrzucaniu tylnych ścianek.
+        // Dla osi Y prawoskrętna para to (Z, X), nie (X, Z) — bo Y = Z × X. Pierwsza wersja
+        // brała (X, Z) i skutek był taki, że **wszystkie** ściany zwrócone na północ i południe
+        // znikały: teren pokrywał się siatką dziur wzdłuż poziomic, przez które widać niebo.
         let (ua, va) = match axis {
-            0 => (1usize, 2usize),
-            1 => (0, 2),
-            _ => (0, 1),
+            0 => (1usize, 2usize), // X = Y × Z
+            1 => (2, 0),           // Y = Z × X
+            _ => (0, 1),           // Z = X × Y
         };
 
         let mut mask = vec![Face::default(); (dim * dim) as usize];
@@ -165,14 +185,14 @@ pub fn build_mesh(b: &ChunkBuilder, reg: &MaterialRegistry) -> ChunkMesh {
                     p[ua] = u;
                     p[va] = v;
 
+                    let material = renders(p[0], p[1], p[2]);
                     let widoczna =
-                        solid(p[0], p[1], p[2]) && !solid(p[0] + nx, p[1] + ny, p[2] + nz);
+                        !material.is_air() && !blocks(material, p[0] + nx, p[1] + ny, p[2] + nz);
                     let idx = (v * dim + u) as usize;
                     if !widoczna {
                         mask[idx] = Face::default();
                         continue;
                     }
-                    let material = b.material_at(p[0], p[1], p[2]);
                     mask[idx] = Face {
                         material,
                         ao: corner_ao(&solid, p, (*nx, *ny, *nz), ua, va),
@@ -398,6 +418,73 @@ mod tests {
         );
     }
 
+    /// Znak orientacji trójkąta rzutowanego na płaszczyznę prostopadłą do normalnej.
+    /// Dodatni = nawinięcie przeciwne do ruchu wskazówek zegara patrząc z kierunku normalnej,
+    /// czyli ściana przednia przy `front_face: Ccw`.
+    fn orientacja(mesh: &ChunkMesh, tri: usize) -> f32 {
+        let idx = [
+            mesh.indices[tri * 3] as usize,
+            mesh.indices[tri * 3 + 1] as usize,
+            mesh.indices[tri * 3 + 2] as usize,
+        ];
+        let p: Vec<[f32; 3]> = idx
+            .iter()
+            .map(|i| {
+                let (x, y, z) = mesh.vertices[*i].position();
+                [x as f32, y as f32, z as f32]
+            })
+            .collect();
+        let n = NORMALS[mesh.vertices[idx[0]].normal() as usize];
+        let (u, v) = (
+            [p[1][0] - p[0][0], p[1][1] - p[0][1], p[1][2] - p[0][2]],
+            [p[2][0] - p[0][0], p[2][1] - p[0][1], p[2][2] - p[0][2]],
+        );
+        let cross = [
+            u[1] * v[2] - u[2] * v[1],
+            u[2] * v[0] - u[0] * v[2],
+            u[0] * v[1] - u[1] * v[0],
+        ];
+        cross[0] * n.0 as f32 + cross[1] * n.1 as f32 + cross[2] * n.2 as f32
+    }
+
+    #[test]
+    fn kazda_sciana_jest_nawinieta_przodem_do_swojej_normalnej() {
+        // To jest test, którego brak kosztował najwięcej: przy złej orientacji ściany
+        // **znikają** przy odrzucaniu tylnych ścianek, a w kodzie meshingu wszystko wygląda
+        // poprawnie — błąd widać dopiero na ekranie, jako dziury w terenie.
+        let reg = rejestr();
+        let kamien = reg.expect_id("granite");
+        let mut b = ChunkBuilder::new(ChunkCoord::new(0, 0, 0), 0, 1);
+        // Schodki we wszystkich czterech kierunkach poziomych plus góra i dół.
+        for y in 0..CHUNK_DIM as i32 {
+            for x in 0..CHUNK_DIM as i32 {
+                let h = 8 + (x / 4) - (y / 4);
+                b.fill_column(x, y, 0, h.max(1), kamien);
+            }
+        }
+        let mesh = build_mesh(&b, &reg);
+        assert!(
+            mesh.quad_count() > 50,
+            "za mało ścian, test nic nie sprawdza"
+        );
+
+        let mut widziane = [0u32; 6];
+        for tri in 0..mesh.indices.len() / 3 {
+            let o = orientacja(&mesh, tri);
+            let n = mesh.vertices[mesh.indices[tri * 3] as usize].normal();
+            widziane[n as usize] += 1;
+            assert!(
+                o > 0.0,
+                "trójkąt {tri} ściany o normalnej {n} jest nawinięty tyłem (orientacja {o})"
+            );
+        }
+        // Wszystkie sześć kierunków muszą wystąpić — inaczej test przechodzi, bo brakującej
+        // ściany nie ma czym sprawdzić.
+        for (n, ile) in widziane.iter().enumerate() {
+            assert!(*ile > 0, "brak ścian o normalnej {n}");
+        }
+    }
+
     #[test]
     fn pojedynczy_voxel_daje_szesc_scian() {
         let reg = rejestr();
@@ -459,7 +546,7 @@ mod tests {
     }
 
     #[test]
-    fn woda_nie_zaslania_bo_nie_jest_nieprzezroczysta() {
+    fn woda_ma_swoja_tafle_i_nie_zaslania_dna() {
         let reg = rejestr();
         let kamien = reg.expect_id("granite");
         let woda = reg.expect_id("water");
@@ -479,6 +566,22 @@ mod tests {
                 .any(|v| v.material() == kamien && v.normal() == 4),
             "woda zasłoniła dno"
         );
+        // I sama tafla istnieje. To nie jest asercja symetryczna dla ozdoby: pierwsza
+        // wersja testu sprawdzała wyłącznie dno, więc przeszła również wtedy, gdy woda
+        // nie dawała **żadnej** ściany — a na ekranie jezioro było dziurą do nieba.
+        assert!(
+            mesh.vertices
+                .iter()
+                .any(|v| v.material() == woda && v.normal() == 4),
+            "tafla wody nie powstała"
+        );
+        // Wnętrze wody się nie mesh-uje: tafla to jeden quad od góry, nie trzy warstwy.
+        let tafla = mesh
+            .vertices
+            .iter()
+            .filter(|v| v.material() == woda && v.normal() == 4)
+            .count();
+        assert_eq!(tafla, 4, "tafla rozbita na warstwy zamiast jednego quada");
     }
 
     #[test]
