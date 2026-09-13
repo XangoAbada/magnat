@@ -7,9 +7,11 @@
 
 #![forbid(unsafe_code)]
 
+mod png;
 mod testworld;
+mod worldgen;
 
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use magnat_core::Tick;
 use magnat_devtools::{Console, Inspector, MetricSink};
 use magnat_ecs::{App, World};
@@ -23,6 +25,10 @@ use std::path::PathBuf;
     about = "Runner symulacji bez GPU: determinizm, zapis, konsola"
 )]
 struct Args {
+    /// Podpolecenie. Brak = przebieg symulacji świata syntetycznego (tryb M0).
+    #[command(subcommand)]
+    command: Option<Command>,
+
     /// Ziarno świata.
     #[arg(long, default_value_t = 1)]
     seed: u64,
@@ -78,8 +84,28 @@ fn main() -> std::process::ExitCode {
     }
 }
 
+/// Podpolecenia M1. Świadomie **opcjonalne**: bez podpolecenia narzędzie zachowuje się
+/// tak jak w M0 (przebieg ticków świata syntetycznego), więc wywołania w CI i w skryptach
+/// determinizmu M0 działają bez zmian.
+#[derive(Subcommand, Debug)]
+enum Command {
+    /// Generacja świata bez GPU: raport czasów, hash terenu, statystyki.
+    Generate(worldgen::GenerateArgs),
+    /// Dwa przebiegi tego samego ziarna → porównanie hashy (M1 §7.1).
+    Verify(worldgen::VerifyArgs),
+    /// Podgląd wybranego pola generatora jako PNG — sanity-check bez GPU.
+    Preview(worldgen::PreviewArgs),
+}
+
 fn uruchom() -> Result<std::process::ExitCode, Box<dyn std::error::Error>> {
     let args = Args::parse();
+
+    match &args.command {
+        Some(Command::Generate(a)) => return worldgen::generate(a),
+        Some(Command::Verify(a)) => return worldgen::verify(a),
+        Some(Command::Preview(a)) => return worldgen::preview(a),
+        None => {}
+    }
 
     let world = match &args.load {
         Some(path) => {

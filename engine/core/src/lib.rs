@@ -21,6 +21,7 @@ pub mod decision;
 pub mod det_math;
 pub mod entity;
 pub mod fixed;
+pub mod geom;
 pub mod hash;
 pub mod ids;
 pub mod money;
@@ -35,6 +36,7 @@ pub use collections::{seeded_map, seeded_set, SeededMap, SeededMapExt, SeededSet
 pub use decision::DecisionReason;
 pub use entity::Entity;
 pub use fixed::Fx;
+pub use geom::{IAabb3, IRect, IVec2, IVec3};
 pub use hash::{HashState, StateHash, StateHasher};
 pub use ids::{
     BuildingId, CitizenId, ContractId, FirmId, HouseholdId, ParcelId, SiteId, VehicleId,
@@ -48,5 +50,6 @@ pub use types::{
     Tick, Volume, Q,
 };
 pub use vocab::{
-    ActivityKind, NeedKind, PlaceRef, TransportMode, UtilityKind, UtilityService, WorldCoord,
+    ActivityKind, Biome, NeedKind, PlaceRef, ResourceKind, TransportMode, UtilityKind,
+    UtilityService, WorldCoord,
 };

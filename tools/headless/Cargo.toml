@@ -17,6 +17,7 @@ magnat-ecs = { workspace = true }
 magnat-jobs = { workspace = true }
 magnat-io = { workspace = true }
 magnat-devtools = { workspace = true }
+magnat-world = { workspace = true }
 clap = { workspace = true }
 
 [lints]

@@ -79,7 +79,7 @@ z szablonu w `00-konwencje-i-kontrakty.md` §8 i są identyczne dla każdej fazy
 ### M1 — Świat statyczny
 `M1-swiat-statyczny.md` · wymaga: M0
 
-- [ ] 1. Pakiety robocze · [ ] 2. Determinizm · [ ] 3. Własnościowe · [ ] 4. Budżety
+- [~] 1. Pakiety robocze — zamknięte W1, W2, V1 (statusy w `M1-swiat-statyczny.md` §4) · [ ] 2. Determinizm · [ ] 3. Własnościowe · [ ] 4. Budżety
 - [ ] 5. Wyjaśnialność · [ ] 6. Kontrakty · [ ] 7. Decyzje otwarte
 - [ ] **Faza ukończona** — artefakt: oglądalny krajobraz z seeda, rzeki z ujściem, cykl dobowy
 
@@ -168,6 +168,9 @@ Jedna linia na zamknięty pakiet roboczy lub bramkę. Najnowsze na górze.
 
 | Data | Faza | Co zamknięto | Uwagi |
 |---|---|---|---|
+| 2026-09-13 | M1 | W2: przebiegi P1–P3 (maska lądu i profil brzegowy, baza wysokości z domain warpingiem, pola `U` i `K`); podgląd PNG w headless | Budżet §5.9 dla 16 km: P1+P2 = 178 ms wobec celu 400 ms. Dwie poprawki wyszły z podglądu, nie z testów: waga oktaw w ridged zapadała się po pierwszej oktawie, a szum wartościowy zostawiał kratownicę — stąd przejście na szum gradientowy |
+| 2026-09-13 | M1 | W1: `WorldGenParams` z walidacją, `Grid2`, potok 12 nazwanych przebiegów z profilem czasu, `WorldGenReport`, `StreamId` 100–110, `.mgw`, `headless generate/verify/preview` | Decyzje D1–D11 przyjęte wg propozycji domyślnych M1 (D3 potwierdza rezerwację strumieni w 00 §K-4) |
+| 2026-09-13 | M1 | V1: `engine/voxel` — chunk 32³, paleta lokalna, `Uniform`/`Rle`/`Dense`, `ColumnSource`, rejestr materiałów z `data/materials/` | Round-trip Dense→Rle→Dense bit w bit; `Uniform` w 32 B |
 | 2026-09-13 | M0 | **Bramki 1–7 fazy M0.** Cały workspace: 7 crate'ów, 147 testów zielonych, `clippy -D warnings` bez wyjątków, benchmarki B-1…B-9 w budżetach (poza B-1c, patrz M0 §4a K0-10) | Do domknięcia bramki „faza ukończona": Miri, macierz CI, FPS w voxelview, ARM w T-D9 |
 | 2026-09-13 | M0 | WP-15: bootstrap `wgpu`/`winit`, chunk 32³, kamera orbitalna; `wgpu` nie przenika do headless | wgpu 30 zmieniło API względem planu (prezentacja przez kolejkę, `immediate_size`, `CurrentSurfaceTexture`) — ryzyko R-5 zmaterializowane i obsłużone |
 | 2026-09-13 | M0 | WP-13, WP-14: benchmarki, `benches/baseline.json`, `scripts/bench_guard.py`, macierz CI z jobami `check`/`miri`/`determinism`/`bench-guard` | Progi D-8: 10 % ostrzeżenie, 25 % błąd |

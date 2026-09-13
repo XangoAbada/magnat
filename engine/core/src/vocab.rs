@@ -87,6 +87,45 @@ vocab_enum! {
     }
 }
 
+vocab_enum! {
+    /// Rodzaj surowca w złożu. Tutaj, a nie w `sim/world`, bo słownika używają M5
+    /// (ceny surowców), M6 (wydobycie i mapowanie na `GoodId`) i M8 (opłaty eksploatacyjne) —
+    /// czyli więcej niż jedna faza, co jest kryterium z 00 §K-8.
+    /// `core` nie wie nic o geometrii złoża ani o kosztach wydobycia — to jest w M1 i M6.
+    ResourceKind {
+        Coal, IronOre, Oil, Gas, Aggregate, Groundwater, ClayDeposit,
+    }
+}
+
+vocab_enum! {
+    /// Biom. Konsument poza M1: M2 (strefowanie i zieleń), M5/M6 (rolnictwo i leśnictwo),
+    /// M8 (zdarzenia pogodowe zależne od pokrycia terenu).
+    Biome {
+        Sea, Lake, River, Marsh, BroadleafForest, ConiferForest, MixedForest,
+        Grassland, Cropland, Scrub, Rock, Sand, Snow,
+    }
+}
+
+impl Biome {
+    /// Czy biom jest powierzchnią wodną — pytanie zadawane w M1, M2 i M4 na tyle często,
+    /// że lepiej mieć jedną odpowiedź niż trzy listy wariantów.
+    #[inline]
+    #[must_use]
+    pub const fn is_water(self) -> bool {
+        matches!(self, Biome::Sea | Biome::Lake | Biome::River)
+    }
+
+    /// Czy biom jest zalesiony.
+    #[inline]
+    #[must_use]
+    pub const fn is_forest(self) -> bool {
+        matches!(
+            self,
+            Biome::BroadleafForest | Biome::ConiferForest | Biome::MixedForest
+        )
+    }
+}
+
 /// Współrzędna świata w centymetrach — całkowitoliczbowa, więc deterministyczna
 /// i porównywalna. `i32` w centymetrach daje ±21 tys. km, czyli zapas rzędu wielkości
 /// ponad największą planowaną mapę.

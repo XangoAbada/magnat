@@ -23,7 +23,33 @@ pub enum StreamId {
     // 0 zarezerwowane — brak strumienia; użycie to błąd, nie wartość domyślna.
     /// Testy silnika i świat syntetyczny `tools/headless`. Poza silnikiem nieużywany.
     EngineSelfTest = 1,
-    // ── M1: 100..=119 ──  Terrain = 100, Hydrology = 101, Climate = 102, ...
+
+    // ── M1: 100..=119 ── generator świata; jeden strumień na przebieg potoku,
+    // żeby dopisanie przebiegu nie przesunęło losowań pozostałych (M1 §5.6).
+    /// P1 — maska lądu i poziom morza.
+    WorldLandmask = 100,
+    /// P2 — baza wysokości (fBm / ridged multifractal).
+    WorldHeightBase = 101,
+    /// P2 — pole zniekształcenia dziedziny (domain warping).
+    WorldDomainWarp = 102,
+    /// P3 — pole wypiętrzenia `U` dla stream-power.
+    WorldUplift = 103,
+    /// P3 — pole podatności na erozję `K` (twarde intruzje → ostańce).
+    WorldErodibility = 104,
+    /// P8 — modulacja miąższości warstw geologicznych.
+    WorldGeology = 105,
+    /// P9 — rozmieszczenie, typ i kształt złóż.
+    WorldDeposits = 106,
+    /// P10 — temperatura bazowa i jej lokalna zmienność.
+    WorldClimate = 107,
+    /// P11 — wiatr dominujący i adwekcja wilgoci.
+    WorldWind = 108,
+    /// P12 — klasyfikacja biomu i żyzność gleby.
+    WorldBiome = 109,
+    /// P13 — szum detalu przy materializacji 1 m.
+    WorldDetail = 110,
+    // 111–119 zarezerwowane dla M1.
+
     // ── M2: 120..=139 ──  dalej wg siatki wyżej
 }
 
@@ -237,5 +263,7 @@ mod tests {
     fn wartosci_stream_id_sa_wieczne() {
         // Test strażniczy: dopisanie wariantu nie może zmienić istniejących wartości.
         assert_eq!(StreamId::EngineSelfTest as u16, 1);
+        assert_eq!(StreamId::WorldLandmask as u16, 100);
+        assert_eq!(StreamId::WorldDetail as u16, 110);
     }
 }
