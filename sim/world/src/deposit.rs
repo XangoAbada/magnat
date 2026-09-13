@@ -78,9 +78,7 @@ impl DepositShape {
                 if p.z > *top_z || p.z < *top_z - i32::from(*thickness_dm) {
                     return false;
                 }
-                // Pokład rozciąga się na pół szerokości od osi; szerokość jest pochodną
-                // miąższości (pokłady są płaskie, nie sznurkowe).
-                let half = i64::from(*thickness_dm) * 8;
+                let half = i64::from(seam_half_width_m(*thickness_dm));
                 polyline
                     .windows(2)
                     .any(|w| dist_sq_to_segment(p.xy(), w[0], w[1]) <= half * half)
@@ -92,6 +90,18 @@ impl DepositShape {
             } => p.z <= *top_z && p.z >= *bottom_z && point_in_polygon(p.xy(), poly),
         }
     }
+}
+
+/// Połowa szerokości pokładu w metrach, jako pochodna jego miąższości.
+///
+/// Pokłady są płaskie, nie sznurkowe: warstwa o miąższości 2,5 m ciągnie się na setki metrów
+/// w poprzek. Mnożnik 8 jest tu **jedynym** źródłem tej proporcji — i dlatego jest funkcją,
+/// a nie liczbą powtórzoną w teście przynależności i w rachunku objętości, gdzie rozjechałaby
+/// się przy pierwszej zmianie (i rozjechała: objętość liczyła 40 m tam, gdzie kształt miał 200).
+#[inline]
+#[must_use]
+pub fn seam_half_width_m(thickness_dm: u16) -> u32 {
+    u32::from(thickness_dm) * 8
 }
 
 /// Kwadrat odległości punktu od odcinka, w arytmetyce całkowitej.

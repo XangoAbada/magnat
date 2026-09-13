@@ -199,6 +199,12 @@ pub struct WorldData {
     pub deposits: Vec<crate::deposit::Deposit>,
     /// Siatka klimatu 256 m.
     pub climate: Grid2<crate::climate::ClimateCell>,
+    /// Odległość do najbliższej wody w metrach, siatka 16 m (P8). Wejście do geologii
+    /// (torf, mady, poziom wód gruntowych) i do klimatu (wilgotność lokalna).
+    pub water_dist: Grid2<u16>,
+    /// Definicja warstw geologicznych. Sam stos jest funkcją, nie danymi — tu leży
+    /// wyłącznie jego opis, rzędu dwóch kilobajtów.
+    pub geology: crate::geology::GeologyModel,
 }
 
 impl WorldData {
@@ -216,6 +222,8 @@ impl WorldData {
             rivers: RiverNetwork::default(),
             deposits: Vec::new(),
             climate: Grid2::filled(c, crate::climate::ClimateCell::default()),
+            water_dist: Grid2::filled(n / 4, 0),
+            geology: crate::geology::GeologyModel::default(),
         }
     }
 
@@ -281,6 +289,9 @@ impl WorldData {
         for c in self.climate.as_slice() {
             c.hash_state(h);
         }
+        for d in self.water_dist.as_slice() {
+            h.write_u16(*d);
+        }
     }
 
     /// Rozmiar stanu trwałego w bajtach — asercja budżetu z M1 §5.9.
@@ -299,6 +310,7 @@ impl WorldData {
                 .sum::<usize>()
             + self.deposits.len() * size_of::<crate::deposit::Deposit>()
             + self.climate.len() * size_of::<crate::climate::ClimateCell>()
+            + self.water_dist.len() * size_of::<u16>()
     }
 }
 

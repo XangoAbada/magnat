@@ -1,0 +1,75 @@
+// Stos warstw geologicznych, od powierzchni w dół (M1 §5.5, przebieg P8).
+//
+// Warstwa, która nie spełnia swoich warunków (nachylenie, wysokość, bliskość wody),
+// po prostu znika z kolumny — stąd bierze się zróżnicowanie profilu między doliną
+// a grzbietem bez żadnej logiki warunkowej w kodzie.
+//
+// Jednostki: miąższość w centymetrach, wysokość w metrach n.p.m., nachylenie jako ułamek
+// zakresu 0..255 (`slope_falloff: 0.4` znaczy „warstwy nie ma powyżej nachylenia 102/255").
+// `water_affinity` dodatnie = warstwa tylko blisko koryta, ujemne = tylko z dala od niego.
+(
+    schema_version: 1,
+
+    layers: [
+        // Torf: wyłącznie w dolinach przy ciekach, na płaskim.
+        (
+            material: "peat",
+            thickness_base_cm: 180,
+            thickness_noise: (octaves: 3, wavelength_m: 500.0, amplitude: 0.6),
+            slope_falloff: 0.12,
+            elev_max_m: 120,
+            water_affinity: 85,
+        ),
+        // Gleba: wszędzie na łagodnym terenie, znika na stromiźnie.
+        (
+            material: "soil",
+            thickness_base_cm: 90,
+            thickness_noise: (octaves: 4, wavelength_m: 700.0, amplitude: 0.5),
+            slope_falloff: 0.55,
+        ),
+        // Piasek rzeczny i mady — pas wzdłuż dolin.
+        (
+            material: "sand",
+            thickness_base_cm: 240,
+            thickness_noise: (octaves: 3, wavelength_m: 900.0, amplitude: 0.5),
+            slope_falloff: 0.30,
+            elev_max_m: 90,
+            water_affinity: 60,
+        ),
+        // Glina zwałowa: gruba pokrywa na nizinach, cieńsza wyżej.
+        (
+            material: "clay",
+            thickness_base_cm: 420,
+            thickness_noise: (octaves: 4, wavelength_m: 1400.0, amplitude: 0.55),
+            slope_falloff: 0.70,
+            elev_max_m: 140,
+        ),
+        // Żwir wodnolodowcowy — z dala od dzisiejszych koryt, na wyższych terasach.
+        (
+            material: "gravel",
+            thickness_base_cm: 300,
+            thickness_noise: (octaves: 3, wavelength_m: 1100.0, amplitude: 0.6),
+            slope_falloff: 0.80,
+            water_affinity: -40,
+        ),
+        // Skały osadowe: piaskowiec nad wapieniem nad łupkiem.
+        (
+            material: "sandstone",
+            thickness_base_cm: 1600,
+            thickness_noise: (octaves: 3, wavelength_m: 2600.0, amplitude: 0.45),
+        ),
+        (
+            material: "limestone",
+            thickness_base_cm: 2400,
+            thickness_noise: (octaves: 3, wavelength_m: 3200.0, amplitude: 0.40),
+        ),
+        (
+            material: "shale",
+            thickness_base_cm: 2000,
+            thickness_noise: (octaves: 2, wavelength_m: 3800.0, amplitude: 0.35),
+        ),
+    ],
+
+    // Podłoże krystaliczne — sięga dna świata, żeby kolumna nigdy nie miała dziury.
+    bedrock: "granite",
+)

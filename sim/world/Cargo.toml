@@ -10,6 +10,7 @@ publish.workspace = true
 magnat-core = { workspace = true }
 magnat-jobs = { workspace = true }
 magnat-voxel = { workspace = true }
+smallvec = { workspace = true }
 serde = { workspace = true }
 bincode = { workspace = true }
 zstd = { workspace = true }

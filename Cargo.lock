@@ -1277,6 +1277,7 @@ dependencies = [
  "magnat-voxel",
  "ron",
  "serde",
+ "smallvec",
  "zstd",
 ]
 

@@ -11,23 +11,29 @@
 
 #![forbid(unsafe_code)]
 
+pub mod assets;
 pub mod climate;
 pub mod data;
 pub mod deposit;
 pub mod fields;
 pub mod gen;
+pub mod geology;
 pub mod grid;
 pub mod io;
 pub mod noise;
 pub mod params;
 pub mod pipeline;
+pub mod query;
+pub mod terrain;
 
+pub use assets::{data_dir, data_path};
 pub use climate::ClimateCell;
 pub use data::{
     HeightDm, LakeCells, RiverCell, RiverNetwork, RiverSegment, WaterBits, WaterClass, WorldData,
     SEA_LEVEL_DM,
 };
 pub use deposit::{Deposit, DepositId, DepositShape};
+pub use geology::{ColumnStack, GeologyModel, TerrainLayer};
 pub use grid::Grid2;
 pub use io::{load_mgw, save_mgw, WorldIoError, MGW_VERSION};
 pub use params::{
@@ -35,3 +41,8 @@ pub use params::{
     CLIMATE_CELL_M, WORK_CELL_M,
 };
 pub use pipeline::{generate, GenCtx, GenPass, WorldGenReport, WorldStats, PASSES};
+pub use query::{
+    Buildability, Crossing, NavigableClass, ObstacleBitset, TerrainQuery, TileCoord, WaterCell,
+    TILE_M,
+};
+pub use terrain::Terrain;

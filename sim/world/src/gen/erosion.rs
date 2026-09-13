@@ -396,7 +396,7 @@ mod tests {
 
     #[test]
     fn parametry_z_pliku_sa_stabilne_i_zgodne_z_domyslnymi() {
-        let p = ErosionParams::load(std::path::Path::new("../../data/geology/erosion.ron"))
+        let p = ErosionParams::load(&crate::data_path("geology/erosion.ron"))
             .expect("data/geology/erosion.ron");
         p.validate().unwrap();
         let d = ErosionParams::default();

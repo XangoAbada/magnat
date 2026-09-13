@@ -79,12 +79,22 @@ z szablonu w `00-konwencje-i-kontrakty.md` §8 i są identyczne dla każdej fazy
 ### M1 — Świat statyczny
 `M1-swiat-statyczny.md` · wymaga: M0
 
-- [~] 1. Pakiety robocze — zamknięte W1, W2, W3, V1 (statusy w `M1-swiat-statyczny.md` §4) · [ ] 2. Determinizm · [ ] 3. Własnościowe · [ ] 4. Budżety
+- [~] 1. Pakiety robocze — **cała grupa W zamknięta** (W1–W7) oraz V1; zostają V2–V4, grupa R, C1, X1 · [ ] 2. Determinizm · [ ] 3. Własnościowe · [ ] 4. Budżety
 - [ ] 5. Wyjaśnialność · [ ] 6. Kontrakty · [ ] 7. Decyzje otwarte
 - [ ] **Faza ukończona** — artefakt: oglądalny krajobraz z seeda, rzeki z ujściem, cykl dobowy
 
 ### M2 — Miasto statyczne
 `M2-miasto-statyczne.md` · wymaga: M1
+
+Podfazy — porcje wykonawcze; kryterium zamknięcia każdej jest w jej dokumencie:
+
+- [ ] **M2a** Indeksy przestrzenne — `M2a-indeksy-przestrzenne.md` (WP1, WP2)
+- [ ] **M2b** Szkielet transportu — `M2b-szkielet-transportu.md` (WP3, WP4, WP5, WP6)
+- [ ] **M2c** Strefy, parcele, dzielnice — `M2c-strefy-parcele-dzielnice.md` (WP7, WP8, WP9)
+- [ ] **M2d** Zabudowa — `M2d-zabudowa.md` (WP10, WP11, WP12)
+- [ ] **M2e** Gospodarka bazowa i wycena — `M2e-gospodarka-bazowa-i-wycena.md` (WP13, WP14, WP15, WP16, WP17)
+
+Bramki fazy:
 
 - [ ] 1. Pakiety robocze · [ ] 2. Determinizm · [ ] 3. Własnościowe · [ ] 4. Budżety
 - [ ] 5. Wyjaśnialność · [ ] 6. Kontrakty · [ ] 7. Decyzje otwarte
@@ -93,12 +103,30 @@ z szablonu w `00-konwencje-i-kontrakty.md` §8 i są identyczne dla każdej fazy
 ### M3 — Ludzie i dzień
 `M3-ludzie-i-dzien.md` · wymaga: M2
 
+Podfazy — porcje wykonawcze; kryterium zamknięcia każdej jest w jej dokumencie:
+
+- [ ] **M3a** Fundament agenta — `M3a-fundament-agenta.md` (WP1, WP2, WP3, WP4)
+- [ ] **M3b** Dzień mieszkańca — `M3b-dzien-mieszkanca.md` (WP5, WP6)
+- [ ] **M3c** Demografia i społeczeństwo — `M3c-demografia-i-spoleczenstwo.md` (WP7, WP8, WP9)
+- [ ] **M3d** Populacja i UI — `M3d-populacja-i-ui.md` (WP10, WP11, WP12, WP13)
+
+Bramki fazy:
+
 - [ ] 1. Pakiety robocze · [ ] 2. Determinizm · [ ] 3. Własnościowe · [ ] 4. Budżety
 - [ ] 5. Wyjaśnialność · [ ] 6. Kontrakty · [ ] 7. Decyzje otwarte
 - [ ] **Faza ukończona** — artefakt: mieszkańcy chodzą do pracy i sklepu, karta inspekcji z osią dnia
 
 ### M4 — Ruch
 `M4-ruch.md` · wymaga: M3
+
+Podfazy — porcje wykonawcze; kryterium zamknięcia każdej jest w jej dokumencie:
+
+- [ ] **M4a** Graf i routing — `M4a-graf-i-routing.md` (WP1, WP2)
+- [ ] **M4b** Mezo i podróże — `M4b-mezo-i-podroze.md` (WP3, WP4, WP5)
+- [ ] **M4c** Wybór środka, parkingi, komunikacja — `M4c-wybor-srodka-parkingi-komunikacja.md` (WP6, WP7, WP10)
+- [ ] **M4d** Mikro i dowód spójności — `M4d-mikro-i-dowod-spojnosci.md` (WP8, WP9, WP11, WP12)
+
+Bramki fazy:
 
 - [ ] 1. Pakiety robocze · [ ] 2. Determinizm · [ ] 3. Własnościowe · [ ] 4. Budżety
 - [ ] 5. Wyjaśnialność · [ ] 6. Kontrakty · [ ] 7. Decyzje otwarte
@@ -107,12 +135,32 @@ z szablonu w `00-konwencje-i-kontrakty.md` §8 i są identyczne dla każdej fazy
 ### M5 — Gospodarka detaliczna
 `M5-gospodarka-detaliczna.md` · wymaga: M4 · **pierwsza pętla gracza (vertical slice)**
 
+Podfazy — porcje wykonawcze; kryterium zamknięcia każdej jest w jej dokumencie:
+
+- [ ] **M5a** Pieniądz i oferta — `M5a-pieniadz-i-oferta.md` (WP1, WP2)
+- [ ] **M5b** Sklep i zakup — `M5b-sklep-i-zakup.md` (WP3, WP4, WP5)
+- [ ] **M5c** Ceny i księgowość — `M5c-ceny-i-ksiegowosc.md` (WP6, WP7, WP11)
+- [ ] **M5d** Budżety, banki, inflacja — `M5d-budzety-banki-inflacja.md` (WP8, WP9, WP10)
+- [ ] **M5e** Panel, balansator, domknięcie — `M5e-panel-balansator-domkniecie.md` (WP12, WP13, WP14)
+
+Bramki fazy:
+
 - [ ] 1. Pakiety robocze · [ ] 2. Determinizm · [ ] 3. Własnościowe · [ ] 4. Budżety
 - [ ] 5. Wyjaśnialność · [ ] 6. Kontrakty · [ ] 7. Decyzje otwarte
 - [ ] **Faza ukończona** — artefakt: otwórz sklep, ustal ceny, obserwuj klientów; balansator w CI
 
 ### M6 — Łańcuch dostaw
 `M6-lancuch-dostaw.md` · wymaga: M5
+
+Podfazy — porcje wykonawcze; kryterium zamknięcia każdej jest w jej dokumencie:
+
+- [ ] **M6a** Katalog i partia — `M6a-katalog-i-partia.md` (WP1, WP2, WP3)
+- [ ] **M6b** Zakład i transport — `M6b-zaklad-i-transport.md` (WP4, WP5, WP6)
+- [ ] **M6c** Rynek B2B — `M6c-rynek-b2b.md` (WP7, WP8, WP9)
+- [ ] **M6d** Złoża i koniec dostawcy zewnętrznego — `M6d-zloza-i-koniec-dostawcy-zewnetrznego.md` (WP10, WP11, WP12)
+- [ ] **M6e** Panel, testy, pamięć — `M6e-panel-testy-pamiec.md` (WP13, WP14, WP15)
+
+Bramki fazy:
 
 - [ ] 1. Pakiety robocze · [ ] 2. Determinizm · [ ] 3. Własnościowe · [ ] 4. Budżety
 - [ ] 5. Wyjaśnialność · [ ] 6. Kontrakty · [ ] 7. Decyzje otwarte
@@ -121,12 +169,33 @@ z szablonu w `00-konwencje-i-kontrakty.md` §8 i są identyczne dla każdej fazy
 ### M7 — Firmy AI i rynek pracy
 `M7-firmy-ai-i-rynek-pracy.md` · wymaga: M6
 
+Podfazy — porcje wykonawcze; kryterium zamknięcia każdej jest w jej dokumencie:
+
+- [ ] **M7a** Firma jako dane — `M7a-firma-jako-dane.md` (WP1, WP2, WP3)
+- [ ] **M7b** Rynek pracy — `M7b-rynek-pracy.md` (WP4, WP5, WP6)
+- [ ] **M7c** Polityki i menedżerowie — `M7c-polityki-i-menedzerowie.md` (WP6b, WP7)
+- [ ] **M7d** Finanse i upadłość — `M7d-finanse-i-upadlosc.md` (WP8, WP9)
+- [ ] **M7e** AI firm — `M7e-ai-firm.md` (WP10, WP11, WP12, WP12b, WP14)
+- [ ] **M7f** Makro i domknięcie — `M7f-makro-i-domkniecie.md` (WP13, WP15, WP16, WP17)
+
+Bramki fazy:
+
 - [ ] 1. Pakiety robocze · [ ] 2. Determinizm · [ ] 3. Własnościowe · [ ] 4. Budżety
 - [ ] 5. Wyjaśnialność · [ ] 6. Kontrakty · [ ] 7. Decyzje otwarte
 - [ ] **Faza ukończona** — artefakt: konkurencja reaguje na gracza, pensje emergentne
 
 ### M8 — Miasto jako aktor
 `M8-miasto-jako-aktor.md` · wymaga: M7
+
+Podfazy — porcje wykonawcze; kryterium zamknięcia każdej jest w jej dokumencie:
+
+- [ ] **M8a** Pieniądz publiczny — `M8a-pieniadz-publiczny.md` (WP1, WP2)
+- [ ] **M8b** Sieci przesyłowe — `M8b-sieci-przesylowe.md` (WP3)
+- [ ] **M8c** Zdarzenia — `M8c-zdarzenia.md` (WP4, WP5, WP6)
+- [ ] **M8d** Usługi publiczne i prawo — `M8d-uslugi-i-prawo.md` (WP7, WP8)
+- [ ] **M8e** Władza i wybory — `M8e-wladza-i-wybory.md` (WP9, WP10, WP11)
+
+Bramki fazy:
 
 - [ ] 1. Pakiety robocze · [ ] 2. Determinizm · [ ] 3. Własnościowe · [ ] 4. Budżety
 - [ ] 5. Wyjaśnialność · [ ] 6. Kontrakty · [ ] 7. Decyzje otwarte
@@ -135,12 +204,33 @@ z szablonu w `00-konwencje-i-kontrakty.md` §8 i są identyczne dla każdej fazy
 ### M9 — Gracz: kariera
 `M9-gracz-kariera.md` · wymaga: M8
 
+Podfazy — porcje wykonawcze; kryterium zamknięcia każdej jest w jej dokumencie:
+
+- [ ] **M9a** Szkielet gry i komendy — `M9a-szkielet-gry-i-komendy.md` (WP1, WP2)
+- [ ] **M9b** Rdzeń UI — `M9b-rdzen-ui.md` (WP3, WP6)
+- [ ] **M9c** Gracz, inspekcja, nakładki — `M9c-gracz-inspekcja-nakladki.md` (WP4, WP5, WP7)
+- [ ] **M9d** Język reguł — `M9d-jezyk-regul.md` (WP8, WP9)
+- [ ] **M9e** Panele, czas, kariera — `M9e-panele-czas-kariera.md` (WP10, WP11, WP12)
+
+Bramki fazy:
+
 - [ ] 1. Pakiety robocze · [ ] 2. Determinizm · [ ] 3. Własnościowe · [ ] 4. Budżety
 - [ ] 5. Wyjaśnialność · [ ] 6. Kontrakty · [ ] 7. Decyzje otwarte
 - [ ] **Faza ukończona** — artefakt: pełna ścieżka kariery, panele biznesowe, automatyzacja polityk
 
 ### M10 — Głębia
 `M10-glebia.md` · wymaga: M9
+
+Podfazy — porcje wykonawcze; kryterium zamknięcia każdej jest w jej dokumencie:
+
+- [ ] **M10a** Jądro, makro, historia na sucho — `M10a-jadro-makro-historia.md` (WP10.2, WP10.1, WP10.3, WP10.4)
+- [ ] **M10b** Marka i media — `M10b-marka-i-media.md` (WP10.5, WP10.6, WP10.7)
+- [ ] **M10c** R&D i nowe produkty — `M10c-rd-i-nowe-produkty.md` (WP10.8, WP10.9)
+- [ ] **M10d** Giełda, przejęcia, ubezpieczenia — `M10d-gielda-przejecia-ubezpieczenia.md` (WP10.10, WP10.11, WP10.12)
+- [ ] **M10e** Relacje i związki — `M10e-relacje-i-zwiazki.md` (WP10.13, WP10.14)
+- [ ] **M10f** Kroniki i domknięcie — `M10f-kroniki-i-domkniecie.md` (WP10.15, WP10.16)
+
+Bramki fazy:
 
 - [ ] 1. Pakiety robocze · [ ] 2. Determinizm · [ ] 3. Własnościowe · [ ] 4. Budżety
 - [ ] 5. Wyjaśnialność · [ ] 6. Kontrakty · [ ] 7. Decyzje otwarte
@@ -149,12 +239,32 @@ z szablonu w `00-konwencje-i-kontrakty.md` §8 i są identyczne dla każdej fazy
 ### M11 — Prezentacja
 `M11-prezentacja.md` · wymaga: M10
 
+Podfazy — porcje wykonawcze; kryterium zamknięcia każdej jest w jej dokumencie:
+
+- [ ] **M11a** Format i kontrakt snapshotu — `M11a-format-i-snapshot.md` (WP1, WP11, WP2)
+- [ ] **M11b** Animacja i LOD wizualne — `M11b-animacja-i-lod.md` (WP3, WP4)
+- [ ] **M11c** Wnętrza i kamera FPP — `M11c-wnetrza-i-kamera.md` (WP5, WP9)
+- [ ] **M11d** Światło, pogoda, dźwięk — `M11d-swiatlo-pogoda-dzwiek.md` (WP6, WP7, WP8)
+- [ ] **M11e** Budżet klatki — `M11e-budzet-klatki.md` (WP10)
+
+Bramki fazy:
+
 - [ ] 1. Pakiety robocze · [ ] 2. Determinizm · [ ] 3. Własnościowe · [ ] 4. Budżety
 - [ ] 5. Wyjaśnialność · [ ] 6. Kontrakty · [ ] 7. Decyzje otwarte
 - [ ] **Faza ukończona** — artefakt: detale, animacje, wnętrza, audio, cele FPS z §20.2
 
 ### M12 — Skala i jakość
 `M12-skala-i-jakosc.md` · wymaga: M11
+
+Podfazy — porcje wykonawcze; kryterium zamknięcia każdej jest w jej dokumencie:
+
+- [ ] **M12a** Pamięć — `M12a-pamiec.md` (WP1, WP2, WP3)
+- [ ] **M12b** Zapis i replay — `M12b-zapis-i-replay.md` (WP4, WP5, WP6, WP7, WP8)
+- [ ] **M12c** Tryb 50× i skala 400 tys. — `M12c-tryb-50x-i-skala.md` (WP9, WP10)
+- [ ] **M12d** Modding — `M12d-modding.md` (WP11, WP12)
+- [ ] **M12e** Lokalizacja i domknięcie — `M12e-lokalizacja-i-domkniecie.md` (WP13, WP14)
+
+Bramki fazy:
 
 - [ ] 1. Pakiety robocze · [ ] 2. Determinizm · [ ] 3. Własnościowe · [ ] 4. Budżety
 - [ ] 5. Wyjaśnialność · [ ] 6. Kontrakty · [ ] 7. Decyzje otwarte
@@ -168,6 +278,10 @@ Jedna linia na zamknięty pakiet roboczy lub bramkę. Najnowsze na górze.
 
 | Data | Faza | Co zamknięto | Uwagi |
 |---|---|---|---|
+| 2026-09-13 | M1 | W5 i W7: materializacja 1 m (Catmull–Rom + szum detalu + wcięcie koryta z wektora), `Terrain` jako implementacja `ColumnSource` i **całego** kontraktu `TerrainQuery` z §6.1 wraz z pięcioma skrótami M2 | `column_matches_voxels` zielony po poprawce granic warstw: przedziały voxeli muszą pokrywać się co do jednostki z regułą `ColumnStack::material_at`. Szum detalu jest wygaszany w korycie — przy amplitudzie 3,5 dm i korycie 3 dm zjadał całe wcięcie |
+| 2026-09-13 | M1 | W6: przebiegi P10–P12 — temperatura z szerokości, wysokości i kontynentalności, adwekcja wilgoci z opadem orograficznym i cieniem opadowym, biomy Whittakera z nadpisaniami terenowymi, żyzność i poziom wód gruntowych | Cień opadowy zdaje w 8/8 światach po dwóch poprawkach modelu: pełna podstawa regionalna zamiast 55 % (region rzeczny wychodził stepem) i ubytek wilgoci z wysokością bezwzględną. Wiatr w regionie górskim zmieniony na południowy, bo pasmo biegnie z południa na północ |
+| 2026-09-13 | M1 | W4: geologia analityczna (`data/geology/layers.ron`, 0 B pamięci), pole odległości od wody 16 m, złoża z wagami `region × profil × epoka` i całkowitoliczbowym bilansem masy | Test własnościowy masy złóż zielony (00 §6). `data/` odnajdywane przez `assets::data_dir()` zamiast ścieżek względnych w każdym wywołaniu |
+| 2026-09-13 | — | Plan: fazy M2–M12 rozbite na **55 podfaz** we własnych plikach `MX<litera>-*.md`; §4 i §5 dokumentów faz stały się tabelami kierującymi, numeracja `5.x` zachowana. Kontrakt `K-17` w dokumencie 00, procedura startu podfazy w `CLAUDE.md` | Zakres, kontrakty (§6), testy (§7), ryzyka i decyzje otwarte zostają na poziomie fazy — dzielony jest tylko plan wykonawczy. Bramki 1–7 nadal zamykają się na poziomie fazy. M0 i M1 nierozbite: M0 zamknięty, M1 w trakcie |
 | 2026-09-13 | M1 | W3: hydrologia w całości — priority-flood + ε, D8 z porządkiem topologicznym, erozja stream-power (Braun–Willett, n = 1) z równoległością po zlewniach, dyfuzja zboczowa, erozja termiczna, klasyfikacja wód, rząd Strahlera, geometria hydrauliczna, wektorowa sieć koryt | **Pięć odstępstw od liczb w planie, każde z uzasadnieniem w kodzie lub w `data/geology/erosion.ron`:** (1) `dt` 150 lat zamiast 5000 i `K` rząd wyżej — przy planowych wartościach nachylenie koryta w stanie ustalonym wychodzi 20 %, czyli 800 m różnicy na rzece w świecie o zakresie 256 m; (2) dyfuzja 0,001 zamiast 0,01 — zasięg wygładzania musi zostać poniżej komórki 4 m, inaczej kasuje sieć dolin wyciętą przez stream-power; (3) próg rzeki 0,1 km² zamiast 0,25 — przy planowym mapa 4 km ma sieć rzędu 2, czyli bez rozgałęzień; (4) erozja pracuje na powierzchni **wypełnionej**, a zagłębienia wracają pomniejszone o wcięcie progu odpływowego — bez tego misy bezodpływowe w ogóle nie były rzeźbione; (5) regiony śródlądowe dostały regionalne nachylenie `tilt_m`, bez którego ridged multifractal daje jeziora na jednej trzeciej mapy. Budżety §5.9 dla 16 km: generacja 8,3–8,9 s (cel ≤ 10 s), P4 1,2 s (cel ≤ 1,5 s), stan trwały 50–59 MB (limit 60 MB), `.mgw` 14–21 MB (limit 25 MB). P6 7,5 s wobec prognozy 5–6 s — ryzyko R3 zmaterializowane w przewidzianej skali, mieści się w limicie CI |
 | 2026-09-13 | M0 | `core::det_math` rozszerzony o `sin`/`cos`/`tan` (redukcja Cody'ego–Waite'a + jądra fdlibm), tabela referencyjna 60-cyfrowa i osobny złoty odcisk T-D9 dla trygonometrii | Dopisane przez M1 wg procedury z 00 §K-6: roczny cykl `ClimateCell` i kąt usypu wchodzą do stanu trwałego, więc nie mogły zostać po stronie renderu. Odcisk M0 celowo **nietknięty** |
 | 2026-09-13 | M1 | W2: przebiegi P1–P3 (maska lądu i profil brzegowy, baza wysokości z domain warpingiem, pola `U` i `K`); podgląd PNG w headless | Budżet §5.9 dla 16 km: P1+P2 = 178 ms wobec celu 400 ms. Dwie poprawki wyszły z podglądu, nie z testów: waga oktaw w ridged zapadała się po pierwszej oktawie, a szum wartościowy zostawiał kratownicę — stąd przejście na szum gradientowy |

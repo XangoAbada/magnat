@@ -134,8 +134,11 @@ pub fn run(ctx: &mut GenCtx) {
         river_cells.push(RiverCell {
             cell: c as u32,
             strahler: strahler[c],
-            depth_dm: ((surface - nowe_dno) * 10.0).clamp(1.0, f32::from(u16::MAX)) as u16,
-            width_dm: (width_m * 10.0).clamp(0.0, f64::from(u16::MAX)) as u16,
+            // Zaokrąglenie, nie obcięcie: minimalna głębokość 0,3 m w arytmetyce `f32`
+            // wypada czasem jako 2,9999 dm i obcięcie robi z niej 2 dm — czyli koryto
+            // płytsze niż deklarowany próg, i to akurat dla najmniejszych rzek.
+            depth_dm: ((surface - nowe_dno) * 10.0 + 0.5).clamp(1.0, f32::from(u16::MAX)) as u16,
+            width_dm: (width_m * 10.0 + 0.5).clamp(0.0, f64::from(u16::MAX)) as u16,
             surface_dm: to_dm(surface),
         });
     }

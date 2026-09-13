@@ -12,7 +12,8 @@ Na polecenie „zacznij implementację fazy X" / „rusz z MX":
    wiążący, nie tło. Szczególnie §2 (typy bazowe), §3 (determinizm) i §4a (rozstrzygnięcia `K-n`).
 2. Przeczytaj `MX-*.md` tej fazy — w całości, zanim napiszesz pierwszą linię kodu.
    Sekcja 2 mówi, czego **nie** robić i do której fazy to należy; sekcja 6 mówi, na czym stoisz
-   i co musisz dostarczyć innym.
+   i co musisz dostarczyć innym. Od M2 sekcje 4 i 5 są tabelami kierującymi do dokumentów
+   podfaz — dokument fazy czyta się w całości, ale treść podfaz tylko tej, którą robisz.
 3. Przejrzyj sekcję 9 („Decyzje otwarte"). Każda ma propozycję domyślną — przyjmij ją i powiedz
    o tym, albo zapytaj, jeśli wybór zmienia kształt rozwiązania. Nie zaczynaj pakietu, którego
    decyzja blokująca jest nierozstrzygnięta.
@@ -21,6 +22,28 @@ Na polecenie „zacznij implementację fazy X" / „rusz z MX":
 5. Idź pakietami roboczymi w kolejności z sekcji 4. Pakiet jest gotowy, gdy spełnia **swoje
    kryterium ukończenia** — nie gdy kod się kompiluje.
 6. Po każdym zamkniętym pakiecie odhacz go i dopisz linię do dziennika (reguła niżej).
+
+## Jak zacząć podfazę
+
+Fazy M2–M12 są rozbite na podfazy (`K-17` w dokumencie 00): `M5c` to osobny plik
+`M5c-ceny-i-ksiegowosc.md` z własnym zestawem WP, własnym wycinkiem projektu technicznego
+i własnym kryterium zamknięcia. Podfaza jest domyślną porcją pracy — „zacznij M5" znaczy
+„zacznij `M5a`", nie „zrób całe M5 naraz".
+
+Na polecenie „zacznij podfazę M5c" / „rusz z M5c":
+
+1. `00-konwencje-i-kontrakty.md` — w całości, jak wyżej.
+2. Dokument **fazy** (`M5-gospodarka-detaliczna.md`): sekcje 1, 2, 3, 6, 7, 9. To jest kontekst,
+   w którym podfaza ma sens — zakres, kontrakty i decyzje otwarte nie są dzielone na podfazy.
+3. Dokument **podfazy** — w całości. Nagłówek mówi, na czym stoisz (wejście), co masz pokazać
+   i kiedy podfaza jest zamknięta. Sekcje `5.x` w środku mają numerację z dokumentu fazy,
+   więc odesłania „patrz §5.4" nadal działają — jeśli wskazują sekcję spoza tej podfazy,
+   tabela w §5 dokumentu fazy mówi, w którym pliku ona jest.
+4. Nie zaczynaj podfazy, której wejście nie jest domknięte, i nie wchodź w WP należące
+   do sąsiedniej podfazy — jeśli okaże się, że są potrzebne wcześniej, popraw podział
+   w dokumencie fazy i odnotuj to w dzienniku.
+5. Po zamknięciu podfazy odhacz ją w `00-postep.md` i dopisz linię do dziennika. Bramki 1–7
+   zamykają się na poziomie fazy, dopiero po ostatniej podfazie.
 
 Jeśli w trakcie implementacji okaże się, że plan fazy jest błędny — popraw plan, odnotuj w dzienniku
 i dopiero potem pisz kod. Rozjazd kodu z planem jest gorszy niż błąd w planie, bo nikt go nie widzi.
