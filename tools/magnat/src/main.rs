@@ -11,6 +11,7 @@
 
 #![forbid(unsafe_code)]
 
+mod overlay;
 mod stream;
 
 use clap::Parser;
@@ -85,6 +86,11 @@ struct Args {
     #[arg(long)]
     bench: Option<u32>,
 
+    /// Nakładka debug na starcie: `height`, `flow`, `water`, `biome`, `temp-jan`,
+    /// `temp-jul`, `precip`, `geology`, `deposits`. W oknie przełącza je `F3`.
+    #[arg(long)]
+    overlay: Option<String>,
+
     /// Scena pomiarowa WP-R4: tyle świateł punktowych rozrzuconych wokół celu kamery.
     /// Kryterium mówi o 4096 — tyle właśnie mieści snapshot M11 (`MAX_LIGHTS`).
     #[arg(long, default_value_t = 0)]
@@ -155,6 +161,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         camera: startowa_kamera(args.dist),
         minute: SimMinute(args.day.min(359) * 1440 + args.hour.min(23) * 60),
         czas_x1000: false,
+        nakladka: match args.overlay.as_deref() {
+            Some(k) => overlay::Nakladka::z_klucza(k).ok_or("nieznana nakładka")?,
+            None => overlay::Nakladka::Brak,
+        },
         cel: match args.target.as_deref() {
             Some(t) => {
                 let (a, b) = t
@@ -187,6 +197,59 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     event_loop.run_app(&mut app)?;
     Ok(())
+}
+
+/// Mapa dalekiego terenu: wysokości w decymetrach i kolor powierzchni na siatce roboczej.
+///
+/// Kolor bierze się z **klasy wody i biomu klimatu**, a nie z `biome_at`: to drugie liczy
+/// szum przesunięcia granicy dla każdego punktu, a tutaj punktów jest kilka milionów i nikt
+/// ich nie ogląda z bliska. Różnicy nie widać z kilometra, a generacja skraca się z sekund
+/// do milisekund.
+fn mapa_dalekiego_terenu(terrain: &magnat_world::Terrain) -> (u32, Vec<i16>, Vec<u8>) {
+    use magnat_core::Biome;
+    use magnat_world::WaterClass;
+
+    let dane = terrain.data();
+    let dim = dane.height.dim();
+    let cdim = dane.climate.dim();
+    let mut wysokosci = Vec::with_capacity(dim * dim);
+    let mut kolor = Vec::with_capacity(dim * dim * 4);
+    // Komórka klimatu ma 256 m, robocza 4 m — stąd przelicznik między siatkami.
+    let na_klimat = (magnat_world::CLIMATE_CELL_M / magnat_world::WORK_CELL_M) as usize;
+
+    for gy in 0..dim {
+        for gx in 0..dim {
+            let i = gy * dim + gx;
+            wysokosci.push(dane.height[i]);
+            let biom = match dane.water[i].class() {
+                WaterClass::Sea => Biome::Sea,
+                WaterClass::Lake => Biome::Lake,
+                WaterClass::River => Biome::River,
+                WaterClass::Dry => {
+                    let c = (gy / na_klimat).min(cdim - 1) * cdim + (gx / na_klimat).min(cdim - 1);
+                    dane.climate[c].biome
+                }
+            };
+            let (r, g, b) = barwa_biomu(biom);
+            kolor.extend_from_slice(&[r, g, b, 255]);
+        }
+    }
+    (dim as u32, wysokosci, kolor)
+}
+
+/// Barwa powierzchni dla dalekiego terenu. Te same wartości co albedo materiałów pokrywy
+/// z `data/materials/terrain.ron` — gdyby się rozjechały, granica między terenem voxelowym
+/// a panoramą byłaby widoczna jako zmiana koloru w poprzek horyzontu.
+fn barwa_biomu(biom: magnat_core::Biome) -> (u8, u8, u8) {
+    use magnat_core::Biome;
+    match biom {
+        Biome::Sea | Biome::Lake | Biome::River => (40, 90, 130),
+        Biome::Sand => (196, 178, 132),
+        Biome::Rock => (124, 120, 118),
+        Biome::Snow => (238, 242, 248),
+        Biome::Marsh => (58, 44, 32),
+        _ => (86, 124, 62),
+    }
 }
 
 /// Światła testowe do sceny pomiarowej WP-R4.
@@ -269,6 +332,7 @@ struct App {
     camera: magnat_render::CameraState,
     minute: SimMinute,
     czas_x1000: bool,
+    nakladka: overlay::Nakladka,
     cel: Option<(i32, i32)>,
     /// Klatki przelotu pomiarowego i zebrane z nich czasy.
     bench: Option<u32>,
@@ -335,6 +399,26 @@ impl ApplicationHandler for App {
             let cel = self.camera.target();
             self.swiatla = swiatla_testowe(self.swiatla.len(), &self.terrain, cel);
         }
+        // Daleki teren: mapa wysokości i zapieczony kolor powierzchni, raz na świat.
+        let (dim, wysokosci, kolor) = mapa_dalekiego_terenu(&self.terrain);
+        let mut renderer = renderer;
+        renderer.upload_far_terrain(dim, magnat_world::WORK_CELL_M as f32, &wysokosci, &kolor);
+
+        // Nakładka wybrana z wiersza poleceń musi trafić do renderera zaraz po jego
+        // powstaniu — `przelacz_nakladke` przesunęłoby ją o jedną pozycję.
+        if self.nakladka != overlay::Nakladka::Brak {
+            if let Some(p) = overlay::zbuduj(&self.terrain, self.nakladka) {
+                renderer.set_overlay(Some(magnat_render::TerrainOverlay {
+                    cell_m: p.cell_m,
+                    dim: p.dim,
+                    values: &p.values,
+                    palette: &p.palette,
+                    strength: 0.75,
+                }));
+                eprintln!("nakładka: {}", self.nakladka.nazwa());
+            }
+        }
+
         let mut streamer = stream::Streamer::new(self.terrain.clone(), self.materials.clone());
         if let Some(r) = self.lod0_radius {
             streamer.wymus_lod0(r);
@@ -385,6 +469,9 @@ impl ApplicationHandler for App {
                     }
                     // Tryby kamery (§15.2). Przejścia zachowują pozycję oka i kierunek —
                     // to `CameraState` gwarantuje, tutaj zostaje tylko wysokość gruntu.
+                    // F3 przechodzi po nakładkach debug z §1 — wszystkie przez jeden
+                    // mechanizm `TerrainOverlay`, ten sam, którego użyje M2.
+                    Key::Named(NamedKey::F3) => self.przelacz_nakladke(),
                     Key::Character("1") => self.camera.to_orbit(600.0),
                     Key::Character("2") => self.camera.to_free(),
                     Key::Character("3") => {
@@ -462,6 +549,28 @@ impl App {
 
     /// Przesuwa kamerę w locie swobodnym i z pierwszej osoby. W orbicie nic nie robi —
     /// tam od przesuwania jest przeciąganie myszą.
+    /// Przełącza nakładkę i przelicza jej pole. Przeliczenie jest jednorazowe (dziesiątki
+    /// milisekund na mapie 8 km), bo pole opisuje świat, a ten w M1 się nie zmienia.
+    fn przelacz_nakladke(&mut self) {
+        self.nakladka = self.nakladka.nastepna();
+        let Some(renderer) = self.renderer.as_mut() else {
+            return;
+        };
+        match overlay::zbuduj(&self.terrain, self.nakladka) {
+            Some(p) => {
+                renderer.set_overlay(Some(magnat_render::TerrainOverlay {
+                    cell_m: p.cell_m,
+                    dim: p.dim,
+                    values: &p.values,
+                    palette: &p.palette,
+                    strength: 0.75,
+                }));
+            }
+            None => renderer.set_overlay(None),
+        }
+        eprintln!("nakładka: {}", self.nakladka.nazwa());
+    }
+
     fn lec(&mut self, klawisz: &str) {
         let przod = self.camera.forward();
         let przod = glam::DVec3::new(f64::from(przod.x), f64::from(przod.y), f64::from(przod.z));

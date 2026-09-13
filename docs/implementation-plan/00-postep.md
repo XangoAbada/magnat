@@ -79,7 +79,7 @@ z szablonu w `00-konwencje-i-kontrakty.md` §8 i są identyczne dla każdej fazy
 ### M1 — Świat statyczny
 `M1-swiat-statyczny.md` · wymaga: M0
 
-- [~] 1. Pakiety robocze — zamknięte W1–W7, V1–V4, R1–R4, C1; zostają R5, R6 i X1 · [ ] 2. Determinizm · [ ] 3. Własnościowe · [ ] 4. Budżety
+- [~] 1. Pakiety robocze — zamknięte W1–W7, V1–V4, R1–R6, C1; zostaje X1 · [ ] 2. Determinizm · [ ] 3. Własnościowe · [ ] 4. Budżety
 - [ ] 5. Wyjaśnialność · [ ] 6. Kontrakty · [ ] 7. Decyzje otwarte
 - [ ] **Faza ukończona** — artefakt: oglądalny krajobraz z seeda, rzeki z ujściem, cykl dobowy
 
@@ -278,6 +278,7 @@ Jedna linia na zamknięty pakiet roboczy lub bramkę. Najnowsze na górze.
 
 | Data | Faza | Co zamknięto | Uwagi |
 |---|---|---|---|
+| 2026-09-14 | M1 | R5, R6: przebieg wody (fresnel, mgła głębinowa z bufora głębi, fale, miękki brzeg), siatka dalekiego terenu z mapy 4 m, bufor HDR z ekspozycją i ACES w post-processingu, FXAA, `TerrainOverlay` i dziewięć nakładek pod `F3` | **Korekta wobec §1:** nakładka „akumulacja spływu" pokazuje rząd Strahlera, bo sama akumulacja nie jest stanem trwałym — cztery bajty na komórkę to 64 MB na mapie 16 km wobec całego budżetu 60 MB z §5.9. Przy okazji wyszedł błąd, którego nie widać w testach: `struct Frame` w `sky.wgsl` został przy układzie sprzed kaskad i czytał barwę nieba z macierzy światła (niebo wychodziło białawe) — teraz strzeże tego test porównujący deklaracje we wszystkich shaderach. Przelot 2 km z pełnym potokiem: 183 FPS średnio, GPU 0,29 ms na wszystkie przebiegi (p95 0,63 ms) |
 | 2026-09-14 | M1 | R3, R4: cienie kaskadowe (4 kaskady, sfera otaczająca + zatrzask do texela, PCF 3×3 na sprzętowym porównaniu), przypisanie świateł do froxeli 16×9×24 w compute, `ClusterOccupancy` w devtools | Cienie 0,18 ms (p95 0,29) w scenie z pierścieniami LOD wobec limitu 2 ms; 4096 świateł: przypisanie 0,26 ms (p95 0,52) wobec 0,4 ms — mediana w budżecie, ogon poza nim, bo pomiar obejmuje klatki z materializacją chunków. Trzy błędy wyłapane przez podgląd, nie przez testy: pass cienia nie może widzieć własnej mapy w grupie wiązań, kafel klastra we fragmencie liczy się po **odbitej** osi Y, a warstwa klastra po **głębokości widoku**, nie po odległości od oka |
 | 2026-09-13 | M1 | R1, R2, C1: pomiar czasu GPU per pass (timestamp queries), rysowanie pośrednie `multi_draw_indexed_indirect` ze ścieżką zapasową, tryby kamery z przejściami bez przeskoku | 3380 chunków LOD0: GPU p95 2,62 + 1,59 ms (limit 6 ms); obie ścieżki rysowania dają zrzut **identyczny bit w bit** (SHA-256); przelot 2 km bez zacięć > 33 ms; `tools/voxelview` usunięte zgodnie z K-3 |
 | 2026-09-13 | M1 | Poprawki ujawnione przez podgląd: tafla wody nie powstawała w meshu, chunki różnych LOD nadpisywały się w rendererze, granica biomu biegła po siatce klimatu 256 m, `column_at` pomijał pokrywę biomu | Komórki jezior przeszły na RLE (6 B/komórkę → 8 B/odcinek): stan trwały 16 km z 61,4 MB na 53,0 MB (region górski, 1,54 mln komórek jezior), znów pod limitem 60 MB z §5.9 |

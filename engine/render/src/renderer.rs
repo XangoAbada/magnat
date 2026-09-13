@@ -104,6 +104,8 @@ impl Arena {
 struct GpuChunk {
     vertices: Block,
     indices: Block,
+    /// Ile pierwszych indeksów bloku jest nieprzezroczystych; reszta to woda (§5.8).
+    opaque_indices: u32,
     lod: u8,
     /// Środek chunka w metrach — do cullingu.
     center_m: [f32; 3],
@@ -120,12 +122,68 @@ struct VisibleChunk {
     instance: u32,
     vertices: Block,
     indices: Block,
+    opaque_indices: u32,
 }
 
-/// Listy rysowania jednej klatki: kadr kamery i po jednej na kaskadę cienia.
+impl VisibleChunk {
+    /// Zakres indeksów do rysowania w danym przebiegu.
+    fn zakres(self, woda: bool) -> std::ops::Range<u32> {
+        let start = self.indices.offset;
+        if woda {
+            start + self.opaque_indices..start + self.indices.len
+        } else {
+            start..start + self.opaque_indices
+        }
+    }
+
+    fn pusty(self, woda: bool) -> bool {
+        self.zakres(woda).is_empty()
+    }
+}
+
+/// Listy rysowania jednej klatki: geometria nieprzezroczysta kadru, woda kadru
+/// i po jednej liście na kaskadę cienia.
+///
+/// Listy są **rozłączne i już przefiltrowane**, bo ta sama kolejność rządzi zapisem
+/// argumentów rysowania pośredniego. Filtrowanie w dwóch miejscach (raz przy zapisie
+/// argumentów, raz przy rysowaniu) rozjeżdża się przy pierwszej zmianie warunku,
+/// a objawem jest chunk rysujący cudzą geometrię.
 struct FrameLists {
     widoczne: Vec<VisibleChunk>,
+    woda: Vec<VisibleChunk>,
     cienie: [Vec<VisibleChunk>; shadow::CASCADES],
+}
+
+impl FrameLists {
+    /// Kolejność list w buforze argumentów: kadr, woda, potem kaskady.
+    fn offset(&self, ktora: usize) -> u32 {
+        let mut o = 0u32;
+        for (i, l) in std::iter::once(&self.widoczne)
+            .chain(std::iter::once(&self.woda))
+            .chain(self.cienie.iter())
+            .enumerate()
+        {
+            if i == ktora {
+                break;
+            }
+            o += l.len() as u32;
+        }
+        o
+    }
+}
+
+/// Nakładka terenowa: pole skalarne na siatce świata plus paleta (M1 §6.1, WP-R6).
+pub struct TerrainOverlay<'a> {
+    /// Bok komórki pola w metrach.
+    pub cell_m: f32,
+    /// Wymiar pola w komórkach (kwadratowe).
+    pub dim: u32,
+    /// Wartość na komórkę — indeks do palety.
+    pub values: &'a [u8],
+    /// 256 barw RGBA.
+    pub palette: &'a [[u8; 4]; 256],
+    /// Siła mieszania z barwą terenu, 0…1.
+    pub strength: f32,
 }
 
 /// Argumenty `draw_indexed` dla ścieżki pośredniej. Układ jest kontraktem sterownika,
@@ -158,7 +216,13 @@ struct FrameUniform {
     fog: [f32; 4],
     clip: [f32; 4],
     /// xy = rozmiar okna w pikselach; shader dzieli go na kafle klastrów.
+    /// zw = współczynniki odwrócenia bufora głębi.
     screen: [f32; 4],
+    /// xyz = pozycja kamery w świecie. Potrzebna tam, gdzie shader musi odtworzyć
+    /// **absolutną** współrzędną punktu — czyli przy próbkowaniu map pokrywających świat.
+    eye: [f32; 4],
+    /// x = bok komórki nakładki w metrach, y = jej wymiar, z = siła mieszania, w = czy aktywna.
+    overlay: [f32; 4],
 }
 
 /// Per-chunk dane w SSBO: przesunięcie względem kamery i skala voxela.
@@ -176,7 +240,28 @@ const MAX_INDIRECT_ARGS: usize = MAX_DRAWN_CHUNKS * (1 + shadow::CASCADES);
 const MAX_DRAWN_CHUNKS: usize = 8192;
 
 /// Nazwy mierzonych passów — indeks odpowiada parze znaczników w `QuerySet`.
-pub const PASS_NAMES: [&str; 4] = ["clusters", "shadows", "depth_prepass", "opaque"];
+pub const PASS_NAMES: [&str; 6] = [
+    "clusters",
+    "shadows",
+    "depth_prepass",
+    "opaque",
+    "water",
+    "post",
+];
+
+/// Format bufora sceny: HDR, bo ekspozycja i tonemap dzieją się dopiero w post-processingu.
+/// Ósemkowy bufor obciąłby jasne końce **przed** krzywą i zachód słońca wychodziłby biały.
+const HDR_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
+
+/// Oczko siatki dalekiego terenu w metrach i jej rozmiar w quadach.
+///
+/// 32 m na 512 quadów to 16 km w poprzek — cała największa mapa (§5.1). Drobniejsze oczko
+/// nie ma czego pokazać: siatka próbkuje mapę 4 m, a z odległości, na której w ogóle ją
+/// widać, cztery metry to ułamek piksela.
+const FAR_CELL_M: f32 = 32.0;
+const FAR_QUADS: u32 = 512;
+/// Promień wyciętego środka siatki: tam rysują chunki (`LOD_RADII_M` sięga 4 km).
+const FAR_INNER_M: f32 = 800.0;
 
 /// Statystyki klatki — wejście do licznika w tytule okna i do raportu z §7.4.
 #[derive(Clone, Copy, Default, Debug)]
@@ -340,6 +425,34 @@ pub struct Renderer {
     occupancy_w_locie: std::sync::Arc<std::sync::atomic::AtomicBool>,
     occupancy_gotowe: std::sync::Arc<std::sync::atomic::AtomicBool>,
     lights: u32,
+    /// Parametry nakładki terenowej w postaci, w jakiej trafiają do uniformu ramki.
+    overlay_cfg: [f32; 4],
+    overlay_bind: wgpu::BindGroup,
+    overlay_layout: wgpu::BindGroupLayout,
+    post_pipeline: wgpu::RenderPipeline,
+    post_layout: wgpu::BindGroupLayout,
+    post_bind: wgpu::BindGroup,
+    post_cfg: wgpu::Buffer,
+    post_sampler: wgpu::Sampler,
+    hdr_view: wgpu::TextureView,
+    /// Siła FXAA, 0 = wyłączone. Zmienna, bo to pierwsza rzecz, którą się wyłącza,
+    /// oceniając ostrość obrazu.
+    fxaa: f32,
+    far_pipeline: wgpu::RenderPipeline,
+    far_layout: wgpu::BindGroupLayout,
+    far_cfg: wgpu::Buffer,
+    /// Grupa wiązań dalekiego terenu powstaje dopiero wtedy, gdy mapa zostanie wgrana —
+    /// bez niej pass nie ma czego rysować i jest pomijany.
+    far_bind: Option<wgpu::BindGroup>,
+    far_dim: u32,
+    far_cell_m: f32,
+    water_pipeline: wgpu::RenderPipeline,
+    water_layout: wgpu::BindGroupLayout,
+    water_bind: wgpu::BindGroup,
+    time_buffer: wgpu::Buffer,
+    /// Czas renderu w sekundach — napędza fale. Nie zegar symulacji: tafla ma falować
+    /// także przy pauzie, bo pauza zatrzymuje gospodarkę, a nie wodę.
+    czas_s: f32,
     shadow_pipeline: wgpu::RenderPipeline,
     shadow_bind: wgpu::BindGroup,
     shadow_layers: Vec<wgpu::TextureView>,
@@ -479,6 +592,43 @@ impl Renderer {
                 uniform_entry(8, wgpu::ShaderStages::FRAGMENT),
             ],
         });
+        // Nakładka terenowa (§6.1, kontrakt dla M2): pole skalarne na siatce świata plus
+        // paleta. Osobna grupa wiązań, bo nakładkę ma widzieć teren bliski **i** daleki,
+        // a te dwa pipeline'y nie dzielą niczego poza grupą ramki.
+        let overlay_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("render.overlay.layout"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+            ],
+        });
+        // Nakładka domyślnie nie istnieje, ale grupa wiązań musi — pipeline jej wymaga.
+        // Jednopikselowe tekstury są tańsze niż drugi wariant pipeline'u bez nakładki.
+        let overlay_bind = create_overlay_bind(
+            device,
+            &overlay_layout,
+            &create_pixel_texture(device),
+            &create_pixel_texture(device),
+        );
+
         // Klastry świateł: konfiguracja, lista świateł, liczniki i listy indeksów.
         // Liczniki mają `COPY_SRC`, bo `ClusterOccupancy` czyta je z powrotem na CPU —
         // histogram bez odczytu byłby przyrządem, którego nie da się odczytać.
@@ -574,6 +724,31 @@ impl Renderer {
             cache: None,
         });
 
+        // Przebieg wody: własna grupa wiązań (głębia sceny + czas) i własny pipeline
+        // z mieszaniem. Reszta — ramka, chunki, materiały — idzie z grupy głównej.
+        let water_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("render.water.layout"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Depth,
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                uniform_entry(1, wgpu::ShaderStages::FRAGMENT),
+            ],
+        });
+        let time_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("render.water.time"),
+            size: 16,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
         let (shadow_layers, shadow_array) = create_shadow_maps(device);
         let shadow_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("render.shadow.sampler"),
@@ -659,6 +834,12 @@ impl Renderer {
             bind_group_layouts: &[Some(&layout)],
             immediate_size: 0,
         });
+        // Teren nieprzezroczysty widzi nakładkę jako grupę 2 — patrz `overlay_layout`.
+        let terrain_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("render.terrain.pipeline.layout"),
+            bind_group_layouts: &[Some(&layout), Some(&overlay_layout)],
+            immediate_size: 0,
+        });
         // Pass cienia **pisze** do mapy cieni, więc nie wolno mu jej jednocześnie widzieć
         // jako tekstury: to nie jest kwestia stylu, tylko błąd walidacji. Stąd druga grupa
         // wiązań, węższa — sama ramka i dane chunków.
@@ -683,6 +864,12 @@ impl Renderer {
                 },
             ],
         });
+        let water_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("render.water.pipeline.layout"),
+                bind_group_layouts: &[Some(&layout), Some(&water_layout)],
+                immediate_size: 0,
+            });
         let shadow_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("render.shadow.layout"),
             bind_group_layouts: &[Some(&geom_layout), Some(&cascade_layout)],
@@ -693,11 +880,24 @@ impl Renderer {
             label: Some("render.voxel"),
             source: wgpu::ShaderSource::Wgsl(include_str!("shaders/voxel.wgsl").into()),
         });
+        let water_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("render.water"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("shaders/water.wgsl").into()),
+        });
         let sky_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("render.sky"),
             source: wgpu::ShaderSource::Wgsl(include_str!("shaders/sky.wgsl").into()),
         });
 
+        let vertex_layout_water = wgpu::VertexBufferLayout {
+            array_stride: 8,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &[wgpu::VertexAttribute {
+                format: wgpu::VertexFormat::Uint32x2,
+                offset: 0,
+                shader_location: 0,
+            }],
+        };
         let vertex_layout = wgpu::VertexBufferLayout {
             array_stride: 8,
             step_mode: wgpu::VertexStepMode::Vertex,
@@ -780,7 +980,7 @@ impl Renderer {
 
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("render.opaque"),
-            layout: Some(&pipeline_layout),
+            layout: Some(&terrain_layout),
             vertex: wgpu::VertexState {
                 module: &voxel_shader,
                 entry_point: Some("vs_main"),
@@ -790,7 +990,7 @@ impl Renderer {
             fragment: Some(wgpu::FragmentState {
                 module: &voxel_shader,
                 entry_point: Some("fs_main"),
-                targets: &[Some(gpu.config.format.into())],
+                targets: &[Some(HDR_FORMAT.into())],
                 compilation_options: Default::default(),
             }),
             primitive: wgpu::PrimitiveState {
@@ -815,7 +1015,7 @@ impl Renderer {
             fragment: Some(wgpu::FragmentState {
                 module: &sky_shader,
                 entry_point: Some("fs_main"),
-                targets: &[Some(gpu.config.format.into())],
+                targets: &[Some(HDR_FORMAT.into())],
                 compilation_options: Default::default(),
             }),
             primitive: wgpu::PrimitiveState::default(),
@@ -831,7 +1031,182 @@ impl Renderer {
             cache: None,
         });
 
+        // Woda rysowana **po** terenie, z mieszaniem i bez zapisu głębi: dwie tafle
+        // jedna za drugą nie mają się wzajemnie wycinać, a bufor głębi opisuje dno,
+        // z którego liczy się grubość słupa wody.
+        let water_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("render.water"),
+            layout: Some(&water_pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &water_shader,
+                entry_point: Some("vs_main"),
+                buffers: &[Some(vertex_layout_water)],
+                compilation_options: Default::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &water_shader,
+                entry_point: Some("fs_main"),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: HDR_FORMAT,
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+                compilation_options: Default::default(),
+            }),
+            primitive: wgpu::PrimitiveState {
+                cull_mode: Some(wgpu::Face::Back),
+                ..Default::default()
+            },
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: wgpu::TextureFormat::Depth32Float,
+                depth_write_enabled: Some(false),
+                depth_compare: Some(wgpu::CompareFunction::Less),
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+            }),
+            multisample: wgpu::MultisampleState::default(),
+            multiview_mask: None,
+            cache: None,
+        });
+
+        let far_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("render.far.layout"),
+            entries: &[
+                uniform_entry(0, wgpu::ShaderStages::VERTEX),
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Sint,
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+            ],
+        });
+        let far_cfg = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("render.far.cfg"),
+            size: 48,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let far_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("render.far"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("shaders/far_terrain.wgsl").into()),
+        });
+        let far_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("render.far"),
+            layout: Some(
+                &device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                    label: Some("render.far.pipeline.layout"),
+                    bind_group_layouts: &[Some(&layout), Some(&far_layout), Some(&overlay_layout)],
+                    immediate_size: 0,
+                }),
+            ),
+            vertex: wgpu::VertexState {
+                module: &far_shader,
+                entry_point: Some("vs_main"),
+                buffers: &[],
+                compilation_options: Default::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &far_shader,
+                entry_point: Some("fs_main"),
+                targets: &[Some(HDR_FORMAT.into())],
+                compilation_options: Default::default(),
+            }),
+            primitive: wgpu::PrimitiveState::default(),
+            depth_stencil: Some(depth_state(true)),
+            multisample: wgpu::MultisampleState::default(),
+            multiview_mask: None,
+            cache: None,
+        });
+
         let depth_view = create_depth(device, gpu.config.width, gpu.config.height);
+        let water_bind = create_water_bind(device, &water_layout, &depth_view, &time_buffer);
+
+        // Post-processing: bufor HDR sceny → ekran. Sampler liniowy, bo FXAA pobiera
+        // próbki między pikselami.
+        let post_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("render.post.layout"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+                uniform_entry(2, wgpu::ShaderStages::FRAGMENT),
+            ],
+        });
+        let post_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("render.post.sampler"),
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            ..Default::default()
+        });
+        let post_cfg = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("render.post.cfg"),
+            size: 16,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let post_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("render.post"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("shaders/post.wgsl").into()),
+        });
+        let post_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("render.post"),
+            layout: Some(
+                &device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                    label: Some("render.post.pipeline.layout"),
+                    bind_group_layouts: &[Some(&post_layout)],
+                    immediate_size: 0,
+                }),
+            ),
+            vertex: wgpu::VertexState {
+                module: &post_shader,
+                entry_point: Some("vs_main"),
+                buffers: &[],
+                compilation_options: Default::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &post_shader,
+                entry_point: Some("fs_main"),
+                targets: &[Some(gpu.config.format.into())],
+                compilation_options: Default::default(),
+            }),
+            primitive: wgpu::PrimitiveState::default(),
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState::default(),
+            multiview_mask: None,
+            cache: None,
+        });
+        let hdr_view = create_hdr(device, gpu.config.width, gpu.config.height);
+        let post_bind = create_post_bind(device, &post_layout, &hdr_view, &post_sampler, &post_cfg);
 
         Renderer {
             gpu,
@@ -856,6 +1231,27 @@ impl Renderer {
             occupancy_w_locie: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             occupancy_gotowe: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             lights: 0,
+            overlay_cfg: [4.0, 1.0, 0.0, 0.0],
+            overlay_bind,
+            overlay_layout,
+            post_pipeline,
+            post_layout,
+            post_bind,
+            post_cfg,
+            post_sampler,
+            hdr_view,
+            fxaa: 0.75,
+            far_pipeline,
+            far_layout,
+            far_cfg,
+            far_bind: None,
+            far_dim: 0,
+            far_cell_m: 4.0,
+            water_pipeline,
+            water_layout,
+            water_bind,
+            time_buffer,
+            czas_s: 0.0,
             shadow_pipeline,
             shadow_bind,
             shadow_layers,
@@ -876,6 +1272,27 @@ impl Renderer {
             self.gpu.config.width,
             self.gpu.config.height,
         );
+        // Grupy wiązań trzymają widoki tekstur, więc po ich odtworzeniu muszą powstać
+        // na nowo — inaczej woda czytałaby głębię o starym rozmiarze, a post-processing
+        // scenę o starym.
+        self.water_bind = create_water_bind(
+            &self.gpu.device,
+            &self.water_layout,
+            &self.depth_view,
+            &self.time_buffer,
+        );
+        self.hdr_view = create_hdr(
+            &self.gpu.device,
+            self.gpu.config.width,
+            self.gpu.config.height,
+        );
+        self.post_bind = create_post_bind(
+            &self.gpu.device,
+            &self.post_layout,
+            &self.hdr_view,
+            &self.post_sampler,
+            &self.post_cfg,
+        );
     }
 
     #[must_use]
@@ -888,6 +1305,199 @@ impl Renderer {
         self.chunks
             .get(&(lod, coord))
             .is_some_and(|c| c.revision == revision)
+    }
+
+    /// Ustawia nakładkę terenową albo ją zdejmuje (`None`).
+    ///
+    /// To jest **mechanizm z §6.1, nie zestaw nakładek**: M1 używa go do ośmiu podglądów
+    /// z §1 (wysokość, spływ, klasa wody, biom, temperatura, opady, geologia, złoża),
+    /// a M2 podepnie pod niego własne pola — wartość dzielnicy, dostępność, hałas. Renderer
+    /// nie wie, co znaczy liczba w polu; wie tylko, że ma ją zamienić na barwę z palety.
+    ///
+    /// `values` to jeden bajt na komórkę siatki `cell_m`, `palette` to 256 barw RGBA.
+    pub fn set_overlay(&mut self, overlay: Option<TerrainOverlay<'_>>) {
+        let Some(o) = overlay else {
+            self.overlay_cfg[3] = 0.0;
+            return;
+        };
+        assert_eq!(
+            o.values.len(),
+            (o.dim * o.dim) as usize,
+            "pole nakładki ma inny wymiar niż zadeklarowany"
+        );
+        let device = &self.gpu.device;
+        let rozmiar = wgpu::Extent3d {
+            width: o.dim,
+            height: o.dim,
+            depth_or_array_layers: 1,
+        };
+        // Pole idzie jako RGBA8, a nie R8: w wartości siedzi tylko czerwony kanał, ale
+        // jeden format tekstury dla pola i palety oznacza jeden układ wiązań i jedną
+        // ścieżkę kodu. Cztery bajty na komórkę to przy siatce 4 m ułamek budżetu.
+        let pole = {
+            let t = device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("render.overlay.pole"),
+                size: rozmiar,
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::R8Unorm,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+                view_formats: &[],
+            });
+            self.gpu.queue.write_texture(
+                wgpu::TexelCopyTextureInfo {
+                    texture: &t,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                },
+                o.values,
+                wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(o.dim),
+                    rows_per_image: Some(o.dim),
+                },
+                rozmiar,
+            );
+            t
+        };
+        let paleta = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("render.overlay.paleta"),
+            size: wgpu::Extent3d {
+                width: 256,
+                height: 1,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        self.gpu.queue.write_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture: &paleta,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            bytemuck::cast_slice(o.palette.as_slice()),
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(256 * 4),
+                rows_per_image: Some(1),
+            },
+            wgpu::Extent3d {
+                width: 256,
+                height: 1,
+                depth_or_array_layers: 1,
+            },
+        );
+
+        self.overlay_bind = create_overlay_bind(device, &self.overlay_layout, &pole, &paleta);
+        self.overlay_cfg = [o.cell_m, o.dim as f32, o.strength, 1.0];
+    }
+
+    /// Wgrywa mapę dalekiego terenu: wysokości w decymetrach i zapieczony kolor powierzchni,
+    /// oba na siatce `cell_m` (tej samej, na której liczona jest hydrologia).
+    ///
+    /// Wołane **raz po wygenerowaniu świata**, nie co klatkę: mapa 16 km to 4096 × 4096
+    /// komórek, czyli 32 MB wysokości i 64 MB koloru. Przesyłanie tego w pętli klatki
+    /// zjadłoby całą przepustowość magistrali na dane, które się nie zmieniają.
+    pub fn upload_far_terrain(&mut self, dim: u32, cell_m: f32, heights_dm: &[i16], albedo: &[u8]) {
+        assert_eq!(
+            heights_dm.len(),
+            (dim * dim) as usize,
+            "mapa wysokości ma inny wymiar niż zadeklarowany"
+        );
+        assert_eq!(
+            albedo.len(),
+            (dim * dim * 4) as usize,
+            "mapa koloru ma inny wymiar niż zadeklarowany"
+        );
+        let device = &self.gpu.device;
+        let rozmiar = wgpu::Extent3d {
+            width: dim,
+            height: dim,
+            depth_or_array_layers: 1,
+        };
+        let wysokosci = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("render.far.height"),
+            size: rozmiar,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::R16Sint,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        self.gpu.queue.write_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture: &wysokosci,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            bytemuck::cast_slice(heights_dm),
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(dim * 2),
+                rows_per_image: Some(dim),
+            },
+            rozmiar,
+        );
+        let kolor = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("render.far.albedo"),
+            size: rozmiar,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        self.gpu.queue.write_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture: &kolor,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            albedo,
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(dim * 4),
+                rows_per_image: Some(dim),
+            },
+            rozmiar,
+        );
+
+        self.far_dim = dim;
+        self.far_cell_m = cell_m;
+        self.far_bind = Some(device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("render.far.bind"),
+            layout: &self.far_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: self.far_cfg.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(
+                        &wysokosci.create_view(&wgpu::TextureViewDescriptor::default()),
+                    ),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::TextureView(
+                        &kolor.create_view(&wgpu::TextureViewDescriptor::default()),
+                    ),
+                },
+            ],
+        }));
     }
 
     /// Podaje światła punktowe tej klatki. Pozycje są w metrach świata — przeliczenie
@@ -958,6 +1568,7 @@ impl Renderer {
             GpuChunk {
                 vertices: vb,
                 indices: ib,
+                opaque_indices: mesh.opaque_indices,
                 lod,
                 center_m,
                 // Promień sfery otaczającej chunk: przekątna prostopadłościanu.
@@ -1138,12 +1749,56 @@ impl Renderer {
             &sky,
             camera,
             eye.z as f32,
+            (eye.x as f32, eye.y as f32),
             &kaskady,
             rozmiar,
         );
 
         // Konfiguracja klastrów i macierz widoku — froxele opisują ten sam ostrosłup,
         // który widać w kadrze, więc muszą pochodzić z tej samej klatki.
+        // Czas fal: klatka przy 60 Hz to 1/60 s. Liczymy go tutaj, a nie z zegara systemu,
+        // bo zrzut offscreen ma wyglądać tak samo przy każdym uruchomieniu.
+        self.czas_s += 1.0 / 60.0;
+        self.gpu.queue.write_buffer(
+            &self.time_buffer,
+            0,
+            bytemuck::cast_slice(&[self.czas_s, 0.0, 0.0, 0.0]),
+        );
+
+        // Siatka dalekiego terenu jest **zatrzaśnięta** do swojego oczka: bez tego
+        // przesuwa się o ułamek oczka przy każdym ruchu kamery i cała odległa panorama
+        // faluje, mimo że stoi w miejscu.
+        let snap = |v: f64| (v / f64::from(FAR_CELL_M)).floor() * f64::from(FAR_CELL_M);
+        let far = [
+            self.far_cell_m,
+            self.far_dim as f32,
+            FAR_CELL_M,
+            FAR_QUADS as f32,
+            snap(eye.x) as f32,
+            snap(eye.y) as f32,
+            FAR_INNER_M,
+            0.0,
+            eye.x as f32,
+            eye.y as f32,
+            eye.z as f32,
+            0.0,
+        ];
+        self.gpu
+            .queue
+            .write_buffer(&self.far_cfg, 0, bytemuck::cast_slice(&far));
+
+        // Ekspozycja idzie **do post-processingu**, a nie do shaderów sceny: jedna krzywa
+        // dla całego obrazu, a nie po kopii w każdym shaderze.
+        let post = [
+            exposure(sun.elevation_deg),
+            self.fxaa,
+            1.0 / rozmiar.0 as f32,
+            1.0 / rozmiar.1.max(1) as f32,
+        ];
+        self.gpu
+            .queue
+            .write_buffer(&self.post_cfg, 0, bytemuck::cast_slice(&post));
+
         let cfg = ClusterConfig::new(camera.fov_deg, aspect, self.lights);
         self.gpu
             .queue
@@ -1191,6 +1846,7 @@ impl Renderer {
                     instance: (per_chunk.len() - 1) as u32,
                     vertices: c.vertices,
                     indices: c.indices,
+                    opaque_indices: c.opaque_indices,
                 },
                 rel,
                 c.radius_m,
@@ -1207,46 +1863,65 @@ impl Renderer {
         // a nie chunk brakujący, więc błąd jest po bezpiecznej stronie. Ta sama funkcja
         // obsługuje kaskady, bo rzutowanie ortograficzne też ma sześć płaszczyzn.
         let planes = frustum_planes(&view_proj);
-        let widoczne: Vec<VisibleChunk> = wszystkie
+        let w_kadrze: Vec<VisibleChunk> = wszystkie
             .iter()
             .filter(|(_, rel, r)| sphere_in_frustum(&planes, *rel, *r))
             .map(|(v, _, _)| *v)
             .collect();
+        let widoczne: Vec<VisibleChunk> = w_kadrze
+            .iter()
+            .filter(|c| !c.pusty(false))
+            .copied()
+            .collect();
+        let woda: Vec<VisibleChunk> = w_kadrze
+            .iter()
+            .filter(|c| !c.pusty(true))
+            .copied()
+            .collect();
 
+        // Woda nie rzuca cienia: tafla jest przezroczysta, a jej cień wyglądałby jak
+        // czarna plama na dnie. Kaskady dostają więc samą geometrię nieprzezroczystą.
         let cienie: [Vec<VisibleChunk>; shadow::CASCADES] = std::array::from_fn(|i| {
             let planes = frustum_planes(&kaskady[i].view_proj);
             wszystkie
                 .iter()
-                .filter(|(_, rel, r)| sphere_in_frustum(&planes, *rel, *r))
+                .filter(|(c, rel, r)| !c.pusty(false) && sphere_in_frustum(&planes, *rel, *r))
                 .map(|(v, _, _)| *v)
                 .collect()
         });
 
-        self.write_indirect(&widoczne, &cienie);
-        FrameLists { widoczne, cienie }
+        let listy = FrameLists {
+            widoczne,
+            woda,
+            cienie,
+        };
+        self.write_indirect(&listy);
+        listy
     }
 
     /// Argumenty rysowania pośredniego: kadr, a za nim kolejne kaskady — każdy widok
     /// dostaje własny zakres bufora, żeby jedno wywołanie pośrednie nie rysowało cudzej listy.
-    fn write_indirect(&self, widoczne: &[VisibleChunk], cienie: &[Vec<VisibleChunk>]) {
+    fn write_indirect(&self, listy: &FrameLists) {
         let Some(buf) = self.indirect_buffer.as_ref() else {
             return;
         };
         let mut args: Vec<DrawArgs> = Vec::with_capacity(MAX_DRAWN_CHUNKS);
-        let mut wpisz = |lista: &[VisibleChunk]| {
+        let mut wpisz = |lista: &[VisibleChunk], woda: bool| {
             for c in lista {
+                let zakres = c.zakres(woda);
                 args.push(DrawArgs {
-                    index_count: c.indices.len,
+                    index_count: zakres.end - zakres.start,
                     instance_count: 1,
-                    first_index: c.indices.offset,
+                    first_index: zakres.start,
                     base_vertex: c.vertices.offset as i32,
                     first_instance: c.instance,
                 });
             }
         };
-        wpisz(widoczne);
-        for lista in cienie {
-            wpisz(lista);
+        wpisz(&listy.widoczne, false);
+        wpisz(&listy.woda, true);
+        for lista in &listy.cienie {
+            wpisz(lista, false);
         }
         args.truncate(MAX_INDIRECT_ARGS);
         if !args.is_empty() {
@@ -1263,6 +1938,8 @@ impl Renderer {
         depth: &wgpu::TextureView,
         listy: &FrameLists,
     ) -> usize {
+        // Scena idzie do bufora HDR; `color` jest celem dopiero dla post-processingu.
+        let scena = &self.hdr_view;
         {
             let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                 label: Some(PASS_NAMES[0]),
@@ -1323,7 +2000,8 @@ impl Renderer {
                 &mut pass,
                 &self.shadow_bind,
                 lista,
-                self.offset_kaskady(listy, i),
+                false,
+                listy.offset(2 + i),
             );
         }
 
@@ -1343,14 +2021,14 @@ impl Renderer {
                 ..Default::default()
             });
             pass.set_pipeline(&self.depth_pipeline);
-            self.draw_list(&mut pass, &self.bind_group, &listy.widoczne, 0);
+            self.draw_list(&mut pass, &self.bind_group, &listy.widoczne, false, 0);
         }
 
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some(PASS_NAMES[3]),
             timestamp_writes: self.timer.as_ref().map(|t| t.writes(3)),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: color,
+                view: scena,
                 depth_slice: None,
                 resolve_target: None,
                 ops: wgpu::Operations {
@@ -1374,17 +2052,81 @@ impl Renderer {
         pass.set_bind_group(0, Some(&self.bind_group), &[]);
         pass.draw(0..3, 0..1);
 
+        // Daleki teren przed chunkami: zapisuje głębię, więc chunki wygrywają z nim
+        // wszędzie tam, gdzie są — a tam, gdzie ich nie ma, zostaje panorama zamiast nieba.
+        if let Some(bind) = self.far_bind.as_ref() {
+            pass.set_pipeline(&self.far_pipeline);
+            pass.set_bind_group(0, Some(&self.bind_group), &[]);
+            pass.set_bind_group(1, Some(bind), &[]);
+            pass.set_bind_group(2, Some(&self.overlay_bind), &[]);
+            pass.draw(0..FAR_QUADS * FAR_QUADS * 6, 0..1);
+        }
+
         pass.set_pipeline(&self.pipeline);
-        self.draw_list(&mut pass, &self.bind_group, &listy.widoczne, 0)
+        pass.set_bind_group(1, Some(&self.overlay_bind), &[]);
+        let trojkaty = self.draw_list(&mut pass, &self.bind_group, &listy.widoczne, false, 0);
+        drop(pass);
+
+        // Woda: osobny przebieg z mieszaniem, głębia **tylko do odczytu** — pass czyta ją
+        // jako teksturę, żeby policzyć grubość słupa wody, a zapis do tej samej tekstury
+        // byłby jednoczesnym czytaniem i pisaniem zasobu, czyli błędem walidacji.
+        if !listy.woda.is_empty() {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some(PASS_NAMES[4]),
+                timestamp_writes: self.timer.as_ref().map(|t| t.writes(4)),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: scena,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: depth,
+                    depth_ops: None,
+                    stencil_ops: None,
+                }),
+                ..Default::default()
+            });
+            pass.set_pipeline(&self.water_pipeline);
+            pass.set_bind_group(1, Some(&self.water_bind), &[]);
+            let t = self.draw_list(
+                &mut pass,
+                &self.bind_group,
+                &listy.woda,
+                true,
+                listy.offset(1),
+            );
+            drop(pass);
+            self.record_post(encoder, color);
+            return trojkaty + t;
+        }
+        self.record_post(encoder, color);
+        trojkaty
     }
 
-    /// Gdzie w buforze pośrednim zaczyna się lista danej kaskady.
-    fn offset_kaskady(&self, listy: &FrameLists, kaskada: usize) -> u32 {
-        let mut o = listy.widoczne.len() as u32;
-        for l in &listy.cienie[..kaskada] {
-            o += l.len() as u32;
-        }
-        o
+    /// Przebieg końcowy: ekspozycja, tonemap i FXAA z bufora HDR na ekran.
+    fn record_post(&self, encoder: &mut wgpu::CommandEncoder, color: &wgpu::TextureView) {
+        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some(PASS_NAMES[5]),
+            timestamp_writes: self.timer.as_ref().map(|t| t.writes(5)),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: color,
+                depth_slice: None,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            ..Default::default()
+        });
+        pass.set_pipeline(&self.post_pipeline);
+        pass.set_bind_group(0, Some(&self.post_bind), &[]);
+        pass.draw(0..3, 0..1);
     }
 
     /// Przepisuje znaczniki czasu do bufora odczytu. Musi iść do **tego samego** enkodera,
@@ -1474,12 +2216,19 @@ impl Renderer {
         pass: &mut wgpu::RenderPass<'_>,
         bind: &wgpu::BindGroup,
         lista: &[VisibleChunk],
+        woda: bool,
         pierwszy_arg: u32,
     ) -> usize {
         pass.set_bind_group(0, Some(bind), &[]);
         pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
         pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-        let trojkaty = lista.iter().map(|c| (c.indices.len / 3) as usize).sum();
+        let trojkaty = lista
+            .iter()
+            .map(|c| {
+                let z = c.zakres(woda);
+                ((z.end - z.start) / 3) as usize
+            })
+            .sum();
 
         let miesci_sie = (pierwszy_arg as usize + lista.len()) <= MAX_INDIRECT_ARGS;
         match self.indirect_buffer.as_ref() {
@@ -1492,10 +2241,8 @@ impl Renderer {
             }
             _ => {
                 for c in lista {
-                    let start = c.indices.offset;
-                    let end = start + c.indices.len;
                     pass.draw_indexed(
-                        start..end,
+                        c.zakres(woda),
                         c.vertices.offset as i32,
                         c.instance..c.instance + 1,
                     );
@@ -1516,6 +2263,7 @@ impl Renderer {
         sky: &SkySample,
         camera: &CameraState,
         eye_z: f32,
+        eye_xy: (f32, f32),
         kaskady: &[Cascade; shadow::CASCADES],
         rozmiar: (u32, u32),
     ) {
@@ -1540,7 +2288,17 @@ impl Renderer {
             // kontrast już na 500 m i cały widok wychodził jednolicie brązowy.
             fog: Vec4::from((sky.horizon, 0.000_06)).to_array(),
             clip: [clip_level, clip_active, eye_z, 0.0],
-            screen: [rozmiar.0 as f32, rozmiar.1 as f32, 0.0, 0.0],
+            // zw: współczynniki odwrócenia bufora głębi, `d = z / (ndc + w)`. Bez nich
+            // odczytana głębia jest liczbą z przedziału [0, 1] o nieliniowym rozkładzie,
+            // z której nie da się policzyć grubości słupa wody w metrach.
+            eye: [eye_xy.0, eye_xy.1, eye_z, 0.0],
+            overlay: self.overlay_cfg,
+            screen: [
+                rozmiar.0 as f32,
+                rozmiar.1 as f32,
+                camera.near * camera.far / (camera.near - camera.far),
+                camera.far / (camera.near - camera.far),
+            ],
         };
         self.gpu
             .queue
@@ -1569,7 +2327,10 @@ fn create_depth(device: &wgpu::Device, width: u32, height: u32) -> wgpu::Texture
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: wgpu::TextureFormat::Depth32Float,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            // `TEXTURE_BINDING` obok załącznika, bo przebieg wody **czyta** głębię terenu,
+            // żeby policzyć grubość słupa wody. Odczyt jest bezpieczny, dopóki ten sam
+            // przebieg nie zapisuje głębi — i dlatego pass wody ma ją tylko do odczytu.
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
             view_formats: &[],
         })
         .create_view(&wgpu::TextureViewDescriptor::default())
@@ -1578,6 +2339,124 @@ fn create_depth(device: &wgpu::Device, width: u32, height: u32) -> wgpu::Texture
 /// Mapa cieni: jedna tekstura tablicowa, widok na całość do próbkowania i widok na każdą
 /// warstwę do rysowania. Warstwy nie mogą być osobnymi teksturami, bo shader wybiera
 /// kaskadę indeksem — a indeksować da się tablicę, nie cztery uchwyty.
+/// Grupa wiązań wody: głębia sceny i czas. Powstaje przy starcie i po każdej zmianie
+/// rozmiaru okna, bo trzyma widok tekstury głębi.
+/// Bufor sceny w HDR. Osobna tekstura, a nie powierzchnia okna: powierzchnia jest
+/// ośmiobitowa i w sRGB, więc nie uniesie wartości powyżej jedynki, na których pracuje
+/// ekspozycja.
+/// Jednopikselowa tekstura — zaślepka dla nieaktywnej nakładki. Jej zawartość nie ma
+/// znaczenia: shader czyta nakładkę dopiero wtedy, gdy uniform mówi, że jest aktywna.
+fn create_pixel_texture(device: &wgpu::Device) -> wgpu::Texture {
+    device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("render.overlay.pusta"),
+        size: wgpu::Extent3d {
+            width: 1,
+            height: 1,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8Unorm,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    })
+}
+
+fn create_overlay_bind(
+    device: &wgpu::Device,
+    layout: &wgpu::BindGroupLayout,
+    pole: &wgpu::Texture,
+    paleta: &wgpu::Texture,
+) -> wgpu::BindGroup {
+    device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("render.overlay.bind"),
+        layout,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::TextureView(
+                    &pole.create_view(&wgpu::TextureViewDescriptor::default()),
+                ),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: wgpu::BindingResource::TextureView(
+                    &paleta.create_view(&wgpu::TextureViewDescriptor::default()),
+                ),
+            },
+        ],
+    })
+}
+
+fn create_hdr(device: &wgpu::Device, width: u32, height: u32) -> wgpu::TextureView {
+    device
+        .create_texture(&wgpu::TextureDescriptor {
+            label: Some("render.hdr"),
+            size: wgpu::Extent3d {
+                width: width.max(1),
+                height: height.max(1),
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: HDR_FORMAT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        })
+        .create_view(&wgpu::TextureViewDescriptor::default())
+}
+
+fn create_post_bind(
+    device: &wgpu::Device,
+    layout: &wgpu::BindGroupLayout,
+    hdr: &wgpu::TextureView,
+    sampler: &wgpu::Sampler,
+    cfg: &wgpu::Buffer,
+) -> wgpu::BindGroup {
+    device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("render.post.bind"),
+        layout,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::TextureView(hdr),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: wgpu::BindingResource::Sampler(sampler),
+            },
+            wgpu::BindGroupEntry {
+                binding: 2,
+                resource: cfg.as_entire_binding(),
+            },
+        ],
+    })
+}
+
+fn create_water_bind(
+    device: &wgpu::Device,
+    layout: &wgpu::BindGroupLayout,
+    depth: &wgpu::TextureView,
+    time: &wgpu::Buffer,
+) -> wgpu::BindGroup {
+    device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("render.water.bind"),
+        layout,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::TextureView(depth),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: time.as_entire_binding(),
+            },
+        ],
+    })
+}
+
 fn create_shadow_maps(device: &wgpu::Device) -> (Vec<wgpu::TextureView>, wgpu::TextureView) {
     let tex = device.create_texture(&wgpu::TextureDescriptor {
         label: Some("render.shadow"),
@@ -1704,6 +2583,44 @@ pub fn sphere_in_frustum(planes: &[Vec4; 6], center: Vec3, radius: f32) -> bool 
 
 #[cfg(test)]
 mod tests {
+    /// Deklaracja `struct Frame` musi być **identyczna** we wszystkich shaderach sceny.
+    ///
+    /// Uniform to jeden bufor, a każdy shader czyta go po swojemu: shader z nieaktualną
+    /// deklaracją nie zgłasza błędu, tylko odczytuje pola spod cudzych przesunięć. Tak
+    /// właśnie stało się przy dokładaniu kaskad cieni — `sky.wgsl` został przy starym
+    /// układzie i zaczął brać barwę nieba z macierzy światła, przez co niebo wychodziło
+    /// białawe. Objaw wyglądał jak zła paleta, a był rozjazdem układu pamięci.
+    #[test]
+    fn uklad_uniformu_ramki_jest_ten_sam_we_wszystkich_shaderach() {
+        let shadery = [
+            ("voxel", include_str!("shaders/voxel.wgsl")),
+            ("water", include_str!("shaders/water.wgsl")),
+            ("sky", include_str!("shaders/sky.wgsl")),
+            ("far_terrain", include_str!("shaders/far_terrain.wgsl")),
+        ];
+        let pola = |src: &str| -> Vec<String> {
+            let start = src.find("struct Frame {").expect("brak struktury Frame");
+            let body = &src[start + "struct Frame {".len()..];
+            let end = body.find('}').expect("niedomknięta struktura Frame");
+            body[..end]
+                .lines()
+                .filter_map(|l| l.split("//").next())
+                .map(str::trim)
+                .filter(|l| !l.is_empty())
+                .map(|l| l.trim_end_matches(',').to_string())
+                .collect()
+        };
+        let wzorzec = pola(shadery[0].1);
+        assert!(wzorzec.len() > 5, "wzorzec wygląda na pusty: {wzorzec:?}");
+        for (nazwa, src) in &shadery[1..] {
+            assert_eq!(
+                pola(src),
+                wzorzec,
+                "shader {nazwa} ma inny układ `Frame` niż voxel"
+            );
+        }
+    }
+
     use super::*;
 
     #[test]

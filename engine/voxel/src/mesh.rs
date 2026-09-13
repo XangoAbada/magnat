@@ -93,10 +93,17 @@ pub const NORMALS: [(i32, i32, i32); 6] = [
 ];
 
 /// Gotowy mesh chunka.
+///
+/// Indeksy są **posegregowane**: najpierw wszystkie ściany nieprzezroczyste, potem
+/// przezroczyste. Renderer rysuje je dwoma passami (§5.8: woda ma własny przebieg
+/// z mieszaniem i bez zapisu głębi), a segregacja po stronie meshingu oszczędza mu
+/// przeglądania geometrii co klatkę — materiał ściany nie zmienia się między klatkami.
 #[derive(Clone, Default, Debug)]
 pub struct ChunkMesh {
     pub vertices: Vec<PackedVertex>,
     pub indices: Vec<u32>,
+    /// Ile pierwszych indeksów należy do geometrii nieprzezroczystej.
+    pub opaque_indices: u32,
 }
 
 impl ChunkMesh {
@@ -154,6 +161,9 @@ pub fn build_mesh(b: &ChunkBuilder, reg: &MaterialRegistry) -> ChunkMesh {
         let m = b.material_at(x, y, z);
         !m.is_air() && reg.get(m).is_opaque()
     };
+
+    // Indeksy przezroczyste zbierane osobno i doklejane na końcu — patrz `ChunkMesh`.
+    let mut przezroczyste: Vec<u32> = Vec::new();
 
     for (n, (nx, ny, nz)) in NORMALS.iter().enumerate() {
         // Osie płaszczyzny przekroju: `u` i `v` to dwie osie prostopadłe do normalnej.
@@ -232,7 +242,14 @@ pub fn build_mesh(b: &ChunkBuilder, reg: &MaterialRegistry) -> ChunkMesh {
                         h += 1;
                     }
 
-                    emit_quad(&mut mesh, axis, ua, va, slice, u, v, w, h, n as u8, start);
+                    let cel = if reg.get(start.material).is_opaque() {
+                        None
+                    } else {
+                        Some(&mut przezroczyste)
+                    };
+                    emit_quad(
+                        &mut mesh, cel, axis, ua, va, slice, u, v, w, h, n as u8, start,
+                    );
 
                     for dv in 0..h {
                         for du in 0..w {
@@ -244,6 +261,8 @@ pub fn build_mesh(b: &ChunkBuilder, reg: &MaterialRegistry) -> ChunkMesh {
             }
         }
     }
+    mesh.opaque_indices = mesh.indices.len() as u32;
+    mesh.indices.extend_from_slice(&przezroczyste);
     mesh
 }
 
@@ -286,6 +305,10 @@ fn corner_ao(
 #[allow(clippy::too_many_arguments)]
 fn emit_quad(
     mesh: &mut ChunkMesh,
+    // `Some` dla ścian przezroczystych: ich indeksy idą do osobnej listy, doklejanej
+    // na końcu. Wierzchołki zostają w jednej tablicy — dzielenie ich na dwie tylko po to,
+    // żeby rozdzielić passy, podwoiłoby liczbę alokacji w arenie GPU.
+    osobno: Option<&mut Vec<u32>>,
     axis: usize,
     ua: usize,
     va: usize,
@@ -338,14 +361,13 @@ fn emit_quad(
     // Zwrot nawijania zależy od kierunku ściany — inaczej połowa ścian byłaby odrzucona
     // przez culling tylnych ścianek.
     let odwroc = !normal.is_multiple_of(2);
+    let docelowe = osobno.unwrap_or(&mut mesh.indices);
     for k in 0..2 {
         let t = [kolejnosc[k * 3], kolejnosc[k * 3 + 1], kolejnosc[k * 3 + 2]];
         if odwroc {
-            mesh.indices
-                .extend_from_slice(&[first + t[0], first + t[2], first + t[1]]);
+            docelowe.extend_from_slice(&[first + t[0], first + t[2], first + t[1]]);
         } else {
-            mesh.indices
-                .extend_from_slice(&[first + t[0], first + t[1], first + t[2]]);
+            docelowe.extend_from_slice(&[first + t[0], first + t[1], first + t[2]]);
         }
     }
 }
@@ -582,6 +604,25 @@ mod tests {
             .filter(|v| v.material() == woda && v.normal() == 4)
             .count();
         assert_eq!(tafla, 4, "tafla rozbita na warstwy zamiast jednego quada");
+
+        // Indeksy wody leżą **za** granicą `opaque_indices`: renderer rysuje je osobnym
+        // passem z mieszaniem, więc pomieszanie obu list oznaczałoby wodę rysowaną
+        // nieprzezroczyście albo skałę rysowaną z mieszaniem.
+        let nieprzezroczyste = &mesh.indices[..mesh.opaque_indices as usize];
+        assert!(
+            nieprzezroczyste
+                .iter()
+                .all(|i| mesh.vertices[*i as usize].material() != woda),
+            "woda trafiła do geometrii nieprzezroczystej"
+        );
+        let reszta = &mesh.indices[mesh.opaque_indices as usize..];
+        assert!(!reszta.is_empty(), "brak indeksów przezroczystych");
+        assert!(
+            reszta
+                .iter()
+                .all(|i| mesh.vertices[*i as usize].material() == woda),
+            "do listy przezroczystej trafiło coś poza wodą"
+        );
     }
 
     #[test]

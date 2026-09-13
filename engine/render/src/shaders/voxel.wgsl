@@ -17,7 +17,9 @@ struct Frame {
     ground_color: vec4<f32>,  // xyz = ambient odbity od gruntu, w = nieużywane
     fog: vec4<f32>,           // xyz = barwa mgły, w = gęstość
     clip: vec4<f32>,          // x = poziom cięcia w metrach, y = czy aktywne, z = wysokość kamery
-    screen: vec4<f32>,        // xy = rozmiar okna w pikselach
+    screen: vec4<f32>,        // xy = rozmiar okna w pikselach, zw = odwrócenie bufora głębi
+    eye: vec4<f32>,           // xyz = pozycja kamery w świecie
+    overlay: vec4<f32>,       // x = bok komórki, y = wymiar, z = siła, w = czy aktywna
 }
 
 struct ChunkData {
@@ -49,6 +51,12 @@ struct Clusters {
 
 struct Cascade { index: u32 }
 @group(1) @binding(0) var<uniform> cascade: Cascade;
+
+// Nakładka terenowa (§6.1). W passie nieprzezroczystym grupa 1 niesie nakładkę, w passie
+// cienia — numer kaskady. To nie kolizja: oba pipeline'y mają własny układ wiązań i własny
+// punkt wejścia, a wspólny jest tylko moduł.
+@group(1) @binding(0) var overlay_field: texture_2d<f32>;
+@group(1) @binding(1) var overlay_palette: texture_2d<f32>;
 
 struct VertexOut {
     @builtin(position) clip_pos: vec4<f32>,
@@ -229,6 +237,20 @@ fn swiatla_punktowe(klaster: u32, pos: vec3<f32>, n: vec3<f32>) -> vec3<f32> {
     return suma;
 }
 
+/// Miesza barwę terenu z barwą nakładki. Nakładka jest **podglądem danych**, nie materiałem:
+/// dlatego miesza się z gotowym oświetleniem, a nie z albedo — wtedy odczyt wartości nie
+/// zależy od tego, czy zbocze akurat jest w cieniu.
+fn z_nakladka(color: vec3<f32>, swiat_xy: vec2<f32>) -> vec3<f32> {
+    if (frame.overlay.w < 0.5) {
+        return color;
+    }
+    let dim = i32(frame.overlay.y);
+    let k = clamp(vec2<i32>(swiat_xy / frame.overlay.x), vec2<i32>(0), vec2<i32>(dim - 1));
+    let wartosc = textureLoad(overlay_field, k, 0).r;
+    let barwa = textureLoad(overlay_palette, vec2<i32>(i32(wartosc * 255.0 + 0.5), 0), 0);
+    return mix(color, barwa.rgb, frame.overlay.z * barwa.a);
+}
+
 @fragment
 fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
     // Cięcie poziomem (§15.2): wszystko powyżej zadanej rzędnej znika. Cap domykający
@@ -261,14 +283,14 @@ fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
     }
     let light = frame.sun_color.xyz * ndotl * cien + ambient + punktowe;
     var color = in.color * light * in.ao;
+    color = z_nakladka(color, in.world_pos.xy + frame.eye.xy);
 
     // Mgła atmosferyczna — wykładnicza po odległości, barwa z nieba przy horyzoncie.
     let fog = 1.0 - exp(-in.view_dist * frame.fog.w);
     color = mix(color, frame.fog.xyz, clamp(fog, 0.0, 1.0));
 
-    // Ekspozycja i tonemap ACES (przybliżenie Narkowicza) — jeden wzór zamiast krzywej
-    // w teksturze, bo i tak jest strojony jednym parametrem ekspozycji.
-    color = color * frame.sun_dir.w;
-    color = (color * (2.51 * color + 0.03)) / (color * (2.43 * color + 0.59) + 0.14);
-    return vec4<f32>(clamp(color, vec3<f32>(0.0), vec3<f32>(1.0)), 1.0);
+    // Kolor wychodzi **liniowy i bez ograniczenia z góry** — ekspozycja i tonemap są
+    // w przebiegu post-processingu (`post.wgsl`), bo inaczej każdy shader sceny miałby
+    // własną kopię krzywej i pierwsza zmiana rozjechałaby wodę z terenem.
+    return vec4<f32>(color, 1.0);
 }
