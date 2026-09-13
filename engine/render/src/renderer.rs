@@ -12,7 +12,9 @@
 //! zmienia się jedna pętla.
 
 use crate::camera::CameraState;
+use crate::clusters::{self, ClusterConfig, GpuLight, CLUSTER_CAPACITY, CLUSTER_COUNT, CLUSTER_Z};
 use crate::gpu::GpuContext;
+use crate::shadow::{self, Cascade};
 use crate::sky::{exposure, sample_sky, sky_lut, sun_state, SkySample, SunState, SKY_LUT_SIZE};
 use glam::{Mat4, Vec3, Vec4};
 use magnat_core::SimMinute;
@@ -114,8 +116,16 @@ struct GpuChunk {
 /// nagrywanie passów nie trzymało pożyczki na mapie chunków.
 #[derive(Clone, Copy)]
 struct VisibleChunk {
+    /// Indeks w buforze per-chunk — ten sam dla kadru i dla każdej kaskady.
+    instance: u32,
     vertices: Block,
     indices: Block,
+}
+
+/// Listy rysowania jednej klatki: kadr kamery i po jednej na kaskadę cienia.
+struct FrameLists {
+    widoczne: Vec<VisibleChunk>,
+    cienie: [Vec<VisibleChunk>; shadow::CASCADES],
 }
 
 /// Argumenty `draw_indexed` dla ścieżki pośredniej. Układ jest kontraktem sterownika,
@@ -135,12 +145,20 @@ struct DrawArgs {
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct FrameUniform {
     view_proj: [[f32; 4]; 4],
+    /// Macierze kaskad cieni, w kolejności od najbliższej.
+    light_view_proj: [[[f32; 4]; 4]; shadow::CASCADES],
+    /// x..w = koniec zakresu kolejnych kaskad w metrach od kamery.
+    cascade_far: [f32; 4],
+    /// x..w = rozmiar texela kaskady w metrach — wejście do biasu głębi w shaderze.
+    cascade_texel: [f32; 4],
     sun_dir: [f32; 4],
     sun_color: [f32; 4],
     sky_color: [f32; 4],
     ground_color: [f32; 4],
     fog: [f32; 4],
     clip: [f32; 4],
+    /// xy = rozmiar okna w pikselach; shader dzieli go na kafle klastrów.
+    screen: [f32; 4],
 }
 
 /// Per-chunk dane w SSBO: przesunięcie względem kamery i skala voxela.
@@ -150,12 +168,15 @@ struct ChunkUniform {
     origin_scale: [f32; 4],
 }
 
+/// Ile wpisów rysowania pośredniego mieści bufor: kadr plus cztery kaskady.
+const MAX_INDIRECT_ARGS: usize = MAX_DRAWN_CHUNKS * (1 + shadow::CASCADES);
+
 /// Ile chunków naraz mieści bufor per-chunk. Przekroczenie obcina listę rysowania —
 /// widok z orbity i tak nie pokazuje więcej niż kilka tysięcy chunków (M1 §5.9).
 const MAX_DRAWN_CHUNKS: usize = 8192;
 
 /// Nazwy mierzonych passów — indeks odpowiada parze znaczników w `QuerySet`.
-pub const PASS_NAMES: [&str; 2] = ["depth_prepass", "opaque"];
+pub const PASS_NAMES: [&str; 4] = ["clusters", "shadows", "depth_prepass", "opaque"];
 
 /// Statystyki klatki — wejście do licznika w tytule okna i do raportu z §7.4.
 #[derive(Clone, Copy, Default, Debug)]
@@ -232,6 +253,21 @@ impl PassTimer {
         }
     }
 
+    /// Znaczniki obejmujące **blok** passów: początek stempluje pierwszy, koniec ostatni.
+    /// Cztery kaskady cieni to cztery passy, ale jeden budżet czasu (§4, WP-R3: ≤ 2 ms).
+    fn writes_block(
+        &self,
+        pass: usize,
+        pierwszy: bool,
+        ostatni: bool,
+    ) -> wgpu::RenderPassTimestampWrites<'_> {
+        wgpu::RenderPassTimestampWrites {
+            query_set: &self.set,
+            beginning_of_pass_write_index: pierwszy.then_some(2 * pass as u32),
+            end_of_pass_write_index: ostatni.then_some(2 * pass as u32 + 1),
+        }
+    }
+
     /// Odczyt wyniku poprzedniej klatki i zlecenie następnego. Wołane po `submit`.
     ///
     /// Pomiar wychodzi co druga klatka i tak ma być: w klatce, w której bufor jest
@@ -292,6 +328,24 @@ pub struct Renderer {
     /// Istnieje tylko wtedy, gdy sterownik ma multi-draw; inaczej idzie ścieżka zapasowa.
     indirect_buffer: Option<wgpu::Buffer>,
     depth_view: wgpu::TextureView,
+    cluster_pipeline: wgpu::ComputePipeline,
+    cluster_bind: wgpu::BindGroup,
+    cluster_config: wgpu::Buffer,
+    view_buffer: wgpu::Buffer,
+    light_buffer: wgpu::Buffer,
+    cluster_counts: wgpu::Buffer,
+    occupancy_readback: wgpu::Buffer,
+    occupancy: magnat_devtools::ClusterOccupancy,
+    /// Odczyt histogramu w toku — ten sam mechanizm co przy znacznikach czasu.
+    occupancy_w_locie: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    occupancy_gotowe: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    lights: u32,
+    shadow_pipeline: wgpu::RenderPipeline,
+    shadow_bind: wgpu::BindGroup,
+    shadow_layers: Vec<wgpu::TextureView>,
+    /// Po jednej grupie na kaskadę — niosą wyłącznie jej numer, żeby ten sam shader
+    /// mógł sięgnąć po właściwą macierz z uniformu ramki.
+    cascade_binds: Vec<wgpu::BindGroup>,
     vertex_arena: Arena,
     index_arena: Arena,
     /// Klucz niesie **LOD razem ze współrzędną**, bo `ChunkCoord` jest współrzędną
@@ -388,7 +442,7 @@ impl Renderer {
             device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("render.indirect"),
                 // `DrawIndexedIndirectArgs` to pięć `u32`.
-                size: (MAX_DRAWN_CHUNKS * 20) as u64,
+                size: (MAX_INDIRECT_ARGS * 20) as u64,
                 usage: wgpu::BufferUsages::INDIRECT | wgpu::BufferUsages::COPY_DST,
                 mapped_at_creation: false,
             })
@@ -400,7 +454,136 @@ impl Renderer {
                 uniform_entry(0, wgpu::ShaderStages::VERTEX_FRAGMENT),
                 storage_entry(1, wgpu::ShaderStages::VERTEX),
                 storage_entry(2, wgpu::ShaderStages::VERTEX),
+                // Mapa cieni: tablica czterech warstw i sampler porównawczy. Porównawczy,
+                // bo sprzętowe porównanie z filtrowaniem daje PCF 2×2 za darmo — nasze
+                // 3×3 dokłada do niego tylko cztery próbki, a nie dwadzieścia pięć.
+                wgpu::BindGroupLayoutEntry {
+                    binding: 3,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Depth,
+                        view_dimension: wgpu::TextureViewDimension::D2Array,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 4,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Comparison),
+                    count: None,
+                },
+                storage_entry(5, wgpu::ShaderStages::FRAGMENT),
+                storage_entry(6, wgpu::ShaderStages::FRAGMENT),
+                storage_entry(7, wgpu::ShaderStages::FRAGMENT),
+                uniform_entry(8, wgpu::ShaderStages::FRAGMENT),
             ],
+        });
+        // Klastry świateł: konfiguracja, lista świateł, liczniki i listy indeksów.
+        // Liczniki mają `COPY_SRC`, bo `ClusterOccupancy` czyta je z powrotem na CPU —
+        // histogram bez odczytu byłby przyrządem, którego nie da się odczytać.
+        let cluster_config = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("render.clusters.config"),
+            size: std::mem::size_of::<ClusterConfig>() as u64,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let view_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("render.clusters.view"),
+            size: 64,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let light_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("render.lights"),
+            size: (clusters::MAX_LIGHTS * std::mem::size_of::<GpuLight>()) as u64,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let cluster_counts = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("render.clusters.counts"),
+            size: u64::from(CLUSTER_COUNT) * 4,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
+        let cluster_indices = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("render.clusters.indices"),
+            size: u64::from(CLUSTER_COUNT) * u64::from(CLUSTER_CAPACITY) * 4,
+            usage: wgpu::BufferUsages::STORAGE,
+            mapped_at_creation: false,
+        });
+        let occupancy_readback = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("render.clusters.readback"),
+            size: u64::from(CLUSTER_COUNT) * 4,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+
+        let cluster_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("render.clusters.layout"),
+            entries: &[
+                uniform_entry(0, wgpu::ShaderStages::COMPUTE),
+                storage_entry(1, wgpu::ShaderStages::COMPUTE),
+                rw_storage_entry(2),
+                rw_storage_entry(3),
+                uniform_entry(4, wgpu::ShaderStages::COMPUTE),
+            ],
+        });
+        let cluster_bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("render.clusters.bind"),
+            layout: &cluster_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: cluster_config.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: light_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: cluster_counts.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: cluster_indices.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: view_buffer.as_entire_binding(),
+                },
+            ],
+        });
+        let cluster_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("render.clusters"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("shaders/clusters.wgsl").into()),
+        });
+        let cluster_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("render.clusters.pipeline"),
+            layout: Some(
+                &device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                    label: Some("render.clusters.pipeline.layout"),
+                    bind_group_layouts: &[Some(&cluster_layout)],
+                    immediate_size: 0,
+                }),
+            ),
+            module: &cluster_shader,
+            entry_point: Some("cs_main"),
+            compilation_options: Default::default(),
+            cache: None,
+        });
+
+        let (shadow_layers, shadow_array) = create_shadow_maps(device);
+        let shadow_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("render.shadow.sampler"),
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            compare: Some(wgpu::CompareFunction::LessEqual),
+            ..Default::default()
         });
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("render.bind"),
@@ -418,12 +601,91 @@ impl Renderer {
                     binding: 2,
                     resource: material_buffer.as_entire_binding(),
                 },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: wgpu::BindingResource::TextureView(&shadow_array),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: wgpu::BindingResource::Sampler(&shadow_sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 5,
+                    resource: light_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 6,
+                    resource: cluster_counts.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 7,
+                    resource: cluster_indices.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 8,
+                    resource: cluster_config.as_entire_binding(),
+                },
             ],
         });
+
+        // Grupa 1 niesie numer kaskady. Osobny bufor na kaskadę zamiast dynamicznego
+        // przesunięcia: cztery szesnastobajtowe bufory są tańsze w czytaniu niż wyrównanie
+        // do 256 B i przesunięcia liczone przy każdym passie.
+        let cascade_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("render.cascade.layout"),
+            entries: &[uniform_entry(0, wgpu::ShaderStages::VERTEX)],
+        });
+        let cascade_binds: Vec<wgpu::BindGroup> = (0..shadow::CASCADES as u32)
+            .map(|i| {
+                let buf = create_init_buffer(
+                    device,
+                    "render.cascade.index",
+                    bytemuck::bytes_of(&[i, 0, 0, 0]),
+                    wgpu::BufferUsages::UNIFORM,
+                );
+                device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("render.cascade.bind"),
+                    layout: &cascade_layout,
+                    entries: &[wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: buf.as_entire_binding(),
+                    }],
+                })
+            })
+            .collect();
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("render.pipeline.layout"),
             bind_group_layouts: &[Some(&layout)],
+            immediate_size: 0,
+        });
+        // Pass cienia **pisze** do mapy cieni, więc nie wolno mu jej jednocześnie widzieć
+        // jako tekstury: to nie jest kwestia stylu, tylko błąd walidacji. Stąd druga grupa
+        // wiązań, węższa — sama ramka i dane chunków.
+        let geom_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("render.geometry.layout"),
+            entries: &[
+                uniform_entry(0, wgpu::ShaderStages::VERTEX),
+                storage_entry(1, wgpu::ShaderStages::VERTEX),
+            ],
+        });
+        let shadow_bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("render.geometry.bind"),
+            layout: &geom_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: frame_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: chunk_buffer.as_entire_binding(),
+                },
+            ],
+        });
+        let shadow_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("render.shadow.layout"),
+            bind_group_layouts: &[Some(&geom_layout), Some(&cascade_layout)],
             immediate_size: 0,
         });
 
@@ -457,6 +719,42 @@ impl Renderer {
             stencil: wgpu::StencilState::default(),
             bias: wgpu::DepthBiasState::default(),
         };
+
+        // Pass cienia: sama głębia, z przodu odciętymi ściankami **przednimi**, nie tylnymi.
+        // Rysowanie tylnych ścianek do mapy cienia odsuwa zapisaną głębię o grubość bryły
+        // i usuwa akne cieniowania na powierzchniach oświetlonych — tanim kosztem
+        // (cień „odkleja się" od podstawy tylko tam, gdzie bryła jest cienka).
+        let shadow_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("render.shadow"),
+            layout: Some(&shadow_layout),
+            vertex: wgpu::VertexState {
+                module: &voxel_shader,
+                entry_point: Some("vs_shadow"),
+                buffers: &[Some(vertex_layout.clone())],
+                compilation_options: Default::default(),
+            },
+            fragment: None,
+            primitive: wgpu::PrimitiveState {
+                cull_mode: Some(wgpu::Face::Front),
+                ..Default::default()
+            },
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: wgpu::TextureFormat::Depth32Float,
+                depth_write_enabled: Some(true),
+                depth_compare: Some(wgpu::CompareFunction::Less),
+                stencil: wgpu::StencilState::default(),
+                // Bias stały plus zależny od nachylenia: na zboczu jeden texel cienia
+                // pokrywa większy przedział głębi, więc stały bias tam nie wystarcza.
+                bias: wgpu::DepthBiasState {
+                    constant: 2,
+                    slope_scale: 2.0,
+                    clamp: 0.0,
+                },
+            }),
+            multisample: wgpu::MultisampleState::default(),
+            multiview_mask: None,
+            cache: None,
+        });
 
         // Depth prepass: wypełnia bufor głębi bez zapisu koloru. Wypłaca się przy terenie,
         // gdzie nadrysowanie jest duże, a shader fragmentu liczy oświetlenie.
@@ -547,6 +845,21 @@ impl Renderer {
             index_buffer,
             indirect_buffer,
             depth_view,
+            cluster_pipeline,
+            cluster_bind,
+            cluster_config,
+            view_buffer,
+            light_buffer,
+            cluster_counts,
+            occupancy_readback,
+            occupancy: magnat_devtools::ClusterOccupancy::default(),
+            occupancy_w_locie: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            occupancy_gotowe: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            lights: 0,
+            shadow_pipeline,
+            shadow_bind,
+            shadow_layers,
+            cascade_binds,
             vertex_arena: Arena::new(vertex_capacity),
             index_arena: Arena::new(index_capacity),
             chunks: BTreeMap::new(),
@@ -575,6 +888,31 @@ impl Renderer {
         self.chunks
             .get(&(lod, coord))
             .is_some_and(|c| c.revision == revision)
+    }
+
+    /// Podaje światła punktowe tej klatki. Pozycje są w metrach świata — przeliczenie
+    /// na układ kamery dzieje się tutaj, bo tylko renderer wie, gdzie jest oko.
+    ///
+    /// Do M11 źródłem jest snapshot (`RenderSnapshot::lights`); w M1 służy to scenie
+    /// pomiarowej z §4 (4096 świateł ≤ 0,4 ms na przypisanie).
+    pub fn set_lights(&mut self, lights: &[magnat_sim_snapshot::LightRecord], eye: glam::DVec3) {
+        let dane: Vec<GpuLight> = lights
+            .iter()
+            .take(clusters::MAX_LIGHTS)
+            .map(|l| clusters::to_gpu(l, eye))
+            .collect();
+        self.lights = dane.len() as u32;
+        if !dane.is_empty() {
+            self.gpu
+                .queue
+                .write_buffer(&self.light_buffer, 0, bytemuck::cast_slice(&dane));
+        }
+    }
+
+    /// Histogram zajętości klastrów z ostatniego odczytu (przyrząd z §6.1 dla M2/M11).
+    #[must_use]
+    pub fn cluster_occupancy(&self) -> &magnat_devtools::ClusterOccupancy {
+        &self.occupancy
     }
 
     /// Wgrywa mesh chunka do areny. Stary blok jest zwalniany — bez tego arena wypełnia się
@@ -638,7 +976,12 @@ impl Renderer {
 
     /// Rysuje klatkę do okna.
     pub fn render(&mut self, camera: &CameraState, minute: SimMinute, latitude_ddeg: i16) {
-        let widoczne = self.prepare_frame(camera, minute, latitude_ddeg);
+        let listy = self.prepare_frame(
+            camera,
+            minute,
+            latitude_ddeg,
+            (self.gpu.config.width, self.gpu.config.height),
+        );
         let frame = match self.gpu.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(f)
             | wgpu::CurrentSurfaceTexture::Suboptimal(f) => f,
@@ -662,11 +1005,11 @@ impl Renderer {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("render.frame"),
             });
-        let triangles = self.record_passes(&mut encoder, &view, &self.depth_view, &widoczne);
+        let triangles = self.record_passes(&mut encoder, &view, &self.depth_view, &listy);
         self.resolve_timer(&mut encoder);
         self.gpu.queue.submit(Some(encoder.finish()));
         self.gpu.queue.present(frame);
-        self.finish_stats(&widoczne, triangles);
+        self.finish_stats(&listy.widoczne, triangles);
     }
 
     /// Rysuje jedną klatkę do obrazu w pamięci i zwraca go jako RGB8.
@@ -683,7 +1026,7 @@ impl Renderer {
         width: u32,
         height: u32,
     ) -> (u32, u32, Vec<u8>) {
-        let widoczne = self.prepare_frame(camera, minute, latitude_ddeg);
+        let listy = self.prepare_frame(camera, minute, latitude_ddeg, (width, height));
         let device = &self.gpu.device;
 
         let color = device.create_texture(&wgpu::TextureDescriptor {
@@ -716,7 +1059,7 @@ impl Renderer {
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("render.offscreen"),
         });
-        let triangles = self.record_passes(&mut encoder, &color_view, &depth, &widoczne);
+        let triangles = self.record_passes(&mut encoder, &color_view, &depth, &listy);
         self.resolve_timer(&mut encoder);
         encoder.copy_texture_to_buffer(
             wgpu::TexelCopyTextureInfo {
@@ -770,7 +1113,7 @@ impl Renderer {
         drop(data);
         readback.unmap();
 
-        self.finish_stats(&widoczne, triangles);
+        self.finish_stats(&listy.widoczne, triangles);
         (width, height, rgb)
     }
 
@@ -780,34 +1123,59 @@ impl Renderer {
         camera: &CameraState,
         minute: SimMinute,
         latitude_ddeg: i16,
-    ) -> Vec<VisibleChunk> {
+        rozmiar: (u32, u32),
+    ) -> FrameLists {
         let sun = sun_state(minute, latitude_ddeg);
         let sky = sample_sky(&self.sky, sun.elevation_deg);
-        let aspect = self.gpu.aspect();
+        let aspect = rozmiar.0 as f32 / rozmiar.1.max(1) as f32;
         let view_proj = camera.view_proj_relative(aspect);
         let eye = camera.eye();
+        let kaskady = shadow::cascades(&view_proj, sun.direction, camera.near);
 
-        self.write_frame_uniform(&view_proj, &sun, &sky, camera, eye.z as f32);
+        self.write_frame_uniform(
+            &view_proj,
+            &sun,
+            &sky,
+            camera,
+            eye.z as f32,
+            &kaskady,
+            rozmiar,
+        );
 
-        // Culling frustum po stronie CPU (§5.8). Test sfery otaczającej względem sześciu
-        // płaszczyzn — tanio i wystarczająco: chunk odrzucony błędnie to chunk narysowany,
-        // a nie chunk brakujący, więc błąd jest po bezpiecznej stronie.
-        let planes = frustum_planes(&view_proj);
-        let mut widoczne: Vec<VisibleChunk> = Vec::with_capacity(self.chunks.len());
+        // Konfiguracja klastrów i macierz widoku — froxele opisują ten sam ostrosłup,
+        // który widać w kadrze, więc muszą pochodzić z tej samej klatki.
+        let cfg = ClusterConfig::new(camera.fov_deg, aspect, self.lights);
+        self.gpu
+            .queue
+            .write_buffer(&self.cluster_config, 0, bytemuck::bytes_of(&cfg));
+        let view = glam::camera::rh::view::look_at_mat4(
+            Vec3::ZERO,
+            (camera.target() - eye).as_vec3(),
+            Vec3::Z,
+        );
+        self.gpu.queue.write_buffer(
+            &self.view_buffer,
+            0,
+            bytemuck::cast_slice(&view.to_cols_array()),
+        );
+
+        // Bufor per-chunk opisuje **wszystkie** chunki rezydentne, a nie tylko widoczne
+        // z kamery. Powód jest w cieniach: kaskada rysuje inny podzbiór niż kadr, a oba
+        // passy indeksują ten sam bufor przez `instance_index`. Dwa bufory znaczyłyby dwie
+        // numeracje i pierwszą pomyłkę przy pierwszej zmianie cullingu.
         let mut per_chunk: Vec<ChunkUniform> =
             Vec::with_capacity(self.chunks.len().min(MAX_DRAWN_CHUNKS));
+        let mut wszystkie: Vec<(VisibleChunk, Vec3, f32)> =
+            Vec::with_capacity(per_chunk.capacity());
         for ((_, coord), c) in &self.chunks {
+            if per_chunk.len() >= MAX_DRAWN_CHUNKS {
+                break;
+            }
             let rel = Vec3::new(
                 c.center_m[0] - eye.x as f32,
                 c.center_m[1] - eye.y as f32,
                 c.center_m[2] - eye.z as f32,
             );
-            if !sphere_in_frustum(&planes, rel, c.radius_m) {
-                continue;
-            }
-            if per_chunk.len() >= MAX_DRAWN_CHUNKS {
-                break;
-            }
             let skala = f32::from(1u16 << c.lod);
             let d = CHUNK_DIM as i32;
             let origin = [
@@ -818,35 +1186,74 @@ impl Renderer {
             per_chunk.push(ChunkUniform {
                 origin_scale: [origin[0], origin[1], origin[2], skala],
             });
-            widoczne.push(VisibleChunk {
-                vertices: c.vertices,
-                indices: c.indices,
-            });
+            wszystkie.push((
+                VisibleChunk {
+                    instance: (per_chunk.len() - 1) as u32,
+                    vertices: c.vertices,
+                    indices: c.indices,
+                },
+                rel,
+                c.radius_m,
+            ));
         }
         if !per_chunk.is_empty() {
             self.gpu
                 .queue
                 .write_buffer(&self.chunk_buffer, 0, bytemuck::cast_slice(&per_chunk));
         }
-        if let Some(buf) = self.indirect_buffer.as_ref() {
-            let args: Vec<DrawArgs> = widoczne
+
+        // Culling frustum po stronie CPU (§5.8). Test sfery otaczającej względem sześciu
+        // płaszczyzn — tanio i wystarczająco: chunk odrzucony błędnie to chunk narysowany,
+        // a nie chunk brakujący, więc błąd jest po bezpiecznej stronie. Ta sama funkcja
+        // obsługuje kaskady, bo rzutowanie ortograficzne też ma sześć płaszczyzn.
+        let planes = frustum_planes(&view_proj);
+        let widoczne: Vec<VisibleChunk> = wszystkie
+            .iter()
+            .filter(|(_, rel, r)| sphere_in_frustum(&planes, *rel, *r))
+            .map(|(v, _, _)| *v)
+            .collect();
+
+        let cienie: [Vec<VisibleChunk>; shadow::CASCADES] = std::array::from_fn(|i| {
+            let planes = frustum_planes(&kaskady[i].view_proj);
+            wszystkie
                 .iter()
-                .enumerate()
-                .map(|(i, c)| DrawArgs {
+                .filter(|(_, rel, r)| sphere_in_frustum(&planes, *rel, *r))
+                .map(|(v, _, _)| *v)
+                .collect()
+        });
+
+        self.write_indirect(&widoczne, &cienie);
+        FrameLists { widoczne, cienie }
+    }
+
+    /// Argumenty rysowania pośredniego: kadr, a za nim kolejne kaskady — każdy widok
+    /// dostaje własny zakres bufora, żeby jedno wywołanie pośrednie nie rysowało cudzej listy.
+    fn write_indirect(&self, widoczne: &[VisibleChunk], cienie: &[Vec<VisibleChunk>]) {
+        let Some(buf) = self.indirect_buffer.as_ref() else {
+            return;
+        };
+        let mut args: Vec<DrawArgs> = Vec::with_capacity(MAX_DRAWN_CHUNKS);
+        let mut wpisz = |lista: &[VisibleChunk]| {
+            for c in lista {
+                args.push(DrawArgs {
                     index_count: c.indices.len,
                     instance_count: 1,
                     first_index: c.indices.offset,
                     base_vertex: c.vertices.offset as i32,
-                    first_instance: i as u32,
-                })
-                .collect();
-            if !args.is_empty() {
-                self.gpu
-                    .queue
-                    .write_buffer(buf, 0, bytemuck::cast_slice(&args));
+                    first_instance: c.instance,
+                });
             }
+        };
+        wpisz(widoczne);
+        for lista in cienie {
+            wpisz(lista);
         }
-        widoczne
+        args.truncate(MAX_INDIRECT_ARGS);
+        if !args.is_empty() {
+            self.gpu
+                .queue
+                .write_buffer(buf, 0, bytemuck::cast_slice(&args));
+        }
     }
 
     fn record_passes(
@@ -854,12 +1261,76 @@ impl Renderer {
         encoder: &mut wgpu::CommandEncoder,
         color: &wgpu::TextureView,
         depth: &wgpu::TextureView,
-        widoczne: &[VisibleChunk],
+        listy: &FrameLists,
     ) -> usize {
         {
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                 label: Some(PASS_NAMES[0]),
-                timestamp_writes: self.timer.as_ref().map(|t| t.writes(0)),
+                timestamp_writes: self
+                    .timer
+                    .as_ref()
+                    .map(|t| wgpu::ComputePassTimestampWrites {
+                        query_set: &t.set,
+                        beginning_of_pass_write_index: Some(0),
+                        end_of_pass_write_index: Some(1),
+                    }),
+            });
+            pass.set_pipeline(&self.cluster_pipeline);
+            pass.set_bind_group(0, Some(&self.cluster_bind), &[]);
+            // Grupa robocza to jedna warstwa siatki (16 × 9), więc dispatch ma tyle grup,
+            // ile warstw — patrz `clusters.wgsl`.
+            pass.dispatch_workgroups(1, 1, CLUSTER_Z);
+        }
+        if !self
+            .occupancy_w_locie
+            .load(std::sync::atomic::Ordering::Acquire)
+        {
+            encoder.copy_buffer_to_buffer(
+                &self.cluster_counts,
+                0,
+                &self.occupancy_readback,
+                0,
+                u64::from(CLUSTER_COUNT) * 4,
+            );
+        }
+
+        // Kaskady idą **przed** wszystkim (slot `Offscreen` w grafie): ich wynik jest
+        // wejściem passa nieprzezroczystego, a nie dodatkiem do niego.
+        for (i, lista) in listy.cienie.iter().enumerate() {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("shadow_cascade"),
+                // Pośrednie kaskady nie stemplują niczego — wtedy deskryptor nie może
+                // nieść pustych znaczników, bo to błąd walidacji, a nie „brak pomiaru".
+                timestamp_writes: self
+                    .timer
+                    .as_ref()
+                    .filter(|_| i == 0 || i == shadow::CASCADES - 1)
+                    .map(|t| t.writes_block(1, i == 0, i == shadow::CASCADES - 1)),
+                color_attachments: &[],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &self.shadow_layers[i],
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(1.0),
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
+                ..Default::default()
+            });
+            pass.set_pipeline(&self.shadow_pipeline);
+            pass.set_bind_group(1, Some(&self.cascade_binds[i]), &[]);
+            self.draw_list(
+                &mut pass,
+                &self.shadow_bind,
+                lista,
+                self.offset_kaskady(listy, i),
+            );
+        }
+
+        {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some(PASS_NAMES[2]),
+                timestamp_writes: self.timer.as_ref().map(|t| t.writes(2)),
                 color_attachments: &[],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                     view: depth,
@@ -872,12 +1343,12 @@ impl Renderer {
                 ..Default::default()
             });
             pass.set_pipeline(&self.depth_pipeline);
-            self.draw_chunks(&mut pass, widoczne);
+            self.draw_list(&mut pass, &self.bind_group, &listy.widoczne, 0);
         }
 
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some(PASS_NAMES[1]),
-            timestamp_writes: self.timer.as_ref().map(|t| t.writes(1)),
+            label: Some(PASS_NAMES[3]),
+            timestamp_writes: self.timer.as_ref().map(|t| t.writes(3)),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                 view: color,
                 depth_slice: None,
@@ -904,7 +1375,16 @@ impl Renderer {
         pass.draw(0..3, 0..1);
 
         pass.set_pipeline(&self.pipeline);
-        self.draw_chunks(&mut pass, widoczne)
+        self.draw_list(&mut pass, &self.bind_group, &listy.widoczne, 0)
+    }
+
+    /// Gdzie w buforze pośrednim zaczyna się lista danej kaskady.
+    fn offset_kaskady(&self, listy: &FrameLists, kaskada: usize) -> u32 {
+        let mut o = listy.widoczne.len() as u32;
+        for l in &listy.cienie[..kaskada] {
+            o += l.len() as u32;
+        }
+        o
     }
 
     /// Przepisuje znaczniki czasu do bufora odczytu. Musi iść do **tego samego** enkodera,
@@ -925,11 +1405,47 @@ impl Renderer {
         encoder.copy_buffer_to_buffer(&t.resolve, 0, &t.readback, 0, u64::from(n) * 8);
     }
 
+    /// Odbiera liczniki klastrów z poprzedniej klatki i zleca kolejny odczyt.
+    /// Ten sam wzorzec co przy znacznikach czasu: mapowanie jest gotowe dopiero wtedy,
+    /// gdy karta skończy klatkę, więc histogram jest o klatkę spóźniony — i to wystarcza,
+    /// bo służy do kalibracji budżetu, a nie do sterowania rysowaniem.
+    fn zbierz_occupancy(&mut self) {
+        use std::sync::atomic::Ordering;
+        if self.occupancy_gotowe.swap(false, Ordering::Acquire) {
+            if let Ok(dane) = self.occupancy_readback.slice(..).get_mapped_range() {
+                let counts: Vec<u32> = dane
+                    .chunks_exact(4)
+                    .map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+                    .collect();
+                drop(dane);
+                self.occupancy.record(&counts);
+            }
+            self.occupancy_readback.unmap();
+            self.occupancy_w_locie.store(false, Ordering::Release);
+            return;
+        }
+        if !self.occupancy_w_locie.swap(true, Ordering::AcqRel) {
+            let gotowe = self.occupancy_gotowe.clone();
+            let w_locie = self.occupancy_w_locie.clone();
+            self.occupancy_readback
+                .slice(..)
+                .map_async(wgpu::MapMode::Read, move |wynik| {
+                    if wynik.is_ok() {
+                        gotowe.store(true, Ordering::Release);
+                    } else {
+                        w_locie.store(false, Ordering::Release);
+                    }
+                });
+            self.gpu.device.poll(wgpu::PollType::Poll).ok();
+        }
+    }
+
     fn finish_stats(&mut self, widoczne: &[VisibleChunk], triangles: usize) {
         if let Some(mut t) = self.timer.take() {
             t.zbierz(&self.gpu);
             self.timer = Some(t);
         }
+        self.zbierz_occupancy();
         self.stats = FrameStats {
             chunks_resident: self.chunks.len(),
             chunks_drawn: widoczne.len(),
@@ -946,31 +1462,53 @@ impl Renderer {
         };
     }
 
-    /// Rysuje widoczne chunki. Dwie ścieżki, jedna geometria: pośrednia, gdy sterownik ją ma,
+    /// Rysuje listę chunków. Dwie ścieżki, jedna geometria: pośrednia, gdy sterownik ją ma,
     /// i wywołanie na chunk, gdy nie ma (ryzyko R6 fazy — WebGPU i część sterowników nie
     /// wystawiają multi-draw). Obie muszą dawać **ten sam obraz**, dlatego argumenty rysowania
-    /// powstają z tej samej listy `widoczne`, a nie z osobnego przebiegu cullingu.
-    fn draw_chunks(&self, pass: &mut wgpu::RenderPass<'_>, widoczne: &[VisibleChunk]) -> usize {
-        pass.set_bind_group(0, Some(&self.bind_group), &[]);
+    /// powstają z tej samej listy, a nie z osobnego przebiegu cullingu.
+    ///
+    /// `pierwszy_arg` to pozycja listy w buforze pośrednim: kadr zaczyna się od zera,
+    /// a kaskady leżą za nim, jedna za drugą.
+    fn draw_list(
+        &self,
+        pass: &mut wgpu::RenderPass<'_>,
+        bind: &wgpu::BindGroup,
+        lista: &[VisibleChunk],
+        pierwszy_arg: u32,
+    ) -> usize {
+        pass.set_bind_group(0, Some(bind), &[]);
         pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
         pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-        let trojkaty = widoczne.iter().map(|c| (c.indices.len / 3) as usize).sum();
+        let trojkaty = lista.iter().map(|c| (c.indices.len / 3) as usize).sum();
 
+        let miesci_sie = (pierwszy_arg as usize + lista.len()) <= MAX_INDIRECT_ARGS;
         match self.indirect_buffer.as_ref() {
-            Some(buf) if !widoczne.is_empty() => {
-                pass.multi_draw_indexed_indirect(buf, 0, widoczne.len() as u32);
+            Some(buf) if !lista.is_empty() && miesci_sie => {
+                pass.multi_draw_indexed_indirect(
+                    buf,
+                    u64::from(pierwszy_arg) * 20,
+                    lista.len() as u32,
+                );
             }
             _ => {
-                for (i, c) in widoczne.iter().enumerate() {
+                for c in lista {
                     let start = c.indices.offset;
                     let end = start + c.indices.len;
-                    pass.draw_indexed(start..end, c.vertices.offset as i32, i as u32..i as u32 + 1);
+                    pass.draw_indexed(
+                        start..end,
+                        c.vertices.offset as i32,
+                        c.instance..c.instance + 1,
+                    );
                 }
             }
         }
         trojkaty
     }
 
+    // Osiem argumentów, bo tyle niezależnych wielkości opisuje klatkę. Opakowanie ich
+    // w strukturę pośrednią dodałoby typ istniejący wyłącznie po to, żeby zaraz się
+    // rozpakować — dokładnie ten sam przypadek co `PackedVertex::new` w `engine/voxel`.
+    #[allow(clippy::too_many_arguments)]
     fn write_frame_uniform(
         &self,
         view_proj: &Mat4,
@@ -978,11 +1516,16 @@ impl Renderer {
         sky: &SkySample,
         camera: &CameraState,
         eye_z: f32,
+        kaskady: &[Cascade; shadow::CASCADES],
+        rozmiar: (u32, u32),
     ) {
         let clip_active = f32::from(u8::from(camera.clip_plane_z.is_some()));
         let clip_level = camera.clip_plane_z.map_or(0.0, |z| z as f32 * 0.5);
         let u = FrameUniform {
             view_proj: view_proj.to_cols_array_2d(),
+            light_view_proj: std::array::from_fn(|i| kaskady[i].view_proj.to_cols_array_2d()),
+            cascade_far: std::array::from_fn(|i| kaskady[i].far_m),
+            cascade_texel: std::array::from_fn(|i| kaskady[i].texel_m),
             sun_dir: [
                 sun.direction.x,
                 sun.direction.y,
@@ -997,6 +1540,7 @@ impl Renderer {
             // kontrast już na 500 m i cały widok wychodził jednolicie brązowy.
             fog: Vec4::from((sky.horizon, 0.000_06)).to_array(),
             clip: [clip_level, clip_active, eye_z, 0.0],
+            screen: [rozmiar.0 as f32, rozmiar.1 as f32, 0.0, 0.0],
         };
         self.gpu
             .queue
@@ -1031,6 +1575,43 @@ fn create_depth(device: &wgpu::Device, width: u32, height: u32) -> wgpu::Texture
         .create_view(&wgpu::TextureViewDescriptor::default())
 }
 
+/// Mapa cieni: jedna tekstura tablicowa, widok na całość do próbkowania i widok na każdą
+/// warstwę do rysowania. Warstwy nie mogą być osobnymi teksturami, bo shader wybiera
+/// kaskadę indeksem — a indeksować da się tablicę, nie cztery uchwyty.
+fn create_shadow_maps(device: &wgpu::Device) -> (Vec<wgpu::TextureView>, wgpu::TextureView) {
+    let tex = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("render.shadow"),
+        size: wgpu::Extent3d {
+            width: shadow::SHADOW_MAP_SIZE,
+            height: shadow::SHADOW_MAP_SIZE,
+            depth_or_array_layers: shadow::CASCADES as u32,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Depth32Float,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+        view_formats: &[],
+    });
+    let warstwy = (0..shadow::CASCADES as u32)
+        .map(|i| {
+            tex.create_view(&wgpu::TextureViewDescriptor {
+                label: Some("render.shadow.layer"),
+                dimension: Some(wgpu::TextureViewDimension::D2),
+                base_array_layer: i,
+                array_layer_count: Some(1),
+                ..Default::default()
+            })
+        })
+        .collect();
+    let tablica = tex.create_view(&wgpu::TextureViewDescriptor {
+        label: Some("render.shadow.array"),
+        dimension: Some(wgpu::TextureViewDimension::D2Array),
+        ..Default::default()
+    });
+    (warstwy, tablica)
+}
+
 fn create_init_buffer(
     device: &wgpu::Device,
     label: &str,
@@ -1051,6 +1632,21 @@ fn uniform_entry(binding: u32, visibility: wgpu::ShaderStages) -> wgpu::BindGrou
         visibility,
         ty: wgpu::BindingType::Buffer {
             ty: wgpu::BufferBindingType::Uniform,
+            has_dynamic_offset: false,
+            min_binding_size: None,
+        },
+        count: None,
+    }
+}
+
+/// Bufor zapisywalny przez compute — tylko tam, bo zapis z fragmentu wymagałby
+/// synchronizacji, której ten renderer nie potrzebuje.
+fn rw_storage_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {
+    wgpu::BindGroupLayoutEntry {
+        binding,
+        visibility: wgpu::ShaderStages::COMPUTE,
+        ty: wgpu::BindingType::Buffer {
+            ty: wgpu::BufferBindingType::Storage { read_only: false },
             has_dynamic_offset: false,
             min_binding_size: None,
         },

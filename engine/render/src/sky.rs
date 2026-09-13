@@ -334,6 +334,43 @@ mod tests {
     }
 
     #[test]
+    fn doba_zmienia_oswietlenie_bez_skokow() {
+        // Kryterium WP-R4: „doba w 30 s realnych — ciągła zmiana oświetlenia bez skoków".
+        // Przy 1000× przyspieszeniu klatka to ~17 minut gry, więc sprawdzamy krok
+        // minutowy z zapasem: żaden składnik oświetlenia nie ma prawa przeskoczyć.
+        let lat = 521;
+        let lut = sky_lut();
+        let mut poprzednie: Option<(SkySample, f32, f32)> = None;
+        for m in 0..1440 {
+            let sun = sun_state(SimMinute(minute(170, 0).0 + m), lat);
+            let sky = sample_sky(&lut, sun.elevation_deg);
+            let e = exposure(sun.elevation_deg);
+            if let Some((p_sky, p_exp, p_elev)) = poprzednie {
+                assert!(
+                    (sun.elevation_deg - p_elev).abs() < 0.5,
+                    "skok wysokości słońca w minucie {m}"
+                );
+                // Ekspozycja przechodzi od 4× do 1× na dziesięciu stopniach wysokości,
+                // a słońce wznosi się o ~0,25°/min — zmiana rzędu 0,08 na minutę jest
+                // płynna, skok byłby wielokrotnie większy.
+                assert!((e - p_exp).abs() < 0.15, "skok ekspozycji w minucie {m}");
+                for (a, b) in [
+                    (sky.zenith, p_sky.zenith),
+                    (sky.horizon, p_sky.horizon),
+                    (sky.ground, p_sky.ground),
+                    (sky.sun_color, p_sky.sun_color),
+                ] {
+                    assert!(
+                        (a - b).length() < 0.06,
+                        "skok barwy nieba w minucie {m}: {a:?} po {b:?}"
+                    );
+                }
+            }
+            poprzednie = Some((sky, e, sun.elevation_deg));
+        }
+    }
+
+    #[test]
     fn noc_jest_ciemna_a_dzien_jasny() {
         let lut = sky_lut();
         let noc = sample_sky(&lut, -15.0);

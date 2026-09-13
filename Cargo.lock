@@ -1267,6 +1267,7 @@ dependencies = [
  "glam",
  "log",
  "magnat-core",
+ "magnat-devtools",
  "magnat-sim-snapshot",
  "magnat-voxel",
  "pollster",

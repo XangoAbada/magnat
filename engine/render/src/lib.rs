@@ -2,12 +2,15 @@
 #![forbid(unsafe_code)]
 
 pub mod camera;
+pub mod clusters;
 pub mod gpu;
 pub mod graph;
 pub mod renderer;
+pub mod shadow;
 pub mod sky;
 
 pub use camera::{CameraMode, CameraState};
+pub use clusters::{CLUSTER_COUNT, CLUSTER_X, CLUSTER_Y, CLUSTER_Z};
 pub use gpu::GpuContext;
 pub use graph::{
     GraphError, GraphSlot, PassDecl, PassId, RenderGraph, RenderPass, ResourceDesc, ResourceRef,

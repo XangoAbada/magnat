@@ -85,6 +85,11 @@ struct Args {
     #[arg(long)]
     bench: Option<u32>,
 
+    /// Scena pomiarowa WP-R4: tyle świateł punktowych rozrzuconych wokół celu kamery.
+    /// Kryterium mówi o 4096 — tyle właśnie mieści snapshot M11 (`MAX_LIGHTS`).
+    #[arg(long, default_value_t = 0)]
+    lights: usize,
+
     /// Scena pomiarowa WP-R2: wszystko w LOD0 do zadanego promienia w metrach.
     #[arg(long)]
     lod0_radius: Option<i32>,
@@ -161,9 +166,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
         bench: args.bench,
         lod0_radius: args.lod0_radius,
+        // Wypełniane po ustawieniu kamery — pozycje zależą od celu, którego tu jeszcze nie ma.
+        swiatla: vec![magnat_sim_snapshot::LightRecord::default(); args.lights],
         bench_ms: Vec::new(),
         bench_pass_ms: Vec::new(),
         bench_chunks: 0,
+        occupancy_opis: String::new(),
+        occupancy_max: 0,
         bench_start: glam::DVec3::ZERO,
         zrzut: args.screenshot.clone(),
         zrzut_po: args.screenshot_after,
@@ -178,6 +187,39 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     event_loop.run_app(&mut app)?;
     Ok(())
+}
+
+/// Światła testowe do sceny pomiarowej WP-R4.
+///
+/// Rozrzucone po siatce z przesunięciem z RNG świata, a nie losowo przy każdym starcie:
+/// pomiar przypisania świateł ma być powtarzalny, bo inaczej porównanie dwóch commitów
+/// mierzy różnicę w rozkładzie, a nie w kodzie.
+fn swiatla_testowe(
+    ile: usize,
+    terrain: &magnat_world::Terrain,
+    cel: glam::DVec3,
+) -> Vec<magnat_sim_snapshot::LightRecord> {
+    use magnat_core::{rng, StreamId, Tick, NO_ENTITY};
+    use magnat_world::TerrainQuery;
+    let mut r = rng(0xC0FFEE, StreamId::WorldDetail, NO_ENTITY, Tick(1));
+    let bok = (ile as f64).sqrt().ceil() as i32;
+    // Rozstaw i zasięg jak przy ulicznych latarniach: co 25 m, świecą na 12 m dookoła.
+    let rozstaw = 25.0;
+    let mut out = Vec::with_capacity(ile);
+    for i in 0..ile as i32 {
+        let (gx, gy) = (i % bok, i / bok);
+        let x = cel.x + f64::from(gx - bok / 2) * rozstaw + f64::from(r.next_u32() % 8);
+        let y = cel.y + f64::from(gy - bok / 2) * rozstaw + f64::from(r.next_u32() % 8);
+        let z = f64::from(terrain.height_at(x as i32, y as i32)) * 0.5 + 6.0;
+        out.push(magnat_sim_snapshot::LightRecord {
+            pos: [x as f32, y as f32, z as f32],
+            range: 12.0,
+            // Ciepła barwa latarni. Wykładnik 128 + 3 daje mnożnik 8/256, czyli 1/32 —
+            // latarnia świeci ułamkiem mocy słońca, a nie tyle samo co ono.
+            color_rgbe: ((128 + 3) << 24) | (255 << 16) | (180 << 8) | 90,
+        });
+    }
+    out
 }
 
 /// Wysokość oczu w trybie pierwszoosobowym.
@@ -231,9 +273,12 @@ struct App {
     /// Klatki przelotu pomiarowego i zebrane z nich czasy.
     bench: Option<u32>,
     lod0_radius: Option<i32>,
+    swiatla: Vec<magnat_sim_snapshot::LightRecord>,
     bench_ms: Vec<f32>,
     bench_pass_ms: Vec<[f32; magnat_render::PASS_NAMES.len()]>,
     bench_chunks: usize,
+    occupancy_opis: String,
+    occupancy_max: u32,
     bench_start: glam::DVec3,
     zrzut: Option<std::path::PathBuf>,
     zrzut_po: u32,
@@ -286,6 +331,10 @@ impl ApplicationHandler for App {
             *target = glam::DVec3::new(f64::from(tx), f64::from(ty), h);
         }
 
+        if !self.swiatla.is_empty() {
+            let cel = self.camera.target();
+            self.swiatla = swiatla_testowe(self.swiatla.len(), &self.terrain, cel);
+        }
         let mut streamer = stream::Streamer::new(self.terrain.clone(), self.materials.clone());
         if let Some(r) = self.lod0_radius {
             streamer.wymus_lod0(r);
@@ -400,6 +449,9 @@ impl App {
             })
             .collect::<Vec<_>>()
             .join(", ");
+        if !self.swiatla.is_empty() {
+            eprintln!("światła: {} · {}", self.swiatla.len(), self.occupancy_opis);
+        }
         eprintln!(
             "szczyt: {} chunków rysowanych, GPU {gpu}; arena {:.1} MB z {:.1} MB",
             self.bench_chunks,
@@ -469,6 +521,9 @@ impl App {
             return;
         };
         streamer.update(&self.camera, renderer);
+        if !self.swiatla.is_empty() {
+            renderer.set_lights(&self.swiatla, self.camera.eye());
+        }
 
         self.numer_klatki += 1;
         if let Some(sciezka) = self.zrzut.clone() {
@@ -495,6 +550,13 @@ impl App {
                         _ => glam::DVec3::ZERO,
                     }
                 );
+                if !self.swiatla.is_empty() {
+                    eprintln!(
+                        "światła: {} · {}",
+                        self.swiatla.len(),
+                        renderer.cluster_occupancy().summary()
+                    );
+                }
                 match magnat_devtools::write_rgb(&sciezka, w, h, &px) {
                     Ok(b) => eprintln!("zrzut: {} ({w}×{h}, {b} B)", sciezka.display()),
                     Err(e) => eprintln!("zrzut nieudany: {e}"),
@@ -516,6 +578,13 @@ impl App {
                     self.bench_pass_ms.push(s.pass_ms);
                 }
                 self.bench_chunks = self.bench_chunks.max(s.chunks_drawn);
+                // Zapamiętujemy klatkę o **największym** obciążeniu klastra, a nie ostatnią:
+                // przelot wychodzi poza obszar świateł, więc ostatnia klatka pokazywałaby zera.
+                let o = renderer.cluster_occupancy();
+                if o.max() >= self.occupancy_max {
+                    self.occupancy_max = o.max();
+                    self.occupancy_opis = o.summary();
+                }
             }
             if self.numer_klatki >= klatek + BENCH_ROZGRZEWKA {
                 let stats = renderer.stats();

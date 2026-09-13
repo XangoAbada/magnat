@@ -8,12 +8,16 @@
 
 struct Frame {
     view_proj: mat4x4<f32>,
+    light_view_proj: array<mat4x4<f32>, 4>,  // macierze kaskad cieni
+    cascade_far: vec4<f32>,                  // koniec zakresu kaskad w metrach
+    cascade_texel: vec4<f32>,                // rozmiar texela kaskady w metrach
     sun_dir: vec4<f32>,       // xyz = kierunek do słońca, w = ekspozycja
     sun_color: vec4<f32>,     // xyz = barwa, w = wysokość słońca w stopniach
     sky_color: vec4<f32>,     // xyz = ambient z nieba, w = nieużywane
     ground_color: vec4<f32>,  // xyz = ambient odbity od gruntu, w = nieużywane
     fog: vec4<f32>,           // xyz = barwa mgły, w = gęstość
-    clip: vec4<f32>,          // x = poziom cięcia w metrach, y = czy aktywne
+    clip: vec4<f32>,          // x = poziom cięcia w metrach, y = czy aktywne, z = wysokość kamery
+    screen: vec4<f32>,        // xy = rozmiar okna w pikselach
 }
 
 struct ChunkData {
@@ -24,6 +28,27 @@ struct ChunkData {
 @group(0) @binding(0) var<uniform> frame: Frame;
 @group(0) @binding(1) var<storage, read> chunks: array<ChunkData>;
 @group(0) @binding(2) var<storage, read> materials: array<vec4<f32>>;
+@group(0) @binding(3) var shadow_map: texture_depth_2d_array;
+@group(0) @binding(4) var shadow_sampler: sampler_comparison;
+
+struct Light {
+    pos_range: vec4<f32>,
+    color: vec4<f32>,
+}
+
+struct Clusters {
+    frustum: vec4<f32>,
+    dims: vec4<u32>,
+    light_count: vec4<u32>,
+}
+
+@group(0) @binding(5) var<storage, read> lights: array<Light>;
+@group(0) @binding(6) var<storage, read> cluster_counts: array<u32>;
+@group(0) @binding(7) var<storage, read> cluster_indices: array<u32>;
+@group(0) @binding(8) var<uniform> clusters: Clusters;
+
+struct Cascade { index: u32 }
+@group(1) @binding(0) var<uniform> cascade: Cascade;
 
 struct VertexOut {
     @builtin(position) clip_pos: vec4<f32>,
@@ -32,6 +57,7 @@ struct VertexOut {
     @location(2) ao: f32,
     @location(3) view_dist: f32,
     @location(4) world_z: f32,
+    @location(5) world_pos: vec3<f32>,
 }
 
 // Sześć kierunków ścian — ta sama kolejność co `NORMALS` w `engine/voxel`.
@@ -48,6 +74,79 @@ const NORMALS = array<vec3<f32>, 6>(
 
 // Wysokość voxela to 0,5 m, a bok 1 m — chunk jest niesymetryczny w metrach (M1 §5.1).
 const VOXEL_HEIGHT_M: f32 = 0.5;
+
+/// Pozycja voxela względem kamery — wspólna dla kadru i dla mapy cienia. Rozjazd tych
+/// dwóch przeliczeń byłby widoczny jako cień przesunięty względem bryły, która go rzuca.
+fn pozycja(packed: vec2<u32>, chunk_index: u32) -> vec3<f32> {
+    let lo = packed.x;
+    let chunk = chunks[chunk_index];
+    let scale = chunk.origin_scale.w;
+    let local = vec3<f32>(
+        f32(lo & 0x3Fu) * scale,
+        f32((lo >> 6u) & 0x3Fu) * scale,
+        f32((lo >> 12u) & 0x3Fu) * scale * VOXEL_HEIGHT_M,
+    );
+    return chunk.origin_scale.xyz + local;
+}
+
+@vertex
+fn vs_shadow(
+    @location(0) packed: vec2<u32>,
+    @builtin(instance_index) chunk_index: u32,
+) -> @builtin(position) vec4<f32> {
+    return frame.light_view_proj[cascade.index] * vec4<f32>(pozycja(packed, chunk_index), 1.0);
+}
+
+/// Ile światła dociera do punktu: 1 = pełne słońce, 0 = pełny cień.
+///
+/// Kaskadę wybiera odległość od kamery, a nie głębia w NDC — progi są w metrach i mają
+/// znaczyć to samo niezależnie od rzutowania. Ostatnia kaskada kończy cienie miękkim
+/// zanikiem zamiast twardej krawędzi, bo krawędź na 1200 m widać jako linię na terenie.
+fn oswietlenie(pos: vec3<f32>, dist_m: f32, ndotl: f32) -> f32 {
+    if (ndotl <= 0.0) {
+        return 0.0;
+    }
+    var k = 3;
+    for (var i = 0; i < 4; i = i + 1) {
+        if (dist_m < frame.cascade_far[i]) {
+            k = i;
+            break;
+        }
+    }
+    if (dist_m > frame.cascade_far[3]) {
+        return 1.0;
+    }
+
+    let p = frame.light_view_proj[k] * vec4<f32>(pos, 1.0);
+    let ndc = p.xyz / p.w;
+    if (any(abs(ndc.xy) > vec2<f32>(1.0)) || ndc.z > 1.0) {
+        return 1.0;
+    }
+    let uv = vec2<f32>(ndc.x * 0.5 + 0.5, 0.5 - ndc.y * 0.5);
+
+    // Bias zależny od nachylenia: przy świetle padającym płasko jeden texel cienia
+    // obejmuje większy przedział głębi, więc stały bias zostawiałby akne.
+    let nachylenie = clamp(1.0 - ndotl, 0.0, 1.0);
+    let bias = (0.00008 + 0.0009 * nachylenie) * (frame.cascade_texel[k] + 1.0);
+
+    // PCF 3×3 na sprzętowym porównaniu — każda próbka jest już dwuliniowa, więc efektywnie
+    // jest to filtr 4×4 za dziewięć pobrań.
+    let krok = 1.0 / f32(textureDimensions(shadow_map).x);
+    var suma = 0.0;
+    for (var dy = -1; dy <= 1; dy = dy + 1) {
+        for (var dx = -1; dx <= 1; dx = dx + 1) {
+            let o = vec2<f32>(f32(dx), f32(dy)) * krok;
+            suma = suma + textureSampleCompareLevel(
+                shadow_map, shadow_sampler, uv + o, k, ndc.z - bias
+            );
+        }
+    }
+    let swiatlo = suma / 9.0;
+
+    // Zanik na końcu ostatniej kaskady.
+    let zanik = smoothstep(frame.cascade_far[3] * 0.85, frame.cascade_far[3], dist_m);
+    return mix(swiatlo, 1.0, zanik);
+}
 
 @vertex
 fn vs_main(
@@ -78,10 +177,56 @@ fn vs_main(
     out.ao = mix(0.35, 1.0, ao) * mix(0.25, 1.0, sun);
     out.color = materials[material].xyz;
     out.view_dist = length(pos);
+    out.world_pos = pos;
     // Wysokość bezwzględna potrzebna do cięcia poziomem — chunk niesie ją w przesunięciu,
     // więc odtwarzamy ją z pozycji kamery zapisanej w `clip.z`.
     out.world_z = pos.z + frame.clip.z;
     return out;
+}
+
+/// Numer klastra dla piksela: kafel z pozycji na ekranie, warstwa z odległości.
+///
+/// Podział po Z jest logarytmiczny i **musi** być tą samą funkcją co w `clusters.wgsl` —
+/// rozjazd o jedną warstwę znaczy oświetlenie czytane z sąsiedniego froxela, czyli światła
+/// znikające przy ruchu kamery.
+fn numer_klastra(frag_xy: vec2<f32>, glebokosc_m: f32) -> u32 {
+    let n = clusters.frustum.z;
+    let f = clusters.frustum.w;
+    let z = clamp(glebokosc_m, n, f);
+    let warstwa = u32(clamp(
+        log(z / n) / log(f / n) * f32(clusters.dims.z),
+        0.0,
+        f32(clusters.dims.z - 1u),
+    ));
+    // Rozmiar ekranu w pikselach leży w `frame.screen`; kafel to po prostu jego podział.
+    // Oś Y ekranu rośnie w dół, a siatka klastrów jest liczona w NDC, gdzie rośnie w górę.
+    // Bez tego odbicia fragment czyta listę z kafla odbitego względem środka ekranu —
+    // widać to jako poziome pasy oświetlenia przesunięte względem świateł.
+    let kx = u32(clamp(frag_xy.x / frame.screen.x * f32(clusters.dims.x), 0.0, f32(clusters.dims.x - 1u)));
+    let ky_gora = u32(clamp(frag_xy.y / frame.screen.y * f32(clusters.dims.y), 0.0, f32(clusters.dims.y - 1u)));
+    let kafel = vec2<u32>(kx, clusters.dims.y - 1u - ky_gora);
+    return warstwa * clusters.dims.x * clusters.dims.y + kafel.y * clusters.dims.x + kafel.x;
+}
+
+/// Wkład świateł punktowych przypisanych do klastra tego piksela.
+fn swiatla_punktowe(klaster: u32, pos: vec3<f32>, n: vec3<f32>) -> vec3<f32> {
+    let pojemnosc = clusters.dims.w;
+    let ile = min(cluster_counts[klaster], pojemnosc);
+    var suma = vec3<f32>(0.0);
+    for (var i = 0u; i < ile; i = i + 1u) {
+        let l = lights[cluster_indices[klaster * pojemnosc + i]];
+        let do_swiatla = l.pos_range.xyz - pos;
+        let d = length(do_swiatla);
+        if (d > l.pos_range.w) {
+            continue;
+        }
+        // Tłumienie odwrotnie kwadratowe z odcięciem na zasięgu — bez odcięcia światło
+        // ma nieskończony ogon i klaster przestaje cokolwiek odsiewać.
+        let zanik = clamp(1.0 - d / l.pos_range.w, 0.0, 1.0);
+        let ndotl = max(dot(n, do_swiatla / max(d, 0.0001)), 0.0);
+        suma = suma + l.color.xyz * ndotl * zanik * zanik;
+    }
+    return suma;
 }
 
 @fragment
@@ -100,7 +245,21 @@ fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
     let up = n.z * 0.5 + 0.5;
     let ambient = mix(frame.ground_color.xyz, frame.sky_color.xyz, up);
 
-    let light = frame.sun_color.xyz * ndotl + ambient;
+    let cien = oswietlenie(in.world_pos, in.view_dist, ndotl);
+    // Warstwa klastra idzie po **głębokości widoku**, nie po odległości od oka: compute
+    // wycina froxele płaszczyznami prostopadłymi do osi patrzenia. Na brzegu kadru te dwie
+    // wielkości różnią się o kilkanaście procent, a objawem jest oświetlenie w kwadratowych
+    // łatach, bo fragment czyta listę z sąsiedniej warstwy. `position.w` we fragmencie
+    // to odwrotność `w` z przestrzeni obcinania, czyli dokładnie ta głębokość.
+    let glebokosc = 1.0 / in.clip_pos.w;
+    // Poza zasięgiem siatki klastrów świateł po prostu nie ma. Zaciskanie głębokości do
+    // ostatniej warstwy dawałoby tam listę z granicy zasięgu — czyli prostokątne łaty
+    // cudzego światła na odległym terenie.
+    var punktowe = vec3<f32>(0.0);
+    if (glebokosc <= clusters.frustum.w) {
+        punktowe = swiatla_punktowe(numer_klastra(in.clip_pos.xy, glebokosc), in.world_pos, n);
+    }
+    let light = frame.sun_color.xyz * ndotl * cien + ambient + punktowe;
     var color = in.color * light * in.ao;
 
     // Mgła atmosferyczna — wykładnicza po odległości, barwa z nieba przy horyzoncie.

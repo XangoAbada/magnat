@@ -7,12 +7,14 @@
 
 #![forbid(unsafe_code)]
 
+pub mod clusters;
 pub mod console;
 pub mod inspector;
 pub mod metrics;
 pub mod png;
 pub mod profile;
 
+pub use clusters::{ClusterOccupancy, MAX_LIGHTS_PER_CLUSTER};
 pub use console::{Console, ConsoleFn};
 pub use inspector::Inspector;
 pub use metrics::MetricSink;

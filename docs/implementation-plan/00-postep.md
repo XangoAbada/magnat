@@ -79,7 +79,7 @@ z szablonu w `00-konwencje-i-kontrakty.md` §8 i są identyczne dla każdej fazy
 ### M1 — Świat statyczny
 `M1-swiat-statyczny.md` · wymaga: M0
 
-- [~] 1. Pakiety robocze — zamknięte W1–W7, V1–V4, R1, R2, C1; zostają R3–R6 i X1 · [ ] 2. Determinizm · [ ] 3. Własnościowe · [ ] 4. Budżety
+- [~] 1. Pakiety robocze — zamknięte W1–W7, V1–V4, R1–R4, C1; zostają R5, R6 i X1 · [ ] 2. Determinizm · [ ] 3. Własnościowe · [ ] 4. Budżety
 - [ ] 5. Wyjaśnialność · [ ] 6. Kontrakty · [ ] 7. Decyzje otwarte
 - [ ] **Faza ukończona** — artefakt: oglądalny krajobraz z seeda, rzeki z ujściem, cykl dobowy
 
@@ -278,6 +278,7 @@ Jedna linia na zamknięty pakiet roboczy lub bramkę. Najnowsze na górze.
 
 | Data | Faza | Co zamknięto | Uwagi |
 |---|---|---|---|
+| 2026-09-14 | M1 | R3, R4: cienie kaskadowe (4 kaskady, sfera otaczająca + zatrzask do texela, PCF 3×3 na sprzętowym porównaniu), przypisanie świateł do froxeli 16×9×24 w compute, `ClusterOccupancy` w devtools | Cienie 0,18 ms (p95 0,29) w scenie z pierścieniami LOD wobec limitu 2 ms; 4096 świateł: przypisanie 0,26 ms (p95 0,52) wobec 0,4 ms — mediana w budżecie, ogon poza nim, bo pomiar obejmuje klatki z materializacją chunków. Trzy błędy wyłapane przez podgląd, nie przez testy: pass cienia nie może widzieć własnej mapy w grupie wiązań, kafel klastra we fragmencie liczy się po **odbitej** osi Y, a warstwa klastra po **głębokości widoku**, nie po odległości od oka |
 | 2026-09-13 | M1 | R1, R2, C1: pomiar czasu GPU per pass (timestamp queries), rysowanie pośrednie `multi_draw_indexed_indirect` ze ścieżką zapasową, tryby kamery z przejściami bez przeskoku | 3380 chunków LOD0: GPU p95 2,62 + 1,59 ms (limit 6 ms); obie ścieżki rysowania dają zrzut **identyczny bit w bit** (SHA-256); przelot 2 km bez zacięć > 33 ms; `tools/voxelview` usunięte zgodnie z K-3 |
 | 2026-09-13 | M1 | Poprawki ujawnione przez podgląd: tafla wody nie powstawała w meshu, chunki różnych LOD nadpisywały się w rendererze, granica biomu biegła po siatce klimatu 256 m, `column_at` pomijał pokrywę biomu | Komórki jezior przeszły na RLE (6 B/komórkę → 8 B/odcinek): stan trwały 16 km z 61,4 MB na 53,0 MB (region górski, 1,54 mln komórek jezior), znów pod limitem 60 MB z §5.9 |
 | 2026-09-13 | M1 | V2, V3, V4: greedy meshing z voxelowym AO i formatem wierzchołka 8 B, agregacja LOD, `VoxelWorld` z pierścieniami LOD, histerezą, budżetem pamięci i dwufazową kolejką edycji | **Trzy korekty planu, wszystkie z pomiarem:** (1) budżet 900 quadów na chunk dotyczy średniej (zmierzone 477–664), najgorszy chunk sięga 2564 — i wypada na **nizinie**, nie w górach, bo chunk przy jeziorze ma dwie niezależne powierzchnie; arena GPU nadal w budżecie (250 MB z 768 MB); (2) agregację LOD wykonuje **źródło**, nie `engine/voxel` — nadpróbkowanie `8^lod` po stronie silnika dało 305 ms na chunk LOD3 wobec budżetu 1,5 ms, próbkowanie po stronie `sim/world` mieści się w budżecie przy błędzie powierzchni 1 voxela LOD0; (3) porządek stosowania edycji wyprowadzany jest **z treści komendy**, nie z `EditSeq` — numer nadawany przy równoległym `push` nie jest deterministyczny, więc sortowanie po nim łamałoby `edits_order_invariant`. Geologia próbkowana co 8 m (i tak samo w `column_at`, żeby inspektor i wykop pokazywały to samo): materializacja chunka 0,39–0,50 ms, meshing 0,64–0,68 ms |
