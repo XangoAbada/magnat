@@ -45,28 +45,36 @@ z szablonu w `00-konwencje-i-kontrakty.md` §8 i są identyczne dla każdej fazy
 ### M0 — Fundament silnika
 `M0-fundament-silnika.md` · bez zależności wejściowych, może ruszyć od razu
 
-- [x] 1. Pakiety robocze · [x] 2. Determinizm · [x] 3. Własnościowe · [~] 4. Budżety
-- [x] 5. Wyjaśnialność · [x] 6. Kontrakty · [x] 7. Decyzje otwarte
-
-Bramka 4 jest `[~]`, a nie `[x]`, z jednego powodu: **B-1c osiąga 5,2× zamiast 8×**
-przy 16 wątkach. To nie jest wada implementacji (przy 70 µs pracy dominuje narzut
-planowania zadań), tylko kryterium sformułowane bez zastrzeżenia o wielkości pracy —
-korekta K0-10 czeka na akceptację. Pozostałe jedenaście benchmarków mieści się
-w celach, część z wielokrotnym zapasem (M0 §4a).
-Bramka 5 jest domknięta mechanizmem, nie treścią: M0 nie ma decyzji domenowych,
-więc `DecisionReason` ma na razie jeden wariant — pilnuje go test `trybuild`,
-który wywala kompilację `match` bez ramienia `_` (to jest cały sens K-12).
-- [~] **Faza ukończona** — artefakt działa (headless runner + okno `wgpu` z chunkiem 32³,
-  hashe identyczne przy 1/2/8/16 wątkach, wznowienie z zapisu nieodróżnialne od przebiegu
-  ciągłego). **Do domknięcia przez właściciela repozytorium, bo wymaga środowisk,
-  których nie ma na maszynie deweloperskiej:**
-  1. przebieg joba `miri` (wymaga toolchaina nightly — job jest w `ci.yml`, kod ma
-     `unsafe` wyłącznie w `engine/ecs/src/chunk.rs`),
+- [x] **1. Pakiety robocze** — WP-01…WP-15 zamknięte, każdy wg własnego kryterium
+  (statusy przy pakietach w `M0-fundament-silnika.md` §4)
+- [x] **2. Determinizm** — T-D1…T-D8 i T-D11…T-D13 zielone; hashe bajt w bajt identyczne
+  przy 1/2/8/16 wątkach, wznowienie z zapisu nieodróżnialne od przebiegu ciągłego,
+  test negatywny `--features chaos` zawodzi na właściwym ticku
+- [x] **3. Własnościowe** — `split_proportional` sumuje się do kwoty dzielonej dla 10⁵
+  losowych przypadków (w tym kwot ujemnych i wag zerowych); masy M0 jeszcze nie ma,
+  bo nie ma towarów
+- [~] **4. Budżety** — 11 z 12 benchmarków w celu, część z wielokrotnym zapasem (M0 §4a).
+  Poza celem **B-1c: 5,2× zamiast 8×** przy 16 wątkach — to nie wada implementacji
+  (przy 70 µs pracy dominuje narzut planowania zadań), tylko kryterium sformułowane
+  bez zastrzeżenia o wielkości pracy. Bramka domknie się wraz z akceptacją korekty K0-10
+- [x] **5. Wyjaśnialność** — mechanizm gotowy i egzekwowany przez kompilator: `match`
+  po `DecisionReason` bez ramienia `_` nie kompiluje się (test `trybuild`). Treści nie ma,
+  bo M0 nie podejmuje decyzji domenowych — pierwszy wariant dopisze M3
+- [x] **6. Kontrakty** — całe §6 dokumentu fazy ma pokrycie w publicznym API; konsumentem
+  wewnątrz M0 są `tools/headless` (ECS, jobs, io, devtools) i `engine/io` (kontrakt chunków)
+- [x] **7. Decyzje otwarte** — D-1, D-4, D-8, D-12 przyjęte domyślnie; D-6 i D-2 były już
+  zamknięte; **D-7 rozstrzygnięte odwrotnie niż domyślnie** (K0-12); D-3, D-5, D-9, D-11
+  przeniesione dalej z adresatem (M1, M2, M4), zgodnie z treścią bramki
+- [~] **Faza ukończona** — artefakt działa: runner headless, okno `wgpu` z chunkiem 32³,
+  147 testów zielonych, `clippy -D warnings` bez wyjątków. **Cztery pozycje do domknięcia
+  wymagają środowisk, których nie ma na maszynie deweloperskiej:**
+  1. przebieg joba `miri` (potrzebny toolchain nightly; job jest w `ci.yml`, `unsafe`
+     siedzi wyłącznie w `engine/ecs/src/chunk.rs`),
   2. przebieg macierzy CI na GitHub Actions (Linux + Windows) przy pierwszym push,
-  3. potwierdzenie ≥ 60 FPS w `magnat-voxelview` na docelowej maszynie (okno startuje
+  3. potwierdzenie ≥ 60 FPS w `magnat-voxelview` na maszynie docelowej (okno startuje
      na Vulkanie, licznik FPS jest w tytule),
-  4. T-D9 na `aarch64` (QEMU, przebieg nocny) — złoty odcisk `det_math` jest zatwierdzony
-     dla `x86_64-pc-windows-msvc`.
+  4. T-D9 na `aarch64` (QEMU, przebieg nocny) — złoty odcisk `det_math` jest na razie
+     zatwierdzony dla `x86_64-pc-windows-msvc`.
 
 ### M1 — Świat statyczny
 `M1-swiat-statyczny.md` · wymaga: M0
