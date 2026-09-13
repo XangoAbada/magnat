@@ -9,15 +9,28 @@
 #![forbid(unsafe_code)]
 
 pub mod chunk;
+pub mod edit;
+pub mod lod;
 pub mod material;
+pub mod mesh;
+pub mod world;
 
 pub use chunk::{
     lin, pack, unlin, Chunk, ChunkBuilder, ChunkCoord, ChunkState, ChunkStorage, Palette, Run,
     CHUNK_DIM, CHUNK_HEIGHT_M, CHUNK_SPAN_M, CHUNK_VOXELS, VOXEL_HEIGHT_DM,
 };
+pub use edit::{
+    CarveShape, EditOp, EditQueue, EditReport, EditSeq, EditSource, Overlap, Rot90, VoxelEditCmd,
+};
+pub use lod::{aggregate, MAX_LOD};
 pub use material::{
     LocalIdx, MaterialError, MaterialFlags, MaterialId, MaterialRegistry, VoxelMaterial,
     MATERIALS_SCHEMA_VERSION,
+};
+pub use mesh::{build_mesh, ChunkMesh, PackedVertex, NORMALS};
+pub use world::{
+    EditOverlay, ViewPoint, VoxelBudget, VoxelStats, VoxelWorld, LOD_HYSTERESIS_PERMILLE,
+    LOD_RADII_M,
 };
 
 /// Jedyne wejście voxeli do świata (M1 §5.2).

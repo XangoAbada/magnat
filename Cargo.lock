@@ -1248,6 +1248,7 @@ dependencies = [
  "criterion",
  "magnat-core",
  "magnat-jobs",
+ "parking_lot",
  "ron",
  "serde",
  "smallvec",

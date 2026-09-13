@@ -10,6 +10,7 @@ publish.workspace = true
 magnat-core = { workspace = true }
 magnat-jobs = { workspace = true }
 smallvec = { workspace = true }
+parking_lot = { workspace = true }
 serde = { workspace = true }
 ron = { workspace = true }
 

@@ -24,7 +24,9 @@ use crate::query::{
     TILE_M,
 };
 use magnat_core::{Biome, IRect, IVec2, IVec3, StreamId, Q};
-use magnat_voxel::{ChunkBuilder, ChunkCoord, ColumnSource, MaterialId, MaterialRegistry};
+use magnat_voxel::{
+    ChunkBuilder, ChunkCoord, ColumnSource, MaterialId, MaterialRegistry, CHUNK_DIM,
+};
 use std::sync::Arc;
 
 /// Amplituda szumu detalu przy materializacji 1 m, w metrach.
@@ -287,10 +289,26 @@ impl TerrainQuery for Terrain {
     }
 
     fn column_at(&self, x: i32, y: i32) -> ColumnStack {
-        self.data.geology.column_at(
+        // Miąższości warstw liczone na tej **samej** rzadkiej siatce, z której korzysta
+        // materializacja voxeli (`GEOLOGY_SAMPLE_M`). To nie jest oszczędność przeniesiona
+        // do zapytania, tylko warunek spójności: gdyby inspektor liczył geologię dokładnie,
+        // a chunk co 8 m, karta inspekcji pokazywałaby inną warstwę niż ta, którą widać
+        // w wykopie — i test `column_matches_voxels` (§7.1) miałby rację, zgłaszając błąd.
+        let (gx, gy) = (
+            (x / GEOLOGY_SAMPLE_M) * GEOLOGY_SAMPLE_M,
+            (y / GEOLOGY_SAMPLE_M) * GEOLOGY_SAMPLE_M,
+        );
+        let t = self.data.geology.layer_thicknesses(
             &self.geo_noise,
-            x,
-            y,
+            gx,
+            gy,
+            self.bicubic_dm(gx, gy) / 10,
+            self.slope_at(gx, gy),
+            self.water_dist_m(gx, gy),
+        );
+        // Powierzchnia i zwierciadło wód gruntowych — już w pełnej rozdzielczości 1 m.
+        self.data.geology.stack_from(
+            &t,
             self.height_dm(x, y),
             self.slope_at(x, y),
             self.water_dist_m(x, y),
@@ -508,31 +526,77 @@ fn deposit_center(d: &Deposit) -> IVec3 {
     }
 }
 
+/// Co ile metrów próbkowana jest geologia przy materializacji chunka.
+///
+/// Miąższości warstw mają długości fal rzędu kilometra (`data/geology/layers.ron`), więc
+/// próbkowanie ich co metr to liczenie tej samej wartości szesnaście razy. Różnica jest
+/// mierzalna: chunk LOD0 to 1156 kolumn, a przy kroku 8 m — 25 próbek geologii zamiast 1156.
+const GEOLOGY_SAMPLE_M: i32 = 8;
+
 impl ColumnSource for Terrain {
     /// Materializacja chunka. Wołana z dowolnego workera — i dlatego nie ma tu ani jednego
     /// zapisu do `self` (M1 §5.2: źródło musi być czyste, bo kolejność ładowania chunków
     /// zależy od kamery, a kamera nie wchodzi do hasha stanu).
+    ///
+    /// **Agregacja LOD dzieje się tutaj, nie w `engine/voxel`** (M1 §5.4: „agregat liczy się
+    /// z `ColumnSource`"). Dla `lod > 0` powierzchnia komórki agregatu jest średnią z czterech
+    /// próbek w jej obrębie — to jest praktyczna postać reguły „pusto, gdy ponad połowa
+    /// to powietrze": zbocze nie puchnie, bo komórka nie bierze najwyższego punktu, ani się
+    /// nie dziurawi, bo nie bierze najniższego.
     fn fill_chunk(&self, coord: ChunkCoord, lod: u8, out: &mut ChunkBuilder) {
         let skala = 1i32 << lod;
         let origin = coord.origin_voxels(lod);
         let zakres = out.range();
         let water = self.materials.id_of("water").unwrap_or(MaterialId::AIR);
+        let size = self.size_m();
+
+        // Geologia na rzadszej siatce: jedna próbka na `GEOLOGY_SAMPLE_M` metrów obszaru chunka.
+        let span = CHUNK_DIM as i32 * skala;
+        let krok = GEOLOGY_SAMPLE_M.max(skala);
+        let n_geo = (span / krok + 2) as usize;
+        let mut geo: Vec<smallvec::SmallVec<[(MaterialId, i32); 8]>> =
+            Vec::with_capacity(n_geo * n_geo);
+        for gy in 0..n_geo {
+            for gx in 0..n_geo {
+                let wx = (origin.x + gx as i32 * krok).clamp(0, size - 1);
+                let wy = (origin.y + gy as i32 * krok).clamp(0, size - 1);
+                geo.push(self.data.geology.layer_thicknesses(
+                    &self.geo_noise,
+                    wx,
+                    wy,
+                    self.bicubic_dm(wx, wy) / 10,
+                    self.slope_at(wx, wy),
+                    self.water_dist_m(wx, wy),
+                ));
+            }
+        }
 
         for ly in zakres.clone() {
             for lx in zakres.clone() {
                 let wx = origin.x + lx * skala;
                 let wy = origin.y + ly * skala;
-                if wx < 0 || wy < 0 || wx >= self.size_m() || wy >= self.size_m() {
+                if wx < 0 || wy < 0 || wx >= size || wy >= size {
                     continue;
                 }
 
-                let surface_dm = self.height_dm(wx, wy);
-                let column = self.data.geology.column_at(
-                    &self.geo_noise,
-                    wx,
-                    wy,
+                // Powierzchnia: jedna próbka w LOD0, średnia z czterech w agregacie.
+                let surface_dm = if skala == 1 {
+                    self.height_dm(wx, wy)
+                } else {
+                    let p = skala / 2;
+                    let s = i64::from(self.height_dm(wx, wy))
+                        + i64::from(self.height_dm((wx + p).min(size - 1), wy))
+                        + i64::from(self.height_dm(wx, (wy + p).min(size - 1)))
+                        + i64::from(self.height_dm((wx + p).min(size - 1), (wy + p).min(size - 1)));
+                    (s / 4) as i32
+                };
+
+                let gx = ((lx * skala).clamp(0, span) / krok).clamp(0, n_geo as i32 - 1) as usize;
+                let gy = ((ly * skala).clamp(0, span) / krok).clamp(0, n_geo as i32 - 1) as usize;
+                let column = self.data.geology.stack_from(
+                    &geo[gy * n_geo + gx],
                     surface_dm,
-                    self.slope_at(wx, wy),
+                    0,
                     self.water_dist_m(wx, wy),
                 );
 

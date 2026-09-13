@@ -165,26 +165,25 @@ impl GeologyModel {
         })
     }
 
-    /// Kolumna geologiczna w punkcie. Bezalokacyjna poza `SmallVec` mieszczącym 8 warstw.
+    /// Miąższości warstw w punkcie, w jednostkach 0,5 m, w kolejności od powierzchni w dół.
     ///
-    /// Argumenty są celowo prymitywne, a nie referencją do świata: dzięki temu funkcję można
-    /// wołać z dowolnego workera przy materializacji chunków, bez pożyczania całego terenu.
+    /// **Najdroższa funkcja całej materializacji** — osiem warstw razy trzy–cztery oktawy
+    /// szumu na każdą. Dlatego jest wydzielona: miąższości zmieniają się na długościach fal
+    /// rzędu kilometra, więc wolno je próbkować rzadziej niż powierzchnię terenu i wspólne
+    /// dla wielu kolumn 1 m. Rozdzielenie tego od `column_at` zbiło koszt chunka LOD0
+    /// kilkunastokrotnie.
     #[must_use]
-    pub fn column_at(
+    pub fn layer_thicknesses(
         &self,
         noise: &NoiseField,
         x: i32,
         y: i32,
-        surface_dm: i32,
+        elev_m: i32,
         slope: u8,
         water_dist_m: u16,
-    ) -> ColumnStack {
-        let surface_z = surface_dm / VOXEL_DM;
-        let elev_m = surface_dm / 10;
+    ) -> SmallVec<[(MaterialId, i32); 8]> {
         let slope_frac = f32::from(slope) / 255.0;
-
-        let mut stack: SmallVec<[(MaterialId, i32); 8]> = SmallVec::new();
-        let mut top = surface_z;
+        let mut out: SmallVec<[(MaterialId, i32); 8]> = SmallVec::new();
 
         for layer in &self.layers {
             if elev_m < i32::from(layer.elev_min_m) || elev_m > i32::from(layer.elev_max_m) {
@@ -215,21 +214,54 @@ impl GeologyModel {
             let cm = layer.thickness_base_cm as f32 * modulacja * slope_factor * water_factor;
             // Miąższość w jednostkach 0,5 m = 50 cm.
             let grubosc_z = (cm / 50.0) as i32;
-            if grubosc_z <= 0 {
-                continue;
+            if grubosc_z > 0 {
+                out.push((layer.material, grubosc_z));
             }
-            top -= grubosc_z;
-            stack.push((layer.material, top));
         }
+        out
+    }
 
+    /// Składa kolumnę z gotowych miąższości. Tania — sama arytmetyka.
+    #[must_use]
+    pub fn stack_from(
+        &self,
+        thicknesses: &[(MaterialId, i32)],
+        surface_dm: i32,
+        slope: u8,
+        water_dist_m: u16,
+    ) -> ColumnStack {
+        let surface_z = surface_dm / VOXEL_DM;
+        let mut layers: SmallVec<[(MaterialId, i32); 8]> = SmallVec::new();
+        let mut top = surface_z;
+        for (m, grubosc) in thicknesses {
+            top -= grubosc;
+            layers.push((*m, top));
+        }
         // Podłoże sięga dna świata — kolumna nie ma prawa mieć dziury.
-        stack.push((self.bedrock, i32::MIN / 2));
-
+        layers.push((self.bedrock, i32::MIN / 2));
         ColumnStack {
             surface_z,
-            layers: stack,
+            layers,
             water_table_z: water_table_z(surface_z, slope, water_dist_m),
         }
+    }
+
+    /// Kolumna geologiczna w punkcie. Bezalokacyjna poza `SmallVec` mieszczącym 8 warstw.
+    ///
+    /// Argumenty są celowo prymitywne, a nie referencją do świata: dzięki temu funkcję można
+    /// wołać z dowolnego workera przy materializacji chunków, bez pożyczania całego terenu.
+    #[must_use]
+    pub fn column_at(
+        &self,
+        noise: &NoiseField,
+        x: i32,
+        y: i32,
+        surface_dm: i32,
+        slope: u8,
+        water_dist_m: u16,
+    ) -> ColumnStack {
+        let t = self.layer_thicknesses(noise, x, y, surface_dm / 10, slope, water_dist_m);
+        self.stack_from(&t, surface_dm, slope, water_dist_m)
     }
 }
 
