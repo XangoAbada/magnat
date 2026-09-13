@@ -6,6 +6,12 @@ rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
 
+# Testy jednostkowe nie są benchmarkami. Bez tego `cargo bench` próbuje uruchomić
+# bibliotekę jako bench target i przewraca się na flagach criteriona, których libtest
+# nie zna — a bramka regresji z D-8 przestaje działać, zanim cokolwiek zmierzy.
+[lib]
+bench = false
+
 [dependencies]
 magnat-core = { workspace = true }
 magnat-jobs = { workspace = true }
@@ -21,3 +27,7 @@ criterion = { workspace = true }
 
 [lints]
 workspace = true
+
+[[bench]]
+name = "world_bench"
+harness = false

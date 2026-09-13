@@ -124,3 +124,50 @@ fn mem_world_persistent_16km() {
         );
     }
 }
+
+#[test]
+#[ignore = "9 s na region — CI uruchamia jawnie przez --ignored"]
+fn bench_priority_flood_16km() {
+    // §7.3: samo wypełnianie zagłębień ma zmieścić się w 1,5 s na mapie 16 km. To jest
+    // przebieg, który najłatwiej zamienić w wąskie gardło (kolejka priorytetowa po
+    // 16 mln komórek), więc ma własny próg, a nie tylko udział w sumie.
+    const LIMIT_MS: f64 = 1500.0;
+    let pool = JobPool::new(0);
+    for region in Region::ALL {
+        let (_, r) = generate(params(WorldSize::Metropolis16km, *region), &pool).unwrap();
+        let flood = r
+            .timings
+            .iter()
+            .find(|t| t.name.contains("P4"))
+            .unwrap_or_else(|| panic!("{}: brak przebiegu P4 w raporcie", region.key()));
+        println!(
+            "{}: {} {:.0} ms z {LIMIT_MS:.0} ms",
+            region.key(),
+            flood.name,
+            flood.millis
+        );
+        assert!(
+            flood.millis < LIMIT_MS,
+            "{}: {} zajęło {:.0} ms wobec limitu {LIMIT_MS:.0} ms",
+            region.key(),
+            flood.name,
+            flood.millis
+        );
+    }
+}
+
+#[test]
+fn mem_voxel_budget() {
+    // §7.3: pula chunków ≤ 384 MB, arena GPU ≤ 768 MB. To asercja na **stałych**, nie na
+    // pomiarze: budżet jest deklaracją, którą łatwo bezwiednie podnieść przy strojeniu
+    // promieni LOD, a skutek — zabraknięcie pamięci na słabszej karcie — wychodzi dopiero
+    // u gracza. Zajętość w biegu pilnuje `budzet_wywlaszcza_zamiast_rosnac` w `engine/voxel`.
+    const LIMIT_PULI: usize = 384 * 1024 * 1024;
+    let budzet = magnat_voxel::VoxelBudget::default();
+    assert!(
+        budzet.chunk_pool_bytes <= LIMIT_PULI,
+        "pula chunków {} MB wobec limitu {} MB",
+        budzet.chunk_pool_bytes / (1024 * 1024),
+        LIMIT_PULI / (1024 * 1024)
+    );
+}

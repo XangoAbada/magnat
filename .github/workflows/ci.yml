@@ -40,12 +40,23 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: test
         run: cargo test --workspace
-      - name: brak wgpu poza voxelview (R-5)
+      - name: brak wgpu w headless (R-5)
         shell: bash
         run: |
           if cargo tree -p magnat-headless | grep -q wgpu; then
             echo "wgpu przeniknął do headless" && exit 1
           fi
+      - name: dep_isolation — render i voxel nie widzą symulacji (M1 §7.3)
+        shell: bash
+        run: |
+          # Uzgodnione z M11: renderer dostaje dane przez `sim-snapshot` i **tylko** przez
+          # niego. Gdyby mógł sięgnąć do `sim/world` albo `sim/city`, kontrakt snapshotu
+          # przestałby cokolwiek znaczyć — i nikt by tego nie zauważył do M11.
+          for crate in magnat-render magnat-voxel; do
+            if cargo tree -p $crate --prefix none               | grep -E '^magnat-(world|city|econ|sim)($| )'               | grep -v 'magnat-sim-snapshot'; then
+              echo "$crate zależy od symulacji poza sim-snapshot" && exit 1
+            fi
+          done
 
   miri:
     name: miri (ecs + core)
@@ -112,6 +123,29 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: bench
-        run: cargo bench --workspace -- --warm-up-time 1 --measurement-time 3
+        # Jawna lista crate'ów z benchmarkami, a nie `--workspace`: cargo traktuje każdy
+        # cel z `bench = true` jako benchmark, więc `--workspace` próbuje uruchomić także
+        # biblioteki i binarki, które nie znają flag criteriona.
+        run: |
+          cargo bench -p magnat-core -p magnat-ecs -p magnat-io                       -p magnat-voxel -p magnat-world --benches                       -- --warm-up-time 1 --measurement-time 3
       - name: porównanie z linią bazową (10 % ostrzeżenie, 25 % błąd — D-8)
         run: python3 scripts/bench_guard.py benches/baseline.json
+
+  budzety:
+    name: raport budżetów M1 (pamięć, czas generacji)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: testy budżetowe
+        # Budżety z §5.9 i §7.3 są **asercjami**, nie wykresem: przekroczenie wywraca job.
+        # Raport jest artefaktem, żeby dało się zobaczyć zapas, a nie tylko fakt, że limit
+        # nie pękł. FPS nie wchodzi tutaj — runner CI nie ma GPU (§7.5), więc przelot
+        # kamery mierzy się na maszynie z kartą (`magnat --bench`).
+        run: |
+          cargo test --release -p magnat-world --test budgets --test mesh_budget             -- --include-ignored --nocapture | tee raport-budzetow.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: raport-budzetow
+          path: raport-budzetow.txt

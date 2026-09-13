@@ -18,5 +18,13 @@
   "b-9 arena/get po uchwycie": 2.6334644609983187,
   "b-9 arena/insert + remove": 4.690691661898565,
   "b-9 arena/insert 600k": 1291699.879951981,
-  "b-9 arena/pełna iteracja (30 % dziur)": 218673.61393323657
+  "b-9 arena/pełna iteracja (30 % dziur)": 218673.61393323657,
+  "m1-1 generacja/4km": 333072900.0,
+  "m1-1 generacja/8km": 1392610500.0,
+  "m1-2 przebiegi 8km/lowland": 1407154900.0,
+  "m1-2 przebiegi 8km/mountain": 1386931450.0,
+  "m1-3 meshing/greedy + ao": 645467.6292194093,
+  "m1-3 meshing/materializacja chunka": 25540.014088525873,
+  "m1-4 lod/agregat lod1": 528105.3721488595,
+  "m1-4 lod/agregat lod3": 465180.56648308417
 }

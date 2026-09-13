@@ -123,7 +123,7 @@ Kolejność jest ścieżką krytyczną od góry do dołu; pakiety w tej samej gr
 
 | WP | Opis | Zależy od | Kryterium ukończenia | Status |
 |---|---|---|---|---|
-| **X1 — Testy, benchmarki, CI** | Test determinizmu terenu, testy własnościowe złóż, benchmarki `criterion` (meshing, LOD, hydrologia), scena benchmarkowa FPS z ustalonym przelotem kamery, budżety jako asercje | wszystkie | CI zielone; raport budżetów (pamięć, czas generacji, FPS) publikowany jako artefakt builda | [ ] |
+| **X1 — Testy, benchmarki, CI** | Test determinizmu terenu, testy własnościowe złóż, benchmarki `criterion` (meshing, LOD, hydrologia), scena benchmarkowa FPS z ustalonym przelotem kamery, budżety jako asercje | wszystkie | CI zielone; raport budżetów (pamięć, czas generacji, FPS) publikowany jako artefakt builda || [x] |
 
 ---
 

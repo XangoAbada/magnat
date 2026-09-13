@@ -11,6 +11,7 @@
 
 #![forbid(unsafe_code)]
 
+mod bench;
 mod overlay;
 mod stream;
 
@@ -80,11 +81,12 @@ struct Args {
     #[arg(long)]
     target: Option<String>,
 
-    /// Przelot pomiarowy: kamera przechodzi 2 km wzdłuż mapy przez zadaną liczbę klatek,
-    /// po czym program wypisuje raport wydajności (§7.4) i kończy. Bez okna nie da się tego
-    /// zmierzyć uczciwie — czas GPU zależy od tego, co naprawdę trafiło na ekran.
+    /// Scena pomiarowa z §7.4: ustalony przelot przez pięć etapów (orbita miasta →
+    /// dzielnica → poziom ulicy → przelot 2 km → orbita) przez zadaną liczbę sekund,
+    /// a na końcu raport wydajności. Bez okna nie da się tego zmierzyć uczciwie —
+    /// czas GPU zależy od tego, co naprawdę trafiło na ekran.
     #[arg(long)]
-    bench: Option<u32>,
+    bench: Option<f32>,
 
     /// Nakładka debug na starcie: `height`, `flow`, `water`, `biome`, `temp-jan`,
     /// `temp-jul`, `precip`, `geology`, `deposits`. W oknie przełącza je `F3`.
@@ -175,6 +177,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             None => None,
         },
         bench: args.bench,
+        bench_czas_s: 0.0,
+        bench_etapy: Vec::new(),
         lod0_radius: args.lod0_radius,
         // Wypełniane po ustawieniu kamery — pozycje zależą od celu, którego tu jeszcze nie ma.
         swiatla: vec![magnat_sim_snapshot::LightRecord::default(); args.lights],
@@ -290,8 +294,6 @@ const WZROST_OCZU_M: f32 = 1.7;
 /// Krok lotu swobodnego na jedno naciśnięcie klawisza.
 const KROK_LOTU_M: f64 = 12.0;
 
-/// Dystans przelotu pomiarowego — kryterium V4 mówi wprost o 2 km wzdłuż mapy.
-const BENCH_DYSTANS_M: f64 = 2000.0;
 /// Klatki rozgrzewkowe przed pomiarem.
 const BENCH_ROZGRZEWKA: u32 = 60;
 
@@ -335,7 +337,10 @@ struct App {
     nakladka: overlay::Nakladka,
     cel: Option<(i32, i32)>,
     /// Klatki przelotu pomiarowego i zebrane z nich czasy.
-    bench: Option<u32>,
+    bench: Option<f32>,
+    /// Czas od startu pomiaru i wyniki kolejnych etapów.
+    bench_czas_s: f32,
+    bench_etapy: Vec<bench::Pomiar>,
     lod0_radius: Option<i32>,
     swiatla: Vec<magnat_sim_snapshot::LightRecord>,
     bench_ms: Vec<f32>,
@@ -502,23 +507,64 @@ impl ApplicationHandler for App {
 }
 
 impl App {
-    /// Raport z przelotu: rozkład czasu klatki, zacięcia, szczyt czasu GPU i pamięci.
+    /// Który etap scenariusza trwa w tej chwili.
+    fn etap_pomiaru(&self, sekundy: f32) -> usize {
+        let na_etap = sekundy / bench::ETAPY.len() as f32;
+        ((self.bench_czas_s / na_etap.max(0.001)) as usize).min(bench::ETAPY.len() - 1)
+    }
+
+    /// Ustawia kamerę zgodnie z bieżącym etapem scenariusza z §7.4.
+    fn ustaw_kamere_pomiarowa(&mut self) {
+        let Some(sekundy) = self.bench else {
+            return;
+        };
+        let i = self.etap_pomiaru(sekundy);
+        let etap = bench::ETAPY[i];
+        let na_etap = sekundy / bench::ETAPY.len() as f32;
+        // Postęp **w obrębie etapu**, 0…1.
+        let t = ((self.bench_czas_s - i as f32 * na_etap) / na_etap.max(0.001)).clamp(0.0, 1.0);
+
+        let start = self.bench_start;
+        // Przesunięcie kumuluje się z poprzednich etapów: przelot 2 km ma zaczynać się tam,
+        // gdzie skończył poprzedni etap, a nie wracać na start.
+        let przed: f64 = bench::ETAPY[..i].iter().map(|e| e.przesuniecie_m).sum();
+        let x = start.x + przed + etap.przesuniecie_m * f64::from(t);
+
+        if let CameraMode::Orbit {
+            target, dist, yaw, ..
+        } = &mut self.camera.mode
+        {
+            target.x = x;
+            target.y = start.y;
+            target.z = f64::from(self.terrain.height_at(x as i32, start.y as i32)) * 0.5;
+            *dist = etap.dist_m;
+            *yaw = 0.6 + etap.obrot_rad * t;
+        }
+        // FOV jest związane z dystansem orbity (§15.2) — bez tego zoom zmienia kadr,
+        // ale nie zmienia perspektywy, a raport opisywałby inny widok niż gra.
+        self.camera.fov_deg = self.camera.fov_for_distance();
+    }
+
+    /// Raport z przelotu: jeden wiersz na etap plus podsumowanie całości.
     ///
     /// Percentyle, nie sama średnia: 60 FPS średnio przy jednym zacięciu 200 ms to gorsze
     /// wrażenie niż równe 50 FPS, a średnia obu nie odróżnia.
     fn raport_bench(&mut self, s: magnat_render::FrameStats) {
-        self.bench_ms.sort_by(f32::total_cmp);
-        let n = self.bench_ms.len().max(1);
-        let suma: f32 = self.bench_ms.iter().sum();
-        let p = |q: f32| self.bench_ms[((n - 1) as f32 * q) as usize];
-        let zaciecia = self.bench_ms.iter().filter(|ms| **ms > 33.0).count();
+        eprintln!("── raport wydajności (§7.4) ──");
+        for (i, etap) in bench::ETAPY.iter().enumerate() {
+            let Some(p) = self.bench_etapy.get(i) else {
+                continue;
+            };
+            eprintln!("{}", bench::wiersz(etap, p));
+        }
+
+        let wszystkie: usize = self.bench_etapy.iter().map(|p| p.ms.len()).sum();
+        let zaciecia: usize = self.bench_etapy.iter().map(bench::Pomiar::zaciecia).sum();
         eprintln!(
-            "przelot {BENCH_DYSTANS_M:.0} m, {n} klatek: średnio {:.1} FPS (mediana {:.1} ms, p95 {:.1} ms, maks. {:.1} ms), zacięć > 33 ms: {zaciecia}",
-            1000.0 * n as f32 / suma,
-            p(0.5),
-            p(0.95),
-            p(1.0),
+            "razem {wszystkie} klatek w {:.0} s, zacięć > 33 ms: {zaciecia} (próg §7.4: ≤ 2 na 60 s)",
+            self.bench_czas_s
         );
+
         let gpu = magnat_render::PASS_NAMES
             .iter()
             .enumerate()
@@ -540,15 +586,12 @@ impl App {
             eprintln!("światła: {} · {}", self.swiatla.len(), self.occupancy_opis);
         }
         eprintln!(
-            "szczyt: {} chunków rysowanych, GPU {gpu}; arena {:.1} MB z {:.1} MB",
-            self.bench_chunks,
+            "GPU {gpu}; arena {:.1} MB z {:.1} MB",
             (s.vertex_bytes + s.index_bytes) as f64 / (1024.0 * 1024.0),
             s.arena_capacity_bytes as f64 / (1024.0 * 1024.0),
         );
     }
 
-    /// Przesuwa kamerę w locie swobodnym i z pierwszej osoby. W orbicie nic nie robi —
-    /// tam od przesuwania jest przeciąganie myszą.
     /// Przełącza nakładkę i przelicza jej pole. Przeliczenie jest jednorazowe (dziesiątki
     /// milisekund na mapie 8 km), bo pole opisuje świat, a ten w M1 się nie zmienia.
     fn przelacz_nakladke(&mut self) {
@@ -612,18 +655,16 @@ impl App {
         let h = f64::from(self.terrain.height_at(punkt.x as i32, punkt.y as i32)) * 0.5;
         self.camera.clamp_above_terrain(h, 2.0);
 
-        // Przelot pomiarowy: cel sunie po prostej, żeby trasa była **ta sama** przy każdym
-        // uruchomieniu — inaczej porównywanie wyników między commitami nie ma sensu.
-        if let Some(klatek) = self.bench {
-            if let CameraMode::Orbit { target, .. } = &mut self.camera.mode {
-                if self.bench_start == glam::DVec3::ZERO {
-                    self.bench_start = *target;
-                }
-                let krok = BENCH_DYSTANS_M / f64::from(klatek.max(1));
-                target.x = self.bench_start.x + krok * f64::from(self.numer_klatki);
-                target.z =
-                    f64::from(self.terrain.height_at(target.x as i32, target.y as i32)) * 0.5;
-            }
+        // Scena pomiarowa (§7.4): kamera przechodzi ustalone etapy w funkcji **czasu**,
+        // a nie numeru klatki. Trasa musi być ta sama niezależnie od tego, ile klatek
+        // zdążyło się narysować — inaczej wolniejsza maszyna przechodziłaby krótszą drogę
+        // i wyniki dwóch maszyn opisywałyby dwa różne przeloty.
+        // Indeks etapu policzony **przed** pobraniem renderera: dalej trzymamy na nim
+        // pożyczkę mutowalną i `self` jest wtedy niedostępne.
+        let etap = self.bench.map_or(0, |s| self.etap_pomiaru(s));
+        if self.bench.is_some() {
+            self.bench_czas_s += dt as f32;
+            self.ustaw_kamere_pomiarowa();
         }
 
         let (Some(renderer), Some(streamer)) = (&mut self.renderer, &mut self.streamer) else {
@@ -675,11 +716,20 @@ impl App {
                 return;
             }
         }
-        if let Some(klatek) = self.bench {
+        if let Some(sekundy) = self.bench {
             // Pierwsze klatki to rozgrzewka strumieniowania — mierzenie ich mówiłoby
             // o czasie materializacji, a nie o rysowaniu.
             if self.numer_klatki > BENCH_ROZGRZEWKA {
                 let s = renderer.stats();
+                let i = etap;
+                while self.bench_etapy.len() <= i {
+                    self.bench_etapy.push(bench::Pomiar::default());
+                }
+                self.bench_etapy[i].dodaj(
+                    std::time::Duration::from_secs_f64(dt),
+                    s.chunks_drawn,
+                    s.triangles,
+                );
                 self.bench_ms.push((dt * 1000.0) as f32);
                 // Czas GPU wychodzi co druga klatka (bufor odczytu jest wtedy zajęty),
                 // więc zera to brak pomiaru, a nie pass bez pracy.
@@ -695,7 +745,7 @@ impl App {
                     self.occupancy_opis = o.summary();
                 }
             }
-            if self.numer_klatki >= klatek + BENCH_ROZGRZEWKA {
+            if self.bench_czas_s >= sekundy {
                 let stats = renderer.stats();
                 self.raport_bench(stats);
                 self.koniec = true;
