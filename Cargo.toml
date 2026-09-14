@@ -7,6 +7,7 @@ members = [
     "engine/io",
     "engine/devtools",
     "engine/render",
+    "engine/spatial",
     "engine/voxel",
     "sim/snapshot",
     "sim/world",
@@ -29,6 +30,7 @@ magnat-jobs = { path = "engine/jobs" }
 magnat-io = { path = "engine/io" }
 magnat-devtools = { path = "engine/devtools" }
 magnat-render = { path = "engine/render" }
+magnat-spatial = { path = "engine/spatial" }
 magnat-sim-snapshot = { path = "sim/snapshot" }
 magnat-voxel = { path = "engine/voxel" }
 magnat-world = { path = "sim/world" }

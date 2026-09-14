@@ -26,5 +26,22 @@
   "m1-3 meshing/greedy + ao": 645467.6292194093,
   "m1-3 meshing/materializacja chunka": 25540.014088525873,
   "m1-4 lod/agregat lod1": 528105.3721488595,
-  "m1-4 lod/agregat lod3": 465180.56648308417
+  "m1-4 lod/agregat lod3": 465180.56648308417,
+  "m2a-1 csr/1m zapytan r=250, 8 watkow (mapa 256 km2)": 111188925.0,
+  "m2a-1 csr/1m zapytan r=250, 8 watkow (miasto 70 km2)": 275462725.0,
+  "m2a-1 csr/budowa indeksu 300 tys": 1852992.6870748298,
+  "m2a-1 csr/k=15 najblizszych": 1093.4637275904838,
+  "m2a-1 csr/pojedyncze zapytanie r=250": 2078.8416118301698,
+  "m2a-1 csr/query_radius_batch 100k x r=60": 21667512.666666664,
+  "m2a-1 csr/query_rect 200x200 m": 719.6232682526384,
+  "m2a-2 dynamic/przebudowa 400 tys., 1 watkow": 2028097.1647869674,
+  "m2a-2 dynamic/przebudowa 400 tys., 8 watkow": 1850692.3076923077,
+  "m2a-3 tree/budowa 42 tys. parcel": 2867905.4320987654,
+  "m2a-3 tree/odcinek 500 m": 4011.4413613771767,
+  "m2a-3 tree/prostokat 300x300 m": 2708.251334002536,
+  "m2a-3 tree/punkt -_ parcela": 319.6919199993739,
+  "m2a-4 field/combine 2 pol 1 mln komorek": 2136207.1511627906,
+  "m2a-4 field/dijkstra 1 mln komorek": 35144218.14814815,
+  "m2a-4 field/probka dwuliniowa": 7.684354204035529,
+  "m2a-5 category/oferty kategorii w r=600": 275.91995022068795
 }

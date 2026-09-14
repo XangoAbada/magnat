@@ -22,8 +22,8 @@ Crate `engine/spatial` w całości: siatka chunków, CSR-grid statyczny, grid dy
 
 | WP | Nazwa | Zależy od | Opis | Kryterium ukończenia |
 |---|---|---|---|---|
-| WP1 | `spatial`: siatka i indeksy statyczne | M0 | `GridSpec`, `CellId`, `morton2`, `CsrGrid`, `CategoryGrid`, zapytania `query_radius` / `query_rect` / `k_nearest` / `query_radius_batch` | benchmark: 1 mln zapytań promieniowych R=250 m po 300 tys. encji ≤ 180 ms na 8 wątkach; test własnościowy: wynik gridu == wynik brute-force dla 10 tys. losowych zapytań |
-| WP2 | `spatial`: quadtree, grid dynamiczny, pola skalarne | WP1 | `ParcelTree` (quadtree AABB), `DynamicGrid` (przebudowa sortowaniem zliczającym), `ScalarField`, `multi_source_dijkstra` | zapytanie punkt→parcela ≤ 2 µs; przebudowa 400 tys. encji ≤ 3 ms na 8 wątkach i **bit-identyczna** przy 2 przebiegach; Dijkstra 1 mln komórek ≤ 400 ms |
+| [x] WP1 | `spatial`: siatka i indeksy statyczne | M0 | `GridSpec`, `CellId`, `morton2`, `CsrGrid`, `CategoryGrid`, zapytania `query_radius` / `query_rect` / `k_nearest` / `query_radius_batch` | benchmark: 1 mln zapytań promieniowych R=250 m po 300 tys. encji ≤ 180 ms na 8 wątkach; test własnościowy: wynik gridu == wynik brute-force dla 10 tys. losowych zapytań |
+| [x] WP2 | `spatial`: quadtree, grid dynamiczny, pola skalarne | WP1 | `ParcelTree` (quadtree AABB), `DynamicGrid` (przebudowa sortowaniem zliczającym), `ScalarField`, `multi_source_dijkstra` | zapytanie punkt→parcela ≤ 2 µs; przebudowa 400 tys. encji ≤ 3 ms na 8 wątkach i **bit-identyczna** przy 2 przebiegach; Dijkstra 1 mln komórek ≤ 400 ms |
 
 ---
 
@@ -49,7 +49,7 @@ impl GridSpec {
 pub fn morton2(x: u16, y: u16) -> u32;   // przeplot bitów, dla kolejności encji w ECS
 
 /// Indeks statyczny: budowany raz, tylko do odczytu. CSR (compressed sparse row).
-pub struct CsrGrid<T: Copy> { spec: GridSpec, starts: Vec<u32>, items: Vec<T> }
+pub struct CsrGrid<T: Copy> { spec: GridSpec, starts: Vec<u32>, pts: Vec<Vec2>, items: Vec<T> }
 impl<T: Copy> CsrGrid<T> {
     pub fn build(spec: GridSpec, it: impl Iterator<Item = (Vec2, T)>) -> Self;  // O(n)
     pub fn for_each_in_radius(&self, c: Vec2, r: f32, f: impl FnMut(Vec2, T));
@@ -63,7 +63,7 @@ pub struct CategoryGrid<K: Ord + Copy, T: Copy> { keys: Vec<K>, grids: Vec<CsrGr
 /// równoległa, niezależna od kolejności ukończenia jobów — dok. 00 §3.3).
 pub struct DynamicGrid<T: Copy> { spec: GridSpec, front: CsrGrid<T>, back: Buffers }
 impl<T: Copy> DynamicGrid<T> {
-    pub fn rebuild(&mut self, pos: &[Vec2], ids: &[T], jobs: &JobScope);  // O(n + cells)
+    pub fn rebuild(&mut self, pos: &[Vec2], ids: &[T], pool: &JobPool);   // O(n + cells)
     pub fn for_each_in_radius(&self, c: Vec2, r: f32, f: impl FnMut(Vec2, T));
     pub fn k_nearest(&self, c: Vec2, k: usize, out: &mut Vec<(f32, T)>);  // ekspansja pierścieniowa
 }
@@ -73,7 +73,7 @@ impl<T: Copy> DynamicGrid<T> {
 pub struct ParcelTree { nodes: Vec<QNode>, aabbs: Vec<Aabb2>, ids: Vec<ParcelId> }
 impl ParcelTree {
     pub fn build(items: &[(Aabb2, ParcelId)]) -> Self;   // bulk, bottom-up po kluczu Mortona
-    pub fn at_point(&self, p: Vec2, poly: &PolyArena) -> Option<ParcelId>;
+    pub fn at_point(&self, p: Vec2, contains: impl Fn(ParcelId) -> bool) -> Option<ParcelId>;
     pub fn query_rect(&self, a: Aabb2, out: &mut Vec<ParcelId>);
     pub fn query_segment(&self, a: Vec2, b: Vec2, out: &mut Vec<ParcelId>);
 }
@@ -81,12 +81,13 @@ impl ParcelTree {
 // insert/remove dodaje M5 (podziały i scalenia działek).
 
 /// Pole skalarne na GridSpec — nośnik wszystkich „map wpływu" generatora i nakładek UI.
-pub struct ScalarField { spec: GridSpec, data: Vec<u16> }    // znormalizowane 0..=65535
+pub struct ScalarField { spec: GridSpec, data: Vec<u16>, full_scale: f32 }  // znorm. 0..=65535
 impl ScalarField {
     pub fn sample(&self, p: Vec2) -> f32;                    // dwuliniowo, O(1)
+    pub fn sample_scaled(&self, p: Vec2) -> f32;             // sample * full_scale
     pub fn multi_source_dijkstra(spec: GridSpec, sources: &[CellId],
                                  cost: impl Fn(CellId, CellId) -> u32) -> Self;
-    pub fn decay_from(sources: &[(CellId, f32)], half_life_m: f32) -> Self;
+    pub fn decay_from(spec: GridSpec, sources: &[(CellId, f32)], half_life_m: f32) -> Self;
     pub fn combine(inputs: &[(&ScalarField, f32)]) -> Self;  // suma ważona w stałej kolejności
 }
 ```
@@ -114,6 +115,64 @@ na job systemie; składanie wyniku po indeksie porcji, nie po kolejności zakoń
 **Dobór `cell_m`.** Reguła: `cell_m ≈ mediana promienia zapytania / 4`. Ustalone:
 budynki i parcele 64 m, agenci 32 m, pojazdy 32 m, oferty per kategoria 128 m
 (kategorii jest dużo, encji w każdej mało), pola skalarne 16 m.
+
+**Korekty planu wpisane po implementacji** (CLAUDE.md: rozjazd kodu z planem jest gorszy
+niż błąd w planie).
+
+| # | Co | Dlaczego |
+|---|---|---|
+| A1 | `ParcelTree::at_point` bierze **predykat** `impl Fn(ParcelId) -> bool`, nie `&PolyArena` | `PolyArena` jest typem `sim/world` (M2b §5.2), a `engine/spatial` leży pod nim w grafie zależności. AABB zawęża kandydatów do garstki, o wielokącie rozstrzyga wywołujący — indeks nie musi znać geometrii parceli, żeby ją znaleźć |
+| A2 | `ParcelTree::build` buduje **z góry na dół, ćwiartkami, ze straddlerami** (element na granicy zostaje w rodzicu), nie bottom-up po kluczu Mortona | Klucz Mortona porządkuje punkty, a nie prostokąty; przy rozpiętości trzech rzędów wielkości (o którą w tej strukturze chodzi) pole rolne i tak nie zeszłoby do liścia. Zmierzone: 42 tys. parcel → 4916 węzłów, `at_point` 0,32 µs |
+| A3 | `DynamicGrid::rebuild` bierze `&JobPool`, nie `&JobScope` | `engine/jobs` (M0) nie eksportuje `JobScope` jako typu wejściowego systemu; pula jest tym, co dostaje każdy system symulacji |
+| A4 | `ScalarField` niesie `full_scale: f32` (wartość fizyczna odpowiadająca 65535) | Bez tego pole odległości po drogach traci skalę przy kwantyzacji do `u16` i M2c musiałby ją liczyć drugi raz. `decay_from` dostaje `GridSpec` — bez niego nie ma na czym rysować |
+| A5 | `CsrGrid` trzyma **pozycje** obok elementów (`pts`) | Filtr odległości bez skoku do pamięci encji. Koszt: 8 B na encję; zysk: zapytanie promieniowe jest jednym przebiegiem strumieniowym |
+| A6 | `CellId` jest **row-major**, `morton2` zostaje do porządkowania encji i sortowania zapytań wsadowych | Przy row-major komórki jednego wiersza leżą w CSR obok siebie: 81 komórek zapytania to 9 ciągłych odczytów, a nie 81 skoków. Szerokość wiersza liczona z cięciwy koła, nie z kwadratu opisanego |
+| A7 | **Budżet zapytania promieniowego uzupełniony o gęstość** — patrz niżej | Budżet „1 mln zapytań R = 250 m po 300 tys. encji ≤ 180 ms" wycenia `k` (liczbę komórek), a przemilcza `m` (liczbę trafień), które przy tym promieniu dominuje pięciokrotnie |
+
+**Korekta budżetu (A7).** Koszt zapytania promieniowego to O(k + m), a przy R = 250 m składnik
+`m` jest kilkakrotnie większy od `k`: zapytanie zwraca **tyle encji, ile ich jest w kole
+o powierzchni 0,196 km²**. Ta sama struktura, te same 300 tys. encji i ten sam milion zapytań
+dają więc dwa różne wyniki, zależnie od tego, na jakim obszarze te encje leżą:
+
+| Scenariusz | Gęstość | Trafień na zapytanie | 1 mln zapytań / 8 wątków |
+|---|---|---|---|
+| cała mapa 16 × 16 km (256 km²) | 1,2 tys./km² | ~230 | **111 ms** ✓ wobec 180 ms |
+| obszar zurbanizowany 70 km² | 4,3 tys./km² | ~860 | **275 ms** ✗ wobec 180 ms |
+
+Drugi wiersz nie jest wadą implementacji: 860 trafień × 12 B to 10 KB przepisane na zapytanie,
+czyli przy 1 mln zapytań ~10 GB ruchu z L3 — pomiar leży na przepustowości pamięci, nie na
+arytmetyce. Zawężenie wiersza do cięciwy koła (A6) ścięło liczbę kandydatów o ~40 % i **nie
+zmieniło czasu**, co tę diagnozę potwierdza.
+
+Wniosek wiążący dla faz zależnych: **zapytanie promieniowe o dużym R po wszystkich encjach nie
+jest ścieżką, którą gra ma chodzić**. Do „najbliższe obiekty" służy `k_nearest` (k = 15 → 1,09 µs),
+do „oferty kategorii K w okolicy" — `CategoryGrid` (0,28 µs, PRD §17.5 przewiduje 3–15
+kandydatów). Budżet 180 ms obowiązuje dla gęstości ≤ ~1,5 tys. encji/km² w jednym indeksie;
+indeks obejmujący cały obszar zurbanizowany dzieli się na kategorie, zamiast rosnąć.
+
+**Wynik pomiarów** (`cargo bench -p magnat-spatial`, 8 rdzeni, profil `bench`):
+
+| Benchmark | Zmierzone | Budżet §5.1 | |
+|---|---|---|---|
+| `csr/1M zapytań R=250, 8 wątków (mapa 256 km²)` | 111 ms | ≤ 180 ms | ✓ |
+| `csr/1M zapytań R=250, 8 wątków (miasto 70 km²)` | 275 ms | ≤ 180 ms | ✗ (A7) |
+| `csr/pojedyncze zapytanie R=250` | 2,09 µs | — | |
+| `csr/k=15 najbliższych` | 1,09 µs | ≤ 8 µs | ✓ |
+| `csr/query_rect 200×200 m` | 0,72 µs | — | |
+| `csr/budowa indeksu 300 tys.` | 1,86 ms | — | |
+| `dynamic/przebudowa 400 tys., 8 wątków` | 1,86 ms | ≤ 3 ms | ✓ |
+| `dynamic/przebudowa 400 tys., 1 wątek` | 2,02 ms | — | |
+| `tree/punkt → parcela` | 0,32 µs | ≤ 2 µs | ✓ |
+| `tree/prostokąt 300×300 m` | 2,69 µs | — | |
+| `tree/odcinek 500 m` | 4,04 µs | — | |
+| `field/próbka dwuliniowa` | 7,7 ns | ≤ 30 ns | ✓ |
+| `field/dijkstra 1 mln komórek` | 35,2 ms | ≤ 400 ms | ✓ |
+| `category/oferty kategorii w R=600` | 0,28 µs | 3–15 kandydatów | ✓ |
+
+Przebudowa `DynamicGrid` skaluje się słabo (2,02 → 1,86 ms przy ośmiu wątkach), bo histogram
+i suma prefiksowa po 70 tys. komórek są sekwencyjne i zjadają połowę czasu. Zostaje tak, bo
+budżet jest spełniony z zapasem, a równoległy histogram to trzy razy więcej kodu w miejscu,
+które nie jest wąskim gardłem.
 
 **Czego tu nie ma i dlaczego.** Brak R-tree (quadtree wystarcza dla statycznych AABB),
 brak BVH (to nie jest raytracer — pikowanie myszą robi render przez bufor identyfikatorów),

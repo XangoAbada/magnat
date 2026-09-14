@@ -1235,6 +1235,8 @@ dependencies = [
  "magnat-ecs",
  "magnat-io",
  "magnat-jobs",
+ "magnat-spatial",
+ "magnat-voxel",
  "magnat-world",
 ]
 
@@ -1283,6 +1285,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "magnat-spatial"
+version = "0.1.0"
+dependencies = [
+ "criterion",
+ "glam",
+ "magnat-core",
+ "magnat-jobs",
+]
+
+[[package]]
 name = "magnat-voxel"
 version = "0.1.0"
 dependencies = [
@@ -1302,8 +1314,10 @@ version = "0.1.0"
 dependencies = [
  "bincode",
  "criterion",
+ "glam",
  "magnat-core",
  "magnat-jobs",
+ "magnat-spatial",
  "magnat-voxel",
  "proptest",
  "ron",
