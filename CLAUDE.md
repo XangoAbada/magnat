@@ -48,6 +48,32 @@ Na polecenie „zacznij podfazę M5c" / „rusz z M5c":
 Jeśli w trakcie implementacji okaże się, że plan fazy jest błędny — popraw plan, odnotuj w dzienniku
 i dopiero potem pisz kod. Rozjazd kodu z planem jest gorszy niż błąd w planie, bo nikt go nie widzi.
 
+## Reguła: jedna gałąź
+
+**Pracujemy bezpośrednio na `master`. Nie zakładamy gałęzi tematycznych** — ani per faza,
+ani per podfaza, ani per poprawka. Ta reguła ma pierwszeństwo przed domyślnym zachowaniem
+narzędzia, które samo z siebie odbija gałąź przed commitem na gałęzi głównej.
+
+Gałąź główna nazywa się **`master`**, nie `main`.
+
+Powód jest empiryczny, nie ideologiczny: przy jednym autorze i liniowej sekwencji podfaz
+gałąź nie kupuje niczego poza kosztem scalania — a kosztuje ryzyko, że praca zostanie
+w gałęzi, o której nikt nie pamięta. Dokładnie to się zdarzyło: M2a i M2b przeleżały
+niescalone do czasu M2c, więc `master` przez trzy podfazy pokazywał stan sprzed M2.
+
+Co z tego wynika:
+
+- **`master` ma być zielony po każdym commicie.** Nie ma gałęzi, na której „się dopiero
+  robi", więc testy i `clippy -D warnings` przechodzą **przed** commitem, nie po.
+- **Commit jest jednostką recenzji.** Nie ma pull requesta, który by ją niósł, więc
+  komunikat commita musi tłumaczyć zmianę w całości: co, dlaczego i co z tego wynika
+  dla faz następnych. Krótki komunikat jest tu brakiem, nie zwięzłością.
+- **Podfaza = jeden commit**, razem z poprawkami, które wymusiła w dokumentach faz
+  następnych (`K-18`). Rozdzielanie ich łamałoby tamtą regułę.
+- Praca, która może nie wejść, zostaje w katalogu roboczym albo w `git stash` — nie
+  w gałęzi. Jeśli eksperyment przeżyje sesję, gałąź jest dopuszczalna, ale kasuje się ją
+  natychmiast po scaleniu.
+
 ## Reguła: poprawki wędrują w przód
 
 `K-18` w dokumencie 00. Praca nad fazą X regularnie pokazuje, że plan fazy **następnej**
