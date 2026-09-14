@@ -28,7 +28,11 @@
             typical: Ref("sciana"),
             top: Ref("sciana"),
         ),
-        Roof(shape: Gable(pitch_deg: 38), material: "roof_tile_red"),
+        Choice([
+            (5, Roof(shape: Gable(pitch_deg: 38), material: "roof_tile_red", dormers: (0, 2))),
+            (3, Roof(shape: Flat, material: "roof_felt")),
+            (2, Roof(shape: Gable(pitch_deg: 25), material: "roof_sheet", dormers: (0, 0))),
+        ]),
     ],
     refs: [
         ("sciana", Seq([

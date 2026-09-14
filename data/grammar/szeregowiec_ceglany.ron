@@ -30,7 +30,11 @@
             typical: Ref("pietro"),
             top: Ref("pietro"),
         ),
-        Roof(shape: Gable(pitch_deg: 35), material: "roof_tile_red", dormers: (0, 2)),
+        Choice([
+            (6, Roof(shape: Gable(pitch_deg: 35), material: "roof_tile_red", dormers: (0, 2))),
+            (3, Roof(shape: Gable(pitch_deg: 45), material: "roof_tile_red", dormers: (1, 3))),
+            (2, Roof(shape: Flat, material: "roof_felt")),
+        ]),
     ],
     refs: [
         // Parter ma sień na przestrzał, nie witrynę: to dom robotniczy, nie kamienica

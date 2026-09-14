@@ -29,7 +29,11 @@
             typical: Ref("pietro"),
             top: Ref("pietro"),
         ),
-        Roof(shape: Hip(pitch_deg: 35), material: "roof_tile_red"),
+        Choice([
+            (5, Roof(shape: Hip(pitch_deg: 35), material: "roof_tile_red", dormers: (0, 2))),
+            (4, Roof(shape: Gable(pitch_deg: 38), material: "roof_tile_red", dormers: (1, 2))),
+            (2, Roof(shape: Hip(pitch_deg: 25), material: "roof_sheet", dormers: (0, 0))),
+        ]),
     ],
     refs: [
         ("parter", Seq([

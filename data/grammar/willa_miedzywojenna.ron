@@ -31,7 +31,11 @@
             typical: Ref("pietro"),
             top: Ref("pietro"),
         ),
-        Roof(shape: Hip(pitch_deg: 32), material: "roof_tile_red", dormers: (1, 3)),
+        Choice([
+            (5, Roof(shape: Hip(pitch_deg: 32), material: "roof_tile_red", dormers: (1, 3))),
+            (3, Roof(shape: Gable(pitch_deg: 36), material: "roof_tile_red", dormers: (2, 3))),
+            (2, Roof(shape: Flat, material: "roof_felt")),
+        ]),
     ],
     refs: [
         ("parter_z_ryzalitem", Seq([

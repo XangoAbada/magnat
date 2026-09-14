@@ -217,6 +217,23 @@ impl Scope {
     }
 }
 
+/// Kształt połaci sprowadzony do jednego bajtu — `RoofShape` niesie jeszcze kąt,
+/// a sygnatura budynku ma odróżniać dach płaski od spadzistego, nie 38° od 40°.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum RoofKind {
+    #[default]
+    Flat,
+    Gable,
+    Hip,
+}
+
+impl RoofKind {
+    #[must_use]
+    pub const fn index(self) -> u32 {
+        self as u32
+    }
+}
+
 /// Terminal derywacji: zakres plus to, co w nim zrobić.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct Part {
@@ -278,6 +295,17 @@ pub struct Derived {
     /// Budżet węzłów albo głębokość przekroczone — liczone w `GenerationReport`,
     /// nigdy nie jest cichym obcięciem (M2 §5.6).
     pub truncated: bool,
+    /// Materiał dachu i kształt połaci — dwa z czterech znaczników sygnatury budynku.
+    /// Zapisuje je reguła `Roof`, bo poza nią nie da się ich odróżnić od reszty wypełnień.
+    pub roof_material: MaterialId,
+    pub roof_shape: RoofKind,
+    /// Materiał fundamentu — nie wchodzi do sygnatury, ale musi być znany, żeby dało się
+    /// go odjąć od bilansu objętości ścian.
+    pub foundation_material: MaterialId,
+    /// Materiał ściany: ten, którego w bryle jest **najwięcej objętościowo**, pominąwszy
+    /// fundament i dach. Liczony, a nie deklarowany, bo `Choice` wybiera go per kondygnacja
+    /// i żadne pole w gramatyce nie wie, co ostatecznie wyszło (M2f, WP20).
+    pub wall_material: MaterialId,
     /// Wysunięcia postawione, przycięte do granicy działki i odrzucone jako zbyt płytkie.
     /// Trzy liczby, nie jedna: „balkony są, ale płytsze" to co innego niż „balkonów nie ma",
     /// a bez rozróżnienia nie widać, czy brakuje miejsca, czy gramatyka prosi o za dużo.
@@ -377,7 +405,35 @@ pub fn derive(
     let h = (ctx.top_z - p.base_z_m).max(0.0);
     ctx.out.height_dm = (h * 10.0).clamp(0.0, f32::from(u16::MAX)) as u16;
     ctx.out.nodes = ctx.node;
+    ctx.out.wall_material = material_sciany(&ctx.out);
     ctx.out
+}
+
+/// Materiał, którego w bryle jest najwięcej — bez dachu i bez fundamentu, bo te dwa
+/// niosą własne znaczniki i zdominowałyby wynik (dach kamienicy to ~40 % wysokości).
+///
+/// Remis rozstrzyga **niższy** `MaterialId`, nie kolejność w `parts`: ta zależy od
+/// kolejności reguł i przy dwóch materiałach o równej objętości dawałaby różne wyniki
+/// dla dwóch zapisów tej samej gramatyki.
+fn material_sciany(d: &Derived) -> MaterialId {
+    let mut objetosc: Vec<(MaterialId, f64)> = Vec::new();
+    for p in d.parts.iter().filter(|p| !p.carve) {
+        if p.material == d.roof_material || p.material == d.foundation_material {
+            continue;
+        }
+        let v = f64::from(8.0 * p.scope.half.x * p.scope.half.y * p.scope.half.z);
+        match objetosc.iter_mut().find(|(m, _)| *m == p.material) {
+            Some((_, acc)) => *acc += v,
+            None => objetosc.push((p.material, v)),
+        }
+    }
+    objetosc
+        .into_iter()
+        .fold(None::<(MaterialId, f64)>, |best, (m, v)| match best {
+            Some((bm, bv)) if bv > v || (bv == v && bm.0 <= m.0) => Some((bm, bv)),
+            _ => Some((m, v)),
+        })
+        .map_or(MaterialId::AIR, |(m, _)| m)
 }
 
 fn apply(ctx: &mut Ctx, r: &Rule, s: Scope, depth: u32) {
@@ -388,9 +444,21 @@ fn apply(ctx: &mut Ctx, r: &Rule, s: Scope, depth: u32) {
     // Zakres bryły ma **zerową wysokość** — leży na rzędnej posadowienia. Trzy reguły
     // domenowe budują od niej w pionie i dostają go takim, jaki jest; wszystkie pozostałe
     // operują na gotowej kondygnacji i na zerowej wysokości nie mają czego robić.
+    //
+    // Reguły **rozdzielające** (`Seq`, `Choice`, `If`, `Ref`) też są zwolnione: one same
+    // zakresu nie używają, tylko przekazują go dalej, a o degeneracji ma rozstrzygać ta
+    // reguła, która naprawdę na nim pracuje. Bez tego `Choice([Roof, Roof])` — czyli
+    // losowanie kształtu dachu, trzeci kanał wariancji z §5.6c — wypadałby w całości,
+    // bo bryła w momencie wyboru ma zerową wysokość (M2f, WP20).
     let pion_wazny = !matches!(
         r,
-        Rule::Foundation { .. } | Rule::Floors { .. } | Rule::Roof { .. }
+        Rule::Foundation { .. }
+            | Rule::Floors { .. }
+            | Rule::Roof { .. }
+            | Rule::Seq(_)
+            | Rule::Choice(_)
+            | Rule::If { .. }
+            | Rule::Ref(_)
     );
     if s.half.x <= 0.05 || s.half.y <= 0.05 || (pion_wazny && s.half.z <= 0.01) {
         return;
@@ -520,6 +588,7 @@ fn apply(ctx: &mut Ctx, r: &Rule, s: Scope, depth: u32) {
             basements,
         } => {
             let m = ctx.material(material);
+            ctx.out.foundation_material = m;
             let h = depth_m + f32::from(*basements) * 2.8;
             let bottom = ctx.p.base_z_m - h;
             ctx.out.basements = *basements;
@@ -683,6 +752,12 @@ fn dach(ctx: &mut Ctx, s: Scope, shape: RoofShape, material: &str, dormers: (u8,
     /// Grubość płyty dachu płaskiego.
     const GRUBOSC_M: f32 = 0.5;
     let m = ctx.material(material);
+    ctx.out.roof_material = m;
+    ctx.out.roof_shape = match shape {
+        RoofShape::Flat => RoofKind::Flat,
+        RoofShape::Gable { .. } => RoofKind::Gable,
+        RoofShape::Hip { .. } => RoofKind::Hip,
+    };
     let bottom = ctx.top_z;
     match shape {
         RoofShape::Flat => {

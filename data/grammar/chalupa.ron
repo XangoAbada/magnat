@@ -33,7 +33,11 @@
             top: Ref("sciana"),
         ),
         // Stromy dach kryty dachówką: poddasze użytkowe było regułą, nie dodatkiem.
-        Roof(shape: Gable(pitch_deg: 48), material: "roof_tile_red", dormers: (0, 2)),
+        Choice([
+            (6, Roof(shape: Gable(pitch_deg: 48), material: "roof_tile_red", dormers: (0, 2))),
+            (3, Roof(shape: Hip(pitch_deg: 42), material: "roof_tile_red", dormers: (0, 1))),
+            (1, Roof(shape: Gable(pitch_deg: 40), material: "roof_sheet", dormers: (0, 0))),
+        ]),
     ],
     refs: [
         // Materiał ściany jest tu najmocniejszym znacznikiem epoki: drewno na wsi,

@@ -327,7 +327,7 @@ ani czasu przejazdu, bo to domena M4. Dopóki M4 nie istnieje, M3 może użyć
 | T10 | Bilans lokali i stanowisk | Σ mieszkań × wielkość GD epoki ∈ [0,97; 1,08] × `target_pop`; Σ stanowisk ∈ [0,95; 1,12] × oczekiwanych etatów |
 | T11 | Domknięcie łańcuchów | `missing == []`; ∀g: `0,85 ≤ supply/demand ≤ 1,30` |
 | T12 | Sanity wyceny | `avg_land_value(OldTown) > avg_land_value(Suburb)`; parcela sąsiadująca z `IndustryHeavy` poniżej mediany dzielnicy; brak wartości ≤ 0 |
-| T13 | Różnorodność zabudowy (M2f) | udział budynków o **identycznej** `BuildingSignature` wśród budynków w promieniu 60 m < 15 %; entropia Shannona rozkładu `GrammarId` w dzielnicy mieszkaniowej o ≥ 100 budynkach ≥ 1,8 bita; udział gramatyki awaryjnej < 0,5 %, udział doboru z rozluźnionym filtrem < 5 % |
+| T13 | Różnorodność zabudowy (M2f) | udział budynków o **identycznej** `BuildingSignature` wśród budynków w promieniu 60 m < 15 %; entropia Shannona rozkładu **sygnatur** ≥ 1,8 bita w dzielnicy mieszkaniowej o ≥ 100 budynkach i ≥ 4,0 bita w całym mieście; udział gramatyki awaryjnej < 0,5 %, udział doboru z rozluźnionym filtrem < 5 %. Progi skalibrowane pomiarem, mierzone na 32 ziarnach × 4 profile (korekta H12) |
 
 ### Determinizm (dok. 00 §3.6)
 

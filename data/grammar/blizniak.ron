@@ -30,7 +30,11 @@
             typical: Ref("dwie_polowy"),
             top: Ref("dwie_polowy"),
         ),
-        Roof(shape: Gable(pitch_deg: 40), material: "roof_tile_red", dormers: (2, 2)),
+        Choice([
+            (5, Roof(shape: Gable(pitch_deg: 40), material: "roof_tile_red", dormers: (2, 2))),
+            (3, Roof(shape: Hip(pitch_deg: 34), material: "roof_tile_red", dormers: (0, 2))),
+            (2, Roof(shape: Flat, material: "roof_felt")),
+        ]),
     ],
     refs: [
         // Dwie połowy, każda z własnym materiałem: bliźniak rzadko jest bliźniaczy do końca,

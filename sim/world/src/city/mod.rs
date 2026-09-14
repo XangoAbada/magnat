@@ -310,6 +310,44 @@ impl GenerationReport {
                 "  detal bryły: {} wysunięć ({} przyciętych do działki, {} odrzuconych jako płytsze niż voxel)",
                 self.build.protrusions, self.build.protrusions_clipped, self.build.protrusions_dropped
             ));
+            v.push(format!(
+                "  różnorodność: powtórki sygnatury w promieniu 60 m {:.1}% ({} z {} par) · najgorsze {:.1}% w {},{} · entropia gramatyk: miasto {:.2} bita, dzielnica {} min {:.2} ({} mierzonych, dominuje gramatyka #{} z {} na {} budynków)",
+                if self.build.signature_pairs > 0 {
+                    f64::from(self.build.signature_repeats) * 100.0 / f64::from(self.build.signature_pairs)
+                } else {
+                    0.0
+                },
+                self.build.signature_repeats,
+                self.build.signature_pairs,
+                f64::from(self.build.worst_neighbourhood_permille) / 10.0,
+                self.build.worst_neighbourhood_at.0,
+                self.build.worst_neighbourhood_at.1,
+                f64::from(self.build.city_entropy_mbits) / 1000.0,
+                self.build.min_district_entropy_at,
+                f64::from(self.build.min_district_entropy_mbits) / 1000.0,
+                self.build.districts_measured,
+                self.build.min_district_top.0,
+                self.build.min_district_top.1,
+                self.build.min_district_top.2
+            ));
+            if !self.build.grammar_hist.is_empty() {
+                let mut h: Vec<(usize, u32)> = self
+                    .build
+                    .grammar_hist
+                    .iter()
+                    .copied()
+                    .enumerate()
+                    .filter(|(_, n)| *n > 0)
+                    .collect();
+                h.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+                v.push(format!(
+                    "  gramatyki wg liczby budynków: {}",
+                    h.iter()
+                        .map(|(i, n)| format!("#{i} {n}"))
+                        .collect::<Vec<_>>()
+                        .join(" · ")
+                ));
+            }
             if self.build.fallback > 0 {
                 v.push(format!(
                     "  awaryjne wg stref: {}",

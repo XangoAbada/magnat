@@ -30,7 +30,11 @@
             typical: Ref("pietro"),
             top: Ref("poddasze"),
         ),
-        Roof(shape: Gable(pitch_deg: 40), material: "roof_tile_red", dormers: (1, 3)),
+        Choice([
+            (6, Roof(shape: Gable(pitch_deg: 40), material: "roof_tile_red", dormers: (1, 3))),
+            (3, Roof(shape: Hip(pitch_deg: 38), material: "roof_tile_red", dormers: (2, 4))),
+            (2, Roof(shape: Flat, material: "roof_felt")),
+        ]),
     ],
     refs: [
         // Parter: witryny niemal na całą wysokość i przejazd bramny, gdy front szeroki.

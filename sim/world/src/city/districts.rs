@@ -37,7 +37,21 @@ pub enum DistrictKind {
 }
 
 impl DistrictKind {
+    /// Czy dzielnica jest **mieszkaniowa** — próg entropii gramatyk z testu T13 dotyczy
+    /// tylko takich. Osiedle płytowe ma prawo być monotonne, bo takie jest; pas przemysłowy
+    /// ma trzy rodzaje hal i to jest komplet, a nie uboga różnorodność (M2f, WP20).
     #[must_use]
+    pub const fn is_residential(self) -> bool {
+        matches!(
+            self,
+            DistrictKind::OldTown
+                | DistrictKind::InnerCity
+                | DistrictKind::BlockEstate
+                | DistrictKind::Suburb
+                | DistrictKind::Village
+        )
+    }
+
     pub const fn key(self) -> &'static str {
         match self {
             DistrictKind::OldTown => "old_town",

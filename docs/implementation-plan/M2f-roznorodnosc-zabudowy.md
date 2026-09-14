@@ -12,7 +12,7 @@ zostają w dokumencie fazy — tu jest wyłącznie to, co robisz w tej porcji.
 | **Projekt techniczny** | §5.6c |
 | **Wynik do pokazania** | Przelot kamerą nad dzielnicą mieszkaniową, w której **żadne dwa sąsiadujące budynki nie są tym samym budynkiem**: różnią się typem, wysokością, materiałem, dachem albo detalem bryły. Macierz pokrycia (strefa × epoka × styl) bez ani jednej luki. |
 | **Kryterium zamknięcia** | Kryteria WP18–WP20; udział gramatyki awaryjnej < 0,5 %, udział doboru z rozluźnionym filtrem (`relaxed`) < 5 %; test T13 zielony na 32 ziarnach × 4 profile. |
-| **Stan** | WP18 i WP19 zamknięte (korekty H1–H11). WP20 przed sobą. |
+| **Stan** | **Podfaza zamknięta** — WP18, WP19 i WP20 (korekty H1–H15). |
 | **Poprzednia / następna** | `M2d-zabudowa.md` · `M2e-gospodarka-bazowa-i-wycena.md` |
 
 Domknięcie Etapu 6: jeden brakujący operator bryły (`Protrude`), lukarny w regule `Roof`,
@@ -45,7 +45,7 @@ estetyczny.
 |---|---|---|---|---|
 | ✅ WP18 | Operator `Protrude` i lukarny | M2d (WP11, WP12) | wariant `Rule::Protrude { face, m, rule }` — wysunięcie zakresu **poza jedną** ścianę; `dormers` w regule `Roof`; przycięcie wysunięcia do granicy parceli, z wyjątkiem wysięgu nad chodnikiem powyżej skrajni | balkon, wykusz i lukarna dają się zapisać w `.ron` bez ani jednej linii Rusta; **poniżej skrajni 3,5 m** żadne wysunięcie nie wychodzi poza wielokąt parceli, **powyżej** nie dalej niż 1,5 m; budżet `MAX_NODES` trzymany na kamienicy 6-kondygnacyjnej z balkonami na każdym piętrze (korekta H1) |
 | ✅ WP19 | Katalog gramatyk: pokrycie i wariancja | WP18 | rozszerzenie `data/grammar/` z 12 do ~32 plików wg typologii z §5.6c; `Choice` wewnątrz gramatyk na materiał, rytm otworów i kształt dachu | macierz pokrycia (strefa × epoka × styl) **bez luk**: każda kombinacja występująca w mieście ma ≥ 1 gramatykę bez rozluźniania filtrów; fallback < 0,5 %; `relaxed` < 5 % |
-| WP20 | Miara różnorodności + test T13 | WP19 | `BuildingSignature` (4 znaczniki), histogram gramatyk i kolizje sygnatur w `GenerationReport`; test T13 | T13 zielony: udział par identycznych sygnatur w promieniu 60 m < 15 %; entropia rozkładu gramatyk w dzielnicy mieszkaniowej o ≥ 100 budynkach ≥ 1,8 bita; oba progi mierzone na 32 ziarnach × 4 profile |
+| ✅ WP20 | Miara różnorodności + test T13 | WP19 | `BuildingSignature` (4 znaczniki), histogram gramatyk i kolizje sygnatur w `GenerationReport`; test T13 | T13 zielony: udział par identycznych sygnatur w promieniu 60 m < 15 %; entropia rozkładu gramatyk w dzielnicy mieszkaniowej o ≥ 100 budynkach ≥ 1,8 bita; oba progi mierzone na 32 ziarnach × 4 profile |
 
 Ścieżka jest liniowa: WP18 → WP19 → WP20. WP20 wolno pisać równolegle z WP19 —
 miara powstaje szybciej niż dane, które ma mierzyć, i lepiej, żeby powstała pierwsza.
@@ -250,6 +250,12 @@ Numeracja `H-n`, jak `E-n` w M2d. Gwiazdką te, które zmieniają **zakres albo 
 - `Face::Front` jest od tej pory **zawsze** licem od ulicy (korekta H2). Gramatyki pisane
   w WP19 mogą na tym polegać; wcześniejsze były pisane w świecie, w którym to nie było prawdą.
 
+| H12 ★ | **Entropia liczona po sygnaturach, nie po `GrammarId`**, i dochodzi drugi próg — entropia całego miasta ≥ 4,0 bita. §5.6c mówił „entropia rozkładu `GrammarId`"; to było mierzenie złej rzeczy | Dzielnica „Bór" (ziarno 7, profil przemysłowy) dostała 0,29 bita, bo 108 ze 112 budynków to `chalupa`. Tyle że te chałupy różnią się materiałem, kształtem dachu i wysokością — z ulicy **są** różne. Entropia gramatyk mierzy, jak zorganizowany jest katalog; entropia sygnatur mierzy to, co widzi gracz. Po zamianie ta sama dzielnica ma 3,45 bita i jest to liczba prawdziwa. Próg miasta dochodzi, bo dzielnica ma prawo być jednorodna (osiedle płytowe takie jest i ma takie zostać), a miasto nie ma |
+| H13 | Reguły **rozdzielające** (`Seq`, `Choice`, `If`, `Ref`) zwolnione ze strażnika zdegenerowanego zakresu w `derive::apply` | Bryła w momencie wyboru dachu ma zerową wysokość (dach dostaje ją dopiero od `Floors`), więc `Choice([Roof, Roof])` wypadał w całości i **nie było jak zapisać losowania kształtu dachu** — trzeci kanał wariancji z §5.6c był martwy. Strażnik ma pilnować reguł, które naprawdę pracują na zakresie; reguła, która tylko przekazuje go dalej, nie ma czego pilnować. Strażnik nadal zatrzymuje `Fill` i `Comp` na liściu |
+| H14 | Kształt dachu jako trzeci kanał `Choice` w dziewięciu gramatykach | Sygnatura ma cztery znaczniki, a jeden z nich — dach — był w całym katalogu stały. Czwarta część miary leżała odłogiem. Efekt zmierzony na tym samym mieście: powtórki sygnatury w promieniu 60 m **14,2 % → 8,6 %**, bez dokładania ani jednego pliku |
+| H15 | Dwie monokultury znalezione **przez miarę** i naprawione w danych: `kamienica_modernistyczna` miała próg wartości gruntu 300 000 gr/m², przez co na taniej ziemi w ogóle nie kandydowała i `kamienica_plombowa` brała 441 z 474 budynków dzielnicy; `blok_wspolczesny` wymagał 14 m frontu, czyli więcej, niż ma typowa wąska działka R3 | Obie były niewidoczne w pokryciu: macierz była pełna, fallback poniżej progu, a mimo to jedna gramatyka wygrywała 93 % losowań w dzielnicy. Dokładnie po to jest druga miara — pokrycie mówi „jest z czego wybierać", entropia mówi „i faktycznie wybiera" |
+| H16 ★ | **Próg wartości gruntu w `applies` jest bezpieczny na typie prestiżowym i groźny na typie roboczym.** `blok_wspolczesny` i `kamienica_modernistyczna` tracą swoje progi; `wiezowiec`, `wiezowiec_mieszkalny`, `willa_miedzywojenna` i `kamienica_secesyjna` zostają ze swoimi | To samo znalezisko co H15, tylko na szerszej macierzy: T13 na 32 ziarnach złapał ziarno 1 / profil przemysłowy z 16,5 % powtórek, bo `blok_wspolczesny` miał próg 400 000 gr/m², w tanim mieście nie kandydował, a `kamienica_plombowa` brała 546 z 650 budynków dzielnicy. Reguła, którą z tego wyciągam: próg wartości gruntu wolno postawić typowi, **poniżej którego ktoś inny przejmuje** (wieżowiec ma pod sobą blok, willa ma pod sobą kostkę) — nigdy typowi, który jest dla swojej kombinacji jedynym kandydatem. Po zdjęciu progu: 10,5 % powtórek, entropia dzielnicy 3,31 → 4,09 bita |
+
 ---
 
 ## Co WP19 zostawia WP20
@@ -277,3 +283,36 @@ sprzed 1918) nadal wygląda jednorodnie, mimo że ma tam teraz pięciu kandydat�
 jednego. Wagi są tak dobrane, że `kamienica` wygrywa większość losowań, a pozostałe
 warianty różnią się od niej detalem, nie bryłą. To jest dokładnie to, co ma zmierzyć
 entropia w teście T13 — i jeśli T13 upadnie, upadnie właśnie tam, a nie na przedmieściach.
+
+---
+
+## Co zostaje po M2f
+
+Podfaza zamknięta. Test **T13** stoi w `sim/world/tests/city_m2d.rs` i chodzi po
+**32 ziarnach × 4 profile** na mieście 4 km. Trzy progi, każdy odpowiada na inne pytanie:
+
+| Miara | Próg | Najgorsza wartość w próbce | Co łapie |
+|---|---|---|---|
+| powtórki sygnatury w promieniu 60 m | < 15 % | 10,5 % | pierzeja z jednej formy powielonej dwadzieścia razy |
+| entropia sygnatur w dzielnicy (≥ 100 budynków, mieszkaniowa) | ≥ 1,8 bita | 3,45 bita | dzielnica z jednym rodzajem domu |
+| entropia sygnatur w mieście | ≥ 4,0 bita | 5,91 bita | miasto z jednym rodzajem domu |
+
+**Progi są podłogami przeciw regresji, nie celami.** Zostały skalibrowane pomiarem
+i mają margines rzędu dwukrotności — zmiana, która je przebije, nie „lekko pogorszyła
+różnorodność", tylko ją zawaliła. Wymyślanie progów przed pomiarem raz już się nie udało
+(korekta H12), a 16-punktowa próbka okazała się za mała: pełny przebieg 32 × 4 znalazł
+przypadek o 4,6 pp. gorszy od wszystkiego, co widziała próbka (korekta H16). **Kalibrować
+próg wolno wyłącznie na tej macierzy, na której test potem chodzi.**
+
+`GenerationReport` niesie komplet: histogram gramatyk, liczbę par sąsiedztwa i powtórek,
+najgorsze sąsiedztwo z **współrzędnymi** (żeby dało się tam polecieć kamerą), entropię
+miasta, najniższą entropię dzielnicy z jej numerem oraz gramatykę, która ją zdominowała,
+i w jakiej proporcji.
+
+`BuildingSignature` **nie jest trzymana w `Building`** — powstaje w generacji, wchodzi
+do miar i ginie. Do raportu trafiają agregaty, nie tablica 14,5 tys. sygnatur.
+
+Otwarte, świadomie nieruszone: rdzeń miasta (R3 i Commercial w pierścieniach sprzed 1918)
+ma pięciu kandydatów, ale `kamienica` nadal wygrywa większość losowań. T13 tego nie łapie,
+bo sygnatury **wewnątrz** kamienicy są zróżnicowane (trzy materiały × trzy dachy × zakres
+kondygnacji). Jeśli kiedyś ma się to zmienić, dźwignią są wagi w `applies`, a nie nowy plik.

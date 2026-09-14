@@ -19,7 +19,7 @@
 //!    byłoby nieprawdą.
 
 use super::blocks::BlockSet;
-use super::derive::{self, BuildParams, Derived, Scope};
+use super::derive::{self, BuildParams, Derived, RoofKind, Scope};
 use super::districts::DistrictSet;
 use super::grammar::{BuildingGrammar, GrammarId, GrammarSet, UnitClass, MAX_PROTRUDE_M};
 use super::parcels::{ParcelSet, ParcelStatus};
@@ -210,6 +210,67 @@ pub struct BuildReport {
     /// (korekta D7) — rampa nie powstała i ma to być widać.
     pub ramp_missing: u32,
     pub edit_commands: u32,
+
+    // ── WP20: różnorodność ──────────────────────────────────────────────────────
+    /// Ile budynków dostała każda gramatyka (indeksy jak `GrammarId`).
+    pub grammar_hist: Vec<u32>,
+    /// Pary budynków w promieniu 60 m i ile z nich ma **identyczną** sygnaturę.
+    /// Dwie liczby zamiast udziału, bo `BuildReport` jest `Eq` i nie trzyma floatów.
+    pub signature_pairs: u32,
+    pub signature_repeats: u32,
+    /// Najgorsze sąsiedztwo: udział powtórzeń w promilach i jego współrzędne w metrach —
+    /// żeby dało się tam polecieć kamerą, zamiast czytać, że test upadł.
+    pub worst_neighbourhood_permille: u32,
+    pub worst_neighbourhood_at: (i32, i32),
+    /// Najniższa entropia Shannona rozkładu **sygnatur** w dzielnicy mieszkaniowej
+    /// o co najmniej [`MIN_BUDYNKOW_DZIELNICY`] budynkach, w milibitach, i numer tej
+    /// dzielnicy. Zero znaczy „nie było czego mierzyć".
+    ///
+    /// Po sygnaturach, a nie po gramatykach — bo dzielnica zbudowana w całości z chałup,
+    /// w której każda ma inny materiał, inny dach i inną wysokość, **jest** różnorodna,
+    /// a entropia gramatyk pokazywała dla niej 0,29 bita. Sygnatura mierzy to, co gracz
+    /// widzi z ulicy; identyfikator gramatyki mierzy, jak zorganizowany jest katalog.
+    pub min_district_entropy_mbits: u32,
+    pub min_district_entropy_at: u16,
+    pub districts_measured: u32,
+    /// Dzielnica o najniższej entropii w trzech liczbach: **która gramatyka** ją zdominowała,
+    /// ile w niej ma budynków i ile budynków ma cała dzielnica. Bez tego sama entropia mówi,
+    /// że jest źle, ale nie mówi, czy to wina katalogu, czy charakteru dzielnicy.
+    pub min_district_top: (u16, u32, u32),
+    /// Entropia rozkładu sygnatur w **całym mieście**, w milibitach. Dzielnica ma prawo być
+    /// monotonna — osiedle płytowe takie jest i tak ma wyglądać — ale miasto nie ma.
+    /// To jest liczba, która odpowiada na pytanie „czy to miasto jest różnorodne".
+    pub city_entropy_mbits: u32,
+}
+
+/// Promień sąsiedztwa z testu T13 — mniej więcej to, co widać z chodnika po obu
+/// stronach ulicy.
+pub const PROMIEN_SASIEDZTWA_M: f32 = 60.0;
+
+/// Poniżej tylu budynków entropia dzielnicy jest szumem, nie miarą.
+pub const MIN_BUDYNKOW_DZIELNICY: u32 = 100;
+
+/// Cztery znaczniki, po których dwa budynki tej samej gramatyki są albo nie są tym samym
+/// budynkiem: gramatyka, liczba kondygnacji, materiał ściany i kształt dachu. Dokładnie to,
+/// co gracz rozróżnia z chodnika po drugiej stronie ulicy — i nic więcej, bo detal poniżej
+/// tego progu i tak ginie w rastrze (M2f §5.6c).
+///
+/// Liczona w generacji i **nietrzymana w `Building`**: 14,5 tys. budynków × 4 B to pamięć
+/// za miarę jakości, a nie za stan gry. Do raportu trafiają agregaty, nie tablica sygnatur.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+pub struct BuildingSignature(pub u32);
+
+impl BuildingSignature {
+    /// Pakowanie: 6 bitów gramatyki, 5 kondygnacji, 10 materiału, 2 dachu — 23 z 32.
+    /// Przekroczenie zakresu **nasyca**, nie zawija: budynek 40-kondygnacyjny ma być
+    /// nieodróżnialny od 31-kondygnacyjnego, a nie od 8-kondygnacyjnego.
+    #[must_use]
+    pub fn new(grammar: GrammarId, floors: u8, wall: magnat_voxel::MaterialId, roof: RoofKind) -> BuildingSignature {
+        let g = u32::from(grammar.0).min(63);
+        let f = u32::from(floors).min(31);
+        let m = u32::from(wall.0).min(1023);
+        BuildingSignature(g | (f << 6) | (m << 11) | (roof.index() << 21))
+    }
 }
 
 #[must_use]
@@ -671,6 +732,9 @@ pub fn build_all(
         report: BuildReport::default(),
     };
     let mut srodki: Vec<(Vec2, BuildingId)> = Vec::new();
+    // Sygnatury żyją tylko tutaj: do raportu idą agregaty, nie tablica (M2f, WP20).
+    let mut sygnatury: Vec<BuildingSignature> = Vec::new();
+    out.report.grammar_hist = vec![0; input.grammars.len()];
 
     for wynik in planned {
         let p = match wynik {
@@ -746,6 +810,15 @@ pub fn build_all(
             entrances,
         });
         srodki.push((Vec2::new(p.base.center.x, p.base.center.y), id));
+        sygnatury.push(BuildingSignature::new(
+            p.grammar,
+            p.derived.floors,
+            p.derived.wall_material,
+            p.derived.roof_shape,
+        ));
+        if let Some(n) = out.report.grammar_hist.get_mut(p.grammar.0 as usize) {
+            *n += 1;
+        }
         let parcel = &mut parcels.parcels[p.parcel as usize];
         parcel.status = ParcelStatus::Built;
         parcel.building = Some(id);
@@ -756,8 +829,131 @@ pub fn build_all(
     out.report.buildings = out.buildings.len() as u32;
     out.report.units = out.units.len() as u32;
     out.report.edit_commands = (q.len() - przed_komend) as u32;
-    out.index = CsrGrid::build(*out.index.spec(), srodki.into_iter());
+    out.index = CsrGrid::build(*out.index.spec(), srodki.iter().copied());
+    roznorodnosc(&mut out, input, parcels, &srodki, &sygnatury);
     out
+}
+
+/// Miary z testu T13: powtarzalność sygnatur w sąsiedztwie i entropia gramatyk
+/// w dzielnicy. Liczone **po** zbudowaniu indeksu, bo obie potrzebują sąsiadów.
+///
+/// Bez miary „różnorodny" jest opinią, a kryterium ukończenia musi dać się obalić
+/// (M2f, WP20). Stąd dwa progi, a nie jeden: sąsiedztwo łapie pierzeję z jednej formy
+/// powielonej dwadzieścia razy, entropia — dzielnicę, w której jedna gramatyka wygrywa
+/// wszystkie losowania. Pierwsze zdarza się przy wąskich działkach, drugie przy wagach.
+fn roznorodnosc(
+    out: &mut BuildingSet,
+    input: &BuildInput,
+    parcels: &ParcelSet,
+    srodki: &[(Vec2, BuildingId)],
+    sygnatury: &[BuildingSignature],
+) {
+    let mut sasiedzi: Vec<BuildingId> = Vec::new();
+    let (mut pary, mut powtorki) = (0u32, 0u32);
+    for (i, (pos, _)) in srodki.iter().enumerate() {
+        sasiedzi.clear();
+        out.index
+            .query_radius(*pos, PROMIEN_SASIEDZTWA_M, &mut sasiedzi);
+        let (mut lokalne, mut lokalne_powtorki) = (0u32, 0u32);
+        for id in &sasiedzi {
+            let j = id.0.index() as usize;
+            if j == i {
+                continue;
+            }
+            lokalne += 1;
+            if sygnatury[j] == sygnatury[i] {
+                lokalne_powtorki += 1;
+            }
+        }
+        pary += lokalne;
+        powtorki += lokalne_powtorki;
+        // Najgorsze sąsiedztwo liczymy tylko tam, gdzie w ogóle jest sąsiedztwo:
+        // budynek z dwoma sąsiadami i dwiema powtórkami daje 100 % i nic nie znaczy.
+        if lokalne >= 8 {
+            let promille = lokalne_powtorki * 1000 / lokalne;
+            if promille > out.report.worst_neighbourhood_permille {
+                out.report.worst_neighbourhood_permille = promille;
+                out.report.worst_neighbourhood_at = (pos.x as i32, pos.y as i32);
+            }
+        }
+    }
+    out.report.signature_pairs = pary;
+    out.report.signature_repeats = powtorki;
+    let mut wszystkie: Vec<u32> = sygnatury.iter().map(|s| s.0).collect();
+    wszystkie.sort_unstable();
+    let hist: Vec<u32> = wszystkie
+        .chunk_by(|a, b| a == b)
+        .map(|o| o.len() as u32)
+        .collect();
+    out.report.city_entropy_mbits = entropia_mbits(&hist, wszystkie.len() as u32);
+
+    // ── entropia sygnatur per dzielnica ─────────────────────────────────────────
+    let n = input.districts.districts.len();
+    let mut sygn_dzielnicy: Vec<Vec<u32>> = vec![Vec::new(); n];
+    let mut gram_dzielnicy: Vec<Vec<u32>> = vec![Vec::new(); n];
+    for (i, b) in out.buildings.iter().enumerate() {
+        let d = parcels.parcels[b.parcel.0.index() as usize].district.0 as usize;
+        let (Some(sy), Some(gr)) = (sygn_dzielnicy.get_mut(d), gram_dzielnicy.get_mut(d)) else {
+            continue;
+        };
+        sy.push(sygnatury[i].0);
+        if gr.is_empty() {
+            gr.resize(input.grammars.len(), 0);
+        }
+        if let Some(c) = gr.get_mut((sygnatury[i].0 & 63) as usize) {
+            *c += 1;
+        }
+    }
+    out.report.min_district_entropy_mbits = u32::MAX;
+    for (d, sy) in sygn_dzielnicy.iter().enumerate() {
+        let Some(kind) = input.districts.districts.get(d).map(|x| x.kind) else {
+            continue;
+        };
+        if !kind.is_residential() || sy.len() < MIN_BUDYNKOW_DZIELNICY as usize {
+            continue;
+        }
+        out.report.districts_measured += 1;
+        // Sygnatur jest mało na dzielnicę, więc sortowanie i zliczanie serii jest tańsze
+        // od mapy — i, co ważniejsze, nie wymaga iterowania po `HashMap` (00 §3.2).
+        let mut posortowane = sy.clone();
+        posortowane.sort_unstable();
+        let mut hist: Vec<u32> = Vec::new();
+        for okno in posortowane.chunk_by(|a, b| a == b) {
+            hist.push(okno.len() as u32);
+        }
+        let suma = sy.len() as u32;
+        let mbits = entropia_mbits(&hist, suma);
+        if mbits < out.report.min_district_entropy_mbits {
+            out.report.min_district_entropy_mbits = mbits;
+            out.report.min_district_entropy_at = d as u16;
+            let gr = &gram_dzielnicy[d];
+            let (g, ile) = gr.iter().enumerate().fold((0usize, 0u32), |b, (i, c)| {
+                if *c > b.1 {
+                    (i, *c)
+                } else {
+                    b
+                }
+            });
+            out.report.min_district_top = (g as u16, ile, suma);
+        }
+    }
+    if out.report.districts_measured == 0 {
+        out.report.min_district_entropy_mbits = 0;
+    }
+}
+
+/// Entropia Shannona rozkładu w **milibitach**. `log2` wyłącznie z `det_math` (00 §K-6),
+/// sumowanie w kolejności indeksów — wynik wchodzi do raportu, a raport do hasha.
+fn entropia_mbits(hist: &[u32], suma: u32) -> u32 {
+    if suma == 0 {
+        return 0;
+    }
+    let mut h = 0.0f64;
+    for c in hist.iter().filter(|c| **c > 0) {
+        let p = f64::from(*c) / f64::from(suma);
+        h -= p * magnat_core::det_math::log2(p);
+    }
+    (h * 1000.0).max(0.0) as u32
 }
 
 /// Część równoległa — **czysta**: czyta arenę i teren, niczego nie mutuje.

@@ -8,6 +8,7 @@
 use magnat_jobs::JobPool;
 use magnat_voxel::{ChunkBuilder, ChunkCoord, ColumnSource, MaterialRegistry, CHUNK_DIM};
 use magnat_world::city::build::{EntranceKind, UnitKind};
+use magnat_world::city::grammar::GrammarId;
 use magnat_world::city::{poly, value};
 use magnat_world::{
     generate, generate_city, CityData, CityPlan, Difficulty, EconomyProfile, Epoch, Region,
@@ -20,13 +21,23 @@ fn miasto(seed: u64, size: WorldSize, region: Region) -> (CityData, Terrain) {
 }
 
 fn miasto_w(seed: u64, size: WorldSize, region: Region, watki: usize) -> (CityData, Terrain) {
+    miasto_pelne(seed, size, region, watki, EconomyProfile::Mixed)
+}
+
+fn miasto_pelne(
+    seed: u64,
+    size: WorldSize,
+    region: Region,
+    watki: usize,
+    profile: EconomyProfile,
+) -> (CityData, Terrain) {
     let pool = JobPool::new(watki);
     let params = WorldGenParams {
         seed,
         size,
         region,
         epoch: Epoch::Y1990,
-        profile: EconomyProfile::Mixed,
+        profile,
         difficulty: Difficulty::Normal,
     };
     let (data, _) = generate(params, &pool).unwrap();
@@ -135,6 +146,122 @@ fn katalog_trafia_bez_awaryjnej_i_prawie_zawsze_bez_rozluznienia() {
         r.relaxed_epoch,
         r.relaxed_style,
         r.relaxed_value
+    );
+}
+
+/// **Test T13 fazy** (M2f, WP20): różnorodność zabudowy ma próg, a nie opinię.
+///
+/// Trzy miary, każda odpowiada na inne pytanie:
+/// * **powtórki w sąsiedztwie** — czy pierzeja to jedna forma powielona dwadzieścia razy;
+/// * **entropia sygnatur w dzielnicy** — czy dzielnica ma więcej niż jeden rodzaj domu;
+/// * **entropia sygnatur w mieście** — czy całość jest różnorodna, nawet jeśli pojedyncza
+///   dzielnica ma prawo być jednorodna (osiedle płytowe takie jest i tak ma wyglądać).
+///
+/// Progi są **skalibrowane pomiarem**, nie wymyślone: na 16-punktowej próbce przed
+/// zamknięciem WP20 najgorsze wartości wyniosły 11,9 %, 3,45 bita i 5,91 bita. To są
+/// podłogi chroniące przed regresją, a nie cele — zmiana, która je przebije, zawaliła
+/// różnorodność i ma o tym powiedzieć głośno.
+#[test]
+#[ignore = "128 generacji świata — CI uruchamia jawnie przez --include-ignored"]
+fn t13_roznorodnosc_zabudowy() {
+    /// Udział budynków o identycznej sygnaturze wśród sąsiadów w promieniu 60 m.
+    const MAX_POWTOREK_PCT: f64 = 15.0;
+    /// Entropia Shannona sygnatur w dzielnicy mieszkaniowej o ≥ 100 budynkach.
+    const MIN_ENTROPII_DZIELNICY_MBITS: u32 = 1800;
+    /// To samo dla całego miasta.
+    const MIN_ENTROPII_MIASTA_MBITS: u32 = 4000;
+
+    let profile = [
+        EconomyProfile::Mixed,
+        EconomyProfile::Industrial,
+        EconomyProfile::Tourist,
+        EconomyProfile::Agricultural,
+    ];
+    let mut najgorsze_powtorki: (f64, u64, &str) = (0.0, 0, "");
+    let mut najnizsza_dzielnica: (u32, u64, &str) = (u32::MAX, 0, "");
+    let mut najnizsze_miasto: (u32, u64, &str) = (u32::MAX, 0, "");
+    let mut mierzonych_dzielnic = 0u32;
+
+    for seed in 1..=32u64 {
+        for p in profile {
+            let (c, _) = miasto_pelne(seed, WorldSize::Small4km, Region::Lowland, 0, p);
+            let r = &c.report.build;
+            assert!(
+                r.signature_pairs > 1000,
+                "seed {seed} {p:?}: tylko {} par sąsiedztwa — próg nic wtedy nie znaczy",
+                r.signature_pairs
+            );
+            let powtorki = f64::from(r.signature_repeats) * 100.0 / f64::from(r.signature_pairs);
+            if powtorki > najgorsze_powtorki.0 {
+                najgorsze_powtorki = (powtorki, seed, p.key());
+            }
+            if r.city_entropy_mbits < najnizsze_miasto.0 {
+                najnizsze_miasto = (r.city_entropy_mbits, seed, p.key());
+            }
+            mierzonych_dzielnic += r.districts_measured;
+            if r.districts_measured > 0 && r.min_district_entropy_mbits < najnizsza_dzielnica.0 {
+                najnizsza_dzielnica = (r.min_district_entropy_mbits, seed, p.key());
+            }
+        }
+    }
+
+    assert!(
+        mierzonych_dzielnic > 0,
+        "żadna dzielnica nie osiągnęła progu wielkości — próg entropii nic nie mierzy"
+    );
+    assert!(
+        najgorsze_powtorki.0 < MAX_POWTOREK_PCT,
+        "powtórki sygnatury {:.1}% (limit {MAX_POWTOREK_PCT}%) — seed {} profil {}",
+        najgorsze_powtorki.0,
+        najgorsze_powtorki.1,
+        najgorsze_powtorki.2
+    );
+    assert!(
+        najnizsza_dzielnica.0 >= MIN_ENTROPII_DZIELNICY_MBITS,
+        "entropia sygnatur w dzielnicy {:.2} bita (limit {:.2}) — seed {} profil {}",
+        f64::from(najnizsza_dzielnica.0) / 1000.0,
+        f64::from(MIN_ENTROPII_DZIELNICY_MBITS) / 1000.0,
+        najnizsza_dzielnica.1,
+        najnizsza_dzielnica.2
+    );
+    assert!(
+        najnizsze_miasto.0 >= MIN_ENTROPII_MIASTA_MBITS,
+        "entropia sygnatur w mieście {:.2} bita (limit {:.2}) — seed {} profil {}",
+        f64::from(najnizsze_miasto.0) / 1000.0,
+        f64::from(MIN_ENTROPII_MIASTA_MBITS) / 1000.0,
+        najnizsze_miasto.1,
+        najnizsze_miasto.2
+    );
+}
+
+/// Sygnatura ma odróżniać to, co różne, i sklejać to, co takie samo — w obie strony.
+#[test]
+fn sygnatura_pakuje_cztery_znaczniki_bez_kolizji() {
+    use magnat_voxel::MaterialId;
+    use magnat_world::city::build::BuildingSignature;
+    use magnat_world::city::derive::RoofKind;
+
+    let baza = BuildingSignature::new(GrammarId(5), 4, MaterialId(9), RoofKind::Gable);
+    assert_eq!(
+        baza,
+        BuildingSignature::new(GrammarId(5), 4, MaterialId(9), RoofKind::Gable)
+    );
+    for inny in [
+        BuildingSignature::new(GrammarId(6), 4, MaterialId(9), RoofKind::Gable),
+        BuildingSignature::new(GrammarId(5), 5, MaterialId(9), RoofKind::Gable),
+        BuildingSignature::new(GrammarId(5), 4, MaterialId(10), RoofKind::Gable),
+        BuildingSignature::new(GrammarId(5), 4, MaterialId(9), RoofKind::Hip),
+    ] {
+        assert_ne!(baza, inny, "zmiana jednego znacznika nie zmieniła sygnatury");
+    }
+    // Nasycenie, nie zawinięcie: 40 kondygnacji ma być nieodróżnialne od 31, a nie od 8.
+    assert_eq!(
+        BuildingSignature::new(GrammarId(1), 40, MaterialId(1), RoofKind::Flat),
+        BuildingSignature::new(GrammarId(1), 31, MaterialId(1), RoofKind::Flat)
+    );
+    assert_ne!(
+        BuildingSignature::new(GrammarId(1), 40, MaterialId(1), RoofKind::Flat),
+        BuildingSignature::new(GrammarId(1), 8, MaterialId(1), RoofKind::Flat)
     );
 }
 

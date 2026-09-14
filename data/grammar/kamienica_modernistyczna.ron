@@ -9,7 +9,7 @@
         zones: ["r3", "commercial"],
         epochs: ["interwar", "postwar"],
         styles: [],
-        land_value: (300000, 14000000),
+        land_value: (0, 14000000),
         frontage_m: (9.0, 60.0),
         depth_m: (10.0, 140.0),
         weight: 40,

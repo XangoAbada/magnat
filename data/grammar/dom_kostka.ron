@@ -30,7 +30,11 @@
             top: Ref("sciana"),
         ),
         // Dach kopertowy o minimalnym spadku — z ulicy czyta się jak płaski, ale nie jest.
-        Roof(shape: Hip(pitch_deg: 18), material: "roof_sheet", dormers: (0, 0)),
+        Choice([
+            (5, Roof(shape: Hip(pitch_deg: 18), material: "roof_sheet", dormers: (0, 0))),
+            (3, Roof(shape: Flat, material: "roof_felt")),
+            (2, Roof(shape: Gable(pitch_deg: 30), material: "roof_tile_red", dormers: (0, 1))),
+        ]),
     ],
     refs: [
         ("sciana", Seq([
