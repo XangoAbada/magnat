@@ -74,8 +74,8 @@ Wszystkie komponenty `#[repr(C)]`, bez paddingu niejawnego (test `size_of` + `of
 // ---------- stan gorący, tablice SoA ----------
 
 #[repr(C)] pub struct Identity {        // 16 B
-    pub first_name: u16,                // indeks w puli imion (data/names/)
-    pub last_name:  u16,
+    pub first_name: u16,                // indeks w puli imion (data/names/) — pula powstaje w M4d/WP13
+    pub last_name:  u16,                //   (patrz Z-7 w M4-ruch.md); do tego czasu to surowa liczba
     pub birth_day:  i32,                // dni od dnia 0 świata (rok = 360 dni, K-1); ujemne = przed startem
     pub birth_district: u16,            // DistrictId; 0xFFFF = przyjezdny
     pub flags:      u8,                 // bit0 płeć, bit1 żywy, bit2 gracz, bit3..7 rezerwa

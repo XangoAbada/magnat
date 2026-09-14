@@ -79,6 +79,7 @@ odczytywaną z danych** (`data/goods/fuel.ron`), nie mają zbiorników. M4 defin
 | §9.4 Wybór środka transportu | WP6 |
 | §9.5 Paliwo i energia | WP5 |
 | §9.6 Sieci przesyłowe | **poza zakresem — M8** |
+| §5.1 Model mieszkańca — tożsamość | WP13 — imię i nazwisko „z puli regionalnej"; pula powstaje dopiero tutaj (`Z-7`) |
 | §5.5 Tryb dnia | WP4, WP5 — podróż i tankowanie jako zadania planera M3 |
 | §5.6 Decyzje długoterminowe | WP2 — `TravelTimeMatrix` zasila zasięg poszukiwania pracy i mieszkania; próg „koszt komunikacji + czas > koszt posiadania auta" |
 | §14.1 Wyjaśnialność | `TripDecisionReason` w każdej decyzji transportowej |
@@ -108,9 +109,11 @@ dopiero po ostatniej podfazie; podfaza zamyka się własnym kryterium ze swojego
 | **M4a — Graf i routing** | WP1, WP2 | 5.1 | Devtools: inspektor grafu rysuje krawędzie z atrybutami; zapytanie CCH odpowiada w budżecie na grafie 200 tys. węzłów. | `M4a-graf-i-routing.md` |
 | **M4b — Mezo i podróże** | WP3, WP4, WP5 | 5.2, 5.7 | Mieszkańcy z M3 dojeżdżają do pracy pojazdami zamiast teleportacji; korek powstaje na przewężeniu i rozładowuje się. | `M4b-mezo-i-podroze.md` |
 | **M4c — Wybór środka, parkingi, komunikacja** | WP6, WP7, WP10 | 5.3, 5.5, 5.6 | Rozkład udziału środków transportu w widełkach z PRD §20.1; linia autobusowa wozi ludzi wg rozkładu; przepełniony parking odbiera opcję „samochód”. | `M4c-wybor-srodka-parkingi-komunikacja.md` |
-| **M4d — Mikro i dowód spójności** | WP8, WP9, WP11, WP12 | 5.4, 5.8, 5.9 | Pełny artefakt fazy z §1 dokumentu fazy: korki widoczne i mierzone, „kamera nie zmienia świata”. | `M4d-mikro-i-dowod-spojnosci.md` |
+| **M4d — Mikro i dowód spójności** | WP8, WP9, WP11, WP12, WP13 | 5.4, 5.8, 5.9, 5.10 | Pełny artefakt fazy z §1 dokumentu fazy: korki widoczne i mierzone, „kamera nie zmienia świata”. | `M4d-mikro-i-dowod-spojnosci.md` |
 
 Ścieżka krytyczna: WP1 → WP2 → WP3 → WP4 → WP6. WP8/WP9 mogą iść równolegle do WP10 po WP3.
+WP13 jest poza ścieżką krytyczną i **nie blokuje niczego** — zależy tylko od WP11, bo to karta
+inspekcji podróży jest pierwszym ekranem, na którym brak imion widać (`Z-7`, §5.10).
 
 ---
 
@@ -130,6 +133,7 @@ odesłania w tekście („patrz §5.4") nadal wskazują tę samą sekcję — zm
 | 5.7 | Paliwo i tankowanie (§9.5) | `M4b-mezo-i-podroze.md` |
 | 5.8 | Systemy ECS i częstotliwości | `M4d-mikro-i-dowod-spojnosci.md` |
 | 5.9 | Determinizm | `M4d-mikro-i-dowod-spojnosci.md` |
+| 5.10 | **Generator imion i nazwisk (WP13)** — sekcja nowa, dopisana po M3 | `M4d-mikro-i-dowod-spojnosci.md` |
 
 ---
 
@@ -242,6 +246,9 @@ krawędzi, nigdy nie dokładają nowego profilu per regulacja (patrz D11).
 | `mode_choice_explainability` | 100 % decyzji ma `TripDecisionReason` z pełną listą kandydatów i kosztów (dok. 00 §7) |
 | `fuel_conservation` (własnościowy) | `Σ zatankowane − Σ spalone == Σ poziomów baków − stan początkowy`, tolerancja 0 ml |
 | `money_conservation` (własnościowy) | wydatki na paliwo/bilety/parking == przychody stacji/operatorów/parkingów, tolerancja 0 gr |
+| `indeks_zawsze_ma_wpis_w_puli` (własnościowy, WP13) | 100 tys. wylosowanych tożsamości: każdy `first_name`/`last_name` ma wpis w puli — zakres losowania pochodzi z długości pliku, nie ze stałej |
+| `imie_zgadza_sie_z_plcia` (WP13) | imię wylosowane dla `FLAG_MALE` pochodzi z męskiego podzbioru puli i odwrotnie, 100 % |
+| `nazwisko_dziedziczone_w_formie_wlasnej_plci` (WP13) | rodzina Kowalskich: ojciec „Kowalski", córka „Kowalska", ten sam indeks nazwiska; nazwisko nieodmienne („Nowak") identyczne w obu formach |
 
 ### 7.2 Spójność LOD i determinizm
 
@@ -347,6 +354,7 @@ W tej sesji nie był dostępny mechanizm odpytania agentów planujących pozosta
 | **D9** | **Kto wystawia cenę paliwa w M4?** | M4 czyta stałą z `data/`. M5 wprowadza oferty, M6 — łańcuch. Propozycja: **`FuelPrice` jako trywialna oferta w `sim/economy` już od M5**, a M4 czyta przez interfejs, nie bezpośrednio z pliku — żeby podmiana w M5 nie ruszała kodu M4. | **M5**, M6 |
 | **D10** | **Sygnalizacja adaptacyjna.** | PRD nie rozstrzyga, czy sygnalizacja jest stałoczasowa czy adaptacyjna. M4 planuje **stałoczasową z planów w `data/`** (deterministyczna, prosta, kalibrowalna). Sygnalizacja adaptacyjna jest naturalną polityką miejską — jeśli M8 chce ją jako narzędzie gracza/miasta, potrzebuje hooka `SignalPlanId → plan` już teraz. | **M8** |
 | **D11** | **Liczba profili routingu musi zostać mała.** | M4 utrzymuje 3 zestawy wag CCH (`Passenger`, `HeavyDay`, `HeavyNight`) — każdy kosztuje ~150 ms kustomizacji i ~4–8 MB. Jeśli M8 zaprojektuje regulacje ruchu jako dowolnie parametryzowalne strefy (godziny, klasy pojazdów, dni tygodnia per dzielnica), liczba profili eksploduje i routing przestaje się mieścić w budżecie. Propozycja M4: **regulacje M8 zmieniają maskę wyłączonych krawędzi wewnątrz istniejącego profilu; utworzenie nowego profilu wymaga zgody M4.** Fallbackiem dla rzadkiego, nietypowego ograniczenia jest A\* na `RoadGraph` z predykatem — wolniejszy, ale bez kosztu stałego. | **M8**, M6 |
+| **D12** | **Czy ulice mają nazwy?** | Wyszło przy dopisywaniu WP13: plan **nie ma nazw ulic w żadnej fazie**, a adres mieszkańca to dziś `budynek / lokal / dzielnica` (M3d §5.4). Nie ma też nigdzie zapisu, że to decyzja — więc jest to przeoczenie, nie wybór. M4 jest fazą, która ulice indeksuje (`EdgeId`, `RoadGraph`), więc gdyby nazwy miały powstać, to jest najtańszy moment: generator stałby obok dzielnicowego z M2c i brał od niego toponimy. Propozycja M4: **nie w M4** — nazwa ulicy jest widoczna dopiero, gdy jest gdzie ją pokazać (tabliczka w M11c, adres w karcie M9c), a M4 ma już WP13 jako dług z poprzedniej fazy i nie ma powodu brać drugiego. Jeśli właściciel produktu uzna inaczej, WP13 rozszerza się o trzeci plik `data/names/streets_pl.ron` i pole `name: u16` w `RoadSegment` — koszt jest wtedy mały, bo pula i formater już będą. | właściciel produktu, **M9**, M11 |
 
 ---
 
@@ -366,6 +374,7 @@ W tej sesji nie był dostępny mechanizm odpytania agentów planujących pozosta
 | WP10 | Komunikacja miejska | **L** | Rozkłady, tabor, kierowcy, routing multimodalny, przepełnienie |
 | WP11 | Nakładki UI i inspekcja | **M** | Trzy nakładki + karta podróży + karta pojazdu |
 | WP12 | Wydajność i determinizm | **M** | Profilowanie, chunkowanie, benchmarki, hash |
+| WP13 | Generator imion i nazwisk | **S** | Dwa pliki danych, jeden formater, trzy testy; objętość jest w treści plików, nie w kodzie. Dług z M3 (`Z-7`), nie zakres M4 |
 
 Sumarycznie faza jest **ciężka** — porównywalna z M2 lub M3 — a jej ciężar koncentruje się
 w WP8 (mikro) i WP3 (mezo). Gdyby faza musiała zostać przycięta, jedyna bezpieczna redukcja to
@@ -386,3 +395,4 @@ M4 nie jest tu przeprojektowywany.
 | Z-6 ★ | **Warstwa Mikro ma okno**: `WalkOracle::set_micro_window(środek, promień)`, domyślnie wyłączone. Pieszy wchodzi w nią w chwili, gdy **zaczyna** podróż, i tylko jeśli któryś koniec trasy mieści się w oknie. M4 przejmuje ten kontrakt razem z buforem | Bez okna warstwa trzyma polilinie dla wszystkich 274 tys. mieszkańców, których nikt nie ogląda. Bramka jest po stronie `WalkOracle`, nie wołającego: `DayLoopSystem` woła `enter_micro` bezwarunkowo i nic nie wie o kamerze, a headless nie płaci nic. **Konsekwencja, o której trzeba pamiętać**: okno musi być otwarte, zanim ruszy doba, którą chce się oglądać — pieszy, który wyszedł przed jego otwarciem, drugiej szansy nie dostanie (H-28) |
 | Z-4 | **Warstwa Mikro jest już wpięta jako system `WalkMicroSystem`** (`Cadence::EveryMicroTick`, 600 podkroków po 100 ms) i **nie zapisuje niczego do stanu ekonomicznego** | M4 zastępuje `PedestrianBuffer` jednym buforem dla pieszych, pojazdów i pasażerów (decyzja 9.17). Częstotliwość i kontrakt „mikro nie ma prawa zapisu" są już zadeklarowane w kodzie, więc M4 podmienia treść, a nie miejsce |
 | Z-5 | **Spóźnienia wobec planu już istnieją i mają obsługę**: `ReplanCause::Late { delay_min }` wyzwala przeplanowanie przyrostowe z debouncingiem 15 minut | M4 dokłada drugą przyczynę spóźnienia (korek), a nie ścieżkę sterowania — ta jest zbudowana i zmierzona (0,1 % przybyć, 2,1 min średnio) |
+| Z-7 ★ | **M4 przejmuje dług M3: puli imion i nazwisk nie ma.** Nowy pakiet **WP13** w M4d (§5.10) buduje `data/names/first_names_pl.ron` i `surnames_pl.ron`, przestawia zakres losowania ze stałych `256`/`512` na długość puli i dokłada formater w `engine/ui` | `Identity.first_name`/`last_name` istnieją od M3a **jako indeksy w puli, której nikt nie zbudował** — komentarz typu w M3a §5.1 i M12e §66 odsyłają do niej jako do rzeczy istniejącej, a żaden pakiet w M2, M3a, M3c ani M3d jej nie tworzy. Dziś `demography.rs` i `migration.rs` losują surowe liczby, a karta mieszkańca z M3d wypisuje je dosłownie: `#84213 (45/321)`. M4 jest fazą, w której zaczyna to boleć widocznie, bo zdanie testowe fazy z §1 brzmi *„Anna wyjeżdża o 07:20"*, a karta inspekcji podróży (WP11) jest pierwszym ekranem pokazującym mieszkańca w zdaniu, nie w wierszu tabeli. **Konsekwencja, o której trzeba pamiętać:** zmiana zakresu losowania zmienia wylosowane wartości, a oba pola wchodzą do funkcji haszującej — hash świata przestawia się jednorazowo (§5.10) |

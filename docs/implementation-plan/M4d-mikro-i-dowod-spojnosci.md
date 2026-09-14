@@ -8,13 +8,13 @@ zostają w dokumencie fazy — tu jest wyłącznie to, co robisz w tej porcji.
 | | |
 |---|---|
 | **Wejście** | M4b (mezo), M4c (wybór środka). |
-| **Pakiety robocze** | WP8, WP9, WP11, WP12 |
-| **Projekt techniczny** | §5.4, §5.8, §5.9 |
+| **Pakiety robocze** | WP8, WP9, WP11, WP12, WP13 |
+| **Projekt techniczny** | §5.4, §5.8, §5.9, §5.10 |
 | **Wynik do pokazania** | Pełny artefakt fazy z §1 dokumentu fazy: korki widoczne i mierzone, „kamera nie zmienia świata”. |
-| **Kryterium zamknięcia** | Kryteria WP8, WP9, WP11 i WP12 oraz bramki 1–7 fazy M4 w `00-postep.md`. |
+| **Kryterium zamknięcia** | Kryteria WP8, WP9, WP11, WP12 i WP13 oraz bramki 1–7 fazy M4 w `00-postep.md`. |
 | **Poprzednia / następna** | `M4c-wybor-srodka-parkingi-komunikacja.md` · — (ostatnia w fazie) |
 
-Warstwa mikro (IDM, MOBIL, sygnalizacja) z dostępem read-only do stanu ekonomicznego, harness równoważności mikro↔mezo z kalibratorem, nakładki UI i domknięcie wydajnościowo-determinizmowe.
+Warstwa mikro (IDM, MOBIL, sygnalizacja) z dostępem read-only do stanu ekonomicznego, harness równoważności mikro↔mezo z kalibratorem, nakładki UI, generator imion i nazwisk (dług z M3, §5.10) oraz domknięcie wydajnościowo-determinizmowe.
 
 ---
 
@@ -26,13 +26,16 @@ Warstwa mikro (IDM, MOBIL, sygnalizacja) z dostępem read-only do stanu ekonomic
 | **WP9** | **Dowód spójności mikro↔mezo** | WP8 | Harness `micro_mezo_equivalence` + kalibrator offline parametrów IDM ↔ VDF w `tools/balansator`. Szczegóły w §5.4 i §7.2. | Twarde asercje (pieniądz, paliwo, minuta przybycia) z tolerancją 0; miernik dryfu kalibracji w normie; test „kamera nie zmienia świata" zielony |
 | **WP11** | Nakładki UI i inspekcja | WP3, WP7, WP10 | Nakładki: natężenie, korki, izochrony, parkingi, obciążenie linii. Karta inspekcji podróży i pojazdu. Filtr „pokaż tylko X" (§14.2). | Nakładki działają na snapshocie double-buffered, bez blokowania symulacji; przełączanie nakładki < 1 klatka |
 | **WP12** | Wydajność i determinizm | wszystkie | Profilowanie, chunkowanie jobów, budżety, hash stanu ruchu w funkcji haszującej ECS, benchmarki criterion. | Budżety z §7.3 dotrzymane; dwa przebiegi tego samego seeda = identyczny ciąg hashy przez 100 dni gry |
+| **WP13** | **Generator imion i nazwisk** | WP11 | Pule `data/names/first_names_pl.ron` i `surnames_pl.ron`, ładowane jak `districts_pl.ron`; rozmiar puli jako źródło zakresu losowania w miejsce stałych `256`/`512`; nazwisko w formie zgodnej z płcią; formatowanie w `engine/ui`. Szczegóły w §5.10. | Karta mieszkańca i karta podróży pokazują „Anna Kowalska", nie `#84213 (45/321)`; testy `imie_zgadza_sie_z_plcia`, `nazwisko_dziedziczone_w_formie_wlasnej_plci` i `indeks_zawsze_ma_wpis_w_puli` zielone |
 
 ---
 
 ## Projekt techniczny
 
 Numeracja sekcji jest ta sama co w pierwotnym dokumencie fazy — odesłania
-w tekście („patrz §5.4") nadal wskazują tę samą treść.
+w tekście („patrz §5.4") nadal wskazują tę samą treść. Wyjątkiem jest **§5.10**,
+która jest nowa: przyszła z pakietem WP13 po zamknięciu M3 (`Z-7`), a nie z podziału
+zakresu fazy.
 
 ### 5.4 **Spójność mikro ↔ mezo — architektura i dowód**
 
@@ -223,3 +226,79 @@ prawa zapisu do `sim/*`. To formalne odzwierciedlenie §5.4.
    formalny zapis tego, że mikro jest wizualizacją.
 
 ---
+
+### 5.10 Generator imion i nazwisk (WP13)
+
+Sekcja **nowa** — nie ma odpowiednika w pierwotnej numeracji fazy. Powstaje tutaj, bo pakiet
+przyszedł z M3 jako dług (`Z-7` w dokumencie fazy), a nie z podziału zakresu M4.
+
+#### Dlaczego to stoi w M4d, skoro dotyczy mieszkańca
+
+`Identity.first_name` i `last_name` istnieją od M3a jako indeksy **w puli, której nikt nie zbudował**.
+Kod losuje surowe liczby (`gen_range_u32(256)` w `demography.rs`, `gen_range_u32(512)`
+w `migration.rs`), a karta mieszkańca z M3d wypisuje je dosłownie: gracz widzi `#84213 (45/321)`.
+Dwa dokumenty odsyłają do tej puli jako do rzeczy istniejącej — komentarz typu w M3a §5.1
+i M12e §66 (rodzaj gramatyczny w kronikach bierze `Gender` „z katalogu imion (M2/M3)").
+
+M4 jest pierwszą fazą, w której to **boli widocznie**, a nie tylko wisi w komentarzu: zdanie testowe
+fazy z §1 brzmi *„Anna wyjeżdża o 07:20, tankuje po drodze…"*, a karta inspekcji podróży (WP11)
+jest pierwszym ekranem, na którym mieszkaniec pojawia się graczowi w zdaniu narracyjnym, nie jako
+wiersz tabeli. Dlatego pakiet ląduje **po WP11** i w tej samej podfazie: bez puli WP11 pokazuje
+identyfikator zamiast osoby i sam sobie zabiera połowę wartości.
+
+#### Dane
+
+Dwa pliki obok istniejących `districts_pl.ron` i `firms_pl.ron`, ładowane tą samą ścieżką
+(`assets::data_path`, RON ze `schema_version`). **To nie jest lokalizacja UI** — nagłówek każdego
+pliku powtarza tę notatkę, jak w dwóch poprzednich.
+
+```
+data/names/first_names_pl.ron    (Sex, "Anna")           — ~200 pozycji, podział po płci
+data/names/surnames_pl.ron       ("Kowalski", "Kowalska") — ~600 pozycji, para form
+```
+
+**Nazwisko jest parą form, nie regułą sufiksową.** Polskie nazwisko odmienia się przez rodzaj
+tylko czasem: `Kowalski → Kowalska`, ale `Nowak`, `Wróbel`, `Zaremba` i `Puchała` mają jedną formę
+dla obu płci. Reguła „`-ski` → `-ska`" trafia w około jedną trzecią zbioru i myli się na reszcie,
+a lista wyjątków do reguły jest dłuższa niż lista nazwisk. Para form w danych kosztuje drugą kolumnę
+w pliku i zero kodu; dla nieodmiennych obie formy są identyczne i tak ma to wyglądać w diffie.
+
+Wagi częstości **nie wchodzą** — losowanie jednostajne. Rozkład nazwisk w prawdziwym mieście ma długi
+ogon, którego nikt nie zobaczy w karcie jednego mieszkańca, a waga to trzecia kolumna i drugi tryb
+losowania. Gdyby kiedyś miało to znaczenie (kroniki M10f, ród gracza M9e), wagę dokłada faza, która
+jej potrzebuje.
+
+#### Co się zmienia w kodzie
+
+1. **`Identity` nie zmienia się w ogóle** — nadal dwa `u16` i płeć w `flags` bit0
+   (`Identity::FLAG_MALE`). Pakiet nie dotyka komponentu, jego rozmiaru ani układu.
+2. **Zakres losowania pochodzi z długości puli**, nie ze stałej. Dziś `gen_range_u32(256)` przy puli
+   200 imion trafiałby w 56 indeksów bez wpisu. Pula imion jest dzielona po płci, więc losuje się
+   w obrębie właściwego podzbioru i indeks niesie od razu zgodność rodzaju.
+3. **Dziedziczenie nazwiska zostaje, ale w formie własnej płci.** `demography.rs` już dziś kopiuje
+   `last_name: m_id.last_name` — indeks pozostaje wspólny dla całej rodziny, forma jest wybierana
+   z pary przy wypisywaniu. Dzięki temu córka Kowalskiego jest Kowalską, a syn Kowalskim, i nikt
+   nie przechowuje dwóch indeksów.
+4. **Formatowanie mieszka w `engine/ui`**, nie w `sim/agents` — nazwa jest prezentacją, a crate
+   agentów nie ma powodu ładować katalogu nazw. `inspect/citizen.rs` i karta podróży WP11 dostają
+   ten sam formater.
+
+#### Determinizm i hash
+
+Losowanie idzie istniejącym strumieniem RNG demografii i migracji — **żadnego nowego `StreamId`**.
+Zmienia się natomiast zakres, więc wylosowane wartości `first_name`/`last_name` będą inne niż dziś,
+a oba pola wchodzą do funkcji haszującej (`components.rs`). **Hash świata przestawia się jednorazowo.**
+Testy determinizmu i złote testy M3 porównują przebieg z przebiegiem, nie z zapisaną liczbą, więc
+przeżyją to bez zmian; gdyby gdzieś stał zapisany hash odniesienia, przeliczenie go należy do tego
+pakietu, a nie do fazy następnej.
+
+#### Świadomie przyjęty sufit
+
+| Czego nie robimy | Dlaczego | Kto to podniesie, gdy będzie trzeba |
+|---|---|---|
+| unikalność imion | w mieście 274 tys. imiona **mają** się powtarzać — to odwrotność wymogu R10 dla dzielnic i firm | — |
+| zależność imienia od epoki urodzenia | mieszkaniec urodzony w 1890 nazywałby się inaczej niż ten z 1985; dane są, bo `birth_day` istnieje, ale nikt tego nie zamawiał | M10f (kroniki), jeśli historia rodu zacznie obejmować pokolenia |
+| drugie imię, zdrobnienia, formy adresatywne | jedna forma wystarcza karcie i kronice | M10b / M12e |
+| pule per region | obie ścieżki są dziś zahardkodowane na `_pl`, bo drugiego regionu nie ma; wybór regionu to abstrakcja dla jednego konsumenta | faza, która wnosi drugi region |
+| odmiana imienia przez przypadki | `{imię} wyjeżdża o 07:20` to mianownik; dopełniacz („karta Anny") wymagałby paradygmatu fleksyjnego | M12e, razem z rodzajem gramatycznym w szablonach |
+| nazwy ulic | osobna luka, szersza od tej: adres mieszkańca to dziś `budynek / lokal / dzielnica`, a plan nie ma nazw ulic w żadnej fazie | decyzja właściciela produktu — patrz `D12` w §9 dokumentu fazy |
