@@ -1081,17 +1081,34 @@ pub fn generate_population(
     // Na końcu, bo kierowcą zostaje pracujący dorosły, a adres gospodarstwa jest
     // znany dopiero po kroku 7. Auto stoi zaparkowane pod domem właściciela.
     let catalog = oracle.catalog().clone();
-    let (drivers, fleet, mut flota) = crate::traffic_build::seed_fleet(
+    // Parkingi **przed** flotą: auto, którego nie ma gdzie trzymać, nie powstaje
+    // (WP7, niezmiennik `parking_no_ghosts`).
+    let mut parking = crate::traffic_build::build_parking(&oracle);
+    let (drivers, mut fleet, mut flota) = crate::traffic_build::seed_fleet(
         world,
         seed,
         &catalog,
         crate::traffic_build::MOTORISATION_PER_MILLE,
+        &mut parking,
+        &places,
     );
     flota.stations = oracle.stations().len() as u32;
     flota.route_cache_capacity = pojemnosc_cache;
+    oracle.set_seed(seed);
+    oracle.set_incomes(crate::traffic_build::dochody_gospodarstw(world));
+    oracle.set_parking(parking);
     oracle.set_drivers(drivers);
+
+    // Komunikacja miejska (WP10) po flocie, bo tabor dokłada się do tej samej tablicy
+    // pojazdów — kurs sięga po pojazd tym samym slotem co kierowca po swoje auto.
+    let (transit, kierowcy, tranzyt) =
+        crate::traffic_build::seed_transit(world, city, &oracle, &catalog, &mut fleet);
+    flota.transit_lines = tranzyt.transit_lines;
+    flota.transit_stops = tranzyt.transit_stops;
+    flota.transit_buses = tranzyt.transit_buses;
+    oracle.set_transit(transit);
     let traffic = Arc::new(oracle);
-    crate::traffic_build::install_traffic(world, traffic.clone(), vdf, fleet);
+    crate::traffic_build::install_traffic(world, traffic.clone(), vdf, fleet, kierowcy);
 
     odcinek("flota", &mut czasy, &mut zegar);
     report.timings = czasy;

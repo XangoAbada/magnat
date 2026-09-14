@@ -31,6 +31,7 @@ pub mod schema;
 pub mod time;
 pub mod types;
 pub mod vocab;
+pub mod weather;
 
 pub use arena::{Arena, ArenaChunk, ArenaHandle, ArenaKind};
 pub use assets::{data_dir, data_path};
@@ -51,6 +52,7 @@ pub use types::{
     DistrictId, Energy, GoodId, JobRoleId, Mass, Money, Mood, Qty, RecipeId, SimInstant, SimMinute,
     Tick, Volume, Q,
 };
+pub use weather::{weather_at, Weather};
 pub use vocab::{
     ActivityKind, Biome, CommitmentKind, DeprivationEffect, LifeEventKind, MigrationKind, NeedKind,
     PlaceKind, PlaceRef, ResourceKind, RoadClass, StockCat, TraitId, TransportMode, UtilityKind,

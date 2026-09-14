@@ -247,9 +247,9 @@ fn bilans_paliwa_domyka_sie_co_do_mikrolitra() {
     );
     // Bramka 5 (00 §7): każda podróż wychodzi z uzasadnieniem, a tankowanie
     // przesłania wybór środka — bo to o nim mieszkaniec chce przeczytać w karcie.
-    assert_eq!(net.stats.reasons[5], 0, "podróż bez uzasadnienia z bloku M4");
+    assert_eq!(net.stats.reasons[7], 0, "podróż bez uzasadnienia z bloku M4");
     assert!(
-        net.stats.reasons[3] > 0,
+        net.stats.reasons[5] > 0,
         "żadna podróż nie zapisała wyboru stacji, mimo {} tankowań",
         net.stats.refuels
     );
@@ -298,8 +298,14 @@ fn dwa_przebiegi_daja_ten_sam_hash() {
     );
 }
 
-/// Przeniesione z `sim/agents` razem z warstwą Mikro (`Z-4`): 5 tys. pieszych
-/// w kadrze mieści się w budżecie klatki, a warstwa nie dotyka niczego poza sobą.
+/// Kryterium WP14 (M4c §5.12): 5 tys. pieszych w kadrze kosztuje ≤ 2 ms **na minutę
+/// świata**, nie na wywołanie.
+///
+/// Różnica jest cała w tym słowie. Poprzednia wersja tego testu mierzyła pojedyncze
+/// `step` i porównywała je z progiem 20 ms — a system robił wtedy 600 takich wywołań
+/// w każdej minucie, więc realny koszt tej samej sceny był czternastokrotnością progu
+/// ogłoszonego jako spełniony z zapasem rzędu wielkości. Po WP14 jedno wywołanie
+/// **jest** minutą świata, więc pomiar i kryterium wreszcie mówią o tym samym.
 #[test]
 fn mikro_utrzymuje_piec_tysiecy_pieszych_w_kadrze() {
     use magnat_core::WorldCoord;
@@ -317,20 +323,45 @@ fn mikro_utrzymuje_piec_tysiecy_pieszych_w_kadrze() {
     }
     assert_eq!(warstwa.len(), PIESZYCH as usize);
 
+    // Minuta świata to **jedno** przestawienie pozycji plus sprzątanie tych,
+    // którzy dotarli — dokładnie to, co robi `TravelMicroSystem` po WP14.
+    const MINUT: u64 = 60;
     let start = std::time::Instant::now();
-    for k in 0..100u64 {
-        warstwa.step(8 * 60 * 60_000 + k * 100);
+    for m in 0..MINUT {
+        warstwa.step((8 * 60 + m) * 60_000 + 59_900);
+        warstwa.retire((8 * 60 + m) as u16);
     }
-    let na_klatke = start.elapsed() / 100;
+    let na_minute = start.elapsed() / MINUT as u32;
     println!(
-        "mikro: {PIESZYCH} pieszych, {:.0} µs na klatkę",
-        na_klatke.as_secs_f64() * 1e6
+        "mikro: {PIESZYCH} pieszych, {:.0} µs na minutę świata",
+        na_minute.as_secs_f64() * 1e6
     );
+    // Próg release'owy to 2 ms z §7.3; w debugu ta sama pętla jest kilkanaście razy
+    // wolniejsza, więc próg jest zapisany w obu profilach — próg z jedną liczbą robi
+    // `cargo test --workspace` czerwonym u każdego, kto nie doda `--release`
+    // (nauka z M3d: H-21, H-25, H-27).
+    let prog = if cfg!(debug_assertions) {
+        std::time::Duration::from_millis(30)
+    } else {
+        std::time::Duration::from_millis(2)
+    };
     assert!(
-        na_klatke < std::time::Duration::from_millis(20),
-        "krok mikro {na_klatke:?} — próg WP6 to 2 ms, tu z zapasem 10×"
+        na_minute < prog,
+        "krok Mikro {na_minute:?} na minutę świata — próg WP14 to {prog:?}"
     );
 
     warstwa.retire(8 * 60 + 31);
     assert_eq!(warstwa.len(), 0, "pieszy po przybyciu został w buforze");
+
+    // Bramka okna (`Z-6`): poza kadrem warstwa nie tworzy encji, choćby wołający
+    // nie wiedział, gdzie stoi kamera. To jest wymóg kontraktu, nie optymalizacja —
+    // headless nie ma kadru i nie ma płacić nic.
+    warstwa.set_window(None, 0);
+    warstwa.enter(
+        1,
+        &[WorldCoord::new(0, 0, 0), WorldCoord::new(1_000, 0, 0)],
+        0,
+        10,
+    );
+    assert_eq!(warstwa.len(), 0, "warstwa Mikro chodzi bez kadru");
 }

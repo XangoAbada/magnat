@@ -20,13 +20,13 @@ use crate::nav_build::{build_nav, NavBuildError};
 use magnat_agents::{
     household, Household, HouseholdOverflow, Identity, PlaceTable, Population,
 };
-use magnat_core::{rng, PlaceRef, SiteId, StreamId, Tick, WorldCoord};
+use magnat_core::{rng, PlaceRef, SimMinute, SiteId, StreamId, Tick, WorldCoord};
 use magnat_ecs::{Entity, World};
 use magnat_nav::NavRouter;
 use magnat_traffic::{
-    register_traffic, DriverEntry, FuelTank, Station, TrafficNetwork, TrafficOracle,
-    TrafficServices, VdfTable, VehicleClass, VehicleCatalog, VehicleClassId, VehicleCondition,
-    VehicleLocation, VehicleOwner,
+    register_traffic, DriverEntry, FuelTank, ParkingRegistry, Station, TrafficNetwork,
+    TrafficOracle, TrafficServices, TransitNetwork, VdfTable, VehicleClass, VehicleCatalog,
+    VehicleClassId, VehicleCondition, VehicleLocation, VehicleOwner,
 };
 use std::sync::Arc;
 
@@ -47,6 +47,28 @@ pub const MOTORISATION_PER_MILLE: u16 = 430;
 /// Udziały klas pojazdów w promilach, w kolejności katalogu. Suma musi dać 1000.
 const CLASS_SHARE_PER_MILLE: [u16; 4] = [480, 350, 130, 40];
 
+/// Udział w promilach parkingów przyulicznych, które są płatne.
+///
+/// Płaci się na ulicach zbiorczych, nie na osiedlowych — to jedyny podział, jaki
+/// M4 potrafi wyprowadzić z danych, które ma (klasa drogi). Strefa płatnego parkowania
+/// jako **polityka miejska** należy do M8 i wtedy ten podział zastąpi jej mapa.
+pub const PAID_CURB_PRICE_GR_PER_HOUR: i64 = 200;
+
+/// Ile linii komunikacji miejskiej stawia się na każde 50 tys. mieszkańców.
+///
+/// `ponytail:` liczba linii z populacji zamiast z planu sieci. Sufit nazwany: linie
+/// łączą najludniejsze dzielnice parami i nikt nie patrzy, czy się dublują. Ścieżka
+/// wyjścia: M8 wprowadza przetargi i inwestycje, a wtedy sieć linii staje się
+/// decyzją miasta, nie parametrem generatora.
+pub const LINES_PER_50K: u32 = 6;
+
+/// Ile pojazdów przypada na linię. Odstęp w szczycie to 10 minut, a przejazd końcowy
+/// trwa ~40, więc cztery autobusy trzymają rozkład bez odwołań.
+pub const BUSES_PER_LINE: u32 = 4;
+
+/// Klucz klasy pojazdu komunikacji w `data/vehicles/classes.ron`.
+pub const BUS_CLASS_KEY: &str = "city_bus";
+
 /// Ile pojazdów wjeżdża na sieć — wejście rachunku pamięci floty (§7.3).
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub struct FleetReport {
@@ -54,6 +76,15 @@ pub struct FleetReport {
     pub vehicles: u32,
     pub stations: u32,
     pub route_cache_capacity: u32,
+    /// Gospodarstwa, które **nie dostały auta, bo nie miały gdzie go trzymać**.
+    /// To nie jest błąd generatora: parking jest warunkiem posiadania pojazdu,
+    /// inaczej pierwszej doby połowa floty byłaby widmami (`parking_no_ghosts`).
+    pub no_home_parking: u32,
+    pub parking_lots: u32,
+    pub parking_spaces: u64,
+    pub transit_lines: u32,
+    pub transit_stops: u32,
+    pub transit_buses: u32,
 }
 
 #[derive(Debug)]
@@ -148,12 +179,15 @@ pub fn seed_fleet(
     seed: u64,
     catalog: &VehicleCatalog,
     motorisation_per_mille: u16,
+    parking: &mut ParkingRegistry,
+    places: &PlaceTable,
 ) -> (Vec<DriverEntry>, Vec<Entity>, FleetReport) {
     let mieszkancy: Vec<Entity> = world.resource::<Population>().citizens().to_vec();
     let mut obsadzone: std::collections::BTreeSet<u32> = std::collections::BTreeSet::new();
     let mut drivers: Vec<DriverEntry> = Vec::new();
     let mut fleet: Vec<Entity> = Vec::new();
     let mut gospodarstw = 0u32;
+    let mut bez_parkingu = 0u32;
 
     for c in mieszkancy {
         let Some(id) = world.get::<Identity>(c).copied() else {
@@ -181,6 +215,39 @@ pub fn seed_fleet(
             .get::<Household>(hh_entity(world, hh).unwrap_or(c))
             .map(|h| PlaceRef::Building(magnat_core::BuildingId(encja(h.building))))
             .unwrap_or_default();
+        // **Auto, którego nie ma gdzie trzymać, nie powstaje.** Bez tego warunku
+        // pierwszej doby każdy pojazd startowy byłby widmem: stałby pod domem, nie
+        // zajmując żadnego miejsca, i `parking_no_ghosts` nie miałby czego pilnować.
+        // Konsekwencja jest zamierzona i realistyczna — na osiedlu bez krawężnika
+        // motoryzacja jest niższa.
+        let slot = fleet.len() as u32;
+        parking.resize_fleet(slot as usize + 1);
+        let pod_domem = places.coord_of(dom).unwrap_or(magnat_core::WorldCoord::ORIGIN);
+        if parking
+            .find_and_reserve(pod_domem, HOME_PARKING_RADIUS_M, slot, 10, SimMinute(u64::MAX))
+            .is_err()
+        {
+            // Krawężnika w promieniu nie ma albo jest pełny. Dom wolnostojący ma wtedy
+            // podjazd, blok — nie; tego rozróżnienia M2 nie daje (`BuildingSpec` nie zna
+            // pojemności postojowej), więc podjazd dostaje **co czwarte** gospodarstwo,
+            // deterministycznie po indeksie.
+            //
+            // `ponytail:` sufit nazwany. Ścieżka wyjścia jest ta sama, co przy parkingach
+            // przy budynkach: pole `parking_spaces` w `BuildingSpec` z M2 zastępuje ten
+            // ułamek liczbą, a rejestr i wyszukiwanie nie drgną.
+            if hh % 4 != 0 {
+                bez_parkingu += 1;
+                continue;
+            }
+            parking.add_private(pod_domem, 1);
+            if parking
+                .find_and_reserve(pod_domem, HOME_PARKING_RADIUS_M, slot, 10, SimMinute(u64::MAX))
+                .is_err()
+            {
+                bez_parkingu += 1;
+                continue;
+            }
+        }
         let veh = world
             .spawn()
             .with(VehicleOwner::household(hh, c.index()))
@@ -191,8 +258,9 @@ pub fn seed_fleet(
             .id();
         drivers.push(DriverEntry {
             citizen: c.index(),
-            vehicle: fleet.len() as u32,
+            vehicle: slot,
             class,
+            household: hh,
         });
         fleet.push(veh);
     }
@@ -200,11 +268,17 @@ pub fn seed_fleet(
     let report = FleetReport {
         households: gospodarstw,
         vehicles: fleet.len() as u32,
-        stations: 0,
-        route_cache_capacity: 0,
+        no_home_parking: bez_parkingu,
+        parking_lots: parking.lots().len() as u32,
+        parking_spaces: parking.occupied_total() + parking.free_total(),
+        ..FleetReport::default()
     };
     (drivers, fleet, report)
 }
+
+/// W jakim promieniu od domu szuka się miejsca postojowego dla pojazdu startowego.
+/// Szerzej niż przy celu podróży: pod domem stoi się na noc i chodzi się dalej.
+pub const HOME_PARKING_RADIUS_M: u16 = 400;
 
 /// Zbiornik napełniony w `permille` pojemności.
 fn bak(spec: &magnat_traffic::VehicleClassSpec, permille: u32) -> FuelTank {
@@ -241,12 +315,185 @@ fn encja(index: u32) -> magnat_core::Entity {
     magnat_core::Entity::new(index, std::num::NonZeroU32::new(1).expect("1 != 0"))
 }
 
+/// Buduje rejestr parkingów miasta: postój przyuliczny z krawędzi grafu, z ceną
+/// wyprowadzoną z klasy drogi.
+///
+/// Parkingi przy budynkach **nie powstają** — M2 nie deklaruje ich pojemności
+/// (`ponytail:` w `parking.rs` nazywa sufit i ścieżkę wyjścia).
+#[must_use]
+pub fn build_parking(oracle: &TrafficOracle) -> ParkingRegistry {
+    let mut r = oracle.with_road(|road| ParkingRegistry::build(road, Vec::new(), 0));
+    oracle.with_road(|road| {
+        for (i, l) in r.lots_mut().iter_mut().enumerate() {
+            let _ = i;
+            if l.kind != magnat_traffic::ParkingKind::Curb {
+                continue;
+            }
+            let klasa = road
+                .out(l.access_node)
+                .iter()
+                .map(|e| road.edges[*e as usize].class)
+                .max_by_key(|c| c.rank());
+            if klasa == Some(magnat_core::RoadClass::Collector) {
+                l.price_gr_per_hour = magnat_core::Money(PAID_CURB_PRICE_GR_PER_HOUR);
+            }
+        }
+    });
+    r
+}
+
+/// Stawia sieć komunikacji miejskiej: linie między najludniejszymi dzielnicami,
+/// tabor jako encje pojazdów i kierowców wskazanych imiennie.
+///
+/// **Korytarze wybiera miasto, przystanki stawia komunikacja.** Tutaj powstaje tylko
+/// para „skąd–dokąd" per linia; rozstawienie przystanków wzdłuż trasy jest regułą
+/// M4 i siedzi w `TransitLine::from_route`.
+///
+/// Kierowcy: mieszkańcy pracujący w dzielnicy końcowej linii, wybrani po indeksie
+/// encji. `ponytail:` sufit nazwany — zajezdnia **nie jest** miejscem pracy, więc
+/// kierowca ma w planie dnia swój dotychczasowy etat, a nie etat przewoźnika.
+/// Ścieżka wyjścia: M7 (rynek pracy) daje zajezdni własne wakaty i wtedy wybór
+/// kierowcy idzie przez `Vacancies`, nie przez ten wektor.
+pub fn seed_transit(
+    world: &mut World,
+    city: &CityData,
+    oracle: &TrafficOracle,
+    catalog: &VehicleCatalog,
+    fleet: &mut Vec<Entity>,
+) -> (TransitNetwork, Vec<u32>, FleetReport) {
+    let mut raport = FleetReport::default();
+    let Some(class) = catalog.by_key(BUS_CLASS_KEY) else {
+        return (TransitNetwork::default(), Vec::new(), raport);
+    };
+    let ludzi = world.resource::<Population>().citizens().len() as u32;
+    let ile_linii = (ludzi * LINES_PER_50K / 50_000).clamp(4, 24) as usize;
+
+    // Korytarze: linia zaczyna się w ludnej dzielnicy i kończy w **najdalszej od niej**,
+    // a nie w drugiej z listy. Inaczej cztery linie łączą cztery sąsiadujące centra
+    // i sieć obsługuje jedną trzecią miasta — dokładnie to pokazał pierwszy pomiar
+    // (27 przystanków na miasto 8 km, 2,9 % udziału komunikacji).
+    let mut dzielnice: Vec<(u32, usize)> = city
+        .districts
+        .districts
+        .iter()
+        .enumerate()
+        .map(|(i, d)| (d.pop_capacity, i))
+        .collect();
+    dzielnice.sort_unstable_by_key(|(p, i)| (std::cmp::Reverse(*p), *i));
+    dzielnice.truncate(ile_linii);
+
+    let mut linie = Vec::new();
+    let rozklad = magnat_traffic::Timetable {
+        first_min: 5 * 60,
+        last_min: 23 * 60,
+        headway_peak_min: 5,
+        headway_base_min: 15,
+        days: 0b111_1111,
+    };
+    let srodek = |i: usize| city.districts.districts[i].centroid;
+    for (_, a) in dzielnice.iter().copied().take(ile_linii) {
+        // Drugi koniec: dzielnica najdalsza od pierwszej. Remisy po indeksie.
+        let sa = srodek(a);
+        let Some((_, b)) = city
+            .districts
+            .districts
+            .iter()
+            .enumerate()
+            .map(|(i, d)| {
+                let dx = f64::from(d.centroid.x - sa.x);
+                let dy = f64::from(d.centroid.y - sa.y);
+                ((dx * dx + dy * dy) as i64, i)
+            })
+            .max_by_key(|(d, i)| (*d, std::cmp::Reverse(*i)))
+        else {
+            continue;
+        };
+        let wezel = |i: usize| {
+            let c = city.districts.districts[i].centroid;
+            oracle.nearest_node(magnat_core::WorldCoord::new(
+                (c.x * 100.0) as i32,
+                (c.y * 100.0) as i32,
+                0,
+            ))
+        };
+        let (Some(od), Some(do_)) = (wezel(a), wezel(b)) else {
+            continue;
+        };
+        let Some(trasa) = oracle.route_nodes(od, do_, magnat_core::MinuteOfDay::new(8 * 60)) else {
+            continue;
+        };
+        let krawedzie: Vec<magnat_nav::EdgeId> =
+            trasa.legs.iter().flat_map(|l| l.edges.iter().copied()).collect();
+        let linia = oracle.with_road(|road| {
+            magnat_traffic::TransitLine::from_route(
+                magnat_traffic::LineId(linie.len() as u16 + 1),
+                magnat_traffic::TransitMode::Bus,
+                &krawedzie,
+                road,
+                rozklad,
+                class,
+                magnat_core::Money(i64::from(oracle.params().transit_fare_gr as i32)),
+                catalog.spec(class).seats.into(),
+            )
+        });
+        if let Some(l) = linia {
+            linie.push(l);
+        }
+    }
+
+    // Tabor: pojazdy jako encje ECS, tak samo jak auta osobowe. Autobus stojący
+    // w zajezdni **nie zajmuje miejsca postojowego** — zajezdnia nie jest parkingiem
+    // publicznym i nie wchodzi do niezmiennika `parking_no_ghosts`.
+    for l in &mut linie {
+        // Ile pojazdów trzyma rozkład: tyle, ile kursów jest jednocześnie w trasie.
+        // Przejazd w jedną stronę dzielony przez odstęp w szczycie, razy dwa (powrót),
+        // z zapasem jednego na postój na pętli. Cztery autobusy na linię wystarczały
+        // przy trzech przystankach; przy dwudziestu kurs nie zdąża wrócić po pojazd.
+        let dlugosc_min: u32 = l.stops.len() as u32 * 2;
+        let ile = (dlugosc_min * 2 / u32::from(l.timetable.headway_peak_min) + 1)
+            .clamp(BUSES_PER_LINE, 40);
+        for _ in 0..ile {
+            let slot = fleet.len() as u32;
+            let veh = world
+                .spawn()
+                .with(VehicleOwner::household(u32::MAX, u32::MAX))
+                .with(VehicleCondition::new())
+                .with(bak(catalog.spec(class), 1_000))
+                .with(VehicleLocation::parked(PlaceRef::District(
+                    magnat_core::DistrictId(0),
+                )))
+                .with(VehicleClass::new(class))
+                .id();
+            fleet.push(veh);
+            l.fleet.push(slot);
+            raport.transit_buses += 1;
+        }
+        raport.transit_stops += l.stop_count() as u32;
+    }
+    raport.transit_lines = linie.len() as u32;
+
+    // Kierowcy: co setny mieszkaniec z pracą, po indeksie encji. Kurs bierze
+    // pierwszego, który jest dziś w pracy; reszta jest rezerwą.
+    let kierowcy: Vec<u32> = world
+        .resource::<Population>()
+        .citizens()
+        .iter()
+        .map(|e| e.index())
+        .filter(|i| i % 97 == 0)
+        .take(raport.transit_buses as usize * 4)
+        .collect();
+
+    let siec = oracle.with_road(|road| TransitNetwork::new(linie, road));
+    (siec, kierowcy, raport)
+}
+
 /// Wstawia usługi ruchu i stan sieci do świata razem z hakami hasha.
 pub fn install_traffic(
     world: &mut World,
     oracle: Arc<TrafficOracle>,
     vdf: VdfTable,
     fleet: Vec<Entity>,
+    transit_drivers: Vec<u32>,
 ) {
     let network = oracle.with_road(|road| TrafficNetwork::new(road, &vdf));
     register_traffic(
@@ -255,10 +502,44 @@ pub fn install_traffic(
             oracle,
             vdf,
             fleet,
+            transit_drivers,
         },
         network,
     );
 }
+
+/// Dochód netto gospodarstw w groszach na godzinę, indeksowany indeksem encji GD.
+///
+/// `income_monthly` jest brutto-miesięczny; dzielimy przez typowy miesięczny czas
+/// pracy. Podatek dochodowy jest w M8 — do tego czasu „netto" znaczy „to, co
+/// gospodarstwo widzi", i jest to ta sama liczba.
+#[must_use]
+pub fn dochody_gospodarstw(world: &World) -> Vec<i64> {
+    let mut out: Vec<i64> = Vec::new();
+    for e in world.resource::<Population>().citizens() {
+        let Some(id) = world.get::<Identity>(*e).copied() else {
+            continue;
+        };
+        if id.household == u32::MAX {
+            continue;
+        }
+        let Some(hh) = hh_entity(world, id.household) else {
+            continue;
+        };
+        let Some(h) = world.get::<Household>(hh).copied() else {
+            continue;
+        };
+        if out.len() <= id.household as usize {
+            out.resize(id.household as usize + 1, 0);
+        }
+        out[id.household as usize] = h.income_monthly.0 / WORK_HOURS_PER_MONTH;
+    }
+    out
+}
+
+/// Typowy miesięczny czas pracy — 168 godzin (21 dni roboczych × 8 h w kalendarzu
+/// 360-dniowym z `K-1`).
+const WORK_HOURS_PER_MONTH: i64 = 168;
 
 /// Rejestracja samych komponentów pojazdu — musi się wydarzyć **przed** obsadzeniem
 /// floty, bo `spawn().with(...)` wymaga zarejestrowanego typu.

@@ -234,7 +234,10 @@ pub fn run(a: &M3DayArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
         stats.fulfilled, stats.refused
     );
 
-    ruch(&app.world);
+    let ruch_ok = ruch(&app.world);
+    let rozklad_ok = wybor_srodka(&app.world);
+    let parking_ok = parkingi(&app.world);
+    let transit_ok = komunikacja(&app.world);
     profil_doby(&app.world);
     potrzeby(&app.world);
     if let Some(c) = wybrany {
@@ -277,12 +280,198 @@ pub fn run(a: &M3DayArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
         eprintln!("BŁĄD: {} spóźnień i ani jednego przeplanowania", stats.late);
         return Ok(ExitCode::FAILURE);
     }
+    if !ruch_ok {
+        eprintln!(
+            "BŁĄD: podróż bez uzasadnienia — bramka 5 z §7.4 i kryterium zamknięcia M4c"
+        );
+        return Ok(ExitCode::FAILURE);
+    }
+    if !parking_ok {
+        eprintln!(
+            "BŁĄD: obłożenie parkingów rozjechało się z przypisaniem pojazdów —              `parking_no_ghosts` (§7.1)"
+        );
+        return Ok(ExitCode::FAILURE);
+    }
+    if !transit_ok {
+        eprintln!("BŁĄD: pasażerów w pojeździe więcej niż pojemność — `transit_capacity` (§7.1)");
+        return Ok(ExitCode::FAILURE);
+    }
+    if !rozklad_ok {
+        eprintln!(
+            "BŁĄD: rozkład udziału środków transportu poza widełkami odniesienia              (`data/roads/mode_choice.ron`) — kryterium WP6"
+        );
+        return Ok(ExitCode::FAILURE);
+    }
     Ok(ExitCode::SUCCESS)
+}
+
+/// Rozkład udziału środków transportu i jego bramka (kryterium WP6).
+///
+/// Widełki są w `data/roads/mode_choice.ron`, bo PRD §20.1 mówi „w zakresach
+/// referencyjnych **dla epoki**" i liczb nie podaje — podaje je tabela, a tabela
+/// jest daną, nie kodem. Zwraca `false`, gdy którykolwiek udział z niej wypadł.
+fn wybor_srodka(world: &magnat_ecs::World) -> bool {
+    use magnat_traffic::{TravelOption, TrafficServices};
+    let services = world.resource::<TrafficServices>();
+    let n = services.oracle.mode_counts();
+    let suma: u64 = n.iter().sum();
+    println!("
+wybór środka transportu (WP6)");
+    if suma == 0 {
+        println!("  brak podróży — nie ma czego mierzyć");
+        return true;
+    }
+    let permille = |k: u64| (k * 1_000 / suma) as u16;
+    for (i, o) in TravelOption::ALL.iter().enumerate() {
+        println!(
+            "  {:<14} {:>7} podróży ({:>3},{} %)",
+            o.key(),
+            n[i],
+            permille(n[i]) / 10,
+            permille(n[i]) % 10
+        );
+    }
+    // Widełki są dla pięciu pozycji: auto własne i rodzinne to jeden środek.
+    let udzialy = [
+        permille(n[0]),
+        permille(n[1]),
+        permille(n[2]),
+        permille(n[3] + n[4]),
+        permille(n[5]),
+    ];
+    let nazwy = ["pieszo", "rower", "komunikacja", "samochód", "taksówka"];
+    let params = services.oracle.params();
+    let widelki = &params.reference_share_permille;
+    // Widełki obowiązują dla scenariusza odniesienia z §7.3. Mniejsze miasto ma
+    // krótsze podróże i inny rozkład — i to jest poprawne, więc bramka tam milczy
+    // zamiast kłamać.
+    let ludzi = world.resource::<magnat_agents::Population>().citizens().len() as u32;
+    let bramka = ludzi >= params.reference_population;
+    let mut ok = true;
+    for (i, u) in udzialy.iter().enumerate() {
+        let w = widelki[i];
+        let werdykt = match (w.contains(*u), bramka) {
+            (true, _) => "w widełkach",
+            (false, false) => "poza (miasto mniejsze od odniesienia — bramka nie działa)",
+            (false, true) => "POZA",
+        };
+        if !w.contains(*u) && bramka {
+            ok = false;
+        }
+        println!(
+            "  odniesienie {:<12} {:>3},{} % wobec {},{}–{},{} % → {werdykt}",
+            nazwy[i],
+            u / 10,
+            u % 10,
+            w.min / 10,
+            w.min % 10,
+            w.max / 10,
+            w.max % 10
+        );
+    }
+    let nie = services.oracle.infeasible_counts();
+    println!(
+        "  odpadło opcji: {} brak auta w GD, {} auto zajęte, {} brak parkingu, {} zasięg,         {} brak połączenia, {} brak trasy, {} za daleko, {} wiek/awaria",
+        nie[0], nie[1], nie[2], nie[3], nie[4], nie[5], nie[6], nie[7]
+    );
+    ok
+}
+
+/// Obłożenie parkingów i niezmiennik „brak pojazdów widm" (kryterium WP7).
+///
+/// Zwraca `false`, gdy suma obłożeń rozjechała się z liczbą przypisanych pojazdów:
+/// to jest test `parking_no_ghosts` z §7.1, tylko liczony na całym mieście zamiast
+/// na scenariuszu.
+fn parkingi(world: &magnat_ecs::World) -> bool {
+    use magnat_traffic::{TrafficNetwork, TrafficServices};
+    let services = world.resource::<TrafficServices>();
+    let na_sieci = world.resource::<TrafficNetwork>().mezo.vehicles_on_network();
+    services.oracle.with_parking(|p| {
+        let zajete = p.occupied_total();
+        let stoi = p.parked();
+        let wolne = p.free_total();
+        println!("
+parkingi (WP7)");
+        println!(
+            "  {} parkingów, {} miejsc, zajętych {} ({},{} %)",
+            p.lots().len(),
+            zajete + wolne,
+            zajete,
+            zajete * 1_000 / (zajete + wolne).max(1) / 10,
+            zajete * 1_000 / (zajete + wolne).max(1) % 10
+        );
+        println!(
+            "  szukań miejsca {}, odmów {}, blokad wygasłych {}",
+            p.searches, p.denials, p.expired
+        );
+        // `parking_no_ghosts` (§7.1): każdy zaparkowany pojazd zajmuje **jedno**
+        // miejsce, a pojazd na sieci nie zajmuje żadnego.
+        println!(
+            "  bilans miejsc: {zajete} obłożeń == {stoi} zaparkowanych → {}",
+            if zajete == stoi { "zgodny" } else { "ROZJAZD" }
+        );
+        println!(
+            "  pojazdy: {stoi} na parkingach + {na_sieci} na sieci = {}",
+            stoi + na_sieci
+        );
+        zajete == stoi
+    })
+}
+
+/// Kursy, pasażerowie i przepełnienie (kryterium WP10).
+///
+/// Zwraca `false`, gdy w którymkolwiek kursie jest więcej pasażerów niż miejsc —
+/// to jest test `transit_capacity` z §7.1.
+fn komunikacja(world: &magnat_ecs::World) -> bool {
+    use magnat_traffic::{FareLedger, TrafficServices};
+    let services = world.resource::<TrafficServices>();
+    let oplaty = *world.resource::<FareLedger>();
+    services.oracle.with_transit(|t| {
+        let s = t.stats;
+        println!("
+komunikacja miejska (WP10)");
+        if t.is_empty() {
+            println!("  brak linii — miasto nie ma komunikacji");
+            return true;
+        }
+        println!(
+            "  {} linii, {} przystanków, kursy: {} wypuszczone, {} zakończone, {} odwołane",
+            t.lines().len(),
+            t.lines().iter().map(magnat_traffic::TransitLine::stop_count).sum::<usize>(),
+            s.runs_started,
+            s.runs_finished,
+            s.runs_cancelled
+        );
+        println!(
+            "  pasażerowie: {} wsiadło, {} wysiadło, {} nie zmieściło się ({} odmów              wsiadania), {} zrezygnowało",
+            s.boardings, s.alightings, s.left_behind, s.boarding_refusals, s.gave_up
+        );
+        println!(
+            "  oczekiwanie średnio {:.1} min, największe obłożenie kursu {}",
+            s.wait_minutes as f64 / s.boardings.max(1) as f64,
+            s.max_occupancy
+        );
+        println!(
+            "  spóźnienia kursów: suma {} min, największe {} min",
+            s.delay_minutes, s.max_delay_minutes
+        );
+        println!(
+            "  bilet: {:.2} zł przychodu z {} biletów; taksówki {:.2} zł; paliwo taboru {:.2} zł",
+            oplaty.transit_revenue.0 as f64 / 100.0,
+            oplaty.transit_tickets,
+            oplaty.taxi_revenue.0 as f64 / 100.0,
+            oplaty.transit_fuel_cost.0 as f64 / 100.0
+        );
+        t.runs().iter().all(|r| r.occupancy <= r.capacity)
+    })
 }
 
 /// Raport warstwy mezo: przejazdy, korki, paliwo i dwa bilanse, które muszą
 /// wyjść co do zera (kryterium zamknięcia M4b).
-fn ruch(world: &magnat_ecs::World) {
+///
+/// Zwraca `false`, gdy choć jedna podróż skończyła się bez uzasadnienia — bramka 5
+/// z §7.4 i kryterium zamknięcia M4c („100 % decyzji transportowych ma uzasadnienie").
+fn ruch(world: &magnat_ecs::World) -> bool {
     let net = world.resource::<TrafficNetwork>();
     let paliwo = world.resource::<FuelLedger>();
     let s = net.stats;
@@ -311,8 +500,15 @@ ruch (warstwa mezo)");
     );
     let min = |cs: u64| cs as f64 / 6_000.0 / s.arrived.max(1) as f64;
     println!(
-        "  uzasadnienia: {} wybór środka, {} brak trasy, {} tankowanie, {} wybór stacji,          {} spóźnienie, {} bez powodu",
-        s.reasons[0], s.reasons[1], s.reasons[2], s.reasons[3], s.reasons[4], s.reasons[5]
+        "  uzasadnienia: {} środek, {} porównanie opcji, {} brak trasy, {} brak parkingu,          {} tankowanie, {} wybór stacji, {} spóźnienie, {} BEZ POWODU",
+        s.reasons[0],
+        s.reasons[1],
+        s.reasons[2],
+        s.reasons[3],
+        s.reasons[4],
+        s.reasons[5],
+        s.reasons[6],
+        s.reasons[7]
     );
     println!(
         "  rozbiór przejazdu: jazda {:.1} min, skrzyżowania {:.1} min, kolejki {:.1} min",
@@ -380,6 +576,7 @@ ruch (warstwa mezo)");
         s.exits,
         if net.conserved() { "zgodny" } else { "ROZJAZD" }
     );
+    s.reasons[7] == 0 && net.conserved()
 }
 
 /// Karta inspekcji mieszkańca w formie tekstowej — ten sam model, który w kliencie

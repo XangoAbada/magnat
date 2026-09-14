@@ -23,9 +23,12 @@
 
 pub mod mezo;
 pub mod micro;
+pub mod mode;
+pub mod parking;
 pub mod oracle;
 pub mod spec;
 pub mod systems;
+pub mod transit;
 pub mod trip;
 pub mod vehicle;
 
@@ -34,6 +37,14 @@ pub use mezo::{
     VehicleSpecRef, CS_PER_MINUTE, UL_PER_ML,
 };
 pub use micro::{MicroLayer, Pedestrian, PedestrianBuffer};
+pub use mode::{
+    evaluate_modes, Candidate, DiscomfortBreakdown, GeneralizedCost, Infeasible, ModeChoiceParams,
+    ModeContext, ModeDecision, OptionOffer, ShareRange, TravelOption, MODE_CHOICE_SCHEMA_VERSION,
+};
+pub use parking::{
+    ParkingDenied, ParkingKind, ParkingLot, ParkingRegistry, ParkingSlotRef, CURB_WALK_RADIUS_M,
+    MAX_LOTS_SEARCHED, NO_LOT,
+};
 pub use oracle::{
     speed_pct, walk_minutes_for, DriverEntry, OracleHandle, Station, TrafficOracle,
     FUEL_RESERVE_FACTOR, WALK_SPEED_CM_PER_MIN,
@@ -43,7 +54,12 @@ pub use spec::{
     VDF_SCHEMA_VERSION, VEHICLES_SCHEMA_VERSION,
 };
 pub use systems::{
-    register_traffic, FuelLedger, TrafficServices, TrafficSystem, VehicleWearSystem,
+    register_traffic, FareLedger, FuelLedger, TrafficServices, TrafficSystem, VehicleWearSystem,
+};
+pub use transit::{
+    LineId, OperatorRef, Timetable, TransitEvent, TransitJourney, TransitLine, TransitMode,
+    TransitNetwork, TransitRun, TransitStats, TransitStop, Waiting, MAX_ACCESS_M, MAX_WAIT_MIN,
+    STOP_SPACING_M,
 };
 pub use trip::{
     PendingTrip, TrafficEvent, TrafficNetwork, TrafficStats, TripFailure, TripId, TripLedger,

@@ -106,8 +106,17 @@ pub enum StreamId {
     FuelStationChoice = 161,
     /// Obsadzenie gospodarstw pojazdami przy generacji świata (M4b, WP5).
     VehicleSeed = 162,
-    // 163–179 zarezerwowane dla M4 (`ParkingSearch`, `TransitDwell`,
-    // `VehicleBreakdown` dokładają M4c i M4d); rezerwa dalsza 1160–1179 (K-4).
+    /// Wybór miejsca parkingowego spośród kandydatów w promieniu dojścia (M4c §5.5).
+    ParkingSearch = 163,
+    /// Rozrzut postoju na przystanku wokół wartości z rozkładu (M4c §5.6).
+    TransitDwell = 164,
+    /// Awaria pojazdu w trasie (M4d).
+    VehicleBreakdown = 165,
+    /// Pogoda doby — **zaślepka `D4`**, właścicielem docelowym jest M8. Numer zostaje
+    /// przy M4, bo to M4 wnosi mechanizm i to jego strumień wchodzi do zapisów
+    /// wygenerowanych przed M8; podmiana ciała `weather_at` numeru nie ruszy.
+    WeatherStub = 166,
+    // 167–179 zarezerwowane dla M4; rezerwa dalsza 1160–1179 (K-4).
 }
 
 /// Encja zastępcza dla losowania bez encji (zdarzenie globalne, generator świata).

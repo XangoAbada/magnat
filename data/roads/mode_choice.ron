@@ -1,0 +1,142 @@
+// Wybór środka transportu — parametry kosztu uogólnionego (M4c/WP6, §5.3).
+//
+// Wszystko jest **w groszach albo w promilach**: koszt uogólniony wchodzi do decyzji
+// mieszkańca, a decyzja do świata, więc żadna z tych liczb nie ma prawa być floatem
+// (00 §2). Wygoda jest zmonetyzowana, a nie ważona — dzięki temu karta inspekcji
+// pokazuje „rower kosztowałby o 340 gr więcej, bo pada", a nie „waga 0,7".
+//
+// To jest **główna gałka balansująca udział środków transportu**. Mnożniki celu
+// (`purpose_multiplier_permille`) przesuwają go najmocniej: im droższy czas, tym
+// więcej samochodu i taksówki.
+(
+    schema_version: 1,
+
+    // ── wartość czasu ────────────────────────────────────────────────────────────
+    // vot = dochód netto gospodarstwa na godzinę / 60 × mnożnik celu, przycięty
+    // do widełek. Podłoga jest istotna: czas ma wartość także dla bezrobotnego,
+    // inaczej cała ta grupa chodziłaby wszędzie pieszo bez względu na odległość.
+    vot_floor_gr_per_min: 6,
+    vot_cap_gr_per_min: 150,
+
+    // Mnożnik per TripPurpose, w kolejności enuma:
+    // Work, School, Shopping, Refuel, Leisure, Medical, Escort.
+    // Dojazd do pracy jest droższy od zakupów, bo spóźnienie kosztuje; odbiór dziecka
+    // jest najdroższy, bo termin jest nienegocjowalny.
+    purpose_multiplier_permille: [1300, 1000, 850, 700, 700, 1400, 1500],
+
+    // ── dyskomfort ───────────────────────────────────────────────────────────────
+    // Ekspozycja na pogodę w promilach kosztu czasu podróży, w kolejności opcji:
+    // Walk, Bike, Transit, CarOwn, CarHousehold, Taxi.
+    // Pasażer komunikacji jest wystawiony na pogodę tylko w dojściu i oczekiwaniu,
+    // stąd wartość pośrednia; kierowca nie jest wcale.
+    weather_exposure_permille: [700, 900, 250, 0, 0, 0],
+
+    // Stała kara za przesiadkę — „koszt złamanej podróży", niezależny od jej długości.
+    transfer_penalty_gr: 250,
+
+    // Stała niedogodność środka, w groszach na podróż, w kolejności opcji:
+    // Walk, Bike, Transit, CarOwn, CarHousehold, Taxi.
+    //
+    // To nie jest gałka do dostrajania wyniku, tylko nazwanie tego, czego model czasu
+    // i pieniądza nie widzi: rower w mieście bez ścieżek (kradzież, brak miejsca do
+    // przebrania, jazda po jezdni), oczekiwanie na rozkład, wyprowadzenie auta
+    // i szukanie miejsca po drugiej stronie. Bez tego składnika rower wygrywa
+    // wszystko, bo jest darmowy i trzy razy szybszy od marszu — a to jest prawda
+    // o arytmetyce, nie o mieście roku 1990.
+    option_penalty_gr: [0, 480, 40, 140, 140, 0],
+
+    // Ilu mieszkańców na tysiąc ma sprawny rower. Losowane raz per mieszkaniec
+    // strumieniem `ModeChoice`, więc stałe przez całą sesję i niezależne od wątków.
+    bike_ownership_permille: 220,
+
+    // Kara za tłok: grosze za minutę przejazdu przy pełnym pojeździe, skalowane
+    // liniowo obłożeniem. Autobus zapełniony w połowie kosztuje połowę tej stawki.
+    crowding_gr_per_min_full: 12,
+
+    // Dysonans statusu: mieszkaniec o wysokim statusie płaci za jazdę komunikacją,
+    // a jazda autem mu się „opłaca" symbolicznie. Wartość w groszach za minutę
+    // przy percentylu statusu 100; przy medianie jest zerowa (skala jest liniowa
+    // od −1 do +1 wokół percentyla 50).
+    status_gr_per_min_at_top: 20,
+
+    // Bagaż: grosze za minutę na każdy kilogram niesiony pieszo albo na rowerze.
+    // Zakupy to kilka kilogramów, więc pieszy powrót ze sklepu boli, a dojazd do
+    // pracy z teczką nie.
+    luggage_gr_per_kg_min: 3,
+
+    // Dojście ponad ten próg zaczyna boleć osobno — do progu jest wliczone w czas.
+    walk_access_free_min: 5,
+    walk_access_gr_per_min: 15,
+
+    // ── nawyk ────────────────────────────────────────────────────────────────────
+    // Premia dla środka wybranego poprzednio: promile kosztu najtańszej opcji.
+    // Bez niej decyzja przeskakuje między opcjami przy każdej zmianie korka,
+    // a mieszkaniec nie zachowuje się wtedy jak człowiek, tylko jak solver.
+    habit_bonus_permille: 60,
+
+    // ── wykonalność ──────────────────────────────────────────────────────────────
+    // Twardy limit marszu, nie gałka udziału: powyżej niego nikt nie idzie pieszo
+    // niezależnie od kosztu. O tym, czy pójdzie przy 40 minutach, rozstrzyga koszt.
+    max_walk_min: 60,
+    max_bike_min: 35,
+    min_bike_age: 8,
+    min_drive_age: 18,
+    // Poniżej tej odległości nikt nie wyprowadza auta — manewry i parkowanie
+    // zjadają zysk, zanim jeszcze ruszy.
+    min_car_distance_m: 800,
+
+    // ── taksówka (D5: opcja z ceną z danych, bez encji firmy — operatora doda M7) ─
+    // Taksówka epoki jest **luksusem**, nie tanim wariantem komunikacji: przejazd
+    // przez miasto kosztuje kilka procent miesięcznej płacy. Przy poprzednich
+    // wartościach (5 zł + 1,80 zł/km) zbierała 12 % podróży, bo dla mieszkańca bez
+    // auta była jedyną szybką opcją — cena jest tu jedynym hamulcem, jaki model ma.
+    taxi_base_gr: 800,
+    taxi_gr_per_km: 400,
+    taxi_wait_min: 10,
+    // Ile promili **dziennego** dochodu gospodarstwa wolno wydać na jeden kurs.
+    // Powyżej tego progu taksówka nie jest opcją — tak samo jak auto bez miejsca
+    // postojowego u celu. To jedyny hamulec, jaki model ma: koszt uogólniony sam
+    // jej nie odrzuci, bo dla kogoś bez auta bywa jedyną szybką opcją.
+    taxi_max_fare_permille_of_daily: 100,
+
+    // ── komunikacja ──────────────────────────────────────────────────────────────
+    // Bilet normalny epoki: ~kwadrans pracy przy medianie płac, nie czterdzieści minut.
+    // Cena wchodzi wprost do kosztu uogólnionego, więc jest **drugą po wartości czasu
+    // gałką** udziału komunikacji — i dlatego jest w danych, a nie w kodzie.
+    transit_fare_gr: 90,
+
+    // ── rozkład odniesienia (kryterium WP6) ──────────────────────────────────────
+    // PRD §20.1 mówi „rozkłady w zakresach referencyjnych **dla epoki**", ale liczb
+    // nie podaje — podaje je ta tabela i to ona jest bramką scenariusza odniesienia.
+    //
+    // **Widełki obowiązują dla scenariusza odniesienia z M4 §7.3** — miasta co najmniej
+    // `reference_population`. Nie jest to formalność: rozkład zależy od **długości
+    // podróży**, a ta od wielkości miasta. Zmierzone tym samym modelem:
+    //
+    // | miasto      | pieszo | rower | komunikacja | samochód | taksówka |
+    // |-------------|--------|-------|-------------|----------|----------|
+    // | 4 km, 28 tys.  | 70,6 % | 10,0 % |  9,3 % |  9,9 % | 0,0 % |
+    // | 8 km, 81 tys.  | 57,5 % | 11,6 % | 15,9 % | 13,7 % | 1,1 % |
+    // | 16 km, 274 tys.| 37,8 % | 10,7 % | 34,9 % | 13,6 % | 2,9 % |
+    //
+    // To jest zachowanie **poprawne**, nie dryf: w mieście 4 km wszystko jest w zasięgu
+    // marszu, a w metropolii nie jest. Widełki dla miasteczka musiałyby więc być inne
+    // niż dla metropolii, a jedne dla obu nie byłyby bramką, tylko przedziałem „coś
+    // pomiędzy 9 a 71 %".
+    //
+    // Wartości poniżej opisują metropolię i pokrywają się z tym, co wiadomo o polskim
+    // mieście przełomu lat 90.: komunikacja jeszcze dominuje nad autem, rower jest
+    // marginalny, taksówka jest luksusem. Bramka ma łapać rozjazd modelu, nie kalibrację
+    // miasta — wersja bez stałej niedogodności środka dawała 92 % roweru i to właśnie
+    // taki wynik ma tu upaść.
+    //
+    // Kolejność: Walk, Bike, Transit, Car (własne + rodzinne razem), Taxi.
+    reference_population: 150000,
+    reference_share_permille: [
+        (min: 280, max: 500),
+        (min:  40, max: 180),
+        (min: 250, max: 480),
+        (min:  90, max: 300),
+        (min:   0, max:  60),
+    ],
+)

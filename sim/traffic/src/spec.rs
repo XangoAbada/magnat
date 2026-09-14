@@ -226,11 +226,17 @@ impl VehicleCatalog {
         i64::from(self.price_gr[kind.as_index()])
     }
 
-    /// Koszt zatankowania danej objętości. Zaokrąglenie jest jawne i idzie
-    /// przez `div_round_half_up` (00 §2) — nigdy przez obcięcie.
+    /// Koszt paliwa w **mikrolitrach** (`K-25`) — bo taka jest jednostka wewnętrzna
+    /// ruchu, a cena z katalogu jest za litr. Zaokrąglenie jest jawne i idzie przez
+    /// `div_round_half_up` (00 §2), nigdy przez obcięcie.
+    ///
+    /// Dzielnik był `1_000` do M4c: funkcja powstała w M4b przed rozstrzygnięciem
+    /// `K-25` i **nie miała wtedy żadnego wołającego** — jedyne tankowanie liczyło
+    /// się inline w `trip::refuel`, już w mikrolitrach. Pierwszy konsument (tabor
+    /// komunikacji) pokazał błąd natychmiast: kurs płacił tysiąckrotność.
     #[must_use]
-    pub fn fuel_cost(&self, kind: FuelKind, units: i64) -> Money {
-        Money(units.saturating_mul(self.price_gr(kind))).div_round_half_up(1_000)
+    pub fn fuel_cost(&self, kind: FuelKind, units_ul: i64) -> Money {
+        Money(units_ul.saturating_mul(self.price_gr(kind))).div_round_half_up(1_000_000)
     }
 }
 

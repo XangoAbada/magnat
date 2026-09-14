@@ -14,6 +14,7 @@ bench = false
 magnat-core = { workspace = true }
 magnat-ecs = { workspace = true }
 magnat-spatial = { workspace = true }
+magnat-sim-snapshot = { workspace = true }
 serde = { workspace = true }
 ron = { workspace = true }
 

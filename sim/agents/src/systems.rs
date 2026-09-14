@@ -976,10 +976,18 @@ impl System for SocietySystem {
     }
 }
 
-/// Warstwa Mikro: 600 podkroków po 100 ms w każdej minucie (00 §4).
+/// Warstwa Mikro: **jedno** przestawienie pozycji na minutę świata (M4c §5.12).
 ///
 /// **Wyłącznie wizualna** — nie zapisuje niczego do stanu ekonomicznego, więc obrót
 /// kamerą nie zmienia wyniku symulacji (00 §4, tolerancja mikro↔mezo = 0).
+///
+/// **Dlaczego jedno wywołanie, a nie 600.** Tick ruchu mikro to 100 ms gry (00 §4),
+/// więc pierwotnie system krokował bufor `MICRO_STEPS_PER_TICK` razy w każdej minucie.
+/// Krok jest jednak **czystą funkcją czasu**: pozycja wynika z `(now_ms, depart, arrive)`
+/// i nic się między podkrokami nie akumuluje, więc 599 z 600 przebiegów było
+/// nadpisywanych. Nie kupowały nawet płynności, bo renderer czyta zrzut raz na klatkę
+/// i widzi wyłącznie stan po ostatnim podkroku. Płynność wymaga kroku sterowanego
+/// czasem **klatki**, a nie tickiem symulacji — to M11b (animacja), nie tutaj.
 pub struct TravelMicroSystem {
     desc: SystemDesc,
 }
@@ -1004,10 +1012,10 @@ impl System for TravelMicroSystem {
         let Some(z) = ctx.res::<AgentSources>().get() else {
             return;
         };
-        for k in 0..magnat_core::time::MICRO_STEPS_PER_TICK {
-            z.travel
-                .micro_step(minuta * 60_000 + k * magnat_core::time::MICRO_TICK_MS);
-        }
+        // Koniec minuty, nie jej początek: `micro_retire` usuwa tych, którzy w tej
+        // minucie dotarli, więc pozycja musi być już policzona na moment przybycia.
+        let koniec_ms = (minuta + 1) * 60_000 - magnat_core::time::MICRO_TICK_MS;
+        z.travel.micro_step(koniec_ms);
         z.travel.micro_retire((minuta % 1440) as u16);
     }
 }

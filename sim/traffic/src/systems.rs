@@ -14,6 +14,7 @@
 
 use crate::oracle::TrafficOracle;
 use crate::spec::{VdfTable, VehicleCatalog};
+use crate::transit::TransitEvent;
 use crate::trip::{PendingTrip, TrafficEvent, TrafficNetwork, TripFailure};
 use crate::vehicle::{FuelTank, VehicleClass, VehicleCondition, VehicleLocation, VehicleOwner};
 use magnat_agents::{
@@ -33,6 +34,58 @@ pub struct TrafficServices {
     pub vdf: VdfTable,
     /// Encje pojazdów, indeksowane slotem floty (`DriverEntry.vehicle`).
     pub fleet: Vec<Entity>,
+    /// Mieszkańcy, którzy prowadzą kursy komunikacji — indeksy encji, posortowane.
+    /// Kurs bierze pierwszego, który jest dziś w pracy (§5.6).
+    pub transit_drivers: Vec<u32>,
+}
+
+impl HashState for TrafficServices {
+    /// **Zmiana wobec M4b: usługi ruchu wchodzą do hasha** — nie w całości, tylko
+    /// tym, co jest w nich stanem.
+    ///
+    /// Do M4b zasób był traktowany jak dane wejściowe miasta i pomijany. Już wtedy
+    /// trzymał jednak `busy` — informację o tym, które auto jest w podróży — a ta
+    /// wpływa na plan mieszkańca. M4c dokłada parkingi, komunikację, nawyk i macierz
+    /// czasów przejazdu (`M-2`), więc luka przestała być teoretyczna. Graf, katalog
+    /// pojazdów i tabela VDF **nadal** zostają poza hashem: są wejściem, nie wynikiem.
+    fn hash_state(&self, h: &mut StateHasher) {
+        self.oracle.hash_state(h);
+    }
+}
+
+/// Rejestr opłat przewozowych: bilety, taryfy i parkingi (WP7, WP10).
+///
+/// Wchodzi do hasha z tego samego powodu co [`FuelLedger`]: to **pieniądz**, a test
+/// własnościowy „wydatki mieszkańców == przychody operatorów" wymaga tolerancji 0
+/// (00 §6). M4b zamknął parę „kierowca ↔ stacja"; M4c dokłada do niej pary
+/// „pasażer ↔ przewoźnik" i „kierowca ↔ parking" (`M-6`) — nie drugi licznik,
+/// tylko drugi wiersz w tym samym.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub struct FareLedger {
+    /// Bilety komunikacji miejskiej.
+    pub transit_revenue: Money,
+    pub transit_tickets: u64,
+    /// Taryfy taksówkowe (`D5` — przewoźnik bez encji do czasu M7).
+    pub taxi_revenue: Money,
+    pub taxi_rides: u64,
+    /// Opłaty parkingowe.
+    pub parking_revenue: Money,
+    pub parking_stays: u64,
+    /// Paliwo spalone przez tabor komunikacji — obciąża operatora i jest drugą
+    /// stroną obrotu stacji, tak samo jak paliwo kierowcy.
+    pub transit_fuel_cost: Money,
+}
+
+impl HashState for FareLedger {
+    fn hash_state(&self, h: &mut StateHasher) {
+        h.write_u64(self.transit_revenue.0 as u64);
+        h.write_u64(self.transit_tickets);
+        h.write_u64(self.taxi_revenue.0 as u64);
+        h.write_u64(self.taxi_rides);
+        h.write_u64(self.parking_revenue.0 as u64);
+        h.write_u64(self.parking_stays);
+        h.write_u64(self.transit_fuel_cost.0 as u64);
+    }
 }
 
 /// Rejestr obrotu stacji paliw — druga strona każdego grosza wydanego na paliwo.
@@ -73,14 +126,18 @@ pub fn register_traffic(world: &mut World, services: TrafficServices, network: T
     world.insert_resource(services);
     world.insert_resource(network);
     world.insert_resource(FuelLedger::default());
+    world.insert_resource(FareLedger::default());
     world.register_resource_hash::<TrafficNetwork>();
     world.register_resource_hash::<FuelLedger>();
+    world.register_resource_hash::<FareLedger>();
+    world.register_resource_hash::<TrafficServices>();
 }
 
 /// Krok minutowy warstwy mezo: wysłanie zleceń, przejazd, rozliczenie.
 pub struct TrafficSystem {
     desc: SystemDesc,
     events: Vec<TrafficEvent>,
+    transit: Vec<TransitEvent>,
 }
 
 impl TrafficSystem {
@@ -89,6 +146,7 @@ impl TrafficSystem {
         TrafficSystem {
             desc: SystemDesc::new("traffic.Mezo", Cadence::EveryMinute).exclusive(),
             events: Vec::new(),
+            transit: Vec::new(),
         }
     }
 }
@@ -104,11 +162,21 @@ impl System for TrafficSystem {
         if world.get_resource::<TrafficServices>().is_none() {
             return;
         }
-        let (oracle, vdf, fleet) = {
+        let (oracle, vdf, fleet, kierowcy) = {
             let s = world.resource::<TrafficServices>();
-            (s.oracle.clone(), s.vdf, s.fleet.clone())
+            (
+                s.oracle.clone(),
+                s.vdf,
+                s.fleet.clone(),
+                s.transit_drivers.clone(),
+            )
         };
         let catalog = oracle.catalog().clone();
+        // Doba świata — pogoda przelicza się tylko przy jej zmianie (`D4`).
+        oracle.set_day(u64::from(now) / 1440);
+        // Blokady parkingowe, które wygasły: podróż, która nigdy nie wyruszyła, nie
+        // ma prawa trzymać miejsca (zawór, nie ścieżka główna — patrz `parking.rs`).
+        oracle.with_parking(|p| p.expire(SimMinute(u64::from(now))));
 
         // 1. Zlecenia zebrane przez `begin_trip` w poprzedniej minucie. Dopiero tutaj
         //    wiadomo, ile jest paliwa w baku — bo tutaj jest świat.
@@ -151,6 +219,123 @@ impl System for TrafficSystem {
             }
             zastosuj(world, &fleet, ev, satysfakcja);
         }
+
+        // 4. Komunikacja miejska: odjazdy z rozkładu, przejazd kursów, wsiadanie
+        //    i wysiadanie. Idzie **po** kroku mezo, bo czas przejazdu autobusu liczy
+        //    się z `LinkState` tej minuty — z tego samego obłożenia, które właśnie
+        //    zatrzymało samochody (§5.6).
+        self.transit.clear();
+        let dow = magnat_core::DayOfWeek::from_day_index(u64::from(now) / 1440);
+        let mut gotowy = |c: u32| kierowca_w_pracy(world, c, dow);
+        oracle.with_road(|road| {
+            let net = world.resource::<TrafficNetwork>();
+            oracle.with_transit(|t| {
+                t.step_minute(
+                    now,
+                    dow,
+                    road,
+                    &net.mezo,
+                    &catalog,
+                    &kierowcy,
+                    &mut gotowy,
+                    &mut self.transit,
+                );
+            });
+        });
+        for ev in std::mem::take(&mut self.transit) {
+            zastosuj_transit(world, ev, satysfakcja);
+        }
+
+        // 5. Taryfy taksówkowe: oracle je zebrał przy wyruszeniu, tu trafiają do
+        //    rejestru, żeby bilans pieniądza miał drugą stronę (`M-6`).
+        let taryfy = oracle.taxi_fares();
+        let l = world.resource_mut::<FareLedger>();
+        if taryfy.0 > l.taxi_revenue.0 {
+            l.taxi_rides += 1;
+            l.taxi_revenue = taryfy;
+        }
+    }
+}
+
+/// Czy mieszkaniec jest dziś w pracy i zdolny poprowadzić kurs.
+///
+/// Brak kierowcy odwołuje kurs — to jest cały model absencji w tej podfazie (§5.6).
+/// Choroba i wolne przenoszą się wprost z `Employment`, bo kierowca **jest**
+/// mieszkańcem i ma tę pracę w planie dnia, a nie obok niego.
+fn kierowca_w_pracy(world: &World, citizen: u32, dow: magnat_core::DayOfWeek) -> bool {
+    let Some(c) = citizen_by_index(world, citizen) else {
+        return false;
+    };
+    let Some(e) = world.get::<magnat_agents::Employment>(c).copied() else {
+        return false;
+    };
+    e.works_on(dow) && e.flags & magnat_agents::Employment::FLAG_SICK_LEAVE == 0
+}
+
+/// Skutki zdarzeń komunikacji w świecie.
+fn zastosuj_transit(world: &mut World, ev: TransitEvent, satysfakcja: u8) {
+    match ev {
+        TransitEvent::Boarded { citizen, fare, .. } => {
+            {
+                let l = world.resource_mut::<FareLedger>();
+                l.transit_revenue = Money(l.transit_revenue.0 + fare.0);
+                l.transit_tickets += 1;
+            }
+            // Pasażer płaci dokładnie tyle, ile dostaje przewoźnik — obie strony
+            // biorą tę samą liczbę, więc bilans domyka się z konstrukcji.
+            if let Some(c) = citizen_by_index(world, citizen) {
+                if let Some(w) = world.get_mut::<Wealth>(c) {
+                    w.cash = Money(w.cash.0 - fare.0);
+                }
+            }
+        }
+        TransitEvent::Alighted {
+            citizen,
+            slot,
+            egress_min,
+            at,
+        } => {
+            // Dojście z przystanku do celu dolicza się tutaj: pasażer wysiadł, ale
+            // jeszcze nie dotarł, a plan dnia mierzy drzwi–drzwi.
+            przybycie(
+                world,
+                citizen,
+                slot,
+                SimMinute(at.0 + u64::from(egress_min)),
+                satysfakcja,
+            );
+        }
+        // Pozostawiony na przystanku **nie dostaje** `Arrive`: czeka na następny kurs,
+        // a jeśli się nie doczeka, `GaveUp` zamknie podróż marszem.
+        TransitEvent::LeftBehind { .. } => {}
+        TransitEvent::GaveUp {
+            citizen,
+            slot,
+            walk_min,
+            at,
+        } => {
+            // Zawór z `M-4`: podróż bez zakończenia zawiesza mieszkańca do końca gry.
+            // Idzie pieszo i **liczy się mu to uczciwie** — przybycie w następnej
+            // minucie byłoby teleportacją w nagrodę za czterdzieści pięć minut
+            // czekania na przystanku.
+            przybycie(
+                world,
+                citizen,
+                slot,
+                SimMinute(at.0 + u64::from(walk_min.max(1))),
+                satysfakcja,
+            );
+        }
+        TransitEvent::RunFuelled { units_ul, cost, .. } => {
+            let l = world.resource_mut::<FuelLedger>();
+            l.revenue = Money(l.revenue.0 + cost.0);
+            l.purchases += 1;
+            l.volume_ul += units_ul;
+            l.burned_ul += units_ul;
+            let f = world.resource_mut::<FareLedger>();
+            f.transit_fuel_cost = Money(f.transit_fuel_cost.0 + cost.0);
+        }
+        TransitEvent::RunCancelled { .. } => {}
     }
 }
 

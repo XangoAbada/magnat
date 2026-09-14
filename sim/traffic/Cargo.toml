@@ -15,6 +15,7 @@ magnat-ecs = { workspace = true }
 magnat-nav = { workspace = true }
 magnat-agents = { workspace = true }
 magnat-spatial = { workspace = true }
+magnat-sim-snapshot = { workspace = true }
 serde = { workspace = true }
 ron = { workspace = true }
 

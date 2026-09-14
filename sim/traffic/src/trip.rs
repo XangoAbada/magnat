@@ -247,9 +247,12 @@ pub struct TrafficStats {
     pub late_arrivals: u64,
     pub late_minutes: u64,
     /// Ile podróży zakończyło się którym uzasadnieniem — wejście bramki 5 (00 §7).
-    /// Kolejność: `ModeChosen`, `NoRouteForMode`, `RefuelNeeded`, `StationChosen`,
-    /// `TripDelayed`, inne.
-    pub reasons: [u64; 6],
+    /// Kolejność: `ModeChosen`, `ModeCompared`, `NoRouteForMode`,
+    /// `NoParkingAtDestination`, `RefuelNeeded`, `StationChosen`, `TripDelayed`, inne.
+    ///
+    /// Ostatni kubełek musi zostać **pusty**: podróż bez uzasadnienia łamie bramkę 5
+    /// z §7.4 i kryterium zamknięcia M4c („100 % decyzji transportowych ma uzasadnienie").
+    pub reasons: [u64; 8],
     /// Suma czasów planowanych i faktycznych — z ilorazu bierze się narzut
     /// planistyczny, który `TrafficOracle` dokłada do czasu swobodnego z routera.
     pub planned_minutes_total: u64,
@@ -704,11 +707,13 @@ impl TrafficNetwork {
         );
         self.stats.reasons[match ledger.reason {
             DecisionReason::ModeChosen { .. } => 0,
-            DecisionReason::NoRouteForMode { .. } => 1,
-            DecisionReason::RefuelNeeded { .. } => 2,
-            DecisionReason::StationChosen { .. } => 3,
-            DecisionReason::TripDelayed { .. } => 4,
-            _ => 5,
+            DecisionReason::ModeCompared { .. } => 1,
+            DecisionReason::NoRouteForMode { .. } => 2,
+            DecisionReason::NoParkingAtDestination { .. } => 3,
+            DecisionReason::RefuelNeeded { .. } => 4,
+            DecisionReason::StationChosen { .. } => 5,
+            DecisionReason::TripDelayed { .. } => 6,
+            _ => 7,
         }] += 1;
         out.push(TrafficEvent::Arrived {
             trip: t.trip,
@@ -820,9 +825,7 @@ impl TrafficNetwork {
             let w_baku = t.tank_level_ul - t.fuel_ul + t.bought_ul;
             let units = (t.tank_capacity_ul - w_baku).max(0);
             let kind = cat.spec(t.class).fuel;
-            // Cena jest za litr (kWh), a `units` w mikrolitrach — stąd dzielenie
-            // przez milion, jawne i z zaokrągleniem (00 §2).
-            let cost = Money(units.saturating_mul(cat.price_gr(kind))).div_round_half_up(1_000_000);
+            let cost = cat.fuel_cost(kind, units);
             t.bought_ul += units;
             t.money = Money(t.money.0 + cost.0);
             // Objazd liczony z tego, co już wiadomo: różnica między planem a chwilą

@@ -92,5 +92,23 @@
             wear_gr_per_100km: 5_200,
             top_speed_dkmh: 1_600,
         ),
+        // Autobus miejski (M4c/WP10). Dopisany **na końcu** — kolejność klas jest
+        // kontraktem, bo `VehicleClassId` to indeks w tej tablicy i siedzi w komponencie
+        // pojazdu, czyli w zapisie gry (`K-24`). `seats` jest tu pojemnością kursu,
+        // a nie liczbą foteli: w szczycie jedzie się na stojąco.
+        (
+            key: "city_bus",
+            fuel: Diesel,
+            kerb_mass_g: 11_500_000,
+            length_cm: 1_200,
+            seats: 100,
+            tank_ml: 250_000,
+            refuel_threshold_permille: 200,
+            base_ml_per_100km: 35_000,
+            idle_ml_per_stop: 45,
+            cold_start_ml: 300,
+            wear_gr_per_100km: 18_000,
+            top_speed_dkmh: 900,
+        ),
     ],
 )

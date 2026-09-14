@@ -289,7 +289,41 @@ pub fn describe(c: &Catalog, l: Locale, r: DecisionReason) -> String {
                 ("plan", &minutes(c, l, planned_min)),
             ],
         ),
+        DecisionReason::ModeCompared {
+            chosen,
+            runner_up,
+            delta_gr,
+        } => c.fmt_key(
+            l,
+            "ui.reason.ModeCompared",
+            &[
+                ("srodek", &transport_mode(c, l, chosen)),
+                ("drugi", &transport_mode(c, l, runner_up)),
+                ("roznica", &pieniadze(i64::from(delta_gr))),
+            ],
+        ),
+        DecisionReason::NoParkingAtDestination { lots_searched } => c.fmt_key(
+            l,
+            "ui.reason.NoParkingAtDestination",
+            &[("ile", &lots_searched.to_string())],
+        ),
+        DecisionReason::LeftBehind { line, waited_min } => c.fmt_key(
+            l,
+            "ui.reason.LeftBehind",
+            &[
+                ("linia", &line.to_string()),
+                ("czekal", &minutes(c, l, waited_min)),
+            ],
+        ),
     }
+}
+
+/// Kwota w groszach jako złotówki — dwie cyfry po przecinku, bez floata.
+#[must_use]
+fn pieniadze(gr: i64) -> String {
+    let znak = if gr < 0 { "-" } else { "" };
+    let a = gr.unsigned_abs();
+    format!("{znak}{},{:02}", a / 100, a % 100)
 }
 
 fn commitment(c: &Catalog, l: Locale, k: CommitmentKind) -> String {

@@ -344,3 +344,109 @@ fn planer_stoi_na_traitach_a_nie_na_implementacjach() {
         "zakupy w sklepie, którego nie ma"
     );
 }
+
+/// Kryterium WP14 (M4c §5.12 punkt 1): **jedno** wywołanie kroku Mikro na minutę
+/// świata, nie sześćset.
+///
+/// Test patrzy na system, a nie na warstwę: `Micro::step` jest czystą funkcją czasu,
+/// więc 599 z 600 przebiegów było nadpisywanych i **żaden pomiar samej warstwy nie
+/// mógł tego pokazać**. Widać to dopiero od strony wołającego — stąd licznik
+/// w atrapie zamiast benchmarku.
+#[test]
+fn warstwa_mikro_jest_krokowana_raz_na_minute() {
+    use magnat_agents::{
+        register, register_day, AgentSources, DayLoopSystem, TravelEstimate, TravelMicroSystem,
+        TravelOracle, TripHandle, TripRequest,
+    };
+    use magnat_core::{MinuteOfDay, Tick, TransportMode};
+    use magnat_ecs::{App, ScheduleBuilder};
+    use std::sync::atomic::{AtomicU32, Ordering};
+
+    /// Oracle, który liczy wywołania warstwy Mikro i nic więcej nie robi.
+    #[derive(Default)]
+    struct LiczacyOracle {
+        kroki: Arc<AtomicU32>,
+        retire: Arc<AtomicU32>,
+    }
+
+    impl TravelOracle for LiczacyOracle {
+        fn estimate(
+            &self,
+            _from: PlaceRef,
+            _to: PlaceRef,
+            _depart: MinuteOfDay,
+            _who: &magnat_agents::CitizenView<'_>,
+        ) -> TravelEstimate {
+            TravelEstimate {
+                minutes: 1,
+                cost: Money::ZERO,
+                mode: TransportMode::Walk,
+                reason: DecisionReason::ModeWalkOnly { minutes: 1 },
+            }
+        }
+
+        fn begin_trip(
+            &mut self,
+            trip: TripRequest,
+            _who: &magnat_agents::CitizenView<'_>,
+            q: &mut magnat_agents::EventQueue,
+        ) -> TripHandle {
+            TripHandle {
+                id: 1,
+                from: trip.from,
+                to: trip.to,
+                arrive_at: q.now() + 1,
+                minutes: 1,
+                mode: TransportMode::Walk,
+            }
+        }
+
+        fn places_on_route(
+            &self,
+            _trip: &TripHandle,
+            out: &mut ArrayVec<PlaceRef, { magnat_agents::MAX_ON_ROUTE }>,
+        ) {
+            out.clear();
+        }
+
+        fn micro_step(&self, _now_ms: u64) {
+            self.kroki.fetch_add(1, Ordering::Relaxed);
+        }
+
+        fn micro_retire(&self, _now_min: u16) {
+            self.retire.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+
+    let kroki = Arc::new(AtomicU32::new(0));
+    let retire = Arc::new(AtomicU32::new(0));
+    let mut world = magnat_ecs::World::new(7);
+    register(&mut world, NeedTable::load_default().expect("data/needs/"));
+    register_day(&mut world);
+    *world.resource_mut::<AgentSources>() = AgentSources::new(
+        Box::new(EmptyPlaces),
+        Box::new(LiczacyOracle {
+            kroki: kroki.clone(),
+            retire: retire.clone(),
+        }),
+    );
+
+    let mut builder = ScheduleBuilder::new();
+    builder
+        .add(DayLoopSystem::new(&world))
+        .add(TravelMicroSystem::new(&world));
+    let mut app = App::new(world, builder.build().expect("harmonogram"), 1);
+
+    const MINUT: u32 = 120;
+    for _ in 0..MINUT {
+        app.tick();
+    }
+    assert_eq!(
+        kroki.load(Ordering::Relaxed),
+        MINUT,
+        "krok Mikro wołany {} razy na {MINUT} minut świata — pętla 600 podkroków wróciła",
+        kroki.load(Ordering::Relaxed)
+    );
+    assert_eq!(retire.load(Ordering::Relaxed), MINUT);
+    let _ = Tick(0);
+}

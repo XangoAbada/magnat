@@ -427,11 +427,9 @@ pub fn run(a: &DayArgs) -> Result<std::process::ExitCode, Box<dyn std::error::Er
                 }
             }
             if a.micro > 0 {
-                // Sześćset podkroków po 100 ms w każdej minucie (00 §4). Liczymy
-                // co dziesiąty, bo runner nie rysuje — chodzi o koszt, nie o obraz.
-                for k in (0..600).step_by(10) {
-                    oracle.micro_step(u64::from(teraz) * 60_000 + k * 100);
-                }
+                // Jedno przestawienie pozycji na minutę świata (M4c §5.12): krok Mikro
+                // jest czystą funkcją czasu, więc podkroki nadpisywały się nawzajem.
+                oracle.micro_step(u64::from(teraz) * 60_000 + 59_900);
                 oracle.micro_retire((teraz % 1440) as u16);
             }
         }

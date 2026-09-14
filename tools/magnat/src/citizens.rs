@@ -60,10 +60,10 @@ pub struct Citizens {
     panel: CitizenPanel,
     egui_ctx: egui::Context,
     egui_state: egui_winit::State,
-    /// Rekordy dla renderera, przepisywane co klatkę z warstwy Mikro.
+    /// Rekordy dla renderera, wypełniane co klatkę wprost przez warstwę Mikro.
+    /// Jedna kopia, nie dwie (M4c §5.12 punkt 3) — bufor pośredni zniknął razem
+    /// ze zrzutem do krotki.
     peds: Vec<PedestrianRecord>,
-    /// Bufor pośredni `TravelOracle::micro_snapshot`, żeby klatka nie alokowała.
-    zrzut: Vec<(u32, [f32; 3], f32)>,
     /// Doba, dla której karta odtwarza plan.
     dzien: u64,
     /// Czy panel jest widoczny. Karta bez zaznaczenia pokazuje komunikat, więc panel
@@ -149,7 +149,6 @@ impl Citizens {
             egui_ctx,
             egui_state,
             peds: Vec::new(),
-            zrzut: Vec::new(),
             dzien: 0,
             pokaz_karte: false,
             ludzi,
@@ -249,12 +248,7 @@ impl Citizens {
         };
         z.travel
             .set_micro_window(Some((eye.x as i32, eye.y as i32)), MICRO_RADIUS_M);
-        z.travel.micro_snapshot(&mut self.zrzut);
-        self.peds.clear();
-        self.peds.extend(self.zrzut.iter().map(|(e, pos, _)| PedestrianRecord {
-            pos: *pos,
-            entity: *e,
-        }));
+        z.travel.micro_snapshot(&mut self.peds);
         &self.peds
     }
 

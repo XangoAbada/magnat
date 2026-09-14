@@ -19,6 +19,7 @@ use magnat_core::{
     BuildingId, CitizenId, DayOfWeek, DecisionReason, Entity, HouseholdId, MinuteOfDay, Money,
     NeedKind, PlaceKind, PlaceRef, SimMinute, SiteId, TransportMode, WorldCoord, Q,
 };
+use magnat_sim_snapshot::PedestrianRecord;
 use magnat_spatial::{Aabb2, CategoryGrid, GridSpec, Vec2};
 
 /// Twardy limit kandydatów (§5.3, ryzyko R6). Nie jest orientacyjny: to on trzyma
@@ -592,8 +593,13 @@ pub trait TravelOracle: Send + Sync {
     /// koniec jego trasy się w nim mieści. Promień 0 = warstwa wyłączona (`Z-6`).
     fn set_micro_window(&self, _center: Option<(i32, i32)>, _radius_m: u32) {}
 
-    /// Zrzut dla renderera: `(indeks encji, pozycja w metrach, postęp 0..=1)`.
-    fn micro_snapshot(&self, out: &mut Vec<(u32, [f32; 3], f32)>) {
+    /// Zrzut dla renderera — **w docelowej strukturze**, nie w krotce pośredniej.
+    ///
+    /// Renderer bierze `&[PedestrianRecord]`, więc zrzut do krotki kazał wołającemu
+    /// przepisać całość drugi raz w tej samej klatce, tylko po to, żeby odrzucić
+    /// postęp, którego nikt nie czyta (M4c §5.12 punkt 3). Selekcja kadru — promień
+    /// i stożek widzenia — zostaje po stronie renderera, bo tylko on zna kamerę.
+    fn micro_snapshot(&self, out: &mut Vec<PedestrianRecord>) {
         out.clear();
     }
 }

@@ -143,6 +143,26 @@ pub enum DecisionReason {
     /// na skrzyżowaniu (M4b §5.2). To jest druga przyczyna `ReplanCause::Late`
     /// obok tej, którą M3 znał (marsz zwalniający razem z energią).
     TripDelayed { planned_min: u16, actual_min: u16 } = 204,
+    /// Środek wybrany **przez porównanie kosztu uogólnionego** wszystkich wykonalnych
+    /// opcji (M4c §5.3). `runner_up` to druga najtańsza opcja, a `delta_gr` — o ile
+    /// groszy była droższa; ujemna różnica jest niemożliwa i znaczyłaby błąd argminu.
+    ///
+    /// Pełna lista kandydatów z rozbiciem kosztu żyje w `ModeDecision.candidates`
+    /// i idzie do karty inspekcji; tutaj zostaje to, co mieści się w 24 bajtach
+    /// i co wchodzi do ledgera każdej podróży (zasada 5 w nagłówku modułu).
+    ModeCompared {
+        chosen: TransportMode,
+        runner_up: TransportMode,
+        delta_gr: i32,
+    } = 205,
+    /// Opcja „samochód" odpadła, bo u celu nie ma wolnego miejsca postojowego
+    /// (M4c §5.5). To jest wprost uzasadnienie z PRD §14.1: *„dlaczego Anna nie
+    /// kupiła u mnie?" → „brak parkingu"*. `lots_searched` mówi, ilu parkingów
+    /// szukano w promieniu dojścia.
+    NoParkingAtDestination { lots_searched: u16 } = 206,
+    /// Pasażer nie zmieścił się do pojazdu komunikacji i czeka na następny kurs
+    /// (M4c §5.6). `waited_min` to czas spędzony na przystanku do tej chwili.
+    LeftBehind { line: u16, waited_min: u16 } = 207,
     // ── M5 — gospodarka detaliczna: 300..=399 ────────────────────────────────────
     // ShopChosen { shop: FirmId, dominant: UtilityKind, margin_permille: i16 } = 300,
     // ... kolejne fazy dopisują własne bloki na końcu pliku
@@ -185,6 +205,9 @@ impl DecisionReason {
             DecisionReason::RefuelNeeded { .. } => 202,
             DecisionReason::StationChosen { .. } => 203,
             DecisionReason::TripDelayed { .. } => 204,
+            DecisionReason::ModeCompared { .. } => 205,
+            DecisionReason::NoParkingAtDestination { .. } => 206,
+            DecisionReason::LeftBehind { .. } => 207,
         }
     }
 }

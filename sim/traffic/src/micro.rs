@@ -22,6 +22,7 @@
 //! `MicroLayer` jest jedną trasą i jedną encją na trasę.
 
 use magnat_core::WorldCoord;
+use magnat_sim_snapshot::PedestrianRecord;
 use std::sync::atomic::{AtomicI32, AtomicU32, Ordering};
 use std::sync::Mutex;
 
@@ -271,13 +272,22 @@ impl MicroLayer {
         self.peds.lock().expect("micro").is_empty()
     }
 
-    /// Zrzut dla renderera: `(indeks encji, pozycja w metrach, postęp 0..=1)`.
-    pub fn snapshot(&self, out: &mut Vec<(u32, [f32; 3], f32)>) {
+    /// Zrzut dla renderera — **jedna kopia, prosto do struktury docelowej**.
+    ///
+    /// Wcześniej metoda oddawała krotki `(encja, pozycja, postęp)`, a wołający
+    /// przepisywał je natychmiast drugi raz na `PedestrianRecord`, żeby odrzucić
+    /// postęp, którego renderer nie czyta. Dwie pełne kopie `O(n)` na klatkę zamiast
+    /// jednej (M4c §5.12 punkt 3).
+    pub fn snapshot(&self, out: &mut Vec<PedestrianRecord>) {
         out.clear();
         let buf = self.peds.lock().expect("micro");
+        out.reserve(buf.len());
         for i in 0..buf.len() {
             let p = buf.get(i);
-            out.push((p.citizen, p.pos, p.progress));
+            out.push(PedestrianRecord {
+                pos: p.pos,
+                entity: p.citizen,
+            });
         }
     }
 }
@@ -321,31 +331,31 @@ mod tests {
         m.set_window(Some((0, 0)), 1_000);
         m.enter(7, &trasa(), 480, 490);
 
+        let postep = |m: &MicroLayer| m.peds.lock().expect("micro").get(0).progress;
         let mut zrzut = Vec::new();
         let mut poprzedni = -1.0f32;
         let krokow = 10u64 * 600; // 600 kroków po 100 ms = minuta gry
         for krok in 0..krokow {
             m.step(480 * 60_000 + krok * 100);
-            m.snapshot(&mut zrzut);
-            let postep = zrzut[0].2;
-            assert!(postep >= poprzedni, "postęp cofnął się w kroku {krok}");
-            assert!(postep < 1.0, "mikro dotarło przed czasem mezo");
-            poprzedni = postep;
+            let p = postep(&m);
+            assert!(p >= poprzedni, "postęp cofnął się w kroku {krok}");
+            assert!(p < 1.0, "mikro dotarło przed czasem mezo");
+            poprzedni = p;
         }
         m.step(490 * 60_000);
         m.snapshot(&mut zrzut);
-        let (id, pos, postep) = zrzut[0];
-        assert_eq!(id, 7);
-        assert!((postep - 1.0).abs() < 1e-6);
+        let r = zrzut[0];
+        assert_eq!(r.entity, 7);
+        assert!((postep(&m) - 1.0).abs() < 1e-6);
         assert!(
-            (pos[0] - 200.0).abs() < 0.5 && pos[1].abs() < 0.5,
-            "pieszy skończył w {pos:?}, a nie w celu"
+            (r.pos[0] - 200.0).abs() < 0.5 && r.pos[1].abs() < 0.5,
+            "pieszy skończył w {:?}, a nie w celu",
+            r.pos
         );
 
         // Krok po czasie przybycia niczego nie psuje i nie cofa.
         m.step(490 * 60_000 + 5_000);
-        m.snapshot(&mut zrzut);
-        assert!((zrzut[0].2 - 1.0).abs() < 1e-6);
+        assert!((postep(&m) - 1.0).abs() < 1e-6);
     }
 
     #[test]
@@ -360,7 +370,7 @@ mod tests {
         let mut zrzut = Vec::new();
         m.snapshot(&mut zrzut);
         assert_eq!(zrzut.len(), 1);
-        assert_eq!(zrzut[0].0, 2, "retire usunął niewłaściwego pieszego");
+        assert_eq!(zrzut[0].entity, 2, "retire usunął niewłaściwego pieszego");
 
         m.retire(30);
         assert!(m.is_empty(), "pieszy po przybyciu został w buforze");
