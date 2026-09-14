@@ -24,8 +24,9 @@
 //!    z lokalizacją. Test pilnuje `size_of::<DecisionReason>() <= 24`.
 //! 6. Wariant, którego nie da się pokazać graczowi jednym zdaniem, jest źle zaprojektowany.
 
+use crate::time::MinuteOfDay;
 use crate::types::Q;
-use crate::vocab::{DeprivationEffect, NeedKind};
+use crate::vocab::{CommitmentKind, DeprivationEffect, NeedKind, PlaceRef, StockCat, TraitId};
 use serde::{Deserialize, Serialize};
 
 /// JEDEN enum dla całej gry. Bez `#[non_exhaustive]`. Celowo.
@@ -40,18 +41,52 @@ pub enum DecisionReason {
     // ── M3 — agenci: 100..=199 ───────────────────────────────────────────────────
     // Pełna lista wariantów fazy jest w M3b §5.4; numeracja jest przypisana tam raz
     // i zamrożona (M3 §6.4), więc podfaza dopisuje **swój** wariant pod swoim numerem,
-    // a nie kolejny wolny. Numery wolne w tym bloku, zajęte przez M3b i M3c:
-    //   100 Commitment, 102 StockBelowThreshold, 103 FreeTimePreference,
-    //   104 NoTimeWindow, 105 SlotBudgetExhausted, 107 ChosenOnRoute,
-    //   109 PlaceClosed, 110 Arrived, 111 Replanned.
+    // a nie kolejny wolny. Blok M3 jest po M3b kompletny: 100–114 zajęte, 115–199 wolne.
+    /// Zobowiązanie stałe planu dnia — praca, szkoła, odwożenie dzieci, dojazd
+    /// do jednego z nich (M3b faza 1). Slotu z tym powodem nie usuwa żadna
+    /// późniejsza faza planera ani przeplanowanie przyrostowe.
+    Commitment { kind: CommitmentKind } = 100,
     /// Potrzeba zeszła poniżej progu krytycznego i wymusiła slot w planie (M3b faza 2).
     NeedCritical { need: NeedKind, level: Q } = 101,
+    /// Zapas gospodarstwa w tej kategorii starcza na `days_left` dni — stąd zakupy
+    /// (M3b faza 3). W M3 zapas jest abstrakcyjny; M5 wstawi tu realny towar.
+    StockBelowThreshold { cat: StockCat, days_left: u8 } = 102,
+    /// Czas wolny wypełniony wg cechy osobowości; `weight` to waga, którą ta cecha
+    /// dała wybranemu zajęciu (0 = brak preferencji, slot wypełniający).
+    FreeTimePreference { trait_id: TraitId, weight: u8 } = 103,
+    /// Zadanie pominięte, bo w dobie nie było dość długiej luki. `longest_gap_min`
+    /// mówi, ile brakowało — bez tego karta inspekcji nie odróżnia „nie zdążył"
+    /// od „nie chciał".
+    NoTimeWindow {
+        need: NeedKind,
+        needed_min: u16,
+        longest_gap_min: u16,
+    } = 104,
+    /// Zadanie pominięte, bo skończył się twardy limit 24 slotów planu (M3b §5.4).
+    SlotBudgetExhausted { dropped: NeedKind } = 105,
     /// Wybrano najbliższe znane miejsce; `runner_up_min` mówi, o ile było gorsze drugie —
     /// bez tego karta inspekcji pokazuje wybór bez alternatywy, a PRD §5.5 chce obu.
     ChosenNearest { travel_min: u16, runner_up_min: u16 } = 106,
+    /// Wybrano miejsce leżące na trasie już zaplanowanego dojazdu: nadłożenie
+    /// `detour_min` minut zamiast osobnej wyprawy na `direct_min` minut.
+    ChosenOnRoute { detour_min: u16, direct_min: u16 } = 107,
     /// Mieszkaniec nie zna żadnego miejsca zaspokajającego tę potrzebę (§5.7).
     /// `known_count` to liczba miejsc, które w ogóle zna — 0 czyta się inaczej niż 12.
     PlaceUnknown { need: NeedKind, known_count: u8 } = 108,
+    /// Miejsce było w tej porze zamknięte; `opens_at` to najbliższe otwarcie.
+    PlaceClosed {
+        place: PlaceRef,
+        opens_at: MinuteOfDay,
+    } = 109,
+    /// Mieszkaniec dotarł na miejsce — plan wobec realizacji (§14.4).
+    Arrived {
+        planned: MinuteOfDay,
+        actual: MinuteOfDay,
+    } = 110,
+    /// Dzień przeplanowany. `cause_tag` to `ReplanCause::tag()` z `sim/agents`:
+    /// ładunek centralnego enuma nie może pochodzić z crate'u zależnego od `core`
+    /// (korekta B-1), a sam `ReplanCause` niesie `PlaceRef` i przekroczyłby limit 24 B.
+    Replanned { cause_tag: u8, slots_changed: u8 } = 111,
     /// Skutek utrzymującej się deprywacji potrzeby (M3a §5.5).
     Deprivation {
         need: NeedKind,
@@ -82,9 +117,18 @@ impl DecisionReason {
     pub const fn discriminant(self) -> u16 {
         match self {
             DecisionReason::Unspecified => 0,
+            DecisionReason::Commitment { .. } => 100,
             DecisionReason::NeedCritical { .. } => 101,
+            DecisionReason::StockBelowThreshold { .. } => 102,
+            DecisionReason::FreeTimePreference { .. } => 103,
+            DecisionReason::NoTimeWindow { .. } => 104,
+            DecisionReason::SlotBudgetExhausted { .. } => 105,
             DecisionReason::ChosenNearest { .. } => 106,
+            DecisionReason::ChosenOnRoute { .. } => 107,
             DecisionReason::PlaceUnknown { .. } => 108,
+            DecisionReason::PlaceClosed { .. } => 109,
+            DecisionReason::Arrived { .. } => 110,
+            DecisionReason::Replanned { .. } => 111,
             DecisionReason::Deprivation { .. } => 112,
             DecisionReason::ModeWalkOnly { .. } => 113,
             DecisionReason::NeedSatisfied { .. } => 114,
@@ -139,6 +183,87 @@ mod tests {
         assert_eq!(
             DecisionReason::ModeWalkOnly { minutes: 3 }.discriminant(),
             113
+        );
+
+        // Blok M3 po M3b: 100..=114 bez dziur i bez przestawień. Lista jest
+        // wypisana jawnie, bo to jej **liczby** są kontraktem (M3 §6.4), a nie
+        // kolejność deklaracji w pliku.
+        let wszystkie = [
+            DecisionReason::Unspecified,
+            DecisionReason::Commitment {
+                kind: CommitmentKind::Work,
+            },
+            DecisionReason::NeedCritical {
+                need: NeedKind::Sleep,
+                level: Q::MIN,
+            },
+            DecisionReason::StockBelowThreshold {
+                cat: StockCat::Food,
+                days_left: 1,
+            },
+            DecisionReason::FreeTimePreference {
+                trait_id: TraitId::Sociability,
+                weight: 7,
+            },
+            DecisionReason::NoTimeWindow {
+                need: NeedKind::Health,
+                needed_min: 45,
+                longest_gap_min: 20,
+            },
+            DecisionReason::SlotBudgetExhausted {
+                dropped: NeedKind::Clothing,
+            },
+            DecisionReason::ChosenNearest {
+                travel_min: 1,
+                runner_up_min: 2,
+            },
+            DecisionReason::ChosenOnRoute {
+                detour_min: 3,
+                direct_min: 9,
+            },
+            DecisionReason::PlaceUnknown {
+                need: NeedKind::Hunger,
+                known_count: 0,
+            },
+            DecisionReason::PlaceClosed {
+                place: PlaceRef::District(crate::types::DistrictId(1)),
+                opens_at: MinuteOfDay::new(7 * 60),
+            },
+            DecisionReason::Arrived {
+                planned: MinuteOfDay::new(480),
+                actual: MinuteOfDay::new(482),
+            },
+            DecisionReason::Replanned {
+                cause_tag: 2,
+                slots_changed: 3,
+            },
+            DecisionReason::Deprivation {
+                need: NeedKind::Sleep,
+                effect: DeprivationEffect::AbsenceRisk,
+            },
+            DecisionReason::ModeWalkOnly { minutes: 3 },
+            DecisionReason::NeedSatisfied {
+                need: NeedKind::Hunger,
+                gain: Q::new(40),
+            },
+        ];
+        let numery: Vec<u16> = wszystkie.iter().map(|r| r.discriminant()).collect();
+        assert_eq!(numery[0], 0);
+        assert_eq!(numery[1..], (100..=114).collect::<Vec<u16>>()[..]);
+    }
+
+    #[test]
+    fn skrot_powodu_miesci_sie_w_bajcie() {
+        // `PlanSlot.reason` (M3a §5.1) pakuje powód jako `tag(u8) | param(u8) << 8`.
+        // Dopóki dyskryminanty M3–M5 mieszczą się w bajcie, pakowanie jest bezstratne;
+        // faza z blokiem ≥ 256 (M9 i dalej) musi ten zapis zmienić, a nie obciąć.
+        assert!(
+            DecisionReason::NeedSatisfied {
+                need: NeedKind::Hunger,
+                gain: Q::MAX
+            }
+            .discriminant()
+                <= 255
         );
     }
 

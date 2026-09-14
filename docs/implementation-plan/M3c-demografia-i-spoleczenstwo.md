@@ -7,7 +7,7 @@ zostają w dokumencie fazy — tu jest wyłącznie to, co robisz w tej porcji.
 
 | | |
 |---|---|
-| **Wejście** | M3a (komponenty, DES). |
+| **Wejście** | M3a (komponenty, DES), M3b (planer — `HouseholdView` i `StockCat`). |
 | **Pakiety robocze** | WP7, WP8, WP9 |
 | **Projekt techniczny** | §5.6, §5.7, §5.8 |
 | **Wynik do pokazania** | `m3_century` — 100 lat gry headless bez wybuchu ani wygaszenia populacji. |
@@ -164,3 +164,18 @@ Zgodnie z `K-18`. Wpisane jest **tylko to, co wiadomo na pewno** po zamknięciu 
 | C-3 | **`StatusLoss` stosuje ta podfaza**, przy funkcji statusu z §5.8. M3a go nie odejmuje, tylko wystawia przez `deprivation_of` | Rozstrzygnięcie D-6: status jest tu **liczony**, a nie odejmowany — odejmowanie go w M3a rozjechałoby się z tą funkcją przy pierwszym uruchomieniu obu naraz. To samo dotyczy `AmbitionGain` (M7) |
 | C-4 | **`ReplanCause::HouseholdEvent { kind: HhEventKind }` istnieje** z wariantami `Birth`, `ChildIll`, `Death`, `MemberJoined`, `MemberLeft`, `Moved`; `is_full_replan()` zwraca `true` dla `Death` | Zdarzenia demograficzne mają już punkt zaczepienia w planerze — WP7 wypełnia je treścią, nie projektuje od nowa |
 | C-5 | **Strumienie RNG tej podfazy są przypisane i zamrożone:** `Demography` 141, `Gossip` 142, `Migration` 145, `Relations` 146 (`K-4`, blok M3 = 140–159) | Wartości raz nadane są niezmienne — zmiana numeru strumienia zmienia każdy świat wygenerowany wcześniej z tego samego ziarna |
+
+---
+
+## Zmiany wpisane po M3b
+
+Zgodnie z `K-18`. Wpisane jest **tylko to, co wiadomo na pewno** po zamknięciu M3b —
+podfaza nie jest tu przeprojektowywana.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| C-6 ★ | **`Household.stock: [u8; 8]` indeksuje się `StockCat` z `engine/core`**, nie własnym enumem. Rozmiar tablicy to `STOCK_CAT_COUNT`, a `StockCat::need()` mówi, którą potrzebę uzupełnia zakup w danej kategorii | Słownik powstał w M3b, bo jest ładunkiem `DecisionReason::StockBelowThreshold` i musiał trafić do `core` (K-12, korekta F-3). Kolejność wariantów jest kontraktem tak samo jak przy `NeedKind` — to ona indeksuje tablicę |
+| C-7 ★ | **`HouseholdView` istnieje i jest widokiem, nie komponentem** (`planner.rs`): niesie `id`, `stock` i `escorts`. WP7 **wypełnia go** z `Household` i podziału ról, a nie projektuje od nowa | Planer powstał przed gospodarstwem, więc kontrakt opisuje, co planer czyta, a nie z czego to pochodzi — ta sama sztuczka co `CitizenView` w M3a (korekta F-4). Gdyby WP7 dołożył własny widok obok, planer miałby dwa źródła zapasów |
+| C-8 ★ | **Odbiór dziecka ze szkoły po południu należy do tej podfazy.** M3b odprowadza rano (`escorts` = szkoły, do których ten mieszkaniec odprowadza) i na tym poprzestaje | Szkoła kończy się o 14:00, a zmiana dzienna o 16:00 — kto odbiera dziecko, wynika z **podziału ról w gospodarstwie** (§5.6), a nie z planu jednej osoby. Planer ma już gotowy mechanizm: trzy sloty na odcinek, każdy o czasie zgodnym z `TravelOracle` (korekta F-8) |
+| C-9 | **Wyzwalacz „chory → wizyta u lekarza" czyta dziś wyłącznie `Needs[Health] < 30`.** `Lifecycle.flags.chory` z §5.4 nie jest jeszcze podłączony, bo `CitizenView` nie niesie `Lifecycle` | Do rozstrzygnięcia w WP7 razem z chorobą: albo choroba **obniża `Health`** (i wtedy nic nie trzeba dokładać), albo `PlanCtx` dostaje flagę. Pierwsze jest tańsze i spójne z §5.5, gdzie choroba to skok −10..−60 na `Health` |
+| C-10 | **`ReplanCause::HouseholdEvent` ma po stronie planera gotową ścieżkę**: `replan` przyrostowe zachowuje zobowiązania i sen, a pełne (`Death`) buduje dobę od zera. Debouncing 15 minut jest w `request_replan` | WP7 wypełnia zdarzenia treścią i woła `request_replan` — nie musi projektować ani strategii, ani limitu przeplanowań (R3) |

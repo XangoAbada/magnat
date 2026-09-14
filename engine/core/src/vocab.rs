@@ -116,6 +116,54 @@ vocab_enum! {
 }
 
 vocab_enum! {
+    /// Zobowiązanie stałe w planie dnia — ładunek `DecisionReason::Commitment` (M3b §5.4).
+    ///
+    /// W `core`, choć sam planer jest w `sim/agents`: ładunek centralnego enuma nie może
+    /// pochodzić z crate'u, który od `core` zależy (ta sama reguła, która wypchnęła
+    /// `ReplanCause` z `DecisionReason` — korekta B-1). M4 czyta go przy dojazdach,
+    /// M7 przy grafikach zmianowych.
+    CommitmentKind {
+        Work, School, Childcare, Commute,
+    }
+}
+
+vocab_enum! {
+    /// Kategoria zapasu gospodarstwa domowego — indeks w `Household.stock: [u8; 8]`
+    /// (M3c §5.6) i ładunek `DecisionReason::StockBelowThreshold` (M3b §5.4).
+    ///
+    /// Kolejność jest kontraktem tak samo jak przy `NeedKind`: to ona indeksuje tablicę
+    /// dni zapasu. W M3 zapas jest abstrakcyjnymi „dniami"; M5 zastępuje go realnymi
+    /// towarami i to on przypisuje `GoodId` do kategorii — `core` nadal nie wie,
+    /// co w kategorii leży.
+    StockCat {
+        Food, Drink, Hygiene, Cleaning, Clothing, Medicine, Fuel, Other,
+    }
+}
+
+/// Liczba kategorii zapasu — rozmiar tablicy `Household.stock`.
+pub const STOCK_CAT_COUNT: usize = StockCat::ALL.len();
+
+impl StockCat {
+    /// Potrzeba, którą uzupełnia zakup w tej kategorii. Odwzorowanie jest tutaj,
+    /// a nie w danych, bo jest **definicją kategorii**, nie parametrem do strojenia:
+    /// zapas żywności uzupełnia głód i nic innego.
+    ///
+    /// Kategoria wskazująca potrzebę bez miejsc w `data/needs/needs.ron` (paliwo,
+    /// „inne" → `Housing`) nie produkuje w M3 zadania zakupowego. To granica fazy,
+    /// nie luka: paliwo należy do M4, wyposażenie mieszkania do M5.
+    #[must_use]
+    pub const fn need(self) -> NeedKind {
+        match self {
+            StockCat::Food | StockCat::Drink => NeedKind::Hunger,
+            StockCat::Hygiene | StockCat::Cleaning => NeedKind::Hygiene,
+            StockCat::Clothing => NeedKind::Clothing,
+            StockCat::Medicine => NeedKind::Health,
+            StockCat::Fuel | StockCat::Other => NeedKind::Housing,
+        }
+    }
+}
+
+vocab_enum! {
     /// Rodzaj czynności w planie dnia. Konsument: M3 (planer + DES), M4 (skąd dokąd),
     /// M9 (oś czasu w karcie inspekcji).
     ActivityKind {

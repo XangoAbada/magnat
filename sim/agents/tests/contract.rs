@@ -220,10 +220,10 @@ fn walk_nie_wycieka_do_publicznego_api() {
 
 #[test]
 fn kontrakt_nie_wspomina_o_gospodarce_ani_o_grafie() {
-    // `plan_no_economy_types` z §7.3, przeniesiony na moduł kontraktu: to tutaj
-    // przeciek by powstał, bo to tu M5 i M4 będą kusić, żeby „na chwilę" wstawić
-    // cenę do wyboru miejsca (ryzyko R1).
-    const ZAKAZANE: [&str; 6] = [
+    // `plan_no_economy_types` z §7.3: to tutaj przeciek by powstał, bo to tu M5 i M4
+    // będą kusić, żeby „na chwilę" wstawić cenę do wyboru miejsca albo trasę do planu
+    // (ryzyko R1). Skanujemy kontrakt **i planer** — korekta B-5.
+    const GOSPODARKA: [&str; 6] = [
         "GoodId",
         "RecipeId",
         "Offer",
@@ -231,19 +231,117 @@ fn kontrakt_nie_wspomina_o_gospodarce_ani_o_grafie() {
         "RoadGraph",
         "Batch",
     ];
-    let src = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/src/places.rs"))
-        .expect("src/places.rs");
-    for (nr, linia) in src.lines().enumerate() {
-        let kod = linia.trim_start();
-        if kod.starts_with("//") {
-            continue; // komentarz może o nich mówić — i mówi, właśnie po to
-        }
-        for z in ZAKAZANE {
-            assert!(
-                !kod.contains(z),
-                "places.rs:{}: typ `{z}` w kontrakcie — to jest ryzyko R1",
-                nr + 1
-            );
+    // Planer dodatkowo nie ma prawa **znać modułu trasy**: jego jedynym wejściem
+    // do routingu jest `TravelOracle` (K-2). `places.rs` może — to on buduje
+    // `InfinitePlaces` na tej samej prędkości marszu co `WalkOracle`.
+    const TRASA: [&str; 2] = ["StreetGraph", "crate::walk"];
+
+    for (plik, zakazane) in [
+        ("src/places.rs", &GOSPODARKA[..]),
+        ("src/planner.rs", &GOSPODARKA[..]),
+        ("src/planner.rs", &TRASA[..]),
+    ] {
+        let sciezka = format!("{}/{plik}", env!("CARGO_MANIFEST_DIR"));
+        let src = std::fs::read_to_string(&sciezka).expect("plik źródłowy");
+        for (nr, linia) in src.lines().enumerate() {
+            let kod = linia.trim_start();
+            if kod.starts_with("//") {
+                continue; // komentarz może o nich mówić — i mówi, właśnie po to
+            }
+            for z in zakazane {
+                assert!(
+                    !kod.contains(z),
+                    "{plik}:{}: typ `{z}` w kontrakcie — to jest ryzyko R1",
+                    nr + 1
+                );
+            }
         }
     }
+}
+
+#[test]
+fn planer_stoi_na_traitach_a_nie_na_implementacjach() {
+    // Kryterium akceptacyjne nr 7 fazy, tym razem na prawdziwym planerze: podmiana
+    // `InfinitePlaces` na atrapę nie wymaga zmiany ani jednej linii u wołającego.
+    // Gdyby `PlanCtx` znał typ implementacji, `uloz` nie przyjęłoby obu.
+    use magnat_agents::{
+        plan_day, CitizenView, DayCanvas, Employment, HouseholdView, Identity, Needs, Personality,
+        PlanCtx, Residence, Vitals, WalkOracle,
+    };
+    use magnat_core::{DayOfWeek, HouseholdId, STOCK_CAT_COUNT};
+
+    let places = katalog();
+    let needs = Arc::new(NeedTable::load_default().expect("data/needs/needs.ron"));
+    let oracle = WalkOracle::new(places.clone());
+    let identity = Identity {
+        birth_day: -360 * 30,
+        flags: Identity::FLAG_ALIVE,
+        ..Identity::default()
+    };
+    let vitals = Vitals {
+        health: 80,
+        energy: 80,
+        ..Vitals::default()
+    };
+    let (needs_stan, personality, residence) =
+        (Needs::default(), Personality([50; 8]), Residence::default());
+    let wpisy = wiedza(&[2, 3]);
+    let stock: [u8; STOCK_CAT_COUNT] = [0; STOCK_CAT_COUNT];
+    let escorts: Vec<PlaceRef> = Vec::new();
+    let employment = Employment::default();
+
+    let uloz = |places: &dyn PlaceProvider| {
+        let ctx = PlanCtx {
+            seed: 1,
+            day: 1,
+            dow: DayOfWeek::Tuesday,
+            citizen: CitizenView {
+                id: CitizenId(encja(10)),
+                identity: &identity,
+                vitals: &vitals,
+                needs: &needs_stan,
+                personality: &personality,
+                residence: &residence,
+                today: 1,
+            },
+            household: HouseholdView {
+                id: HouseholdId(encja(11)),
+                stock: &stock,
+                escorts: &escorts,
+            },
+            employment: &employment,
+            known: KnowledgeView::new(&wpisy),
+            needs: &needs,
+            home: budynek(1),
+            work: None,
+            school: None,
+            places,
+            travel: &oracle,
+            max_task_travel_min: 30,
+        };
+        let mut c = DayCanvas::new();
+        plan_day(&ctx, &mut c);
+        c
+    };
+
+    let nieskonczone = InfinitePlaces::new(places, needs.clone());
+    let z_miejscami = uloz(&nieskonczone);
+    assert!(
+        z_miejscami
+            .slots()
+            .iter()
+            .any(|s| s.kind == magnat_core::ActivityKind::Shop as u8),
+        "zapas na zerze, a zakupów brak"
+    );
+
+    // Ta sama funkcja, inna implementacja — zero zmian po stronie wołającego.
+    let bez_miejsc = uloz(&EmptyPlaces);
+    assert!(!bez_miejsc.is_empty(), "plan bez miejsc stracił całą dobę");
+    assert!(
+        !bez_miejsc
+            .slots()
+            .iter()
+            .any(|s| s.kind == magnat_core::ActivityKind::Shop as u8),
+        "zakupy w sklepie, którego nie ma"
+    );
 }

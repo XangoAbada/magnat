@@ -102,7 +102,7 @@ dopiero po ostatniej podfazie; podfaza zamyka się własnym kryterium ze swojego
 | Podfaza | WP | §5 | Wynik do pokazania | Dokument |
 |---|---|---|---|---|
 | ✅ **M3a — Fundament agenta** | WP1, WP2, WP3, WP4 | 5.1, 5.2, 5.3, 5.5 | Headless: 400 tys. mieszkańców w pamięci, potrzeby spadają zgodnie z tabelą, koło czasu rozdaje zdarzenia. | `M3a-fundament-agenta.md` |
-| **M3b — Dzień mieszkańca** | WP5, WP6 | 5.4, 5.10 | Wydruk dnia wzorcowego: pobudka → posiłek → dojazd → praca → zadanie po drodze → dom → czas wolny → sen; pieszy dociera na czas. | `M3b-dzien-mieszkanca.md` |
+| ✅ **M3b — Dzień mieszkańca** | WP5, WP6 | 5.4, 5.10 | Wydruk dnia wzorcowego: pobudka → posiłek → dojazd → praca → zadanie po drodze → dom → czas wolny → sen; pieszy dociera na czas. | `M3b-dzien-mieszkanca.md` |
 | **M3c — Demografia i społeczeństwo** | WP7, WP8, WP9 | 5.6, 5.7, 5.8 | `m3_century` — 100 lat gry headless bez wybuchu ani wygaszenia populacji. | `M3c-demografia-i-spoleczenstwo.md` |
 | **M3d — Populacja i UI** | WP10, WP11, WP12, WP13 | 5.9, 5.11, 5.12 | Pełny artefakt fazy z §1 dokumentu fazy: mieszkańcy chodzą do pracy i sklepu, karta inspekcji pokazuje plan obok realizacji. | `M3d-populacja-i-ui.md` |
 
@@ -387,3 +387,19 @@ fazy, czyli sekcji §6.
 | A-6 | **§6.1: `register` rozbite na `register_components` i `register_resources`** | Minimalny snapshot z M0 nie niesie zasobów, a `world_state_hash` je hashuje — świat z hakami zasobów nie przechodzi round-tripu. Poprawka do `engine/io` poszła do M12b; do tego czasu round-trip testuje się na samych komponentach (korekta D-4) |
 | A-8 ★ | **§7.5: `bench_need_decay` ≤ 100 µs na 8 wątkach zamiast ≤ 30 µs** (zmierzone 63 µs przy 400 tys.) | Próg 30 µs liczył koszt dotknięcia shardu (107 KB), a nie koszt jego znalezienia: archetypowy ECS musi przejść wszystkie wiersze i odrzucić 59/60, bo nie umie zaadresować „co sześćdziesiątej encji" bez bocznego indeksu, który trzeba by unieważniać przy każdych narodzinach. 63 µs to 0,007 % ticku przy 1× — szczegóły w korekcie D-13 dokumentu M3a |
 | A-7 | **§7.5: `bench_alloc_population` nazywa się `mem_population_400k`** i jest testem, nie benchmarkiem; próg to **430 B** zamiast 400 B | Budżet mierzy się raz i porównuje z progiem — to jest test. Criterion mierzy tempo zmian i pilnuje regresji, więc benchmarkiem zostaje `m3a-3 populacja/spawn 400 tys.`. Podniesienie progu: korekta D-1 |
+
+---
+
+## Zmiany wpisane po M3b
+
+Zgodnie z `K-18`. Pełne uzasadnienie w tabeli „Korekty planu wpisane po implementacji M3b"
+dokumentu `M3b-dzien-mieszkanca.md` (numeracja `F-n`) — tu tylko to, co dotyczy kontraktów
+fazy, czyli sekcji §6.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| A-9 ★ | **§6.1: `sim::agents::planner` eksportuje `plan_day`, `plan_day_explained`, `replan`, `replan_explained_into`, `request_replan`, `tick_replan_cooldown`, `store_plan`, `load_plan`, `render_day_debug`, `PlanCtx`, `DayCanvas`, `PlanStats`, `ReasonLog`, `ReasonEntry`, `HouseholdView`, `MAX_SLOTS`** | Lista z §6.1 wymieniała `PlanSlot` (jest w `store`, M3a) i nie wymieniała ani debouncingu, ani zapisu planu do slabu — a bez obu planer nie da się wpiąć w systemy ECS w M3d. `HouseholdView` dochodzi jako widok, nie komponent (korekta F-4) |
+| A-10 ★ | **§6.3: M3 konsumuje z `core` dwa kolejne słowniki — `CommitmentKind` i `StockCat`** (z `STOCK_CAT_COUNT` i `StockCat::need()`) | Oba są ładunkami `DecisionReason`, więc muszą być w `core` (K-12). Dopisane do `K-20` w dokumencie 00 — korekta F-3 |
+| A-11 ★ | **§6.4: blok `DecisionReason` fazy M3 jest kompletny i zamrożony: 100–114.** `SlotBudgetExhausted` niesie `NeedKind`, nie `TaskKind`; `Replanned` niesie `cause_tag: u8` (B-1) | `TaskKind` nie powstał — w M3 zadanie jest tożsame z potrzebą (korekta F-2). Numery 115–199 zostają wolne dla M3c i M3d |
+| A-12 ★ | **§6.1: `sim::agents::des` — zegar `EventQueue` stoi na minucie właśnie rozdawanej.** `schedule` odrzuca zdarzenie na minutę już rozdaną | Korekta `D-14` do M3a §5.2, znaleziona przy wykonaniu planu: przy poprzedniej semantyce każda podróż trwała o minutę dłużej niż w planie. Dotyczy każdego konsumenta kolejki — M4, M6, M7 i M8 — więc jest zmianą kontraktu, nie szczegółem M3b (korekta F-5) |
+| A-13 | **§6.2: `WalkOracle` dostaje konstruktor `with_streets(places, nodes, segments)` i pięć metod `micro_*`.** Wszystkie znikają razem z modułem, gdy M4 dostarczy `engine/nav` | Płaskie tablice zamiast typu grafu (F-6) i zrzut pozycji zamiast bufora (F-7) — publiczne API crate'a nadal nie zna ani węzła, ani odcinka, ani trasy |

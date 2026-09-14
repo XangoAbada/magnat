@@ -240,3 +240,224 @@ fn des_przerabia_dobe_dwustu_tysiecy_agentow() {
     );
     assert!(q.is_empty());
 }
+
+// ── M3b: ruch pieszy (WP6) ──────────────────────────────────────────────────────
+
+/// Katalog miejsc, węzły i odcinki `(a, b, długość w cm)` plus lista celów —
+/// minimum, jakiego `WalkOracle::with_streets` potrzebuje od M2 (decyzja 9.4).
+type MiastoTestowe = (
+    std::sync::Arc<magnat_agents::PlaceTable>,
+    Vec<magnat_core::WorldCoord>,
+    Vec<(u32, u32, u32)>,
+    Vec<magnat_core::PlaceRef>,
+);
+
+/// Miasto testowe: siatka 20 × 20 węzłów co 150 m i sto miejsc rozsianych po niej.
+fn miasto_testowe() -> MiastoTestowe {
+    use magnat_agents::{PlaceEntry, PlaceTable};
+    use magnat_core::{BuildingId, Entity, PlaceKind, PlaceRef, WorldCoord};
+
+    const K: i32 = 20;
+    const KROK: i32 = 15_000;
+    let encja = |i: u32| Entity::new(i, std::num::NonZeroU32::new(1).unwrap());
+
+    let mut nodes = Vec::new();
+    for y in 0..K {
+        for x in 0..K {
+            nodes.push(WorldCoord::new(x * KROK, y * KROK, 0));
+        }
+    }
+    let idx = |x: i32, y: i32| (y * K + x) as u32;
+    let mut segs = Vec::new();
+    for y in 0..K {
+        for x in 0..K {
+            if x + 1 < K {
+                segs.push((idx(x, y), idx(x + 1, y), KROK as u32));
+            }
+            if y + 1 < K {
+                segs.push((idx(x, y), idx(x, y + 1), KROK as u32));
+            }
+        }
+    }
+
+    let mut wpisy = vec![PlaceEntry {
+        place: PlaceRef::Building(BuildingId(encja(1))),
+        kind: PlaceKind::Home,
+        at: WorldCoord::new(0, 0, 0),
+    }];
+    let mut cele = Vec::new();
+    for i in 0..100u32 {
+        let x = (i * 7 % K as u32) as i32;
+        let y = (i * 13 % K as u32) as i32;
+        let p = PlaceRef::Building(BuildingId(encja(100 + i)));
+        cele.push(p);
+        wpisy.push(PlaceEntry {
+            place: p,
+            kind: PlaceKind::Grocery,
+            at: WorldCoord::new(x * KROK + 300, y * KROK + 300, 0),
+        });
+    }
+    (
+        std::sync::Arc::new(PlaceTable::build(wpisy)),
+        nodes,
+        segs,
+        cele,
+    )
+}
+
+#[test]
+fn walk_estimate_miesci_sie_w_budzecie() {
+    // §7.5 `bench_walk_estimate`: mediana ≤ 80 µs dla przebiegu **zimnego** (pierwsza
+    // Dijkstra dla pary miejsc) i ≤ 0,2 µs dla trafienia w cache. Tutaj pilnujemy
+    // progu z zapasem rzędu wielkości, bo test biega też w debugu; dokładny pomiar
+    // i bramka regresji są w `benches/agents_bench.rs` (D-8).
+    use magnat_agents::{TravelOracle, WalkOracle};
+    use magnat_core::{BuildingId, CitizenId, Entity, MinuteOfDay, PlaceRef};
+
+    let (places, nodes, segs, cele) = miasto_testowe();
+    let oracle = WalkOracle::with_streets(places, &nodes, &segs);
+    let dom = PlaceRef::Building(BuildingId(Entity::new(
+        1,
+        std::num::NonZeroU32::new(1).unwrap(),
+    )));
+
+    let (identity, vitals, potrzeby, personality, residence) = (
+        Identity {
+            birth_day: -360 * 34,
+            flags: Identity::FLAG_ALIVE,
+            ..Identity::default()
+        },
+        Vitals {
+            health: 80,
+            energy: 80,
+            ..Vitals::default()
+        },
+        Needs::default(),
+        Personality([50; 8]),
+        Residence::default(),
+    );
+    let widok = magnat_agents::CitizenView {
+        id: CitizenId(Entity::new(1, std::num::NonZeroU32::new(1).unwrap())),
+        identity: &identity,
+        vitals: &vitals,
+        needs: &potrzeby,
+        personality: &personality,
+        residence: &residence,
+        today: 0,
+    };
+
+    // Zimno: każda para pytana pierwszy raz.
+    let start = std::time::Instant::now();
+    let mut suma = 0u64;
+    for cel in &cele {
+        suma += u64::from(
+            oracle
+                .estimate(dom, *cel, MinuteOfDay::new(8 * 60), &widok)
+                .minutes,
+        );
+    }
+    let zimno = start.elapsed() / cele.len() as u32;
+
+    // Ciepło: te same pary, tym razem z cache'u.
+    let start = std::time::Instant::now();
+    for cel in &cele {
+        suma += u64::from(
+            oracle
+                .estimate(dom, *cel, MinuteOfDay::new(8 * 60), &widok)
+                .minutes,
+        );
+    }
+    let cieplo = start.elapsed() / cele.len() as u32;
+
+    println!(
+        "estimate: zimno {:.1} µs, cache {:.3} µs ({} par)",
+        zimno.as_secs_f64() * 1e6,
+        cieplo.as_secs_f64() * 1e6,
+        cele.len()
+    );
+    assert!(suma > 0);
+    assert!(
+        zimno < std::time::Duration::from_micros(800),
+        "zimny estimate {zimno:?} — próg §7.5 to 80 µs, tu z zapasem 10×"
+    );
+    assert!(
+        cieplo * 10 < zimno,
+        "cache nie przyspiesza: zimno {zimno:?}, ciepło {cieplo:?}"
+    );
+}
+
+#[test]
+fn mikro_utrzymuje_piec_tysiecy_pieszych_w_kadrze() {
+    // Kryterium WP6: 5 tys. pieszych w LOD Mikro ≤ 2 ms na klatkę. Próg z zapasem
+    // rzędu wielkości (debug), dokładny pomiar w benchmarku `m3b-2 ruch`.
+    use magnat_agents::{TravelOracle, TripRequest, WalkOracle};
+    use magnat_core::{BuildingId, CitizenId, Entity, MinuteOfDay, PlaceRef};
+
+    const PIESZYCH: u32 = 5_000;
+    let (places, nodes, segs, cele) = miasto_testowe();
+    let mut oracle = WalkOracle::with_streets(places, &nodes, &segs);
+    let dom = PlaceRef::Building(BuildingId(Entity::new(
+        1,
+        std::num::NonZeroU32::new(1).unwrap(),
+    )));
+    let (identity, vitals, potrzeby, personality, residence) = (
+        Identity {
+            birth_day: -360 * 34,
+            flags: Identity::FLAG_ALIVE,
+            ..Identity::default()
+        },
+        Vitals {
+            health: 80,
+            energy: 80,
+            ..Vitals::default()
+        },
+        Needs::default(),
+        Personality([50; 8]),
+        Residence::default(),
+    );
+    let widok = magnat_agents::CitizenView {
+        id: CitizenId(Entity::new(1, std::num::NonZeroU32::new(1).unwrap())),
+        identity: &identity,
+        vitals: &vitals,
+        needs: &potrzeby,
+        personality: &personality,
+        residence: &residence,
+        today: 0,
+    };
+
+    let mut q = EventQueue::new();
+    for i in 0..PIESZYCH {
+        let handle = oracle.begin_trip(
+            TripRequest {
+                traveller: CitizenId(Entity::new(i + 1, std::num::NonZeroU32::new(1).unwrap())),
+                from: dom,
+                to: cele[i as usize % cele.len()],
+                depart: MinuteOfDay::new(8 * 60),
+                slot: 0,
+            },
+            &widok,
+            &mut q,
+        );
+        oracle.enter_micro(&handle, i, MinuteOfDay::new(8 * 60));
+    }
+    assert_eq!(oracle.micro_len(), PIESZYCH as usize);
+
+    // Sto klatek po 100 ms gry — tyle, ile mieści się w dziesięciu sekundach gry.
+    let start = std::time::Instant::now();
+    for k in 0..100u64 {
+        oracle.micro_step(8 * 60 * 60_000 + k * 100);
+    }
+    let na_klatke = start.elapsed() / 100;
+    println!(
+        "mikro: {PIESZYCH} pieszych, {:.0} µs na klatkę",
+        na_klatke.as_secs_f64() * 1e6
+    );
+    assert!(
+        na_klatke < std::time::Duration::from_millis(20),
+        "krok mikro {na_klatke:?} — próg WP6 to 2 ms, tu z zapasem 10×"
+    );
+
+    // Spójność LOD (00 §4): mikro nie dotyka ani potrzeb, ani kolejki zdarzeń.
+    // Zdarzeń jest dokładnie tyle, ile podróży — ani jednego więcej.
+    assert_eq!(q.len(), PIESZYCH as usize);
+}

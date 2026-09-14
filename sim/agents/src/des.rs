@@ -126,7 +126,14 @@ pub const fn order_key(e: &SimEvent) -> u64 {
 pub struct EventQueue {
     wheel: Vec<Vec<SimEvent>>,
     overflow: BTreeMap<u32, Vec<SimEvent>>,
+    /// Minuta **aktualnie obsługiwana**, nie następna (korekta D-14). Handler musi
+    /// widzieć zegar na swojej minucie, bo to od niego liczy się czas przybycia:
+    /// `TravelOracle::begin_trip` harmonogramuje `Arrive` na `now + minutes`, a gdyby
+    /// `now` było już minutę do przodu, każda podróż w symulacji trwałaby o minutę
+    /// dłużej niż w planie — i planer rozjechałby się z ruchem o jedną minutę na dojazd.
     now: u32,
+    /// Czy minuta `now` została już rozdana. Dopóki nie, wolno na nią harmonogramować.
+    dispatched: bool,
     len: usize,
 }
 
@@ -143,6 +150,7 @@ impl EventQueue {
             wheel: vec![Vec::new(); WHEEL_MINUTES],
             overflow: BTreeMap::new(),
             now: 0,
+            dispatched: false,
             len: 0,
         }
     }
@@ -168,10 +176,15 @@ impl EventQueue {
     /// Wstawia zdarzenie. Zdarzenie z przeszłości jest błędem wywołującego — kolejka
     /// nie ma jak go obsłużyć, a ciche przesunięcie na „teraz" zmieniłoby wynik
     /// symulacji w sposób zależny od momentu, w którym błąd powstał.
+    ///
+    /// **Minuta już rozdana też jest przeszłością.** Kubełek bieżącej minuty został
+    /// opróżniony, więc zdarzenie dopisane do niego z handlera nie wyszłoby nigdy —
+    /// zginęłoby po cichu, razem z licznikiem długości kolejki. Handler, który chce
+    /// „zaraz potem", harmonogramuje na `now + 1` (korekta D-14).
     pub fn schedule(&mut self, e: SimEvent) {
         assert!(
-            e.time >= self.now,
-            "zdarzenie na minutę {} przy zegarze {}",
+            e.time > self.now || !self.dispatched,
+            "zdarzenie na minutę {} przy zegarze {} (minuta już rozdana)",
             e.time,
             self.now
         );
@@ -197,6 +210,10 @@ impl EventQueue {
     /// symulację i nie alokuje w pętli gorącej.
     pub fn drain_minute(&mut self, out: &mut Vec<SimEvent>) {
         out.clear();
+        if self.dispatched {
+            self.now += 1;
+        }
+        self.dispatched = true;
         let minuta = self.now;
 
         // Przelew: wszystko, co właśnie weszło w zasięg koła, przepisujemy do kubełków.
@@ -231,7 +248,6 @@ impl EventQueue {
             "dwa zdarzenia o identycznym kluczu w minucie {minuta} — porządek przestał \
              być totalny, a wynik zaczął zależeć od kolejności wstawiania"
         );
-        self.now = minuta + 1;
     }
 
     /// Zaalokowane bajty — wejście do rachunku budżetu §17.7.
@@ -257,6 +273,7 @@ impl HashState for EventQueue {
     /// bo kubełek trzyma je w kolejności wstawiania, a ta zależy od liczby wątków.
     fn hash_state(&self, h: &mut StateHasher) {
         h.write_u32(self.now);
+        h.write_u8(u8::from(self.dispatched));
         h.write_u64(self.len as u64);
         let mut wszystkie: Vec<&SimEvent> = self
             .wheel
@@ -417,7 +434,7 @@ mod tests {
 
         // Przewijamy do minuty zdarzenia dalekiego — musi się pojawić dokładnie raz.
         let mut trafienia = 0;
-        while q.now() <= daleko {
+        while q.now() < daleko {
             q.drain_minute(&mut out);
             trafienia += out.iter().filter(|e| e.actor == 1).count();
         }
@@ -438,6 +455,36 @@ mod tests {
         q.drain_minute(&mut out);
         assert!(out.is_empty(), "zdarzenie wyszło 2880 minut za wcześnie");
         assert_eq!(q.len(), 1);
+    }
+
+    #[test]
+    fn zegar_stoi_na_minucie_ktora_wlasnie_rozdaje() {
+        // Korekta D-14: handler widzi zegar na **swojej** minucie, bo to od niego
+        // liczy czas przybycia. Gdyby `now` było już minutę dalej, każda podróż
+        // trwałaby o minutę dłużej niż w planie.
+        let mut q = EventQueue::new();
+        q.schedule(ev(5, 1, EventKind::StartActivity));
+        let mut out = Vec::new();
+        for oczekiwana in 0..=5u32 {
+            q.drain_minute(&mut out);
+            assert_eq!(q.now(), oczekiwana);
+        }
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].time, q.now());
+        // „Zaraz potem" to `now + 1`, nie `now`: kubełek bieżącej minuty jest już pusty.
+        q.schedule(ev(q.now() + 1, 1, EventKind::EndActivity));
+        q.drain_minute(&mut out);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].event_kind(), Some(EventKind::EndActivity));
+    }
+
+    #[test]
+    #[should_panic(expected = "minuta już rozdana")]
+    fn zdarzenie_na_minute_juz_rozdana_nie_ginie_po_cichu() {
+        let mut q = EventQueue::new();
+        let mut out = Vec::new();
+        q.drain_minute(&mut out);
+        q.schedule(ev(0, 1, EventKind::Arrive));
     }
 
     #[test]

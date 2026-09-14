@@ -8,6 +8,7 @@
 #![forbid(unsafe_code)]
 
 mod agents;
+mod day;
 mod testworld;
 mod worldgen;
 
@@ -97,6 +98,8 @@ enum Command {
     Preview(worldgen::PreviewArgs),
     /// Populacja bez miasta: rachunek pamięci, spadek potrzeb, koło czasu (M3a).
     Agents(agents::AgentsArgs),
+    /// Doba mieszkańca: planer, kolejka zdarzeń, ruch pieszy (M3b).
+    Day(day::DayArgs),
 }
 
 fn uruchom() -> Result<std::process::ExitCode, Box<dyn std::error::Error>> {
@@ -107,6 +110,7 @@ fn uruchom() -> Result<std::process::ExitCode, Box<dyn std::error::Error>> {
         Some(Command::Verify(a)) => return worldgen::verify(a),
         Some(Command::Preview(a)) => return worldgen::preview(a),
         Some(Command::Agents(a)) => return agents::run(a),
+        Some(Command::Day(a)) => return day::run(a),
         None => {}
     }
 
