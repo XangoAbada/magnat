@@ -7,14 +7,14 @@ zostają w dokumencie fazy — tu jest wyłącznie to, co robisz w tej porcji.
 
 | | |
 |---|---|
-| **Wejście** | M9a (pętla). |
-| **Pakiety robocze** | WP3, WP6 |
-| **Projekt techniczny** | §5.8 |
-| **Wynik do pokazania** | Panel testowy: brak zmian danych → 0 alokacji i 0 ms przebudowy; tabela 100 tys. wierszy sortuje i filtruje poza klatką. |
-| **Kryterium zamknięcia** | Kryteria WP3 i WP6; pseudo-lokalizacja ×1,4 nie rozwala układu. |
+| **Wejście** | M9a (pętla, powłoka sesji, `NewGameParams`). |
+| **Pakiety robocze** | WP3, WP6, WP14 |
+| **Projekt techniczny** | §5.8, §5.14 |
+| **Wynik do pokazania** | Panel testowy: brak zmian danych → 0 alokacji i 0 ms przebudowy; tabela 100 tys. wierszy sortuje i filtruje poza klatką; **z menu głównego da się dojść do grającego świata bez wiersza poleceń**. |
+| **Kryterium zamknięcia** | Kryteria WP3, WP6 i WP14; pseudo-lokalizacja ×1,4 nie rozwala układu. |
 | **Poprzednia / następna** | `M9a-szkielet-gry-i-komendy.md` · `M9c-gracz-inspekcja-nakladki.md` |
 
-Rdzeń `engine/ui`: drzewo retained, `measure/arrange/paint/event`, dirty-flagging przez `DataVersion`, dokowanie, DPI, atlas fontów, i18n PL/EN z pluralizacją — plus `Table<T>`, `Series` z piramidą mip i miniatura mapy cieplnej.
+Rdzeń `engine/ui`: drzewo retained, `measure/arrange/paint/event`, dirty-flagging przez `DataVersion`, dokowanie, DPI, atlas fontów, i18n PL/EN z pluralizacją — plus `Table<T>`, `Series` z piramidą mip i miniatura mapy cieplnej. Na wierzchu ekrany powłoki (menu, kreator świata, ładowanie, sloty, ustawienia) jako pierwszy prawdziwy klient tych widgetów i motyw `data/ui/theme.ron`.
 
 ---
 
@@ -24,6 +24,7 @@ Rdzeń `engine/ui`: drzewo retained, `measure/arrange/paint/event`, dirty-flaggi
 |---|---|---|---|---|
 | **WP3** | Rdzeń `engine/ui` | WP1 | `Widget`, drzewo retained, `measure/arrange/paint/event`, dirty-flagging przez `DataVersion`, `Layout` z dokowaniem, skalowanie DPI, atlas fontów, i18n PL/EN z pluralizacją, listy rysowania | Panel testowy: brak zmian danych → 0 alokacji i 0 ms przebudowy; pseudo-lokalizacja ×1,4 nie rozwala układu |
 | **WP6** | `Table<T>`, wykresy, mapy cieplne mini | WP3 | Wirtualizowana tabela na 100k wierszy z sortowaniem/filtrem poza klatką, `Series` z piramidą mip (dzień/dekada/miesiąc/kwartał, kalendarz 12 × 30 wg K-1), miniatura mapy cieplnej | Budżety z §7 spełnione w criterion |
+| **WP14** | Ekrany powłoki i motyw | WP3, WP13 (M9a) | Menu główne, kreator świata (`NewGameParams`), ekran generacji z postępem i anulowaniem, podgląd świata, lista slotów, ustawienia, menu pauzy; `data/ui/theme.ron` z tokenami z `docs/ui-design.md` | Świeża instalacja: od uruchomienia `magnat` **bez argumentów** do grającego świata w ≤ 6 interakcjach, wszystko klawiaturą; zmiana języka i `ui_scale` działa bez restartu; pseudo-lokalizacja ×1,4 i skale 0,75–3,0 nie rozwalają żadnego ekranu; test rysuje każdy ekran w CI bez GPU |
 
 ---
 
@@ -120,6 +121,44 @@ wybór formy z reguł CLDR, zaszyty jako funkcja czysta na `(locale, n)`. Format
 pieniądza i dat per locale (PL: przecinek dziesiętny, spacja jako separator tysięcy, „zł" po
 liczbie). Test CI: żadnego literału tekstowego w konstruktorach widgetów.
 
+### 5.14 Ekrany powłoki i motyw (PRD §14.7)
+
+Wygląd, układ i wymagania dostępności każdego z tych ekranów są w **`docs/ui-design.md`** §6 —
+tu jest wyłącznie to, co z nich wynika dla kodu. Logika (`ShellScreen`, `NewGameParams`,
+`WorldGenJob`, `SaveSlot`) należy do WP13 w `M9a`; WP14 jej nie powtarza, tylko rysuje.
+
+**Dlaczego to jest tutaj, a nie w M9e razem z panelami.** Rdzeń UI potrzebuje pierwszego prawdziwego
+konsumenta, a menu główne i kreator świata są najprostszym, jaki istnieje: kilkanaście kontrolek,
+żadnych danych symulacji, żadnej wirtualizacji. Jeśli `Widget`, układ, fokus klawiatury, skala DPI
+i i18n nie wystarczą do narysowania kreatora, to nie wystarczą też do panelu Finanse — a dowiemy się
+o tym tydzień wcześniej i taniej. Zgodnie z regułą z §4 dokumentu fazy: widgety powstają
+w kolejności, w jakiej żąda ich pierwszy ekran, który ich naprawdę potrzebuje.
+
+```rust
+pub struct Theme { pub colors: BTreeMap<TokenId, Rgba>, pub text: [TextStyle; 6], pub grid: u8 }
+// data/ui/theme.ron — schema_version jak każdy plik w data/ (00 §5, K-19)
+```
+
+Motyw jest **danymi**, nie stałymi: tokeny z `docs/ui-design.md` §3 lądują w `data/ui/theme.ron`,
+a `engine/ui` nie zna żadnego koloru z nazwy własnej. Powód jest praktyczny, nie estetyczny — motyw
+jasny (M12) i tryb wysokiego kontrastu mają być zmianą pliku, a nie przeglądem dwudziestu paneli.
+Trzy kolory stanu (`ok` / `warn` / `danger`) zastępują literały, które M3 ma dziś w `widgets.rs`.
+
+Ekrany powłoki rysują się **bez snapshotu symulacji** — w menu głównym nie ma jeszcze świata.
+To jedyne miejsce w UI, gdzie źródłem danych nie jest `&Snapshot`, więc granica z §5.2 nie jest
+naruszona, tylko nieużywana: ekran czyta `&ShellModel` (sloty, ustawienia, draft kreatora), a ten
+nie ma dostępu do `World`, bo świata jeszcze nie ma.
+
+Trzy wymagania, które łatwo przeoczyć, a wszystkie są sprawdzalne:
+
+1. **Ekran generacji odświeża się, gdy symulacja nie chodzi.** Pętla klatki z §5.2 zakłada tick
+   symulacji; w `Generating` ticków nie ma, a pasek postępu i tak musi się ruszać. Stan ma własną,
+   uproszczoną pętlę: odczyt `GenProgress` → `rebuild_dirty` → `draw`.
+2. **Anulowanie działa z klawiatury i jest natychmiastowe w odbiorze** — flaga sprawdzana między
+   passami, a ekran wraca do kreatora od razu po jej ustawieniu, nie po zakończeniu bieżącego passu.
+3. **Miniatura podglądu świata to ta sama mapa co w podglądzie `headless`** — kolor z klasy wody
+   i biomu klimatu, nie drugi renderer (`tools/magnat::mapa_dalekiego_terenu` liczy to już dziś).
+
 ---
 
 ## Zmiany wpisane po M3d
@@ -132,3 +171,5 @@ Zgodnie z `K-18`. To są rzeczy, o których M9 wie **na pewno** po zamknięciu M
 | Z-2 ★ | **Selekcja działa: `Renderer::pick(x, y) -> Option<u32>`** czyta bufor ID (decyzja 9.3). Odczyt pochodzi z **klatki poprzedniej** | To nie jest kompromis, tylko własność mechanizmu: czytanie GPU w chwili kliknięcia to `submit` + `map` + oczekiwanie, czyli zacięcie klatki na każdy klik. Dla M9 ma to konsekwencję na plus — podświetlenie encji pod kursorem jest już policzone i nie kosztuje nic więcej. Dziś w buforze są wyłącznie piesi; M9 dokłada firmy, pojazdy i sieci do **tego samego** przebiegu |
 | Z-3 | **`InspectorPanel::build` zwraca tekst, a rysowanie stoi obok** (`widgets::citizen_card` nad `CitizenModel`) | Jedno źródło prawdy: złoty test wydruku broni tego, co widzi gracz (E-8). Panel M9 ma czytać model, a nie liczyć drugi raz — inaczej test przestaje cokolwiek gwarantować |
 | Z-4 | **Zaznaczenie mieszkańca włącza bufor śledzenia** (`Trace::watch`, najwyżej ośmiu naraz — decyzja 9.16) | Bez tego karta pokazuje sam plan, bez realizacji. M9 musi o tym pamiętać przy każdym nowym sposobie otwierania karty (wyszukiwarka, lista, skok po relacji) |
+| Z-5 ★ | **Nowy pakiet WP14 — ekrany powłoki i motyw** (§5.14), zależny od WP3 i od WP13 z `M9a`. Kryterium: od `magnat` bez argumentów do grającego świata w ≤ 6 interakcjach, wszystko klawiaturą | PRD §14.7 i decyzja właściciela produktu z 2026-09-14. Przy okazji rozwiązuje problem kolejności: WP3 dostaje pierwszego konsumenta, który nie wymaga snapshotu ani wirtualizacji, więc rdzeń UI da się sprawdzić, zanim powstanie pierwszy panel biznesowy |
+| Z-6 | **Tokeny wyglądu są danymi w `data/ui/theme.ron`**, a język wizualny (paleta, typografia, siatka, komponenty, dostępność) mieszka w `docs/ui-design.md` — wiążąco dla każdej fazy dokładającej UI | Bez tego dwanaście faz dokładających panele wyprodukuje dwanaście wyglądów, a motyw jasny i tryb wysokiego kontrastu (M12) będą przeglądem wszystkich paneli zamiast podmianą pliku |

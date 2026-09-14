@@ -15,21 +15,24 @@ da się prowadzić 200 sklepów bez mikrozarządzania.
 
 **Artefakt końcowy:** uruchamialna gra. Konkretnie, w jednej sesji da się:
 
-1. Wybrać (lub wylosować) mieszkańca jako postać — z jego domem, rodziną, pracą, oszczędnościami
+1. **Uruchomić `magnat` bez jednego argumentu** i z menu głównego założyć świat: ziarno, rozmiar,
+   region, epoka, profil, trudność, scenariusz i wariant startu — wszystko na ekranie, z podglądem
+   wygenerowanego miasta i możliwością wylosowania innego (§14.7).
+2. Wybrać (lub wylosować) mieszkańca jako postać — z jego domem, rodziną, pracą, oszczędnościami
    i znajomymi, wygenerowanymi przez M2/M3, nie doklejonymi.
-2. Przeżyć dzień jako pracownik: iść do pracy, zrobić zakupy, obejrzeć własną kartę inspekcji
+3. Przeżyć dzień jako pracownik: iść do pracy, zrobić zakupy, obejrzeć własną kartę inspekcji
    i kartę inspekcji sąsiada — zrozumieć, jak działa miasto.
-3. Otworzyć pierwszy biznes (kiosk / food truck / sklep / warsztat / furgonetka), ustalić ceny
+4. Otworzyć pierwszy biznes (kiosk / food truck / sklep / warsztat / furgonetka), ustalić ceny
    ręcznie, obsłużyć go osobiście (realne godziny postaci), zobaczyć klientów i — przede wszystkim —
    **tych, którzy nie kupili, i dlaczego**.
-4. Urosnąć: zatrudnić ludzi, postawić menedżera, otworzyć drugi punkt, kupić dostawę własną,
+5. Urosnąć: zatrudnić ludzi, postawić menedżera, otworzyć drugi punkt, kupić dostawę własną,
    wejść w produkcję, zbudować grupę — bez żadnej blokady poza kapitałem, ludźmi, informacją i czasem.
-5. **Zautomatyzować**: napisać politykę cenową w edytorze reguł (bez pisania kodu), przypiąć ją
+6. **Zautomatyzować**: napisać politykę cenową w edytorze reguł (bez pisania kodu), przypiąć ją
    do 40 sklepów, zobaczyć w karcie inspekcji, którą regułę menedżer zastosował i jak bardzo ją
    spartaczył, bo ma niską umiejętność.
-6. Zbankrutować osobiście — i grać dalej jako pracownik z długiem i popsutą reputacją.
-7. Umrzeć — i grać dalej jako dziedzic, który odziedziczył firmy, ale nie odziedziczył znajomości.
-8. Obejrzeć kronikę stulecia i wyeksportować replay (seed + wejścia), który u kogoś innego
+7. Zbankrutować osobiście — i grać dalej jako pracownik z długiem i popsutą reputacją.
+8. Umrzeć — i grać dalej jako dziedzic, który odziedziczył firmy, ale nie odziedziczył znajomości.
+9. Obejrzeć kronikę stulecia i wyeksportować replay (seed + wejścia), który u kogoś innego
    odtworzy tę samą grę co do grosza.
 
 **Warunek grywalności fazy** (bez tego faza jest nieukończona): gracz z 200 sklepami nie musi
@@ -48,6 +51,7 @@ w ≤ 12 interakcjach i przy ≤ 3 otwartych panelach.
 | Obszar | PRD | Uwaga |
 |---|---|---|
 | `game/`: pętla gry, stany, sesja, zapis/wczytanie sesji, integracja sim+engine | §16.2 | crate tworzony w tej fazie |
+| **Ekrany poza rozgrywką**: menu główne, kreator świata, generacja z postępem i podglądem, sloty zapisu, ustawienia, pauza | §14.7 | logika — WP13 (`M9a`), rysowanie — WP14 (`M9b`). **Gra przestaje wymagać wiersza poleceń do założenia świata** |
 | Postać gracza jako zwykły mieszkaniec, warianty startu | §13.1 | |
 | Ścieżka kariery bez sztucznych blokad, tier jako etykieta | §13.2 | |
 | Cele, scenariusze, osiągnięcia emergentne z kronik | §13.3 | |
@@ -92,6 +96,7 @@ w ≤ 12 interakcjach i przy ≤ 3 otwartych panelach.
 | §14.4 Śledzenie | `FollowTarget`, oś czasu dnia, ślad partii |
 | §14.5 Czas | `TimeScale`, `StopCondition` |
 | §14.6 Automatyzacja | projekt języka (`Policy`, `Rule`, `ConditionExpr`, `Action`) → `sim/policy`/M7 (K-11); `RuleEditor`, diagnostyka, dry-run, `ManagerExecution` → `game/` |
+| §14.7 Ekrany poza rozgrywką | `ShellScreen`, `NewGameParams`, `WorldGenJob`, `WorldPreview`, `SaveSlot`, `Settings` (WP13); ekrany i motyw `data/ui/theme.ron` (WP14); język wizualny w `docs/ui-design.md` |
 | §6.3 Ceny gracza | polityki cenowe — ten sam zestaw narzędzi co AI (K-11); podstawa ceny jawna (K-7) |
 | §16.4 UI gry | `engine/ui`: `Widget`, `Layout`, `Table<T>`, wykresy, grafy, Gantt, i18n, DPI |
 | §18.2 Determinizm/replay | `CommandEnvelope`, dziennik wejść, test odtworzenia |
@@ -114,14 +119,17 @@ dopiero po ostatniej podfazie; podfaza zamyka się własnym kryterium ze swojego
 
 | Podfaza | WP | §5 | Wynik do pokazania | Dokument |
 |---|---|---|---|---|
-| **M9a — Szkielet gry i komendy** | WP1, WP2 | 5.1, 5.2, 5.5 | Zapis sesji roku gry i jej odtworzenie z łańcuchem hashy zgodnym co 1000 ticków. | `M9a-szkielet-gry-i-komendy.md` |
-| **M9b — Rdzeń UI** | WP3, WP6 | 5.8 | Panel testowy: brak zmian danych → 0 alokacji i 0 ms przebudowy; tabela 100 tys. wierszy sortuje i filtruje poza klatką. | `M9b-rdzen-ui.md` |
+| **M9a — Szkielet gry i komendy** | WP1, WP2, WP13 | 5.1, 5.2, 5.5, 5.13 | Zapis sesji roku gry i jej odtworzenie z łańcuchem hashy zgodnym co 1000 ticków; nowa gra zakładana z `NewGameParams` bez argumentów CLI. | `M9a-szkielet-gry-i-komendy.md` |
+| **M9b — Rdzeń UI** | WP3, WP6, WP14 | 5.8, 5.14 | Panel testowy: brak zmian danych → 0 alokacji i 0 ms przebudowy; tabela 100 tys. wierszy sortuje i filtruje poza klatką; droga z menu głównego do grającego świata bez wiersza poleceń. | `M9b-rdzen-ui.md` |
 | **M9c — Gracz, inspekcja, nakładki** | WP4, WP5, WP7 | 5.3, 5.7, 5.10 | Odpowiedź na „dlaczego Anna nie kupiła u mnie?” w PL i EN, z nazwanym konkurentem i klikalnym odnośnikiem. | `M9c-gracz-inspekcja-nakladki.md` |
 | **M9d — Język reguł** | WP8, WP9 | 5.6 | 6 przykładowych polityk zbudowanych wyłącznie klikaniem; dry-run „30 dni” zgodny z późniejszym wykonaniem. | `M9d-jezyk-regul.md` |
 | **M9e — Panele, czas, kariera** | WP10, WP11, WP12 | 5.4, 5.9, 5.11, 5.12 | Pełny artefakt fazy z §1 dokumentu fazy: pełna ścieżka kariery, panele biznesowe, automatyzacja polityk. | `M9e-panele-czas-kariera.md` |
 
 Ścieżka krytyczna: WP1 → WP2 → WP3 → WP6 → WP8 → WP9 → WP10 → WP12.
 WP4/WP5/WP7/WP11 są równoległe względem siebie po WP3.
+WP13 idzie po WP2 (jest logiką sesji), WP14 po WP3 i WP13 — **oba poza ścieżką krytyczną**, ale
+WP14 jest pierwszym konsumentem rdzenia UI i dlatego warto go zrobić wcześnie: kreator świata
+sprawdza układ, fokus, DPI i i18n bez żadnych danych symulacji.
 
 ---
 
@@ -144,6 +152,8 @@ odesłania w tekście („patrz §5.4") nadal wskazują tę samą sekcję — zm
 | 5.10 | Nakładki, filtry, śledzenie, czas | `M9c-gracz-inspekcja-nakladki.md` |
 | 5.11 | Scenariusze, cele, kronika, porażka | `M9e-panele-czas-kariera.md` |
 | 5.12 | Onboarding — przełożenie §20.3 na wymagania | `M9e-panele-czas-kariera.md` |
+| 5.13 | Powłoka sesji — nowa gra, generacja, sloty (§14.7) | `M9a-szkielet-gry-i-komendy.md` |
+| 5.14 | Ekrany powłoki i motyw (§14.7) | `M9b-rdzen-ui.md` |
 
 ---
 
@@ -157,6 +167,8 @@ odesłania w tekście („patrz §5.4") nadal wskazują tę samą sekcję — zm
 | `fn precheck(&Snapshot, &PlayerCommand) -> Result<(), CommandError>` | `game::command` | wszystkie panele, M10 |
 | `ReplayLog` (nagłówek, strumień autorytatywny, strumień widoku) + odtwarzacz | `game::session` | `engine/devtools` (§16.5), M12 (zgłoszenia błędów) |
 | `PlayerCharacter`, `PlayerAutonomy`, `CareerTier::derive`, `StartVariant` | `game::player` | M10 (progresja), M12 |
+| `ShellScreen`, `NewGameParams`, `WorldGenJob`, `WorldPreview`, `SaveSlot`, `Settings` | `game::session` | M11 (ustawienia grafiki i dźwięku), M12 (wersjonowanie slotów, modding ekranów) |
+| `Theme` + `data/ui/theme.ron` (tokeny z `docs/ui-design.md`) | `engine/ui` | M10, M11, **M12** (motyw jasny, wysoki kontrast, mody) |
 | **Projekt** języka: `Policy`, `Rule`, `ConditionExpr`, `Expr`, `Metric`, `Action`, `PolicyScope`, `PriceBasis` w wyrażeniach | `sim/policy` (**właściciel crate'a: M7**, K-11; autor języka: M9) | M7, M10, M12 |
 | `ManagerExecution::from_skill`, eskalacje, `DecisionReason::PolicyApplied` | `game::policy` | M7, M10 |
 | Wymagania na `PolicyRunner` (kadencja, rozłożenie w dobie, budżet ms) | spec dla `sim/policy` | **M7** (implementuje) |
@@ -193,6 +205,8 @@ odesłania w tekście („patrz §5.4") nadal wskazują tę samą sekcję — zm
 | Zdarzenia świata (awarie, pogoda, recesje) jako `ChronicleKind` | M8, M11 | kronika, warunki zatrzymania |
 | Renderowanie pól skalarnych i strumieni na terenie | M1, M2 | nakładki danych — `game/` daje tylko spec |
 | Zapis/wczytanie snapshotu + strumieni pobocznych (kronika, serie, dziennik replay) | M0 (min.), M12 (pełny) | §9 — format plików pobocznych |
+| `WorldGenParams`, `generate()`, `generate_city()`, Etap 8 populacji, `WorldGenReport`, `PASSES` z nazwami etapów | M1, M2, M3 | istnieją. **WP13 dokłada do `generate()` obserwatora postępu i flagę anulowania** — dziś raport jest dopiero po zakończeniu, a ekran ładowania potrzebuje go w trakcie (`M9a` Z-4) |
+| Nagłówek pliku zapisu czytelny bez wczytania świata (nazwa miasta, data gry, majątek, `WorldGenParams`, `schema_version`) | M0 (min.), **M12** (pełny) | lista slotów nie ma prawa wczytać dziesięciu światów; niezgodna wersja musi dać opisany błąd, nie panikę |
 | Blok `StreamId` **260–279** (K-4) | M0 | M9 używa `PolicyExecution = 260`; 261–279 wolne na przyszłe strumienie gracza |
 
 ---
@@ -284,6 +298,25 @@ headless-first z doc 00 §6.
   test na wygenerowanych księgach: `obrót_brutto = przychód_netto + VAT_należny` i VAT
   występuje wyłącznie po stronie zobowiązań.
 
+### Powłoka i zakładanie gry (§14.7)
+
+- **Bez wiersza poleceń:** `magnat` uruchomiony bez argumentów prowadzi od menu głównego do
+  grającego świata w ≤ 6 interakcjach, wyłącznie z klawiatury. Test skryptowy na `UiIntent`.
+- **Jedna droga do świata:** `new_game(NewGameParams)` i `magnat --seed … --size … --region …`
+  dają **identyczny hash terenu i miasta** dla tych samych wartości. Gdyby kiedykolwiek rozjechały
+  się o bit, znaczyłoby to, że klient ma własną, drugą ścieżkę generacji.
+- **Postęp jest prawdziwy:** ekran generacji pokazuje nazwę etapu z `PASSES` i rośnie monotonicznie;
+  test sprawdza, że liczba raportów = liczba passów, a nie że pasek się rusza.
+- **Anulowanie:** przerwanie generacji 16 km w dowolnym momencie wraca do kreatora bez wycieku
+  wątku i bez sesji w stanie połowicznym (test: 50 anulowań w pętli, stałe zużycie pamięci).
+- **Sloty:** lista dziesięciu slotów czyta wyłącznie nagłówki (test: brak alokacji rzędu świata);
+  slot w starszej wersji schematu zwraca `SaveError::SchemaTooOld` i zostaje widoczny na liście.
+- **Ustawienia bez restartu:** zmiana `Locale` i `ui_scale` w trakcie gry przerysowuje UI w tej samej
+  sesji; test na zrzucie tekstowym w obu językach i na trzech skalach.
+- **Determinizm:** ustawienia i układ paneli **nie wchodzą** do hasha stanu (ten sam test co dla
+  strumienia widoku), a `PlayerCommand::StartGame` niesie komplet `WorldGenParams` — replay
+  odtwarza świat z samej koperty, bez pliku świata.
+
 ### Onboarding
 
 - Skryptowy przebieg samouczka: ≤ 12 interakcji i ≤ 3 panele do pierwszej `SetPrice` (test CI).
@@ -296,7 +329,7 @@ headless-first z doc 00 §6.
 
 | Ryzyko | Skutek | Mitygacja |
 |---|---|---|
-| **`engine/ui` to największa pojedyncza masa kodu w projekcie i nie ma zapasowego planu** (egui wolno tylko w devtools, §16.1) | Faza się rozjeżdża, panele czekają na widgety | Widgety budowane wyłącznie pod konkretny panel, który ich żąda (kolejność WP). Dopuszczamy **tymczasowe** panele na egui za flagą `dev-panels` w buildach deweloperskich, usuwane do końca fazy — to pozwala testować mechaniki, zanim widget powstanie |
+| **`engine/ui` to duża masa kodu, a panele są od niej zależne** | Faza się rozjeżdża, panele czekają na widgety | **Częściowo rozbrojone w M3 (decyzja 9.2):** rdzeniem jest `egui`, nie własny toolkit — nie piszemy układu, atlasu fontów ani obsługi wejścia (korekta PRD §16.4; zapis „egui tylko w devtools" z §16.1 już nie obowiązuje, więc flaga `dev-panels` jest zbędna). Zostaje reguła kolejności: widgety powstają wyłącznie pod ekran albo panel, który ich żąda — pierwszym takim klientem jest kreator świata z WP14, najtańszy z możliwych |
 | **Język reguł puchnie w język programowania** | Nieskończona faza, nieuczalne UI | Twarde limity w §5.6 (bez zmiennych, pętli, funkcji; ≤ 8 reguł, głębokość ≤ 3). Czego zabraknie — idzie do M12/modding, nie do M9 |
 | **Dług wyjaśnialności z M3–M8**: warianty `DecisionReason` okażą się ubogie i karta inspekcji nie odpowie na pytania gracza | Główna obietnica gry (§14.1) niespełniona, metryka §20.3 „rozumiem, dlaczego przegrałem" nie do osiągnięcia | Audyt na starcie fazy: lista pytań z §5.7 skonfrontowana z istniejącymi wariantami; braki zgłoszone jako wymagania do faz M3–M8 **przed** WP5, nie po |
 | **`LostSale` zbyt drogie** przy 400 tys. agentów | Panel Sklep bez odpowiedzi „kto nie kupił" | Dwa poziomy: histogram (zawsze, zakłady gracza) + bufor 256 (tylko oznaczone). Dla zakładów AI zero kosztu |
@@ -351,9 +384,28 @@ blok `StreamId` 260–279 (**K-4**), kalendarz 360 dni = 12 × 30 (**K-1**).
 | WP10 | 9 paneli biznesowych + `GraphView` + `GanttView` + `PanelRegistry` | **XL** |
 | WP11 | Sterowanie czasem, warunki zatrzymania, tryb śledzenia, magazyn i wyszukiwarka kroniki | **L** |
 | WP12 | Kariera, 5 scenariuszy, cele, bankructwo, sukcesja, samouczek, metryki | **L** |
+| WP13 | Powłoka sesji: `ShellScreen`, `NewGameParams`, generacja z postępem i anulowaniem, sloty, ustawienia | **M** |
+| WP14 | Ekrany powłoki (menu, kreator, ładowanie, podgląd, sloty, ustawienia, pauza) + motyw `data/ui/theme.ron` | **M** |
 
-Rozkład masy: **WP3 i WP10 to razem około połowy fazy.** To nie jest przypadek — M9 jest fazą,
+Rozkład masy: **WP3 i WP10 to razem około połowy fazy.** WP13 i WP14 tej proporcji nie zmieniają —
+to razem mniej niż jedno WP10, bo cała mechanika, na której stoją (`WorldGenParams`, `generate`,
+`generate_city`, Etap 8, format zapisu), istnieje od M1–M3. To nie jest przypadek — M9 jest fazą,
 w której powstaje całe UI gry, a nie tylko warstwa gracza. Jeśli faza ma się rozjechać, rozjedzie
-się tam, dlatego WP3 startuje najwcześniej jak to możliwe (zaraz po WP1) i dlatego dopuszczamy
-tymczasowe panele na egui za flagą deweloperską, żeby mechaniki z WP8/WP9/WP12 dało się testować
-niezależnie od postępu widgetów.
+się tam, dlatego WP3 startuje najwcześniej jak to możliwe (zaraz po WP1), a jego pierwszym
+konsumentem jest WP14 — ekrany powłoki nie potrzebują żadnych danych symulacji, więc rdzeń UI
+da się sprawdzić w całości, zanim powstanie pierwszy panel biznesowy.
+
+---
+
+## Zmiany wpisane po M3d
+
+Zgodnie z `K-18`. Źródło: decyzja właściciela produktu z 2026-09-14 — gra ma zakładać świat
+z poziomu gry, a nie z wiersza poleceń — plus stan kodu po M3d.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| Z-1 ★ | **Ekrany poza rozgrywką wchodzą w zakres fazy** (§2, §3): PRD ma nową sekcję §14.7, M9 dostaje dwa pakiety — WP13 (logika, `M9a` §5.13) i WP14 (ekrany i motyw, `M9b` §5.14). Artefakt końcowy §1 zaczyna się od „uruchom `magnat` bez argumentu" | Droga od uruchomienia do grającego świata nie miała właściciela: `GameState::MainMenu` był wariantem enuma, którego nikt nie wypełniał, a komplet parametrów świata żył wyłącznie w `clap` w `tools/magnat`. Przypadek (5) z `K-18` |
+| Z-2 ★ | **Zakładanie gry jest dwuetapowe:** teren + miasto → podgląd i decyzja gracza → zaludnienie (Etap 8) → wybór postaci | Pomiary M1 i M3d: metropolia to ~20 s terenu i **26,9 s** zaludnienia. Świat odrzucony po obejrzeniu mapy nie ma powodu być zaludniany. Konsekwencja wpisana wprost: podgląd pokazuje **pojemność** (mieszkania, miejsca pracy, firmy), nie populację, bo w tym momencie nie istnieje jeszcze ani jeden mieszkaniec |
+| Z-3 ★ | **`PlayerCommand::StartGame` niesie `WorldGenParams`, nie `seed: u64`** (`M9a` §5.5) | Replay z samym ziarnem odtwarzałby inne miasto, bo rozmiar, region, epoka, profil i trudność zmieniają świat tak samo jak ziarno. To kontrakt determinizmu z §7, nie szczegół |
+| Z-4 | **Nowy kontrakt „konsumuję": obserwator postępu i anulowanie w `sim/world::generate`** oraz nagłówek zapisu czytelny bez wczytania świata (§6) | Ekran ładowania i lista slotów bez tego albo kłamią (animowany pasek), albo wczytują dziesięć światów, żeby pokazać dziesięć wierszy |
+| Z-5 | **Język wizualny wydzielony do `docs/ui-design.md`**, tokeny do `data/ui/theme.ron`; PRD §16.4 dostał korektę o `egui` (decyzja M3 9.2), która znosi ograniczenie „egui tylko w devtools" z §16.1 | Ryzyko z §8 („`engine/ui` to największa masa kodu bez planu zapasowego") zostało częściowo rozbrojone jeszcze w M3 — dokument fazy nadal mówił inaczej niż kod, który już stoi na `egui`. Przy okazji: tymczasowe panele „za flagą `dev-panels`" z §8 przestają być potrzebne jako furtka, bo `egui` jest teraz drogą główną, a nie awaryjną |

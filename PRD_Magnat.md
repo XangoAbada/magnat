@@ -598,6 +598,23 @@ Pauza, 1×, 3×, 10×, 50× (tryb makro — ruch przełącza się w mezo, grafik
 
 Polityki i reguły (cenowe, zapasów, HR) edytowane w prostym języku reguł z UI (bez pisania kodu), by gracz z 200 sklepami nie tonął w mikrozarządzaniu. Menedżerowie realizują polityki z jakością zależną od ich umiejętności.
 
+### 14.7 Ekrany poza rozgrywką
+
+**Zasada: gra uruchamia się bez argumentów wiersza poleceń.** Wszystko, co dziś ustawiają przełączniki `magnat --seed --size --region --epoch --profile --difficulty`, gracz ustawia na ekranie. Wiersz poleceń zostaje narzędziem deweloperskim i CI (§16.5) — nie jedyną drogą do nowego świata.
+
+Powłoka gry to stany aplikacji, nie „okienka nad grą": każdy ekran jest wariantem stanu sesji, więc nie da się być jednocześnie w menu i w rozgrywce.
+
+- **Menu główne.** Kontynuuj (ostatni zapis), Nowa gra, Wczytaj, Ustawienia, Wyjdź. Widoczna wersja gry i wersja formatu zapisu — zgłoszenie błędu zaczyna się od tych dwóch liczb.
+- **Nowa gra — kreator świata.** Komplet parametrów generacji (§4.1) w jednym ekranie: ziarno (wpisane lub losowane), rozmiar mapy (4/8/12/16 km), region, epoka startowa, profil gospodarczy, trudność, scenariusz (§13.3) i wariant startu (§13.1). Każdy parametr niesie zdanie o tym, **co zmienia w grze**, a nie samą nazwę. Ziarno jest jawne i przepisywalne: dwóch graczy z tym samym ziarnem i tymi samymi parametrami dostaje ten sam świat co do metra (§18.2).
+- **Generacja i podgląd.** Po zatwierdzeniu parametrów generacja idzie w tle, z nazwanymi etapami (maska lądu, wysokości, erozja, hydrologia, klimat, złoża, drogi, strefy, zabudowa, firmy, populacja) i możliwością anulowania — świat 16 km to kilkanaście sekund i ekran nie ma prawa udawać, że zawiesił się na zawsze. Po generacji: **podgląd mapy z kluczowymi liczbami** (populacja, powierzchnia miasta, dominujące branże, złoża) i decyzja gracza — zaczynam albo losuję ponownie. Odrzucenie świata przed rozpoczęciem gry jest tańsze niż odkrycie po godzinie, że miasto nie ma portu.
+- **Wybór postaci** (§13.1): kandydaci z wygenerowanej populacji, z domem, rodziną, pracą i oszczędnościami; losowanie i przewijanie do skutku.
+- **Wczytaj i zapisz.** Lista slotów z metadanymi: nazwa miasta, data w grze, majątek, godziny rozgrywki, wersja zapisu, ziarno. Autozapis rotacyjny. Zapis niezgodny wersją jest widoczny i opisany, nie ukryty.
+- **Ustawienia** (wspólne dla menu i pauzy): język interfejsu PL/EN, skala UI, grafika (rozdzielczość, tryb okna, synchronizacja pionowa, zasięg widzenia, jakość cieni), dźwięk (§15.5), sterowanie z podglądem skrótów, zapis dziennika widoku do zgłoszeń błędów (włączalny). Zmiana języka i skali działa natychmiast, bez restartu.
+- **Menu pauzy:** wróć do gry, zapisz, wczytaj, ustawienia, wyjdź do menu głównego. Wyjście z niezapisanym postępem zawsze pyta.
+- **Ekrany domknięcia:** koniec scenariusza z rozliczeniem celów (§13.3) i ekran spuścizny po śmierci postaci bez dziedzica — z kroniką dynastii (§13.4). Oba prowadzą z powrotem do gry albo do menu; żaden nie jest ślepym zaułkiem.
+
+Wymagania wspólne dla wszystkich ekranów: pełna obsługa z klawiatury, teksty wyłącznie z katalogów lokalizacji (PL i EN równolegle), układ wytrzymujący napisy dłuższe o 40% i skalę UI od 0,75 do 3,0, oraz ten sam system widgetów co w rozgrywce (§16.4) — powłoka nie jest osobnym interfejsem.
+
 ---
 
 ## 15. Prezentacja: voxele, kamera, dźwięk
@@ -654,7 +671,7 @@ Uzasadnienie w kontekście wymagań:
 - `rayon` (work-stealing thread pool) — lub własny job system, jeśli potrzebna pełniejsza kontrola nad kolejnością (determinizm),
 - `serde` + `bincode`/własny format (serializacja), `zstd` (kompresja zapisów),
 - `glam` (matematyka), `parking_lot`, `crossbeam` (kanały),
-- `egui` **tylko** dla narzędzi deweloperskich (edytor, debug); UI gry — własny system (§16.4),
+- `egui` — rdzeń UI gry **i** narzędzi deweloperskich (korekta po M3, decyzja 9.2; pierwotnie było tu „tylko dla narzędzi deweloperskich, UI gry własne" — uzasadnienie zmiany w §16.4),
 - `mlua` lub `wasmtime` (modding), `kira` lub `cpal` (audio),
 - `tracy-client`/`puffin` (profilowanie).
 
@@ -705,6 +722,10 @@ magnat/
 ### 16.4 UI gry
 
 Własny system retained-mode z deklaratywnym opisem (drzewo widgetów budowane z danych, dirty-flagging). Wymagane widgety: tabele z sortowaniem/filtrami na 100k wierszy (wirtualizacja), wykresy czasowe, grafy (łańcuch dostaw), Gantt, mapy cieplne w miniaturze, edytor reguł. Skalowanie DPI, lokalizacja PL/EN z pluralizacją.
+
+**Korekta po M3 (decyzja 9.2, wiążąca):** rdzeniem UI gry jest **`egui` + `egui-wgpu`**, a nie własny toolkit — §16.1 dopuszczał `egui` tylko w narzędziach deweloperskich i to ograniczenie zostaje zniesione. Powód jest policzalny: M9 ma zbudować kilkanaście paneli, nie framework, a pisanie własnego układu, atlasu fontów i obsługi wejścia to największa pojedyncza masa kodu w projekcie bez planu zapasowego. Wymagania powyżej nie znikają — retained-mode, dirty-flagging po wersji danych, wirtualizacja i budżet klatki obowiązują dalej, tylko realizuje je warstwa modeli widgetów w `engine/ui` nad `egui`, który pozostaje czystym procesorem bez `wgpu` i `winit`. Konsekwencja wykorzystywana od M3: panel da się narysować w teście CI bez karty graficznej.
+
+**Język wizualny** (paleta, typografia, siatka, komponenty, układ ekranów, dostępność) jest kontraktem osobnym od tego rozdziału i mieszka w `docs/ui-design.md`. Rozdział mówi, **co** interfejs musi umieć; tamten dokument — **jak** ma wyglądać i dlaczego tak.
 
 ### 16.5 Narzędzia deweloperskie
 
