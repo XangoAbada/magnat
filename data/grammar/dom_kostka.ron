@@ -1,0 +1,62 @@
+// R1/R2 — kostka. Dom jednorodzinny epoki powojennej i transformacji: rzut kwadratowy,
+// dwie kondygnacje, dach niemal płaski, tynk. Brzydki i wszędzie — i właśnie dlatego
+// musi być w katalogu, bo bez niego przedmieścia z lat 60.–80. wyglądają na willowe.
+(
+    schema_version: 1,
+    id: "dom_kostka",
+    applies: (
+        zones: ["r1", "r2"],
+        epochs: ["postwar", "transition"],
+        styles: [],
+        land_value: (0, 4000000),
+        frontage_m: (9.0, 60.0),
+        depth_m: (10.0, 250.0),
+        weight: 45,
+    ),
+    massing: (
+        setback_front_m: 5.0,
+        setback_side_m: 3.0,
+        setback_back_m: 8.0,
+        max_depth_m: 10.0,
+    ),
+    rules: [
+        Foundation(depth_m: 1.5, material: "concrete", basements: 1),
+        Floors(
+            count: (2, 2),
+            height_m: 2.6,
+            ground_height_m: 2.7,
+            ground: Ref("sciana"),
+            typical: Ref("sciana"),
+            top: Ref("sciana"),
+        ),
+        // Dach kopertowy o minimalnym spadku — z ulicy czyta się jak płaski, ale nie jest.
+        Roof(shape: Hip(pitch_deg: 18), material: "roof_sheet", dormers: (0, 0)),
+    ],
+    refs: [
+        ("sciana", Seq([
+            Choice([
+                (5, Fill("plaster_white")),
+                (3, Fill("stucco")),
+                (2, Fill("brick_yellow")),
+            ]),
+            Comp(thickness_m: 1.2, faces: [
+                (Front, Repeat(axis: U, step_m: 4.0, pad_m: 1.2, rule: Split(axis: W, parts: [
+                    (Abs(0.9), Nothing),
+                    (Abs(1.4), Void),
+                    (Rel(1.0), Nothing),
+                ]))),
+                (Side, Repeat(axis: V, step_m: 4.4, pad_m: 1.5, rule: Split(axis: W, parts: [
+                    (Abs(1.0), Nothing),
+                    (Abs(1.2), Void),
+                    (Rel(1.0), Nothing),
+                ]))),
+            ]),
+        ])),
+    ],
+    interior: (
+        ground: (kind: Dwelling, area_m2: (55, 105)),
+        typical: (kind: Dwelling, area_m2: (55, 105)),
+        top: (kind: Dwelling, area_m2: (50, 95)),
+        circulation_share: 0.07,
+    ),
+)

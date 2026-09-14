@@ -12,7 +12,7 @@ zostają w dokumencie fazy — tu jest wyłącznie to, co robisz w tej porcji.
 | **Projekt techniczny** | §5.6c |
 | **Wynik do pokazania** | Przelot kamerą nad dzielnicą mieszkaniową, w której **żadne dwa sąsiadujące budynki nie są tym samym budynkiem**: różnią się typem, wysokością, materiałem, dachem albo detalem bryły. Macierz pokrycia (strefa × epoka × styl) bez ani jednej luki. |
 | **Kryterium zamknięcia** | Kryteria WP18–WP20; udział gramatyki awaryjnej < 0,5 %, udział doboru z rozluźnionym filtrem (`relaxed`) < 5 %; test T13 zielony na 32 ziarnach × 4 profile. |
-| **Stan** | WP18 zamknięty (korekty H1–H5). WP19, WP20 przed sobą. |
+| **Stan** | WP18 i WP19 zamknięte (korekty H1–H11). WP20 przed sobą. |
 | **Poprzednia / następna** | `M2d-zabudowa.md` · `M2e-gospodarka-bazowa-i-wycena.md` |
 
 Domknięcie Etapu 6: jeden brakujący operator bryły (`Protrude`), lukarny w regule `Roof`,
@@ -44,7 +44,7 @@ estetyczny.
 | WP | Nazwa | Zależy od | Opis | Kryterium ukończenia |
 |---|---|---|---|---|
 | ✅ WP18 | Operator `Protrude` i lukarny | M2d (WP11, WP12) | wariant `Rule::Protrude { face, m, rule }` — wysunięcie zakresu **poza jedną** ścianę; `dormers` w regule `Roof`; przycięcie wysunięcia do granicy parceli, z wyjątkiem wysięgu nad chodnikiem powyżej skrajni | balkon, wykusz i lukarna dają się zapisać w `.ron` bez ani jednej linii Rusta; **poniżej skrajni 3,5 m** żadne wysunięcie nie wychodzi poza wielokąt parceli, **powyżej** nie dalej niż 1,5 m; budżet `MAX_NODES` trzymany na kamienicy 6-kondygnacyjnej z balkonami na każdym piętrze (korekta H1) |
-| WP19 | Katalog gramatyk: pokrycie i wariancja | WP18 | rozszerzenie `data/grammar/` z 12 do ~32 plików wg typologii z §5.6c; `Choice` wewnątrz gramatyk na materiał, rytm otworów i kształt dachu | macierz pokrycia (strefa × epoka × styl) **bez luk**: każda kombinacja występująca w mieście ma ≥ 1 gramatykę bez rozluźniania filtrów; fallback < 0,5 %; `relaxed` < 5 % |
+| ✅ WP19 | Katalog gramatyk: pokrycie i wariancja | WP18 | rozszerzenie `data/grammar/` z 12 do ~32 plików wg typologii z §5.6c; `Choice` wewnątrz gramatyk na materiał, rytm otworów i kształt dachu | macierz pokrycia (strefa × epoka × styl) **bez luk**: każda kombinacja występująca w mieście ma ≥ 1 gramatykę bez rozluźniania filtrów; fallback < 0,5 %; `relaxed` < 5 % |
 | WP20 | Miara różnorodności + test T13 | WP19 | `BuildingSignature` (4 znaczniki), histogram gramatyk i kolizje sygnatur w `GenerationReport`; test T13 | T13 zielony: udział par identycznych sygnatur w promieniu 60 m < 15 %; entropia rozkładu gramatyk w dzielnicy mieszkaniowej o ≥ 100 budynkach ≥ 1,8 bita; oba progi mierzone na 32 ziarnach × 4 profile |
 
 Ścieżka jest liniowa: WP18 → WP19 → WP20. WP20 wolno pisać równolegle z WP19 —
@@ -230,7 +230,11 @@ Numeracja `H-n`, jak `E-n` w M2d. Gwiazdką te, które zmieniają **zakres albo 
 | H4 | **Zapas na wysunięcie liczy się od lica bryły, nie od lica bieżącego zakresu** | Inaczej `Inset(0,4) → Protrude` na cofniętym poddaszu zjadałby 0,4 m balkonu, choć działka się nie zwęziła. Zakres wie, gdzie jest względem obrysu (`Ctx::base`), więc luz da się policzyć dokładnie zamiast zakładać najgorszy przypadek. Działa też w drugą stronę: zakres po `Offset` ma zapas **mniejszy** o tyle, o ile już wystaje |
 | H5 | **`Building.aabb` obejmuje wysunięcia i lukarny, a nie tylko obrys** | `aabb` ma jednego odbiorcę — selekcję do kadru w M11 (kontrakt §6 fazy). Bryła licząca tylko obrys ucinałaby balkony przy krawędzi ekranu, i to dokładnie przy tej krawędzi, przy której gracz na nie patrzy |
 | H6 | Zapas mierzony liniowo co 0,25 m do `MAX_PROTRUDE_M`, nie połowieniem, i **bez** zapamiętywania go w `GrammarSet` per gramatyka | 64 testy przynależności na kierunek przy 14,5 tys. budynków w kroku, który i tak ma budżet 28 s. Optymalizacja „licz zapas tylko dla gramatyk z `Protrude`" wymagałaby dodatkowego stanu w katalogu i nie ma czego kupić (YAGNI) |
-| H7 | **Obejrzane, nie zmierzone: połać dachu czyta się z odległości dzielnicy jak tektura falista.** Nie jest to skutek WP18 — zrzut z commitu poprzedzającego wygląda tak samo. Zadanie przechodzi do WP19 | Derywacja jest w porządku: kamienica 3-kondygnacyjna daje **3** zagnieżdżone bryły dachu (`v = ±5,3 / ±2,7 / ±0,5`) i 2 lukarny, czyli dokładnie to, co opisuje §5.6b M2d. Falowanie powstaje przy **rasteryzacji**: bryły stoją pod kątem do siatki, więc każda ma własne schodki, a trzy schodkowania nachodzą na siebie. To ta sama klasa zjawiska co korekta E12, tylko w skali, której E12 nie usunęła. Dźwignie należą do WP19 i do M11: mniej stopni na płytkim trakcie, inny materiał okapu, albo profil ciągły z prefabrykatu (M11). **Do WP19 wchodzi też rytm okien** — otwór 2,0 m przy rozstawie 4,6 m zostawia filar 2,6 m, co przy voxelu 1 m daje pionową prążkowanicę na całej pierzei |
+| H7 ★ | **Odwołane.** Diagnoza „połać dachu faluje przez trzy nachodzące schodkowania" była błędna i zostaje wycofana razem ze zmianami, które na jej podstawie zrobiłem (próg stopnia dachu, rytm okien, wysokość witryny) | Sprawdzone liczbowo i wzrokowo: derywacja daje dokładnie tyle brył, ile opisuje plan, a zrzut z commitu poprzedzającego wygląda identycznie. Falowanie widać **tak samo na zieleni terenu**, na jezdni i na brzegu rzeki — to nie jest cecha dachu, tylko rasteryzacji obróconych brył przy voxelu 1 m, czyli wygląd całego silnika. Wniosek dla planu: takie zadanie nie należy do WP19 ani do żadnego pakietu M2 — należy do M11 (profil ciągły z prefabrykatu) albo do rozmowy o rozmiarze voxela, czyli do M1. Zapisane tutaj, żeby następny, kto to zobaczy, nie zaczął od tej samej hipotezy |
+| H8 | `Applies::covers` jest **jednym** źródłem odpowiedzi na „czy ta gramatyka dotyczy tej kombinacji": używa jej i dobór dla parceli (`build::pasuje`), i test luk w katalogu (`GrammarSet::covered`) | Dwie kopie tej reguły rozjechałyby się przy pierwszym nowym filtrze, a wtedy test pokrycia mówiłby „katalog kompletny" o katalogu, z którego generator nie umie wybrać. `None` w miejscu epoki albo stylu znaczy „filtr pominięty" — pusty klucz **zaostrzałby** filtr zamiast go pomijać i przy pierwszym podejściu dokładnie to zrobił (udział awaryjnych skoczył z 1,1 % na 7,2 %) |
+| H9 | `relaxed` rozbite na `relaxed_epoch`, `relaxed_style`, `relaxed_value` | Jedna liczba nie mówi, co zrobić. Brak epoki albo stylu łata się **plikiem** w `data/grammar/`, brak przedziału wartości gruntu — **liczbą** w pliku, który już jest. To są dwie różne prace i raport ma je rozróżniać |
+| H10 | Test macierzy pokrycia pomija `Green` i `Extraction` | To są strefy, których `plan_building` nie zabudowuje z zamiaru (korekta E6 z M2d) — obiekty dostają w Etapie 7. Bez tego wyjątku test liczył 18 „luk", z których żadna nie była luką |
+| H11 | Stary test `katalog_gramatyk_pokrywa_strefy_miasta` (próg 2 %) usunięty, jego dwie własne asercje przeniesione do nowego | Dwa testy pilnujące tego samego progu z różnymi liczbami to dwa miejsca do poprawienia przy następnej zmianie kryterium — a kryterium WP19 jest ostrzejsze i ma pierwszeństwo |
 
 ---
 
@@ -246,3 +250,30 @@ Numeracja `H-n`, jak `E-n` w M2d. Gwiazdką te, które zmieniają **zakres albo 
 - `Face::Front` jest od tej pory **zawsze** licem od ulicy (korekta H2). Gramatyki pisane
   w WP19 mogą na tym polegać; wcześniejsze były pisane w świecie, w którym to nie było prawdą.
 
+---
+
+## Co WP19 zostawia WP20
+
+Katalog liczy **32 pliki** (31 gramatyk + awaryjna), z 12 po M2d. Pomiar na mieście 8 km,
+ziarno 7, wobec stanu po WP18:
+
+| Miara | Po WP18 | Po WP19 | Próg |
+|---|---|---|---|
+| gramatyka awaryjna | 55 (1,07 %) | **8 (0,15 %)** | < 0,5 % |
+| dobór po rozluźnieniu filtru | 295 (5,7 %) | **35 (0,67 %)** | < 5 % |
+| luki macierzy (strefa × epoka × styl) | 9 | **0** | 0 |
+| mieszkania | 40 810 | **47 462** | T10 kalibruje M2e |
+| wysunięcia bryły | 8 283 | 8 764 | — |
+| czas etapu zabudowy | 41,8 ms | 40,6 ms | 28 s |
+
+Nowe typy wobec M2d: bliźniak (nie było go **wcale**), chałupa, kostka, willa
+międzywojenna, szeregówka ceglana, trzy warianty kamienicy (secesyjna, modernistyczna,
+plombowa), kamienica biurowa, pasaż, market z parkingiem, punktowiec, galeriowiec,
+apartamentowiec, wieżowiec mieszkalny, skład ceglany, hala lekka, magazyn wysokiego
+składowania, szkoła, kościół z wieżą.
+
+**Czego WP20 nie dostanie za darmo:** rdzeń miasta (R3 i Commercial w pierścieniach
+sprzed 1918) nadal wygląda jednorodnie, mimo że ma tam teraz pięciu kandydatów zamiast
+jednego. Wagi są tak dobrane, że `kamienica` wygrywa większość losowań, a pozostałe
+warianty różnią się od niej detalem, nie bryłą. To jest dokładnie to, co ma zmierzyć
+entropia w teście T13 — i jeśli T13 upadnie, upadnie właśnie tam, a nie na przedmieściach.

@@ -1,0 +1,83 @@
+// R1/R2 — willa międzywojenna. Bryła nie jest prostopadłościanem: od frontu wychodzi
+// ryzalit (`Protrude`), a nad nim lukarny. To jest pierwszy plik katalogu, który używa
+// operatora z WP18 do czegoś innego niż balkon — wysunięcie na pełną wysokość kondygnacji
+// czyta się jako część bryły, nie jako detal (M2f, WP19).
+(
+    schema_version: 1,
+    id: "willa_miedzywojenna",
+    applies: (
+        zones: ["r1", "r2"],
+        epochs: ["interwar", "postwar"],
+        styles: [],
+        land_value: (600000, 9000000),
+        frontage_m: (12.0, 70.0),
+        depth_m: (12.0, 250.0),
+        weight: 30,
+        coverage: 0.7,
+    ),
+    massing: (
+        setback_front_m: 7.0,
+        setback_side_m: 4.0,
+        setback_back_m: 9.0,
+        max_depth_m: 14.0,
+    ),
+    rules: [
+        Foundation(depth_m: 1.8, material: "sandstone", basements: 1),
+        Floors(
+            count: (2, 3),
+            height_m: 3.0,
+            ground_height_m: 3.4,
+            ground: Ref("parter_z_ryzalitem"),
+            typical: Ref("pietro"),
+            top: Ref("pietro"),
+        ),
+        Roof(shape: Hip(pitch_deg: 32), material: "roof_tile_red", dormers: (1, 3)),
+    ],
+    refs: [
+        ("parter_z_ryzalitem", Seq([
+            Ref("pietro"),
+            // Ryzalit: jedna bryła na pełną wysokość kondygnacji, wyśrodkowana na froncie.
+            // Dwie części `Rel` po bokach i jedna `Abs` w środku dają dokładnie jeden
+            // egzemplarz bez względu na szerokość działki.
+            Split(axis: U, parts: [
+                (Rel(1.0), Nothing),
+                (Abs(4.0), Protrude(face: Front, m: 1.6, rule: Seq([
+                    Fill("stucco"),
+                    Comp(thickness_m: 1.0, faces: [
+                        (Front, Split(axis: W, parts: [
+                            (Abs(0.9), Nothing),
+                            (Abs(1.6), Void),
+                            (Rel(1.0), Nothing),
+                        ])),
+                    ]),
+                ]))),
+                (Rel(1.0), Nothing),
+            ]),
+        ])),
+        ("pietro", Seq([
+            Choice([
+                (5, Fill("stucco")),
+                (3, Fill("plaster_white")),
+                (2, Fill("sandstone")),
+            ]),
+            Comp(thickness_m: 1.2, faces: [
+                (Front, Repeat(axis: U, step_m: 4.8, pad_m: 1.5, rule: Split(axis: W, parts: [
+                    (Abs(1.0), Nothing),
+                    (Abs(1.5), Void),
+                    (Rel(1.0), Nothing),
+                ]))),
+                (Side, Repeat(axis: V, step_m: 5.2, pad_m: 1.7, rule: Split(axis: W, parts: [
+                    (Abs(1.0), Nothing),
+                    (Abs(1.4), Void),
+                    (Rel(1.0), Nothing),
+                ]))),
+            ]),
+        ])),
+    ],
+    interior: (
+        ground: (kind: Dwelling, area_m2: (80, 160)),
+        typical: (kind: Dwelling, area_m2: (70, 140)),
+        top: (kind: Dwelling, area_m2: (55, 110)),
+        circulation_share: 0.09,
+    ),
+)

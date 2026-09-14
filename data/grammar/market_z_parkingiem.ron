@@ -1,0 +1,64 @@
+// Commercial/Logistics — market wielkopowierzchniowy. Jedna kondygnacja, ogromny rzut,
+// ściana ze stalowej blachy i witryna wyłącznie przy wejściu. Przeciwieństwo pierzei:
+// tu bryła nie ma rytmu, bo nie ma z czego — i to jest jej cecha rozpoznawcza.
+(
+    schema_version: 1,
+    id: "market_z_parkingiem",
+    applies: (
+        zones: ["commercial", "logistics"],
+        epochs: ["transition", "contemporary"],
+        styles: [],
+        land_value: (0, 6000000),
+        frontage_m: (25.0, 250.0),
+        depth_m: (25.0, 400.0),
+        weight: 30,
+        coverage: 0.8,
+    ),
+    massing: (
+        // Cofnięcie frontowe to parking — dlatego jest tak duże i dlatego market
+        // nigdy nie tworzy pierzei, nawet stojąc przy ulicy handlowej.
+        setback_front_m: 26.0,
+        setback_side_m: 6.0,
+        setback_back_m: 8.0,
+        max_depth_m: 70.0,
+    ),
+    rules: [
+        Foundation(depth_m: 1.2, material: "concrete", basements: 0),
+        Floors(
+            count: (1, 1),
+            height_m: 7.0,
+            ground_height_m: 7.0,
+            ground: Ref("hala"),
+            typical: Ref("hala"),
+            top: Ref("hala"),
+        ),
+        Roof(shape: Flat, material: "roof_sheet"),
+    ],
+    refs: [
+        ("hala", Seq([
+            Choice([
+                (6, Fill("steel_clad")),
+                (3, Fill("concrete_panel")),
+            ]),
+            Comp(thickness_m: 1.4, faces: [
+                // Przeszklenie tylko w środkowej trzeciej części frontu — reszta ściany
+                // jest ślepa, bo za nią stoją regały.
+                (Front, Split(axis: U, parts: [
+                    (Rel(1.0), Nothing),
+                    (Rel(1.0), Split(axis: W, parts: [
+                        (Abs(0.4), Nothing),
+                        (Abs(4.0), Void),
+                        (Rel(1.0), Nothing),
+                    ])),
+                    (Rel(1.0), Nothing),
+                ])),
+            ]),
+        ])),
+    ],
+    interior: (
+        ground: (kind: Retail, area_m2: (400, 2500)),
+        typical: (kind: Retail, area_m2: (400, 2500)),
+        top: (kind: Retail, area_m2: (400, 2500)),
+        circulation_share: 0.12,
+    ),
+)

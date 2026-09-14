@@ -300,6 +300,12 @@ impl GenerationReport {
                 self.build.left_vacant,
                 self.build.ramp_missing
             ));
+            if self.build.relaxed > 0 {
+                v.push(format!(
+                    "  rozluźnienia: epoka {} · styl {} · wartość gruntu {} — pierwsze dwa łata się plikiem w data/grammar/, trzecie liczbą w istniejącym",
+                    self.build.relaxed_epoch, self.build.relaxed_style, self.build.relaxed_value
+                ));
+            }
             v.push(format!(
                 "  detal bryły: {} wysunięć ({} przyciętych do działki, {} odrzuconych jako płytsze niż voxel)",
                 self.build.protrusions, self.build.protrusions_clipped, self.build.protrusions_dropped

@@ -1,0 +1,58 @@
+// Institutional — szkoła: długi, niski budynek o powtarzalnym rytmie dużych okien
+// klasowych i skrzydle sali gimnastycznej. Rytm jest tu rozpoznawalnikiem: okna co 3,4 m
+// na wysokości 2 m to klasa, a nie mieszkanie.
+(
+    schema_version: 1,
+    id: "szkola",
+    applies: (
+        zones: ["institutional"],
+        epochs: ["interwar", "postwar", "transition", "contemporary"],
+        styles: [],
+        land_value: (0, 16000000),
+        frontage_m: (18.0, 160.0),
+        depth_m: (14.0, 250.0),
+        weight: 35,
+    ),
+    massing: (
+        setback_front_m: 8.0,
+        setback_side_m: 6.0,
+        setback_back_m: 10.0,
+        max_depth_m: 18.0,
+    ),
+    rules: [
+        Foundation(depth_m: 1.8, material: "concrete", basements: 1),
+        Floors(
+            count: (2, 4),
+            height_m: 3.6,
+            ground_height_m: 3.8,
+            ground: Ref("kondygnacja"),
+            typical: Ref("kondygnacja"),
+            top: Ref("kondygnacja"),
+        ),
+        Roof(shape: Flat, material: "roof_felt"),
+    ],
+    refs: [
+        ("kondygnacja", Seq([
+            Choice([
+                (5, Fill("plaster_white")),
+                (3, Fill("brick_yellow")),
+                (2, Fill("stucco")),
+            ]),
+            Comp(thickness_m: 1.3, faces: [
+                (Front, Ref("okna_klasowe")),
+                (Back, Ref("okna_klasowe")),
+            ]),
+        ])),
+        ("okna_klasowe", Repeat(axis: U, step_m: 3.4, pad_m: 0.8, rule: Split(axis: W, parts: [
+            (Abs(1.0), Nothing),
+            (Abs(2.0), Void),
+            (Rel(1.0), Nothing),
+        ]))),
+    ],
+    interior: (
+        ground: (kind: Office, area_m2: (55, 90)),
+        typical: (kind: Office, area_m2: (55, 90)),
+        top: (kind: Office, area_m2: (55, 90)),
+        circulation_share: 0.3,
+    ),
+)

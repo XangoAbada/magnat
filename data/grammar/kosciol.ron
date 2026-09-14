@@ -1,0 +1,86 @@
+// Institutional — budynek sakralny. Jedyna gramatyka katalogu, w której bryła jest
+// niesymetryczna z zamiaru: nawa niska i długa, wieża wysoka i wąska, obie w jednym
+// `Split` po osi frontu. Wieża jest tu ważna nie liturgicznie, tylko widokowo — miasto
+// bez pionowej dominanty w starym pierścieniu czyta się jak osiedle (M2f, WP19).
+(
+    schema_version: 1,
+    id: "kosciol",
+    applies: (
+        zones: ["institutional"],
+        epochs: ["medieval", "industrial", "interwar"],
+        styles: [],
+        land_value: (0, 20000000),
+        frontage_m: (14.0, 90.0),
+        depth_m: (18.0, 200.0),
+        weight: 20,
+        coverage: 0.5,
+    ),
+    massing: (
+        setback_front_m: 5.0,
+        setback_side_m: 4.0,
+        setback_back_m: 6.0,
+        max_depth_m: 45.0,
+    ),
+    rules: [
+        Foundation(depth_m: 2.6, material: "limestone", basements: 0),
+        // Nawa: jedna kondygnacja, ale wysoka jak cztery mieszkalne.
+        Floors(
+            count: (1, 1),
+            height_m: 12.0,
+            ground_height_m: 12.0,
+            ground: Ref("nawa"),
+            typical: Ref("nawa"),
+            top: Ref("nawa"),
+        ),
+        Roof(shape: Gable(pitch_deg: 52), material: "roof_tile_red", dormers: (0, 0)),
+    ],
+    refs: [
+        ("nawa", Seq([
+            Choice([
+                (5, Fill("brick_red")),
+                (4, Fill("limestone")),
+                (2, Fill("sandstone")),
+            ]),
+            Comp(thickness_m: 1.6, faces: [
+                // Okna wysokie i wąskie — to jedyna proporcja, po której z daleka
+                // rozpoznaje się kościół, a nie halę.
+                (Side, Repeat(axis: V, step_m: 6.0, pad_m: 2.2, rule: Split(axis: W, parts: [
+                    (Abs(3.0), Nothing),
+                    (Abs(6.0), Void),
+                    (Rel(1.0), Nothing),
+                ]))),
+                (Front, Split(axis: U, parts: [
+                    (Rel(1.0), Nothing),
+                    (Abs(3.0), Split(axis: W, parts: [
+                        (Abs(0.2), Nothing),
+                        (Abs(4.5), Void),
+                        (Rel(1.0), Nothing),
+                    ])),
+                    (Rel(1.0), Nothing),
+                ])),
+            ]),
+            // Wieża: wysunięta przed lico nawy i wyciągnięta na 26 m — `Extrude` liczy
+            // od spodu zakresu, więc mierzy od posadowienia, nie od kalenicy.
+            Split(axis: U, parts: [
+                (Rel(1.0), Nothing),
+                (Abs(6.0), Protrude(face: Front, m: 2.0, rule: Extrude(m: 26.0, rule: Seq([
+                    Fill("brick_red"),
+                    Comp(thickness_m: 1.4, faces: [
+                        (Front, Split(axis: W, parts: [
+                            (Abs(18.0), Nothing),
+                            (Abs(3.0), Void),
+                            (Rel(1.0), Nothing),
+                        ])),
+                    ]),
+                ])))),
+                (Rel(1.0), Nothing),
+            ]),
+        ])),
+    ],
+    interior: (
+        ground: (kind: Office, area_m2: (200, 900)),
+        typical: (kind: Office, area_m2: (200, 900)),
+        top: (kind: Office, area_m2: (200, 900)),
+        circulation_share: 0.05,
+    ),
+)

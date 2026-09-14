@@ -1,0 +1,64 @@
+// IndustryLight — hala lekka: warsztat, drukarnia, montownia. Niższa i węższa od
+// `hala_przemyslowa.ron`, z pasmem okien pod okapem zamiast świetlików — bo przy jednej
+// kondygnacji to jedyne miejsce, w którym światło ma jak wejść.
+(
+    schema_version: 1,
+    id: "hala_lekka",
+    applies: (
+        zones: ["industry_light"],
+        epochs: [],
+        styles: [],
+        land_value: (0, 5000000),
+        frontage_m: (12.0, 160.0),
+        depth_m: (12.0, 300.0),
+        weight: 40,
+    ),
+    massing: (
+        setback_front_m: 5.0,
+        setback_side_m: 3.0,
+        setback_back_m: 5.0,
+        max_depth_m: 34.0,
+    ),
+    rules: [
+        Foundation(depth_m: 1.4, material: "concrete", basements: 0),
+        Floors(
+            count: (1, 2),
+            height_m: 4.5,
+            ground_height_m: 5.5,
+            ground: Ref("sciana"),
+            typical: Ref("sciana"),
+            top: Ref("sciana"),
+        ),
+        Roof(shape: Gable(pitch_deg: 20), material: "roof_sheet", dormers: (0, 0)),
+    ],
+    refs: [
+        ("sciana", Seq([
+            Choice([
+                (4, Fill("brick_red")),
+                (4, Fill("steel_clad")),
+                (2, Fill("concrete_panel")),
+            ]),
+            Comp(thickness_m: 1.3, faces: [
+                // Pasmo pod okapem: wąskie, ciągłe, wysoko — przeciwieństwo okna mieszkalnego.
+                (Front, Ref("pasmo_pod_okapem")),
+                (Back, Ref("pasmo_pod_okapem")),
+                (Side, Repeat(axis: V, step_m: 6.0, pad_m: 1.6, rule: Split(axis: W, parts: [
+                    (Abs(3.0), Nothing),
+                    (Abs(1.2), Void),
+                    (Rel(1.0), Nothing),
+                ]))),
+            ]),
+        ])),
+        ("pasmo_pod_okapem", Repeat(axis: U, step_m: 5.0, pad_m: 1.2, rule: Split(axis: W, parts: [
+            (Abs(3.2), Nothing),
+            (Abs(1.2), Void),
+            (Rel(1.0), Nothing),
+        ]))),
+    ],
+    interior: (
+        ground: (kind: Workshop, area_m2: (120, 700)),
+        typical: (kind: Workshop, area_m2: (120, 700)),
+        top: (kind: Workshop, area_m2: (120, 700)),
+        circulation_share: 0.08,
+    ),
+)

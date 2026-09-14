@@ -39,29 +39,102 @@ fn miasto_w(seed: u64, size: WorldSize, region: Region, watki: usize) -> (CityDa
 
 // ── WP10: język gramatyki ────────────────────────────────────────────────────────────
 
-/// „100% plików z repo przechodzi walidację" — walidator jest w testach jednostkowych
-/// modułu, tu sprawdzamy skutek: każda strefa zabudowywalna dostaje w mieście gramatykę
-/// **inną niż awaryjna**, czyli katalog naprawdę pokrywa miasto.
+/// Kryterium WP19 (M2f): **macierz pokrycia bez luk**. Dla każdej kombinacji
+/// (strefa × epoka × styl), która w mieście **faktycznie występuje**, katalog ma mieć
+/// co najmniej jedną gramatykę niebędącą awaryjną — bez rozluźniania filtrów.
+///
+/// Kombinacje nieużywane nie są sprawdzane z rozmysłu: wieżowiec w średniowiecznej wsi
+/// to nie jest luka, tylko kombinacja, której generator nigdy nie wyprodukuje, a test
+/// pilnujący 648 pól macierzy mierzyłby pracowitość, nie jakość miasta.
 #[test]
 #[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
-fn katalog_gramatyk_pokrywa_strefy_miasta() {
+fn macierz_pokrycia_gramatyk_nie_ma_luk() {
+    let (c, _) = miasto(7, WorldSize::Medium8km, Region::River);
+    let mats = magnat_voxel::MaterialRegistry::load_dir(&magnat_world::assets::data_path(
+        "materials",
+    ))
+    .expect("materiały");
+    let katalog = magnat_world::city::grammar::GrammarSet::load_dir(
+        &magnat_world::assets::data_path("grammar"),
+        &mats,
+    )
+    .expect("gramatyki");
+    let mut luki: Vec<(String, String, String, u32)> = Vec::new();
+    for p in &c.parcels.parcels {
+        // Te same strefy, które pomija `plan_building`: zieleń i wydobycie dostają obiekty
+        // dopiero w Etapie 7 (korekta E6), więc brak dla nich gramatyki nie jest luką.
+        if !p.zone.parcelled()
+            || matches!(
+                p.zone,
+                ZoneKind::Water | ZoneKind::Undevelopable | ZoneKind::Green | ZoneKind::Extraction
+            )
+        {
+            continue;
+        }
+        let block = &c.blocks.blocks[p.block.0 as usize];
+        let epoka = c
+            .zones
+            .rings
+            .get(usize::from(block.epoch_ring))
+            .map_or("", |e| e.key.as_str());
+        let styl = c
+            .districts
+            .districts
+            .get(p.district.0 as usize)
+            .map_or("", |d| d.kind.key());
+        if katalog.covered(p.zone.key(), epoka, styl) {
+            continue;
+        }
+        let klucz = (p.zone.key().to_string(), epoka.to_string(), styl.to_string());
+        match luki.iter_mut().find(|(z, e, s, _)| {
+            (z.as_str(), e.as_str(), s.as_str()) == (klucz.0.as_str(), klucz.1.as_str(), klucz.2.as_str())
+        }) {
+            Some((_, _, _, n)) => *n += 1,
+            None => luki.push((klucz.0, klucz.1, klucz.2, 1)),
+        }
+    }
+    luki.sort_by(|a, b| b.3.cmp(&a.3).then(a.0.cmp(&b.0)));
+    assert!(
+        luki.is_empty(),
+        "katalog nie pokrywa {} kombinacji; najliczniejsze: {}",
+        luki.len(),
+        luki.iter()
+            .take(12)
+            .map(|(z, e, s, n)| format!("{z}/{e}/{s} ×{n}"))
+            .collect::<Vec<_>>()
+            .join(" · ")
+    );
+}
+
+/// Udział gramatyki awaryjnej i doborów po rozluźnieniu — progi z kryterium WP19.
+#[test]
+#[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
+fn katalog_trafia_bez_awaryjnej_i_prawie_zawsze_bez_rozluznienia() {
     let (c, _) = miasto(7, WorldSize::Medium8km, Region::River);
     let r = &c.report.build;
+    let awaryjne = f64::from(r.fallback) * 100.0 / f64::from(r.buildings);
+    let rozluznione = f64::from(r.relaxed) * 100.0 / f64::from(r.buildings);
+    assert!(
+        awaryjne < 0.5,
+        "gramatyka awaryjna na {awaryjne:.2}% budynków (limit 0,5%); rozbicie: {:?}",
+        r.fallback_zone
+    );
     assert!(
         r.buildings > 500,
-        "miasto ma tylko {} budynków",
+        "miasto ma tylko {} budynków — próg udziału nic wtedy nie znaczy",
         r.buildings
-    );
-    let udzial = f64::from(r.fallback) * 100.0 / f64::from(r.buildings);
-    assert!(
-        udzial < 2.0,
-        "gramatyka awaryjna na {udzial:.1}% budynków (limit 2%); rozbicie: {:?}",
-        r.fallback_zone
     );
     assert_eq!(
         r.truncated, 0,
         "{} derywacji przerwanych limitem węzłów albo głębokości",
         r.truncated
+    );
+    assert!(
+        rozluznione < 5.0,
+        "rozluźniony filtr na {rozluznione:.2}% budynków (limit 5%): epoka {} · styl {} · wartość {}",
+        r.relaxed_epoch,
+        r.relaxed_style,
+        r.relaxed_value
     );
 }
 

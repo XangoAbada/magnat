@@ -1,0 +1,92 @@
+// R3/Commercial — kamienica secesyjna, najbogatszy wariant pierzei. Różni się od
+// `kamienica.ron` bryłą, a nie ubraniem: od frontu wychodzą wykusze na pełną wysokość
+// pięter, a poddasze ma lukarny. To jest powód, dla którego jest osobnym plikiem,
+// a nie kolejnym `Choice` w tamtym (M2f, §5.6c: nowy plik dopiero przy innej bryle).
+(
+    schema_version: 1,
+    id: "kamienica_secesyjna",
+    applies: (
+        zones: ["r3", "commercial"],
+        epochs: ["industrial", "interwar"],
+        styles: ["old_town", "inner_city", "port_quarter"],
+        land_value: (900000, 9000000),
+        frontage_m: (9.0, 40.0),
+        depth_m: (10.0, 120.0),
+        weight: 30,
+    ),
+    massing: (
+        setback_front_m: 0.0,
+        setback_side_m: 0.0,
+        setback_back_m: 3.0,
+        courtyard_min_m2: 80.0,
+        max_depth_m: 17.0,
+    ),
+    rules: [
+        Foundation(depth_m: 2.8, material: "sandstone", basements: 1),
+        Floors(
+            count: (4, 6),
+            height_m: 3.4,
+            ground_height_m: 4.4,
+            ground: Ref("parter_uslugowy"),
+            typical: Ref("pietro_z_wykuszem"),
+            top: Ref("pietro"),
+        ),
+        Roof(shape: Gable(pitch_deg: 45), material: "roof_tile_red", dormers: (2, 4)),
+    ],
+    refs: [
+        ("parter_uslugowy", Seq([
+            Fill("sandstone"),
+            Comp(thickness_m: 1.2, faces: [
+                (Front, Repeat(axis: U, step_m: 5.2, pad_m: 1.4, rule: Split(axis: W, parts: [
+                    (Abs(0.6), Nothing),
+                    (Abs(2.6), Void),
+                    (Rel(1.0), Nothing),
+                ]))),
+            ]),
+        ])),
+        // Wykusz co drugie okno, wysunięty na 1,0 m i na całą wysokość kondygnacji.
+        // Skrajnia pilnuje się sama: parter nie ma tej reguły, a piętra zaczynają się
+        // powyżej 4,4 m, czyli nad progiem wysięgu nad chodnikiem.
+        ("pietro_z_wykuszem", Seq([
+            Ref("pietro"),
+            Repeat(axis: U, step_m: 10.4, pad_m: 3.2, rule: Protrude(
+                face: Front, m: 1.0,
+                rule: Seq([
+                    Fill("stucco"),
+                    Comp(thickness_m: 0.9, faces: [
+                        (Front, Split(axis: W, parts: [
+                            (Abs(0.9), Nothing),
+                            (Abs(1.7), Void),
+                            (Rel(1.0), Nothing),
+                        ])),
+                    ]),
+                ]),
+            )),
+        ])),
+        ("pietro", Seq([
+            Choice([
+                (5, Fill("stucco")),
+                (3, Fill("plaster_white")),
+                (2, Fill("sandstone")),
+            ]),
+            Comp(thickness_m: 1.3, faces: [
+                (Front, Repeat(axis: U, step_m: 5.2, pad_m: 1.7, rule: Split(axis: W, parts: [
+                    (Abs(1.0), Nothing),
+                    (Abs(1.8), Void),
+                    (Rel(1.0), Nothing),
+                ]))),
+                (Back, Repeat(axis: U, step_m: 5.0, pad_m: 1.6, rule: Split(axis: W, parts: [
+                    (Abs(1.0), Nothing),
+                    (Abs(1.5), Void),
+                    (Rel(1.0), Nothing),
+                ]))),
+            ]),
+        ])),
+    ],
+    interior: (
+        ground: (kind: Retail, area_m2: (55, 150)),
+        typical: (kind: Dwelling, area_m2: (55, 130)),
+        top: (kind: Dwelling, area_m2: (35, 70)),
+        circulation_share: 0.15,
+    ),
+)

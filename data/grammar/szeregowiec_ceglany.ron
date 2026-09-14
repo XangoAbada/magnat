@@ -1,0 +1,78 @@
+// R2/R3 — szeregówka robotnicza z pierścienia przemysłowego. Wąski front, głęboki trakt,
+// cegła bez tynku, wspólna ściana z sąsiadem. To jest typ, którego brakowało dla
+// kombinacji `r2/industrial/inner_city` — po kamienicy najliczniejszej luki katalogu
+// zmierzonej testem macierzy pokrycia (M2f, WP19).
+(
+    schema_version: 1,
+    id: "szeregowiec_ceglany",
+    applies: (
+        zones: ["r2", "r3"],
+        epochs: ["industrial", "interwar"],
+        styles: [],
+        land_value: (0, 5000000),
+        frontage_m: (4.5, 30.0),
+        depth_m: (8.0, 140.0),
+        weight: 45,
+    ),
+    massing: (
+        setback_front_m: 0.5,
+        setback_side_m: 0.0,
+        setback_back_m: 5.0,
+        max_depth_m: 14.0,
+    ),
+    rules: [
+        Foundation(depth_m: 1.6, material: "brick_red", basements: 1),
+        Floors(
+            count: (2, 4),
+            height_m: 2.9,
+            ground_height_m: 3.1,
+            ground: Ref("parter"),
+            typical: Ref("pietro"),
+            top: Ref("pietro"),
+        ),
+        Roof(shape: Gable(pitch_deg: 35), material: "roof_tile_red", dormers: (0, 2)),
+    ],
+    refs: [
+        // Parter ma sień na przestrzał, nie witrynę: to dom robotniczy, nie kamienica
+        // czynszowa. Przejazd jest jeden i wypada pośrodku frontu.
+        ("parter", Seq([
+            Fill("brick_red"),
+            Comp(thickness_m: 1.2, faces: [
+                (Front, Split(axis: U, parts: [
+                    (Rel(1.0), Ref("okna_gesto")),
+                    (Abs(2.2), Split(axis: W, parts: [
+                        (Abs(2.4), Void),
+                        (Rel(1.0), Nothing),
+                    ])),
+                    (Rel(1.0), Ref("okna_gesto")),
+                ])),
+            ]),
+        ])),
+        ("pietro", Seq([
+            Choice([
+                (6, Fill("brick_red")),
+                (2, Fill("brick_yellow")),
+                (1, Fill("stucco")),
+            ]),
+            Comp(thickness_m: 1.2, faces: [
+                (Front, Ref("okna_gesto")),
+                (Back, Repeat(axis: U, step_m: 4.4, pad_m: 1.5, rule: Split(axis: W, parts: [
+                    (Abs(1.0), Nothing),
+                    (Abs(1.2), Void),
+                    (Rel(1.0), Nothing),
+                ]))),
+            ]),
+        ])),
+        ("okna_gesto", Repeat(axis: U, step_m: 3.4, pad_m: 1.1, rule: Split(axis: W, parts: [
+            (Abs(0.9), Nothing),
+            (Abs(1.3), Void),
+            (Rel(1.0), Nothing),
+        ]))),
+    ],
+    interior: (
+        ground: (kind: Dwelling, area_m2: (32, 62)),
+        typical: (kind: Dwelling, area_m2: (32, 62)),
+        top: (kind: Dwelling, area_m2: (26, 50)),
+        circulation_share: 0.11,
+    ),
+)

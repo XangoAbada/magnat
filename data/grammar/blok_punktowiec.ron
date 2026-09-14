@@ -1,0 +1,83 @@
+// R4/R5 — punktowiec: blok o rzucie zbliżonym do kwadratu, jedna klatka, 8–14 kondygnacji.
+// Różnica wobec `blok.ron` jest w bryle, nie w elewacji: tamten jest ścianą wzdłuż ulicy,
+// ten stoi wolno i ma cztery elewacje, więc okna idą po wszystkich ścianach, a balkony
+// na narożnikach (M2f, WP19).
+(
+    schema_version: 1,
+    id: "blok_punktowiec",
+    applies: (
+        zones: ["r4", "r5"],
+        epochs: ["postwar", "transition"],
+        styles: [],
+        land_value: (0, 14000000),
+        frontage_m: (14.0, 60.0),
+        depth_m: (14.0, 120.0),
+        weight: 35,
+    ),
+    massing: (
+        setback_front_m: 8.0,
+        setback_side_m: 6.0,
+        setback_back_m: 8.0,
+        max_depth_m: 20.0,
+    ),
+    rules: [
+        Foundation(depth_m: 2.4, material: "concrete", basements: 1),
+        Floors(
+            count: (8, 14),
+            height_m: 2.7,
+            ground_height_m: 3.0,
+            ground: Ref("kondygnacja"),
+            typical: Ref("kondygnacja_z_balkonami"),
+            top: Ref("kondygnacja_z_balkonami"),
+        ),
+        Roof(shape: Flat, material: "roof_felt"),
+    ],
+    refs: [
+        ("kondygnacja", Seq([
+            Choice([
+                (5, Fill("concrete_panel")),
+                (3, Fill("plaster_white")),
+                (2, Fill("stucco")),
+            ]),
+            Comp(thickness_m: 1.2, faces: [
+                (Front, Ref("pasmo")),
+                (Back, Ref("pasmo")),
+                (Side, Repeat(axis: V, step_m: 4.2, pad_m: 1.3, rule: Split(axis: W, parts: [
+                    (Abs(0.9), Nothing),
+                    (Abs(1.3), Void),
+                    (Rel(1.0), Nothing),
+                ]))),
+            ]),
+        ])),
+        ("kondygnacja_z_balkonami", Seq([
+            Ref("kondygnacja"),
+            // Balkon po jednym na elewację frontową i tylną — punktowiec ma ich cztery,
+            // ale dwa wystarczą, żeby bryła przestała być gładkim słupem.
+            Repeat(axis: U, step_m: 20.0, pad_m: 4.0, rule: Protrude(
+                face: Front, m: 1.2,
+                rule: Split(axis: W, parts: [
+                    (Abs(0.6), Fill("concrete")),
+                    (Rel(1.0), Nothing),
+                ]),
+            )),
+            Repeat(axis: U, step_m: 20.0, pad_m: 4.0, rule: Protrude(
+                face: Back, m: 1.2,
+                rule: Split(axis: W, parts: [
+                    (Abs(0.6), Fill("concrete")),
+                    (Rel(1.0), Nothing),
+                ]),
+            )),
+        ])),
+        ("pasmo", Repeat(axis: U, step_m: 4.2, pad_m: 1.2, rule: Split(axis: W, parts: [
+            (Abs(0.9), Nothing),
+            (Abs(1.4), Void),
+            (Rel(1.0), Nothing),
+        ]))),
+    ],
+    interior: (
+        ground: (kind: Dwelling, area_m2: (32, 64)),
+        typical: (kind: Dwelling, area_m2: (32, 64)),
+        top: (kind: Dwelling, area_m2: (32, 64)),
+        circulation_share: 0.18,
+    ),
+)

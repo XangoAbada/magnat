@@ -1,0 +1,82 @@
+// R3/Commercial — kamienica modernistyczna: międzywojnie i wczesne lata powojenne.
+// Płaski dach, okna poziome zamiast pionowych, narożnik zaokrąglony cofnięciem, balkony
+// wpuszczone w lico zamiast wysuniętych. Ta ostatnia rzecz jest tu istotna: pokazuje,
+// że wnęka jest tańsza od wysunięcia — robi ją `Comp` + `Void`, bez `Protrude`.
+(
+    schema_version: 1,
+    id: "kamienica_modernistyczna",
+    applies: (
+        zones: ["r3", "commercial"],
+        epochs: ["interwar", "postwar"],
+        styles: [],
+        land_value: (300000, 14000000),
+        frontage_m: (9.0, 60.0),
+        depth_m: (10.0, 140.0),
+        weight: 40,
+    ),
+    massing: (
+        setback_front_m: 1.0,
+        setback_side_m: 0.0,
+        setback_back_m: 4.0,
+        courtyard_min_m2: 110.0,
+        max_depth_m: 15.0,
+    ),
+    rules: [
+        Foundation(depth_m: 2.4, material: "concrete", basements: 1),
+        Floors(
+            count: (3, 6),
+            height_m: 3.0,
+            ground_height_m: 3.8,
+            ground: Ref("parter"),
+            typical: Ref("pietro"),
+            top: Ref("pietro_cofniete"),
+        ),
+        Roof(shape: Flat, material: "roof_felt"),
+    ],
+    refs: [
+        ("parter", Seq([
+            Fill("stucco"),
+            Comp(thickness_m: 1.3, faces: [
+                (Front, Repeat(axis: U, step_m: 5.4, pad_m: 1.1, rule: Split(axis: W, parts: [
+                    (Abs(0.6), Nothing),
+                    (Abs(2.4), Void),
+                    (Rel(1.0), Nothing),
+                ]))),
+            ]),
+        ])),
+        ("pietro", Seq([
+            Choice([
+                (6, Fill("plaster_white")),
+                (3, Fill("stucco")),
+                (1, Fill("brick_yellow")),
+            ]),
+            Comp(thickness_m: 1.2, faces: [
+                // Okno poziome: szerokie i niskie. Przy tym samym rozstawie co w kamienicy
+                // czynszowej daje elewację, która czyta się zupełnie inaczej.
+                (Front, Repeat(axis: U, step_m: 5.4, pad_m: 0.9, rule: Split(axis: W, parts: [
+                    (Abs(1.0), Nothing),
+                    (Abs(1.3), Void),
+                    (Rel(1.0), Nothing),
+                ]))),
+                (Back, Repeat(axis: U, step_m: 5.0, pad_m: 1.5, rule: Split(axis: W, parts: [
+                    (Abs(1.0), Nothing),
+                    (Abs(1.4), Void),
+                    (Rel(1.0), Nothing),
+                ]))),
+                // Loggia: wnęka na całą głębokość płyty, co trzecie przęsło.
+                (Front, Repeat(axis: U, step_m: 16.2, pad_m: 6.4, rule: Split(axis: W, parts: [
+                    (Abs(0.5), Nothing),
+                    (Abs(2.0), Void),
+                    (Rel(1.0), Nothing),
+                ]))),
+            ]),
+        ])),
+        ("pietro_cofniete", Inset(m: 1.2, rule: Ref("pietro"))),
+    ],
+    interior: (
+        ground: (kind: Retail, area_m2: (45, 130)),
+        typical: (kind: Dwelling, area_m2: (42, 95)),
+        top: (kind: Dwelling, area_m2: (42, 95)),
+        circulation_share: 0.14,
+    ),
+)

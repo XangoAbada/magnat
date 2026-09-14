@@ -1,0 +1,69 @@
+// R1/R2 — bliźniak: dwa mieszkania w jednej bryle, podzielone lustrzanie ścianą szczytową.
+// Typ, którego katalog M2d nie miał **wcale**: działka o froncie 8–14 m dostawała albo dom
+// wolnostojący z zerowym odstępem bocznym, albo nic. Podział na dwie połowy jest widoczny
+// z zewnątrz, stąd `Split` po osi frontu zamiast jednolitej ściany (M2f, WP19).
+(
+    schema_version: 1,
+    id: "blizniak",
+    applies: (
+        zones: ["r1", "r2"],
+        epochs: ["interwar", "postwar", "transition", "contemporary"],
+        styles: [],
+        land_value: (0, 5000000),
+        frontage_m: (8.0, 26.0),
+        depth_m: (9.0, 200.0),
+        weight: 40,
+    ),
+    massing: (
+        setback_front_m: 4.5,
+        setback_side_m: 1.5,
+        setback_back_m: 7.0,
+        max_depth_m: 11.0,
+    ),
+    rules: [
+        Foundation(depth_m: 1.3, material: "concrete", basements: 1),
+        Floors(
+            count: (2, 2),
+            height_m: 2.8,
+            ground_height_m: 2.9,
+            ground: Ref("dwie_polowy"),
+            typical: Ref("dwie_polowy"),
+            top: Ref("dwie_polowy"),
+        ),
+        Roof(shape: Gable(pitch_deg: 40), material: "roof_tile_red", dormers: (2, 2)),
+    ],
+    refs: [
+        // Dwie połowy, każda z własnym materiałem: bliźniak rzadko jest bliźniaczy do końca,
+        // bo elewacje idą osobnymi remontami. Pas pośrodku to ściana oddzielenia pożarowego.
+        ("dwie_polowy", Split(axis: U, parts: [
+            (Rel(1.0), Ref("polowa")),
+            (Abs(0.4), Fill("plaster_white")),
+            (Rel(1.0), Ref("polowa")),
+        ])),
+        ("polowa", Seq([
+            Choice([
+                (4, Fill("plaster_white")),
+                (3, Fill("stucco")),
+                (2, Fill("brick_yellow")),
+            ]),
+            Comp(thickness_m: 1.2, faces: [
+                (Front, Repeat(axis: U, step_m: 4.2, pad_m: 1.3, rule: Split(axis: W, parts: [
+                    (Abs(0.9), Nothing),
+                    (Abs(1.3), Void),
+                    (Rel(1.0), Nothing),
+                ]))),
+                (Back, Repeat(axis: U, step_m: 4.6, pad_m: 1.5, rule: Split(axis: W, parts: [
+                    (Abs(0.9), Nothing),
+                    (Abs(1.2), Void),
+                    (Rel(1.0), Nothing),
+                ]))),
+            ]),
+        ])),
+    ],
+    interior: (
+        ground: (kind: Dwelling, area_m2: (48, 90)),
+        typical: (kind: Dwelling, area_m2: (48, 90)),
+        top: (kind: Dwelling, area_m2: (42, 78)),
+        circulation_share: 0.07,
+    ),
+)

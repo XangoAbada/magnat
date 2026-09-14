@@ -1,0 +1,58 @@
+// Logistics — magazyn wysokiego składowania. Jedna kondygnacja o wysokości czterech,
+// ściana bez okien, doki przeładunkowe w rytmie co 4 m wzdłuż frontu. Różni się od
+// `magazyn.ron` proporcją, a nie materiałem: tamten jest niski i długi, ten jest
+// pudełkiem, które widać ponad dachami dzielnicy.
+(
+    schema_version: 1,
+    id: "magazyn_wysoki",
+    applies: (
+        zones: ["logistics"],
+        epochs: ["transition", "contemporary"],
+        styles: [],
+        land_value: (0, 3500000),
+        frontage_m: (20.0, 220.0),
+        depth_m: (20.0, 400.0),
+        weight: 35,
+    ),
+    massing: (
+        setback_front_m: 16.0,
+        setback_side_m: 6.0,
+        setback_back_m: 8.0,
+        max_depth_m: 90.0,
+    ),
+    rules: [
+        Foundation(depth_m: 1.6, material: "concrete", basements: 0),
+        Floors(
+            count: (1, 1),
+            height_m: 13.0,
+            ground_height_m: 13.0,
+            ground: Ref("sciana"),
+            typical: Ref("sciana"),
+            top: Ref("sciana"),
+        ),
+        Roof(shape: Flat, material: "roof_sheet"),
+    ],
+    refs: [
+        ("sciana", Seq([
+            Choice([
+                (7, Fill("steel_clad")),
+                (3, Fill("concrete_panel")),
+            ]),
+            Comp(thickness_m: 1.5, faces: [
+                // Doki: szerokie i niskie, przy samej ziemi. Nic powyżej 4 m —
+                // magazyn wysokiego składowania nie ma okien z definicji.
+                (Front, Repeat(axis: U, step_m: 4.0, pad_m: 0.9, rule: Split(axis: W, parts: [
+                    (Abs(1.2), Nothing),
+                    (Abs(3.2), Void),
+                    (Rel(1.0), Nothing),
+                ]))),
+            ]),
+        ])),
+    ],
+    interior: (
+        ground: (kind: Storage, area_m2: (600, 5000)),
+        typical: (kind: Storage, area_m2: (600, 5000)),
+        top: (kind: Storage, area_m2: (600, 5000)),
+        circulation_share: 0.07,
+    ),
+)

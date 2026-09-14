@@ -191,6 +191,13 @@ pub struct BuildReport {
     /// Trafienia dopiero po rozluźnieniu filtru `applies` — luka w katalogu gramatyk,
     /// nie błąd generacji, ale ma być widoczna.
     pub relaxed: u32,
+    /// To samo w rozbiciu na filtr, który trzeba było pominąć. Rozróżnienie ma znaczenie
+    /// operacyjne: brak epoki albo stylu łata się **plikiem** w `data/grammar/`, a brak
+    /// przedziału wartości gruntu — **liczbą** w istniejącym pliku. Suma nie musi być
+    /// równa `relaxed`: jeden dobór pomija filtry narastająco (M2f, WP19).
+    pub relaxed_epoch: u32,
+    pub relaxed_style: u32,
+    pub relaxed_value: u32,
     /// Derywacje przerwane limitem węzłów albo głębokości (M2 §5.6: liczone, nie ciche).
     pub truncated: u32,
     /// Wysunięcia (`Protrude`): postawione, przycięte do granicy działki i odrzucone
@@ -509,29 +516,29 @@ enum Relax {
 
 fn pasuje(g: &BuildingGrammar, c: &PickCtx, relax: Relax) -> bool {
     let a = &g.applies;
-    let epoka = matches!(relax, Relax::None)
-        && !(a.epochs.is_empty() || a.epochs.iter().any(|e| e == c.epoch_key));
-    let styl = matches!(relax, Relax::None | Relax::Epoch)
-        && !(a.styles.is_empty() || a.styles.iter().any(|s| s == c.district_key));
-    let wartosc = !(matches!(relax, Relax::EpochStyleValue)
-        || (c.land_value >= a.land_value.0 && c.land_value <= a.land_value.1));
-    (a.zones.is_empty() || a.zones.iter().any(|z| z == c.zone.key()))
-        && !epoka
-        && !styl
-        && !wartosc
+    // Filtr epoki i stylu to `Applies::covers` z pominiętym wymiarem — ta sama reguła
+    // co w `GrammarSet::covered`, żeby „luka w katalogu" i „dobór dla parceli"
+    // nie mogły się rozjechać (00, „Dobre praktyki": DRY dotyczy wiedzy).
+    let epoka = matches!(relax, Relax::None).then_some(c.epoch_key);
+    let styl = matches!(relax, Relax::None | Relax::Epoch).then_some(c.district_key);
+    let wartosc = matches!(relax, Relax::EpochStyleValue)
+        || (c.land_value >= a.land_value.0 && c.land_value <= a.land_value.1);
+    a.covers(c.zone.key(), epoka, styl)
+        && wartosc
         && (c.front_m >= a.frontage_m.0 && c.front_m <= a.frontage_m.1)
         && (c.depth_m >= a.depth_m.0 && c.depth_m <= a.depth_m.1)
 }
+
 
 /// Wynik doboru gramatyki.
 struct Picked {
     grammar: Option<GrammarId>,
     /// Gramatyka awaryjna — kryterium §5.6 mówi „< 2%", więc jest liczona osobno.
     fallback: bool,
-    /// Trafienie dopiero po rozluźnieniu filtru. Nie jest błędem (miasto z 1990 ma
-    /// kwartały z pięciu epok, a katalog gramatyk nie pokrywa każdej kombinacji),
-    /// ale ma być widoczne w raporcie — inaczej luka w danych nigdy nie wyjdzie.
-    relaxed: bool,
+    /// Etap rozluźnienia, na którym trafiono. Nie jest błędem (miasto z 1990 ma kwartały
+    /// z pięciu epok, a katalog nie musi pokrywać każdej kombinacji), ale ma być widoczne
+    /// w raporcie — inaczej luka w danych nigdy nie wyjdzie.
+    relaxed: Relax,
 }
 
 /// Wybór gramatyki dla parceli: filtr `applies`, potem losowanie ważone `weight`.
@@ -569,13 +576,13 @@ fn pick_grammar(set: &GrammarSet, c: &PickCtx, r: &mut Rng) -> Picked {
                     return Picked {
                         grammar: None,
                         fallback: false,
-                        relaxed: false,
+                        relaxed: Relax::None,
                     };
                 }
                 return Picked {
                     grammar: Some(GrammarId(i as u16)),
                     fallback: false,
-                    relaxed: !matches!(relax, Relax::None),
+                    relaxed: relax,
                 };
             }
             los -= w;
@@ -584,7 +591,7 @@ fn pick_grammar(set: &GrammarSet, c: &PickCtx, r: &mut Rng) -> Picked {
     Picked {
         grammar: set.fallback_for(c.zone),
         fallback: set.fallback_for(c.zone).is_some(),
-        relaxed: false,
+        relaxed: Relax::None,
     }
 }
 
@@ -612,7 +619,7 @@ struct Planned {
     teren: (f32, f32),
     derived: Derived,
     fallback: bool,
-    relaxed: bool,
+    relaxed: Relax,
 }
 
 /// Wejście Etapu 6 — referencje zebrane w jedno, żeby sygnatura nie miała dwunastu pozycji.
@@ -683,8 +690,24 @@ pub fn build_all(
             out.report.fallback += 1;
             out.report.fallback_zone[parcels.parcels[p.parcel as usize].zone.index()] += 1;
         }
-        if p.relaxed {
-            out.report.relaxed += 1;
+        // Rozluźnienia są narastające: `EpochStyleValue` znaczy, że pominięto wszystkie trzy.
+        match p.relaxed {
+            Relax::None => {}
+            Relax::Epoch => {
+                out.report.relaxed += 1;
+                out.report.relaxed_epoch += 1;
+            }
+            Relax::EpochStyle => {
+                out.report.relaxed += 1;
+                out.report.relaxed_epoch += 1;
+                out.report.relaxed_style += 1;
+            }
+            Relax::EpochStyleValue => {
+                out.report.relaxed += 1;
+                out.report.relaxed_epoch += 1;
+                out.report.relaxed_style += 1;
+                out.report.relaxed_value += 1;
+            }
         }
         if p.derived.truncated {
             out.report.truncated += 1;

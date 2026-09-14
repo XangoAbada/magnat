@@ -221,6 +221,45 @@ fn pelne_pokrycie() -> f32 {
     1.0
 }
 
+impl Applies {
+    /// Czy gramatyka **w ogóle kandyduje** dla takiej kombinacji strefy, epoki i stylu.
+    ///
+    /// Nie patrzy na wartość gruntu ani na wymiary działki celowo: tamte są cechą
+    /// konkretnej parceli, a to jest pytanie o **lukę w katalogu**. Kombinacja, dla której
+    /// żadna gramatyka nie zwraca `true`, jest dziurą w danych, którą trzeba załatać
+    /// plikiem — a nie parcelą, która akurat jest za wąska (M2f, kryterium WP19).
+    ///
+    /// Ta sama funkcja rozstrzyga trzy pierwsze filtry w `build::pasuje`: jedna reguła
+    /// domenowa ma mieć jedną implementację (00, „Dobre praktyki": DRY dotyczy wiedzy).
+    /// `None` w miejscu epoki albo stylu znaczy **filtr pominięty** — tak dobór dla parceli
+    /// rozluźnia warunki etapami. Nie da się tego wyrazić kluczem pustym: pusty klucz
+    /// zaostrzałby filtr (żadna gramatyka nie wymienia `""` w `applies`), a nie pomijał.
+    #[must_use]
+    pub fn covers(&self, zone: &str, epoch: Option<&str>, style: Option<&str>) -> bool {
+        fn lista_dopuszcza(lista: &[String], klucz: Option<&str>) -> bool {
+            match klucz {
+                None => true,
+                Some(k) => lista.is_empty() || lista.iter().any(|x| x == k),
+            }
+        }
+        (self.zones.is_empty() || self.zones.iter().any(|z| z == zone))
+            && lista_dopuszcza(&self.epochs, epoch)
+            && lista_dopuszcza(&self.styles, style)
+    }
+}
+
+impl GrammarSet {
+    /// Czy katalog ma dla tej kombinacji choć jedną gramatykę **niebędącą awaryjną**.
+    #[must_use]
+    pub fn covered(&self, zone: &str, epoch: &str, style: &str) -> bool {
+        self.items
+            .iter()
+            .any(|g| {
+                !g.id.starts_with("_fallback") && g.applies.covers(zone, Some(epoch), Some(style))
+            })
+    }
+}
+
 /// Obrys bryły na działce (M2 §5.6, `massing`).
 ///
 /// Jedna struktura zamiast enuma `Perimeter | Freestanding | Hall`: warianty różniły się

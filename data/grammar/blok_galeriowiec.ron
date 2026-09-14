@@ -1,0 +1,66 @@
+// R4 — galeriowiec: długa ściana z galerią komunikacyjną biegnącą wzdłuż elewacji
+// tylnej. Galeria jest tu bryłą, nie detalem — ciągłe wysunięcie na całej długości,
+// z otwartymi przęsłami zamiast okien. Bez `Protrude` z WP18 nie dałoby się jej zapisać
+// i galeriowiec byłby zwykłym blokiem o innej proporcji (M2f, WP19).
+(
+    schema_version: 1,
+    id: "blok_galeriowiec",
+    applies: (
+        zones: ["r4"],
+        epochs: ["postwar", "transition"],
+        styles: [],
+        land_value: (0, 9000000),
+        frontage_m: (28.0, 220.0),
+        depth_m: (10.0, 160.0),
+        weight: 30,
+    ),
+    massing: (
+        setback_front_m: 6.0,
+        setback_side_m: 4.0,
+        setback_back_m: 8.0,
+        max_depth_m: 12.0,
+    ),
+    rules: [
+        Foundation(depth_m: 2.0, material: "concrete", basements: 1),
+        Floors(
+            count: (4, 8),
+            height_m: 2.7,
+            ground_height_m: 3.0,
+            ground: Ref("kondygnacja"),
+            typical: Ref("kondygnacja_z_galeria"),
+            top: Ref("kondygnacja_z_galeria"),
+        ),
+        Roof(shape: Flat, material: "roof_felt"),
+    ],
+    refs: [
+        ("kondygnacja", Seq([
+            Choice([
+                (6, Fill("concrete_panel")),
+                (3, Fill("plaster_white")),
+            ]),
+            Comp(thickness_m: 1.2, faces: [
+                (Front, Repeat(axis: U, step_m: 3.8, pad_m: 1.1, rule: Split(axis: W, parts: [
+                    (Abs(0.9), Nothing),
+                    (Abs(1.4), Void),
+                    (Rel(1.0), Nothing),
+                ]))),
+            ]),
+        ])),
+        // Galeria: jedno wysunięcie na całą długość, z płytą u spodu i pustką powyżej.
+        // `Repeat` o kroku większym niż budynek dałby jeden kawałek wyśrodkowany —
+        // tu chcemy pełnej długości, więc idzie bez `Repeat`.
+        ("kondygnacja_z_galeria", Seq([
+            Ref("kondygnacja"),
+            Protrude(face: Back, m: 1.4, rule: Split(axis: W, parts: [
+                (Abs(0.7), Fill("concrete")),
+                (Rel(1.0), Nothing),
+            ])),
+        ])),
+    ],
+    interior: (
+        ground: (kind: Dwelling, area_m2: (30, 58)),
+        typical: (kind: Dwelling, area_m2: (30, 58)),
+        top: (kind: Dwelling, area_m2: (30, 58)),
+        circulation_share: 0.13,
+    ),
+)

@@ -1,0 +1,85 @@
+// R3/Commercial — plomba: dom wielorodzinny wstawiony w lukę pierzei po 1945. Dach płaski,
+// tynk albo płyta, rytm okien szerszy niż w kamienicy czynszowej, balkony od podwórza.
+// Zamyka lukę `r3/postwar/*`, w której katalog M2d nie miał nic: kamienica kończy się
+// na międzywojniu, a blok wymaga R4 (M2f, WP19).
+(
+    schema_version: 1,
+    id: "kamienica_plombowa",
+    applies: (
+        zones: ["r3", "commercial"],
+        epochs: ["postwar", "transition", "contemporary"],
+        styles: [],
+        land_value: (0, 12000000),
+        frontage_m: (8.0, 60.0),
+        depth_m: (9.0, 140.0),
+        weight: 45,
+    ),
+    massing: (
+        setback_front_m: 0.5,
+        setback_side_m: 0.0,
+        setback_back_m: 5.0,
+        courtyard_min_m2: 140.0,
+        max_depth_m: 14.0,
+    ),
+    rules: [
+        Foundation(depth_m: 2.2, material: "concrete", basements: 1),
+        Floors(
+            count: (3, 7),
+            height_m: 2.8,
+            ground_height_m: 3.6,
+            ground: Ref("parter"),
+            typical: Ref("pietro_z_balkonami"),
+            top: Ref("pietro"),
+        ),
+        Roof(shape: Flat, material: "roof_felt"),
+    ],
+    refs: [
+        ("parter", Seq([
+            Fill("concrete"),
+            Comp(thickness_m: 1.2, faces: [
+                (Front, Repeat(axis: U, step_m: 5.6, pad_m: 1.5, rule: Split(axis: W, parts: [
+                    (Abs(0.6), Nothing),
+                    (Abs(2.2), Void),
+                    (Rel(1.0), Nothing),
+                ]))),
+            ]),
+        ])),
+        ("pietro_z_balkonami", Seq([
+            Ref("pietro"),
+            // Od podwórza, bo plomba stoi w pierzei bez cofnięcia — od frontu balkon
+            // wyszedłby na chodnik i zostałby przycięty do zera.
+            Repeat(axis: U, step_m: 7.0, pad_m: 1.8, rule: Protrude(
+                face: Back, m: 1.3,
+                rule: Split(axis: W, parts: [
+                    (Abs(0.6), Fill("concrete")),
+                    (Rel(1.0), Nothing),
+                ]),
+            )),
+        ])),
+        ("pietro", Seq([
+            Choice([
+                (5, Fill("plaster_white")),
+                (3, Fill("stucco")),
+                (2, Fill("concrete_panel")),
+            ]),
+            Comp(thickness_m: 1.2, faces: [
+                (Front, Repeat(axis: U, step_m: 5.6, pad_m: 1.6, rule: Split(axis: W, parts: [
+                    (Abs(0.8), Nothing),
+                    (Abs(1.5), Void),
+                    (Rel(1.0), Nothing),
+                ]))),
+                (Back, Repeat(axis: U, step_m: 5.6, pad_m: 1.6, rule: Split(axis: W, parts: [
+                    (Abs(0.8), Nothing),
+                    (Abs(1.5), Void),
+                    (Rel(1.0), Nothing),
+                ]))),
+            ]),
+        ])),
+    ],
+    interior: (
+        ground: (kind: Retail, area_m2: (40, 110)),
+        typical: (kind: Dwelling, area_m2: (36, 78)),
+        top: (kind: Dwelling, area_m2: (36, 78)),
+        circulation_share: 0.15,
+    ),
+)

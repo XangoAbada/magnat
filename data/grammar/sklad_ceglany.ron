@@ -1,0 +1,74 @@
+// Logistics/IndustryLight — skład ceglany: magazyn portowy i kolejowy sprzed ery hali
+// stalowej. Wąskie, wysokie otwory ładunkowe jeden nad drugim, bez okien mieszkalnych.
+// Zamyka luki `logistics/industrial/*` i `logistics/interwar/*`, gdzie katalog M2d
+// nie miał nic, bo `magazyn.ron` zaczyna się dopiero po wojnie.
+(
+    schema_version: 1,
+    id: "sklad_ceglany",
+    applies: (
+        zones: ["logistics", "industry_light"],
+        epochs: ["industrial", "interwar", "postwar"],
+        styles: [],
+        land_value: (0, 4000000),
+        frontage_m: (10.0, 120.0),
+        depth_m: (10.0, 250.0),
+        weight: 40,
+    ),
+    massing: (
+        setback_front_m: 1.0,
+        setback_side_m: 1.0,
+        setback_back_m: 3.0,
+        max_depth_m: 26.0,
+    ),
+    rules: [
+        Foundation(depth_m: 2.0, material: "brick_red", basements: 0),
+        Floors(
+            count: (2, 5),
+            height_m: 3.8,
+            ground_height_m: 4.6,
+            ground: Ref("parter_ladunkowy"),
+            typical: Ref("kondygnacja"),
+            top: Ref("kondygnacja"),
+        ),
+        Roof(shape: Gable(pitch_deg: 30), material: "roof_tile_red", dormers: (0, 0)),
+    ],
+    refs: [
+        // Wrota ładunkowe: szerokie, niskie, na osi każdego przęsła.
+        ("parter_ladunkowy", Seq([
+            Fill("brick_red"),
+            Comp(thickness_m: 1.4, faces: [
+                (Front, Repeat(axis: U, step_m: 7.0, pad_m: 1.6, rule: Split(axis: W, parts: [
+                    (Abs(0.3), Nothing),
+                    (Abs(3.2), Void),
+                    (Rel(1.0), Nothing),
+                ]))),
+            ]),
+        ])),
+        ("kondygnacja", Seq([
+            Choice([
+                (6, Fill("brick_red")),
+                (3, Fill("brick_yellow")),
+            ]),
+            Comp(thickness_m: 1.4, faces: [
+                (Front, Ref("otwory")),
+                (Back, Ref("otwory")),
+                (Side, Repeat(axis: V, step_m: 6.0, pad_m: 2.0, rule: Split(axis: W, parts: [
+                    (Abs(1.2), Nothing),
+                    (Abs(1.6), Void),
+                    (Rel(1.0), Nothing),
+                ]))),
+            ]),
+        ])),
+        ("otwory", Repeat(axis: U, step_m: 7.0, pad_m: 2.4, rule: Split(axis: W, parts: [
+            (Abs(0.8), Nothing),
+            (Abs(2.2), Void),
+            (Rel(1.0), Nothing),
+        ]))),
+    ],
+    interior: (
+        ground: (kind: Storage, area_m2: (150, 900)),
+        typical: (kind: Storage, area_m2: (150, 900)),
+        top: (kind: Storage, area_m2: (150, 900)),
+        circulation_share: 0.1,
+    ),
+)

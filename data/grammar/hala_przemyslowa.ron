@@ -9,7 +9,7 @@
         epochs: ["industrial", "interwar", "postwar", "transition", "contemporary"],
         styles: [],
         land_value: (0, 4000000),
-        frontage_m: (12.0, 600.0),
+        frontage_m: (10.0, 600.0),
         depth_m: (12.0, 600.0),
         weight: 50,
     ),

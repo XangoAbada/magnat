@@ -1,0 +1,73 @@
+// Commercial/Office — pasaż: dom handlowy w pierzei, parter i pierwsze piętro przeszklone
+// na całą szerokość, wyżej biura albo mieszkania. Zamyka lukę `commercial/interwar/*`:
+// pawilon zaczyna się dopiero po wojnie, a kamienica nie obsługuje stylów przedmiejskich.
+(
+    schema_version: 1,
+    id: "pasaz_handlowy",
+    applies: (
+        zones: ["commercial", "office"],
+        epochs: ["industrial", "interwar", "postwar"],
+        styles: [],
+        land_value: (0, 20000000),
+        frontage_m: (10.0, 80.0),
+        depth_m: (10.0, 160.0),
+        weight: 40,
+    ),
+    massing: (
+        setback_front_m: 0.0,
+        setback_side_m: 0.0,
+        setback_back_m: 3.0,
+        max_depth_m: 22.0,
+    ),
+    rules: [
+        Foundation(depth_m: 2.6, material: "concrete", basements: 1),
+        Floors(
+            count: (2, 5),
+            height_m: 3.6,
+            ground_height_m: 4.6,
+            ground: Ref("witryna"),
+            typical: Ref("kondygnacja"),
+            top: Ref("kondygnacja"),
+        ),
+        Roof(shape: Flat, material: "roof_felt"),
+    ],
+    refs: [
+        // Witryna idzie przez całą szerokość frontu jednym otworem, z filarami co 6 m.
+        // To jest różnica wobec kamienicy: tam otwór jest oknem, tu jest wystawą.
+        ("witryna", Seq([
+            Fill("sandstone"),
+            Comp(thickness_m: 1.4, faces: [
+                (Front, Repeat(axis: U, step_m: 6.0, pad_m: 1.0, rule: Split(axis: W, parts: [
+                    (Abs(0.5), Nothing),
+                    (Abs(3.0), Void),
+                    (Rel(1.0), Nothing),
+                ]))),
+            ]),
+        ])),
+        ("kondygnacja", Seq([
+            Choice([
+                (4, Fill("sandstone")),
+                (3, Fill("stucco")),
+                (2, Fill("glass")),
+            ]),
+            Comp(thickness_m: 1.3, faces: [
+                (Front, Repeat(axis: U, step_m: 3.0, pad_m: 0.8, rule: Split(axis: W, parts: [
+                    (Abs(0.8), Nothing),
+                    (Abs(2.0), Void),
+                    (Rel(1.0), Nothing),
+                ]))),
+                (Back, Repeat(axis: U, step_m: 5.0, pad_m: 1.6, rule: Split(axis: W, parts: [
+                    (Abs(0.9), Nothing),
+                    (Abs(1.5), Void),
+                    (Rel(1.0), Nothing),
+                ]))),
+            ]),
+        ])),
+    ],
+    interior: (
+        ground: (kind: Retail, area_m2: (90, 400)),
+        typical: (kind: Office, area_m2: (60, 220)),
+        top: (kind: Office, area_m2: (60, 220)),
+        circulation_share: 0.18,
+    ),
+)

@@ -1,0 +1,67 @@
+// R1/R2 — chałupa przedmiejska i wiejska. Jedyna zabudowa mieszkaniowa dostępna
+// w pierścieniach sprzed 1918 poza pierzeją: przed kanalizacją i tramwajem miasto
+// kończyło się kilkaset metrów za rynkiem, a dalej stały domy z drewna i cegły
+// na własnej ziemi. Bez tego pliku R1 w pierścieniu średniowiecznym i przemysłowym
+// nie ma kandydata i schodzi na gramatykę awaryjną (M2f, WP19).
+(
+    schema_version: 1,
+    id: "chalupa",
+    applies: (
+        zones: ["r1", "r2"],
+        epochs: ["medieval", "industrial", "interwar"],
+        styles: [],
+        land_value: (0, 2500000),
+        frontage_m: (6.0, 60.0),
+        depth_m: (7.0, 300.0),
+        weight: 35,
+        coverage: 0.85,
+    ),
+    massing: (
+        setback_front_m: 3.0,
+        setback_side_m: 2.0,
+        setback_back_m: 6.0,
+        max_depth_m: 9.0,
+    ),
+    rules: [
+        Foundation(depth_m: 0.8, material: "limestone", basements: 0),
+        Floors(
+            count: (1, 2),
+            height_m: 2.5,
+            ground_height_m: 2.7,
+            ground: Ref("sciana"),
+            typical: Ref("sciana"),
+            top: Ref("sciana"),
+        ),
+        // Stromy dach kryty dachówką: poddasze użytkowe było regułą, nie dodatkiem.
+        Roof(shape: Gable(pitch_deg: 48), material: "roof_tile_red", dormers: (0, 2)),
+    ],
+    refs: [
+        // Materiał ściany jest tu najmocniejszym znacznikiem epoki: drewno na wsi,
+        // cegła bliżej miasta, tynk tam, gdzie kogoś było stać na elewację.
+        ("sciana", Seq([
+            Choice([
+                (4, Fill("timber")),
+                (3, Fill("brick_red")),
+                (2, Fill("plaster_white")),
+            ]),
+            Comp(thickness_m: 1.2, faces: [
+                (Front, Repeat(axis: U, step_m: 3.6, pad_m: 1.2, rule: Split(axis: W, parts: [
+                    (Abs(0.9), Nothing),
+                    (Abs(1.1), Void),
+                    (Rel(1.0), Nothing),
+                ]))),
+                (Back, Repeat(axis: U, step_m: 4.2, pad_m: 1.5, rule: Split(axis: W, parts: [
+                    (Abs(1.0), Nothing),
+                    (Abs(1.0), Void),
+                    (Rel(1.0), Nothing),
+                ]))),
+            ]),
+        ])),
+    ],
+    interior: (
+        ground: (kind: Dwelling, area_m2: (35, 70)),
+        typical: (kind: Dwelling, area_m2: (35, 70)),
+        top: (kind: Dwelling, area_m2: (28, 55)),
+        circulation_share: 0.05,
+    ),
+)
