@@ -97,9 +97,13 @@
         (
             key: "Mobility",
             visit_min: 15,
-            decay_centi_per_hour: 0,     // M4 (dostęp do trasy) — patrz nagłówek
+            // M4b wnosi mechanizm i razem z nim tempo (`Z-2`). 0,6 pkt/h to 14,4 pkt
+            // na dobę; dwie zakończone podróże je pokrywają. `places` zostaje puste
+            // **celowo**: mobilności nie zaspokaja wizyta gdziekolwiek, tylko sam fakt,
+            // że mieszkaniec dojechał — `satisfaction` nalicza `TripArrived`, nie planer.
+            decay_centi_per_hour: 60,
             critical: 25,
-            satisfaction: 0,
+            satisfaction: 10,
             places: [],
             effects: [
                 (effect: AbsenceRisk, magnitude: 1000),      // brak dostępu do pracy

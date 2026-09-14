@@ -28,7 +28,7 @@ use crate::time::MinuteOfDay;
 use crate::types::Q;
 use crate::vocab::{
     CommitmentKind, DeprivationEffect, LifeEventKind, MigrationKind, NeedKind, PlaceRef, StockCat,
-    TraitId,
+    TraitId, TransportMode,
 };
 use serde::{Deserialize, Serialize};
 
@@ -121,7 +121,28 @@ pub enum DecisionReason {
     /// narodziny, poczęcie, emerytura, choroba, wyzdrowienie, zgon.
     LifeEvent { kind: LifeEventKind } = 119,
     // ── M4 — ruch: 200..=299 ─────────────────────────────────────────────────────
-    // ModeChosen { mode: TransportMode, minutes: u16 } = 200,
+    // M4b zajmuje 200–204. Wybór środka z pełnym kosztem uogólnionym (M4c/WP6)
+    // dopisze `ModeCompared` pod kolejnym numerem — `ModeChosen` zostaje i niesie
+    // to, co wiadomo zawsze: który środek i ile minut.
+    /// Wybrany środek transportu i przewidywany czas przejazdu (M4b §5.2).
+    ModeChosen { mode: TransportMode, minutes: u16 } = 200,
+    /// Dla tego środka nie ma trasy między końcami podróży — 3,5 % węzłów sieci M2
+    /// to pułapki jednokierunkowe (M4b `Y-1`). Rozstrzygnięcie zapada **przy
+    /// planowaniu**: mieszkaniec dostaje inny środek, a nie porażkę przejazdu.
+    NoRouteForMode { mode: TransportMode, fallback: TransportMode } = 201,
+    /// Poziom paliwa spadł poniżej progu i tankowanie weszło do planu dnia
+    /// (M4b §5.7). `level_permille` to stan baku w promilach pojemności.
+    RefuelNeeded { level_permille: u16 } = 202,
+    /// Wybrana stacja paliw: nadłożenie trasy i cena, którą płaci kierowca
+    /// (M4b §5.7). Remisy rozstrzyga indeks stacji, nie kolejność iteracji.
+    StationChosen {
+        detour_min: u16,
+        price_gr_per_l: u16,
+    } = 203,
+    /// Przejazd trwał dłużej, niż zakładał plan — korek, spillback albo kolejka
+    /// na skrzyżowaniu (M4b §5.2). To jest druga przyczyna `ReplanCause::Late`
+    /// obok tej, którą M3 znał (marsz zwalniający razem z energią).
+    TripDelayed { planned_min: u16, actual_min: u16 } = 204,
     // ── M5 — gospodarka detaliczna: 300..=399 ────────────────────────────────────
     // ShopChosen { shop: FirmId, dominant: UtilityKind, margin_permille: i16 } = 300,
     // ... kolejne fazy dopisują własne bloki na końcu pliku
@@ -159,6 +180,11 @@ impl DecisionReason {
             DecisionReason::MigrationDecision { .. } => 117,
             DecisionReason::Inheritance { .. } => 118,
             DecisionReason::LifeEvent { .. } => 119,
+            DecisionReason::ModeChosen { .. } => 200,
+            DecisionReason::NoRouteForMode { .. } => 201,
+            DecisionReason::RefuelNeeded { .. } => 202,
+            DecisionReason::StationChosen { .. } => 203,
+            DecisionReason::TripDelayed { .. } => 204,
         }
     }
 }

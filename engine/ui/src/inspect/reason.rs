@@ -9,7 +9,7 @@ use crate::loc::{Catalog, Locale};
 use magnat_agents::SocialClass;
 use magnat_core::{
     ActivityKind, CommitmentKind, DecisionReason, DeprivationEffect, LifeEventKind, MigrationKind,
-    NeedKind, StockCat, TraitId,
+    Money, NeedKind, StockCat, TraitId, TransportMode,
 };
 
 /// Nazwa potrzeby w języku gracza.
@@ -34,6 +34,12 @@ pub fn stock(c: &Catalog, l: Locale, s: StockCat) -> String {
 #[must_use]
 pub fn trait_name(c: &Catalog, l: Locale, t: TraitId) -> String {
     c.fmt_key(l, &format!("ui.trait.{}", t.name()), &[])
+}
+
+/// Nazwa środka transportu.
+#[must_use]
+pub fn transport_mode(c: &Catalog, l: Locale, m: TransportMode) -> String {
+    c.fmt_key(l, &format!("ui.mode.{}", m.name()), &[])
 }
 
 /// Nazwa skutku deprywacji.
@@ -240,6 +246,49 @@ pub fn describe(c: &Catalog, l: Locale, r: DecisionReason) -> String {
         DecisionReason::LifeEvent { kind } => {
             c.fmt_key(l, "ui.reason.LifeEvent", &[("co", &life_event(c, l, kind))])
         }
+        DecisionReason::ModeChosen { mode, minutes: m } => c.fmt_key(
+            l,
+            "ui.reason.ModeChosen",
+            &[
+                ("co", &transport_mode(c, l, mode)),
+                ("czas", &minutes(c, l, m)),
+            ],
+        ),
+        DecisionReason::NoRouteForMode { mode, fallback } => c.fmt_key(
+            l,
+            "ui.reason.NoRouteForMode",
+            &[
+                ("co", &transport_mode(c, l, mode)),
+                ("zamiast", &transport_mode(c, l, fallback)),
+            ],
+        ),
+        DecisionReason::RefuelNeeded { level_permille } => c.fmt_key(
+            l,
+            "ui.reason.RefuelNeeded",
+            &[("promile", &level_permille.to_string())],
+        ),
+        DecisionReason::StationChosen {
+            detour_min,
+            price_gr_per_l,
+        } => c.fmt_key(
+            l,
+            "ui.reason.StationChosen",
+            &[
+                ("objazd", &minutes(c, l, detour_min)),
+                ("cena", &crate::zlotowki(Money(i64::from(price_gr_per_l)))),
+            ],
+        ),
+        DecisionReason::TripDelayed {
+            planned_min,
+            actual_min,
+        } => c.fmt_key(
+            l,
+            "ui.reason.TripDelayed",
+            &[
+                ("faktycznie", &minutes(c, l, actual_min)),
+                ("plan", &minutes(c, l, planned_min)),
+            ],
+        ),
     }
 }
 
@@ -267,7 +316,7 @@ mod tests {
     use super::*;
     use magnat_core::{MinuteOfDay, PlaceRef, Q};
 
-    /// Wszystkie warianty bloku M3 — ta sama lista co w teście dyskryminant `core`.
+    /// Wszystkie warianty bloków M3 i M4 — ta sama lista co w teście dyskryminant `core`.
     fn wszystkie() -> Vec<DecisionReason> {
         vec![
             DecisionReason::Unspecified,
@@ -346,6 +395,23 @@ mod tests {
             DecisionReason::LifeEvent {
                 kind: LifeEventKind::Died,
             },
+            DecisionReason::ModeChosen {
+                mode: TransportMode::Bus,
+                minutes: 24,
+            },
+            DecisionReason::NoRouteForMode {
+                mode: TransportMode::Car,
+                fallback: TransportMode::Walk,
+            },
+            DecisionReason::RefuelNeeded { level_permille: 80 },
+            DecisionReason::StationChosen {
+                detour_min: 4,
+                price_gr_per_l: 649,
+            },
+            DecisionReason::TripDelayed {
+                planned_min: 18,
+                actual_min: 31,
+            },
         ]
     }
 
@@ -363,8 +429,8 @@ mod tests {
                 );
             }
         }
-        // Blok M3 jest kompletny: 21 wariantów (Unspecified + 100..=119).
-        assert_eq!(wszystkie().len(), 21);
+        // Bloki M3 i M4 są kompletne: 26 wariantów (Unspecified + 100..=119 + 200..=204).
+        assert_eq!(wszystkie().len(), 26);
     }
 
     #[test]
@@ -385,6 +451,9 @@ mod tests {
             }
             for d in DeprivationEffect::ALL {
                 assert!(!deprivation(&c, l, *d).is_empty());
+            }
+            for m in TransportMode::ALL {
+                assert!(!transport_mode(&c, l, *m).is_empty());
             }
         }
     }

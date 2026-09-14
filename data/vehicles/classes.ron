@@ -1,0 +1,96 @@
+// Katalog klas pojazdów (M4b, WP5). `VehicleClassId` to indeks w tej tablicy —
+// kolejność jest kontraktem, bo wchodzi do komponentu pojazdu, a ten do zapisu gry.
+//
+// Wszystkie liczby są całkowite i wszystkie mnożniki są w promilach: wzór zużycia
+// paliwa z M4d §5.4 nie ma prawa zobaczyć ani jednego floata, bo jego wynik wchodzi
+// do ledgera, czyli do pieniądza (00 §2).
+//
+// `base_ml_per_100km` to zużycie odniesienia: pojazd pusty, teren płaski, prędkość
+// z kubełka optymalnego. Reszta to mnożniki nakładane kolejno.
+(
+    schema_version: 1,
+
+    // Mnożnik zużycia od prędkości średniej. Kubełek co 100 dkmh (10 km/h),
+    // indeks = mean_speed_dkmh / 100, ostatni obowiązuje dla wszystkiego powyżej.
+    // Krzywa jest w kształcie U: w korku pali się na jałowym, na autostradzie
+    // na opór powietrza. Minimum wypada przy 50–60 km/h.
+    speed_factor_permille: [1800, 1350, 1150, 1050, 1000, 980, 1000, 1060, 1150, 1280, 1450],
+
+    // Mnożnik od ładunku: 1000 + load_g * load_slope_permille / kerb_mass_g.
+    // 100 % masy własnej dokłada 30 % zużycia.
+    load_slope_permille: 300,
+
+    // Mnożnik od nachylenia: 1000 + grade_permille * grade_slope_permille,
+    // przycięty z dołu do `grade_floor_permille` (zjazd nie zwraca paliwa w nieskończoność).
+    grade_slope_permille: 15,
+    grade_floor_permille: 600,
+
+    // Cena detaliczna paliwa w groszach za litr (D9: w M4 stała z danych; M5 podmienia
+    // na ofertę w `sim/economy`, M4 czyta przez `FuelPrices`, nie z pliku wprost).
+    // Dla `Electric` jednostką jest grosz za kWh.
+    fuel_price_gr: [
+        (kind: Petrol,   price: 550),
+        (kind: Diesel,   price: 520),
+        (kind: Lpg,      price: 290),
+        (kind: Electric, price: 75),
+    ],
+
+    classes: [
+        (
+            key: "car_small",
+            fuel: Petrol,
+            kerb_mass_g: 950_000,
+            length_cm: 390,
+            seats: 5,
+            tank_ml: 45_000,
+            refuel_threshold_permille: 150,
+            base_ml_per_100km: 6_200,
+            idle_ml_per_stop: 7,
+            cold_start_ml: 55,
+            wear_gr_per_100km: 2_600,
+            top_speed_dkmh: 1_650,
+        ),
+        (
+            key: "car_medium",
+            fuel: Petrol,
+            kerb_mass_g: 1_280_000,
+            length_cm: 445,
+            seats: 5,
+            tank_ml: 58_000,
+            refuel_threshold_permille: 150,
+            base_ml_per_100km: 7_600,
+            idle_ml_per_stop: 9,
+            cold_start_ml: 70,
+            wear_gr_per_100km: 3_400,
+            top_speed_dkmh: 1_900,
+        ),
+        (
+            key: "car_large",
+            fuel: Diesel,
+            kerb_mass_g: 1_680_000,
+            length_cm: 485,
+            seats: 5,
+            tank_ml: 70_000,
+            refuel_threshold_permille: 150,
+            base_ml_per_100km: 7_100,
+            idle_ml_per_stop: 11,
+            cold_start_ml: 90,
+            wear_gr_per_100km: 4_800,
+            top_speed_dkmh: 2_100,
+        ),
+        (
+            key: "van",
+            fuel: Diesel,
+            kerb_mass_g: 2_100_000,
+            length_cm: 580,
+            seats: 3,
+            tank_ml: 80_000,
+            refuel_threshold_permille: 200,
+            base_ml_per_100km: 9_400,
+            idle_ml_per_stop: 14,
+            cold_start_ml: 110,
+            wear_gr_per_100km: 5_200,
+            top_speed_dkmh: 1_600,
+        ),
+    ],
+)

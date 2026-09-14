@@ -280,12 +280,12 @@ struct Mieszkaniec {
     escorts: Vec<magnat_core::PlaceRef>,
     tabela: std::sync::Arc<NeedTable>,
     miejsca: magnat_agents::InfinitePlaces,
-    oracle: magnat_agents::WalkOracle,
+    oracle: magnat_agents::StraightLineTravel,
 }
 
 fn mieszkaniec() -> Mieszkaniec {
-    use magnat_agents::{InfinitePlaces, Knowledge, KnowledgeKind, WalkOracle};
-    let (places, nodes, segs) = miasto();
+    use magnat_agents::{InfinitePlaces, Knowledge, KnowledgeKind, StraightLineTravel};
+    let (places, _nodes, _segs) = miasto();
     let tabela = std::sync::Arc::new(tabela());
     let mut stock = [30u8; magnat_core::STOCK_CAT_COUNT];
     stock[0] = 1;
@@ -324,7 +324,7 @@ fn mieszkaniec() -> Mieszkaniec {
         stock,
         escorts: Vec::new(),
         miejsca: InfinitePlaces::new(places.clone(), tabela.clone()),
-        oracle: WalkOracle::with_streets(places, &nodes, &segs),
+        oracle: StraightLineTravel::new(places.clone()),
         tabela,
     }
 }

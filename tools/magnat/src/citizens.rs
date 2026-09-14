@@ -20,7 +20,7 @@
 //!
 //! ### Warstwa Mikro chodzi tylko w kadrze
 //!
-//! Polilinia trasy dla 274 tys. mieszkańców to koszt, którego nikt nie ogląda. `WalkOracle`
+//! Polilinia trasy dla 274 tys. mieszkańców to koszt, którego nikt nie ogląda. Oracle ruchu
 //! dostaje **okno**: środek kadru i promień. Mezo — czyli cały wynik — nie zależy od tego
 //! ani o minutę, bo warstwa Mikro nie ma prawa zapisu do stanu (00 §4) i `AgentSources`
 //! świadomie nie wchodzi do hasha stanu (bramka 2 fazy M3).
@@ -29,10 +29,11 @@ use magnat_agents::{
     bootstrap_day, register, register_day, society, AgentSources, DayLoopSystem, DemographyTable,
     DeprivationEffectsSystem, HouseholdStockSystem, InfinitePlaces, NeedDecaySystem, NeedTable,
     NoInheritance, Population, ReplanCooldownSystem, SkillDriftSystem, SocietySystem, Trace,
-    WalkMicroSystem,
+    TravelMicroSystem,
 };
 use magnat_core::{SimSpeed, Tick};
 use magnat_ecs::{App, ScheduleBuilder, World};
+use magnat_traffic::{TrafficSystem, VehicleWearSystem};
 use magnat_sim_snapshot::PedestrianRecord;
 use magnat_ui::{CitizenPanel, Locale, Selection, UiContext};
 use magnat_world::{generate_population, CityData, PopulationParams};
@@ -61,7 +62,7 @@ pub struct Citizens {
     egui_state: egui_winit::State,
     /// Rekordy dla renderera, przepisywane co klatkę z warstwy Mikro.
     peds: Vec<PedestrianRecord>,
-    /// Bufor pośredni `WalkOracle::micro_snapshot`, żeby klatka nie alokowała.
+    /// Bufor pośredni `TravelOracle::micro_snapshot`, żeby klatka nie alokowała.
     zrzut: Vec<(u32, [f32; 3], f32)>,
     /// Doba, dla której karta odtwarza plan.
     dzien: u64,
@@ -101,7 +102,7 @@ impl Citizens {
         }
 
         let tabela = Arc::new(NeedTable::load_default()?);
-        let oracle = zaludnione.walk_oracle();
+        let oracle = zaludnione.travel_oracle();
         oracle.set_micro_window(None, 0);
         *world.resource_mut::<AgentSources>() = AgentSources::new(
             Box::new(InfinitePlaces::new(zaludnione.places.clone(), tabela)),
@@ -119,8 +120,14 @@ impl Citizens {
             .add(SkillDriftSystem::new(&world))
             .add(HouseholdStockSystem::new(&world))
             .add(SocietySystem::new(Box::new(NoInheritance)))
+            // Warstwa mezo musi tu być, i to nie dla widoku. Zlecenie przejazdu
+            // zebrane przez `begin_trip` wykonuje **tylko** ten system; bez niego
+            // kierowca zgłasza podróż, której nikt nie realizuje, nie dostaje
+            // `Arrive` i stoi do końca sesji — a jego auto zostaje zajęte na zawsze.
+            .add(TrafficSystem::new(&world))
+            .add(VehicleWearSystem::new(&world))
             // W oknie warstwa Mikro jest zawsze: bez niej nie ma czego rysować.
-            .add(WalkMicroSystem::new(&world));
+            .add(TravelMicroSystem::new(&world));
         let schedule = builder.build()?;
         let ludzi = society::population(&world);
         let app = App::new(world, schedule, threads);

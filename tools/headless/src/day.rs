@@ -16,7 +16,7 @@ use magnat_agents::{
     plan_day, plan_day_explained, render_day_debug, CitizenView, DayCanvas, Employment, EventKind,
     EventQueue, HouseholdView, Identity, InfinitePlaces, Knowledge, KnowledgeKind, KnowledgeView,
     NeedTable, Needs, Personality, PlaceEntry, PlaceTable, PlanCtx, ReasonLog, Residence,
-    ShiftKind, SimEvent, TravelOracle, TripRequest, Vitals, WalkOracle,
+    ShiftKind, SimEvent, StraightLineTravel, TravelOracle, TripRequest, Vitals,
 };
 use magnat_core::{
     rng, ActivityKind, BuildingId, CitizenId, DayOfWeek, Entity, HouseholdId, MinuteOfDay,
@@ -253,7 +253,7 @@ fn kontekst<'a>(
     seed: u64,
     tabela: &'a NeedTable,
     places: &'a InfinitePlaces,
-    oracle: &'a WalkOracle,
+    oracle: &'a StraightLineTravel,
     brak_eskorty: &'a [PlaceRef],
 ) -> PlanCtx<'a> {
     PlanCtx {
@@ -284,8 +284,9 @@ pub fn run(a: &DayArgs) -> Result<std::process::ExitCode, Box<dyn std::error::Er
     let miasto = zbuduj_miasto(a.grid);
     let tabela = Arc::new(NeedTable::load_default()?);
     let places = InfinitePlaces::new(miasto.places.clone(), tabela.clone());
-    let mut oracle =
-        WalkOracle::with_streets(miasto.places.clone(), &miasto.nodes, &miasto.segments);
+    // Scenariusz M3b mierzy dobę mieszkańca, nie ruch: estymatorem jest dubler
+    // w linii prostej z `sim/agents`. Sieć, pojazdy i korki pokazuje `m4b`.
+    let mut oracle = StraightLineTravel::new(miasto.places.clone());
     let ludzie = zaludnij(a.seed, a.citizens, &miasto);
     let brak_eskorty: Vec<PlaceRef> = Vec::new();
     eprintln!(
@@ -517,7 +518,7 @@ fn wydruk_dnia(
     a: &DayArgs,
     tabela: &NeedTable,
     places: &InfinitePlaces,
-    oracle: &WalkOracle,
+    oracle: &StraightLineTravel,
     brak_eskorty: &[PlaceRef],
 ) {
     let i = match a.print {

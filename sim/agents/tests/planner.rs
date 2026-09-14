@@ -13,7 +13,7 @@ use magnat_agents::{
     request_replan, store_plan, tick_replan_cooldown, AgentState, DayCanvas, Employment,
     EmptyPlaces, FlakyPlaces, HouseholdView, Identity, InfinitePlaces, Knowledge, KnowledgeKind,
     KnowledgeView, NeedTable, Needs, Personality, PlaceEntry, PlaceTable, PlanCtx, PlanRef,
-    PlanSlab, ReasonLog, ReplanCause, Residence, ShiftKind, Vitals, WalkOracle, MAX_SLOTS,
+    PlanSlab, ReasonLog, ReplanCause, Residence, ShiftKind, Vitals, StraightLineTravel, MAX_SLOTS,
 };
 use magnat_core::{
     ActivityKind, BuildingId, CitizenId, DayOfWeek, DecisionReason, Entity, NeedKind, PlaceKind,
@@ -115,7 +115,7 @@ struct Scena {
     escorts: Vec<PlaceRef>,
     tabela: Arc<NeedTable>,
     miejsca: InfinitePlaces,
-    oracle: WalkOracle,
+    oracle: StraightLineTravel,
     day: u64,
 }
 
@@ -125,7 +125,7 @@ impl Scena {
     fn anna() -> Scena {
         let places = Arc::new(katalog());
         let tabela = Arc::new(NeedTable::load_default().expect("data/needs/needs.ron"));
-        let (nodes, segs) = siatka();
+        let (_nodes, _segs) = siatka();
         let mut stock = HouseholdView::FULL;
         stock[StockCat::Food.as_index()] = 1;
 
@@ -180,7 +180,7 @@ impl Scena {
             stock,
             escorts: vec![budynek(SZKOLA)],
             miejsca: InfinitePlaces::new(places.clone(), tabela.clone()),
-            oracle: WalkOracle::with_streets(places, &nodes, &segs),
+            oracle: StraightLineTravel::new(places.clone()),
             tabela,
             // Doba 3 świata = czwartek (doba 0 to poniedziałek, K-15).
             day: 3,

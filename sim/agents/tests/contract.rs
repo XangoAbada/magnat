@@ -197,25 +197,23 @@ fn sciezka_odmowy_dziala_zanim_m5_bedzie_mial_czym_odmawiac() {
 }
 
 #[test]
-fn walk_nie_wycieka_do_publicznego_api() {
-    // Kryterium akceptacyjne nr 8 fazy (K-2): M4 ma móc zbudować `engine/nav`
-    // bez rozbierania M3. Test czyta `lib.rs`, bo to jedyne miejsce, w którym
-    // ten przeciek może powstać — i powstanie cicho, jednym `pub use`.
+fn trasa_nie_wycieka_do_publicznego_api() {
+    // Kryterium akceptacyjne nr 8 fazy (K-2), wersja po M4b. Do M4b pilnowaliśmy,
+    // żeby moduł `walk` był prywatny; teraz go **nie ma** — graf pieszy i routing
+    // mieszkają w `engine/nav` i `sim/traffic`. Test pilnuje tego samego zakazu
+    // od drugiej strony: z `sim/agents` nie ma prawa wyjść ani jeden typ trasy.
     let lib = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/src/lib.rs"))
         .expect("src/lib.rs");
     assert!(
-        lib.contains("pub(crate) mod walk;"),
-        "moduł `walk` przestał być prywatny — graf pieszy należy do M4 (K-2)"
+        !lib.contains("mod walk"),
+        "moduł `walk` wrócił — graf pieszy należy do M4 (K-2, Z-1)"
     );
-    let reeksporty: Vec<&str> = lib
-        .lines()
-        .filter(|l| l.trim_start().starts_with("pub use walk::"))
-        .collect();
-    assert_eq!(
-        reeksporty,
-        vec!["pub use walk::WalkOracle;"],
-        "z modułu `walk` wychodzi coś poza implementacją traitu"
-    );
+    for zakazane in ["WalkOracle", "StreetGraph", "magnat_nav", "magnat_traffic"] {
+        assert!(
+            !lib.contains(zakazane),
+            "`{zakazane}` w publicznym API `sim/agents` — zależność idzie w drugą stronę"
+        );
+    }
 }
 
 #[test]
@@ -233,7 +231,7 @@ fn kontrakt_nie_wspomina_o_gospodarce_ani_o_grafie() {
     ];
     // Planer dodatkowo nie ma prawa **znać modułu trasy**: jego jedynym wejściem
     // do routingu jest `TravelOracle` (K-2). `places.rs` może — to on buduje
-    // `InfinitePlaces` na tej samej prędkości marszu co `WalkOracle`.
+    // `InfinitePlaces` na tej samej prędkości marszu co `StraightLineTravel`.
     const TRASA: [&str; 2] = ["StreetGraph", "crate::walk"];
 
     for (plik, zakazane) in [
@@ -266,13 +264,13 @@ fn planer_stoi_na_traitach_a_nie_na_implementacjach() {
     // Gdyby `PlanCtx` znał typ implementacji, `uloz` nie przyjęłoby obu.
     use magnat_agents::{
         plan_day, CitizenView, DayCanvas, Employment, HouseholdView, Identity, Needs, Personality,
-        PlanCtx, Residence, Vitals, WalkOracle,
+        PlanCtx, Residence, Vitals, StraightLineTravel,
     };
     use magnat_core::{DayOfWeek, HouseholdId, STOCK_CAT_COUNT};
 
     let places = katalog();
     let needs = Arc::new(NeedTable::load_default().expect("data/needs/needs.ron"));
-    let oracle = WalkOracle::new(places.clone());
+    let oracle = StraightLineTravel::new(places.clone());
     let identity = Identity {
         birth_day: -360 * 30,
         flags: Identity::FLAG_ALIVE,

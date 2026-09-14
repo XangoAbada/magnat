@@ -29,10 +29,12 @@ use magnat_agents::{
     demography, household, migration, social, Ages, ArrayVec, CitizenView, CityFacts,
     DemographyTable, Employment, HomeSlot, Household, HouseholdOverflow, Identity, JobSlot,
     KnowledgeKind, Needs, Personality, PlaceEntry, PlaceTable, RelationKind, Residence, ShiftKind,
-    SkillSlot, Skills, TravelOracle, Vacancies, Vitals, WalkOracle, MAX_ON_ROUTE,
+    SkillSlot, Skills, Vacancies, Vitals, MAX_ON_ROUTE,
 };
+use magnat_traffic::{OracleHandle, TrafficOracle};
+use crate::traffic_build::FleetReport;
 use magnat_core::{
-    det_math, rng, BuildingId, CitizenId, Entity, MinuteOfDay, Money, PlaceKind,
+    det_math, rng, BuildingId, CitizenId, Entity, Money, PlaceKind,
     PlaceRef, Rng, SiteId, StreamId, Tick, WorldCoord,
 };
 use magnat_ecs::World;
@@ -55,9 +57,6 @@ pub const COMMUTE_BINS: usize = 12;
 /// Szerokość kubełka w minutach; ostatni jest otwarty.
 pub const COMMUTE_BIN_MIN: u16 = 5;
 
-/// Minuta, o której liczy się dojazd odniesienia. Estymator pieszy jej nie używa,
-/// ale kontrakt `TravelOracle` ją bierze — i M4 użyje jej do rozkładu ruchu w szczycie.
-const GODZINA_ODNIESIENIA: u16 = 8 * 60;
 
 #[inline]
 #[must_use]
@@ -260,27 +259,33 @@ fn chi2(obs: &[u32], exp_permille: &[u32], n: u32) -> f64 {
 }
 
 /// Miasto zaludnione: to, czego `sim/agents` potrzebuje, żeby zacząć dobę.
+///
+/// Po M4b nie ma tu już dwóch płaskich tablic sieci pieszej (`Z-3`): graf buduje
+/// `nav_build` z `RoadNetwork` bezpośrednio, a estymator podróży jest crate'em ruchu.
 pub struct Populated {
-    /// Katalog miejsc dla `InfinitePlaces` i `WalkOracle` (korekta E-1).
+    /// Katalog miejsc dla `InfinitePlaces` (korekta E-1).
     pub places: Arc<PlaceTable>,
-    /// Węzły sieci pieszej w centymetrach (korekta E-7).
-    pub nodes: Vec<WorldCoord>,
-    /// Odcinki `(a, b, długość w cm)`.
-    pub segments: Vec<(u32, u32, u32)>,
+    /// Oracle ruchu — router, flota i stacje tego miasta. Ten sam `Arc` siedzi
+    /// w zasobie `TrafficServices` świata, więc system ruchu i planer widzą
+    /// dokładnie jeden obiekt.
+    pub traffic: Arc<TrafficOracle>,
+    pub fleet: FleetReport,
     pub report: PopulationReport,
 }
 
 impl Populated {
-    /// Estymator odległości pieszej zbudowany na sieci tego miasta.
+    /// Estymator podróży do `Sources.travel` — wykonanie `Z-1`.
     #[must_use]
-    pub fn walk_oracle(&self) -> WalkOracle {
-        WalkOracle::with_streets(self.places.clone(), &self.nodes, &self.segments)
+    pub fn travel_oracle(&self) -> Box<dyn magnat_agents::TravelOracle> {
+        Box::new(OracleHandle(self.traffic.clone()))
     }
 }
 
 #[derive(Debug)]
 pub enum PopulationError {
     Table(TableError),
+    /// Sieć transportowa miasta nie dała się zbudować albo dane ruchu są niespójne.
+    Traffic(Box<crate::traffic_build::TrafficBuildError>),
     /// Miasto bez ani jednego mieszkania nie da się zaludnić — i to jest błąd Etapu 6,
     /// a nie stan do obsłużenia tutaj.
     NoHomes,
@@ -290,6 +295,7 @@ impl std::fmt::Display for PopulationError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             PopulationError::Table(e) => write!(f, "{e}"),
+            PopulationError::Traffic(e) => write!(f, "sieć transportowa: {e}"),
             PopulationError::NoHomes => write!(f, "miasto nie ma ani jednego mieszkania"),
         }
     }
@@ -498,29 +504,6 @@ fn fakty_miasta(city: &CityData, jobs: &crate::city::build::JobTable) -> CityFac
     }
 }
 
-/// Sieć piesza dla `WalkOracle` (korekta E-7). Centymetry, nie decymetry —
-/// `WorldCoord` jest w centymetrach (00 §2), a `RoadSegment.length_dm` w decymetrach.
-fn siec_piesza(city: &CityData) -> (Vec<WorldCoord>, Vec<(u32, u32, u32)>) {
-    let nodes: Vec<WorldCoord> = city
-        .roads
-        .nodes
-        .iter()
-        .map(|n| {
-            WorldCoord::new(
-                (n.pos.x * 100.0) as i32,
-                (n.pos.y * 100.0) as i32,
-                n.z_dm * 10,
-            )
-        })
-        .collect();
-    let segments: Vec<(u32, u32, u32)> = city
-        .roads
-        .segments
-        .iter()
-        .map(|s| (s.a.0, s.b.0, s.length_dm.saturating_mul(10)))
-        .collect();
-    (nodes, segments)
-}
 
 // ── pula wieku (krok 1) ─────────────────────────────────────────────────────────
 
@@ -877,7 +860,7 @@ pub fn generate_population(
 
     // ── krok 0: most ────────────────────────────────────────────────────────────
     let places = Arc::new(PlaceTable::build(katalog_miejsc(city)));
-    let (nodes, segments) = siec_piesza(city);
+    crate::traffic_build::register_vehicle_components(world);
     *world.resource_mut::<CityFacts>() = fakty_miasta(city, &jobs_table);
 
     let mut domy = pustostany(city);
@@ -1016,7 +999,15 @@ pub fn generate_population(
     odcinek("praca", &mut czasy, &mut zegar);
 
     // ── kroki 6 i 7: mieszkania i dojazd ────────────────────────────────────────
-    let oracle = WalkOracle::with_streets(places.clone(), &nodes, &segments);
+    //
+    // Estymator dojazdu jest już **siecią M4**, nie dwiema płaskimi tablicami M3
+    // (`Z-3`): krok 7 steruje medianą dojazdu całego miasta, więc odległość musi
+    // być sieciowa, a nie manhattanowa. Flota jest jeszcze pusta — auta rozdaje się
+    // po dopasowaniu mieszkań, bo dopiero wtedy wiadomo, kto gdzie mieszka.
+    let commuters = zatrudnienie.employed.max(1);
+    let (mut oracle, vdf, pojemnosc_cache) =
+        crate::traffic_build::build_oracle(city, places.clone(), commuters)
+            .map_err(|e| PopulationError::Traffic(Box::new(e)))?;
     let commute_cel = params.commute_median_min.unwrap_or(t.commute.median_min);
     let mieszkania = dopasuj_mieszkania(
         world,
@@ -1084,12 +1075,31 @@ pub fn generate_population(
     );
 
     odcinek("raport", &mut czasy, &mut zegar);
+
+    // ── krok 11: flota ──────────────────────────────────────────────────────────
+    //
+    // Na końcu, bo kierowcą zostaje pracujący dorosły, a adres gospodarstwa jest
+    // znany dopiero po kroku 7. Auto stoi zaparkowane pod domem właściciela.
+    let catalog = oracle.catalog().clone();
+    let (drivers, fleet, mut flota) = crate::traffic_build::seed_fleet(
+        world,
+        seed,
+        &catalog,
+        crate::traffic_build::MOTORISATION_PER_MILLE,
+    );
+    flota.stations = oracle.stations().len() as u32;
+    flota.route_cache_capacity = pojemnosc_cache;
+    oracle.set_drivers(drivers);
+    let traffic = Arc::new(oracle);
+    crate::traffic_build::install_traffic(world, traffic.clone(), vdf, fleet);
+
+    odcinek("flota", &mut czasy, &mut zegar);
     report.timings = czasy;
 
     Ok(Populated {
         places,
-        nodes,
-        segments,
+        traffic,
+        fleet: flota,
         report,
     })
 }
@@ -1437,7 +1447,7 @@ fn dopasuj_mieszkania(
     world: &mut World,
     gospodarstwa: &[Entity],
     domy: &[HomeSlot],
-    oracle: &WalkOracle,
+    oracle: &TrafficOracle,
     seed: u64,
     cel_min: u16,
     proby: u32,
@@ -1727,17 +1737,11 @@ struct Puste {
 
 /// Dojazdy całego gospodarstwa. Każdy pracownik osobno, bo prędkość marszu zależy
 /// od wieku i zdrowia — i bo cache par miejsc w estymatorze i tak zbiera powtórzenia.
-fn dojazdy_gospodarstwa(oracle: &WalkOracle, dom: PlaceRef, lista: &mut [Pracownik]) {
+fn dojazdy_gospodarstwa(oracle: &TrafficOracle, dom: PlaceRef, lista: &mut [Pracownik]) {
     let puste = Puste::default();
     for p in lista.iter_mut() {
-        p.commute = oracle
-            .estimate(
-                dom,
-                p.work,
-                MinuteOfDay::new(GODZINA_ODNIESIENIA),
-                &widok(p, &puste),
-            )
-            .minutes;
+        let tempo = magnat_traffic::speed_pct(&widok(p, &puste));
+        p.commute = oracle.network_walk_minutes(dom, p.work, tempo);
     }
 }
 

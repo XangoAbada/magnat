@@ -1402,6 +1402,7 @@ dependencies = [
  "magnat-render",
  "magnat-sim-snapshot",
  "magnat-spatial",
+ "magnat-traffic",
  "magnat-ui",
  "magnat-voxel",
  "magnat-world",
@@ -1468,6 +1469,7 @@ dependencies = [
  "magnat-jobs",
  "magnat-nav",
  "magnat-spatial",
+ "magnat-traffic",
  "magnat-ui",
  "magnat-voxel",
  "magnat-world",
@@ -1542,6 +1544,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "magnat-traffic"
+version = "0.1.0"
+dependencies = [
+ "magnat-agents",
+ "magnat-core",
+ "magnat-ecs",
+ "magnat-nav",
+ "magnat-spatial",
+ "ron",
+ "serde",
+ "smallvec",
+]
+
+[[package]]
 name = "magnat-ui"
 version = "0.1.0"
 dependencies = [
@@ -1581,6 +1597,7 @@ dependencies = [
  "magnat-jobs",
  "magnat-nav",
  "magnat-spatial",
+ "magnat-traffic",
  "magnat-voxel",
  "proptest",
  "ron",

@@ -42,7 +42,6 @@ use crate::planner::{
     load_plan, plan_day, replan, store_plan, DayCanvas, HouseholdView, PlanCtx,
 };
 use crate::store::{Knowledge, KnowledgeSlab, PlanSlab, PlanSlot};
-use crate::walk::WalkOracle;
 use crate::{demography, society};
 use magnat_core::{
     ActivityKind, Cadence, CitizenId, DayOfWeek, Entity, HouseholdId, MinuteOfDay, NeedKind,
@@ -56,19 +55,21 @@ use magnat_ecs::{System, SystemCtx, SystemDesc, World};
 /// dokąd chodzić. Systemy **wyjmują** go na czas obsługi minuty, bo `fulfil`
 /// i `begin_trip` biorą `&mut self`, a jednocześnie potrzebny jest `&mut World`.
 ///
-/// M5 podmienia `places` na indeks ofert, M4 kasuje `travel` razem z modułem `walk`
-/// (§6.2) — to jedyne dwa pola, które te fazy muszą tu ruszyć.
+/// M5 podmienia `places` na indeks ofert. **M4b podmienił `travel`** (`Z-1`): pole
+/// jest `Box<dyn TravelOracle>`, moduł `walk` nie istnieje, a implementację wnosi
+/// `magnat-traffic`. Żadne wywołanie w planerze ani w pętli doby się przez to
+/// nie zmieniło — o to chodziło w tym punkcie podmiany.
 #[derive(Default)]
 pub struct AgentSources(Option<Sources>);
 
 pub struct Sources {
     pub places: Box<dyn PlaceProvider>,
-    pub travel: WalkOracle,
+    pub travel: Box<dyn TravelOracle>,
 }
 
 impl AgentSources {
     #[must_use]
-    pub fn new(places: Box<dyn PlaceProvider>, travel: WalkOracle) -> AgentSources {
+    pub fn new(places: Box<dyn PlaceProvider>, travel: Box<dyn TravelOracle>) -> AgentSources {
         AgentSources(Some(Sources { places, travel }))
     }
 
@@ -611,7 +612,7 @@ fn zaplanuj(
     let Some(snap) = CitizenSnapshot::of(world, citizen, day) else {
         return false;
     };
-    let ctx = snap.ctx(seed, day, table, zrodla.places.as_ref(), &zrodla.travel);
+    let ctx = snap.ctx(seed, day, table, zrodla.places.as_ref(), zrodla.travel.as_ref());
     plan_day(&ctx, canvas);
     // Uchwyt do areny planow **nadpisuje sie**, a nie alokuje od nowa: `PlanRef::default()`
     // ma `offset = NO_PLAN`, wiec `store_plan` wzialby swiezy blok i porzucil poprzedni.
@@ -650,7 +651,7 @@ fn przeplanuj(
     };
     let plan = world.get::<PlanRef>(citizen).copied().unwrap_or_default();
     canvas.load(load_plan(&plan, world.resource::<PlanSlab>()));
-    let ctx = snap.ctx(seed, day, table, zrodla.places.as_ref(), &zrodla.travel);
+    let ctx = snap.ctx(seed, day, table, zrodla.places.as_ref(), zrodla.travel.as_ref());
     replan(&ctx, from, cause, canvas);
     let slab = world.resource_mut::<PlanSlab>();
     let mut nowy = plan;
@@ -979,21 +980,21 @@ impl System for SocietySystem {
 ///
 /// **Wyłącznie wizualna** — nie zapisuje niczego do stanu ekonomicznego, więc obrót
 /// kamerą nie zmienia wyniku symulacji (00 §4, tolerancja mikro↔mezo = 0).
-pub struct WalkMicroSystem {
+pub struct TravelMicroSystem {
     desc: SystemDesc,
 }
 
-impl WalkMicroSystem {
+impl TravelMicroSystem {
     #[must_use]
-    pub fn new(world: &World) -> WalkMicroSystem {
-        WalkMicroSystem {
-            desc: SystemDesc::new("agents.WalkMicro", Cadence::EveryMicroTick)
+    pub fn new(world: &World) -> TravelMicroSystem {
+        TravelMicroSystem {
+            desc: SystemDesc::new("agents.TravelMicro", Cadence::EveryMicroTick)
                 .reads_resource::<AgentSources>(world),
         }
     }
 }
 
-impl System for WalkMicroSystem {
+impl System for TravelMicroSystem {
     fn desc(&self) -> &SystemDesc {
         &self.desc
     }

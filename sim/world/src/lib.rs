@@ -22,6 +22,7 @@ pub mod geology;
 pub mod grid;
 pub mod io;
 pub mod nav_build;
+pub mod traffic_build;
 pub mod noise;
 pub mod params;
 pub mod pipeline;

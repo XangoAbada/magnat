@@ -9,11 +9,17 @@
 //! sceny z `sim/agents/tests/planner.rs` jest świadome: tamten test broni **planera**
 //! i drukuje diagnostycznie po angielsku, ten broni **interfejsu gracza** i drukuje
 //! w obu językach. Wspólny byłby jeden plik złoty dla dwóch różnych rzeczy.
+//!
+//! Po M4b dublerem podróży jest `StraightLineTravel` — `WalkOracle` z siatką ulic
+//! zniknął z `sim/agents` razem z przeniesieniem tras do `sim/traffic`, a `engine/ui`
+//! od `sim/traffic` nie zależy i zależeć nie ma. Wzorce złote zostały przez to
+//! wygenerowane na nowo: plan Anny z odległościami w linii prostej robi zakupy
+//! wieczorem (`ChosenNearest`) zamiast po drodze z pracy (`ChosenOnRoute`).
 
 use magnat_agents::{
     plan_day_explained, DayCanvas, Employment, HouseholdView, Identity, InfinitePlaces, Knowledge,
     KnowledgeKind, KnowledgeView, NeedTable, Needs, Personality, PlaceEntry, PlaceTable, PlanCtx,
-    ReasonLog, Residence, ShiftKind, Vitals, WalkOracle,
+    ReasonLog, Residence, ShiftKind, StraightLineTravel, Vitals,
 };
 use magnat_core::{
     ActivityKind, BuildingId, CitizenId, DayOfWeek, Entity, NeedKind, PlaceKind, PlaceRef, SiteId,
@@ -44,29 +50,6 @@ const SKLEP_PRZY_DOMU: u32 = 4;
 const SZKOLA: u32 = 5;
 const PRZYCHODNIA: u32 = 6;
 
-/// Siatka 4 × 4 węzłów co 300 m — odległość po ulicach różni się od linii prostej.
-fn siatka() -> (Vec<WorldCoord>, Vec<(u32, u32, u32)>) {
-    let mut nodes = Vec::new();
-    for y in 0..4i32 {
-        for x in 0..4i32 {
-            nodes.push(WorldCoord::new(x * 30_000, y * 30_000, 0));
-        }
-    }
-    let idx = |x: i32, y: i32| (y * 4 + x) as u32;
-    let mut segs = Vec::new();
-    for y in 0..4i32 {
-        for x in 0..4i32 {
-            if x + 1 < 4 {
-                segs.push((idx(x, y), idx(x + 1, y), 30_000));
-            }
-            if y + 1 < 4 {
-                segs.push((idx(x, y), idx(x, y + 1), 30_000));
-            }
-        }
-    }
-    (nodes, segs)
-}
-
 fn katalog() -> PlaceTable {
     let wpis = |place, kind, x, y| PlaceEntry {
         place,
@@ -95,7 +78,7 @@ struct Anna {
     escorts: Vec<PlaceRef>,
     tabela: Arc<NeedTable>,
     miejsca: InfinitePlaces,
-    oracle: WalkOracle,
+    oracle: StraightLineTravel,
     day: u64,
 }
 
@@ -103,7 +86,6 @@ impl Anna {
     fn new() -> Anna {
         let places = Arc::new(katalog());
         let tabela = Arc::new(NeedTable::load_default().expect("data/needs/needs.ron"));
-        let (nodes, segs) = siatka();
         let mut stock = HouseholdView::FULL;
         stock[StockCat::Food.as_index()] = 1;
 
@@ -158,7 +140,7 @@ impl Anna {
             stock,
             escorts: vec![budynek(SZKOLA)],
             miejsca: InfinitePlaces::new(places.clone(), tabela.clone()),
-            oracle: WalkOracle::with_streets(places, &nodes, &segs),
+            oracle: StraightLineTravel::new(places),
             tabela,
             // Doba 3 świata = czwartek (doba 0 to poniedziałek, K-15).
             day: 3,

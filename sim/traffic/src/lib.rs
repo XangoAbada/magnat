@@ -1,0 +1,88 @@
+//! `magnat-traffic` — ruch: pojazdy, warstwa mezo i podróże (M4, podfaza M4b).
+//!
+//! Crate stoi na `engine/nav` (grafy i routing z M4a) i wnosi to, czego M4a nie miał:
+//! **czas, paliwo i pieniądze przejazdu**.
+//!
+//! Trzy rzeczy, które warto wiedzieć, zanim się tu coś dopisze:
+//!
+//! 1. **Warstwa mezo jest jedynym źródłem prawdy ekonomicznej** (00 §4, M4d §5.4).
+//!    Mikro z M4d będzie wizualizatorem bez prawa zapisu. Jeśli kiedykolwiek pojawi
+//!    się pokusa, żeby „prawdziwy korek kosztował", to znaczy, że ktoś chce oddać
+//!    ekonomię warstwie zależnej od kamery — a kamera nie wchodzi do hasha stanu.
+//! 2. **We wzorze kosztu nie ma floata.** Granicą jest sygnatura `settle_edge`.
+//!    Floaty wolno stosować w geometrii i w szacunkach planowania, nigdy w ledgerze.
+//! 3. **Sieć nie dotyka ECS.** `TrafficNetwork::step_minute` zwraca zdarzenia,
+//!    a `TrafficSystem` je stosuje. Dzięki temu krok minutowy da się przetestować
+//!    bez świata, a zbiór rzeczy, które ruch zapisuje, jest wypisany w jednym miejscu.
+//!
+//! Czego tu **nie ma** i gdzie to jest: wybór środka z pełnym kosztem uogólnionym,
+//! parkingi i komunikacja miejska — M4c; car-following, sygnalizacja fazowa i dowód
+//! równoważności LOD — M4d; ruch towarowy i rampy — M6.
+
+#![forbid(unsafe_code)]
+
+pub mod mezo;
+pub mod micro;
+pub mod oracle;
+pub mod spec;
+pub mod systems;
+pub mod trip;
+pub mod vehicle;
+
+pub use mezo::{
+    settle_edge, settle_node, EdgeQueue, LedgerEntry, LinkState, MezoState, NodeState,
+    VehicleSpecRef, CS_PER_MINUTE, UL_PER_ML,
+};
+pub use micro::{MicroLayer, Pedestrian, PedestrianBuffer};
+pub use oracle::{
+    speed_pct, walk_minutes_for, DriverEntry, OracleHandle, Station, TrafficOracle,
+    FUEL_RESERVE_FACTOR, WALK_SPEED_CM_PER_MIN,
+};
+pub use spec::{
+    DataError, FuelKind, VdfClass, VdfTable, VehicleCatalog, VehicleClassId, VehicleClassSpec,
+    VDF_SCHEMA_VERSION, VEHICLES_SCHEMA_VERSION,
+};
+pub use systems::{
+    register_traffic, FuelLedger, TrafficServices, TrafficSystem, VehicleWearSystem,
+};
+pub use trip::{
+    PendingTrip, TrafficEvent, TrafficNetwork, TrafficStats, TripFailure, TripId, TripLedger,
+    TripOutcome, TripPurpose, GRIDLOCK_RELEASE_MIN, REFUEL_DWELL_MIN,
+};
+pub use vehicle::{
+    FuelTank, LocationKind, OwnerKind, VehicleClass, VehicleCondition, VehicleLocation,
+    VehicleOwner, VEHICLE_COMPONENT_BYTES,
+};
+
+use magnat_core::{PlaceRef, StateHasher};
+
+/// Miejsce do hasha stanu. `PlaceRef` jest enumem z ładunkiem i nie ma własnego
+/// `HashState` w `core` (to słownik, nie stan) — każda faza, która trzyma go
+/// w komponencie, musi go zahaszować sama. Tutaj jest jedna taka funkcja zamiast
+/// czterech kopii.
+pub(crate) fn hash_place(p: PlaceRef, h: &mut StateHasher) {
+    match p {
+        PlaceRef::Building(e) => {
+            h.write_u8(0);
+            h.write_u32(e.0.index());
+        }
+        PlaceRef::Parcel(e) => {
+            h.write_u8(1);
+            h.write_u32(e.0.index());
+        }
+        PlaceRef::Site(e) => {
+            h.write_u8(2);
+            h.write_u32(e.0.index());
+        }
+        PlaceRef::District(d) => {
+            h.write_u8(3);
+            h.write_u16(d.0);
+        }
+        PlaceRef::Coord(c) => {
+            h.write_u8(4);
+            h.write_u32(c.x as u32);
+            h.write_u32(c.y as u32);
+            h.write_u32(c.z as u32);
+        }
+    }
+}

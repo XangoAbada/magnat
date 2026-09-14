@@ -7,12 +7,17 @@
 //! Różnica wobec `day` z M3b jest cała w tym, co go otacza: miasto jest prawdziwe
 //! (M2 + Etap 8), mieszkańcy są encjami ECS, a pętlę przewijają **systemy z §5.12**,
 //! nie runner. Runner mierzy i wypisuje.
+//!
+//! **Od M4b jest to też artefakt tej podfazy**: w świecie jest flota, a mieszkańcy
+//! z samochodem jadą siecią zamiast teleportować się po czasie z formuły. Sekcja
+//! „ruch (warstwa mezo)" wypisuje to, co M4b ma pokazać: przejazdy, korki, rozbiór
+//! czasu przejazdu i dwa bilanse, które muszą wyjść co do zera.
 
 use clap::Args;
 use magnat_agents::{
     bootstrap_day, register_day, society, AgentSources, DayLoopSystem, DayStats, EventQueue,
     HouseholdStockSystem, InfinitePlaces, NeedTable, Needs, NoInheritance, Population,
-    ReplanCooldownSystem, SkillDriftSystem, SocietySystem, WalkMicroSystem,
+    ReplanCooldownSystem, SkillDriftSystem, SocietySystem, TravelMicroSystem,
 };
 use magnat_agents::{AgentState, DeprivationEffectsSystem, Employment, NeedDecaySystem};
 use magnat_core::{ActivityKind, NeedKind};
@@ -25,6 +30,7 @@ use std::sync::Arc;
 use crate::population::{swiat_agentow, zaludnij, zbuduj_miasto};
 use magnat_agents::Trace;
 use magnat_core::{SimSpeed, Tick};
+use magnat_traffic::{FuelLedger, TrafficNetwork, TrafficSystem, VehicleWearSystem, UL_PER_ML};
 use magnat_ui::{
     CitizenPanel, InspectorPanel, ListPicker, Selection, TimeControlsWidget, UiContext,
 };
@@ -115,11 +121,20 @@ pub fn run(a: &M3DayArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
     }
 
     // Źródła miejsc i podróży: to jest cały most między miastem a agentami.
-    // M5 podmienia `InfinitePlaces` na indeks ofert, M4 `WalkOracle` na `engine/nav`.
+    // M5 podmienia `InfinitePlaces` na indeks ofert; **M4b podmienił `travel`**
+    // na oracle ruchu (`Z-1`) i od tej chwili mieszkańcy z samochodem naprawdę
+    // jadą siecią, zamiast teleportować się po czasie z formuły.
     let tabela = Arc::new(NeedTable::load_default()?);
+    eprintln!(
+        "flota: {} pojazdów w {} gospodarstwach, {} stacji, cache tras {}",
+        zaludnione.fleet.vehicles,
+        zaludnione.fleet.households,
+        zaludnione.fleet.stations,
+        zaludnione.fleet.route_cache_capacity
+    );
     *world.resource_mut::<AgentSources>() = AgentSources::new(
         Box::new(InfinitePlaces::new(zaludnione.places.clone(), tabela)),
-        zaludnione.walk_oracle(),
+        zaludnione.travel_oracle(),
     );
 
     let zaplanowanych = bootstrap_day(&mut world, 0);
@@ -136,9 +151,11 @@ pub fn run(a: &M3DayArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
         .add(DeprivationEffectsSystem::new(&world))
         .add(SkillDriftSystem::new(&world))
         .add(HouseholdStockSystem::new(&world))
-        .add(SocietySystem::new(Box::new(NoInheritance)));
+        .add(SocietySystem::new(Box::new(NoInheritance)))
+        .add(TrafficSystem::new(&world))
+        .add(VehicleWearSystem::new(&world));
     if a.micro > 0 {
-        builder.add(WalkMicroSystem::new(&world));
+        builder.add(TravelMicroSystem::new(&world));
     }
     let schedule = builder.build()?;
     eprintln!(
@@ -217,6 +234,7 @@ pub fn run(a: &M3DayArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
         stats.fulfilled, stats.refused
     );
 
+    ruch(&app.world);
     profil_doby(&app.world);
     potrzeby(&app.world);
     if let Some(c) = wybrany {
@@ -260,6 +278,108 @@ pub fn run(a: &M3DayArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
         return Ok(ExitCode::FAILURE);
     }
     Ok(ExitCode::SUCCESS)
+}
+
+/// Raport warstwy mezo: przejazdy, korki, paliwo i dwa bilanse, które muszą
+/// wyjść co do zera (kryterium zamknięcia M4b).
+fn ruch(world: &magnat_ecs::World) {
+    let net = world.resource::<TrafficNetwork>();
+    let paliwo = world.resource::<FuelLedger>();
+    let s = net.stats;
+    println!("
+ruch (warstwa mezo)");
+    println!(
+        "  przejazdy: {} wysłane, {} zakończone, {} nieudane, {} w toku",
+        s.dispatched,
+        s.arrived,
+        s.failed,
+        net.active()
+    );
+    println!(
+        "  krawędzie: {} rozliczeń, {} wstrzymanych wjazdów (spillback), {} rozplątań",
+        s.edge_settles, s.spillbacks, s.gridlock_releases
+    );
+    println!(
+        "  korki: {} krawędzi poniżej połowy prędkości swobodnej w tej minucie",
+        net.mezo.congested_edges()
+    );
+    println!(
+        "  czas przejazdu: plan {:.1} min, faktycznie {:.1} min (iloraz {:.2})",
+        s.planned_minutes_total as f64 / s.arrived.max(1) as f64,
+        s.actual_minutes_total as f64 / s.arrived.max(1) as f64,
+        s.actual_minutes_total as f64 / s.planned_minutes_total.max(1) as f64
+    );
+    let min = |cs: u64| cs as f64 / 6_000.0 / s.arrived.max(1) as f64;
+    println!(
+        "  uzasadnienia: {} wybór środka, {} brak trasy, {} tankowanie, {} wybór stacji,          {} spóźnienie, {} bez powodu",
+        s.reasons[0], s.reasons[1], s.reasons[2], s.reasons[3], s.reasons[4], s.reasons[5]
+    );
+    println!(
+        "  rozbiór przejazdu: jazda {:.1} min, skrzyżowania {:.1} min, kolejki {:.1} min",
+        min(s.travel_cs_total),
+        min(s.node_delay_cs_total),
+        min(s.blocked_cs_total)
+    );
+    println!(
+        "  spóźnienia wobec planu: {} przybyć, średnio {:.1} min",
+        s.late_arrivals,
+        s.late_minutes as f64 / s.late_arrivals.max(1) as f64
+    );
+    println!(
+        "  paliwo: spalone {:.1} l, zatankowane {:.1} l w {} tankowaniach za {:.2} zł",
+        s.fuel_burned_ul as f64 / (UL_PER_ML * 1_000) as f64,
+        paliwo.volume_ul as f64 / (UL_PER_ML * 1_000) as f64,
+        paliwo.purchases,
+        paliwo.revenue.0 as f64 / 100.0
+    );
+    let mut pelne = 0u32;
+    let mut male = 0u32;
+    let mut min_storage = u16::MAX;
+    let mut zablokowane = 0u32;
+    for (i, q) in net.mezo.queues.iter().enumerate() {
+        if q.is_full() {
+            pelne += 1;
+        }
+        if q.storage_capacity < 3 {
+            male += 1;
+        }
+        min_storage = min_storage.min(q.storage_capacity);
+        if q.stuck_minutes > 0 {
+            zablokowane += 1;
+        }
+        let _ = i;
+    }
+    println!(
+        "  porażki: {} zakleszczenie; {} zawrócenia, max czekania {} min, max krawędzi {}",
+        s.failed_gridlock, s.u_turns, s.max_blocked_minutes, s.max_edges_per_trip
+    );
+    if let Some((e, n)) = net.worst_bottleneck() {
+        let services = world.resource::<magnat_traffic::TrafficServices>();
+        services.oracle.with_road(|road| {
+            let r = road.edge(e);
+            println!(
+                "  najwęższe gardło: krawędź {} ({:?}, {} m, {} pasów, pojemność {},                  v0 {} dkmh) — {} odmów wjazdu",
+                e.0,
+                r.class,
+                r.length_cm / 100,
+                r.lanes,
+                net.mezo.queues[e.0 as usize].storage_capacity,
+                net.mezo.links[e.0 as usize].free_flow_dkmh,
+                n
+            );
+        });
+    }
+    println!(
+        "  krawędzie pełne: {pelne}, o pojemności < 3: {male}, min {min_storage},          nieruchome: {zablokowane} z {}",
+        net.mezo.queues.len()
+    );
+    println!(
+        "  bilans pojazdów: {} na sieci == {} wjazdów − {} wyjazdów → {}",
+        net.mezo.vehicles_on_network(),
+        s.entries,
+        s.exits,
+        if net.conserved() { "zgodny" } else { "ROZJAZD" }
+    );
 }
 
 /// Karta inspekcji mieszkańca w formie tekstowej — ten sam model, który w kliencie

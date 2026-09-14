@@ -29,6 +29,32 @@ pub const MAX_CANDIDATES: usize = 16;
 /// Limit miejsc widocznych z trasy (§5.7).
 pub const MAX_ON_ROUTE: usize = 8;
 
+/// Prędkość marszu w metrach na minutę (4,86 km/h).
+///
+/// Mieszka tutaj, a nie w `sim/traffic`, świadomie: to jest **ranking kandydatów
+/// bez sieci**, a nie routing. `PlaceProvider` musi umieć odsiać sto miejsc w promieniu
+/// zanim ktokolwiek policzy trasę do choćby jednego z nich, a `sim/agents` nie zależy
+/// od crate'u ruchu (zależność idzie w drugą stronę). Ta sama liczba jest bazą
+/// szacunku marszu w `magnat_traffic::oracle` — i tam, i tu jest kalibracją M3b.
+pub const BASE_SPEED_M_PER_MIN: f32 = 81.0;
+
+/// Czas dojścia liczony manhattanowo, w minutach. Szacunek do rankingu, nie do planu:
+/// czasem, który trafia do slotu `Commute`, jest zawsze wynik `TravelOracle`.
+///
+/// **Bez mnożnika nadłożenia.** Odległość manhattanowa **jest** odległością po siatce
+/// ulic wszędzie tam, gdzie ulice biegną wzdłuż osi — a tak wygląda większość miasta
+/// M2. Korekta za nadłożenie należy do estymatora, który wie, że nie ma sieci
+/// (`magnat_traffic`, ścieżka zapasowa), a nie do rankingu kandydatów.
+#[must_use]
+pub fn walk_minutes(from: WorldCoord, to: WorldCoord, speed_pct: u32) -> u16 {
+    let dist = i64::from((to.x - from.x).abs()) + i64::from((to.y - from.y).abs());
+    let v = (8_100 * i64::from(speed_pct) / 100).max(1);
+    // W górę, nie do najbliższej: dojście trwające 3,7 minuty kończy się w czwartej
+    // minucie, a plan operuje minutami całymi i nie ma prawa obiecywać przybycia
+    // wcześniej, niż mieszkaniec dojdzie.
+    ((dist + v - 1) / v).clamp(1, i64::from(u16::MAX)) as u16
+}
+
 // ── katalog miejsc ──────────────────────────────────────────────────────────────
 
 /// Miejsce w świecie: czym jest i gdzie stoi.
@@ -433,10 +459,93 @@ pub trait PlaceProvider: Send + Sync {
     fn fulfil(&mut self, req: &FulfilRequest) -> FulfilOutcome;
 }
 
+/// Estymator w linii prostej — **dubler testowy** i nic więcej.
+///
+/// Zastępuje `WalkOracle` z M3 w testach tego crate'u i w benchmarkach: `sim/agents`
+/// nie może zależeć od `sim/traffic` (zależność idzie w drugą stronę), a testy planera
+/// potrzebują jakiegokolwiek czasu dojścia. Wzór jest ten sam, który `InfinitePlaces`
+/// stosuje do rankingu kandydatów — manhattan z nadłożeniem 1,25. Prawdziwy czas
+/// podróży liczy `magnat_traffic::TrafficOracle` na sieci.
+pub struct StraightLineTravel {
+    places: std::sync::Arc<PlaceTable>,
+    next_trip: std::sync::atomic::AtomicU32,
+}
+
+impl StraightLineTravel {
+    #[must_use]
+    pub fn new(places: std::sync::Arc<PlaceTable>) -> StraightLineTravel {
+        StraightLineTravel {
+            places,
+            next_trip: std::sync::atomic::AtomicU32::new(1),
+        }
+    }
+
+    fn minutes(&self, from: PlaceRef, to: PlaceRef) -> u16 {
+        match (self.places.coord_of(from), self.places.coord_of(to)) {
+            (Some(a), Some(b)) => walk_minutes(a, b, 100),
+            _ => 1,
+        }
+    }
+}
+
+impl TravelOracle for StraightLineTravel {
+    fn estimate(
+        &self,
+        from: PlaceRef,
+        to: PlaceRef,
+        _depart: MinuteOfDay,
+        _who: &CitizenView<'_>,
+    ) -> TravelEstimate {
+        let minutes = self.minutes(from, to);
+        TravelEstimate {
+            minutes,
+            cost: Money::ZERO,
+            mode: TransportMode::Walk,
+            reason: DecisionReason::ModeWalkOnly { minutes },
+        }
+    }
+
+    fn begin_trip(
+        &mut self,
+        trip: TripRequest,
+        _who: &CitizenView<'_>,
+        q: &mut crate::des::EventQueue,
+    ) -> TripHandle {
+        let minutes = self.minutes(trip.from, trip.to);
+        let arrive_at = q.now() + u32::from(minutes);
+        q.schedule(crate::des::SimEvent::new(
+            arrive_at,
+            trip.traveller.entity().index(),
+            crate::des::EventKind::Arrive,
+            trip.slot,
+        ));
+        TripHandle {
+            id: self
+                .next_trip
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+            from: trip.from,
+            to: trip.to,
+            arrive_at,
+            minutes,
+            mode: TransportMode::Walk,
+        }
+    }
+
+    fn places_on_route(&self, _trip: &TripHandle, out: &mut ArrayVec<PlaceRef, MAX_ON_ROUTE>) {
+        out.clear();
+    }
+}
+
 /// Czas, koszt i tryb podróży oraz jej rozpoczęcie.
 ///
-/// M3: `WalkOracle` — prywatny estymator, tryb zawsze `Walk`.
-/// M4: `engine/nav` — CH, wybór środka transportu, pojazdy, parking (K-2).
+/// M3: `WalkOracle` — estymator manhattanowy, tryb zawsze `Walk`.
+/// M4b: `magnat_traffic::TrafficOracle` — sieć, router CCH, pojazdy i warstwa mezo.
+///
+/// **Kto wstawia `Arrive`.** Do M4b zawsze implementacja traitu, w `begin_trip`.
+/// Od M4b tylko dla podróży, które nie wchodzą na sieć (pieszo); dla przejazdu
+/// samochodem zdarzenie wstawia warstwa mezo w minucie faktycznego przyjazdu, bo to
+/// ona, a nie szacunek, wie o korku. Wołający się przez to nie zmienia: dostaje
+/// `TripHandle` z czasem planowanym i `Arrive` przychodzi tak samo jak wcześniej.
 pub trait TravelOracle: Send + Sync {
     fn estimate(
         &self,
@@ -456,6 +565,37 @@ pub trait TravelOracle: Send + Sync {
 
     /// Miejsca widoczne z trasy (§5.7).
     fn places_on_route(&self, trip: &TripHandle, out: &mut ArrayVec<PlaceRef, MAX_ON_ROUTE>);
+
+    // ── warstwa Mikro ───────────────────────────────────────────────────────────
+    //
+    // Cztery metody z domyślną implementacją pustą, wszystkie po `&self`: system
+    // `TravelMicroSystem` deklaruje **odczyt** zasobu `AgentSources`, więc mutacja
+    // musi iść wewnątrz implementacji (zamek albo atomiki). Domyślne ciała są puste,
+    // bo warstwa Mikro jest wizualizacją: implementacja, która jej nie ma, nadal
+    // spełnia kontrakt ekonomiczny w całości (00 §4).
+
+    /// Wpuszcza podróżnika do warstwy Mikro, jeśli mieści się w oknie kamery (`Z-6`).
+    fn enter_micro(&self, _handle: &TripHandle, _traveller: u32, _depart: MinuteOfDay) {}
+
+    /// Krok warstwy Mikro; `now_ms` to milisekunda doby, tick 100 ms (00 §4).
+    fn micro_step(&self, _now_ms: u64) {}
+
+    /// Usuwa z warstwy tych, którzy już dotarli.
+    fn micro_retire(&self, _now_min: u16) {}
+
+    /// Ilu podróżników jest w tej chwili w warstwie Mikro.
+    fn micro_len(&self) -> usize {
+        0
+    }
+
+    /// Okno kamery: podróżnik wchodzi do warstwy Mikro tylko wtedy, gdy któryś
+    /// koniec jego trasy się w nim mieści. Promień 0 = warstwa wyłączona (`Z-6`).
+    fn set_micro_window(&self, _center: Option<(i32, i32)>, _radius_m: u32) {}
+
+    /// Zrzut dla renderera: `(indeks encji, pozycja w metrach, postęp 0..=1)`.
+    fn micro_snapshot(&self, out: &mut Vec<(u32, [f32; 3], f32)>) {
+        out.clear();
+    }
 }
 
 /// Wybór miejsca dla zadania — **jedyne** miejsce, w którym M3 rozstrzyga „gdzie".
@@ -505,7 +645,7 @@ impl InfinitePlaces {
         InfinitePlaces {
             places,
             needs,
-            walk_m_per_min: crate::walk::BASE_SPEED_M_PER_MIN,
+            walk_m_per_min: BASE_SPEED_M_PER_MIN,
         }
     }
 }
@@ -530,7 +670,7 @@ impl PlaceProvider for InfinitePlaces {
                 if e.place == from || !known.knows(e.place) {
                     return;
                 }
-                let minuty = crate::walk::walk_minutes(origin, e.at, 100);
+                let minuty = walk_minutes(origin, e.at, 100);
                 if minuty > max_travel_min {
                     return;
                 }

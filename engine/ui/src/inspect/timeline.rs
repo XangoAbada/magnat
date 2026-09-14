@@ -135,12 +135,28 @@ impl DayTimeline<'_> {
     }
 
     /// Rozjazd startu slotu wobec realizacji, w minutach. `0`, gdy nie ma czego porównać.
+    ///
+    /// **Numer slotu nie jest tożsamością czynności.** Przeplanowanie przyrostowe
+    /// (`ReplanCause::Late`) przepisuje plan od bieżącej minuty, więc slot numer 5
+    /// z poranka i slot numer 5 z wieczora to dwie różne rzeczy — a bufor śledzenia
+    /// niesie oba. Dopasowanie po samym numerze potrafiło wtedy przypisać wieczorne
+    /// przybycie do porannego slotu i wypisać w karcie kilkugodzinne „spóźnienie",
+    /// którego nie było. Widać to było dopiero po M4b, bo dopiero korki wytworzyły
+    /// przeplanowania w liczbie, w której przypadek przestaje być rzadki.
+    ///
+    /// Rodzaj czynności jest tanim rozróżnieniem i usuwa większość takich pomyłek.
+    /// Pełne rozwiązanie — dopasowanie po pokryciu czasowym, a nie po numerze — należy
+    /// do karty podróży w M4d/WP11, która i tak przepisuje ten widok.
     #[must_use]
     pub fn drift(&self, slot: u8) -> i32 {
-        let Some(b) = self.actual.iter().find(|b| b.slot == slot) else {
+        let Some(s) = self.canvas.slots().get(slot as usize) else {
             return 0;
         };
-        let Some(s) = self.canvas.slots().get(slot as usize) else {
+        let Some(b) = self
+            .actual
+            .iter()
+            .find(|b| b.slot == slot && b.kind == s.kind)
+        else {
             return 0;
         };
         i32::from(b.start_min) - i32::from(s.start_min)

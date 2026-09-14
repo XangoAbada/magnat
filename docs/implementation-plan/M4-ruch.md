@@ -361,6 +361,20 @@ W tej sesji nie był dostępny mechanizm odpytania agentów planujących pozosta
 | **D11** | **Liczba profili routingu musi zostać mała.** | M4 utrzymuje 3 zestawy wag CCH (`Passenger`, `HeavyDay`, `HeavyNight`) — każdy kosztuje ~150 ms kustomizacji i ~4–8 MB. Jeśli M8 zaprojektuje regulacje ruchu jako dowolnie parametryzowalne strefy (godziny, klasy pojazdów, dni tygodnia per dzielnica), liczba profili eksploduje i routing przestaje się mieścić w budżecie. Propozycja M4: **regulacje M8 zmieniają maskę wyłączonych krawędzi wewnątrz istniejącego profilu; utworzenie nowego profilu wymaga zgody M4.** Fallbackiem dla rzadkiego, nietypowego ograniczenia jest A\* na `RoadGraph` z predykatem — wolniejszy, ale bez kosztu stałego. | **M8**, M6 |
 | **D12** | **Czy ulice mają nazwy?** | Wyszło przy dopisywaniu WP13: plan **nie ma nazw ulic w żadnej fazie**, a adres mieszkańca to dziś `budynek / lokal / dzielnica` (M3d §5.4). Nie ma też nigdzie zapisu, że to decyzja — więc jest to przeoczenie, nie wybór. M4 jest fazą, która ulice indeksuje (`EdgeId`, `RoadGraph`), więc gdyby nazwy miały powstać, to jest najtańszy moment: generator stałby obok dzielnicowego z M2c i brał od niego toponimy. Propozycja M4: **nie w M4** — nazwa ulicy jest widoczna dopiero, gdy jest gdzie ją pokazać (tabliczka w M11c, adres w karcie M9c), a M4 ma już WP13 jako dług z poprzedniej fazy i nie ma powodu brać drugiego. Jeśli właściciel produktu uzna inaczej, WP13 rozszerza się o trzeci plik `data/names/streets_pl.ron` i pole `name: u16` w `RoadSegment` — koszt jest wtedy mały, bo pula i formater już będą. | właściciel produktu, **M9**, M11 |
 
+### 9.1 Rozstrzygnięte w trakcie fazy
+
+| # | Rozstrzygnięcie | Gdzie |
+|---|---|---|
+| **D1** | Przyjęta. Graf pieszy jest w `engine/nav` jako warstwa `Foot`; M4b skasował moduł `walk` z `sim/agents` w całości i podmienił `Sources.travel` | M4a `J-1`…`J-6`, M4b `L-13` |
+| **D3** | Przyjęta jak w propozycji. `wear_gr_per_100km` jest w `data/vehicles/classes.ron` i wchodzi **wyłącznie** do kosztu uogólnionego decyzji; obciążenie budżetu gospodarstwa nalicza M5 z przebiegu (`VehicleCondition.odometer_cm`) | M4b `L-18` |
+| **D6** | **Rozstrzygnięta odwrotnie niż domyślnie: wariant (a) z typowanym wyjściem.** Jednostka zbiornika zależy od `FuelKind` (mikrolitry albo miliwatogodziny), a nie od typu (`enum EnergyStore`). Powód: żadna klasa w `data/vehicles/` nie jest elektryczna, więc drugi wariant enuma nie miałby ani jednej instancji, a `settle_edge` miałby dwie ścieżki, z których jedna nie ma jak być nieprawdziwa. Odwracalne w jednym typie o pięciu polach; adresat pozostaje M8 (obciążenie sieci energetycznej) | M4b `L-18` |
+| **D9** | Przyjęta. Cena paliwa jest w `data/vehicles/classes.ron` per `FuelKind`, a ruch czyta ją przez `VehicleCatalog::price_gr` — nie z pliku wprost. Podmiana na ofertę `sim/economy` w M5 nie rusza kodu ruchu | M4b `L-18` |
+| **D10** | Przyjęta. Sygnalizacja stałoczasowa, cykl 90 s, zielone 40 s na wlot; opóźnienie z członu równomiernego Webstera. Hook `SignalPlanId → plan` jest w `NodeControl::Signal` od M4a i czeka na M8 | M4b `L-18` |
+
+Otwarte i przeniesione dalej z dotychczasowymi adresatami: **D2** (tryb 50×, M12),
+**D4** (pogoda, M8), **D5** (taxi, M7), **D7** (kryterium LOD Mikro, właściciel PRD),
+**D8** (`RoadNetworkChanged`, M2/M8 — patrz `J-16`), **D11** (liczba profili routingu, M8).
+
 ---
 
 ## 10. Szacunek wielkości

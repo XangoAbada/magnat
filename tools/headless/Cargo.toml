@@ -19,6 +19,7 @@ magnat-io = { workspace = true }
 magnat-devtools = { workspace = true }
 magnat-agents = { workspace = true }
 magnat-ui = { workspace = true }
+magnat-traffic = { workspace = true }
 magnat-nav = { workspace = true }
 magnat-world = { workspace = true }
 magnat-voxel = { workspace = true }

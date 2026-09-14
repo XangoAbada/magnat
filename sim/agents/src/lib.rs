@@ -13,8 +13,6 @@
 //! - **planer** (`planner`) — cztery fazy priorytetów, `DayCanvas` na 24 sloty,
 //!   `DecisionReason` per slot i tryb `explain`, który pełne uzasadnienia **odtwarza**
 //!   zamiast je przechowywać,
-//! - **ruch pieszy** (`walk`) — odległość sieciowa po centroliniach ulic z M2 za
-//!   `TravelOracle`, plus warstwa Mikro interpolująca pozycję po polilinii trasy.
 //!
 //! Podfaza M3c dołożyła **społeczeństwo**:
 //! - **gospodarstwo domowe** (`household`) — skład, podział ról, typ liczony ze składu,
@@ -25,6 +23,11 @@
 //! - **status, relacje i plotka** (`social`) — klasa jako przedział statusu, wiedza
 //!   o miejscach rozchodząca się wyłącznie przez kontakt,
 //! - **rytm doby i miesiąca** (`society`) — kolejność wywołań, która ma znaczenie.
+//!
+//! **Po M4b nie ma tu modułu `walk`.** Graf pieszy i wszystko, co dotyczy trasy,
+//! należy do `engine/nav` i `sim/traffic` (`K-2`, `Z-1`); `Sources.travel` jest
+//! `Box<dyn TravelOracle>` i implementację wnosi crate ruchu. Tutaj zostaje
+//! wyłącznie kontrakt: trait, `TripRequest`, `TripHandle` i `TravelEstimate`.
 //!
 //! Czego tu nie ma i gdzie to jest: generacja populacji (Etap 8), systemy ECS
 //! z §5.12 i UI — M3d.
@@ -49,11 +52,6 @@ pub mod society;
 pub mod store;
 pub mod systems;
 
-// K-2: graf pieszy należy do M4. Moduł jest prywatny i taki zostaje — na zewnątrz
-// wychodzi wyłącznie `WalkOracle` jako implementacja wspólnego traitu, bez ani jednego
-// typu trasy. Test `architektura::walk_nie_wycieka` pilnuje tej linijki.
-pub(crate) mod walk;
-
 pub use arrayvec::ArrayVec;
 pub use components::{
     register, register_components, register_resources, AgentState, EduField, EduLevel, Employment,
@@ -76,9 +74,10 @@ pub use needs::{
 pub use places::{
     choose_place, default_hours, knowledge_key, CitizenView, EmptyPlaces, FlakyPlaces,
     FulfilOutcome, FulfilRequest, InfinitePlaces, KnowledgeView, OpenHours, PanickingPlaces,
-    home_of, place_from_key, site_of, PlaceCandidate, PlaceEntry, PlaceProvider, PlaceTable,
-    TravelEstimate, TravelOracle, TripHandle, TripRequest, MAX_CANDIDATES, MAX_ON_ROUTE,
-    SITE_KEY_BASE,
+    home_of, place_from_key, site_of, walk_minutes, PlaceCandidate, PlaceEntry, PlaceProvider,
+    PlaceTable, StraightLineTravel, TravelEstimate, TravelOracle, TripHandle, TripRequest,
+    BASE_SPEED_M_PER_MIN,
+    MAX_CANDIDATES, MAX_ON_ROUTE, SITE_KEY_BASE,
 };
 pub use planner::{
     load_plan, plan_day, plan_day_explained, render_day_debug, replan, replan_explained_into,
@@ -108,6 +107,5 @@ pub use society::{
 pub use systems::{
     bootstrap_day, micro_count, register_day, set_lod, AgentSources, CitizenSnapshot, DayLoopSystem,
     DayStats, HouseholdStockSystem, ReplanCooldownSystem, SkillDriftSystem, SocietySystem, Sources,
-    Trace, TraceEntry, WalkMicroSystem, MAX_TASK_TRAVEL_MIN, MAX_WATCHED, TRACE_LEN, WEEK_SHARDS,
+    Trace, TraceEntry, TravelMicroSystem, MAX_TASK_TRAVEL_MIN, MAX_WATCHED, TRACE_LEN, WEEK_SHARDS,
 };
-pub use walk::WalkOracle;

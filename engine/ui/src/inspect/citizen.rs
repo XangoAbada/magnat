@@ -263,7 +263,7 @@ impl CitizenPanel {
 
         let mut canvas = magnat_agents::DayCanvas::new();
         let mut log = magnat_agents::ReasonLog::new();
-        let ctx = snap.ctx(self.seed, self.day, table, z.places.as_ref(), &z.travel);
+        let ctx = snap.ctx(self.seed, self.day, table, z.places.as_ref(), z.travel.as_ref());
         magnat_agents::plan_day_explained(&ctx, &mut canvas, &mut log);
 
         let actual = crate::actual_from_trace(

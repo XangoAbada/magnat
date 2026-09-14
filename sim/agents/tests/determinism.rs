@@ -188,7 +188,14 @@ fn czas_do_zera_zgadza_sie_z_tabela_paragrafu_5_5() {
     // z `AbsenceRisk` 1000 zatrzymała w drugiej dobie całe miasto w pracy. Tempo wpisze
     // faza, która wniesie mechanizm: M4, M8, M5/M9. Ich wiersze są niżej, jako lista
     // potrzeb zdarzeniowych — żeby ta zmiana **też** miała strażnika.
-    const TABELA_H: [(NeedKind, f64); 7] = [
+    //
+    // **M4b wniósł mechanizm dla mobilności i strażnik zadziałał:** potrzebę podnosi
+    // zakończona podróż (`TrafficSystem`, `Z-2`), więc `Mobility` przechodzi z listy
+    // zdarzeniowych do tabeli temp. `places` zostaje przy niej **puste** — mobilności
+    // nie zaspokaja wizyta gdziekolwiek, tylko sam fakt dojechania. Pozostałe trzy
+    // czekają dalej: `Safety` i `Housing` na M8, `Status` na M5/M9.
+    const TABELA_H: [(NeedKind, f64); 8] = [
+        (NeedKind::Mobility, 166.7),
         (NeedKind::Hunger, 16.7),
         (NeedKind::Sleep, 23.8),
         (NeedKind::Hygiene, 23.8),
@@ -198,11 +205,10 @@ fn czas_do_zera_zgadza_sie_z_tabela_paragrafu_5_5() {
         (NeedKind::Development, 83.3 * 24.0),
     ];
     /// Potrzeby zdarzeniowe: nie spadają same, bo w M3 nic ich nie podnosi.
-    const ZDARZENIOWE: [NeedKind; 5] = [
+    const ZDARZENIOWE: [NeedKind; 4] = [
         NeedKind::Health,
         NeedKind::Safety,
         NeedKind::Housing,
-        NeedKind::Mobility,
         NeedKind::Status,
     ];
 

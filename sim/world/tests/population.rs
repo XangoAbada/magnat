@@ -173,10 +173,17 @@ fn etap8_daje_agentom_wszystko_czego_potrzebuja() {
     let p = zaludnij(&mut world, &city);
 
     assert!(!p.places.is_empty(), "pusty katalog miejsc (E-1)");
-    assert!(!p.nodes.is_empty() && !p.segments.is_empty(), "brak sieci pieszej (E-7)");
+    // Po M4b sieci pieszej nie ma w `Populated` (`Z-3`) — jest w `engine/nav`,
+    // a Etap 8 dostaje ją przez oracle ruchu. Sprawdzamy to, co z tego wynika:
+    // miasto ma flotę, stacje i router z pojemnością wyliczoną z liczby dojeżdżających.
+    assert!(p.fleet.vehicles > 0, "miasto bez ani jednego samochodu (M4b/WP5)");
     assert!(
-        p.walk_oracle().has_streets(),
-        "estymator stoi na fallbacku manhattanowym mimo sieci z M2"
+        p.fleet.route_cache_capacity >= 1_024,
+        "pojemność cache tras nie została wyliczona z populacji (Y-4)"
+    );
+    assert!(
+        !p.traffic.drivers().is_empty(),
+        "flota jest, ale nikt nie ma prawa jazdy"
     );
 
     let v = world.resource::<Vacancies>();
@@ -220,7 +227,7 @@ fn gotowy_swiat(seed: u64) -> (App, u32) {
     let tabela = Arc::new(NeedTable::load_default().expect("data/needs/"));
     *world.resource_mut::<AgentSources>() = AgentSources::new(
         Box::new(InfinitePlaces::new(p.places.clone(), tabela)),
-        p.walk_oracle(),
+        p.travel_oracle(),
     );
     bootstrap_day(&mut world, 0);
 
@@ -302,7 +309,7 @@ fn wynik_doby_nie_zalezy_od_liczby_watkow() {
         let tabela = Arc::new(NeedTable::load_default().unwrap());
         *world.resource_mut::<AgentSources>() = AgentSources::new(
             Box::new(InfinitePlaces::new(p.places.clone(), tabela)),
-            p.walk_oracle(),
+            p.travel_oracle(),
         );
         bootstrap_day(&mut world, 0);
         let mut b = ScheduleBuilder::new();

@@ -97,6 +97,17 @@ pub enum StreamId {
     /// Zawiązywanie i wygasanie relacji (M3c §5.8).
     Relations = 146,
     // 147–159 zarezerwowane dla M3; rezerwa dalsza 1140–1159 (K-4).
+
+    // ── M4: 160..=179 ── ruch; wartości imiennie z M4 §6 i niezmienne.
+    /// Wybór środka transportu — klucz `(citizen_idx, minuta odjazdu)` (M4 §5.3).
+    /// M4b używa go do remisów w regule zastępczej, M4c do pełnego `evaluate_modes`.
+    ModeChoice = 160,
+    /// Wybór stacji paliw spośród kandydatów w korytarzu trasy (M4b §5.7).
+    FuelStationChoice = 161,
+    /// Obsadzenie gospodarstw pojazdami przy generacji świata (M4b, WP5).
+    VehicleSeed = 162,
+    // 163–179 zarezerwowane dla M4 (`ParkingSearch`, `TransitDwell`,
+    // `VehicleBreakdown` dokładają M4c i M4d); rezerwa dalsza 1160–1179 (K-4).
 }
 
 /// Encja zastępcza dla losowania bez encji (zdarzenie globalne, generator świata).

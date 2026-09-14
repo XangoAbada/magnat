@@ -1,0 +1,44 @@
+// Diagram podstawowy ruchu: prędkość średnia na krawędzi jako funkcja jej obłożenia
+// (M4b/WP3, M4d §5.4). To jedyne miejsce, w którym powstaje `LinkState.mean_speed_dkmh`,
+// a ta liczba jest **skwantowana przed** wejściem do `settle_edge` — dlatego wynik
+// jest identyczny w mezo i w mikro z definicji, a nie z tolerancji.
+//
+// Postać jest dwureżimowa, bo taki jest ruch: dopóki gęstość nie przekroczy progu
+// krytycznego, prędkość jest swobodna; powyżej spada liniowo do `min_speed_dkmh`
+// przy gęstości korkowej. BPR na stosunku natężenia do przepustowości opisywałby to
+// samo gorzej, bo mezo zna gęstość (ile pojazdów stoi na krawędzi), a nie natężenie.
+//
+// Tabela jest wynikiem kalibracji offline `balansator calibrate-vdf` (M4d/WP9).
+// Wartości poniżej są startowe — wyprowadzone z klasycznych diagramów Greenshieldsa
+// dla odpowiadających klas drogi, nie zmierzone w mikro, której jeszcze nie ma.
+(
+    schema_version: 1,
+
+    // Długość pojazdu odniesienia plus odstęp przy gęstości korkowej. Dzieli
+    // `length_cm * lanes`, dając `EdgeQueue.storage_capacity` — czyli ile pojazdów
+    // fizycznie mieści się na krawędzi. Powyżej tej liczby zaczyna się spillback.
+    jam_spacing_cm: 750,
+
+    classes: [
+        // crit_density_permille — obłożenie (w promilach pojemności postojowej),
+        //   od którego prędkość zaczyna spadać.
+        // capacity_vph_per_lane — przepustowość pasa; konsumentem jest model węzła
+        //   i nakładka natężenia, nie sam wzór prędkości.
+        // min_speed_dkmh — prędkość przy zapełnieniu. To **ona**, a nie przepustowość,
+        //   wyznacza tempo rozładowania korka: przepływ przy gęstości korkowej wynosi
+        //   `pasy × v / odstęp`, więc 130 dkmh na jednym pasie przy odstępie 7,5 m daje
+        //   ~29 pojazdów/min, czyli tyle, ile realnie zjeżdża z kolejki po zielonym.
+        //   Pierwsza kalibracja miała tu 60–100 i korki rozładowywały się o połowę
+        //   wolniej, niż powinny (dziennik M4b).
+        (class: "highway",    capacity_vph_per_lane: 2000, crit_density_permille: 180, min_speed_dkmh: 160),
+        (class: "arterial",   capacity_vph_per_lane: 1800, crit_density_permille: 150, min_speed_dkmh: 150),
+        (class: "collector",  capacity_vph_per_lane: 1400, crit_density_permille: 140, min_speed_dkmh: 140),
+        (class: "local",      capacity_vph_per_lane: 1000, crit_density_permille: 130, min_speed_dkmh: 130),
+        (class: "service",    capacity_vph_per_lane:  600, crit_density_permille: 120, min_speed_dkmh: 110),
+        // Ciąg pieszy: pojazdy tu nie jeżdżą, ale krawędź istnieje w warstwie pieszej
+        // i musi mieć wiersz, żeby indeksowanie po `RoadClass` było totalne.
+        (class: "pedestrian", capacity_vph_per_lane:    0, crit_density_permille: 500, min_speed_dkmh:  40),
+        (class: "rail_freight",   capacity_vph_per_lane: 20, crit_density_permille: 300, min_speed_dkmh: 200),
+        (class: "rail_passenger", capacity_vph_per_lane: 30, crit_density_permille: 300, min_speed_dkmh: 300),
+    ],
+)
