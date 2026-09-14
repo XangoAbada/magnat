@@ -166,3 +166,17 @@ Twardy wymóg: **prędkość nie wpływa na wynik**. Test: doba przy 1× i doba 
 Wszystkie mutacje strukturalne (narodziny, śmierć, wejście/wyjście GD) idą przez bufor komend sortowany po `(SystemId, entity_index)` — doc 00 §3.4.
 
 ---
+
+---
+
+## Zmiany wpisane po M3a
+
+Zgodnie z `K-18`. Wpisane jest **tylko to, co wiadomo na pewno** po zamknięciu M3a.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| E-1 ★ | **Etap 8 wypełnia `PlaceTable`** — katalog `(PlaceRef, PlaceKind, WorldCoord)` — z budynków i zakładów M2, i podaje go `InfinitePlaces` oraz `WalkOracle` | `sim/agents` nie zależy od `sim/world` (decyzja 9.11 mówi, że zależność idzie w drugą stronę), więc most między miastem a agentami buduje generator populacji, który siedzi w `sim/world`. Bez tego katalogu żaden mieszkaniec nie znajdzie sklepu (korekta D-8) |
+| E-2 ★ | **Zasiew wiedzy jest warunkiem, żeby cokolwiek się wydarzyło**, a nie ozdobą: `candidates` zwraca **wyłącznie** miejsca znane mieszkańcowi (§5.7), więc mieszkaniec bez wpisów w `KnowledgeSlab` dostaje `PlaceUnknown` i nigdzie nie idzie | Tak ma być — to jest treść §5.7 i test `mieszkaniec_bez_wiedzy_nie_teleportuje_sie_do_sklepu`. Konsekwencja dla kroku generacji: każdy mieszkaniec musi dostać zasiew wiedzy o miejscach w swojej okolicy, inaczej scenariusz `m3_day` pokaże miasto stojące w miejscu |
+| E-3 ★ | **Pętla zdarzeń potrzebuje właściciela.** W M3a kolejkę przewija runner scenariusza (`tools/headless agents`), bo nie ma jeszcze handlerów — systemem ECS staje się dopiero wtedy, gdy planer ma czym dyspozytorować | Do rozstrzygnięcia razem z §5.12 (systemy i ich częstotliwość): czy `EventPumpSystem` jest osobnym systemem `EveryMinute`, czy dispatch siedzi w systemie planera. M3a nie przesądza, bo nie ma podstaw |
+| E-4 | **Scenariusz `tools/headless agents` istnieje** (populacja syntetyczna, spadek potrzeb, koło czasu, hash co N ticków). `m3_day` i `m3_century` mogą go rozszerzyć zamiast zaczynać od zera | 400 tys. mieszkańców zaludnia się w 0,8 s, doba gry biegnie w 0,9 s na 16 wątkach — jest z czego wyjść |
+| E-5 | **Karta inspekcji ma gotowe źródło powodów deprywacji:** `needs::deprivation_of(needs, table, out)` zwraca `DecisionReason::Deprivation` per potrzeba, liczone na żądanie | Ta sama zasada co przy `plan_day_explained`: pełnych logów dla 400 tys. mieszkańców nikt nie utrzyma, a odtworzenie jest dokładne (00 §7) |

@@ -56,6 +56,57 @@ impl DayOfWeek {
     }
 }
 
+/// Minuta doby, 0..=1439. Typ, a nie `u16`, bo plan dnia, godziny otwarcia i czasy
+/// przybycia wymieniają się tą wartością przez granice trzech faz (M3 planer,
+/// M4 podróże, M5 godziny handlu), a `u16` w tej roli milczy o tym, że 1500 nie istnieje.
+/// Konstruktor zawija modulo doby — minuta 1445 to 5 minut po północy, nie błąd.
+#[derive(
+    Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Default, Serialize, Deserialize,
+)]
+#[repr(transparent)]
+pub struct MinuteOfDay(u16);
+
+impl MinuteOfDay {
+    pub const MIDNIGHT: MinuteOfDay = MinuteOfDay(0);
+
+    #[inline]
+    #[must_use]
+    pub const fn new(v: u16) -> MinuteOfDay {
+        MinuteOfDay(v % MINUTES_PER_DAY as u16)
+    }
+
+    #[inline]
+    #[must_use]
+    pub const fn get(self) -> u16 {
+        self.0
+    }
+
+    #[inline]
+    #[must_use]
+    pub const fn hour(self) -> u8 {
+        (self.0 / 60) as u8
+    }
+
+    #[inline]
+    #[must_use]
+    pub const fn minute(self) -> u8 {
+        (self.0 % 60) as u8
+    }
+
+    /// Przesunięcie w przód z zawinięciem przez północ.
+    #[inline]
+    #[must_use]
+    pub const fn plus(self, minutes: u16) -> MinuteOfDay {
+        MinuteOfDay::new(self.0 % MINUTES_PER_DAY as u16 + minutes % MINUTES_PER_DAY as u16)
+    }
+}
+
+impl std::fmt::Display for MinuteOfDay {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:02}:{:02}", self.hour(), self.minute())
+    }
+}
+
 /// Widok kalendarzowy na `Tick`. Czysta arytmetyka, bez stanu.
 ///
 /// Kalendarz jest STAŁY: 12 miesięcy po 30 dni, rok = 360 dni, brak lat przestępnych,
@@ -96,6 +147,13 @@ impl SimCalendar {
     #[must_use]
     pub const fn minute_of_day(self) -> u16 {
         (self.minutes() % MINUTES_PER_DAY) as u16
+    }
+
+    /// To samo, typowane — wejście planera dnia i godzin otwarcia (M3).
+    #[inline]
+    #[must_use]
+    pub const fn minute_of_day_typed(self) -> MinuteOfDay {
+        MinuteOfDay((self.minutes() % MINUTES_PER_DAY) as u16)
     }
 
     /// Dzień roku, 0..359. Podstawa deklinacji słońca i sezonowości (00 §K-1).
@@ -233,6 +291,18 @@ mod tests {
         assert_eq!(rok_pozniej.day_of_week(), DayOfWeek::Thursday);
         assert!(DayOfWeek::Saturday.is_weekend());
         assert!(!DayOfWeek::Friday.is_weekend());
+    }
+
+    #[test]
+    fn minuta_doby_zawija_sie_przez_polnoc() {
+        let m = MinuteOfDay::new(23 * 60 + 50);
+        assert_eq!(m.to_string(), "23:50");
+        assert_eq!(m.plus(20), MinuteOfDay::new(10));
+        assert_eq!(MinuteOfDay::new(1440), MinuteOfDay::MIDNIGHT);
+        assert_eq!(
+            SimCalendar::new(Tick(MINUTES_PER_DAY + 61)).minute_of_day_typed(),
+            MinuteOfDay::new(61)
+        );
     }
 
     #[test]

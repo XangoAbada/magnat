@@ -126,3 +126,13 @@ To jest najbardziej ryzykowny mechanizm w fazie, więc opisany jest dokładnie.
 **Narzut pamięci.** Szczyt = suma cieni chunków dotkniętych, ale jeszcze nieprzetworzonych przez wątek zapisu. Ponieważ wątek zapisu zwalnia cienie na bieżąco, a kompresja (0.4 s) jest szybsza niż pesymistyczne dotknięcie wszystkich chunków, realny szczyt to **80–150 MB**. Budżet: **280 MB twardego limitu** areny cieni.
 
 **Wysycenie limitu — tryb „dogoń":** przy 80% limitu `SpeedGovernor` obniża prędkość gry o jeden szczebel i wątek zapisu dostaje wyższy priorytet. Przy 100% sim **zatrzymuje się na najbliższej barierze** do zwolnienia 20% areny. To degradacja (gracz widzi krótką pauzę), nie awaria — i jest metryką alarmową w testach (§7.4). Jedyny scenariusz, w którym to wystąpi, to zapis podczas 50× na dysku talerzowym.
+
+---
+
+## Zmiany wpisane po M3a
+
+Zgodnie z `K-18`.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| — ★ | **Zapis musi nieść zasoby świata, nie tylko archetypy ECS.** Dziś `world_state_hash` hashuje zasoby przez haki (`World::register_resource_hash`), a `save_world`/`load_world` ich nie serializują — świat z zarejestrowanym hakiem **nie przechodzi własnego round-tripu**: `load_world` odrzuca plik z `HashMismatch`, bo po wczytaniu zasobu nie ma. Pierwszy przypadek: M3 rejestruje `RelationSlab`, `KnowledgeSlab`, `PlanSlab` i `EventQueue` (M3a, korekta D-4). Kolejka zdarzeń jest stanem trwałym tak samo jak komponenty — to, co ma się wydarzyć jutro, jest częścią świata | Sekcja `SectionKind::Arena` z K-16 jest wzorem: zasób dostaje sekcję z własnym zakresem bajtów i sumą kontrolną. Do czasu tej zmiany M3 obchodzi problem, rozbijając rejestrację na `register_components` i `register_resources` — ale to jest obejście, nie rozwiązanie: zapis gry z M3 nie odtworzy planów dnia ani zaplanowanych zdarzeń demograficznych |

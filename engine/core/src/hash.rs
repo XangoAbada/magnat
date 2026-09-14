@@ -195,6 +195,13 @@ impl HashState for Q {
     }
 }
 
+impl HashState for crate::time::MinuteOfDay {
+    #[inline]
+    fn hash_state(&self, h: &mut StateHasher) {
+        h.write_u16(self.get());
+    }
+}
+
 impl HashState for Mood {
     #[inline]
     fn hash_state(&self, h: &mut StateHasher) {

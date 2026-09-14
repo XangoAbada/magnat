@@ -101,7 +101,7 @@ dopiero po ostatniej podfazie; podfaza zamyka się własnym kryterium ze swojego
 
 | Podfaza | WP | §5 | Wynik do pokazania | Dokument |
 |---|---|---|---|---|
-| **M3a — Fundament agenta** | WP1, WP2, WP3, WP4 | 5.1, 5.2, 5.3, 5.5 | Headless: 400 tys. mieszkańców w pamięci, potrzeby spadają zgodnie z tabelą, koło czasu rozdaje zdarzenia. | `M3a-fundament-agenta.md` |
+| ✅ **M3a — Fundament agenta** | WP1, WP2, WP3, WP4 | 5.1, 5.2, 5.3, 5.5 | Headless: 400 tys. mieszkańców w pamięci, potrzeby spadają zgodnie z tabelą, koło czasu rozdaje zdarzenia. | `M3a-fundament-agenta.md` |
 | **M3b — Dzień mieszkańca** | WP5, WP6 | 5.4, 5.10 | Wydruk dnia wzorcowego: pobudka → posiłek → dojazd → praca → zadanie po drodze → dom → czas wolny → sen; pieszy dociera na czas. | `M3b-dzien-mieszkanca.md` |
 | **M3c — Demografia i społeczeństwo** | WP7, WP8, WP9 | 5.6, 5.7, 5.8 | `m3_century` — 100 lat gry headless bez wybuchu ani wygaszenia populacji. | `M3c-demografia-i-spoleczenstwo.md` |
 | **M3d — Populacja i UI** | WP10, WP11, WP12, WP13 | 5.9, 5.11, 5.12 | Pełny artefakt fazy z §1 dokumentu fazy: mieszkańcy chodzą do pracy i sklepu, karta inspekcji pokazuje plan obok realizacji. | `M3d-populacja-i-ui.md` |
@@ -268,7 +268,7 @@ Dla 10 seedów × 4 rozmiary miasta:
 | `bench_replan` | mediana ≤ 5 µs |
 | `bench_des_dispatch` | 2 778 zdarzeń/tick (średnia dla 200 tys. agentów) ≤ 60 µs; szczyt 11 tys. zdarzeń ≤ 250 µs |
 | `bench_des_day` | pełna doba dla 200 tys. agentów (4 mln zdarzeń) ≤ 250 ms na 1 wątku |
-| `bench_need_decay` | shard 1/60 przy 400 tys. ≤ 30 µs/tick |
+| `bench_need_decay` | shard 1/60 przy 400 tys. ≤ 100 µs/tick na 8 wątkach (korekta A-8; zmierzone 63 µs) |
 | `bench_gossip_day` | dobowa plotka dla 400 tys. ≤ 20 ms |
 | `bench_walk_estimate` | mediana ≤ 80 µs; trafienie cache ≤ 0,2 µs |
 | `bench_population_gen` | jak `gen_perf` |
@@ -368,3 +368,22 @@ Do rozstrzygnięcia przed startem wskazanych WP. Rozstrzygnięcia lądują w `00
 **Ścieżka krytyczna:** WP1 → WP3 → WP4 → **WP5** → WP12.
 **Ścieżka równoległa:** WP7 → WP8 → WP10 (wymaga tylko WP1 i danych z M2) — idzie niezależnie od planera, spina się dopiero w WP13.
 **Największe ryzyko harmonogramowe:** WP10 zależy od jakości wyjścia Etapu 6–7 z M2 — decyzja 9.12 (`wage_band` w `JobSlot`) musi zapaść **przed** startem WP10, inaczej krok 6 generacji nie ma na czym pracować.
+
+---
+
+## Zmiany wpisane po M3a
+
+Zgodnie z `K-18`. Pełne uzasadnienie w tabeli „Korekty planu wpisane po implementacji M3a"
+dokumentu `M3a-fundament-agenta.md` (numeracja `D-n`) — tu tylko to, co dotyczy kontraktów
+fazy, czyli sekcji §6.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| A-1 ★ | **§6.1: `sim::agents::des::{EventQueue, SimEvent, EventKind, order_key}` dostaje piąty wariant `EventKind::EndActivity`** (dyskryminatory: `Arrive` 0, `NeedTick` 1, `StartActivity` 2, `EndActivity` 3, `PlanDay` 4) | Lazy scheduling z §5.2 wymaga zdarzenia kończącego czynność, inaczej łańcuch „obsługa harmonogramuje następne" rwie się po `StartActivity`. Kolejność wariantów jest kolejnością obsługi przy remisie czasowym i od teraz jest zamrożona (§6.4) |
+| A-2 ★ | **§6.1: `TravelOracle::begin_trip` ma trzy parametry** — `(trip, who: &CitizenView, q)` | Prędkość marszu zależy od wieku, zdrowia i energii. Sygnatury traitów są zamrożone od M3, a M4 ma je implementować, nie zmieniać — parametr wchodzi teraz, zanim ktokolwiek je implementuje. Szczegóły: korekta D-3 |
+| A-3 ★ | **§6.1: warianty `core::DecisionReason` wniesione przez M3 to lista z M3b §5.4 plus `ModeWalkOnly` (113) i `NeedSatisfied` (114)** | Lista z M3b nie miała powodu dla `TravelEstimate.reason` ani dla `FulfilOutcome::Done`, a oba pola są w kontrakcie §5.3 i oba wymagają wyjaśnienia (00 §7). Przypadek 5 z `K-18` |
+| A-4 ★ | **§6.3: M3 konsumuje z `core` cztery nowe słowniki** — `PlaceKind`, `TraitId`, `DeprivationEffect`, `MinuteOfDay` — i wnosi do `NeedKind` dwanaście wariantów z M3a §5.5 w miejsce dziesięciu roboczych z M0 | Wpisane jako **`K-20`** w dokumencie 00. `DeprivationEffect` musi być w `core`, bo jest ładunkiem `DecisionReason`; reszta spełnia kryterium K-8. Nic nie używało tamtych dziesięciu wariantów |
+| A-5 | **§6.1: `sim::world::population` nadal jest właścicielem generacji, ale `sim/agents` nie zależy od `sim/world`.** Katalog miejsc (`PlaceTable`) wsypuje się z zewnątrz | Zależność idzie w jedną stronę: `sim/world` → `sim/agents`. Etap 8 (M3d) wypełnia `PlaceTable` budynkami i zakładami M2, a `InfinitePlaces` i `WalkOracle` czytają gotowy katalog. Bez tego crate agentów ciągnąłby za sobą generator miasta |
+| A-6 | **§6.1: `register` rozbite na `register_components` i `register_resources`** | Minimalny snapshot z M0 nie niesie zasobów, a `world_state_hash` je hashuje — świat z hakami zasobów nie przechodzi round-tripu. Poprawka do `engine/io` poszła do M12b; do tego czasu round-trip testuje się na samych komponentach (korekta D-4) |
+| A-8 ★ | **§7.5: `bench_need_decay` ≤ 100 µs na 8 wątkach zamiast ≤ 30 µs** (zmierzone 63 µs przy 400 tys.) | Próg 30 µs liczył koszt dotknięcia shardu (107 KB), a nie koszt jego znalezienia: archetypowy ECS musi przejść wszystkie wiersze i odrzucić 59/60, bo nie umie zaadresować „co sześćdziesiątej encji" bez bocznego indeksu, który trzeba by unieważniać przy każdych narodzinach. 63 µs to 0,007 % ticku przy 1× — szczegóły w korekcie D-13 dokumentu M3a |
+| A-7 | **§7.5: `bench_alloc_population` nazywa się `mem_population_400k`** i jest testem, nie benchmarkiem; próg to **430 B** zamiast 400 B | Budżet mierzy się raz i porównuje z progiem — to jest test. Criterion mierzy tempo zmian i pilnuje regresji, więc benchmarkiem zostaje `m3a-3 populacja/spawn 400 tys.`. Podniesienie progu: korekta D-1 |

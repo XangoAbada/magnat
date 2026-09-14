@@ -16,6 +16,7 @@
 #![forbid(unsafe_code)]
 
 pub mod arena;
+pub mod assets;
 pub mod collections;
 pub mod decision;
 pub mod det_math;
@@ -32,6 +33,7 @@ pub mod types;
 pub mod vocab;
 
 pub use arena::{Arena, ArenaChunk, ArenaHandle, ArenaKind};
+pub use assets::{data_dir, data_path};
 pub use collections::{seeded_map, seeded_set, SeededMap, SeededMapExt, SeededSet};
 pub use decision::DecisionReason;
 pub use entity::Entity;
@@ -44,12 +46,12 @@ pub use ids::{
 pub use money::split_proportional;
 pub use rng::{rng, Rng, StreamId, NO_ENTITY};
 pub use schema::ComponentSchemaId;
-pub use time::{Cadence, DayOfWeek, SimCalendar};
+pub use time::{Cadence, DayOfWeek, MinuteOfDay, SimCalendar};
 pub use types::{
     DistrictId, Energy, GoodId, JobRoleId, Mass, Money, Mood, Qty, RecipeId, SimInstant, SimMinute,
     Tick, Volume, Q,
 };
 pub use vocab::{
-    ActivityKind, Biome, NeedKind, PlaceRef, ResourceKind, TransportMode, UtilityKind,
-    UtilityService, WorldCoord,
+    ActivityKind, Biome, DeprivationEffect, NeedKind, PlaceKind, PlaceRef, ResourceKind, TraitId,
+    TransportMode, UtilityKind, UtilityService, WorldCoord, NEED_COUNT,
 };

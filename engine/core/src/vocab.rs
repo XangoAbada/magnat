@@ -66,8 +66,52 @@ vocab_enum! {
 vocab_enum! {
     /// Rodzaj potrzeby. Konsument: M3 (model potrzeb), M5 (co wyzwala zakup),
     /// M8 (usługi publiczne).
+    ///
+    /// **Dwanaście wariantów wniesionych przez M3** (M3a §5.5) — kolejność jest
+    /// kontraktem: `Needs.level: [u8; 12]` indeksuje się `as_index()`, więc
+    /// przestawienie wariantów przestawiłoby zapisane poziomy potrzeb wszystkim
+    /// mieszkańcom. Wolno dopisywać na końcu, nie wolno przestawiać (M3 §6.4).
     NeedKind {
-        Hunger, Thirst, Rest, Hygiene, Health, Social, Fun, Safety, Esteem, Education,
+        Hunger, Sleep, Hygiene, Health, Safety, Housing,
+        Mobility, Clothing, Leisure, Social, Status, Development,
+    }
+}
+
+/// Liczba potrzeb — rozmiar tablicy `Needs.level` (M3a §5.1).
+pub const NEED_COUNT: usize = NeedKind::ALL.len();
+
+vocab_enum! {
+    /// Rodzaj miejsca, w którym da się zaspokoić potrzebę. Odwzorowanie
+    /// `NeedKind → PlaceKind` jest danymi (`data/needs/needs.ron`), nie kodem.
+    ///
+    /// W `core`, bo mówią nim trzy fazy: M3 (wybór celu w planie dnia), M5 (sklep
+    /// jako miejsce z ofertą) i M8 (instytucje publiczne z pojemnością). Zero logiki —
+    /// `core` nie wie, co się w takim miejscu dzieje.
+    PlaceKind {
+        Home, Grocery, Eatery, Clothing, Doctor, Pharmacy, Hospital,
+        Leisure, Social, Education, Workplace,
+    }
+}
+
+vocab_enum! {
+    /// Cecha osobowości — indeks w `Personality([u8; 8])` (M3a §5.1).
+    ///
+    /// W `core`, bo cechy czyta więcej niż jedna faza: M3 (plan dnia, czas wolny),
+    /// M5 (`PriceSensitivity`, `Loyalty` w funkcji użyteczności §6.4), M7 (`Ambition`
+    /// przy zmianie pracy), M10 (`Openness` przy marce). Kolejność jest kontraktem
+    /// tak samo jak przy `NeedKind`.
+    TraitId {
+        Ambition, Thrift, PriceSensitivity, Loyalty,
+        Sociability, Openness, Risk, Conscientiousness,
+    }
+}
+
+vocab_enum! {
+    /// Skutek deprywacji potrzeby — ładunek `DecisionReason::Deprivation` (M3a §5.5).
+    /// Nazwa mówi, **co** się pogarsza; o ile, mówią dane w `data/needs/needs.ron`.
+    DeprivationEffect {
+        EnergyLoss, HealthLoss, MoodLoss, StressGain,
+        StatusLoss, ProductivityLoss, AbsenceRisk, AccidentRisk, AmbitionGain,
     }
 }
 
@@ -182,6 +226,18 @@ pub enum PlaceRef {
     Coord(WorldCoord),
 }
 
+impl Default for PlaceRef {
+    /// Punkt (0, 0, 0) — wartość **wypełniająca**, nie „brak miejsca".
+    ///
+    /// Istnieje wyłącznie po to, żeby `PlaceRef` dało się trzymać w tablicy o stałej
+    /// pojemności (`ArrayVec` w M3) bez `unsafe`. Kod, który chce powiedzieć „nie ma
+    /// miejsca", mówi to przez `Option<PlaceRef>` — i tak ma to wyrazić, bo inaczej
+    /// mieszkaniec poszedłby po zakupy do początku układu współrzędnych.
+    fn default() -> PlaceRef {
+        PlaceRef::Coord(WorldCoord::ORIGIN)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -191,7 +247,6 @@ mod tests {
         assert_eq!(UtilityKind::Price.as_index(), 0);
         assert_eq!(UtilityKind::from_index(0), Some(UtilityKind::Price));
         assert_eq!(TransportMode::ALL.len(), 7);
-        assert_eq!(NeedKind::ALL.len(), 10);
         assert_eq!(ActivityKind::Idle.name(), "Idle");
         assert_eq!(
             UtilityService::ALL.first(),
@@ -215,6 +270,19 @@ mod tests {
             sto_km.distance_sq_xy(WorldCoord::ORIGIN),
             100_000_000_000_000
         );
+    }
+
+    #[test]
+    fn kolejnosc_potrzeb_i_cech_jest_kontraktem() {
+        // M3 §6.4: przestawienie wariantu przestawia zapisane poziomy potrzeb
+        // wszystkim mieszkańcom, bo `Needs.level` indeksuje się `as_index()`.
+        assert_eq!(NEED_COUNT, 12);
+        assert_eq!(NeedKind::Hunger.as_index(), 0);
+        assert_eq!(NeedKind::Sleep.as_index(), 1);
+        assert_eq!(NeedKind::Development.as_index(), 11);
+        assert_eq!(TraitId::ALL.len(), 8);
+        assert_eq!(TraitId::Ambition.as_index(), 0);
+        assert_eq!(TraitId::Conscientiousness.as_index(), 7);
     }
 
     #[test]

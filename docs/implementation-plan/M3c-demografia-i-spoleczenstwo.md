@@ -150,3 +150,17 @@ dla mieszkańca M (w shardzie dnia):
 **Widoczność z trasy.** Przy zmianie trasy dom↔praca (a w M3 tylko wtedy — trasa jest cache'owana) `TravelOracle::places_on_route` zwraca miejsca w buforze 50 m od przebiegu; trafiają do wiedzy jako `SeenOnRoute` ze `score = 35`.
 
 To jest dokładnie mechanika z §5.7: nowy sklep zna początkowo tylko ten, kto go mija lub w nim był; zasięg buduje się przez relacje. M10 dopisze `kind = Ad` i niczego innego nie musi zmieniać.
+
+---
+
+## Zmiany wpisane po M3a
+
+Zgodnie z `K-18`. Wpisane jest **tylko to, co wiadomo na pewno** po zamknięciu M3a.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| C-1 | **`Household` powstaje w tej podfazie, nie w M3a.** M3a definiuje trzynaście komponentów mieszkańca i zostawia `Identity.household` jako indeks encji | §5.1 (M3a) nie opisuje `Household` — opisuje go §5.6, czyli ta podfaza. Budżet §17.7 liczy GD osobno (≈167 tys. × 128 B), poza stanem gorącym mieszkańca |
+| C-2 | **Slaby relacji i wiedzy są gotowe** (`RelationSlab`, `KnowledgeSlab`, klasy 4/8/12/16/24/32, wolna lista, `occupied_blocks()` do wykrywania wycieków). Wypychanie 33. wpisu bierze indeks ofiary z domknięcia wywołującego, a nie z traitu | Dwa magazyny, dwie różne reguły rangowania (`Knowledge::rank` jest w `store.rs`), obie jednolinijkowe u wołającego — trait na to nie zarabia. `prop_knowledge_bound` ma gotowe `occupied_blocks()` |
+| C-3 | **`StatusLoss` stosuje ta podfaza**, przy funkcji statusu z §5.8. M3a go nie odejmuje, tylko wystawia przez `deprivation_of` | Rozstrzygnięcie D-6: status jest tu **liczony**, a nie odejmowany — odejmowanie go w M3a rozjechałoby się z tą funkcją przy pierwszym uruchomieniu obu naraz. To samo dotyczy `AmbitionGain` (M7) |
+| C-4 | **`ReplanCause::HouseholdEvent { kind: HhEventKind }` istnieje** z wariantami `Birth`, `ChildIll`, `Death`, `MemberJoined`, `MemberLeft`, `Moved`; `is_full_replan()` zwraca `true` dla `Death` | Zdarzenia demograficzne mają już punkt zaczepienia w planerze — WP7 wypełnia je treścią, nie projektuje od nowa |
+| C-5 | **Strumienie RNG tej podfazy są przypisane i zamrożone:** `Demography` 141, `Gossip` 142, `Migration` 145, `Relations` 146 (`K-4`, blok M3 = 140–159) | Wartości raz nadane są niezmienne — zmiana numeru strumienia zmienia każdy świat wygenerowany wcześniej z tego samego ziarna |

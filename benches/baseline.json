@@ -43,5 +43,11 @@
   "m2a-4 field/combine 2 pol 1 mln komorek": 2136207.1511627906,
   "m2a-4 field/dijkstra 1 mln komorek": 35144218.14814815,
   "m2a-4 field/probka dwuliniowa": 7.684354204035529,
-  "m2a-5 category/oferty kategorii w r=600": 275.91995022068795
+  "m2a-5 category/oferty kategorii w r=600": 275.91995022068795,
+  "m3a-1 des/dispatch 11000 zdarzen": 146581.00961538462,
+  "m3a-1 des/dispatch 2778 zdarzen": 37765.99002849002,
+  "m3a-1 des/doba 200 tys. agentow": 61285981.66666667,
+  "m3a-2 potrzeby/godzina 400 tys. (skutki deprywacji)": 239801.64937166794,
+  "m3a-2 potrzeby/tick 400 tys. (spadek, shard 1_60)": 64941.23388581952,
+  "m3a-3 populacja/spawn 400 tys. mieszkancow": 3405636000.0
 }

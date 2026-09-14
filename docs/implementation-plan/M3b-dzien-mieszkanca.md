@@ -169,3 +169,20 @@ pub enum DecisionReason {
 - **Granica z M4 (K-2).** Moduł `walk` jest `pub(crate)`. Zero publicznych typów grafu, zero funkcji `route`/`path`/`graph` w API crate'a. Test architektoniczny sprawdza, że publiczne API `sim/agents` nie eksportuje niczego z `walk`. Gdy M4 dostarczy `engine/nav`, moduł znika w całości — nie ma nic do zmigrowania ani do utrzymywania równolegle.
 
 `ponytail:` odległość sieciowa zamiast pełnego A* z heurystyką — przy dystansach pieszych (≤ 3 km) BFS po ważonym grafie z wcześniejszym przerwaniem wystarcza, a i tak cała ta implementacja jest do wyrzucenia w M4.
+
+---
+
+## Zmiany wpisane po M3a
+
+Zgodnie z `K-18`. Wpisane jest **tylko to, co wiadomo na pewno** po zamknięciu M3a —
+podfaza nie jest tu przeprojektowywana.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| B-1 ★ | **`DecisionReason::Replanned` nie może nieść `ReplanCause`** — niech niesie `cause_tag: u8` (jest `ReplanCause::tag()`) i `slots_changed: u8` | `ReplanCause` mieszka w `sim/agents`, a `DecisionReason` w `core` (K-12): ładunek centralnego enuma nie może pochodzić z crate'u, który od `core` zależy. Poza tym `ReplanCause::PlaceClosed` niesie `PlaceRef` (16 B), więc `Replanned` przekroczyłby limit `size_of::<DecisionReason>() <= 24` z K-12 |
+| B-2 ★ | **`begin_trip` ma sygnaturę `(trip, who: &CitizenView, q)`** (korekta D-3 w M3a) | Planer i tak trzyma `CitizenView` w `PlanCtx`, więc wywołanie nic nie kosztuje |
+| B-3 | **`DayCanvas` stoi na `magnat_agents::ArrayVec<PlanSlot, 24>`** — typ jest w crate'cie, przetestowany, `Copy`, bez `unsafe` | `ArrayVec` powstał w M3a na potrzeby `PlaceProvider::candidates`; drugi konsument był znany z góry (§5.4). Zapis planu do slabu: `PlanSlab` + `PlanRef::set_slab_ref` — arena już nie jest buforowana podwójnie (korekta D-1) |
+| B-4 | **`WalkOracle` istnieje i liczy odległość manhattanowo z korektą 1,25×** (fallback z ryzyka R7). WP6 podmienia **wnętrze** `estimate`, `begin_trip` i `places_on_route` na odległość sieciową po centroliniach ulic z M2 | Kontrakt, testy i korytarz „widoczne z trasy" są gotowe; do zrobienia zostaje graf odcinków, cache tras dom↔praca i warstwa Mikro. Sygnatury się nie zmieniają — to jest cały sens `TravelOracle` |
+| B-5 | **`plan_no_economy_types` ma już odpowiednik w M3a** (`tests/contract.rs::kontrakt_nie_wspomina_o_gospodarce_ani_o_grafie`, skanuje `places.rs`). WP5 dopisuje do niego `planner.rs` | Test jest tani i łapie dokładnie to, przed czym broni ryzyko R1 — wystarczy dołożyć drugi plik do listy skanowanych |
+| B-6 | **Faza 3 planera woła `places::choose_place`**, a nie `PlaceProvider::candidates` wprost | `choose_place` jest już jedynym miejscem produkującym `PlaceUnknown { need, known_count }` i ma test na ścieżkę „mieszkaniec bez wiedzy" (korekta D-5). Planer wywoła je z kotwicą i zasięgiem osobistym |
+| B-7 | **Absencja (`DeprivationEffect::AbsenceRisk`) należy do planera** — M3a jej nie stosuje, tylko wystawia przez `deprivation_of` | Rozstrzygnięcie D-6: skutki progowe stosuje faza-właściciel, bo tylko ona wie, co znaczy „nie poszedł do pracy". Wartości (promile) są w `data/needs/needs.ron` |

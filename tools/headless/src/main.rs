@@ -7,6 +7,7 @@
 
 #![forbid(unsafe_code)]
 
+mod agents;
 mod testworld;
 mod worldgen;
 
@@ -94,6 +95,8 @@ enum Command {
     Verify(worldgen::VerifyArgs),
     /// Podgląd wybranego pola generatora jako PNG — sanity-check bez GPU.
     Preview(worldgen::PreviewArgs),
+    /// Populacja bez miasta: rachunek pamięci, spadek potrzeb, koło czasu (M3a).
+    Agents(agents::AgentsArgs),
 }
 
 fn uruchom() -> Result<std::process::ExitCode, Box<dyn std::error::Error>> {
@@ -103,6 +106,7 @@ fn uruchom() -> Result<std::process::ExitCode, Box<dyn std::error::Error>> {
         Some(Command::Generate(a)) => return worldgen::generate(a),
         Some(Command::Verify(a)) => return worldgen::verify(a),
         Some(Command::Preview(a)) => return worldgen::preview(a),
+        Some(Command::Agents(a)) => return agents::run(a),
         None => {}
     }
 

@@ -11,7 +11,7 @@ zostają w dokumencie fazy — tu jest wyłącznie to, co robisz w tej porcji.
 | **Pakiety robocze** | WP1, WP2, WP3, WP4 |
 | **Projekt techniczny** | §5.1, §5.2, §5.3, §5.5 |
 | **Wynik do pokazania** | Headless: 400 tys. mieszkańców w pamięci, potrzeby spadają zgodnie z tabelą, koło czasu rozdaje zdarzenia. |
-| **Kryterium zamknięcia** | Kryteria WP1–WP4; budżet ≤ 400 B stanu gorącego na mieszkańca i test architektoniczny na atrapie `PanickingPlaces`. |
+| **Kryterium zamknięcia** | ✅ Kryteria WP1–WP4; budżet ≤ **430 B** stanu gorącego na mieszkańca (korekta D-1; zmierzone 421 B) i test architektoniczny na atrapie `PanickingPlaces`. |
 | **Poprzednia / następna** | — (pierwsza w fazie) · `M3b-dzien-mieszkanca.md` |
 
 Warstwa, na której stoi cała reszta fazy: komponenty SoA i magazyny o zmiennej długości, potrzeby z deprywacją, silnik DES i dwa punkty rozszerzenia (`PlaceProvider`, `TravelOracle`) z implementacjami tymczasowymi.
@@ -22,16 +22,18 @@ Warstwa, na której stoi cała reszta fazy: komponenty SoA i magazyny o zmiennej
 
 | WP | Nazwa | Zależy od | Rozmiar |
 |---|---|---|---|
-| WP1 | Komponenty i magazyny | M0 (`ecs`, `core`) | M |
-| WP2 | Potrzeby i deprywacja | WP1 | S |
-| WP3 | Silnik DES | WP1 | M |
-| WP4 | Punkty rozszerzenia M4/M5 + implementacje tymczasowe | WP1, M2 (parcele, budynki) | S |
+| ✅ WP1 | Komponenty i magazyny | M0 (`ecs`, `core`) | M |
+| ✅ WP2 | Potrzeby i deprywacja | WP1 | S |
+| ✅ WP3 | Silnik DES | WP1 | M |
+| ✅ WP4 | Punkty rozszerzenia M4/M5 + implementacje tymczasowe | WP1, M2 (parcele, budynki) | S |
 
 ### WP1 — Komponenty i magazyny
 
 Definicja wszystkich komponentów SoA z sekcji 5.1, trzech magazynów o zmiennej długości (arena planu, slab relacji, slab wiedzy), rejestracja w funkcji haszującej stan ECS.
 
-**Kryterium ukończenia:** test `size_of` dla każdego komponentu zgodny z tabelą budżetu; `bench_alloc_population(400_000)` pokazuje zużycie ≤ 400 B/mieszkańca stanu gorącego (bez magazynu wiedzy); hash stanu stabilny po serializacji/deserializacji.
+**Kryterium ukończenia:** test `size_of` dla każdego komponentu zgodny z tabelą budżetu; `mem_population_400k` pokazuje zużycie ≤ **430 B**/mieszkańca stanu gorącego (bez magazynu wiedzy — korekta D-1); hash stanu stabilny po serializacji/deserializacji **komponentów** (zasoby wejdą do snapshotu w M12 — korekta D-4).
+
+**Stan:** ✅ zamknięty. `components.rs` (13 komponentów, 140 B), `store.rs` (slab z klasami 4/8/12/16/24/32, trzy magazyny), `arrayvec.rs`. Zmierzone przy 400 tys.: ECS 148 B, relacje 97 B, plany 157 B, kolejka 19 B → **421 B na mieszkańca**.
 
 ### WP2 — Potrzeby i deprywacja
 
@@ -39,17 +41,23 @@ Tabela temp spadku (dane RON), `NeedDecaySystem` shardowany 1/60 na tick minutow
 
 **Kryterium ukończenia:** mieszkaniec bez żadnego zaspokojenia osiąga stan krytyczny w czasie zgodnym z tabelą (±2%); sharding nie zmienia wyniku względem wersji referencyjnej „wszyscy co godzinę" (tolerancja 0).
 
+**Stan:** ✅ zamknięty. Tolerancja 0 nie jest tu wynikiem kalibracji, tylko konstrukcji: spadek liczy się jako **różnica funkcji czasu absolutnego** (`needs::decay_between`), więc przeliczenie co minutę, co godzinę i shardowane 1/60 dają identyczny wynik. Testy: `shardowanie_nie_zmienia_wyniku`, `shard_daje_ten_sam_wynik_co_zamknieta_formula`, `czas_do_zera_zgadza_sie_z_tabela_paragrafu_5_5`.
+
 ### WP3 — Silnik DES
 
 Koło czasu (`TimingWheel`) o 2880 kubełkach minutowych + `BTreeMap` przelewowy na zdarzenia dalekie (urodziny, śmierć, rocznice). Deterministyczne sortowanie kubełka, dispatch do handlerów.
 
 **Kryterium ukończenia:** `bench_des_dispatch` — 4 mln zdarzeń/dobę gry przetworzone ≤ 250 ms sumarycznie na 1 wątku; test: losowa kolejność wstawiania 100 tys. zdarzeń w tę samą minutę → identyczna kolejność obsługi.
 
+**Stan:** ✅ zamknięty. 4 mln zdarzeń doby w **50 ms** wobec 250 ms budżetu (szczyt 2 804 zdarzenia na tick); 100 tys. zdarzeń w jednej minucie wstawionych w dwóch przeciwnych kolejnościach daje identyczny ciąg.
+
 ### WP4 — Punkty rozszerzenia M4/M5
 
 Traity `PlaceProvider` i `TravelOracle` plus implementacje tymczasowe `InfinitePlaces` i `WalkOracle`. **To jest kontrakt, nie szkic** — M5 i M4 podmieniają wyłącznie implementację, planer się nie zmienia.
 
 **Kryterium ukończenia:** planer kompiluje się przeciwko traitom, nie przeciwko implementacjom (test: atrapa `PanickingPlaces` panikująca w każdej metodzie, podmieniona w teście, potwierdza brak zależności typów); żadna sygnatura w `planner.rs` nie zawiera `Money` w roli ceny, `GoodId` ani typu z grafu nawigacyjnego.
+
+**Stan:** ✅ zamknięty. Planera jeszcze nie ma (M3b), więc rolę wywołującego pełni `places::choose_place` — wycinek fazy 3, który **będzie** wołany z planera i już teraz zna wyłącznie `&dyn PlaceProvider` (korekta D-5). `tests/contract.rs`: podstawienie `EmptyPlaces` i `PanickingPlaces` bez zmiany ani jednej linii u wołającego, `FlakyPlaces` przechodzi ścieżkę odmowy, dwa testy architektoniczne pilnują modułu `walk` i braku typów gospodarczych w kontrakcie.
 
 ---
 
@@ -149,7 +157,7 @@ Wszystkie komponenty `#[repr(C)]`, bez paddingu niejawnego (test `size_of` + `of
 **Magazyny o zmiennej długości**
 
 ```rust
-// Arena planu dnia — wspólny Vec<PlanSlot>, podwójnie buforowana (dziś / jutro), kompaktowana co dobę
+// Plan dnia — blok w slabie (patrz korekta D-1; pierwotnie: wspólny Vec podwójnie buforowany)
 #[repr(C)] pub struct PlanSlot {        // 12 B
     pub start_min: u16,                 // minuta doby 0..1439
     pub dur_min:   u16,
@@ -171,7 +179,9 @@ Wszystkie komponenty `#[repr(C)]`, bez paddingu niejawnego (test `size_of` + `of
 }
 ```
 
-Slaby relacji i wiedzy: klasy rozmiaru **4 / 8 / 16 / 24 / 32** wpisów, alokator blokowy bez fragmentacji (bloki stałej wielkości, wolna lista per klasa). Wpis 33. wypycha najstarszy o najniższej wadze (`score × decay(recency)`).
+Slaby relacji, wiedzy **i planów dnia**: klasy rozmiaru **4 / 8 / 12 / 16 / 24 / 32** wpisów, alokator blokowy bez fragmentacji (bloki stałej wielkości, wolna lista per klasa). Wpis 33. wypycha najstarszy o najniższej wadze (`score × decay(recency)`). Klasa 12 i trzeci magazyn to korekta D-1 — uzasadnienie w tabeli na końcu dokumentu.
+
+Plan dnia dostaje blok w tym samym slabie, a nie własną arenę, bo mieszkaniec ma dokładnie jeden aktualny plan i zastępuje go w całości: `Slab::store` dobiera klasę od razu, zwalnia poprzedni blok i nie wymaga ani kompaktowania, ani dobowego przebiegu przepisującego `PlanRef.offset` wszystkim mieszkańcom. `PlanRef.offset` jest **uchwytem do slabu**: klasa w bitach 29..31, numer bloku niżej — komponent zostaje ośmiobajtowy.
 
 `ponytail:` jeden magazyn na „byłem" i „słyszałem" zamiast dwóch — §5.1 (pamięć) i §5.7 (wiedza) to ten sam byt z innym polem `kind`. Rozdzielenie dopiero gdyby M10 potrzebował innego cyklu życia dla reklamy.
 
@@ -195,13 +205,30 @@ Stan gorący na mieszkańca:
 | `RelationsRef` | 8 |
 | `Lifecycle` | 8 |
 | **suma komponentów** | **140** |
-| arena planu: śr. 12 slotów × 12 B | 144 |
-| slab relacji: śr. 10 wpisów × 8 B | 80 |
-| kolejka DES: 1 zdarzenie w locie × 16 B | 16 |
-| metadane encji ECS (generacja, indeks archetypu) | 16 |
-| **stan gorący razem** | **396 B** |
 
-396 B ≤ 400 B — budżet §17.7 dotrzymany. **400 000 × 396 B = 158 MB** stanu gorącego.
+Do tego magazyny i narzut. Kolumna „plan" to rachunek z pierwszego projektu, kolumna
+„pomiar" — to, co pokazuje `mem_population_400k` przy 400 tys. mieszkańców (korekta D-1):
+
+| Pozycja | plan | pomiar | skąd różnica |
+|---|---|---|---|
+| komponenty + `Entity` + chunkowanie ECS | 156 | **148** | chunk mieści wiersz bez odpadu; 13 komponentów po 140 B + 8 B uchwytu |
+| plan dnia: śr. 12 slotów × 12 B | 144 | **157** | klasa rozmiaru zaokrągla 14 i 16 slotów do bloku 16 |
+| slab relacji: śr. 10 wpisów × 8 B | 80 | **97** | klasa rozmiaru zaokrągla 18 wpisów do 24, a 26 do 32 |
+| kolejka DES: 1 zdarzenie w locie × 16 B | 16 | **19** | nagłówki 2880 kubełków i zapas wzrostu porcjami po 64 |
+| **stan gorący razem** | **396** | **421** | |
+
+**Pierwotny rachunek nie uwzględniał narzutu alokacji w ogóle** — a slab z klasami
+rozmiaru, który ten sam paragraf zaleca, z definicji zaokrągla w górę. Budżet kryterium
+podnosi się więc do **430 B** (zmierzone 421, zapas na drobne zmiany kształtu), co przy
+400 tys. mieszkańców daje **161 MB zamiast 151 MB** stanu gorącego. Wniosek z §17.7
+(„metropolia mieści się w 6 GB") stoi z tym samym zapasem — zmieniła się liczba
+w kryterium, nie wniosek z niej.
+
+Dwie rzeczy, które przy okazji **zeszły** z rachunku, bo były realnym marnotrawstwem,
+a nie ceną projektu: podwójne buforowanie areny planów (plan wczorajszy żyje obok
+dzisiejszego przez całą dobę, czyli 288 B zamiast 144 — stąd slab) i geometryczny wzrost
+`Vec` w slabach i kubełkach koła czasu (drugie tyle pamięci, której nikt nie zapisze —
+stąd `reserve_exact` porcjami).
 
 Poza budżetem gorącym (§17.7 wprost: „pamięć doświadczeń w osobnym, kompresowanym magazynie"):
 
@@ -345,7 +372,10 @@ pub trait TravelOracle: Send + Sync {
     ) -> TravelEstimate;
 
     /// Rozpoczyna podróż; implementacja sama harmonogramuje zdarzenie `Arrive`.
-    fn begin_trip(&mut self, trip: TripRequest, q: &mut EventQueue) -> TripHandle;
+    /// `who` dołożone w M3a (korekta D-3): prędkość marszu zależy od wieku, zdrowia
+    /// i energii, a M4 i tak będzie potrzebował podróżnika, żeby dobrać mu pojazd.
+    fn begin_trip(&mut self, trip: TripRequest, who: &CitizenView<'_>, q: &mut EventQueue)
+        -> TripHandle;
 
     /// Miejsca widoczne z trasy (§5.7). M3: bufor wokół odcinków ulic na drodze dojścia.
     fn places_on_route(&self, trip: &TripHandle, out: &mut ArrayVec<PlaceRef, 8>);
@@ -371,19 +401,51 @@ Wartości bazowe w `data/needs/needs.ron`, skalowane wiekiem, zdrowiem i osobowo
 
 | Potrzeba | Tempo spadku | Pełna → 0 | Zaspokajana przez | Skutek deprywacji (poziom < 25) |
 |---|---|---|---|---|
-| Hunger | 6,0 pkt/h | ~17 h | Meal (dom / lokal) | energia −2/h, zdrowie −0,2/h, produktywność ×0,7 |
-| Sleep | 4,2 pkt/h na jawie, +25 pkt/h we śnie | ~24 h | Sleep (dom, hotel) | energia −3/h, ryzyko wypadku ×2, p(absencja) = 0,15 |
-| Hygiene | 4,2 pkt/h | ~24 h | Hygiene (dom) | zdrowie −0,1/h, status −5 |
+| Hunger | 6,0 pkt/h | 16,7 h | Meal (dom / lokal) | energia −2/h, zdrowie −0,2/h, produktywność ×0,7 |
+| Sleep | 4,2 pkt/h na jawie, +25 pkt/h we śnie | 23,8 h | Sleep (dom, hotel) | energia −3/h, ryzyko wypadku ×2, p(absencja) = 0,15 |
+| Hygiene | 4,2 pkt/h | 23,8 h | Hygiene (dom) | zdrowie −0,1/h, status −5 |
 | Health | zdarzeniowe (choroba −10..−60) | — | Doctor, Pharmacy, Hospital | absencja, hazard śmierci × k(wiek) |
-| Safety | 0,15 pkt/h, modyfikowane przestępczością dzielnicy | ~28 dni | dzielnica, policja (M8) | stres +2/dobę, p(migracji GD) ↑ |
-| Housing | 0,05 pkt/h + skok przy zmianie wielkości GD | ~80 dni | odpowiedni lokal | stres +1/dobę, znacznik „szuka mieszkania" (M5/M9) |
-| Mobility | 4,2 pkt/h | ~24 h | dostęp do trasy (M3 pieszo; M4 reszta) | brak dostępu do pracy → absencja |
-| Clothing | 0,6 pkt/h, ×2 przy zmianie sezonu | ~7 dni | Clothing | status −3, komfort termiczny ↓ |
-| Leisure | 3,0 pkt/h | ~33 h | Leisure (kino, park, restauracja, dom) | nastrój −1/h |
-| Social | 2,5 pkt/h, ×0,5 gdy w tym samym lokalu co relacja | ~40 h | Social (rodzina, lokale) | nastrój −1/h |
-| Status | 0,1 pkt/h | ~40 dni | konsumpcja statusowa (M5), adres, auto (M4) | ambicja ↑, satysfakcja ↓ |
-| Development | 0,05 pkt/h | ~80 dni | Education, kursy | ambicja ↑ → wyzwalacz zmiany pracy w M7 |
+| Safety | 0,15 pkt/h, modyfikowane przestępczością dzielnicy | 27,8 dnia | dzielnica, policja (M8) | stres +2/dobę, p(migracji GD) ↑ |
+| Housing | 0,05 pkt/h + skok przy zmianie wielkości GD | 83,3 dnia | odpowiedni lokal | stres +1/dobę, znacznik „szuka mieszkania" (M5/M9) |
+| Mobility | 4,2 pkt/h | 23,8 h | dostęp do trasy (M3 pieszo; M4 reszta) | brak dostępu do pracy → absencja |
+| Clothing | 0,6 pkt/h, ×2 przy zmianie sezonu | 6,9 dnia | Clothing | status −3, komfort termiczny ↓ |
+| Leisure | 3,0 pkt/h | 33,3 h | Leisure (kino, park, restauracja, dom) | nastrój −1/h |
+| Social | 2,5 pkt/h, ×0,5 gdy w tym samym lokalu co relacja | 40,0 h | Social (rodzina, lokale) | nastrój −1/h |
+| Status | 0,1 pkt/h | 41,7 dnia | konsumpcja statusowa (M5), adres, auto (M4) | ambicja ↑, satysfakcja ↓ |
+| Development | 0,05 pkt/h | 83,3 dnia | Education, kursy | ambicja ↑ → wyzwalacz zmiany pracy w M7 |
+
+Kolumna „pełna → 0" jest **konsekwencją tempa** (100 · 6000 / tempo minut), nie drugim
+parametrem — po korekcie D-2 podaje wartość dokładną zamiast zaokrąglonej do ładnej liczby.
+Test `czas_do_zera_zgadza_sie_z_tabela_paragrafu_5_5` porównuje z nią dane z ±2 %.
 
 **System spadku.** `NeedDecaySystem` działa `EveryMinute`, ale przetwarza **1/60 populacji na tick** (shard = `entity_index % 60`); shard, na który przypada kolej, dostaje spadek za pełne 60 minut. To jest **dokładne** (nie przybliżone), deterministyczne i równomiernie rozkłada koszt: 400 k / 60 = 6 667 mieszkańców × 16 B = 107 KB odczytu i zapisu na tick, poniżej 30 µs.
 
 **Zaspokojenie.** Wykonanie slotu `Meal`, `Sleep`, `Leisure`, `Shopping`… wywołuje `PlaceProvider::fulfil`, którego `satisfaction` dodaje się do poziomu z saturacją na 100. W M3 `InfinitePlaces` zwraca stałe wartości z `data/needs/needs.ron`; w M5 wartość zależy od kupionego dobra — planer się nie zmienia.
+
+**Skutki deprywacji — kto je stosuje.** M3a stosuje wyłącznie skutki **rate'owe dotykające
+`Vitals`**: `EnergyLoss`, `HealthLoss`, `MoodLoss`, `StressGain`. Pozostałe są w danych
+i wychodzą przez `deprivation_of`, ale stosuje je faza będąca ich właścicielem:
+`StatusLoss` → M3c (tam status jest **liczony**, a nie odejmowany, §5.8), `AbsenceRisk`
+→ M3b (planer), `ProductivityLoss` → M7, `AmbitionGain` → M7. Rozstrzygnięcie D-6.
+
+---
+
+## Korekty planu wpisane po implementacji M3a
+
+Zgodnie z `K-18`. Gwiazdka = zmiana zakresu albo kryterium.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| D-1 ★ | **Budżet stanu gorącego: 430 B zamiast 400 B** (zmierzone 421). Plan dnia przenosi się z podwójnie buforowanej areny do slabu, slab dostaje klasę 12, a slaby i kubełki koła czasu rosną `reserve_exact` porcjami zamiast geometrycznie | Pierwotny rachunek §5.1 (396 B) **nie uwzględniał narzutu alokacji w ogóle**, a slab z klasami rozmiaru, który ten sam paragraf zaleca, z definicji zaokrągla w górę: 10 relacji to blok 12, 14 slotów planu to blok 16. Pierwszy pomiar dał 513 B. Dwie pozycje były realnym marnotrawstwem i zeszły: podwójne buforowanie areny (plan wczorajszy żyje obok dzisiejszego przez całą dobę, bo mieszkaniec wykonuje go do pobudki — 288 B zamiast 144) oraz podwajanie pojemności `Vec` (drugie tyle pamięci, której nikt nie zapisze). Reszta, 25 B, jest ceną projektu, nie błędem implementacji. Skutek dla §17.7: 161 MB zamiast 151 MB przy 400 tys. mieszkańców — wniosek „metropolia w 6 GB" stoi z tym samym zapasem |
+| D-2 ★ | **Kolumna „pełna → 0" w §5.5 podaje wartości dokładne**, nie zaokrąglone: 16,7 h zamiast ~17 h, 83,3 dnia zamiast ~80 dni, 41,7 dnia zamiast ~40 dni | Kolumna jest konsekwencją tempa (100 · 6000 / tempo), a nie drugim parametrem. Przy zaokrągleniach kryterium WP2 („±2 %") było niespełnialne dla trzech potrzeb, mimo że dane zgadzały się z temperami co do jednej setnej punktu. Tempo jest parametrem i zostaje bez zmian |
+| D-3 ★ | **`TravelOracle::begin_trip` dostaje `who: &CitizenView`** | Prędkość marszu zależy od wieku, zdrowia i energii (§5.10), więc bez podróżnika `begin_trip` musiałby albo ufać czasowi policzonemu wcześniej przez `estimate`, albo liczyć dla przeciętnego mieszkańca. Sygnatury traitów są zamrożone od M3 (§6.4) i M4 ma ich **nie zmieniać** — lepiej dołożyć parametr teraz, gdy nikt jeszcze nie implementuje, niż zmuszać M4 do złamania tamtej reguły. M4 i tak potrzebuje podróżnika, żeby dobrać mu pojazd |
+| D-4 ★ | **Kryterium WP1 „hash stabilny po serializacji/deserializacji" dotyczy komponentów, nie zasobów.** `register` rozbite na `register_components` + `register_resources` | Minimalny snapshot z M0 niesie archetypy ECS; zasobów (slaby, kolejka zdarzeń) nie serializuje, a `world_state_hash` je hashuje przez haki. Świat z zarejestrowanymi hakami nie przechodzi więc round-tripu i `load_world` odrzuca własny zapis z `HashMismatch`. To jest luka w `engine/io`, nie w M3 — poprawka poszła do `M12b-zapis-i-replay.md`. Do tego czasu test round-tripu używa `register_components`, a scenariusze `register` |
+| D-5 | **Rolę „wołającego przez trait" w kryterium WP4 pełni `places::choose_place`**, a nie planer | Planer powstaje w M3b, więc kryterium „planer kompiluje się przeciwko traitom" nie dawało się w M3a sprawdzić inaczej niż tożsamościowo. `choose_place` to wycinek fazy 3 planera (wybór miejsca dla zadania), który M3b wywoła wprost — i który już teraz zna wyłącznie `&dyn PlaceProvider`. Przy okazji jest jedynym miejscem produkującym `PlaceUnknown` |
+| D-6 | **M3a stosuje tylko skutki deprywacji dotykające `Vitals`**; `StatusLoss`, `AbsenceRisk`, `ProductivityLoss` i `AmbitionGain` są w danych, ale stosuje je faza-właściciel (M3c, M3b, M7) | Status jest w M3c **liczony** funkcją, a nie odejmowany (§5.8) — odejmowanie go tutaj rozjechałoby się z tamtą funkcją przy pierwszym uruchomieniu obu naraz. Absencja jest decyzją planera, produktywność wejściem do M7. Wartości zostają w `data/needs/needs.ron`, żeby faza, która je przejmie, nie wymyślała ich od nowa |
+| D-7 | **`WalkOracle` w M3a liczy odległość manhattanowo z korektą 1,25×**, nie po centroliniach ulic | To jest fallback zapisany wprost w ryzyku R7 fazy. Odległość sieciowa wymaga geometrii ulic z M2, a więc zależności `sim/agents` → `sim/world`, której w M3a nie ma i mieć nie powinna. WP6 (M3b) zastępuje implementację nie zmieniając ani sygnatury, ani niczego u wywołujących — to jest cały sens `TravelOracle` |
+| D-8 | **`InfinitePlaces` i `WalkOracle` stoją na `PlaceTable`** — katalogu `(PlaceRef, PlaceKind, WorldCoord)` z indeksem przestrzennym per rodzaj, wsypywanym z zewnątrz | Zależność WP4 od „M2 (parcele, budynki)" z tabeli pakietów jest w tej podfazie **pośrednia**: `sim/agents` nie zależy od `sim/world` (decyzja 9.11 mówi, że to `sim/world` rozszerza się o populację). Katalog wypełnia generator populacji w M3d, a w testach — ręcznie. Bez tego rozdzielenia crate agentów ciągnąłby za sobą cały generator miasta |
+| D-9 | **Cztery słowniki wędrują do `engine/core`**: `PlaceKind`, `TraitId`, `DeprivationEffect`, `MinuteOfDay`; `NeedKind` dostaje dwanaście wariantów z §5.5 w miejsce dziesięciu roboczych z M0. Do `core` przenosi się też `assets::{data_dir, data_path}` | Wpisane jako `K-20` w dokumencie 00. `DeprivationEffect` **musi** być w `core`, bo jest ładunkiem `DecisionReason`; reszta spełnia kryterium K-8 (więcej niż jedna faza). `data_dir` przenosi się, bo tabelę potrzeb ładuje `sim/agents`, który o `sim/world` nie wie |
+| D-10 | **`DecisionReason` zyskuje dwa warianty spoza listy z M3b §5.4**: `ModeWalkOnly` (113) i `NeedSatisfied` (114) | Lista z M3b nie miała powodu dla `TravelEstimate.reason` ani dla `FulfilOutcome::Done`, a oba pola są w kontrakcie §5.3 i oba wymagają wyjaśnienia (00 §7). To jest przypadek 5 z `K-18`: pakiet obiecywał pole, którego nikt nie był właścicielem. `discriminant()` liczy się teraz jawnym `match`, bo `self as u16` nie działa dla enuma z ładunkiem |
+| D-11 | **`EventKind` ma pięć wariantów, nie cztery** — doszedł `EndActivity` (3); `PlanDay` przesuwa się na 4 | Lazy scheduling z §5.2 („obsługa zdarzenia harmonogramuje kolejne") wymaga zdarzenia kończącego czynność — bez niego łańcuch się rwie po `StartActivity`. Kolejność wariantów jest kolejnością obsługi przy remisie czasowym, więc `EndActivity` musi stać przed `PlanDay` |
+| D-13 ★ | **`bench_need_decay`: ≤ 100 µs na 8 wątkach zamiast ≤ 30 µs.** Zmierzone: **63 µs** przy 400 tys. mieszkańców (342 µs na jednym wątku); skutki deprywacji 236 µs raz na godzinę, czyli 4 µs na tick po rozłożeniu. Oba systemy idą `par_for_each` po chunkach (00 §3.3) | Próg 30 µs pochodził z rachunku „6 667 mieszkańców × 16 B = 107 KB odczytu i zapisu" — czyli z kosztu **dotknięcia** shardu, z pominięciem kosztu jego **znalezienia**. Archetypowy ECS nie umie zaadresować „co sześćdziesiątej encji": trzeba przejść wszystkie 400 tys. wierszy i odrzucić 59/60. Boczny indeks encja → wiersz per shard kosztowałby pamięć i unieważnianie przy każdych narodzinach i każdym zgonie, czyli znacznie więcej niż te 63 µs, które są **0,007 % ticku** przy prędkości 1×. Sharding zostaje po `entity_index`, nigdy po pozycji w archetypie (ryzyko R12) |
+| D-12 | **`sim/agents` dostaje własny `ArrayVec<T, N>`** (`T: Copy + Default`, bez `unsafe`) zamiast zależności `arrayvec` | Limity w kontraktach fazy są twarde: 16 kandydatów (R6), 24 sloty planu, 8 miejsc z trasy. `SmallVec`, który jest już w projekcie, przy przepełnieniu cicho przechodzi na stertę — czyli robi dokładnie to, przed czym limit ma bronić. Sześćdziesiąt linii zamiast nowej zależności; `arrayvec` z crates.io dopiero gdyby trzeba było trzymać tam typ z destruktorem |

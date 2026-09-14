@@ -80,6 +80,23 @@ pub enum StreamId {
     /// Remisy przy sadzeniu zakładów i placówek handlu (M2 §5.8, M2e).
     SitePlacement = 133,
     // 134–139 zarezerwowane dla M2.
+
+    // ── M3: 140..=159 ── ludzie i dzień; wartości imiennie z M3 §6.1 i niezmienne.
+    /// Planer dnia i przeplanowania — klucz `(citizen_idx, day * 1440 + minute)` (M3b §5.4).
+    DayPlan = 140,
+    /// Hazardy demograficzne: narodziny, choroba, zgon, dobór partnera (M3c §5.6).
+    Demography = 141,
+    /// Propagacja plotki po grafie relacji (M3c §5.8).
+    Gossip = 142,
+    /// Generacja populacji — Etap 8 (M3d §5.9).
+    PopGen = 143,
+    /// Losowanie cech osobowości przy tworzeniu mieszkańca (M3d §5.9).
+    PersonalityGen = 144,
+    /// Napływ i odpływ gospodarstw domowych (M3c §5.7).
+    Migration = 145,
+    /// Zawiązywanie i wygasanie relacji (M3c §5.8).
+    Relations = 146,
+    // 147–159 zarezerwowane dla M3; rezerwa dalsza 1140–1159 (K-4).
 }
 
 /// Encja zastępcza dla losowania bez encji (zdarzenie globalne, generator świata).
@@ -297,5 +314,7 @@ mod tests {
         assert_eq!(StreamId::Gates as u16, 120);
         assert_eq!(StreamId::RoadsL as u16, 121);
         assert_eq!(StreamId::Parcels as u16, 128);
+        assert_eq!(StreamId::DayPlan as u16, 140);
+        assert_eq!(StreamId::Relations as u16, 146);
     }
 }

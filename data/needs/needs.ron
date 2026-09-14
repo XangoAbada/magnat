@@ -1,0 +1,164 @@
+// Potrzeby mieszkańca — tempa spadku, progi i skutki deprywacji (M3a §5.5, PRD §5.3).
+//
+// Kolejność wpisów w tym pliku jest **dowolna**: klucz musi odpowiadać nazwie wariantu
+// `NeedKind` z `engine/core`, a ładowanie ustawia je w kolejności słownika. Brak
+// któregokolwiek z dwunastu to błąd ładowania, nie ciche zero — potrzeba, która nie
+// spada, wygląda w symulacji jak zaspokojona na zawsze.
+//
+// `decay_centi_per_hour` to setne punktu na godzinę. Czas „pełna → 0" wynika z niego
+// (100 · 6000 / tempo minut) i jest **konsekwencją**, nie drugim parametrem — kolumna
+// w §5.5 podaje go zaokrąglonego.
+//
+// `magnitude` czyta się dwojako (patrz `NeedEffect`): dla skutków rate'owych to setne
+// punktu na godzinę, dla progowych — promile dla fazy, która jest ich właścicielem.
+// Pierwszy skutek na liście jest tym, który mieszkaniec czuje najmocniej: karta
+// inspekcji pokazuje jeden wiersz na potrzebę.
+//
+// `places` puste = potrzeby nie zaspokaja wizyta. Bezpieczeństwo zależy od dzielnicy
+// (M8), mobilność od dostępu do trasy (M4), mieszkanie od lokalu (M5/M9), status
+// od konsumpcji (M5). To nie jest luka do uzupełnienia — to granica fazy.
+(
+    schema_version: 1,
+    needs: [
+        (
+            key: "Hunger",
+            visit_min: 30,
+            decay_centi_per_hour: 600,   // 6,0 pkt/h → pełna w ~16,7 h
+            critical: 25,
+            satisfaction: 40,
+            places: [Home, Eatery, Grocery],
+            effects: [
+                (effect: EnergyLoss, magnitude: 200),        // −2 pkt/h
+                (effect: HealthLoss, magnitude: 20),         // −0,2 pkt/h
+                (effect: ProductivityLoss, magnitude: 300),  // ×0,7 wydajności (M7)
+            ],
+        ),
+        (
+            key: "Sleep",
+            visit_min: 480,
+            decay_centi_per_hour: 420,   // 4,2 pkt/h na jawie → ~23,8 h
+            critical: 25,
+            satisfaction: 60,
+            places: [Home],
+            effects: [
+                (effect: EnergyLoss, magnitude: 300),
+                (effect: AccidentRisk, magnitude: 1000),     // ×2 ryzyka (M4, M8)
+                (effect: AbsenceRisk, magnitude: 150),       // p = 0,15 (M3b)
+            ],
+        ),
+        (
+            key: "Hygiene",
+            visit_min: 20,
+            decay_centi_per_hour: 420,
+            critical: 25,
+            satisfaction: 35,
+            places: [Home],
+            effects: [
+                (effect: HealthLoss, magnitude: 10),
+                (effect: StatusLoss, magnitude: 500),        // −5 pkt statusu (M3c)
+            ],
+        ),
+        (
+            key: "Health",
+            visit_min: 45,
+            // Zdarzeniowa: nie spada z upływu czasu, tylko skokiem przy chorobie
+            // (−10..−60, M3c). Tempo 0 jest tu treścią, nie brakiem danych.
+            decay_centi_per_hour: 0,
+            critical: 30,
+            satisfaction: 50,
+            places: [Doctor, Pharmacy, Hospital],
+            effects: [
+                (effect: AbsenceRisk, magnitude: 1000),
+                (effect: HealthLoss, magnitude: 5),
+            ],
+        ),
+        (
+            key: "Safety",
+            visit_min: 15,
+            decay_centi_per_hour: 15,    // 0,15 pkt/h, modyfikowane przestępczością (M8)
+            critical: 25,
+            satisfaction: 0,
+            places: [],
+            effects: [
+                (effect: StressGain, magnitude: 8),          // +2 pkt/dobę
+            ],
+        ),
+        (
+            key: "Housing",
+            visit_min: 15,
+            decay_centi_per_hour: 5,     // 0,05 pkt/h + skok przy zmianie wielkości GD
+            critical: 25,
+            satisfaction: 0,
+            places: [],
+            effects: [
+                (effect: StressGain, magnitude: 4),          // +1 pkt/dobę
+            ],
+        ),
+        (
+            key: "Mobility",
+            visit_min: 15,
+            decay_centi_per_hour: 420,
+            critical: 25,
+            satisfaction: 0,
+            places: [],
+            effects: [
+                (effect: AbsenceRisk, magnitude: 1000),      // brak dostępu do pracy
+            ],
+        ),
+        (
+            key: "Clothing",
+            visit_min: 40,
+            decay_centi_per_hour: 60,    // 0,6 pkt/h, ×2 przy zmianie sezonu (M8)
+            critical: 30,
+            satisfaction: 45,
+            places: [Clothing],
+            effects: [
+                (effect: StatusLoss, magnitude: 300),
+            ],
+        ),
+        (
+            key: "Leisure",
+            visit_min: 90,
+            decay_centi_per_hour: 300,
+            critical: 25,
+            satisfaction: 40,
+            places: [Leisure, Home],
+            effects: [
+                (effect: MoodLoss, magnitude: 100),          // −1 pkt/h
+            ],
+        ),
+        (
+            key: "Social",
+            visit_min: 90,
+            decay_centi_per_hour: 250,   // ×0,5 gdy w tym samym lokalu co relacja (M3c)
+            critical: 25,
+            satisfaction: 40,
+            places: [Social, Home],
+            effects: [
+                (effect: MoodLoss, magnitude: 100),
+            ],
+        ),
+        (
+            key: "Status",
+            visit_min: 30,
+            decay_centi_per_hour: 10,
+            critical: 25,
+            satisfaction: 0,
+            places: [],
+            effects: [
+                (effect: AmbitionGain, magnitude: 100),      // ambicja ↑, satysfakcja ↓
+            ],
+        ),
+        (
+            key: "Development",
+            visit_min: 120,
+            decay_centi_per_hour: 5,
+            critical: 25,
+            satisfaction: 30,
+            places: [Education],
+            effects: [
+                (effect: AmbitionGain, magnitude: 100),      // wyzwalacz zmiany pracy (M7)
+            ],
+        ),
+    ],
+)

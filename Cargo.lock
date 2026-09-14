@@ -1193,6 +1193,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "magnat-agents"
+version = "0.1.0"
+dependencies = [
+ "criterion",
+ "magnat-core",
+ "magnat-ecs",
+ "magnat-io",
+ "magnat-spatial",
+ "ron",
+ "serde",
+]
+
+[[package]]
 name = "magnat-core"
 version = "0.1.0"
 dependencies = [
@@ -1231,6 +1244,7 @@ name = "magnat-headless"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "magnat-agents",
  "magnat-core",
  "magnat-devtools",
  "magnat-ecs",
