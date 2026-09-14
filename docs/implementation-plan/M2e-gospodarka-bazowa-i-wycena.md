@@ -1,18 +1,18 @@
 # M2e — Gospodarka bazowa i wycena
 
-Podfaza 5 z 5 fazy **M2 — Miasto statyczne** (`M2-miasto-statyczne.md`).
+Podfaza 6 z 6 fazy **M2 — Miasto statyczne** (`M2-miasto-statyczne.md`).
 Dokument nadrzędny: `00-konwencje-i-kontrakty.md`.
 Zakres fazy (§2), kontrakty międzyfazowe (§6), ryzyka (§8) i decyzje otwarte (§9)
 zostają w dokumencie fazy — tu jest wyłącznie to, co robisz w tej porcji.
 
 | | |
 |---|---|
-| **Wejście** | M2d (budynki), M2c (dzielnice), M2a (pola skalarne). |
+| **Wejście** | M2f (katalog gramatyk domknięty, T13 zielony), M2d (budynki), M2c (dzielnice), M2a (pola skalarne). |
 | **Pakiety robocze** | WP13, WP14, **WP15b** (`pass_2` wyceny — `pass_1` przeniesiony do M2d jako WP15a, korekta D1), WP16, WP17 |
 | **Projekt techniczny** | §5.7, §5.8 |
 | **Wynik do pokazania** | Pełny artefakt fazy z §1 dokumentu fazy: `GenerationReport`, nakładka wartości gruntu z rozbiciem na czynniki, zielone `--test consistency`. |
 | **Kryterium zamknięcia** | Kryteria WP13, WP14, WP15b, WP16, WP17 oraz bramki 1–7 fazy M2 w `00-postep.md`. |
-| **Poprzednia / następna** | `M2d-zabudowa.md` · — (ostatnia w fazie) |
+| **Poprzednia / następna** | `M2f-roznorodnosc-zabudowy.md` · — (ostatnia w fazie) |
 
 Etap 7 i domknięcie fazy: archetypy zakładów, obsada budynków firmami-danymi, algorytm domknięcia łańcuchów produktowych, trzy przebiegi wyceny gruntu, nakładka UI i testy spójności Etapu 10.
 
@@ -260,3 +260,4 @@ dokumentu `M2d-zabudowa.md` (numeracja `E-n`) — tu tylko to, co dotyczy tej po
 | F6 ★ | **T10 (bilans mieszkań i stanowisk) jest zadaniem kalibracyjnym, nie sprawdzającym.** Zmierzone po M2d: metropolia 117 557 mieszkań × 2,4 = 282 tys. wobec `target_pop` 400 tys.; miasto 8 km 40 810 × 2,4 = 98 tys. wobec 120 tys. Stanowisk jest **za dużo**: 263,6 tys. wobec ~212 tys. z budżetu | Rozjazd idzie w ślad za liczbą parcel (18,3 tys. wobec ~42 tys.), którą M2c zgłosił jako rozjazd gęstości, i za odpadem podziału pasowego (3 094 działki o froncie < 6 m, korekta E7). Dźwignie są trzy i wszystkie leżą w M2e: gęstość podziału na parcele, `max_depth_m` w `massing` gramatyk oraz `m2_per_workplace` ról. Kryterium T10 („Σ mieszkań × wielkość GD ∈ [0,97; 1,08] × `target_pop`") jest **wynikiem kalibracji WP17**, nie jej założeniem |
 | F7 | Karta inspekcji WP16 pokazuje też budynek: `BuildingSet.index` (`CsrGrid<BuildingId>`) odpowiada na „co jest w tym prostokącie", a `Building.{floors, floor_heights_dm, units, condition, aabb}` i `Unit.{kind, area_m2, rent_hint}` są gotowe | Rusztowanie z D10 (trafienie w parcelę) wystarczy do parceli; budynek trzeba dołożyć, ale nie trzeba go szukać — `Parcel.building` wskazuje go wprost |
 | F8 | Komendy voxelowe M2e (bryły zakładów, jeśli WP13 je dołoży) idą do tej samej `EditQueue` i tego samego zestawu źródeł co M2d (`city::voxels::SRC_*`) | Kolejność stosowania edycji rozstrzyga **źródło**, bo jest pierwszym kluczem porządku kanonicznego (korekta E19). Nowe źródło wstawia się w tę numerację, a nie obok niej |
+| F9 ★ | **WP17 zamyka 13 testów, nie 12** — T13 (różnorodność zabudowy) dochodzi z M2f. Kalibracja T10 startuje z katalogu gramatyk **po** M2f, nie po M2d | T13 zamyka się w M2f jako kryterium tamtej podfazy, ale wchodzi do §7 fazy, więc `--test consistency` i macierz 32 ziaren × 4 profile muszą go nieść razem z resztą. Druga połowa jest ważniejsza: trzy dźwignie T10 z F6 to gęstość podziału na parcele, `massing.max_depth_m` w gramatykach i `m2_per_workplace` ról — a M2f rusza drugą z nich w ~20 nowych plikach. Kalibracja wykonana przed M2f byłaby kalibracją do katalogu, którego nie będzie |

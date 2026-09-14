@@ -112,3 +112,22 @@ pub enum ScriptHook {
 Kolejność wykonania hooków: sortowana po `(HookKind, load_order, mod_id)` — nigdy po kolejności zwróconej przez system plików.
 
 **Menedżer modów w grze:** lista zainstalowanych z ich statusem determinizmu, rozwiązywanie zależności i konfliktów, przeciąganie kolejności ładowania (zapisywanej jawnie, nie wyliczanej), przycisk „sprawdź determinizm" uruchamiający walidator, ostrzeżenie przed wczytaniem zapisu z inną konfiguracją. Warsztat online — poza zakresem M12 (to infrastruktura, nie gra).
+---
+
+## Zmiany wpisane po M2d
+
+Zgodnie z `K-18`: praca nad M2d/M2f pokazała, że ten dokument jest w trzech miejscach
+niedopowiedziany wobec katalogu, który już istnieje. Gwiazdką oznaczone te, które
+zmieniają **zakres albo kryterium**.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| G1 ★ | **`data/grammar/` jest katalogiem moddowalnym i wchodzi do `ModManifest.data_dirs` imiennie.** `GrammarSet::load_dir(&Path, &MaterialRegistry)` dostaje wariant scalający katalog bazowy z katalogami modów w **deterministycznej kolejności ładowania** — ta sama, którą manifest rozstrzyga dla hooków (`load_order`, potem `mod_id`), nigdy kolejność z systemu plików | §5.7 wymienia `data_dirs` jako mechanizm, ale nie mówi, które katalogi realnie coś przyjmują. Gramatyka budynku jest do tego najlepszym kandydatem w całym `data/`: to czyste dane z walidatorem, zamkniętym zbiorem operatorów i bez dostępu do stanu symulacji (`If` czyta wyłącznie parametry wejściowe budynku), więc mod dokładający budynek nie ma jak złamać determinizmu. Dziś `load_dir` bierze **jedną** ścieżkę i jest to jedyne, co dzieli ten katalog od moddowalności. Ważne dla gracza: różnorodność zabudowy przestaje być wtedy ograniczona zawartością repo — a to jest najtańszy rodzaj modów, jaki ta gra może mieć |
+| G2 ★ | **Walidator gramatyki (`grammar::validate`) jest częścią bramki instalacji moda**, obok walidatora determinizmu z WP12. Mod z nieznanym materiałem, cyklem `Ref`, przekroczonym budżetem węzłów albo złym `schema_version` jest odrzucany przy instalacji, nie przy generacji miasta | Walidator istnieje od M2d i odrzuca dokładnie te cztery klasy błędów. Bez podpięcia go do menedżera modów błąd w pliku moda wyjdzie dopiero przy `generate_city`, czyli po kliknięciu „nowa gra" — a wtedy nie wiadomo, który z zainstalowanych modów go wniósł. Walidator jest deterministyczny i tani (dwanaście plików ładuje się w czasie nieodróżnialnym od zera), więc nie ma powodu go odkładać |
+| G3 | `ModManifest.data_schema` obejmuje `GRAMMAR_SCHEMA_VERSION` (dziś `1`), a nie tylko schemat towarów i receptur | `data_schema: u32` jest w manifeście jedną liczbą, a `data/` ma kilka niezależnych schematów. Gramatyka ma własną stałą w `sim/world/src/city/grammar.rs` i własny błąd `GrammarError::SchemaVersion` — jeśli manifest ma odpowiadać na pytanie „czy ten mod pasuje do tej wersji gry", musi ją widzieć |
+| G4 | `example-mod/` z kryterium WP11 dokłada **także jedną gramatykę budynku** — piąty artefakt obok zdarzenia, polityki AI, typu zakładu i panelu UI | Przykładowy mod jest dokumentacją wykonywalną: modder kopiuje to, co w nim widzi. Nowy budynek jest najczęstszym pierwszym modem w grze miastotwórczej i jednocześnie jedynym, który nie wymaga ani linii Lua — pokazanie tego w `example-mod/` jest tańsze niż rozdział w dokumentacji. Nie zmienia kryterium „cztery klasy hooków z §18.3 PRD", bo gramatyka nie jest hookiem — jest danymi |
+
+**Czego tu celowo nie ma:** operatorów gramatyki dostępnych dla modów jako skrypt.
+Zbiór operatorów jest zamknięty od M2 (ryzyko R4) i modding tego nie otwiera — mod
+dokłada **pliki** w istniejącym języku, nie nowe słowa w języku. Gdyby kiedyś miał je
+dokładać, jest na to `ScriptHook`, a nie rozszerzalna gramatyka.

@@ -103,7 +103,7 @@ M4 wyprowadza z tego: geometrię pasów, skrzyżowania, kierunki ruchu, `RoadGra
 Kolejność jest istotna: etapy generacji tworzą łańcuch zależności zamknięty **trzema przebiegami
 wyceny** (patrz WP15a/WP15b i sekcja 5.7).
 
-Faza jest rozbita na **5 podfaz**. Podfaza to porcja, którą da się zacząć i zamknąć
+Faza jest rozbita na **6 podfaz**. Podfaza to porcja, którą da się zacząć i zamknąć
 bez trzymania w głowie całej fazy: własny zestaw WP, własny sprawdzalny wynik i własny
 wycinek projektu technicznego. Opis pakietów i sekcje §5 mieszkają teraz w dokumentach
 podfaz — poniższa tabela mówi, gdzie co jest. Bramki 1–7 z `00-postep.md` zamykają się
@@ -115,10 +115,18 @@ dopiero po ostatniej podfazie; podfaza zamyka się własnym kryterium ze swojego
 | **M2b — Szkielet transportu** | WP3, WP4, WP5, WP6 | 5.2 | `headless preview --field roads` → PNG z bramami, arteriami, strukturami inżynierskimi i konturami kwartałów. | `M2b-szkielet-transportu.md` |
 | **M2c — Strefy, parcele, dzielnice** | WP7, WP5b, WP8, WP9 | 5.3, 5.4, 5.5 | Podgląd: mapa stref i parcel z granicami dzielnic; kliknięcie parceli daje strefę, właściciela, frontę drogową i dzielnicę. | `M2c-strefy-parcele-dzielnice.md` |
 | **M2d — Zabudowa** | WP10, WP15a, WP11, WP12, WP12b | 5.6, 5.6b, 5.7 (`pass_1`) | **Miasto w kliencie graficznym `magnat`**: zabudowa z gramatyki, nawierzchnia jezdni, nasypy i mosty; budynki z piętrami, lokalami i stanowiskami pracy. | `M2d-zabudowa.md` |
+| **M2f — Różnorodność zabudowy** | WP18, WP19, WP20 | 5.6c | Przelot nad dzielnicą, w której żadne dwa sąsiadujące budynki nie są tym samym budynkiem; macierz pokrycia (strefa × epoka × styl) bez luk. | `M2f-roznorodnosc-zabudowy.md` |
 | **M2e — Gospodarka bazowa i wycena** | WP13, WP14, WP15b, WP16, WP17 | 5.7 (`pass_2`), 5.8 | Pełny artefakt fazy z §1 dokumentu fazy: `GenerationReport`, nakładka wartości gruntu z rozbiciem na czynniki, zielone `--test consistency`. | `M2e-gospodarka-bazowa-i-wycena.md` |
 
-Ścieżka krytyczna: WP1 → WP2 → WP4 → WP6 → WP7 → WP9 → WP8 → WP15a → WP11 → WP12 → WP14 → WP15b → WP17.
-WP3, WP9, WP10, WP13, WP16 można prowadzić równolegle.
+**Kolejność wykonania to `M2a → M2b → M2c → M2d → M2f → M2e`** — litera zapisuje kolejność
+powstania dokumentu, wiersz w tabeli kolejność pracy. M2e zostaje ostatnia i to ona zamyka
+bramki 1–7. Uzasadnienie w korekcie G2 dokumentu M2f; w skrócie: T10 jest zadaniem
+kalibracyjnym M2e (korekta F6), a jedną z jego dźwigni jest `massing` gramatyk — katalog
+rozszerzony po kalibracji znaczy kalibrację drugi raz.
+
+Ścieżka krytyczna: WP1 → WP2 → WP4 → WP6 → WP7 → WP9 → WP8 → WP15a → WP11 → WP12 → WP18 →
+WP19 → WP14 → WP15b → WP17.
+WP3, WP9, WP10, WP13, WP16, WP20 można prowadzić równolegle.
 
 **Korekta po M2b:** kolej towarowa (druga połowa WP5) przenosi się do M2c jako **WP5b**,
 bo jej trasy prowadzą do klastrów stref, a strefy powstają dopiero w WP7. Ścieżka krytyczna
@@ -163,6 +171,7 @@ odesłania w tekście („patrz §5.4") nadal wskazują tę samą sekcję — zm
 | 5.4 | Etap 5 — sieć lokalna i parcele | `M2c-strefy-parcele-dzielnice.md` |
 | 5.5 | §4.3 — dzielnice i hierarchia | `M2c-strefy-parcele-dzielnice.md` |
 | 5.6 | Etap 6 — gramatyka architektury voxelowej | `M2d-zabudowa.md` |
+| 5.6c | Etap 6 — detal bryły, katalog gramatyk, miara różnorodności | `M2f-roznorodnosc-zabudowy.md` |
 | 5.7 | Statyczna wycena gruntu (§6.7, część statyczna) | `M2e-gospodarka-bazowa-i-wycena.md` |
 | 5.8 | Etap 7 — gospodarka bazowa (firmy jako obiekty danych) | `M2e-gospodarka-bazowa-i-wycena.md` |
 
@@ -318,6 +327,7 @@ ani czasu przejazdu, bo to domena M4. Dopóki M4 nie istnieje, M3 może użyć
 | T10 | Bilans lokali i stanowisk | Σ mieszkań × wielkość GD epoki ∈ [0,97; 1,08] × `target_pop`; Σ stanowisk ∈ [0,95; 1,12] × oczekiwanych etatów |
 | T11 | Domknięcie łańcuchów | `missing == []`; ∀g: `0,85 ≤ supply/demand ≤ 1,30` |
 | T12 | Sanity wyceny | `avg_land_value(OldTown) > avg_land_value(Suburb)`; parcela sąsiadująca z `IndustryHeavy` poniżej mediany dzielnicy; brak wartości ≤ 0 |
+| T13 | Różnorodność zabudowy (M2f) | udział budynków o **identycznej** `BuildingSignature` wśród budynków w promieniu 60 m < 15 %; entropia Shannona rozkładu `GrammarId` w dzielnicy mieszkaniowej o ≥ 100 budynkach ≥ 1,8 bita; udział gramatyki awaryjnej < 0,5 %, udział doboru z rozluźnionym filtrem < 5 % |
 
 ### Determinizm (dok. 00 §3.6)
 
@@ -447,6 +457,8 @@ komponenty jest zachowane.
 |---|---|---|---|---|
 | 3 | Moment, w którym wartość gruntu przestaje być statyczna (M5 transakcje / M10 pełny model) | WP15b | pole `Parcel.land_value_per_m2` zostaje, M5/M10 je nadpisują; **bez** traita `LandValueSource` — jedna implementacja nie potrzebuje abstrakcji | propozycja bez sprzeciwu |
 | 5 | Czy `Institutional` (szkoły, szpitale) obsadza M2 jako `SiteSeed` należący do `City`, czy czeka na M8 | WP13 | M2 obsadza i daje stanowiska (M3 potrzebuje nauczycieli i lekarzy jako miejsc pracy); M8 dokłada budżet, politykę i jakość usługi | propozycja bez sprzeciwu |
+| 21 | Gdzie biegnie granica detalu architektonicznego między M2 a M11. Blok `Details` z §5.6 (gzyms, opaska, pilaster, balkon, komin, lukarna) nigdy nie wszedł do enuma `Rule` i nie miał właściciela | WP18 | **Granicą jest rozmiar voxela, nie rodzaj detalu.** Voxel ma 1 m w poziomie, a korekta E12 zmierzyła, że detal cieńszy niż ~2 m rasteryzuje się na mijające się stopnie. M2 wyraża więc detal **od ~1 m w górę** — balkon, wykusz, ryzalit, lukarna, komin, uskok bryły — jednym nowym operatorem `Protrude { face, m, rule }`, bo cztery z pięciu pozycji z `Details` są już wyrażalne istniejącym zestawem (tabela w §5.6c M2f). Detal **subwoxelowy** (gzyms 0,4 m, opaska okienna, pilaster, boniowanie) nie jest w M2 wyrażalny w ogóle — nie z braku operatora, tylko z braku miejsca w rastrze — i należy do M11 jako prefab `Place` albo mesh. Zgodne z 9.1/10: bryła i otwory zostają w M2, M11 dokłada warianty terminali | propozycja domyślna, przyjęta w `M2f-roznorodnosc-zabudowy.md` |
+| 22 | Docelowy rozmiar katalogu `data/grammar/` i kto go utrzymuje po zamknięciu M2 | WP19 | **~32 pliki w M2f, dobrane macierzą pokrycia (strefa × epoka × styl), nie upodobaniem** — próg jest mierzony testem T13 i udziałem fallbacku, a nie liczbą plików. Wariancja wewnątrz pliku (`Choice` na materiał, rytm otworów i dach) ma być wyczerpana przed napisaniem nowego pliku: nowa gramatyka powstaje wtedy, gdy różni się **bryłą**. Dalszy wzrost katalogu po M2 to zawartość, nie faza — po M12d `data/grammar/` jest katalogiem moddowalnym (wpis G1 w `M12d-modding.md`) | propozycja domyślna, przyjęta w `M2f-roznorodnosc-zabudowy.md` |
 
 ---
 
@@ -473,7 +485,14 @@ komponenty jest zachowane.
 | WP15b | Wycena gruntu, `pass_2` + rozbicie (M2e) | M |
 | WP16 | Nakładka UI + karta inspekcji | S |
 | WP17 | Testy spójności + raport generacji | M |
+| WP18 | Operator `Protrude` + lukarny (M2f) | M |
+| WP19 | Katalog gramatyk: pokrycie i wariancja (M2f) | L |
+| WP20 | Miara różnorodności + test T13 (M2f) | S |
 
-Rozkład (po korektach B1, C8 i D1–D3): 4 × L, 13 × M, 3 × S. Ciężar fazy leży w geometrii podziału na parcele (WP8)
+Rozkład (po korektach B1, C8, D1–D3 i G1): 5 × L, 14 × M, 4 × S. Ciężar fazy leży w geometrii podziału na parcele (WP8)
 i w gramatyce budynków (WP11 + WP12) — te trzy WP to ok. 45% pracy fazy i tam należy
 zaplanować rezerwę.
+
+WP19 jest `L` z innego powodu niż reszta `L`: to nie jest trudny kod, tylko ~20 plików
+danych, z których każdy trzeba obejrzeć w kliencie. Pracy jest dużo, ryzyka mało —
+i całość jest przerywalna w dowolnym momencie, bo każdy plik działa osobno.

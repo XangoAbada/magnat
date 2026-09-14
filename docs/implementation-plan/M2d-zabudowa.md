@@ -1,6 +1,6 @@
 # M2d — Zabudowa
 
-Podfaza 4 z 5 fazy **M2 — Miasto statyczne** (`M2-miasto-statyczne.md`).
+Podfaza 4 z 6 fazy **M2 — Miasto statyczne** (`M2-miasto-statyczne.md`).
 Dokument nadrzędny: `00-konwencje-i-kontrakty.md`.
 Zakres fazy (§2), kontrakty międzyfazowe (§6), ryzyka (§8) i decyzje otwarte (§9)
 zostają w dokumencie fazy — tu jest wyłącznie to, co robisz w tej porcji.
@@ -12,7 +12,7 @@ zostają w dokumencie fazy — tu jest wyłącznie to, co robisz w tej porcji.
 | **Projekt techniczny** | §5.6, §5.6b, §5.7 w części `pass_1` (formuła w `M2e-gospodarka-bazowa-i-wycena.md`) |
 | **Wynik do pokazania** | **Miasto w kliencie graficznym `magnat`**: przelot kamerą nad zabudową wygenerowaną z gramatyki, z nawierzchnią jezdni, nasypami i mostami; budynki mają piętra, lokale i stanowiska pracy. |
 | **Kryterium zamknięcia** | Kryteria WP10–WP12, WP12b i WP15a; derywacja 50 tys. budynków równolegle daje wynik identyczny z jednowątkową; żaden voxel fundamentu nie graniczy z powietrzem od spodu (ryzyko R9). |
-| **Poprzednia / następna** | `M2c-strefy-parcele-dzielnice.md` · `M2e-gospodarka-bazowa-i-wycena.md` |
+| **Poprzednia / następna** | `M2c-strefy-parcele-dzielnice.md` · `M2f-roznorodnosc-zabudowy.md` |
 
 Etap 6: język gramatyki architektury w `data/grammar/` z walidatorem, silnik derywacji, kolejkowanie terminali do voxeli i wnętrza logiczne (`Unit`, `Workplace`). Dodatkowo — korekty D1–D3 — przebieg `pass_1` wyceny gruntu (wejście doboru gramatyki), warstwa transportowa w voxelach i podpięcie miasta do klienta graficznego.
 
@@ -316,6 +316,7 @@ oznaczone te, które zmieniają **zakres albo kryterium**, a nie tylko sposób l
 | E17 | `generate_city` przyjmuje `&MaterialRegistry` i `&JobPool` | Gramatyka odwołuje się do materiałów po kluczu, a derywacja 50 tys. budynków jest jedynym zrównoleglonym krokiem fazy. Sygnatura z §6 nie przewidywała ani jednego, ani drugiego |
 | E18 | `Building.aabb` wymagał typu, którego nie było: `Aabb3` dopisany do `engine/spatial` | `core::IAabb3` żyje w voxelach i jest całkowitoliczbowy, a selekcja do kadru (M11) porównuje bryłę z piramidą widzenia **w metrach** |
 | E19 | Niwelacja parceli i pasa drogowego to **para brył** (wypełnienie pod niweletą + wykop nad nią), a nie `EditOp::Terrace` | Konsekwencja E1: `Terrace` przyjmuje wyłącznie `IAabb3`. Kolejność warstw rozstrzyga wtedy `EditSource` — źródło jest **pierwszym** kluczem porządku kanonicznego, więc numery źródeł są kolejnością robót na budowie: ziemia, nawierzchnia, bryły, otwory, tunele. §5.6b rozstrzygał tę kolejność geometrią („podbudowa jeden voxel pod niweletą"), co przestało wystarczać, gdy doszły otwory okienne |
+| E20 ★ | **Blok `Details` z §5.6 nie wszedł do enuma `Rule` i nie jest długiem tej podfazy — jest zakresem nowej, `M2f-roznorodnosc-zabudowy.md`** (WP18–WP20). Katalog został na 12 plikach, po jednym przedstawicielu na rodzaj zabudowy | Kryterium M2d („budynki mają piętra, lokale i stanowiska pracy") jest spełnione bez detalu bryły, więc podfaza domyka się uczciwie — ale §5.6 obiecywał `Cornice`, `Balcony`, `Chimney` i lukarny, a żaden pakiet nie był ich właścicielem. Wpisanie tego jako `TODO` w `Rule` byłoby złamaniem `K-18` pkt (d). Przy okazji wyszło, że brakuje **jednego** operatora, nie pięciu: `Offset` poszerza zakres z każdej strony, więc balkonu, wykusza i ryzalitu nie da się zapisać wcale, a gzyms, komin i pas okienny już się dają. Rozstrzygnięcie granicy z M11 — decyzja 21 w §9.2 fazy: detal poniżej 1 voxela nie jest w M2 wyrażalny z powodu rastra, nie z powodu zakresu |
 
 ### Zmierzone
 
