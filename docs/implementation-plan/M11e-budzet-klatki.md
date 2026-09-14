@@ -33,6 +33,17 @@ zapis do `bench/frames/*.json`, porównanie z baseline w CI.
 **Kryterium ukończenia.** Cele §20.2 osiągnięte na sprzęcie referencyjnym; regresja p95 > 8%
 zatrzymuje build.
 
+**Dodatkowy pomiar z terminem — pass `pick_id` (zgłoszenie z M4c/WP14).** WP10 mierzy pass bufora ID
+pieszych jako **siódmą pozycję** w `PASS_NAMES`. Dziś tablica ma sześć pozycji, a `pick_id` nie ma
+znaczników czasu — więc jest jedynym passem, którego żaden budżet klatki nie widzi, choć rysuje
+**pełną geometrię wszystkich pieszych drugi raz w każdej klatce** i czyści teksturę ID wielkości
+okna, niezależnie od tego, czy kursor cokolwiek wskazuje. Pozycja kursora jest znana **przed**
+nagraniem passa (`pick.rs`, pole `cursor`), więc wyjście wcześniej przy `None` jest poprawką
+o jednej gałęzi — ale dopóki nie ma pomiaru, nie wiadomo, ile to warte. M4c/WP14 naprawia trzy
+przyczyny tego samego objawu po stronie symulacji i **świadomie zostawia tę tutaj**, bo to
+`engine/render`, nie `sim/traffic`. Zgłoszenie ma wartość wcześnie: pass powstał w M3d razem
+z pickingiem pieszych i od tamtej pory jest w każdej klatce z mieszkańcami na ekranie.
+
 **Dodatkowy pomiar z terminem — selekcja kadru (zobowiązanie wobec M2).** WP10 mierzy osobno koszt
 `CsrGrid::query_rect` + odrzucenia po `Building.aabb` w scenach `bench_district` i `bench_city`
 (licznik `snapshot_select_ms` w `RenderStats`). M2 świadomie zostawił `GridSpec` w 2D na podstawie

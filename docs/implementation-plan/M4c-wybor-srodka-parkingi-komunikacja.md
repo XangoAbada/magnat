@@ -8,13 +8,13 @@ zostają w dokumencie fazy — tu jest wyłącznie to, co robisz w tej porcji.
 | | |
 |---|---|
 | **Wejście** | M4b (podróże, paliwo). |
-| **Pakiety robocze** | WP6, WP7, WP10 |
-| **Projekt techniczny** | §5.3, §5.5, §5.6 |
+| **Pakiety robocze** | **WP14 (pierwszy)**, WP6, WP7, WP10 |
+| **Projekt techniczny** | §5.12, §5.3, §5.5, §5.6 |
 | **Wynik do pokazania** | Rozkład udziału środków transportu w widełkach z PRD §20.1; linia autobusowa wozi ludzi wg rozkładu; przepełniony parking odbiera opcję „samochód”. |
-| **Kryterium zamknięcia** | Kryteria WP6, WP7 i WP10; 100 % decyzji transportowych ma uzasadnienie. |
+| **Kryterium zamknięcia** | Kryteria WP14, WP6, WP7 i WP10; 100 % decyzji transportowych ma uzasadnienie. |
 | **Poprzednia / następna** | `M4b-mezo-i-podroze.md` · `M4d-mikro-i-dowod-spojnosci.md` |
 
-Koszt uogólniony i wybór środka transportu z `TripDecisionReason`, parkingi z rezerwacją i cennikiem, komunikacja miejska z rozkładem, taborem i kierowcami-mieszkańcami.
+Koszt uogólniony i wybór środka transportu z `TripDecisionReason`, parkingi z rezerwacją i cennikiem, komunikacja miejska z rozkładem, taborem i kierowcami-mieszkańcami. **Podfaza zaczyna się od WP14** — spłaty kosztu warstwy Mikro, który wyszedł w trakcie M4b (§5.12).
 
 ---
 
@@ -22,6 +22,7 @@ Koszt uogólniony i wybór środka transportu z `TripDecisionReason`, parkingi z
 
 | WP | Nazwa | Zależy od | Opis | Kryterium ukończenia |
 |---|---|---|---|---|
+| **WP14** | **Koszt warstwy Mikro** — *robiony pierwszy, przed WP6* | M4b | Trzy niezależne przyczyny spadku klatek przy dużej liczbie pieszych, wszystkie w kodzie warstwy Mikro napisanym w M4b: krokowanie bezstanowego bufora 600 razy na minutę, brak bramki okna Mikro po migracji `walk` → `sim/traffic` (regresja wobec `Z-6`) i podwójna kopia zrzutu na klatkę. Diagnoza, podział własności i **lista do weryfikacji na starcie** w §5.12. | Krok Mikro dla 5 tys. pieszych ≤ 2 ms **na minutę świata** (nie na wywołanie — patrz §5.12); `enter_micro` poza oknem nie tworzy encji (test); zrzut do renderera kopiowany raz |
 | **WP6** | Wybór środka transportu (§9.4) | WP5, WP7 | Koszt uogólniony w `Money`; wykonalność opcji (dostępność auta w GD, parking u celu, zasięg baku, rozkład komunikacji); wybór + `TripDecisionReason` z kosztami wszystkich kandydatów. Rozszerza `sim/agents`. | Rozkład udziału środków transportu w scenariuszu referencyjnym w zakresach z §20.1; 100 % decyzji ma uzasadnienie; sklep bez parkingu traci klientów zmotoryzowanych (mierzalne) |
 | **WP7** | Parkingi | WP1 | `ParkingLot` z pojemnością, rezerwacją na okno czasowe, cennikiem, promieniem dojścia. Parking przyuliczny jako pojemność krawędzi. Szukanie miejsca = czas + ryzyko porażki. | Przepełniony parking blokuje opcję „samochód"; nakładka obłożenia; brak „pojazdów widmo" — każdy zaparkowany pojazd zajmuje miejsce |
 | **WP10** | Komunikacja miejska | WP4, WP6 | `TransitLine`, `TransitStop`, rozkład, tabor, kierowcy jako mieszkańcy z grafikiem, wsiadanie z limitem pojemności, przesiadki, przepełnienie → pasażer zostaje. Routing multimodalny: dojście + oczekiwanie + przejazd + przesiadka. | Linia autobusowa wozi ludzi wg rozkładu; przepełnienie w szczycie generuje spóźnienia; kierowca-mieszkaniec ma tę pracę w planie dnia |
@@ -31,7 +32,93 @@ Koszt uogólniony i wybór środka transportu z `TripDecisionReason`, parkingi z
 ## Projekt techniczny
 
 Numeracja sekcji jest ta sama co w pierwotnym dokumencie fazy — odesłania
-w tekście („patrz §5.4") nadal wskazują tę samą treść.
+w tekście („patrz §5.4") nadal wskazują tę samą treść. Wyjątkiem jest **§5.12**,
+która jest nowa: przyszła z pakietem WP14 w trakcie M4b, a nie z podziału zakresu fazy.
+
+### 5.12 Koszt warstwy Mikro (WP14)
+
+Sekcja **nowa** — nie ma odpowiednika w pierwotnej numeracji fazy. Powstała z obserwacji zgłoszonej
+w trakcie implementacji M4b („spadki wydajności, gdy na ekranie pojawia się dużo przechodniów")
+i z prześledzenia ścieżki pieszego od bufora do kadru.
+
+**Dlaczego pakiet stoi tutaj, a nie w M4b, skoro kod jest tamtejszy.** Bo M4b był w trakcie
+implementacji, kiedy to wyszło, a pakiet dopisany do trwającej podfazy ginie — czyta ją ktoś,
+kto ma tabelę WP w głowie sprzed poprawki. Podfaza następna jest pierwszym dokumentem, który ktoś
+przeczyta **od początku**. Stąd też WP14 jest pierwszy w kolejności M4c: to spłata długu, a nie
+nowa funkcja, i im dłużej czeka, tym więcej kodu na nim stoi.
+
+**Zanim zaczniesz: zweryfikuj, co M4b naprawił po drodze.** Poniższa diagnoza jest stanem z chwili
+zgłoszenia, czyli sprzed końca M4b. Trzy punkty są niezależne i każdy mógł zostać po drodze
+zamknięty — sprawdź każdy osobno i odhacz, zamiast poprawiać coś, co już działa. Punkt, który
+okaże się naprawiony, zostaje w tej sekcji jako zapis, dlaczego go szukano.
+
+#### 1. Bufor jest krokowany 600 razy na minutę, a jest bezstanowy
+
+`TravelMicroSystem` (`sim/agents/src/systems.rs`) woła `micro_step` w pętli
+`0..MICRO_STEPS_PER_TICK`, czyli **600 razy na minutę świata**. Tymczasem `Micro::step`
+(`sim/traffic/src/micro.rs`) jest **czystą funkcją czasu**: `progress` i `pos` liczą się
+z `now_ms`, `depart_min` i `arrive_min`, nic się między krokami nie akumuluje. Każdy przebieg
+nadpisuje poprzedni, więc **599 z 600 przebiegów jest wyrzucanych**. Do tego `punkt_na_lamanej`
+skanuje segmenty trasy liniowo, więc koszt jednej minuty świata to
+`600 × pieszych × segmentów`, a pętla `advance()` przewija wiele minut na klatkę.
+
+Te 600 kroków nie kupuje nawet płynności: renderer czyta `micro_snapshot` **raz na klatkę**,
+czyli widzi wyłącznie stan po ostatnim kroku. Piesi i tak przeskakują co minutę świata.
+Płynność wymagałaby kroku sterowanego czasem klatki, a nie tickiem symulacji — to osobna
+sprawa i należy do M11b (animacja), nie tutaj.
+
+**Naprawa:** jedno wywołanie na minutę, na końcu minuty. Pętla znika.
+
+**Dlaczego kryterium M3b tego nie złapało.** M3b §7.5 mierzył „krok Mikro dla 5 tys. pieszych
+**47 µs**" przy progu **2 ms/klatkę** — i to jest pomiar **jednego wywołania** `micro_step`.
+System robi ich 600, więc realny koszt tej samej sceny to `600 × 47 µs ≈ 28 ms` na minutę świata,
+czyli **czternastokrotność progu**, który raportowano jako spełniony z zapasem rzędu wielkości.
+Bench mierzył coś innego niż to, co robi kod. To ta sama nauka, którą dziennik zapisał po M2e —
+kryterium, którego nikt nie puścił na realnej ścieżce wywołań, jest hipotezą, a nie kryterium —
+więc kryterium WP14 mówi wprost **„na minutę świata"**, nie „na wywołanie".
+
+#### 2. Bramka okna Mikro wypadła przy migracji (regresja wobec `Z-6`)
+
+`Z-6` w dokumencie fazy jest jednoznaczne: *„Warstwa Mikro ma okno… Pieszy wchodzi w nią
+w chwili, gdy zaczyna podróż, i tylko jeśli któryś koniec trasy mieści się w oknie.
+M4 przejmuje ten kontrakt razem z buforem."* Stary `WalkOracle::enter_micro` odcinał przez
+`if !w_oknie(from) && !w_oknie(to) { return; }`.
+
+W chwili zgłoszenia bramki **nie było**: `enter_micro` w `sim/traffic/src/oracle.rs` wpuszczało
+każdą podróż pieszą w mieście, a `set_micro_window` zniknęło z traitu `TravelOracle` (zostało
+w trzech wywołaniach w `tools/magnat/src/citizens.rs` i w teście `budgets.rs`, które bez niego
+się nie kompilowały — migracja była wtedy w połowie). Bez bramki „5 tys. pieszych **w kadrze**"
+z kryterium M3b przestaje być liczbą pieszych w kadrze i staje się liczbą pieszych w mieście:
+przy 274 tys. mieszkańców w szczycie porannym to rząd wielkości więcej encji, z których każda
+jest krokowana zgodnie z punktem 1.
+
+**Naprawa:** okno po stronie `sim/traffic`, z bramką w `enter_micro`, nie u wołającego.
+To jest wymóg `Z-6`, nie optymalizacja: `DayLoopSystem` ma wołać bezwarunkowo i nic nie wiedzieć
+o kamerze, a headless ma nie płacić nic. Razem z oknem wraca zastrzeżenie z `Z-6`/`H-28` — okno
+musi być otwarte, **zanim** ruszy doba, którą chce się oglądać.
+
+#### 3. Zrzut do renderera kopiowany dwa razy na klatkę
+
+`micro_snapshot` kopiuje cały bufor pod mutexem do wektora pośredniego, a wołający
+(`tools/magnat/src/citizens.rs`) przepisuje go natychmiast drugi raz, tylko po to, żeby odrzucić
+pole `progress`. Dwie pełne kopie `O(n)` na klatkę zamiast jednej.
+
+**Naprawa:** jeden bufor. Renderer bierze to, co dostaje, albo `micro_snapshot` wypełnia od razu
+strukturę docelową. Selekcja kadru (promień + frustum) po stronie renderera jest w porządku
+i zostaje bez zmian — problemem jest wejście, które punkt 2 rozdmuchuje, a nie samo odcinanie.
+
+#### Co do WP14 **nie** należy
+
+| Znalezisko | Dlaczego nie tutaj | Adresat |
+|---|---|---|
+| Pass `pick_id` rysuje wszystkich pieszych **drugi raz w każdej klatce** (pełna geometria + czyszczenie tekstury ID wielkości okna), niezależnie od tego, czy kursor cokolwiek wskazuje — a pozycja kursora jest znana przed nagraniem passa | To `engine/render`, nie `sim/traffic`; pass powstał w M3d razem z pickingiem pieszych i jest kosztem renderu, nie symulacji | **M11e/WP10** — dopisane tam jako pomiar z terminem |
+| Ten sam pass **nie jest mierzony**: `PASS_NAMES` ma sześć pozycji, a `pick_id` jest siódmy i nie ma znaczników czasu | jw. — dopóki nie jest mierzony, żaden budżet klatki go nie widzi | **M11e/WP10** |
+
+#### Pomiar
+
+Bramką regresji jest istniejąca grupa benchmarków ruchu (`m3b-2 ruch` w `agents_bench.rs`),
+ale mierzona **na pełnej ścieżce systemu**, nie na pojedynczym `micro_step` — inaczej WP14
+powtórzyłby błąd, który naprawia. Scenariusz: 5 tys. pieszych, okno otwarte, jedna minuta świata.
 
 ### 5.3 Wybór środka transportu (§9.4)
 

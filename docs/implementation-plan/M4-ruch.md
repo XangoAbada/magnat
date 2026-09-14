@@ -108,12 +108,15 @@ dopiero po ostatniej podfazie; podfaza zamyka się własnym kryterium ze swojego
 |---|---|---|---|---|
 | **M4a — Graf i routing** | WP1, WP2 | 5.1 | Devtools: inspektor grafu rysuje krawędzie z atrybutami; zapytanie CCH odpowiada w budżecie na grafie 200 tys. węzłów. | `M4a-graf-i-routing.md` |
 | **M4b — Mezo i podróże** | WP3, WP4, WP5 | 5.2, 5.7 | Mieszkańcy z M3 dojeżdżają do pracy pojazdami zamiast teleportacji; korek powstaje na przewężeniu i rozładowuje się. | `M4b-mezo-i-podroze.md` |
-| **M4c — Wybór środka, parkingi, komunikacja** | WP6, WP7, WP10 | 5.3, 5.5, 5.6 | Rozkład udziału środków transportu w widełkach z PRD §20.1; linia autobusowa wozi ludzi wg rozkładu; przepełniony parking odbiera opcję „samochód”. | `M4c-wybor-srodka-parkingi-komunikacja.md` |
+| **M4c — Wybór środka, parkingi, komunikacja** | **WP14**, WP6, WP7, WP10 | 5.12, 5.3, 5.5, 5.6 | Rozkład udziału środków transportu w widełkach z PRD §20.1; linia autobusowa wozi ludzi wg rozkładu; przepełniony parking odbiera opcję „samochód”. | `M4c-wybor-srodka-parkingi-komunikacja.md` |
 | **M4d — Mikro i dowód spójności** | WP8, WP9, WP11, WP12, WP13 | 5.4, 5.8, 5.9, 5.10 | Pełny artefakt fazy z §1 dokumentu fazy: korki widoczne i mierzone, „kamera nie zmienia świata”. | `M4d-mikro-i-dowod-spojnosci.md` |
 
 Ścieżka krytyczna: WP1 → WP2 → WP3 → WP4 → WP6. WP8/WP9 mogą iść równolegle do WP10 po WP3.
 WP13 jest poza ścieżką krytyczną i **nie blokuje niczego** — zależy tylko od WP11, bo to karta
 inspekcji podróży jest pierwszym ekranem, na którym brak imion widać (`Z-7`, §5.10).
+**WP14 idzie pierwszy w M4c, przed WP6** — to spłata kosztu warstwy Mikro, który wyszedł w trakcie
+M4b; pakiet stoi w M4c, a nie w M4b, bo do podfazy będącej w trakcie implementacji nie dopisuje się
+pakietów: czyta ją ktoś, kto ma jej tabelę w głowie sprzed poprawki (§5.12).
 
 ---
 
@@ -134,6 +137,7 @@ odesłania w tekście („patrz §5.4") nadal wskazują tę samą sekcję — zm
 | 5.8 | Systemy ECS i częstotliwości | `M4d-mikro-i-dowod-spojnosci.md` |
 | 5.9 | Determinizm | `M4d-mikro-i-dowod-spojnosci.md` |
 | 5.10 | **Generator imion i nazwisk (WP13)** — sekcja nowa, dopisana po M3 | `M4d-mikro-i-dowod-spojnosci.md` |
+| 5.12 | **Koszt warstwy Mikro (WP14)** — sekcja nowa, dopisana w trakcie M4b | `M4c-wybor-srodka-parkingi-komunikacja.md` |
 
 ---
 
@@ -285,6 +289,7 @@ Scenariusz odniesienia: miasto 150 tys. mieszkańców, ~50 000 pojazdów zarejes
 | `transit_*` + `parking_*` | 1 / minutę gry | **1,0 ms** | ~200 kursów, ~2 000 parkingów |
 | **Razem mezo** | 1 / minutę gry | **≤ 11,8 ms** | wzrost z 11 ms po dołożeniu ruchu towarowego |
 | `micro_step` | 1 / 100 ms gry | **4,0 ms** | cap 3 000 **jednostek** w mikro × ~1,3 µs (IDM+MOBIL+integracja), 4 fazy; ciężarówka = 2 jednostki |
+| Warstwa Mikro pieszych (WP14) | **1 / minutę gry** | **2,0 ms** | 5 tys. pieszych w oknie kadru; budżet liczony **na minutę świata**, nie na wywołanie — patrz §5.12 M4c, gdzie ta różnica jest właśnie tym, co kryterium M3b przeoczyło |
 | Budowa snapshotu nakładek | 1 / klatkę | **0,8 ms** | ~80 tys. krawędzi, kopia 4 pól |
 | Kustomizacja CCH | zdarzeniowo, w tle | **≤ 450 ms** łącznie, rozłożone na ≤ 4 ticki | 3 profile (`Passenger`, `HeavyDay`, `HeavyNight`) × ~150 ms, równolegle |
 | Rekontrakcja CCH | zdarzeniowo, w tle | **≤ 8 s** łącznie, rozłożone na ≤ 30 ticków gry | pełna kontrakcja; kolejność wspólna dla wszystkich profili; w międzyczasie fallback A\* |
@@ -375,6 +380,7 @@ W tej sesji nie był dostępny mechanizm odpytania agentów planujących pozosta
 | WP11 | Nakładki UI i inspekcja | **M** | Trzy nakładki + karta podróży + karta pojazdu |
 | WP12 | Wydajność i determinizm | **M** | Profilowanie, chunkowanie, benchmarki, hash |
 | WP13 | Generator imion i nazwisk | **S** | Dwa pliki danych, jeden formater, trzy testy; objętość jest w treści plików, nie w kodzie. Dług z M3 (`Z-7`), nie zakres M4 |
+| WP14 | Koszt warstwy Mikro | **S** | Trzy poprawki w kodzie warstwy Mikro napisanym w M4b: pętla 600 → jedno wywołanie, przywrócenie bramki okna (`Z-6`), jedna kopia zrzutu zamiast dwóch. Objętość jest w pomiarze, nie w kodzie — bench musi iść **pełną ścieżką systemu** (§5.12) |
 
 Sumarycznie faza jest **ciężka** — porównywalna z M2 lub M3 — a jej ciężar koncentruje się
 w WP8 (mikro) i WP3 (mezo). Gdyby faza musiała zostać przycięta, jedyna bezpieczna redukcja to
