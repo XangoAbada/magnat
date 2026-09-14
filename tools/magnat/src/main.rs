@@ -12,6 +12,7 @@
 #![forbid(unsafe_code)]
 
 mod bench;
+mod citizens;
 mod inspect;
 mod overlay;
 mod stream;
@@ -68,9 +69,12 @@ struct Args {
     #[arg(long, default_value_t = 120)]
     screenshot_after: u32,
 
-    /// Godzina dnia na starcie (0–23).
-    #[arg(long, default_value_t = 10)]
-    hour: u64,
+    /// Godzina dnia na starcie: `10` albo `8:15`.
+    ///
+    /// Minuty są tu potrzebne, a nie ozdobne: szczyt poranny w mieście z medianą dojazdu
+    /// 18 minut trwa kilkanaście minut, a o pełnej ósmej ulice są jeszcze albo już puste.
+    #[arg(long, default_value = "10")]
+    hour: String,
 
     /// Wysokość orbity kamery w metrach nad celem.
     #[arg(long, default_value_t = 900.0)]
@@ -118,6 +122,41 @@ struct Args {
     /// regresję terenu dało się zdiagnozować bez zabudowy zasłaniającej widok (WP12b).
     #[arg(long, default_value_t = false)]
     no_city: bool,
+
+    /// Pomija Etap 8 i pokazuje puste miasto (M3d). Istnieje z tego samego powodu co
+    /// `--no-city`: zaludnienie metropolii to kilkadziesiąt sekund, a regresji renderu
+    /// nie diagnozuje się, czekając na nią.
+    #[arg(long, default_value_t = false)]
+    no_citizens: bool,
+
+    /// Sprawdza bufor ID bez rąk: ustawia kursor na piksel `x,y`, przewija kilka klatek
+    /// i wypisuje, w kogo trafiono (kryterium WP11: „kliknięcie w pieszego daje
+    /// `CitizenId`"). Bez tego jedynym sposobem sprawdzenia selekcji jest mysz.
+    #[arg(long)]
+    pick: Option<String>,
+
+    /// Prędkość gry na starcie: `0` (pauza), `1`, `3`, `10`. Ta sama czwórka co
+    /// w widgecie sterowania czasem — i ta sama, na której stoi wymóg „prędkość nie
+    /// wpływa na wynik" (§5.11, PRD §14.5).
+    #[arg(long, default_value_t = 1)]
+    speed: u32,
+
+    /// Język interfejsu: `pl` albo `en`. Tekst w UI zawsze pochodzi z `data/locale/`
+    /// w obu wersjach (CLAUDE.md), więc przełącznik nie ma prawa czegokolwiek zgubić.
+    #[arg(long, default_value = "pl")]
+    locale: String,
+}
+
+/// `HH` albo `HH:MM` na minutę doby.
+fn parse_hour(s: &str) -> Result<u32, Box<dyn std::error::Error>> {
+    let (h, m) = match s.split_once(':') {
+        Some((h, m)) => (h.trim().parse::<u32>()?, m.trim().parse::<u32>()?),
+        None => (s.trim().parse::<u32>()?, 0),
+    };
+    if h > 23 || m > 59 {
+        return Err(format!("--hour {s}: poza dobą").into());
+    }
+    Ok(h * 60 + m)
 }
 
 fn parse_seed(s: &str) -> Result<u64, Box<dyn std::error::Error>> {
@@ -210,7 +249,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         renderer: None,
         streamer: None,
         camera: startowa_kamera(args.dist),
-        minute: SimMinute(args.day.min(359) * 1440 + args.hour.min(23) * 60),
+        minute: SimMinute(args.day.min(359) * 1440 + u64::from(parse_hour(&args.hour)?)),
         czas_x1000: false,
         nakladka: match args.overlay.as_deref() {
             Some(k) => overlay::Nakladka::z_klucza(k).ok_or("nieznana nakładka")?,
@@ -252,6 +291,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         klatki: 0,
         fps_okno: Instant::now(),
         fps: 0.0,
+        citizens: None,
+        bez_ludzi: args.no_city || args.no_citizens,
+        jezyk: match args.locale.as_str() {
+            "en" => magnat_ui::Locale::En,
+            _ => magnat_ui::Locale::Pl,
+        },
+        watki: args.threads,
+        kursor: match args.pick.as_deref() {
+            Some(t) => {
+                let (a, b) = t.split_once(',').ok_or("--pick oczekuje `x,y` w pikselach")?;
+                Some((a.trim().parse()?, b.trim().parse()?))
+            }
+            None => None,
+        },
+        tryb_pick: args.pick.is_some(),
+        godzina_startu: parse_hour(&args.hour)?,
+        predkosc: match args.speed {
+            0 => magnat_core::SimSpeed::Paused,
+            3 => magnat_core::SimSpeed::X3,
+            10 => magnat_core::SimSpeed::X10,
+            _ => magnat_core::SimSpeed::X1,
+        },
+        dzien_slonca: args.day.min(359),
     };
     event_loop.run_app(&mut app)?;
     Ok(())
@@ -417,6 +479,22 @@ struct App {
     klatki: u32,
     fps_okno: Instant,
     fps: f64,
+    /// Mieszkańcy, doba i panel (M3d, WP11/WP12). `None` przy `--no-city`, przy
+    /// `--no-citizens` i dopóki okno nie powstało — Etap 8 potrzebuje miasta,
+    /// a `egui` potrzebuje okna.
+    citizens: Option<citizens::Citizens>,
+    bez_ludzi: bool,
+    jezyk: magnat_ui::Locale,
+    watki: usize,
+    /// Ostatnia znana pozycja kursora w pikselach — bufor ID kopiuje piksel spod niej.
+    kursor: Option<(u32, u32)>,
+    tryb_pick: bool,
+    /// Minuta doby, do której przewijamy symulację przed pierwszą klatką.
+    godzina_startu: u32,
+    predkosc: magnat_core::SimSpeed,
+    /// Dzień roku dla **słońca**. Symulacja liczy własną dobę od zera; `--day` ustawia
+    /// porę roku, czyli deklinację, i tylko ją.
+    dzien_slonca: u64,
 }
 
 impl ApplicationHandler for App {
@@ -492,10 +570,56 @@ impl ApplicationHandler for App {
         }
         self.streamer = Some(streamer);
         self.renderer = Some(renderer);
+
+        // Etap 8 **po** otwarciu okna, bo `egui_winit` potrzebuje uchwytu okna, a nie
+        // dlatego, że zaludnienie zależy od GPU — nie zależy. Gracz widzi w tym czasie
+        // pusty ekran i raport w konsoli; przy metropolii to kilkadziesiąt sekund.
+        if let (Some(city), false) = (self.city.clone(), self.bez_ludzi) {
+            let start = Instant::now();
+            eprintln!("Etap 8: zaludnianie miasta");
+            match citizens::Citizens::new(
+                self.params.seed,
+                city.as_ref(),
+                window.as_ref(),
+                self.jezyk,
+                self.watki,
+            ) {
+                Ok(mut c) => {
+                    eprintln!(
+                        "Etap 8 {:.1} s — {} mieszkańców",
+                        start.elapsed().as_secs_f64(),
+                        c.population()
+                    );
+                    // `--hour`: symulacja zawsze startuje o północy doby zerowej, bo
+                    // `bootstrap_day` zasiewa kolejkę od minuty zero. Godzinę osiąga się
+                    // przewinięciem, nie przestawieniem zegara — przestawiony zegar
+                    // zostawiłby zdarzenia w przeszłości.
+                    c.warm_up(self.godzina_startu, self.camera.eye());
+                    c.set_speed(self.predkosc);
+                    self.citizens = Some(c);
+                }
+                // Brak ludzi nie jest powodem, żeby nie pokazać miasta: klient M2
+                // działał bez nich i ma dalej działać.
+                Err(e) => eprintln!("Etap 8 nieudany, miasto zostaje puste: {e}"),
+            }
+        }
         self.window = Some(window);
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
+        // Priorytet UI nad kamerą (§5.11): zdarzenie pochłonięte przez panel nie obraca
+        // kamery i nie zaznacza pieszego. Bez tego przeciąganie suwaka w panelu
+        // kręciłoby światem pod spodem.
+        let pochloniete = match (&mut self.citizens, &self.window) {
+            (Some(c), Some(w)) => c.on_window_event(w.as_ref(), &event),
+            _ => false,
+        };
+        if pochloniete && !matches!(event, WindowEvent::CloseRequested | WindowEvent::Resized(_)) {
+            if let Some(w) = &self.window {
+                w.request_redraw();
+            }
+            return;
+        }
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
             WindowEvent::Resized(size) => {
@@ -511,6 +635,16 @@ impl ApplicationHandler for App {
                     self.inspekcja();
                 }
                 if button == MouseButton::Left {
+                    // Klik w pieszego (decyzja 9.3). Pytamy bufor ID **przed** ustawieniem
+                    // obrotu: trafienie w mieszkańca otwiera kartę i nie kręci kamerą.
+                    if state == ElementState::Pressed {
+                        let trafiony = self.renderer.as_ref().and_then(Renderer::pick);
+                        if let (Some(i), Some(c)) = (trafiony, &mut self.citizens) {
+                            if c.select(i) {
+                                return;
+                            }
+                        }
+                    }
                     self.obrot = state == ElementState::Pressed;
                     if !self.obrot {
                         self.ostatnia_mysz = None;
@@ -526,6 +660,11 @@ impl ApplicationHandler for App {
                     }
                 }
                 self.ostatnia_mysz = Some(p);
+                // W trybie `--pick` kursor jest zadany z wiersza poleceń i mysz nad oknem
+                // nie ma prawa go przestawić — inaczej test mierzyłby, gdzie leży mysz.
+                if !self.tryb_pick {
+                    self.kursor = Some((position.x.max(0.0) as u32, position.y.max(0.0) as u32));
+                }
             }
             WindowEvent::MouseWheel { delta, .. } => {
                 let kroki = match delta {
@@ -545,6 +684,18 @@ impl ApplicationHandler for App {
                     // F3 przechodzi po nakładkach debug z §1 — wszystkie przez jeden
                     // mechanizm `TerrainOverlay`, ten sam, którego użyje M2.
                     Key::Named(NamedKey::F3) => self.przelacz_nakladke(),
+                    // Sterowanie czasem (§5.11, decyzja 9.1). Spacja wraca do prędkości
+                    // sprzed pauzy, a nie zawsze do 1×.
+                    Key::Named(NamedKey::Space) => {
+                        if let Some(c) = &mut self.citizens {
+                            c.toggle_pause();
+                        }
+                    }
+                    Key::Character("f") | Key::Character("F") => {
+                        if let Some(c) = &mut self.citizens {
+                            c.toggle_card();
+                        }
+                    }
                     Key::Character("1") => self.camera.to_orbit(600.0),
                     Key::Character("2") => self.camera.to_free(),
                     Key::Character("3") => {
@@ -751,10 +902,17 @@ impl App {
         let dt = teraz.duration_since(self.ostatnia_klatka).as_secs_f64();
         self.ostatnia_klatka = teraz;
 
-        // Czas gry: 1 minuta na sekundę realną, albo ×1000 po wciśnięciu `T`
-        // (doba w 30 s realnych — wprost z kryterium §7 dla cyklu dobowego).
-        let mnoznik = if self.czas_x1000 { 1000.0 } else { 1.0 };
-        self.minute = SimMinute(self.minute.0 + (dt * mnoznik) as u64);
+        // Czas gry. Z mieszkańcami zegarem jest `TimeControlsWidget` (decyzja 9.1)
+        // i to on decyduje, ile **minut** wykonać — prędkość nie zmienia wyniku, bo
+        // każda minuta jest tym samym tickiem (§5.11). Bez mieszkańców zostaje stary
+        // mnożnik M1, bo nie ma czego tykać: słońce ma chodzić i tak.
+        if let Some(c) = &mut self.citizens {
+            let t = c.advance((dt * 1000.0) as u32);
+            self.minute = SimMinute(self.dzien_slonca * 1440 + t.0);
+        } else {
+            let mnoznik = if self.czas_x1000 { 1000.0 } else { 1.0 };
+            self.minute = SimMinute(self.minute.0 + (dt * mnoznik) as u64);
+        }
 
         // Kamera nie wchodzi pod teren.
         let punkt = match self.camera.mode {
@@ -783,16 +941,36 @@ impl App {
         if !self.swiatla.is_empty() {
             renderer.set_lights(&self.swiatla, self.camera.eye());
         }
+        renderer.set_cursor(self.kursor);
+        if let Some(c) = &mut self.citizens {
+            let piesi = c.pedestrians(self.camera.eye());
+            renderer.set_pedestrians(piesi, &self.camera);
+        }
 
         self.numer_klatki += 1;
         if let Some(sciezka) = self.zrzut.clone() {
             if self.numer_klatki >= self.zrzut_po {
-                let (w, h, px) = renderer.render_to_image(
+                // Zrzut idzie tą samą ścieżką co okno — razem z panelem, jeśli jest.
+                let klatka_ui = match (&mut self.citizens, &self.window) {
+                    (Some(c), Some(okno)) => {
+                        let (mut wy, _) = c.ui_frame(okno.as_ref());
+                        let ksztalty = std::mem::take(&mut wy.shapes);
+                        let jobs = c.context().tessellate(ksztalty, wy.pixels_per_point);
+                        Some((jobs, wy))
+                    }
+                    _ => None,
+                };
+                let (w, h, px) = renderer.render_to_image_with_ui(
                     &self.camera,
                     self.minute,
                     self.params.region.latitude_ddeg(),
                     1600,
                     900,
+                    klatka_ui.as_ref().map(|(jobs, wy)| magnat_render::ui::UiFrame {
+                        jobs,
+                        textures_delta: &wy.textures_delta,
+                        pixels_per_point: wy.pixels_per_point,
+                    }),
                 );
                 let s = renderer.stats();
                 eprintln!(
@@ -814,6 +992,17 @@ impl App {
                         "światła: {} · {}",
                         self.swiatla.len(),
                         renderer.cluster_occupancy().summary()
+                    );
+                }
+                if let Some(c) = &self.citizens {
+                    eprintln!(
+                        "mieszkańcy: {} · tick {} ({:02}:{:02}) · warstwa Mikro {} · rysowanych {}",
+                        c.population(),
+                        c.tick().0,
+                        c.tick().0 % 1440 / 60,
+                        c.tick().0 % 60,
+                        c.micro_len(),
+                        renderer.pedestrians.drawn()
                     );
                 }
                 match magnat_devtools::write_rgb(&sciezka, w, h, &px) {
@@ -861,11 +1050,64 @@ impl App {
                 return;
             }
         }
-        renderer.render(
-            &self.camera,
-            self.minute,
-            self.params.region.latitude_ddeg(),
-        );
+        match (&mut self.citizens, &self.window) {
+            (Some(c), Some(okno)) => {
+                let (mut wyjscie, wybor) = c.ui_frame(okno.as_ref());
+                if let Some(s) = wybor {
+                    c.set_speed(s);
+                }
+                let ksztalty = std::mem::take(&mut wyjscie.shapes);
+                let jobs = c.context().tessellate(ksztalty, wyjscie.pixels_per_point);
+                renderer.render_with_ui(
+                    &self.camera,
+                    self.minute,
+                    self.params.region.latitude_ddeg(),
+                    Some(magnat_render::ui::UiFrame {
+                        jobs: &jobs,
+                        textures_delta: &wyjscie.textures_delta,
+                        pixels_per_point: wyjscie.pixels_per_point,
+                    }),
+                );
+            }
+            _ => renderer.render(
+                &self.camera,
+                self.minute,
+                self.params.region.latitude_ddeg(),
+            ),
+        }
+
+        // Sprawdzenie bufora ID bez myszy (kryterium WP11). Odczyt pochodzi z klatki
+        // poprzedniej, więc pytamy dopiero po kilku — inaczej mierzylibyśmy to, że
+        // pierwsza klatka jeszcze nie zdążyła nic skopiować.
+        if self.tryb_pick && self.numer_klatki >= 10 {
+            let trafiony = renderer.pick();
+            eprintln!(
+                "bufor ID {}×{}, pieszych rysowanych {}",
+                renderer.gpu.config.width,
+                renderer.gpu.config.height,
+                renderer.pedestrians.drawn()
+            );
+            match (trafiony, &mut self.citizens) {
+                (Some(i), Some(c)) => {
+                    println!("bufor ID: piksel {:?} → encja {i}", self.kursor);
+                    if c.select(i) {
+                        println!("{}", c.card_text());
+                    } else {
+                        println!("encja {i} nie jest mieszkańcem z listy populacji");
+                    }
+                }
+                (None, _) => println!("bufor ID: piksel {:?} → nic", self.kursor),
+                _ => {}
+            }
+            // Ze zrzutem tryb `--pick` nie kończy przebiegu: zaznaczenie otwiera kartę,
+            // a klatka ze zrzutem pokazuje ją narysowaną. To jest cały dowód na to,
+            // że `egui` naprawdę się wpięło (decyzja 9.2).
+            self.tryb_pick = false;
+            if self.zrzut.is_none() {
+                self.koniec = true;
+            }
+            return;
+        }
 
         self.klatki += 1;
         if self.fps_okno.elapsed().as_secs_f64() >= 0.5 {
@@ -875,9 +1117,19 @@ impl App {
             if let Some(w) = &self.window {
                 let s = renderer.stats();
                 let cal = magnat_core::SimCalendar::from_minute(self.minute);
+                // Piesi w tytule, bo to jedyny licznik, który mówi, czy doba naprawdę
+                // biegnie — miasto o trzeciej w nocy wygląda tak samo jak zatrzymane.
+                let ludzie = match &self.citizens {
+                    Some(c) => format!(
+                        " · {} mieszkańców, {} pieszych w kadrze",
+                        c.population(),
+                        renderer.pedestrians.drawn()
+                    ),
+                    None => String::new(),
+                };
                 w.set_title(&format!(
                     "Magnat — {:.0} FPS · {} chunków [{}] ({} rysowanych, {} tys. trójkątów) · \
-                     {:02}:{:02} dzień {} · {:.0} MB geometrii",
+                     {:02}:{:02} dzień {} · {:.0} MB geometrii{}",
                     self.fps,
                     s.chunks_resident,
                     streamer.opis(),
@@ -887,6 +1139,7 @@ impl App {
                     cal.minute_of_hour(),
                     cal.day_of_year(),
                     (s.vertex_bytes + s.index_bytes) as f64 / (1024.0 * 1024.0),
+                    ludzie,
                 ));
             }
         }

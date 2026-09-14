@@ -119,3 +119,16 @@ Pluralizacja: PL ma cztery formy (`one` / `few` / `many` / `other`), EN dwie (`o
 wybór formy z reguł CLDR, zaszyty jako funkcja czysta na `(locale, n)`. Formatowanie liczb,
 pieniądza i dat per locale (PL: przecinek dziesiętny, spacja jako separator tysięcy, „zł" po
 liczbie). Test CI: żadnego literału tekstowego w konstruktorach widgetów.
+
+---
+
+## Zmiany wpisane po M3d
+
+Zgodnie z `K-18`. To są rzeczy, o których M9 wie **na pewno** po zamknięciu M3d.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| Z-1 ★ | **Biblioteka UI jest wybrana i wpięta: `egui` + `egui-wgpu`** (decyzja 9.2 M3). Warstwa siedzi w `engine/render::ui`, a widgety w `engine/ui::widgets`. M9 dokłada panele, nie integrację | Podział przebiega tak, że `engine/ui` **nie zna `wgpu` ani `winit`** — zna tylko `egui`, który jest czystym procesorem. Dzięki temu panel da się narysować w teście w CI bez karty graficznej (`egui::Context::run_ui` + zebranie kształtów tekstowych) i M9 ma zastać ten wzorzec, a nie panele testowalne wyłącznie okiem |
+| Z-2 ★ | **Selekcja działa: `Renderer::pick(x, y) -> Option<u32>`** czyta bufor ID (decyzja 9.3). Odczyt pochodzi z **klatki poprzedniej** | To nie jest kompromis, tylko własność mechanizmu: czytanie GPU w chwili kliknięcia to `submit` + `map` + oczekiwanie, czyli zacięcie klatki na każdy klik. Dla M9 ma to konsekwencję na plus — podświetlenie encji pod kursorem jest już policzone i nie kosztuje nic więcej. Dziś w buforze są wyłącznie piesi; M9 dokłada firmy, pojazdy i sieci do **tego samego** przebiegu |
+| Z-3 | **`InspectorPanel::build` zwraca tekst, a rysowanie stoi obok** (`widgets::citizen_card` nad `CitizenModel`) | Jedno źródło prawdy: złoty test wydruku broni tego, co widzi gracz (E-8). Panel M9 ma czytać model, a nie liczyć drugi raz — inaczej test przestaje cokolwiek gwarantować |
+| Z-4 | **Zaznaczenie mieszkańca włącza bufor śledzenia** (`Trace::watch`, najwyżej ośmiu naraz — decyzja 9.16) | Bez tego karta pokazuje sam plan, bez realizacji. M9 musi o tym pamiętać przy każdym nowym sposobie otwierania karty (wyszukiwarka, lista, skok po relacji) |

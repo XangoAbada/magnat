@@ -226,22 +226,39 @@ pub struct CitizenPanel {
     pub seed: u64,
 }
 
-impl crate::InspectorPanel for CitizenPanel {
-    fn title(&self, ui: &crate::UiContext) -> String {
-        ui.text("ui.card.title")
-    }
+/// Karta razem z tym, na czym stoi oś dnia.
+///
+/// Plan i dziennik uzasadnień są **odtwarzane na żądanie** (§5.4), więc muszą przeżyć
+/// tak długo, jak długo ktoś patrzy na `DayTimeline` — stąd własność, a nie referencja.
+/// Ten sam model karmi wydruk tekstowy i widget `egui`: jedno źródło prawdy, o które
+/// prosi korekta E-8.
+pub struct CitizenModel {
+    pub card: CitizenCard,
+    pub canvas: magnat_agents::DayCanvas,
+    pub log: magnat_agents::ReasonLog,
+    pub actual: Vec<crate::ActualBlock>,
+}
 
-    fn build(&mut self, ui: &crate::UiContext, world: &magnat_ecs::World) -> String {
+impl CitizenModel {
+    #[must_use]
+    pub fn timeline(&self) -> DayTimeline<'_> {
+        DayTimeline {
+            canvas: &self.canvas,
+            log: &self.log,
+            actual: &self.actual,
+        }
+    }
+}
+
+impl CitizenPanel {
+    /// Zbiera wszystko, co karta pokazuje. `None` = nie ma kogo pokazać: brak zaznaczenia,
+    /// encja znikła (zgon, wyprowadzka) albo świat nie ma jeszcze wpiętych źródeł.
+    #[must_use]
+    pub fn model(&self, ui: &crate::UiContext, world: &magnat_ecs::World) -> Option<CitizenModel> {
         let (c, l) = (&ui.catalog, ui.locale);
-        let Some(citizen) = ui.selection.citizen() else {
-            return c.fmt_key(l, "ui.card.no_selection", &[]);
-        };
-        let Some(snap) = CitizenSnapshot::of(world, citizen.entity(), self.day) else {
-            return c.fmt_key(l, "ui.card.no_selection", &[]);
-        };
-        let Some(z) = world.resource::<magnat_agents::AgentSources>().get() else {
-            return c.fmt_key(l, "ui.card.no_selection", &[]);
-        };
+        let citizen = ui.selection.citizen()?;
+        let snap = CitizenSnapshot::of(world, citizen.entity(), self.day)?;
+        let z = world.resource::<magnat_agents::AgentSources>().get()?;
         let table = world.resource::<NeedTable>();
 
         let mut canvas = magnat_agents::DayCanvas::new();
@@ -249,18 +266,12 @@ impl crate::InspectorPanel for CitizenPanel {
         let ctx = snap.ctx(self.seed, self.day, table, z.places.as_ref(), &z.travel);
         magnat_agents::plan_day_explained(&ctx, &mut canvas, &mut log);
 
-        let realizacja = crate::actual_from_trace(
+        let actual = crate::actual_from_trace(
             &world
                 .resource::<magnat_agents::Trace>()
                 .entries(citizen.entity().index()),
         );
-        let timeline = DayTimeline {
-            canvas: &canvas,
-            log: &log,
-            actual: &realizacja,
-        };
-
-        let karta = CitizenCard::build(
+        let card = CitizenCard::build(
             c,
             l,
             &snap,
@@ -269,7 +280,25 @@ impl crate::InspectorPanel for CitizenPanel {
             world.get::<magnat_agents::Household>(snap.household),
             None,
         );
-        karta.render_text(c, l, &timeline)
+        Some(CitizenModel {
+            card,
+            canvas,
+            log,
+            actual,
+        })
+    }
+}
+
+impl crate::InspectorPanel for CitizenPanel {
+    fn title(&self, ui: &crate::UiContext) -> String {
+        ui.text("ui.card.title")
+    }
+
+    fn build(&mut self, ui: &crate::UiContext, world: &magnat_ecs::World) -> String {
+        let Some(m) = self.model(ui, world) else {
+            return ui.catalog.fmt_key(ui.locale, "ui.card.no_selection", &[]);
+        };
+        m.card.render_text(&ui.catalog, ui.locale, &m.timeline())
     }
 }
 

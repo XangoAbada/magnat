@@ -425,6 +425,10 @@ fn mikro_utrzymuje_piec_tysiecy_pieszych_w_kadrze() {
         today: 0,
     };
 
+    // Kadr obejmujący całą scenę testową: bez okna warstwa Mikro jest wyłączona
+    // i test mierzyłby pustą pętlę (M3d, okno Mikro w `WalkOracle`).
+    oracle.set_micro_window(Some((0, 0)), 100_000);
+
     let mut q = EventQueue::new();
     for i in 0..PIESZYCH {
         let handle = oracle.begin_trip(

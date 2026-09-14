@@ -4,6 +4,8 @@
 pub mod camera;
 pub mod clusters;
 pub mod gpu;
+pub mod pick;
+pub mod ui;
 pub mod graph;
 pub mod renderer;
 pub mod shadow;

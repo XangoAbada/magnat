@@ -13,10 +13,16 @@ magnat-sim-snapshot = { workspace = true }
 magnat-devtools = { workspace = true }
 wgpu = { workspace = true }
 winit = { workspace = true }
+egui = { workspace = true }
+egui-wgpu = { workspace = true }
+egui-winit = { workspace = true }
 glam = { workspace = true }
 pollster = { workspace = true }
 bytemuck = { workspace = true }
 log = "0.4"
+
+[dev-dependencies]
+naga = { workspace = true }
 
 [lints]
 workspace = true

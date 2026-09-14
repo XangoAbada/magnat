@@ -29,8 +29,11 @@ pub mod inspect;
 pub mod loc;
 pub mod selection;
 pub mod time;
+pub mod widgets;
 
-pub use inspect::citizen::{zlotowki, CitizenCard, CitizenPanel, NeedRow, StatusRow};
+pub use inspect::citizen::{
+    zlotowki, CitizenCard, CitizenModel, CitizenPanel, NeedRow, StatusRow,
+};
 pub use inspect::reason::{describe, zegar};
 pub use inspect::timeline::{
     actual_from_trace, render_day_text, ActualBlock, CitizenHeader, DayTimeline, TimelineRow,

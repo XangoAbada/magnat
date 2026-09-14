@@ -14,6 +14,8 @@
 use crate::camera::CameraState;
 use crate::clusters::{self, ClusterConfig, GpuLight, CLUSTER_CAPACITY, CLUSTER_COUNT, CLUSTER_Z};
 use crate::gpu::GpuContext;
+use crate::pick;
+use crate::ui::{UiFrame, UiLayer};
 use crate::shadow::{self, Cascade};
 use crate::sky::{exposure, sample_sky, sky_lut, sun_state, SkySample, SunState, SKY_LUT_SIZE};
 use glam::{Mat4, Vec3, Vec4};
@@ -251,7 +253,7 @@ pub const PASS_NAMES: [&str; 6] = [
 
 /// Format bufora sceny: HDR, bo ekspozycja i tonemap dzieją się dopiero w post-processingu.
 /// Ósemkowy bufor obciąłby jasne końce **przed** krzywą i zachód słońca wychodziłby biały.
-const HDR_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
+pub(crate) const HDR_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
 
 /// Oczko siatki dalekiego terenu w metrach i jej rozmiar w quadach.
 ///
@@ -470,6 +472,12 @@ pub struct Renderer {
     sky: [SkySample; SKY_LUT_SIZE],
     timer: Option<PassTimer>,
     stats: FrameStats,
+    /// Piesi i bufor ID (M3 §5.11). Osobny moduł, bo to jedyny pass, który rysuje
+    /// **encje symulacji**, a nie teren — i jedyny, który czyta z GPU z powrotem.
+    pub pedestrians: pick::Pedestrians,
+    /// Warstwa `egui` (decyzja 9.2). Powstaje zawsze; klatka bez panelu po prostu
+    /// jej nie woła, a kosztem jest jeden potok i jeden bufor uniformów.
+    ui: UiLayer,
 }
 
 /// Docelowa pojemność areny w elementach: 8 B na wierzchołek, 4 B na indeks — razem 384 MB,
@@ -1207,6 +1215,9 @@ impl Renderer {
         });
         let hdr_view = create_hdr(device, gpu.config.width, gpu.config.height);
         let post_bind = create_post_bind(device, &post_layout, &hdr_view, &post_sampler, &post_cfg);
+        let pedestrians =
+            pick::Pedestrians::new(device, &frame_buffer, gpu.config.width, gpu.config.height);
+        let ui = UiLayer::new(device, gpu.config.format);
 
         Renderer {
             gpu,
@@ -1262,6 +1273,8 @@ impl Renderer {
             sky: sky_lut(),
             timer,
             stats: FrameStats::default(),
+            pedestrians,
+            ui,
         }
     }
 
@@ -1292,6 +1305,11 @@ impl Renderer {
             &self.hdr_view,
             &self.post_sampler,
             &self.post_cfg,
+        );
+        self.pedestrians.resize(
+            &self.gpu.device,
+            self.gpu.config.width,
+            self.gpu.config.height,
         );
     }
 
@@ -1519,6 +1537,39 @@ impl Renderer {
         }
     }
 
+    /// Wgrywa pieszych widocznych w tej klatce (M3 §5.11).
+    ///
+    /// Bierze **wszystkich** i odcina sama, bo odcięcie wymaga stożka widzenia, a ten
+    /// zna renderer, nie symulacja. Wołający ma tylko przelać `WalkOracle::micro_snapshot`
+    /// do rekordów — i ma prawo wołać to rzadziej niż raz na klatkę, bo pozycje pieszych
+    /// zmieniają się co 100 ms, a klatka trwa 16 ms.
+    pub fn set_pedestrians(
+        &mut self,
+        peds: &[magnat_sim_snapshot::PedestrianRecord],
+        camera: &CameraState,
+    ) {
+        let vp = camera.view_proj_relative(self.gpu.aspect());
+        let planes = frustum_planes(&vp);
+        // Stożek jest liczony w układzie **względem kamery** (`view_proj_relative`),
+        // więc test przesłania też musi dostać pozycję względną — `upload` odejmuje oko.
+        let eye = camera.eye();
+        self.pedestrians
+            .upload(&self.gpu.queue, peds, eye, &planes);
+    }
+
+    /// Kursor w pikselach okna albo `None`, gdy wyszedł poza nie. Ustawia, który piksel
+    /// bufora ID klatka skopiuje — bez tego `hovered` zawsze zwraca `None`.
+    pub fn set_cursor(&mut self, pos: Option<(u32, u32)>) {
+        self.pedestrians.set_cursor(pos);
+    }
+
+    /// Indeks encji pod kursorem albo `None` (decyzja 9.3). Wartość pochodzi z klatki
+    /// poprzedniej — patrz nagłówek `pick.rs`.
+    #[must_use]
+    pub fn pick(&self) -> Option<u32> {
+        self.pedestrians.hovered()
+    }
+
     /// Histogram zajętości klastrów z ostatniego odczytu (przyrząd z §6.1 dla M2/M11).
     #[must_use]
     pub fn cluster_occupancy(&self) -> &magnat_devtools::ClusterOccupancy {
@@ -1587,6 +1638,21 @@ impl Renderer {
 
     /// Rysuje klatkę do okna.
     pub fn render(&mut self, camera: &CameraState, minute: SimMinute, latitude_ddeg: i16) {
+        self.render_with_ui(camera, minute, latitude_ddeg, None);
+    }
+
+    /// Klatka razem z warstwą UI (M3 §5.11). `None` rysuje sam świat.
+    ///
+    /// Panel wchodzi **po** post-processingu, prosto na bufor ekranu — inaczej przeszedłby
+    /// przez tonemapping i FXAA, czyli tekst byłby rozmyty, a kolory nie te, które podał
+    /// autor panelu.
+    pub fn render_with_ui(
+        &mut self,
+        camera: &CameraState,
+        minute: SimMinute,
+        latitude_ddeg: i16,
+        ui: Option<UiFrame<'_>>,
+    ) {
         let listy = self.prepare_frame(
             camera,
             minute,
@@ -1616,9 +1682,24 @@ impl Renderer {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("render.frame"),
             });
-        let triangles = self.record_passes(&mut encoder, &view, &self.depth_view, &listy);
+        let (triangles, odczyt) = self.record_passes(&mut encoder, &view, &self.depth_view, &listy);
+        if let Some(f) = ui.as_ref() {
+            let rozmiar = [self.gpu.config.width, self.gpu.config.height];
+            self.ui.prepare(
+                &self.gpu.device,
+                &self.gpu.queue,
+                &mut encoder,
+                f,
+                rozmiar,
+            );
+            self.ui.paint(&mut encoder, &view, f, rozmiar);
+        }
         self.resolve_timer(&mut encoder);
         self.gpu.queue.submit(Some(encoder.finish()));
+        // Mapowanie **po** wysłaniu kopii — patrz `pick::Pedestrians::record_id_pass`.
+        if odczyt {
+            self.pedestrians.read_back();
+        }
         self.gpu.queue.present(frame);
         self.finish_stats(&listy.widoczne, triangles);
     }
@@ -1636,6 +1717,21 @@ impl Renderer {
         latitude_ddeg: i16,
         width: u32,
         height: u32,
+    ) -> (u32, u32, Vec<u8>) {
+        self.render_to_image_with_ui(camera, minute, latitude_ddeg, width, height, None)
+    }
+
+    /// Zrzut razem z warstwą UI. Istnieje po to, żeby panel dało się **zobaczyć**
+    /// w raporcie z CI — inaczej jedynym dowodem na to, że `egui` się wpięło, byłoby
+    /// słowo autora.
+    pub fn render_to_image_with_ui(
+        &mut self,
+        camera: &CameraState,
+        minute: SimMinute,
+        latitude_ddeg: i16,
+        width: u32,
+        height: u32,
+        ui: Option<UiFrame<'_>>,
     ) -> (u32, u32, Vec<u8>) {
         let listy = self.prepare_frame(camera, minute, latitude_ddeg, (width, height));
         let device = &self.gpu.device;
@@ -1670,7 +1766,13 @@ impl Renderer {
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("render.offscreen"),
         });
-        let triangles = self.record_passes(&mut encoder, &color_view, &depth, &listy);
+        // Zrzut offscreen nie ma kursora, więc kopia piksela ID i tak nie powstaje.
+        let (triangles, _) = self.record_passes(&mut encoder, &color_view, &depth, &listy);
+        if let Some(f) = ui.as_ref() {
+            self.ui
+                .prepare(device, &self.gpu.queue, &mut encoder, f, [width, height]);
+            self.ui.paint(&mut encoder, &color_view, f, [width, height]);
+        }
         self.resolve_timer(&mut encoder);
         encoder.copy_texture_to_buffer(
             wgpu::TexelCopyTextureInfo {
@@ -1937,7 +2039,7 @@ impl Renderer {
         color: &wgpu::TextureView,
         depth: &wgpu::TextureView,
         listy: &FrameLists,
-    ) -> usize {
+    ) -> (usize, bool) {
         // Scena idzie do bufora HDR; `color` jest celem dopiero dla post-processingu.
         let scena = &self.hdr_view;
         {
@@ -2064,8 +2166,16 @@ impl Renderer {
 
         pass.set_pipeline(&self.pipeline);
         pass.set_bind_group(1, Some(&self.overlay_bind), &[]);
-        let trojkaty = self.draw_list(&mut pass, &self.bind_group, &listy.widoczne, false, 0);
+        let mut trojkaty = self.draw_list(&mut pass, &self.bind_group, &listy.widoczne, false, 0);
+        // Piesi na końcu passa: zapisują głębię, więc bufor ID może potem odtworzyć
+        // dokładnie te fragmenty porównaniem `Equal`.
+        trojkaty += self.pedestrians.draw(&mut pass);
         drop(pass);
+
+        // Bufor ID **przed** wodą: tafla nie zapisuje głębi, więc kolejność jest tu
+        // obojętna dla wyniku, ale trzymanie go tuż za passem, który głębię ustalił,
+        // jest tym, co czyni porównanie `Equal` czytelnym.
+        let odczyt = self.pedestrians.record_id_pass(encoder, depth);
 
         // Woda: osobny przebieg z mieszaniem, głębia **tylko do odczytu** — pass czyta ją
         // jako teksturę, żeby policzyć grubość słupa wody, a zapis do tej samej tekstury
@@ -2101,10 +2211,10 @@ impl Renderer {
             );
             drop(pass);
             self.record_post(encoder, color);
-            return trojkaty + t;
+            return (trojkaty + t, odczyt);
         }
         self.record_post(encoder, color);
-        trojkaty
+        (trojkaty, odczyt)
     }
 
     /// Przebieg końcowy: ekspozycja, tonemap i FXAA z bufora HDR na ekran.

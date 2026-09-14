@@ -742,7 +742,7 @@ fn wyrusz(
         residence: &residence,
         today: day as i32,
     };
-    Some(zrodla.travel.begin_trip(
+    let handle = zrodla.travel.begin_trip(
         TripRequest {
             traveller: CitizenId(citizen),
             from: skad,
@@ -752,7 +752,15 @@ fn wyrusz(
         },
         &who,
         q,
-    ))
+    );
+    // Warstwa Mikro (§5.10): pieszy wchodzi w kadr, jeżeli kadr istnieje i jeżeli
+    // jego trasa go dotyka. `WalkOracle` sam to rozstrzyga (`set_micro_window`),
+    // więc system doby woła to bezwarunkowo i nic nie wie o kamerze. Mezo — czyli
+    // minuta przybycia i cała reszta wyniku — nie zmienia się od tego ani trochę.
+    zrodla
+        .travel
+        .enter_micro(&handle, citizen.index(), MinuteOfDay::new(slot.start_min));
+    Some(handle)
 }
 
 /// Cel slotu jako `PlaceRef`. W arenie siedzi sam indeks encji, więc rodzaj miejsca

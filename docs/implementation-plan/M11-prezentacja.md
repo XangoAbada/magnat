@@ -339,3 +339,19 @@ i `PlayerViewRec`, nie czeka na nic z grafiki.
 **Największa niepewność:** WP2 zależy od rozstrzygnięcia decyzji 9.1 (granica z M1) i 9.5
 (crate `sim-snapshot`). Bez nich WP2 nie powinien startować — inaczej grozi przepisanie
 kontraktu danych po fakcie, a on jest fundamentem wszystkich pozostałych pakietów.
+
+---
+
+## Zmiany wpisane po M3d
+
+Zgodnie z `K-18`. To są rzeczy, o których M11 wie **na pewno** po zamknięciu M3d;
+M11 nie jest tu przeprojektowywany.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| Z-1 ★ | **`magnat-sim-snapshot` ma już jeden rekord encji: `PedestrianRecord`** (`pos: [f32;3]`, `entity: u32`). M11 dokłada wygląd, klip i pozę — **obok**, nie zamiast | Schemat ładunku należy do M11 i to się nie zmienia, ale M3 musiał narysować pieszego i odpowiedzieć, w kogo gracz kliknął. Rekord jest świadomie minimalny: ani `Appearance`, ani `AnimationClip` w nim nie ma. `f32` wystarcza — przy 16 km krok `f32` to ~1 mm, a bryła pieszego ma 0,5 m |
+| Z-2 ★ | **Piesi nie idą przez `RenderSnapshot`, tylko slice'em do `Renderer::set_pedestrians`** — tak samo jak światła | `RenderSnapshot` jest `Copy` i bezalokacyjny (§ nagłówek crate'u), a pieszych bywa kilkaset tysięcy. `CappedSlice` na taką liczbę nie mieści się na stosie. Wzorzec „stan w snapshocie, tłum slice'em" jest już w kodzie dla `LightRecord` i M11 ma go zastać, a nie wymyślać |
+| Z-3 ★ | **`engine/render` ma warstwę `egui` (`ui.rs`) i rysuje ją po post-processingu**, prosto na bufor ekranu. M11 stylizuje, nie wpina | Decyzja 9.2 M3 wybrała `egui` + `egui-wgpu`, a K-3 mówi, że urządzeniem GPU zarządza `engine/render`. Panel **nie może** iść przez HDR: kolory UI są w sRGB i mają takie wyjść, a FXAA na tekście wygląda jak wada sterownika |
+| Z-4 | **Jest bufor ID (`pick.rs`) i `Renderer::pick(x, y)`** — osobny przebieg po passie nieprzezroczystym, z porównaniem głębi `Equal`, plus kopia jednego piksela spod kursora na klatkę | M11 rysuje pieszych z animacją i **musi trafić w tę samą geometrię**, bo bufor ID porównuje głębię przez `Equal`. Praktycznie znaczy to, że pass ID ma dostać ten sam punkt wejścia wierzchołka co pass sceny — tak jak dziś, gdzie oba stoją na jednym `vs_main` w `pedestrian.wgsl`, czego pilnuje test |
+| Z-5 | **`engine/render` ma test walidacji WGSL bez GPU** (`tests/shaders.rs`, `naga`) | Shader jest sprawdzany dopiero przy tworzeniu urządzenia, czyli przy oknie, którego w CI nie ma. Każdy shader dokładany przez M11 ma trafić do listy w tym teście — lista jest jawna celowo, żeby nie rósł o pliki, których nikt nie kompiluje |
+| Z-6 | **MSRV workspace'u to 1.95** (podniesione z 1.90 przez `egui 0.36`) | `egui-wgpu 0.36` jest jedyną wersją stojącą na `wgpu 30`; `0.33` wymaga `wgpu ^27`, czyli drugiego `wgpu` w drzewie zależności |

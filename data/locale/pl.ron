@@ -16,7 +16,7 @@
         "ui.time.x3": One("3×"),
         "ui.time.x10": One("10×"),
         "ui.time.speed": One("Prędkość"),
-        "ui.time.date": One("Rok {rok}, {miesiac} {dzien}, {dow}"),
+        "ui.time.date": One("Rok {rok}, {dzien} {miesiac}, {dow}"),
         "ui.time.clock": One("{godzina}:{minuta}"),
         "ui.month.1": One("stycznia"),
         "ui.month.2": One("lutego"),

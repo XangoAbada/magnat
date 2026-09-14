@@ -36,7 +36,7 @@ use magnat_core::{
 use magnat_spatial::{Aabb2, CsrGrid, GridSpec, Vec2};
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicI32, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 
 /// Prędkość marszu: 1,35 m/s = 81 m/min = 8100 cm/min (§5.10).
@@ -283,6 +283,9 @@ pub struct WalkOracle {
     scratch: Mutex<Scratch>,
     next_trip: AtomicU32,
     pedestrians: Mutex<PedestrianBuffer>,
+    /// Środek okna Mikro w metrach; promień 0 = warstwa wyłączona.
+    micro_center: (AtomicI32, AtomicI32),
+    micro_radius_m: AtomicU32,
 }
 
 impl WalkOracle {
@@ -295,6 +298,8 @@ impl WalkOracle {
             scratch: Mutex::new(Scratch::new(0)),
             next_trip: AtomicU32::new(0),
             pedestrians: Mutex::new(PedestrianBuffer::new()),
+            micro_center: (AtomicI32::new(0), AtomicI32::new(0)),
+            micro_radius_m: AtomicU32::new(0),
         }
     }
 
@@ -320,6 +325,8 @@ impl WalkOracle {
             scratch: Mutex::new(Scratch::new(n)),
             next_trip: AtomicU32::new(0),
             pedestrians: Mutex::new(PedestrianBuffer::new()),
+            micro_center: (AtomicI32::new(0), AtomicI32::new(0)),
+            micro_radius_m: AtomicU32::new(0),
         }
     }
 
@@ -399,7 +406,42 @@ impl WalkOracle {
     /// i oddają pozycje oraz postęp, a nie trasy, węzły czy odcinki. Dzięki temu
     /// renderer i system LOD mają czym karmić kadr, a K-2 nadal obowiązuje —
     /// `PedestrianBuffer` zostaje prywatny i M4 kasuje go razem z modułem.
+    /// Okno warstwy Mikro: środek kadru i promień w metrach. `None` wyłącza ją zupełnie
+    /// i jest stanem domyślnym — headless nie ma kadru, a 274 tys. polilinii w pamięci
+    /// to koszt, którego nikt by nie oglądał.
+    ///
+    /// **To nie wpływa na wynik symulacji.** Warstwa Mikro jest wizualizatorem bez prawa
+    /// zapisu (00 §4): nie dotyka potrzeb, kolejki zdarzeń ani czasu przybycia, a
+    /// `AgentSources` świadomie nie wchodzi do funkcji haszującej stan (bramka 2 fazy M3).
+    /// Dzięki temu okno może zależeć od tego, gdzie stoi kamera — a hash i tak jest ten sam.
+    pub fn set_micro_window(&self, center: Option<(i32, i32)>, radius_m: u32) {
+        match center {
+            Some((x, y)) => {
+                self.micro_center.0.store(x, Ordering::Relaxed);
+                self.micro_center.1.store(y, Ordering::Relaxed);
+                self.micro_radius_m.store(radius_m.max(1), Ordering::Relaxed);
+            }
+            None => self.micro_radius_m.store(0, Ordering::Relaxed),
+        }
+    }
+
+    /// Czy punkt (w centymetrach, jak `WorldCoord`) mieści się w oknie Mikro.
+    fn w_oknie(&self, p: WorldCoord) -> bool {
+        let r = self.micro_radius_m.load(Ordering::Relaxed);
+        if r == 0 {
+            return false;
+        }
+        let dx = i64::from(p.x / 100 - self.micro_center.0.load(Ordering::Relaxed));
+        let dy = i64::from(p.y / 100 - self.micro_center.1.load(Ordering::Relaxed));
+        dx * dx + dy * dy <= i64::from(r) * i64::from(r)
+    }
+
     pub fn enter_micro(&self, handle: &TripHandle, citizen: u32, depart: MinuteOfDay) {
+        // Bramka jest **tutaj**, a nie u wołającego: dzięki temu system doby woła to
+        // bezwarunkowo i nie musi wiedzieć, gdzie stoi kamera ani czy w ogóle jest okno.
+        if !self.w_oknie(self.coord(handle.from)) && !self.w_oknie(self.coord(handle.to)) {
+            return;
+        }
         let mut trasa = Vec::new();
         self.route_points(handle.from, handle.to, &mut trasa);
         if trasa.len() < 2 {
@@ -1034,6 +1076,12 @@ mod tests {
         );
         assert_eq!(handle.arrive_at, 8 * 60 + u32::from(handle.minutes));
 
+        // Bez okna warstwa Mikro jest wyłączona — headless nie ma kadru.
+        assert_eq!(oracle.micro_len(), 0, "warstwa Mikro chodzi bez kadru");
+        oracle.enter_micro(&handle, who.id.entity().index(), odjazd);
+        assert_eq!(oracle.micro_len(), 0, "pieszy wszedł w kadr, którego nie ma");
+
+        oracle.set_micro_window(Some((0, 0)), 10_000);
         oracle.enter_micro(&handle, who.id.entity().index(), odjazd);
         assert_eq!(oracle.micro_len(), 1);
         let cel = [200.0f32, 200.0, 0.0];

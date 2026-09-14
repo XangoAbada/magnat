@@ -14,6 +14,11 @@ magnat-voxel = { workspace = true }
 magnat-spatial = { workspace = true }
 magnat-world = { workspace = true }
 magnat-render = { workspace = true }
+magnat-ecs = { workspace = true }
+magnat-agents = { workspace = true }
+magnat-ui = { workspace = true }
+egui = { workspace = true }
+egui-winit = { workspace = true }
 magnat-sim-snapshot = { workspace = true }
 clap = { workspace = true }
 winit = { workspace = true }

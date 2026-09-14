@@ -33,6 +33,30 @@ pub struct LightRecord {
     pub color_rgbe: u32,
 }
 
+/// Pieszy w kadrze — jedyny rekord encji, jaki M3 wnosi do snapshotu.
+///
+/// **Schemat ładunku należy do M11** (nagłówek tego pliku), a M3 dokłada tu minimum
+/// potrzebne do dwóch rzeczy z §5.11: narysowania mieszkańca na ekranie i odczytania,
+/// w kogo gracz kliknął. Nie ma tu ani wyglądu, ani klipu animacji, ani pozy —
+/// `Appearance`, `AnimationClip` i `PoseAtlas` są M11 i mają wejść bez zmiany kształtu
+/// tego rekordu, dokładając własne pola albo własną tablicę.
+///
+/// Pieszych jest do kilkuset tysięcy, więc **nie** siedzą w `RenderSnapshot`: idą
+/// slice'em do `Renderer::set_pedestrians`, tak samo jak światła. `RenderSnapshot`
+/// zostaje `Copy` i bezalokacyjny.
+#[derive(Clone, Copy, PartialEq, Debug, Default)]
+#[repr(C)]
+pub struct PedestrianRecord {
+    /// Pozycja w metrach, względem początku świata. Z jest osią pionową.
+    ///
+    /// `f32` wystarcza: przy 16 km krok `f32` to ~1 mm, a pieszy i tak jest rysowany
+    /// jako bryła 0,5 m. Przeliczenie na współrzędne względem kamery robi renderer,
+    /// bo tylko on zna oko (`camera.rs`: do shadera nie trafia współrzędna absolutna).
+    pub pos: [f32; 3],
+    /// Indeks encji mieszkańca — to samo, co czyta bufor ID przy kliknięciu.
+    pub entity: u32,
+}
+
 /// Tablica o stałej pojemności — odpowiednik `SoaSlice` z planu M1 §6.1.
 ///
 /// Osobny typ zamiast `[T; N]` z licznikiem obok, bo licznik trzymany osobno rozjeżdża się
