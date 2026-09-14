@@ -8,10 +8,10 @@ zostają w dokumencie fazy — tu jest wyłącznie to, co robisz w tej porcji.
 | | |
 |---|---|
 | **Wejście** | M2d (budynki), M2c (dzielnice), M2a (pola skalarne). |
-| **Pakiety robocze** | WP13, WP14, WP15, WP16, WP17 |
+| **Pakiety robocze** | WP13, WP14, **WP15b** (`pass_2` wyceny — `pass_1` przeniesiony do M2d jako WP15a, korekta D1), WP16, WP17 |
 | **Projekt techniczny** | §5.7, §5.8 |
 | **Wynik do pokazania** | Pełny artefakt fazy z §1 dokumentu fazy: `GenerationReport`, nakładka wartości gruntu z rozbiciem na czynniki, zielone `--test consistency`. |
-| **Kryterium zamknięcia** | Kryteria WP13–WP17 oraz bramki 1–7 fazy M2 w `00-postep.md`. |
+| **Kryterium zamknięcia** | Kryteria WP13, WP14, WP15b, WP16, WP17 oraz bramki 1–7 fazy M2 w `00-postep.md`. |
 | **Poprzednia / następna** | `M2d-zabudowa.md` · — (ostatnia w fazie) |
 
 Etap 7 i domknięcie fazy: archetypy zakładów, obsada budynków firmami-danymi, algorytm domknięcia łańcuchów produktowych, trzy przebiegi wyceny gruntu, nakładka UI i testy spójności Etapu 10.
@@ -24,9 +24,9 @@ Etap 7 i domknięcie fazy: archetypy zakładów, obsada budynków firmami-danymi
 |---|---|---|---|---|
 | WP13 | Archetypy zakładów i szablony łańcuchów | WP12 | `data/buildings/` (typy z PRD §7.2), `data/chains/`, obsada stref | każda zabudowana parcela niemieszkalna ma przypisany `SiteSeed` lub jest `Institutional`/`Green` |
 | WP14 | Domknięcie łańcuchów produktowych | WP13 | `supply_closure_check` + naprawa (import / dostawienie zakładu); walidator CI grafu produktów | `missing == []`; podaż/popyt w [0,85; 1,30] dla każdego towaru; **test negatywny: katalog, w którym towar jest osiągalny wyłącznie z `initial_stock.ron`, musi oblać walidację** (zapas startowy nie jest źródłem — 5.8) |
-| WP15 | Wycena gruntu (3 przebiegi) | WP2, WP7, WP14 | `land_value_pass_0/1/2`, `LandValueBreakdown` | monotoniczność: średnia wartość w `OldTown` > `Suburb`; wartość przy przemyśle ciężkim < średniej dzielnicy; przebiegi deterministyczne |
-| WP16 | Nakładka UI + karta inspekcji | WP15, M1 (`render`) | tekstura pola skalarnego na terenie, legenda, karta parceli/budynku | klik na parcelę pokazuje wartość i rozbicie na ≥ 8 czynników; 60 FPS z włączoną nakładką |
-| WP17 | Testy spójności + raport generacji | WP14, WP15 | 12 testów z sekcji 7, `GenerationReport`, `world_hash_m2` | wszystkie testy zielone dla 32 seedów × 4 profile w CI (miasto małe) i 4 seedów (metropolia, nocne CI) |
+| WP15b | Wycena gruntu, przebieg `pass_2` | WP14, WP15a (M2d) | czynniki dostępne po Etapie 7: `job_access`, `retail_access`, `service_access`, prestiż dzielnicy, kara za sąsiedztwo `IndustryHeavy`/`Extraction`; `LandValueBreakdown` | `avg_land_value(OldTown) > avg_land_value(Suburb)`; parcela przy `IndustryHeavy` poniżej mediany dzielnicy; brak wartości ≤ 0; rozbicie na ≥ 8 czynników. **Korekta D1:** `pass_0` zrealizowany w M2c jako punktacja stref, `pass_1` przeniesiony do M2d (WP15a) — jest wejściem doboru gramatyki, nie jego wynikiem |
+| WP16 | Nakładka UI + karta inspekcji | WP15b, M1 (`render`) | tekstura pola skalarnego na terenie, legenda, karta parceli/budynku | klik na parcelę pokazuje wartość i rozbicie na ≥ 8 czynników; 60 FPS z włączoną nakładką |
+| WP17 | Testy spójności + raport generacji | WP14, WP15b | 12 testów z sekcji 7, `GenerationReport`, `world_hash_m2` | wszystkie testy zielone dla 32 seedów × 4 profile w CI (miasto małe) i 4 seedów (metropolia, nocne CI) |
 
 ---
 
@@ -41,11 +41,11 @@ Problem kolejności: strefowanie potrzebuje wartości, wartość potrzebuje miej
 miejsca pracy potrzebują budynków, budynki potrzebują wartości. Rozwiązanie: **trzy
 przebiegi o ustalonym zakresie, bez iteracji do zbieżności** (determinizm + budżet czasu).
 
-| Przebieg | Kiedy | Czynniki | Odbiorca |
-|---|---|---|---|
-| `pass_0` | przed Etapem 4 | `d_center`, `d_gate_*`, `amenity`, `slope`, `flood_risk` | punktacja stref (5.3) |
-| `pass_1` | po Etapie 5 | + klasa drogi frontowej, długość frontu, `noise`, powierzchnia i kształt działki, `epoch_ring` | wybór gramatyki, liczba kondygnacji, `rent_hint` |
-| `pass_2` | po Etapie 7 | + `job_access`, `retail_access`, `service_access`, prestiż dzielnicy, kara za sąsiedztwo `IndustryHeavy`/`Extraction` | UI, karta inspekcji, wejście dla M5/M8/M10 |
+| Przebieg | Kiedy | Gdzie wykonywany | Czynniki | Odbiorca |
+|---|---|---|---|---|
+| `pass_0` | przed Etapem 4 | **M2c**, jako punktacja stref | `d_center`, `d_gate_*`, `amenity`, `slope`, `flood_risk` | punktacja stref (5.3) |
+| `pass_1` | po Etapie 5 | **M2d, WP15a** (korekta D1) | + klasa drogi frontowej, długość frontu, `noise`, powierzchnia i kształt działki, `epoch_ring` | wybór gramatyki, liczba kondygnacji, `rent_hint` |
+| `pass_2` | po Etapie 7 | **M2e, WP15b** | + `job_access`, `retail_access`, `service_access`, prestiż dzielnicy, kara za sąsiedztwo `IndustryHeavy`/`Extraction` | UI, karta inspekcji, wejście dla M5/M8/M10 |
 
 ```
 V = base[zone]
@@ -230,3 +230,15 @@ Pozostałe ustalenia przyjęte od M6 bez zmian:
   i się nie zmienia, ale **roczne agregaty w KROKU 5 liczę przez 360, nie 365.**
 
 ---
+
+---
+
+## Zmiany wpisane po M2c
+
+Zgodnie z `K-18`. Pełne uzasadnienie w tabeli „Zmiany wpisane po M2c" dokumentu
+`M2d-zabudowa.md` — tu tylko to, co dotyczy tej podfazy.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| D1 ★ | **`pass_1` wyceny wychodzi z tej podfazy do M2d jako WP15a.** WP15 staje się WP15b i realizuje wyłącznie `pass_2` | §5.7 mówi wprost, że `pass_1` biegnie „po Etapie 5" i zasila „wybór gramatyki, liczbę kondygnacji, `rent_hint`" — czyli WP11, który leży w M2d, przed WP15 na ścieżce krytycznej. Przy pierwotnym przydziale gramatyka czytałaby wartość gruntu równą zeru. `pass_0` odnotowany jako zrealizowany w M2c: punktacja stref liczy te same czynniki, tyle że nie zapisuje ich jako `Money` |
+| D10 | WP16 (nakładka i karta inspekcji) dostaje gotowe rusztowanie z M2c: `ParcelTree::at_point` + `city::poly::contains` dają trafienie w parcelę, a `headless preview --field zones --inspect x,y` wypisuje już kartę w wersji tekstowej | Karta inspekcji w kliencie graficznym ma pokazać to samo, co wersja headless, plus `LandValueBreakdown`. Warto zacząć od przeniesienia tamtej listy pól, a nie od projektowania jej po raz drugi |

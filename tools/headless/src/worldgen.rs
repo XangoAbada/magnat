@@ -8,8 +8,8 @@ use magnat_devtools::png;
 use magnat_jobs::JobPool;
 use magnat_voxel::MaterialRegistry;
 use magnat_world::{
-    generate as generate_world, generate_city, CityPlan, Difficulty, RoadClass, RoadStructure,
-    Terrain, WorldData, WorldGenParams,
+    generate as generate_world, generate_city, CityData, CityPlan, Difficulty, ResDensity,
+    RoadClass, RoadStructure, Terrain, WorldData, WorldGenParams, ZoneKind,
 };
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -165,9 +165,20 @@ pub struct PreviewArgs {
     profile: String,
 
     /// Pole do narysowania: `height` | `water` | `biome` | `temp` | `precip` | `fertility`
-    /// | `roads` (szkielet transportu miasta, M2b).
+    /// | `roads` (szkielet transportu miasta, M2b) | `zones` (strefy, parcele i granice
+    /// dzielnic, M2c).
     #[arg(long, default_value = "height")]
     field: String,
+
+    /// Karta inspekcji parceli pod podanym punktem `x,y` w metrach (M2c, „kliknięcie
+    /// parceli daje strefę, właściciela, frontę drogową i dzielnicę").
+    #[arg(long)]
+    inspect: Option<String>,
+
+    /// Kadr `x,y,bok` w metrach — wycinek mapy zamiast całości. Bez tego działka
+    /// o froncie 14 m ma na metropolii pół piksela i podgląd niczego nie dowodzi.
+    #[arg(long)]
+    crop: Option<String>,
 
     /// Maksymalny bok obrazu w pikselach; większe mapy są podpróbkowane.
     #[arg(long, default_value_t = 1024)]
@@ -186,8 +197,8 @@ pub fn preview(a: &PreviewArgs) -> Result<ExitCode, Box<dyn std::error::Error>> 
     let (world, report) = generate_world(p, &pool)?;
     eprintln!("generacja {:.1} ms", report.total_millis);
 
-    if a.field == "roads" {
-        return preview_roads(a, world);
+    if a.field == "roads" || a.field == "zones" {
+        return preview_city(a, world);
     }
 
     let src = world.height.dim();
@@ -308,12 +319,92 @@ fn biome_color(b: magnat_core::Biome) -> [u8; 3] {
     }
 }
 
-/// Podgląd szkieletu transportu miasta (M2b, „wynik do pokazania").
+/// Barwa strefy na podglądzie `--field zones`. Paleta jest planistyczna, nie ładna:
+/// mieszkaniówka w odcieniach żółci i brązu, usługi na czerwono, przemysł na fiolet,
+/// tereny otwarte na zielono — tak jak na planie zagospodarowania.
+fn zone_color(z: ZoneKind) -> [u8; 3] {
+    match z {
+        ZoneKind::Residential(ResDensity::R1) => [250, 240, 170],
+        ZoneKind::Residential(ResDensity::R2) => [240, 220, 130],
+        ZoneKind::Residential(ResDensity::R3) => [225, 190, 95],
+        ZoneKind::Residential(ResDensity::R4) => [205, 160, 70],
+        ZoneKind::Residential(ResDensity::R5) => [180, 130, 50],
+        ZoneKind::Commercial => [225, 90, 90],
+        ZoneKind::Office => [180, 70, 120],
+        ZoneKind::IndustryLight => [170, 120, 200],
+        ZoneKind::IndustryHeavy => [120, 70, 160],
+        ZoneKind::Logistics => [110, 110, 190],
+        ZoneKind::Agriculture => [200, 215, 120],
+        ZoneKind::Institutional => [90, 160, 200],
+        ZoneKind::Green => [110, 180, 100],
+        ZoneKind::Extraction => [150, 120, 80],
+        ZoneKind::Water => [60, 90, 150],
+        ZoneKind::Undevelopable => [90, 90, 90],
+    }
+}
+
+/// Karta inspekcji parceli (M2 §1, artefakt 2; wymóg wyjaśnialności — dok. 00 §7).
+fn inspect_parcel(city: &CityData, p: magnat_spatial::Vec2) -> Vec<String> {
+    let geom = &city.roads.geom;
+    let trafiona = city.parcels.tree.at_point(p, |id| {
+        let i = id.0.index() as usize;
+        magnat_world::city::poly::contains(geom.get(city.parcels.parcels[i].poly), p)
+    });
+    let Some(id) = trafiona else {
+        return vec![format!("{:.0},{:.0}: brak parceli", p.x, p.y)];
+    };
+    let parcel = &city.parcels.parcels[id.0.index() as usize];
+    let block = &city.blocks.blocks[parcel.block.0 as usize];
+    let d = &city.districts.districts[parcel.district.0 as usize];
+    let mut v = vec![
+        format!(
+            "parcela #{} · {} · {} m² · {:?}",
+            id.0.index(),
+            parcel.zone.key(),
+            parcel.area_m2,
+            parcel.status
+        ),
+        format!("właściciel: {:?}", parcel.owner),
+    ];
+    if parcel.frontage.is_none() {
+        v.push("front: brak (podwórko)".to_string());
+    } else {
+        let seg = &city.roads.segments[parcel.frontage.seg.0 as usize];
+        v.push(format!(
+            "front: segment {} ({}) · t {:.3}..{:.3} · {:.1} m",
+            parcel.frontage.seg.0,
+            seg.class.key(),
+            parcel.frontage.t0,
+            parcel.frontage.t1,
+            (parcel.frontage.t1 - parcel.frontage.t0) * f64::from(seg.length_dm) as f32 / 10.0
+        ));
+    }
+    v.push(format!(
+        "kwartał {} · osiedle {} · pierścień epoki {}",
+        block.id.0, block.neighborhood, block.epoch_ring
+    ));
+    v.push(format!(
+        "dzielnica {}: {} ({:?}, styl {}) · dochód {}/4 · reputacja {} · przestępczość {} · pojemność {} os.",
+        parcel.district.0,
+        d.name,
+        d.kind,
+        d.style.0,
+        d.income_tier,
+        d.reputation.get(),
+        d.crime.get(),
+        d.pop_capacity
+    ));
+    v
+}
+
+/// Podgląd miasta (M2b: `--field roads`, M2c: `--field zones`).
 ///
 /// Sanity-check bez GPU: na cieniowanym terenie rysowane są osie dróg w barwach klas,
-/// struktury inżynierskie, bramy i obrysy kwartałów. Ten obrazek jest przyrządem —
-/// błąd w L-systemie widać na nim natychmiast, a w liczbach dopiero po zastanowieniu.
-fn preview_roads(
+/// struktury inżynierskie, bramy i obrysy kwartałów, a w trybie `zones` dodatkowo
+/// wypełnienie parcel barwą strefy i granice dzielnic. Ten obrazek jest przyrządem —
+/// błąd w L-systemie albo w podziale na działki widać na nim natychmiast, a w liczbach
+/// dopiero po zastanowieniu.
+fn preview_city(
     a: &PreviewArgs,
     world: WorldData,
 ) -> Result<ExitCode, Box<dyn std::error::Error>> {
@@ -330,18 +421,51 @@ fn preview_roads(
     for l in city.report.lines() {
         println!("{l}");
     }
+    if let Some(spec) = &a.inspect {
+        let (x, y) = spec
+            .split_once(',')
+            .ok_or("--inspect oczekuje `x,y` w metrach")?;
+        let p = magnat_spatial::Vec2::new(x.trim().parse()?, y.trim().parse()?);
+        println!("── karta inspekcji ──");
+        for l in inspect_parcel(&city, p) {
+            println!("{l}");
+        }
+    }
 
     let map_m = params.size.meters();
-    let w = a.max_px.min(map_m) as usize;
-    let skala = w as f32 / map_m as f32;
+    // Kadr: początek i bok wycinka w metrach. Bez `--crop` to cała mapa.
+    let (origin, span_m) = match &a.crop {
+        Some(spec) => {
+            let v: Vec<f32> = spec
+                .split(',')
+                .map(|t| t.trim().parse::<f32>())
+                .collect::<Result<_, _>>()
+                .map_err(|e| format!("--crop oczekuje `x,y,bok` w metrach: {e}"))?;
+            let [cx, cy, bok] = v[..] else {
+                return Err("--crop oczekuje trzech liczb: `x,y,bok`".into());
+            };
+            (
+                magnat_spatial::Vec2::new(cx - bok * 0.5, cy - bok * 0.5),
+                bok.max(1.0),
+            )
+        }
+        None => (magnat_spatial::Vec2::ZERO, map_m as f32),
+    };
+    let w = if a.crop.is_some() {
+        a.max_px as usize
+    } else {
+        a.max_px.min(map_m) as usize
+    };
+    let skala = w as f32 / span_m;
     let mut px = vec![0u8; w * w * 3];
 
     // Tło: teren w szarościach, woda na niebiesko — żeby było widać, czemu droga skręca.
     let src = terrain.data().height.dim();
+    let m_na_probke = map_m as f32 / src as f32;
     for iy in 0..w {
         for ix in 0..w {
-            let sx = (ix * src / w).min(src - 1);
-            let sy = (iy * src / w).min(src - 1);
+            let sx = (((origin.x + ix as f32 / skala) / m_na_probke) as usize).min(src - 1);
+            let sy = (((origin.y + iy as f32 / skala) / m_na_probke) as usize).min(src - 1);
             let i = terrain.data().height.idx(sx, sy);
             let h = terrain.data().height[i];
             let c = if terrain.data().water[i].class().is_water() {
@@ -355,6 +479,41 @@ fn preview_roads(
         }
     }
 
+    // Parcele wypełnione barwą strefy — tylko w trybie `zones`.
+    if a.field == "zones" {
+        for parcel in &city.parcels.parcels {
+            let poly = city.roads.geom.get(parcel.poly);
+            let c = zone_color(parcel.zone);
+            let (mut lo, mut hi) = (magnat_spatial::Vec2::splat(f32::MAX), magnat_spatial::Vec2::splat(f32::MIN));
+            for q in poly {
+                lo = magnat_spatial::Vec2::new(lo.x.min(q.x), lo.y.min(q.y));
+                hi = magnat_spatial::Vec2::new(hi.x.max(q.x), hi.y.max(q.y));
+            }
+            let (x0, x1) = (
+                ((lo.x - origin.x) * skala) as i32,
+                ((hi.x - origin.x) * skala) as i32,
+            );
+            let (y0, y1) = (
+                ((lo.y - origin.y) * skala) as i32,
+                ((hi.y - origin.y) * skala) as i32,
+            );
+            if x1 < 0 || y1 < 0 || x0 >= w as i32 || y0 >= w as i32 {
+                continue;
+            }
+            for iy in y0.max(0)..=y1.min(w as i32 - 1) {
+                for ix in x0.max(0)..=x1.min(w as i32 - 1) {
+                    let q = origin
+                        + magnat_spatial::Vec2::new(ix as f32 / skala, iy as f32 / skala);
+                    if magnat_world::city::poly::contains(poly, q) {
+                        let o = ((w - 1 - iy as usize) * w + ix as usize) * 3;
+                        px[o..o + 3].copy_from_slice(&c);
+                    }
+                }
+            }
+        }
+    }
+
+
     let mut put = |x: i32, y: i32, c: [u8; 3]| {
         if x < 0 || y < 0 || x >= w as i32 || y >= w as i32 {
             return;
@@ -363,8 +522,8 @@ fn preview_roads(
         px[o..o + 3].copy_from_slice(&c);
     };
     let mut line = |a: magnat_spatial::Vec2, b: magnat_spatial::Vec2, c: [u8; 3], gruba: bool| {
-        let (x0, y0) = (a.x * skala, a.y * skala);
-        let (x1, y1) = (b.x * skala, b.y * skala);
+        let (x0, y0) = ((a.x - origin.x) * skala, (a.y - origin.y) * skala);
+        let (x1, y1) = ((b.x - origin.x) * skala, (b.y - origin.y) * skala);
         let n = ((x1 - x0).abs().max((y1 - y0).abs()) as i32).max(1);
         for k in 0..=n {
             let t = k as f32 / n as f32;
@@ -376,6 +535,17 @@ fn preview_roads(
             }
         }
     };
+
+    // Obrysy działek: bez nich sąsiednie parcele tej samej strefy zlewają się
+    // w jedną plamę i podgląd nie dowodzi niczego o podziale.
+    if a.field == "zones" {
+        for parcel in &city.parcels.parcels {
+            let poly = city.roads.geom.get(parcel.poly);
+            for i in 0..poly.len() {
+                line(poly[i], poly[(i + 1) % poly.len()], [60, 50, 40], false);
+            }
+        }
+    }
 
     // Kwartały najpierw — drogi mają je przykryć, nie odwrotnie.
     for b in &city.blocks.blocks {
@@ -406,9 +576,41 @@ fn preview_roads(
         }
     }
 
+    if a.field == "zones" {
+        // Granica dzielnicy: segment, po którego dwóch stronach leżą różne dzielnice.
+        let mut po_segmencie = vec![[u16::MAX; 2]; city.roads.segments.len()];
+        for b in &city.blocks.blocks {
+            for &sid in &city.blocks.bounding_items
+                [b.bounding.start as usize..b.bounding.end as usize]
+            {
+                let slot = &mut po_segmencie[sid.0 as usize];
+                if slot[0] == u16::MAX {
+                    slot[0] = b.district.0;
+                } else if slot[0] != b.district.0 {
+                    slot[1] = b.district.0;
+                }
+            }
+        }
+        for (i, para) in po_segmencie.iter().enumerate() {
+            if para[1] == u16::MAX {
+                continue;
+            }
+            let s = &city.roads.segments[i];
+            line(
+                city.roads.nodes[s.a.0 as usize].pos,
+                city.roads.nodes[s.b.0 as usize].pos,
+                [20, 20, 20],
+                true,
+            );
+        }
+    }
+
     // Bramy i środek miasta — krzyżyki, żeby było widać, skąd i dokąd sieć rośnie.
     let mut krzyzyk = |p: magnat_spatial::Vec2, c: [u8; 3]| {
-        let (x, y) = ((p.x * skala) as i32, (p.y * skala) as i32);
+        let (x, y) = (
+            ((p.x - origin.x) * skala) as i32,
+            ((p.y - origin.y) * skala) as i32,
+        );
         for d in -4..=4 {
             put(x + d, y, c);
             put(x, y + d, c);

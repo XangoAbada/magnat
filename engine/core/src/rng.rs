@@ -55,8 +55,22 @@ pub enum StreamId {
     Gates = 120,
     /// L-system arterii — klucz `seq` propozycji (M2 §5.2).
     RoadsL = 121,
-    // 122–139 zarezerwowane dla M2 (RoadRail, Blocks, Zoning, … — dopisywane przez podfazy,
-    // które ich faktycznie użyją; wartości z tabeli w M2 §6).
+    /// Scalanie i rozjazdy kolei towarowej (M2 §5.2, WP5b).
+    RoadRail = 122,
+    /// Podział kwartału OBB — punkt cięcia (M2 §5.4).
+    Blocks = 123,
+    /// Szum punktacji i remisy przydziału kwotowego stref (M2 §5.3).
+    Zoning = 124,
+    /// Rozrost footprintu per epoka (M2 §5.3).
+    EpochRings = 125,
+    /// Próbkowanie Poissona zalążków dzielnic (M2 §5.5).
+    Districts = 126,
+    /// Nazwy dzielnic z szablonów (M2 §5.5).
+    Naming = 127,
+    /// Szerokości frontów w podziale pasowym (M2 §5.4).
+    Parcels = 128,
+    // 129–139 zarezerwowane dla M2 (BuildingPick, BuildingGrammar, Interiors, FirmSeed,
+    // SitePlacement — dopisywane przez podfazy, które ich użyją; wartości z M2 §6).
 }
 
 /// Encja zastępcza dla losowania bez encji (zdarzenie globalne, generator świata).
@@ -273,5 +287,6 @@ mod tests {
         assert_eq!(StreamId::WorldDetail as u16, 110);
         assert_eq!(StreamId::Gates as u16, 120);
         assert_eq!(StreamId::RoadsL as u16, 121);
+        assert_eq!(StreamId::Parcels as u16, 128);
     }
 }

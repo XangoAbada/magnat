@@ -1,0 +1,151 @@
+// Wagi punktacji stref i twarde weta (M2 §5.3, „Przydział z kwotami", krok 1).
+//
+// `score[b][z] = Σ_f w[z][f] · field_f(centroid(b))`. Wszystkie pola są znormalizowane
+// 0..=1, a pola odległości mają 1 w punkcie **najdalszym**, więc „chcę blisko" zapisuje
+// się wagą ujemną. Wagi są urbanistyką, nie gospodarką: nie zależą od profilu miasta —
+// od profilu zależą kwoty (`mix` w `profile_*.ron`).
+//
+// `max_slope` w jednostkach `TerrainQuery::slope_at` (tan α × 64): 64 = 100 %,
+// czyli 16 ≈ 25 %, 6 ≈ 9 %.
+//
+// Pola: DCenter · AccessRoad · GateRoad · GateRail · Port · Noise · Amenity · Slope
+//       Flood · Deposit · Soil · EpochAge (0 = najstarszy pierścień) · Downwind.
+(
+    schema_version: 1,
+
+    // Powyżej tego ryzyka powodziowego kwartał jest `Undevelopable` (M2 §5.3).
+    //
+    // Próg jest wysoki świadomie: `flood_risk` z M1 sięga 100 przy samym zwierciadle
+    // wody i spada dopiero kilkanaście metrów wyżej, a miasta nadrzeczne stoją
+    // w terenie zalewowym z definicji. Przy progu 55 generator wykreślał 92 ze 96
+    // kwartałów miasta nad rzeką. Weto zostaje więc dla terenu, który jest praktycznie
+    // w wodzie; resztę załatwia ujemna waga `Flood` w punktacji stref.
+    flood_max: 92,
+    // Bufor między przemysłem ciężkim a mieszkaniówką (M2 §5.3, krok 1).
+    heavy_buffer_m: 400.0,
+
+    zones: [
+        // ── Mieszkaniowe ─────────────────────────────────────────────────────────────
+        (
+            zone: Residential(R1),
+            max_slope: 25,
+            weights: [
+                (DCenter, 0.90), (Amenity, 0.80), (Noise, -1.00), (Slope, -0.30),
+                (AccessRoad, -0.30), (EpochAge, 0.60), (Flood, -0.40),
+            ],
+        ),
+        (
+            zone: Residential(R2),
+            max_slope: 20,
+            weights: [
+                (DCenter, 0.50), (Amenity, 0.50), (Noise, -0.80), (Slope, -0.35),
+                (AccessRoad, -0.40), (EpochAge, 0.35), (Flood, -0.40),
+            ],
+        ),
+        (
+            zone: Residential(R3),
+            max_slope: 16,
+            weights: [
+                (DCenter, -0.80), (Amenity, 0.20), (Noise, -0.30), (Slope, -0.40),
+                (AccessRoad, -0.50), (EpochAge, -0.90), (Flood, -0.30),
+            ],
+        ),
+        (
+            zone: Residential(R4),
+            max_slope: 14,
+            weights: [
+                (DCenter, -0.10), (Amenity, 0.30), (Noise, -0.40), (Slope, -0.60),
+                (AccessRoad, -0.50), (EpochAge, -0.10), (Flood, -0.30),
+            ],
+        ),
+        (
+            zone: Residential(R5),
+            max_slope: 12,
+            weights: [
+                (DCenter, -0.60), (Amenity, 0.40), (Noise, -0.20), (Slope, -0.70),
+                (AccessRoad, -0.70), (EpochAge, 0.70), (Flood, -0.30),
+            ],
+        ),
+
+        // ── Usługowe ─────────────────────────────────────────────────────────────────
+        (
+            zone: Commercial,
+            max_slope: 14,
+            weights: [
+                (DCenter, -1.00), (AccessRoad, -1.00), (Noise, 0.10), (Amenity, 0.20),
+                (Slope, -0.50), (Flood, -0.20),
+            ],
+        ),
+        (
+            zone: Office,
+            max_slope: 14,
+            weights: [
+                (DCenter, -0.90), (AccessRoad, -0.80), (Noise, -0.10), (Amenity, 0.25),
+                (EpochAge, 0.40), (Slope, -0.50), (Flood, -0.20),
+            ],
+        ),
+        (
+            zone: Institutional,
+            max_slope: 16,
+            weights: [
+                (DCenter, -0.30), (AccessRoad, -0.60), (Amenity, 0.30), (Noise, -0.40),
+                (Slope, -0.40), (Flood, -0.30),
+            ],
+        ),
+
+        // ── Produkcyjne i magazynowe ─────────────────────────────────────────────────
+        (
+            zone: IndustryLight,
+            max_slope: 12,
+            weights: [
+                (GateRoad, -0.60), (GateRail, -0.40), (AccessRoad, -0.50), (DCenter, 0.40),
+                (Amenity, -0.50), (Slope, -0.60), (Flood, -0.20),
+            ],
+        ),
+        (
+            // Progi nachylenia przemysłu podniesione z 6 do 10 jednostek (≈ 15 %):
+            // przy 6 nie kwalifikował się **żaden** kwartał miasta nad rzeką, kwota
+            // 5 % nie miała gdzie pójść i w całości wsiąkała w R1 (+10 pp. ponad kwotę).
+            // Teren i tak jest karany wagą `Slope`, tylko już nie wetem.
+            zone: IndustryHeavy,
+            max_slope: 10,
+            weights: [
+                (GateRail, -0.90), (GateRoad, -0.50), (Port, -0.40), (DCenter, 0.80),
+                (Amenity, -0.90), (Slope, -0.80), (Noise, 0.40), (Downwind, 1.80),
+            ],
+        ),
+        (
+            zone: Logistics,
+            max_slope: 10,
+            weights: [
+                (GateRoad, -1.00), (GateRail, -0.60), (DCenter, 0.60), (Amenity, -0.40),
+                (Slope, -0.70), (Noise, 0.20),
+            ],
+        ),
+
+        // ── Otwarte ──────────────────────────────────────────────────────────────────
+        (
+            zone: Agriculture,
+            max_slope: 14,
+            weights: [
+                (DCenter, 1.00), (Soil, 1.00), (Slope, -0.50), (AccessRoad, 0.20),
+                (Amenity, 0.10),
+            ],
+        ),
+        (
+            zone: Green,
+            max_slope: 255,
+            weights: [
+                (Amenity, 1.00), (Slope, 0.50), (Flood, 0.60), (Noise, -0.20),
+                (DCenter, 0.10),
+            ],
+        ),
+        (
+            zone: Extraction,
+            max_slope: 40,
+            weights: [
+                (Deposit, 2.00), (DCenter, 0.70), (Amenity, -0.70), (GateRail, -0.30),
+            ],
+        ),
+    ],
+)

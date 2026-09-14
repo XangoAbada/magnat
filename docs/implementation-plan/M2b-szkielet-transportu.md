@@ -25,7 +25,7 @@ Etap 3 generacji: bramy miasta, arterie L-systemem ograniczonym terenem, mosty i
 | [x] WP3 | Punkty wejścia do miasta | M1 (`Terrain`) | `CityGate`, wybór typu i miejsca wg profilu i regionu | dla 20 seedów × 5 profili: każdy wymagany typ bramy istnieje, leży na terenie zgodnym z typem (port na wodzie żeglownej, lotnisko na terenie o nachyleniu < 3%) |
 | [x] WP4 | L-system arterii | WP3 | reguły globalne + ograniczenia lokalne, snapowanie, klasy dróg | sieć bez wiszących końców klasy ≥ Collector; 2 przebiegi tego samego seeda → identyczny bajt w bajt `RoadNetwork` |
 | [x] WP5 | Mosty, tunele, nasypy | WP4 | wybór struktury z `TerrainQuery::crossing_cost`, limity rozpiętości i przewyższenia per klasa | most ≤ `bridge_max[class]`, tunel ≤ `tunnel_max[class]` i tylko dla klas z `tunnel_trigger > 0`, nasyp ≤ 8 m; niweleta segmentu po gruncie ≤ `max_slope[class]` |
-| [ ] WP5b | Kolej towarowa | WP7 (M2c) | A* najtańszej ścieżki dla torów, łączenie odnóg, rozjazdy | każda strefa przemysłowa/logistyczna ma bocznicę ≤ 1,2 km od kwartału; brak toru o nachyleniu > 2% — **przeniesione do M2c, korekta B1** |
+| [x] WP5b | Kolej towarowa | WP7 (M2c) | A* najtańszej ścieżki dla torów, łączenie odnóg, rozjazdy | każda strefa przemysłowa/logistyczna ma bocznicę ≤ 1,2 km od kwartału; brak toru o nachyleniu > 2% — **wykonane w M2c, korekta B1** |
 | [x] WP6 | Kwartały z grafu dróg | WP5 | wyznaczanie ścian planarnych (faces) obchodem półkrawędzi | liczba orbit obchodu = `E − V + 2·C` (wzór Eulera); suma kwartałów + pas drogowy = suma ścian w tolerancji 0,5% — patrz korekta B17 |
 
 ---

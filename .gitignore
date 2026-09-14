@@ -1,3 +1,7 @@
 /target
 *.mgs
 *.hashes
+
+# Podglądy generatora — przyrząd diagnostyczny, odtwarzalny jedną komendą.
+podglad_*.png
+preview*.png

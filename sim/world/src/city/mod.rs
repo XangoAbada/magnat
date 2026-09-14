@@ -1,24 +1,37 @@
-//! Generator miasta (faza M2). Podfaza **M2b** dostarcza Etap 3: bramy, szkielet
-//! transportu i kwartały wyznaczone z powstałego grafu.
+//! Generator miasta (faza M2). **M2b** dostarcza Etap 3 (bramy, szkielet transportu,
+//! kwartały), **M2c** Etapy 4 i 5 (pola wpływu, strefy, pierścienie epok, dzielnice,
+//! sieć lokalna, parcele, kolej towarowa).
 //!
 //! Wejściem jest `CityPlan` i `TerrainQuery` (**K-13** — teren wyłącznie przez kontrakt
-//! M1, nigdy przez surowe dane). Wyjściem `CityData`: sieć dróg, kwartały i raport.
-//! Strefy, parcele, dzielnice, zabudowa i gospodarka bazowa dokładają kolejne podfazy.
+//! M1, nigdy przez surowe dane). Wyjściem `CityData`. Zabudowę (M2d) i gospodarkę bazową
+//! wraz z wyceną (M2e) dokładają kolejne podfazy.
+//!
+//! Kolejność etapów M2c odbiega od numeracji pakietów i to jest świadome (korekta C8):
+//! dzielnice (WP9) idą **przed** parcelami (WP8), bo przypisanie dzielnic przenumerowuje
+//! kwartały, a po powstaniu parcel trzeba by przestawiać dwie tablice zamiast jednej.
 
 pub mod blocks;
+pub mod districts;
 pub mod gates;
 pub mod lsystem;
+pub mod parcels;
 pub mod pattern;
+pub mod poly;
+pub mod rail;
 pub mod road;
+pub mod zoning;
 
 use crate::assets::data_path;
 use crate::params::{Difficulty, EconomyProfile, Epoch, Region, WorldGenParams, WorldSize};
 use crate::query::TerrainQuery;
 use blocks::BlockSet;
+use districts::{DistrictNames, DistrictSet};
 use gates::{CityGate, GateKind, GateProfile};
-use magnat_core::StateHash;
+use magnat_core::{StateHash, StateHasher};
 use magnat_spatial::Vec2;
+use parcels::ParcelSet;
 use pattern::RingTable;
+use zoning::{CityFields, EpochTable, ZoneKind, ZoneResult, ZoningWeights};
 use road::{
     FurnitureKind, NodeFlags, NodeId, PolyArena, RoadClass, RoadFlags, RoadNetwork, RoadNode,
     RoadSegment, SegmentId, StreetFurniture,
@@ -119,8 +132,35 @@ pub struct GenerationReport {
     pub urban_area_km2: f64,
     pub road_area_km2: f64,
     pub stats: lsystem::LStats,
+    // ── M2c ──────────────────────────────────────────────────────────────────────────
+    /// Zrealizowany i docelowy udział powierzchniowy stref, w indeksach `ZoneKind::ALL`.
+    pub zone_share: [f32; 16],
+    pub zone_target: [f32; 16],
+    /// Największe odchylenie udziału od kwoty, w punktach procentowych (test T9: ≤ 3).
+    pub zone_dev_pp: f32,
+    /// Kwartały pozamiejskie — poza kwotami (patrz `zoning::MAX_URBAN_BLOCK_M2`).
+    pub rural_blocks: u32,
+    pub rural_area_km2: f64,
+    /// Dolna granica `zone_dev_pp` wynikająca z ziarnistości kwartałów.
+    pub zone_dev_floor_pp: f32,
+    pub zone_count: [u32; 16],
+    pub zone_candidates: [u32; 16],
+    /// Liczba kwartałów w każdym pierścieniu epoki, w kolejności od najstarszego.
+    pub epoch_rings: Vec<(String, u32)>,
+    pub districts: u32,
+    pub district_names: Vec<String>,
+    pub district_seeds: u32,
+    pub district_snapped: u32,
+    pub parcels: u32,
+    pub parcels_without_frontage: u32,
+    pub parcel_slivers: u32,
+    pub local_streets: u32,
+    pub segment_splits: u32,
+    pub rail: rail::RailReport,
     pub stage_millis: Vec<(&'static str, f64)>,
     pub road_hash: StateHash,
+    /// Odcisk warstwy M2c: strefy, dzielnice, parcele. Wchodzi do `world_hash_m2` (M2e).
+    pub city_hash: StateHash,
     /// Ostrzeżenia — R1 fazy: generator, który odrzuca ponad 40% propozycji,
     /// buduje co innego, niż planowano, i ma o tym powiedzieć.
     pub warnings: Vec<String>,
@@ -169,6 +209,65 @@ impl GenerationReport {
             self.faces_debug.clone(),
             format!("hash sieci: {:032x}", self.road_hash.0),
         ];
+        if self.parcels > 0 || self.districts > 0 {
+            v.push(format!(
+                "strefy: odchylenie max {:.1} pp (próg ziarnistości {:.1}) · pozamiejskich {} ({:.2} km²) · {}",
+                self.zone_dev_pp,
+                self.zone_dev_floor_pp,
+                self.rural_blocks,
+                self.rural_area_km2,
+                ZoneKind::ALL
+                    .iter()
+                    .filter(|z| {
+                    self.zone_share[z.index()] > 0.0005
+                        || self.zone_target[z.index()] > 0.0005
+                        || self.zone_count[z.index()] > 0
+                })
+                    .map(|z| format!(
+                        "{} {}k{}×{:.1}/{:.1}%",
+                        z.key(),
+                        self.zone_candidates[z.index()],
+                        self.zone_count[z.index()],
+                        self.zone_share[z.index()] * 100.0,
+                        self.zone_target[z.index()] * 100.0
+                    ))
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            ));
+            v.push(format!(
+                "pierścienie epok: {}",
+                self.epoch_rings
+                    .iter()
+                    .map(|(k, n)| format!("{k} {n}"))
+                    .collect::<Vec<_>>()
+                    .join(" · ")
+            ));
+            v.push(format!(
+                "dzielnice: {} (zalążków {}, dogięć {}) — {}",
+                self.districts,
+                self.district_seeds,
+                self.district_snapped,
+                self.district_names.join(", ")
+            ));
+            v.push(format!(
+                "parcele: {} · bez frontu {} · odpad {} · ulice lokalne {} · podziały segmentów {}",
+                self.parcels,
+                self.parcels_without_frontage,
+                self.parcel_slivers,
+                self.local_streets,
+                self.segment_splits
+            ));
+            v.push(format!(
+                "kolej: {:.1} km · bocznic {} · rozjazdów {} · w zasięgu istniejących {} · bez połączenia {} · max nachylenie {:.2}%",
+                self.rail.track_km,
+                self.rail.sidings,
+                self.rail.junctions,
+                self.rail.covered,
+                self.rail.unreachable,
+                self.rail.max_grade_pct
+            ));
+            v.push(format!("hash miasta: {:032x}", self.city_hash.0));
+        }
         for (n, ms) in &self.stage_millis {
             v.push(format!("  {n}: {ms:.1} ms"));
         }
@@ -199,12 +298,17 @@ impl GenerationReport {
     }
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, Debug)]
 pub struct CityData {
     pub plan: CityPlan,
     pub center: Vec2,
     pub roads: RoadNetwork,
     pub blocks: BlockSet,
+    /// Pola wpływu — wejście wyceny gruntu (M2e) i nakładek renderu.
+    pub fields: CityFields,
+    pub zones: ZoneResult,
+    pub districts: DistrictSet,
+    pub parcels: ParcelSet,
     pub report: GenerationReport,
 }
 
@@ -212,6 +316,7 @@ pub struct CityData {
 pub enum CityGenError {
     Profile(String),
     Rings(pattern::RingError),
+    Data(zoning::EpochError),
 }
 
 impl std::fmt::Display for CityGenError {
@@ -219,13 +324,14 @@ impl std::fmt::Display for CityGenError {
         match self {
             CityGenError::Profile(s) => write!(f, "{s}"),
             CityGenError::Rings(e) => write!(f, "{e}"),
+            CityGenError::Data(e) => write!(f, "{e}"),
         }
     }
 }
 
 impl std::error::Error for CityGenError {}
 
-pub const PROFILE_SCHEMA_VERSION: u32 = 1;
+pub const PROFILE_SCHEMA_VERSION: u32 = 2;
 
 fn load_profile(plan: &CityPlan) -> Result<GateProfile, CityGenError> {
     let path = data_path(&plan.profile_path());
@@ -243,10 +349,13 @@ fn load_profile(plan: &CityPlan) -> Result<GateProfile, CityGenError> {
     Ok(p)
 }
 
-/// Etap 3 generacji miasta w całości (M2b).
+/// Generacja miasta: Etap 3 (M2b) oraz Etapy 4 i 5 (M2c).
 pub fn generate_city(plan: &CityPlan, t: &dyn TerrainQuery) -> Result<CityData, CityGenError> {
     let profile = load_profile(plan)?;
-    let rings = RingTable::load().map_err(CityGenError::Rings)?;
+    let rings_tbl = RingTable::load().map_err(CityGenError::Rings)?;
+    let epochs = EpochTable::load().map_err(CityGenError::Data)?;
+    let weights = ZoningWeights::load().map_err(CityGenError::Data)?;
+    let names = DistrictNames::load().map_err(CityGenError::Data)?;
     let mut stage = Vec::new();
     let mut zegar = std::time::Instant::now();
     let mut tik = |stage: &mut Vec<(&'static str, f64)>, n: &'static str| {
@@ -257,18 +366,77 @@ pub fn generate_city(plan: &CityPlan, t: &dyn TerrainQuery) -> Result<CityData, 
     let gp = gates::place_gates(plan, t, &profile);
     tik(&mut stage, "bramy");
 
-    let grown = lsystem::grow_network(plan, t, &gp, &rings);
+    let grown = lsystem::grow_network(plan, t, &gp, &rings_tbl);
     tik(&mut stage, "l-system");
 
     let (mut roads, stats) = finalize(grown, &gp, t);
     tik(&mut stage, "domknięcie sieci");
 
-    // Arena wyjęta na czas budowy kwartałów: `build_blocks` czyta sieć i **dopisuje**
-    // do areny obrysy, a to dwa różne pożyczenia tej samej struktury.
+    // Arena wyjęta na czas budowy kwartałów i parcel: te funkcje czytają sieć
+    // i **dopisują** do areny obrysy, a to dwa różne pożyczenia tej samej struktury.
     let mut geom = std::mem::take(&mut roads.geom);
-    let blocks = blocks::build_blocks(&roads, &mut geom);
-    roads.geom = geom;
+    let mut blocks = blocks::build_blocks(&roads, &mut geom);
     tik(&mut stage, "kwartały");
+
+    // ── M2c ─────────────────────────────────────────────────────────────────────────
+    let fields = zoning::build_fields(plan, t, &roads, &gp, gp.center);
+    tik(&mut stage, "pola wpływu");
+
+    let adj = blocks::block_adjacency(&blocks, roads.segments.len());
+    let samples = zoning::sample_blocks(&blocks, &geom, t, gp.center);
+    let rings = epochs.rings_for(plan.epoch);
+    let mut zones = zoning::assign_zones(
+        plan,
+        &blocks,
+        &adj,
+        &fields,
+        &samples,
+        &weights,
+        &profile.mix,
+        rings,
+        gp.center,
+    );
+    tik(&mut stage, "strefy i pierścienie epok");
+
+    // Dzielnice **przed** parcelami: przypisanie przenumerowuje kwartały (korekta C8).
+    let districts = districts::build_districts(
+        plan,
+        t,
+        &mut roads,
+        &mut geom,
+        &mut blocks,
+        &mut zones,
+        &adj,
+        &fields,
+        gp.center,
+        &names,
+    );
+    tik(&mut stage, "dzielnice");
+
+    let centroidy: Vec<Vec2> = blocks
+        .blocks
+        .iter()
+        .map(|b| poly::centroid(geom.get(b.poly)))
+        .collect();
+    let segments_before = roads.segments.len();
+    let rail_rep = rail::build_rail(
+        t,
+        &gp,
+        &mut roads,
+        &mut geom,
+        &blocks,
+        &zones,
+        &fields,
+        &centroidy,
+        segments_before,
+    );
+    tik(&mut stage, "kolej towarowa");
+
+    let parcel_set = parcels::subdivide(plan, t, &mut roads, &mut geom, &mut blocks, &zones);
+    tik(&mut stage, "sieć lokalna i parcele");
+
+    districts::assign_road_districts(&mut roads, &blocks);
+    roads.geom = geom;
 
     let mut warnings = Vec::new();
     if stats.rejection_pct() > 40 {
@@ -294,6 +462,49 @@ pub fn generate_city(plan: &CityPlan, t: &dyn TerrainQuery) -> Result<CityData, 
     if blocks.blocks.is_empty() {
         warnings.push("graf dróg nie zamknął ani jednego kwartału".to_string());
     }
+    warnings.extend(zones.warnings.iter().cloned());
+    // T9 z progiem ziarnistości: kwartał trafia do strefy w całości, więc odchylenia
+    // mniejszego niż udział największego kwartału nie da się osiągnąć żadnym przydziałem.
+    let limit_t9 = 3.0f32.max(zones.largest_block_share * 150.0);
+    if zones.max_deviation_pp() > limit_t9 {
+        warnings.push(format!(
+            "udział stref odbiega od profilu o {:.1} pp. (T9: limit {limit_t9:.1})",
+            zones.max_deviation_pp()
+        ));
+    }
+    if rail_rep.unreachable > 0 {
+        warnings.push(format!(
+            "{} klastrów przemysłowych bez bocznicy — teren nie pozwolił poprowadzić toru",
+            rail_rep.unreachable
+        ));
+    }
+
+    let bez_frontu = parcel_set
+        .parcels
+        .iter()
+        .filter(|p| p.frontage.is_none() && !matches!(p.zone, ZoneKind::Green))
+        .count() as u32;
+    if bez_frontu > 0 {
+        warnings.push(format!(
+            "{bez_frontu} parcel poza zielenią nie ma frontu drogowego (T7)"
+        ));
+    }
+
+    let epoch_rings = zones
+        .rings
+        .iter()
+        .enumerate()
+        .map(|(i, e)| {
+            (
+                e.key.clone(),
+                zones
+                    .epoch_ring
+                    .iter()
+                    .filter(|r| usize::from(**r) == i)
+                    .count() as u32,
+            )
+        })
+        .collect();
 
     let report = GenerationReport {
         center: gp.center,
@@ -302,7 +513,7 @@ pub fn generate_city(plan: &CityPlan, t: &dyn TerrainQuery) -> Result<CityData, 
         deferred_gates: gp
             .gates
             .iter()
-            .filter(|g| g.kind.is_rail())
+            .filter(|g| g.kind.is_rail() && !roads.gates.iter().any(|x| x.pos == g.pos))
             .map(|g| (g.kind, g.pos))
             .collect(),
         nodes: roads.nodes.len() as u32,
@@ -327,8 +538,28 @@ pub fn generate_city(plan: &CityPlan, t: &dyn TerrainQuery) -> Result<CityData, 
         urban_area_km2: blocks.urban_area_m2 / 1e6,
         road_area_km2: blocks.road_area_m2 / 1e6,
         stats,
+        zone_share: zones.share,
+        zone_target: zones.target,
+        zone_dev_pp: zones.max_deviation_pp(),
+        rural_blocks: zones.rural_blocks,
+        rural_area_km2: zones.rural_area_m2 / 1e6,
+        zone_dev_floor_pp: zones.largest_block_share * 100.0,
+        zone_count: zones.count,
+        zone_candidates: zones.candidates,
+        epoch_rings,
+        districts: districts.districts.len() as u32,
+        district_names: districts.districts.iter().map(|d| d.name.clone()).collect(),
+        district_seeds: districts.seeds,
+        district_snapped: districts.snapped,
+        parcels: parcel_set.parcels.len() as u32,
+        parcels_without_frontage: bez_frontu,
+        parcel_slivers: parcel_set.slivers,
+        local_streets: parcel_set.local_streets,
+        segment_splits: parcel_set.splits,
+        rail: rail_rep,
         stage_millis: stage,
         road_hash: roads.hash(),
+        city_hash: city_hash(&blocks, &zones, &districts, &parcel_set),
         warnings,
     };
 
@@ -337,8 +568,58 @@ pub fn generate_city(plan: &CityPlan, t: &dyn TerrainQuery) -> Result<CityData, 
         center: gp.center,
         roads,
         blocks,
+        fields,
+        zones,
+        districts,
+        parcels: parcel_set,
         report,
     })
+}
+
+/// Odcisk warstwy M2c. Kolejność jest kolejnością tablic, a te powstają deterministycznie
+/// (00 §3.6) — dwa przebiegi tego samego ziarna muszą dać ten sam hash.
+#[must_use]
+pub fn city_hash(
+    blocks: &BlockSet,
+    zones: &ZoneResult,
+    districts: &DistrictSet,
+    parcels: &ParcelSet,
+) -> StateHash {
+    let mut h = StateHasher::new();
+    h.write_u32(blocks.blocks.len() as u32);
+    for (i, b) in blocks.blocks.iter().enumerate() {
+        h.write_u32(b.area_m2);
+        h.write_u16(b.district.0);
+        h.write_u16(b.neighborhood);
+        h.write_u8(zones.zone[i].index() as u8);
+        h.write_u8(zones.epoch_ring[i]);
+        h.write_u32(b.parcels.start);
+        h.write_u32(b.parcels.end);
+    }
+    h.write_u32(districts.districts.len() as u32);
+    for d in &districts.districts {
+        for b in d.name.as_bytes() {
+            h.write_u8(*b);
+        }
+        h.write_u8(d.kind as u8);
+        h.write_u8(d.founded_epoch.0);
+        h.write_u16(d.style.0);
+        h.write_u8(d.income_tier);
+        h.write_u8(d.reputation.get());
+        h.write_u8(d.crime.get());
+        h.write_u32(d.pop_capacity);
+    }
+    h.write_u32(parcels.parcels.len() as u32);
+    for p in &parcels.parcels {
+        h.write_u32(p.block.0);
+        h.write_u16(p.district.0);
+        h.write_u32(p.area_m2);
+        h.write_u8(p.zone.index() as u8);
+        h.write_u32(p.frontage.seg.0);
+        h.write_u32(p.frontage.t0.to_bits());
+        h.write_u32(p.frontage.t1.to_bits());
+    }
+    h.finish()
 }
 
 /// Liczba segmentów spełniających warunek — raport mówi o **gotowej** sieci,
@@ -590,19 +871,30 @@ pub fn dangling_high_class(net: &RoadNetwork) -> Vec<NodeId> {
 }
 
 /// Czy sieć jezdna jest jedną składową spójną (wstęp do testu T1 z M2 §7).
+///
+/// Liczone po węzłach **dotkniętych przez drogi jezdne**: od M2c w sieci siedzą też
+/// tory, a te są osobną składową z definicji — pociąg nie skręca w ulicę.
 #[must_use]
 pub fn is_connected(net: &RoadNetwork) -> bool {
-    let start = net
-        .segments
-        .iter()
-        .position(|s| s.class.is_driveable() && !s.flags.contains(RoadFlags::RAIL));
-    let Some(s0) = start else { return true };
+    let jezdny = |s: &RoadSegment| s.class.is_driveable() && !s.flags.contains(RoadFlags::RAIL);
+    let mut w_sieci = vec![false; net.nodes.len()];
+    for s in net.segments.iter().filter(|s| jezdny(s)) {
+        w_sieci[s.a.0 as usize] = true;
+        w_sieci[s.b.0 as usize] = true;
+    }
+    let ile = w_sieci.iter().filter(|x| **x).count();
+    let Some(start) = w_sieci.iter().position(|x| *x) else {
+        return true;
+    };
     let mut seen = vec![false; net.nodes.len()];
-    let mut stos = vec![net.segments[s0].a];
-    seen[net.segments[s0].a.0 as usize] = true;
+    let mut stos = vec![NodeId(start as u32)];
+    seen[start] = true;
     let mut n = 1;
     while let Some(v) = stos.pop() {
         for &s in net.segments_at(v) {
+            if !jezdny(&net.segments[s.0 as usize]) {
+                continue;
+            }
             let o = net.other_end(s, v);
             if !seen[o.0 as usize] {
                 seen[o.0 as usize] = true;
@@ -611,5 +903,5 @@ pub fn is_connected(net: &RoadNetwork) -> bool {
             }
         }
     }
-    n == net.nodes.len()
+    n == ile
 }

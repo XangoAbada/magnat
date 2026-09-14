@@ -28,13 +28,20 @@ pub mod query;
 pub mod terrain;
 
 pub use assets::{data_dir, data_path};
-pub use city::blocks::{Block, BlockId, BlockSet};
+pub use city::blocks::{block_adjacency, Block, BlockId, BlockSet};
+pub use city::districts::{District, DistrictKind, DistrictNames, DistrictSet, Toponym};
 pub use city::gates::{CityGate, GateKind, GateProfile};
+pub use city::parcels::{Frontage, Parcel, ParcelOwner, ParcelSet, ParcelStatus, ZoneSpec};
+pub use city::rail::RailReport;
+pub use city::zoning::{
+    CityFields, EpochId, EpochSpec, EpochTable, ResDensity, StyleId, ZoneField, ZoneKind, ZoneMix,
+    ZoneResult, ZoningWeights,
+};
 pub use city::road::{
     street_lines, FurnitureKind, NodeFlags, NodeId, PolyArena, PolyRef, RoadClass, RoadFlags,
     RoadNetwork, RoadNode, RoadSegment, RoadStructure, SegmentId, StreetFurniture, StreetLine,
 };
-pub use city::{generate_city, CityData, CityGenError, CityPlan, GenerationReport};
+pub use city::{city_hash, generate_city, CityData, CityGenError, CityPlan, GenerationReport};
 pub use climate::ClimateCell;
 pub use data::{
     HeightDm, LakeCells, RiverCell, RiverNetwork, RiverSegment, WaterBits, WaterClass, WorldData,

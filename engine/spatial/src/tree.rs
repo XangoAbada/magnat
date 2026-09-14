@@ -25,6 +25,7 @@ struct QNode {
     children: [u32; 4],
 }
 
+#[derive(Clone, Debug)]
 pub struct ParcelTree {
     nodes: Vec<QNode>,
     aabbs: Vec<Aabb2>,

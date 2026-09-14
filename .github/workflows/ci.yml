@@ -113,6 +113,8 @@ jobs:
           cargo test --release -p magnat-world --test determinism -- --include-ignored
           # M2b: kryteria WP3–WP6. Ten sam job, bo to też testy na prawdziwym terenie.
           cargo test --release -p magnat-world --test city -- --include-ignored
+          # M2c: kryteria WP7, WP5b, WP8, WP9.
+          cargo test --release -p magnat-world --test city_m2c -- --include-ignored
       - name: T-D8 — test negatywny (chaos musi zawieść)
         shell: bash
         run: |

@@ -10,12 +10,14 @@
 //! funkcja monotoniczna z kątem. Ta jest dokładna, bo używa wyłącznie dodawania,
 //! odejmowania i dzielenia.
 
-use super::road::{PolyArena, PolyRef, RoadFlags, RoadNetwork, SegmentId};
+use super::road::{PolyArena, PolyRef, RoadFlags, RoadNetwork, SegmentId, UNASSIGNED_DISTRICT};
+use super::zoning::ZoneKind;
+use magnat_core::DistrictId;
 use magnat_spatial::Vec2;
 use std::ops::Range;
 
-/// Kwartał — **część geometryczna**. Strefę, dzielnicę, osiedle, pierścień epoki
-/// i zakres parcel dokłada M2c (§5.4); tu powstaje to, na czym tamto stanie.
+/// Kwartał. Geometria powstaje w M2b (WP6), reszta pól w M2c: strefa i pierścień epoki
+/// w WP7, zakres parcel w WP8, dzielnica i osiedle w WP9.
 #[derive(Clone, PartialEq, Debug)]
 pub struct Block {
     pub id: BlockId,
@@ -26,6 +28,13 @@ pub struct Block {
     pub area_m2: u32,
     /// CSR → `SegmentId` dróg otaczających kwartał.
     pub bounding: Range<u32>,
+    pub district: DistrictId,
+    /// „Osiedle" — tożsamość drobniejsza niż dzielnica (M2 §9.1/6).
+    pub neighborhood: u16,
+    pub zone: ZoneKind,
+    pub epoch_ring: u8,
+    /// Ciągły zakres w globalnej tablicy parcel.
+    pub parcels: Range<u32>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
@@ -55,6 +64,10 @@ pub struct BlockSet {
     pub visited_half_edges: u32,
     /// Najdłuższa orbita.
     pub max_orbit: u32,
+    /// `(V, E, C)` podgrafu ścian **w chwili budowy kwartałów**. Zapamiętane, bo M2c
+    /// dokłada do sieci ulice lokalne i tory, a niezmiennik Eulera dotyczy tego grafu,
+    /// z którego kwartały powstały — policzony później mierzyłby co innego.
+    pub euler: (u32, u32, u32),
 }
 
 /// Ściana mniejsza niż to jest wysepką w skrzyżowaniu, nie kwartałem.
@@ -76,14 +89,9 @@ fn pseudo_angle(d: Vec2) -> f32 {
     }
 }
 
+/// Pole ze znakiem — jedna implementacja dla całego generatora (`city::poly`).
 fn shoelace(pts: &[Vec2]) -> f64 {
-    let mut a = 0.0f64;
-    for i in 0..pts.len() {
-        let p = pts[i];
-        let q = pts[(i + 1) % pts.len()];
-        a += f64::from(p.x) * f64::from(q.y) - f64::from(q.x) * f64::from(p.y);
-    }
-    a * 0.5
+    super::poly::signed_area(pts)
 }
 
 /// WP6: ściany planarne grafu dróg jezdnych.
@@ -231,6 +239,11 @@ pub fn build_blocks(net: &RoadNetwork, geom: &mut PolyArena) -> BlockSet {
             face: geom.push(&pts),
             area_m2: inner_area as u32,
             bounding: b0..bounding_items.len() as u32,
+            district: UNASSIGNED_DISTRICT,
+            neighborhood: 0,
+            zone: ZoneKind::Undevelopable,
+            epoch_ring: 0,
+            parcels: 0..0,
         });
     }
 
@@ -251,7 +264,48 @@ pub fn build_blocks(net: &RoadNetwork, geom: &mut PolyArena) -> BlockSet {
             .iter()
             .filter(|s| s.class.is_driveable() && s.flags.contains(RoadFlags::GRADE_SEPARATED))
             .count() as u32,
+        euler: {
+            let (v, e, c) = face_graph_stats(net);
+            (v as u32, e as u32, c as u32)
+        },
     }
+}
+
+/// Sąsiedztwo kwartałów w postaci CSR: dwa kwartały są sąsiadami, gdy dzielą segment
+/// drogi. Wejście dla pierścieni epok (WP7), wygładzania stref i Voronoi dzielnic (WP9) —
+/// wszystkie trzy chcą tego samego grafu, więc liczymy go raz.
+#[must_use]
+pub fn block_adjacency(set: &BlockSet, segments: usize) -> (Vec<u32>, Vec<u32>) {
+    // Segment ogranicza co najwyżej dwa kwartały (jest krawędzią grafu planarnego).
+    let mut po_segmencie = vec![[u32::MAX; 2]; segments];
+    for b in &set.blocks {
+        for &s in &set.bounding_items[b.bounding.start as usize..b.bounding.end as usize] {
+            let slot = &mut po_segmencie[s.0 as usize];
+            if slot[0] == u32::MAX {
+                slot[0] = b.id.0;
+            } else if slot[1] == u32::MAX && slot[0] != b.id.0 {
+                slot[1] = b.id.0;
+            }
+        }
+    }
+    let n = set.blocks.len();
+    let mut sasiedzi: Vec<Vec<u32>> = vec![Vec::new(); n];
+    for para in &po_segmencie {
+        if para[0] == u32::MAX || para[1] == u32::MAX {
+            continue;
+        }
+        sasiedzi[para[0] as usize].push(para[1]);
+        sasiedzi[para[1] as usize].push(para[0]);
+    }
+    let mut start = vec![0u32; n + 1];
+    let mut items = Vec::new();
+    for (i, mut v) in sasiedzi.into_iter().enumerate() {
+        v.sort_unstable();
+        v.dedup();
+        items.extend_from_slice(&v);
+        start[i + 1] = items.len() as u32;
+    }
+    (start, items)
 }
 
 /// Statystyki podgrafu, na którym wyznaczane są ściany: `(V, E, C)`.

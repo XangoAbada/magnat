@@ -1,0 +1,67 @@
+// Epoki zabudowy miasta — pierścienie wieku (M2 §5.3, „Pierścienie epok").
+//
+// Miasto nie dostaje losowanego „stylu": footprint jest rozszerzany epoka po epoce,
+// priorytetowo na teren o najlepszej dostępności i atrakcyjności, a kwartał zapamiętuje
+// epokę, w której został objęty rozrostem (`Block.epoch_ring`). Stąd bierze się oś
+// „starówka ↔ blokowisko ↔ przedmieścia" i to ona parametryzuje wielkość kwartału,
+// wymiary działki, zestaw gramatyk i paletę materiałów.
+//
+// `until_year` — rok, w którym epoka się kończy. Pierścienie nowsze od epoki startowej
+// gry odpadają, a epoka startowa jest ostatnim (częściowo zabudowanym) pierścieniem.
+// Miasto zaczynające w 1990 **ma** starówkę: pierścienie to historia zabudowy,
+// a nie stan techniki dostępnej graczowi (M2 §9.2/4).
+//
+// `area_share` — udział w powierzchni obszaru zurbanizowanego. Udziały pierścieni
+// pozostałych po obcięciu są renormalizowane do 1, więc wartości czyta się względnie.
+//
+// `density_bias` — przesunięcie punktacji gęstości mieszkaniowej R1..R5 w tym
+// pierścieniu. To ono sprawia, że kamienice stoją w śródmieściu, a bloki w pasie
+// powojennym, bez zapisywania tego wprost w regułach stref.
+(
+    schema_version: 1,
+
+    epochs: [
+        (
+            key: "medieval",
+            until_year: 1850,
+            area_share: 0.03,
+            // Zwarta zabudowa pierzejowa; bloku ani wieżowca tu nie ma.
+            density_bias: (0.10, 0.25, 1.20, -1.50, -2.00),
+        ),
+        (
+            key: "industrial",
+            until_year: 1918,
+            area_share: 0.13,
+            // XIX-wieczne śródmieście: kamienica czynszowa obok fabryki.
+            density_bias: (0.00, 0.30, 1.00, -0.60, -1.20),
+        ),
+        (
+            key: "interwar",
+            until_year: 1945,
+            area_share: 0.10,
+            // Międzywojnie: pierwsze osiedla willowe i zabudowa szeregowa.
+            density_bias: (0.35, 0.60, 0.45, -0.20, -0.90),
+        ),
+        (
+            key: "postwar",
+            until_year: 1980,
+            area_share: 0.34,
+            // Blokowisko: najszerszy pierścień, bo powstał najszybciej.
+            density_bias: (-0.30, -0.10, -0.30, 1.10, 0.35),
+        ),
+        (
+            key: "transition",
+            until_year: 2005,
+            area_share: 0.22,
+            // Transformacja: rozlewanie się na przedmieścia i plombowanie luk.
+            density_bias: (0.55, 0.45, -0.10, 0.30, 0.10),
+        ),
+        (
+            key: "contemporary",
+            until_year: 2100,
+            area_share: 0.18,
+            // Współczesność: apartamentowce w środku, domy na obrzeżu.
+            density_bias: (0.45, 0.30, -0.20, 0.35, 0.60),
+        ),
+    ],
+)

@@ -48,6 +48,30 @@ Na polecenie „zacznij podfazę M5c" / „rusz z M5c":
 Jeśli w trakcie implementacji okaże się, że plan fazy jest błędny — popraw plan, odnotuj w dzienniku
 i dopiero potem pisz kod. Rozjazd kodu z planem jest gorszy niż błąd w planie, bo nikt go nie widzi.
 
+## Reguła: poprawki wędrują w przód
+
+`K-18` w dokumencie 00. Praca nad fazą X regularnie pokazuje, że plan fazy **następnej**
+jest w czymś nieprawdziwy: kontrakt wygląda inaczej, API nazywa się inaczej, kryterium
+jest niemierzalne, kolejność pakietów niewykonalna, albo pakiet obiecuje coś, czego nikt
+nie jest właścicielem.
+
+**Poprawiamy dokument tej fazy od razu, w tej samej zmianie.** Nie „jak dojdziemy do Y".
+
+1. Poprawka idzie do dokumentu, którego dotyczy. Dziennik `00-postep.md` odnotowuje
+   tylko, że powstała — nie jest jej miejscem przechowywania.
+2. Każdy dokument zbiera je w tabeli **„Zmiany wpisane po MX"** na swoim końcu, w tym
+   samym formacie co tabele korekt (`D-n`, gwiazdka = zmiana zakresu albo kryterium).
+3. Wpisujemy **tylko to, co wiemy na pewno**. Faza następna nie jest przy okazji
+   przeprojektowywana — od tego jest jej własny start.
+4. Poprawka wymagająca decyzji, której nie umiemy teraz podjąć, ląduje w §9.2 dokumentu
+   **fazy** jako decyzja otwarta z propozycją domyślną. Nigdy jako `TODO` w kodzie.
+5. Zmiana dotykająca kontraktu z `00-konwencje-i-kontrakty.md` nadal wymaga wpisu `K-n`
+   w §4a — K-18 tego nie zastępuje.
+
+Powód jest ten sam co przy regule „popraw plan, zanim napiszesz kod": rozjazd planu
+z rzeczywistością jest gorszy od braku planu, bo nikt go nie widzi. Wiedzę ma ten, kto ją
+właśnie zdobył — za miesiąc nie będzie jej miał nikt.
+
 ## Reguła: odhaczanie postępu
 
 Po zakończeniu pracy nad zadaniem zaktualizuj `docs/implementation-plan/00-postep.md`:

@@ -114,16 +114,11 @@ fn bramy_wymagane_istnieja_i_leza_na_wlasciwym_terenie() {
                     c.report.missing_gates
                 );
                 // „Brama istnieje" znaczy: jest w gotowej sieci, a nie tylko w planie.
-                // Bramy kolejowe są w tej podfazie odłożone (tory buduje M2c), więc
-                // szukamy ich na liście odłożonych.
+                // Od M2c dotyczy to także bram kolejowych — WP5b buduje im tory,
+                // więc lista `deferred_gates` jest już pusta.
                 for k in profil_wymaga(prof) {
-                    let jest = if k.is_rail() {
-                        c.report.deferred_gates.iter().any(|(x, _)| *x == k)
-                    } else {
-                        c.roads.gates.iter().any(|g| g.kind == k)
-                    };
                     assert!(
-                        jest,
+                        c.roads.gates.iter().any(|g| g.kind == k),
                         "seed {seed} profil {prof:?}: brama {k:?} nie trafiła do sieci"
                     );
                 }
@@ -293,7 +288,10 @@ fn kwartaly_domykaja_bilans_pol() {
     // na obwód każdej składowej — razem E − V + 2·C. Porównujemy liczbę orbit, bo to
     // wielkość czysto kombinatoryczna: nie zależy od tego, jak klasyfikujemy ścianę
     // po polu, więc mierzy dokładnie to, co ma zmierzyć — poprawność obchodu.
-    let (v, e, skladowe) = blocks::face_graph_stats(&c.roads);
+    // Niezmiennik liczony na stanie sieci **z chwili budowy kwartałów**: M2c dokłada
+    // do niej ulice lokalne i tory, więc `face_graph_stats` po całej generacji mierzyłby
+    // inny graf niż ten, z którego kwartały powstały.
+    let (v, e, skladowe) = c.blocks.euler;
     let oczekiwane = e as i64 - v as i64 + 2 * skladowe as i64;
     assert_eq!(
         i64::from(c.blocks.orbits),

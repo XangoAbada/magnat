@@ -1,0 +1,65 @@
+// Nazwy dzielnic — generacja proceduralna (M2 §5.5 krok 4, ryzyko R10).
+//
+// **To nie jest lokalizacja UI** (CLAUDE.md): nazwy własne generowane per region
+// nie są tłumaczone. Pliku nie dubluje się w wersji angielskiej.
+//
+// Kolejność wyboru: toponim od cechy terenu (rzeka, jezioro, wzniesienie, las) →
+// pula właściwa rodzajowi dzielnicy → „{przymiotnik} {rdzeń}". Unikalność wymuszana
+// sufiksem kierunkowym, a w ostateczności numerem.
+(
+    schema_version: 1,
+
+    by_kind: [
+        (OldTown, ["Starówka", "Stare Miasto", "Rynek", "Podzamcze", "Okół", "Piasek"]),
+        (InnerCity, [
+            "Śródmieście", "Kamienice", "Kwartał Bankowy", "Plac Targowy",
+            "Nowy Świat", "Powiśle", "Latarnia", "Stara Poczta",
+        ]),
+        (BlockEstate, [
+            "Osiedle Słoneczne", "Osiedle Przyjaźni", "Tysiąclecia", "Manhattan",
+            "Osiedle Zielone", "Osiedle Piastowskie", "Blokowisko", "Osiedle Kolejowe",
+        ]),
+        (Suburb, [
+            "Nowa Wieś", "Zacisze", "Sady", "Kolonia", "Willowa", "Bielany",
+            "Ustronie", "Sielanka", "Świerkowa",
+        ]),
+        (IndustrialBelt, [
+            "Fabryczna", "Huta", "Zakłady", "Kotłownia", "Bocznica",
+            "Warsztaty", "Cegielnia", "Gazownia",
+        ]),
+        (PortQuarter, [
+            "Nabrzeże", "Stara Przystań", "Doki", "Port Rybacki", "Latarnia Morska",
+            "Magazyny", "Awanport",
+        ]),
+        (Village, ["Wólka", "Zagroda", "Folwark", "Majątek", "Chutor", "Przysiółek"]),
+        (Campus, [
+            "Miasteczko Akademickie", "Kampus", "Politechnika", "Kliniki",
+            "Ogród Botaniczny", "Kolegium",
+        ]),
+        (GreenBelt, [
+            "Park Miejski", "Błonia", "Łąki", "Uroczysko", "Zwierzyniec",
+            "Planty", "Cmentarna",
+        ]),
+    ],
+
+    // Toponimy od cech terenu — te wygrywają z pulą rodzaju, bo miasto nazywa
+    // swoje dzielnice od tego, co widać z okna.
+    toponyms: [
+        (River, ["Zarzecze", "Nadrzecze", "Międzyrzecze", "Powiśle", "Brzegi", "Przewóz", "Stary Bród"]),
+        (Lake, ["Nadjezierze", "Zalesie Jeziorne", "Przystań", "Stawy", "Rybaki"]),
+        (Hill, ["Podgórze", "Wzgórze", "Skałka", "Krzemionki", "Górka", "Stok", "Grzbiet"]),
+        (Forest, ["Zalesie", "Bór", "Leśna Polana", "Dąbrowa", "Grabina", "Sosnowiec"]),
+    ],
+
+    adjectives: [
+        "Stare", "Nowe", "Górne", "Dolne", "Wielkie", "Małe", "Zielone",
+        "Białe", "Czarne", "Piaskowe", "Kamienne", "Wschodnie", "Zachodnie",
+    ],
+
+    cores: [
+        "Pole", "Wzgórze", "Przedmieście", "Zacisze", "Koło", "Ostrów",
+        "Gaj", "Rogatka", "Młyny", "Brzeziny", "Jary", "Kępa",
+    ],
+
+    directions: ["Północ", "Południe", "Wschód", "Zachód", "Górne", "Dolne"],
+)

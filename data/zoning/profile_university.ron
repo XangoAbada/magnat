@@ -1,17 +1,45 @@
 // Profil gospodarczy miasta: uniwersytecki (M2 §5.2, PRD §4.1).
 //
-// M2b używa z tego pliku wyłącznie sekcji bramowej. Kwoty stref (`mix[z][epoch]`)
-// dołoży M2c przy Etapie 4 — do tego samego pliku, z podbiciem `schema_version`.
+// M2c dokłada sekcję `mix` — kwoty stref Etapu 4 (M2 §5.3, krok 2). `schema_version`
+// podbity do 2.
+//
+// `shares` to udziały stref niemieszkaniowych w obszarze zurbanizowanym, `residential`
+// łączny udział mieszkaniówki, a `density` jej rozkład na R1..R5 **w epoce startowej**:
+// miasto z 1950 nie ma jeszcze wieżowców, miasto z 2020 ma ich trochę. Udziały są
+// renormalizowane do 1 przy ładowaniu, więc liczą się proporcje, nie suma.
 //
 // `required` niesie **krotność**: dwa wpisy `Highway` to dwa wjazdy z dwóch stron mapy.
 // Miasto z jednym wjazdem nie ma jak domknąć sieci arterii w cykl (reguła P4).
 // `optional` to jedno losowanie na rodzaj, prawdopodobieństwo 0..=1.
 (
-    schema_version: 1,
+    schema_version: 2,
     required: [Highway, Highway],
     optional: [
         (RailPassenger, 0.85),
         (RailFreight, 0.35),
         (Airport, 0.3),
     ],
+
+    // Kampusy i instytucje publiczne to największa pozycja po mieszkaniówce.
+    mix: (
+        shares: [
+            (Commercial, 0.11),
+            (Office, 0.08),
+            (IndustryLight, 0.05),
+            (IndustryHeavy, 0.01),
+            (Logistics, 0.03),
+            (Institutional, 0.16),
+            (Green, 0.12),
+            (Agriculture, 0.03),
+            (Extraction, 0.00),
+        ],
+        residential: 0.41,
+        density: [
+            (Y1950, (0.34, 0.23, 0.28, 0.13, 0.02)),
+            (Y1970, (0.30, 0.21, 0.24, 0.22, 0.03)),
+            (Y1990, (0.27, 0.19, 0.22, 0.28, 0.04)),
+            (Y2010, (0.25, 0.18, 0.20, 0.31, 0.06)),
+            (Y2020, (0.24, 0.17, 0.19, 0.32, 0.08)),
+        ],
+    ),
 )

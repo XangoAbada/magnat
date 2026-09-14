@@ -11,14 +11,14 @@
 //! `IndustryHeavy` / `Logistics`, a strefowanie to Etap 4 (M2c, WP7). Przeniesienie
 //! odnotowane w „Korektach planu" dokumentu podfazy.
 
-use super::gates::{to_ivec, AirportFootprint, GatePlan};
+use super::gates::{AirportFootprint, GatePlan};
 use super::pattern::{Pattern, RingTable};
 use super::road::{
     ClassSpec, NodeFlags, PolyArena, RoadClass, RoadFlags, RoadNode, RoadSegment, RoadStructure,
     SegmentId, UNASSIGNED_DISTRICT,
 };
 use super::{road::NodeId, CityPlan};
-use crate::query::{Crossing, TerrainQuery};
+use crate::query::TerrainQuery;
 use magnat_core::{det_math, rng, Rng, StreamId, Tick};
 use magnat_spatial::Vec2;
 use std::cmp::Reverse;
@@ -30,9 +30,6 @@ use std::collections::BinaryHeap;
 /// statyczny („budowany raz, tylko do odczytu", M2a §5.1), a tu co segment dokładamy
 /// węzeł i krawędź. Przebudowa CSR przy każdym z 16 tys. segmentów byłaby O(n²).
 const BUCKET_M: f32 = 64.0;
-
-/// Najmniejsze wypiętrzenie drogi nad teren, przy którym mówimy o nasypie, w decymetrach.
-const EMBANKMENT_MIN_DM: i32 = 15;
 
 /// Statystyki odrzuceń — mitygacja ryzyka R1 fazy. Bez nich rozbieganie się generatora
 /// widać dopiero na obrazku, a nie w liczbie.
@@ -370,52 +367,10 @@ impl<'a> Builder<'a> {
         grade_units(a, ha, b, hb)
     }
 
-    /// Ograniczenie 2: przeszkoda i wybór struktury.
-    ///
-    /// **Kolejność zamieniona względem planu** (tam nachylenie idzie przed strukturą):
-    /// most i tunel z definicji nie podążają za terenem, więc test nachylenia stosuje się
-    /// tylko do przebiegu po gruncie. Przy kolejności z planu żadna przeprawa przez dolinę
-    /// nie miałaby szansy powstać — odrzuciłby ją zbocze, którego most nie dotyka.
+    /// Ograniczenie 2: przeszkoda i wybór struktury. Reguła mieszka w `road`,
+    /// bo używa jej także WP5b (tory) — jedna reguła, jedna implementacja.
     fn structure_for(&self, a: Vec2, b: Vec2, spec: &ClassSpec) -> Option<RoadStructure> {
-        match self.t.crossing_cost(to_ivec(a), to_ivec(b)) {
-            Crossing::Flat => Some(RoadStructure::AtGrade),
-            Crossing::Bridge {
-                span_m,
-                clearance_m,
-            } => (span_m <= u32::from(spec.bridge_max_m)).then(|| RoadStructure::Bridge {
-                clearance_dm: clearance_m.saturating_mul(10),
-            }),
-            Crossing::Tunnel { len_m, .. } => {
-                if spec.tunnel_trigger_m == 0 || len_m > u32::from(spec.tunnel_max_m) {
-                    return None;
-                }
-                let cover = self.cover_dm(a, b);
-                (cover >= i32::from(spec.tunnel_trigger_m) * 10).then_some(RoadStructure::Tunnel {
-                    cover_dm: cover.clamp(0, i32::from(u16::MAX)) as u16,
-                })
-            }
-            Crossing::Embankment { .. } => {
-                // Znak mówi, po której stronie drogi jest teren: dodatni to wykop,
-                // ujemny nasyp. Limit 8 m obowiązuje w obie strony — powyżej robi się
-                // z tego wiadukt albo przekop, a żadnego z nich tabela klas nie zna.
-                //
-                // `Crossing::Embankment` z M1 pada już przy 3 m deniwelacji na całym
-                // odcinku, czyli przy zwykłej ulicy na stoku. Budowlą jest to dopiero
-                // powyżej `EMBANKMENT_MIN_DM` — inaczej co czwarty segment miasta
-                // byłby „nasypem" (zmierzone: 230 na 1012).
-                let d = self.cover_dm(a, b);
-                if d.abs() > 80 {
-                    return None;
-                }
-                Some(if -d >= EMBANKMENT_MIN_DM {
-                    RoadStructure::Embankment {
-                        height_dm: (-d) as u16,
-                    }
-                } else {
-                    RoadStructure::AtGrade
-                })
-            }
-        }
+        super::road::structure_for(self.t, a, b, spec)
     }
 
     /// Rzędna niwelety segmentu `s` w punkcie `p` leżącym na nim.
@@ -425,15 +380,6 @@ impl<'a> Builder<'a> {
         let dl = (nb.pos - na.pos).length().max(1.0);
         let t = ((p - na.pos).length() / dl).clamp(0.0, 1.0);
         na.z_dm + ((nb.z_dm - na.z_dm) as f32 * t) as i32
-    }
-
-    /// Przewyższenie terenu nad cięciwą w połowie odcinka, w decymetrach.
-    /// Dodatnie = teren nad drogą (tunel), ujemne = droga nad terenem (nasyp).
-    fn cover_dm(&self, a: Vec2, b: Vec2) -> i32 {
-        let h = |p: Vec2| self.t.height_at(p.x as i32, p.y as i32);
-        let mid = (a + b) * 0.5;
-        // `height_at` jest w jednostkach 0,5 m (K-13) — stąd ×5 na decymetry.
-        (h(mid) - (h(a) + h(b)) / 2) * 5
     }
 
     /// Ograniczenie 5: minimalny kąt do krawędzi incydentnych w węźle docelowym.

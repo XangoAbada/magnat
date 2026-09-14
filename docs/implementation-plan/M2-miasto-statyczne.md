@@ -101,7 +101,7 @@ M4 wyprowadza z tego: geometrię pasów, skrzyżowania, kierunki ruchu, `RoadGra
 ## 4. Pakiety robocze i podfazy
 
 Kolejność jest istotna: etapy generacji tworzą łańcuch zależności zamknięty **trzema przebiegami
-wyceny** (patrz WP15 i sekcja 5.7).
+wyceny** (patrz WP15a/WP15b i sekcja 5.7).
 
 Faza jest rozbita na **5 podfaz**. Podfaza to porcja, którą da się zacząć i zamknąć
 bez trzymania w głowie całej fazy: własny zestaw WP, własny sprawdzalny wynik i własny
@@ -114,15 +114,32 @@ dopiero po ostatniej podfazie; podfaza zamyka się własnym kryterium ze swojego
 | **M2a — Indeksy przestrzenne** | WP1, WP2 | 5.1 | `cargo bench -p magnat-spatial` na danych syntetycznych: cztery struktury odpowiadają na zapytania w budżecie, bez generatora miasta. | `M2a-indeksy-przestrzenne.md` |
 | **M2b — Szkielet transportu** | WP3, WP4, WP5, WP6 | 5.2 | `headless preview --field roads` → PNG z bramami, arteriami, strukturami inżynierskimi i konturami kwartałów. | `M2b-szkielet-transportu.md` |
 | **M2c — Strefy, parcele, dzielnice** | WP7, WP5b, WP8, WP9 | 5.3, 5.4, 5.5 | Podgląd: mapa stref i parcel z granicami dzielnic; kliknięcie parceli daje strefę, właściciela, frontę drogową i dzielnicę. | `M2c-strefy-parcele-dzielnice.md` |
-| **M2d — Zabudowa** | WP10, WP11, WP12 | 5.6 | Miasto w voxelach: budynki wygenerowane z gramatyki, z piętrami, lokalami i stanowiskami pracy. | `M2d-zabudowa.md` |
-| **M2e — Gospodarka bazowa i wycena** | WP13, WP14, WP15, WP16, WP17 | 5.7, 5.8 | Pełny artefakt fazy z §1 dokumentu fazy: `GenerationReport`, nakładka wartości gruntu z rozbiciem na czynniki, zielone `--test consistency`. | `M2e-gospodarka-bazowa-i-wycena.md` |
+| **M2d — Zabudowa** | WP10, WP15a, WP11, WP12, WP12b | 5.6, 5.6b, 5.7 (`pass_1`) | **Miasto w kliencie graficznym `magnat`**: zabudowa z gramatyki, nawierzchnia jezdni, nasypy i mosty; budynki z piętrami, lokalami i stanowiskami pracy. | `M2d-zabudowa.md` |
+| **M2e — Gospodarka bazowa i wycena** | WP13, WP14, WP15b, WP16, WP17 | 5.7 (`pass_2`), 5.8 | Pełny artefakt fazy z §1 dokumentu fazy: `GenerationReport`, nakładka wartości gruntu z rozbiciem na czynniki, zielone `--test consistency`. | `M2e-gospodarka-bazowa-i-wycena.md` |
 
-Ścieżka krytyczna: WP1 → WP2 → WP4 → WP6 → WP7 → WP8 → WP11 → WP12 → WP14 → WP15 → WP17.
+Ścieżka krytyczna: WP1 → WP2 → WP4 → WP6 → WP7 → WP9 → WP8 → WP15a → WP11 → WP12 → WP14 → WP15b → WP17.
 WP3, WP9, WP10, WP13, WP16 można prowadzić równolegle.
 
 **Korekta po M2b:** kolej towarowa (druga połowa WP5) przenosi się do M2c jako **WP5b**,
 bo jej trasy prowadzą do klastrów stref, a strefy powstają dopiero w WP7. Ścieżka krytyczna
 się nie zmienia — już zakładała `WP4 → WP6 → WP7`. Szczegóły: korekta B1 w dokumencie M2b.
+
+**Korekta po M2c:** wewnątrz podfazy **WP9 wykonuje się przed WP8**. Powód: §5.5 wymaga
+hierarchii tablicowej, czyli przenumerowania kwartałów po przypisaniu dzielnic — zrobione
+po powstaniu parcel wymagałoby przestawiania dwóch sprzężonych tablic zamiast jednej.
+WP9 nie potrzebuje z WP8 niczego. Szczegóły: korekta C8 w dokumencie M2c.
+
+**Korekta po M2c, wpisana w przód (`K-18`):** trzy zmiany w podziale pakietów między M2d
+a M2e, uzasadnione w tabeli „Zmiany wpisane po M2c" dokumentu `M2d-zabudowa.md`:
+
+- **WP15 rozcięty na WP15a i WP15b.** `pass_1` wyceny („po Etapie 5") zasila dobór
+  gramatyki, liczbę kondygnacji i `rent_hint`, czyli WP11 — leży więc w M2d, a nie za nim.
+  W M2e zostaje `pass_2` jako WP15b. `pass_0` zrealizowany w M2c jako punktacja stref.
+- **Nowy WP12b:** warstwa transportowa w voxelach (nawierzchnia, korpus drogi, mosty,
+  tunele) plus podpięcie `generate_city` do klienta `tools/magnat`. §6 obiecuje M1 zapis
+  „brył budynków, nasypów, mostów", ale żaden pakiet nie był ich właścicielem.
+- **Ryzyko R9** (kolizja budynków z terenem) jest mitygowane jawnie w WP12 i wchodzi do
+  kryterium zamknięcia M2d, zamiast żyć wyłącznie w tabeli ryzyk.
 
 ---
 
@@ -413,15 +430,15 @@ komponenty jest zachowane.
 | 15 | Czy zapas startowy może być punktem wejścia domknięcia | **Nie — zaostrzenie wymuszone przez M6.** `data/scenarios/initial_stock.ron` pokrywa ~14 pierwszych dni, ale walidator nie może go traktować jako źródła: przeszedłby w CI łańcuch, który raz wystartuje i nigdy się nie odtworzy po wyczerpaniu zapasu — czyli dokładnie ta klasa błędu, którą walidator ma łapać | 5.8 (KROK 1) |
 | 16 | Kształt pól katalogu towarów | `GoodUnit { Grams, Milliunits }` — dwie jednostki, `Volume` zawsze pochodna masy przez `density_g_per_l`. Importowalność jako `external_base_price: Option<Money>` (jedno pole, brak stanu „importowalny bez ceny"). Epoki dostępności importu **nie** są moim polem — właścicielem jest M10 (`TradeGood`). `yield` nie jest przechowywany, tylko liczony z mas i `duration_minutes`. `schema_version` per plik | 5.8 („Granica z M6") |
 | 17 | Kalendarz w bilansie przepustowości | **K-1: rok = 360 dni (12 × 30).** `1440` w `daily_yield` to minuty na dobę i zostaje; roczne agregaty w KROKU 5 liczone przez 360, nie 365 | 5.8 („Granica z M6") |
+| 18 | Bezpieczny zapis voxeli przy budynku przecinającym granicę chunka (blokowało WP12) | **Rozstrzygnięte przez M1 inaczej, niż proponował M2.** Nie ma `ChunkWriter::stage`/`commit_sorted`; jest `EditQueue` z `EditOp::{Fill, Carve, Terrace}`, a **porządek kanoniczny wyprowadzany jest z treści komendy**, nie z numeru nadanego przy kolejkowaniu — bo numer nadany przy równoległym `push` nie jest deterministyczny. M2 **nie pisze do chunków, tylko kolejkuje edycje** (00 §3.4). Dla WP11 to zmiana na lepsze: derywacja idzie równolegle bez żadnej dyscypliny numerowania | 5.6 (M2d), korekta D4 |
+| 19 | Które z pięciu zgłoszonych rozszerzeń `TerrainQuery` M1 przyjmuje (blokowało WP3, WP7) | **Wszystkie pięć przyjęte.** `water_depth_at`, `deposit_at`, `soil_quality_at`, `prevailing_wind` i `flood_risk_at` są w `TerrainQuery` z domyślnymi implementacjami nad danymi, które już istnieją. M2b i M2c używają wszystkich pięciu | 6 (tabela rozszerzeń) |
+| 20 | Czy epoka startowa dopuszcza pierścienie starsze od niej (blokowało WP7) | **Tak, propozycja przyjęta i zrealizowana w M2c.** `EpochTable::rings_for` zachowuje wszystkie epoki zamknięte przed rokiem startu plus tę, w której gra się zaczyna; udziały są renormalizowane. Miasto z 1990 ma starówkę, bo pierścienie są historią zabudowy, a nie stanem techniki dostępnej graczowi | 5.3 (M2c) |
 
 ### 9.2 Nadal otwarte — do rozstrzygnięcia przed startem wskazanego WP
 
 | # | Decyzja | Blokuje | Propozycja M2 | Stan |
 |---|---|---|---|---|
-| 1 | Czy `engine/voxel` daje `ChunkWriter` bezpieczny dla równoległego zapisu, gdy budynek przecina granicę chunka | WP12 | `ChunkWriter::stage(building_index, runs)` + `commit_sorted()`; składanie po `building_index` | **czeka na M1** |
-| 2 | Które z pięciu zgłoszonych rozszerzeń `TerrainQuery` M1 przyjmuje (`water_depth_at`, `deposit_at`, `soil_quality_at`, `prevailing_wind`, `flood_risk_at`) | WP3, WP7 | wszystkie pięć — każde ma co najmniej dwóch odbiorców (tabela w sekcji 6). Odrzucone = odpowiednie weto lub strefa wypada z generatora i ląduje w `GenerationReport` | **czeka na M1** |
-| 3 | Moment, w którym wartość gruntu przestaje być statyczna (M5 transakcje / M10 pełny model) | WP15 | pole `Parcel.land_value_per_m2` zostaje, M5/M10 je nadpisują; **bez** traita `LandValueSource` — jedna implementacja nie potrzebuje abstrakcji | propozycja bez sprzeciwu |
-| 4 | Czy epoka startowa dopuszcza pierścienie starsze od niej (starówka w mieście startującym w 1990) | WP7 | tak — pierścienie epok to historia zabudowy, nie stan techniki dostępnej graczowi | propozycja bez sprzeciwu |
+| 3 | Moment, w którym wartość gruntu przestaje być statyczna (M5 transakcje / M10 pełny model) | WP15b | pole `Parcel.land_value_per_m2` zostaje, M5/M10 je nadpisują; **bez** traita `LandValueSource` — jedna implementacja nie potrzebuje abstrakcji | propozycja bez sprzeciwu |
 | 5 | Czy `Institutional` (szkoły, szpitale) obsadza M2 jako `SiteSeed` należący do `City`, czy czeka na M8 | WP13 | M2 obsadza i daje stanowiska (M3 potrzebuje nauczycieli i lekarzy jako miejsc pracy); M8 dokłada budżet, politykę i jakość usługi | propozycja bez sprzeciwu |
 
 ---
@@ -441,13 +458,15 @@ komponenty jest zachowane.
 | WP9 | Dzielnice i ich tożsamość | M |
 | WP10 | Język gramatyki + parser + walidator | M |
 | WP11 | Silnik derywacji gramatyki | L |
-| WP12 | Zapis voxeli + wnętrza logiczne | L |
+| WP12 | Kolejkowanie voxeli + wnętrza logiczne | L |
+| WP12b | Warstwa transportowa w voxelach + podgląd w kliencie | M |
 | WP13 | Archetypy zakładów i szablony łańcuchów | M |
 | WP14 | Domknięcie łańcuchów produktowych | M |
-| WP15 | Wycena gruntu (3 przebiegi) | M |
+| WP15a | Wycena gruntu, `pass_1` (M2d) | S |
+| WP15b | Wycena gruntu, `pass_2` + rozbicie (M2e) | M |
 | WP16 | Nakładka UI + karta inspekcji | S |
 | WP17 | Testy spójności + raport generacji | M |
 
-Rozkład: 4 × L, 11 × M, 2 × S. Ciężar fazy leży w geometrii podziału na parcele (WP8)
+Rozkład (po korektach B1, C8 i D1–D3): 4 × L, 13 × M, 3 × S. Ciężar fazy leży w geometrii podziału na parcele (WP8)
 i w gramatyce budynków (WP11 + WP12) — te trzy WP to ok. 45% pracy fazy i tam należy
 zaplanować rezerwę.

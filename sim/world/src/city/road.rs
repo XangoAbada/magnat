@@ -29,10 +29,19 @@ pub struct PolyRef(pub u32);
 /// Jedna arena zamiast `Vec<Vec2>` w każdej strukturze — bo tych polilinii jest
 /// kilkadziesiąt tysięcy, a osobny `Vec` na każdą to osobna alokacja i osobny skok
 /// przy iteracji.
-#[derive(Clone, PartialEq, Debug, Default)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct PolyArena {
     pts: Vec<Vec2>,
     starts: Vec<u32>,
+}
+
+/// `Default` musi dawać to samo co `new`: pusta arena z `starts == []` nie ma nawet
+/// wartownika zerowego i pierwszy `get` na niej pada. A `Default` bierze się tu z
+/// `mem::take`, czyli z miejsca, w którym nikt o tym nie myśli.
+impl Default for PolyArena {
+    fn default() -> PolyArena {
+        PolyArena::new()
+    }
 }
 
 impl PolyArena {
@@ -300,6 +309,69 @@ const SPECS: [ClassSpec; 8] = [
         max_tonnage_t: 0,
     },
 ];
+
+/// Nasyp poniżej tej wysokości jest zwykłą niwelacją, nie budowlą (M2b).
+pub const EMBANKMENT_MIN_DM: i32 = 15;
+
+/// Przewyższenie terenu nad cięciwą w połowie odcinka, w decymetrach.
+/// Dodatnie = teren nad drogą (tunel), ujemne = droga nad terenem (nasyp).
+#[must_use]
+pub fn cover_dm(t: &dyn crate::query::TerrainQuery, a: Vec2, b: Vec2) -> i32 {
+    let h = |p: Vec2| t.height_at(p.x as i32, p.y as i32);
+    let mid = (a + b) * 0.5;
+    // `height_at` jest w jednostkach 0,5 m (K-13) — stąd ×5 na decymetry.
+    (h(mid) - (h(a) + h(b)) / 2) * 5
+}
+
+/// Wybór struktury inżynierskiej dla odcinka — **jedna implementacja** dla L-systemu
+/// arterii (WP5) i dla torów (WP5b). `None` = przeszkody nie da się pokonać w limitach
+/// klasy i odcinek trzeba odrzucić.
+///
+/// Kolejność: struktura **przed** niweletą. Most i tunel z definicji nie podążają
+/// za terenem, więc test nachylenia stosuje się tylko do przebiegu po gruncie.
+#[must_use]
+pub fn structure_for(
+    t: &dyn crate::query::TerrainQuery,
+    a: Vec2,
+    b: Vec2,
+    spec: &ClassSpec,
+) -> Option<RoadStructure> {
+    use crate::query::Crossing;
+    let iv = |p: Vec2| magnat_core::IVec2::new(p.x as i32, p.y as i32);
+    match t.crossing_cost(iv(a), iv(b)) {
+        Crossing::Flat => Some(RoadStructure::AtGrade),
+        Crossing::Bridge {
+            span_m,
+            clearance_m,
+        } => (span_m <= u32::from(spec.bridge_max_m)).then(|| RoadStructure::Bridge {
+            clearance_dm: clearance_m.saturating_mul(10),
+        }),
+        Crossing::Tunnel { len_m, .. } => {
+            if spec.tunnel_trigger_m == 0 || len_m > u32::from(spec.tunnel_max_m) {
+                return None;
+            }
+            let cover = cover_dm(t, a, b);
+            (cover >= i32::from(spec.tunnel_trigger_m) * 10).then_some(RoadStructure::Tunnel {
+                cover_dm: cover.clamp(0, i32::from(u16::MAX)) as u16,
+            })
+        }
+        Crossing::Embankment { .. } => {
+            // Znak mówi, po której stronie drogi jest teren: dodatni to wykop,
+            // ujemny nasyp. Limit 8 m obowiązuje w obie strony.
+            let d = cover_dm(t, a, b);
+            if d.abs() > 80 {
+                return None;
+            }
+            Some(if -d >= EMBANKMENT_MIN_DM {
+                RoadStructure::Embankment {
+                    height_dm: (-d) as u16,
+                }
+            } else {
+                RoadStructure::AtGrade
+            })
+        }
+    }
+}
 
 /// Struktura inżynierska segmentu. Jednostki w decymetrach, bo w tych jednostkach
 /// pracuje `engine/voxel` (voxel = 5 dm).

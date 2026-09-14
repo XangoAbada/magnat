@@ -97,6 +97,8 @@ pub struct GateProfile {
     pub required: Vec<GateKind>,
     /// Bramy losowane; prawdopodobieństwo 0..=1.
     pub optional: Vec<(GateKind, f32)>,
+    /// Kwoty stref Etapu 4 — dołożone przez M2c (`schema_version` 2).
+    pub mix: super::zoning::ZoneMix,
 }
 
 /// Bok siatki, na której szukamy środka miasta, w metrach.
