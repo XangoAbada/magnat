@@ -362,3 +362,13 @@ Rozkład: 4 × L, 6 × M, 1 × M (WP1). Najcięższe i najbardziej ryzykowne są
 do grosza), WP3 (jedyny nowy solver numeryczny w fazie) i WP4 (fundament, od którego zależą
 WP5 i WP8). Kolejność startu: WP1 → WP2 równolegle z WP3 → WP4 → WP5/WP6 równolegle →
 WP7 → WP8/WP9 → WP10 → WP11.
+
+## Zmiany wpisane po M3
+
+Zgodnie z `K-18`.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| Z-1 ★ | **`Safety` ma dziś tempo spadku 0 i to M8 je wpisuje** (`data/needs/needs.ron`, korekta H-3) | Bezpieczeństwo nie ma w M3 ani miejsca zaspokojenia, ani mechanizmu odbudowy, a migracja czyta jego próg (`safety_need_threshold`). Zostawione ze spadkiem 0,15 pkt/h dochodziło u wszystkich do zera w ciągu miesiąca gry i zaczynało wypychać z miasta każdego po kolei. M8 wnosi przestępczość i usługi publiczne — i razem z nimi tempo oraz sposób odbudowy |
+| Z-2 | **Instytucje publiczne są dziś zwykłymi miejscami w katalogu** (`PlaceKind::Education`, `Doctor`, `Hospital`, `Leisure`, `Social`), wskazanymi w `data/buildings/*.ron` polem `place_kind` (korekta H-16) | Decyzja 9.15 fazy M3: w M3 instytucje są nieskończone, M8 podmienia implementację `PlaceProvider` i dokłada pojemność oraz kolejki. Odwzorowanie „archetyp zakładu → rodzaj miejsca" jest już w danych, więc M8 zmienia zachowanie, a nie katalog |
+| Z-3 | **Uczeń ma przypisaną szkołę z Etapu 8** (`Employment.site` ucznia wskazuje najbliższą placówkę `Education`), a nie „szkołę w ogóle" | M8 dokłada pojemność szkoły i rejonizację. Dziś przypisanie jest po najbliższej w promieniu 800 m → 2,5 km → 8 km i zawsze się udaje; liczba uczniów bez placówki jest w raporcie Etapu 8 i wynosi zero |

@@ -96,6 +96,37 @@ impl Vacancies {
         }
     }
 
+    /// Pula **po zasiedleniu**: wolne jest to, co zostało, a pojemność miasta jest
+    /// tym, co miasto ma.
+    ///
+    /// Etap 8 (M3d §5.9) rozdaje lokale i etaty własnym dopasowaniem statystycznym,
+    /// więc nie może ich zdejmować przez `take_*` — a `new` policzyłoby pojemność
+    /// z tego, co **zostało**, i regulator populacji zobaczyłby miasto bez ani jednego
+    /// mieszkania. Dlatego pojemność wchodzi tu osobno od wolnych miejsc.
+    ///
+    /// `all_jobs` to **wszystkie** etaty miasta, także obsadzone: z nich powstaje mapa
+    /// zakładów, dzięki której etat zwolniony po emeryturze wraca do puli z właściwą
+    /// dzielnicą i płacą.
+    #[must_use]
+    pub fn with_occupancy(
+        free_homes: Vec<HomeSlot>,
+        free_jobs: Vec<JobSlot>,
+        homes_total: u32,
+        all_jobs: &[JobSlot],
+    ) -> Vacancies {
+        let mut sites = BTreeMap::new();
+        for j in all_jobs {
+            sites.entry(j.site).or_insert((j.district, j.wage_monthly));
+        }
+        Vacancies {
+            homes_total,
+            jobs_total: all_jobs.len() as u32,
+            sites,
+            homes: free_homes,
+            jobs: free_jobs,
+        }
+    }
+
     /// Dzielnica i płaca zakładu, jeśli pula go zna.
     #[must_use]
     pub fn site_facts(&self, site: u32) -> Option<(u16, Money)> {

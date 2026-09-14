@@ -12,12 +12,12 @@
 //! temu M5 włącza istniejącą ścieżkę sterowania, zamiast dokładać nową.
 
 use crate::arrayvec::ArrayVec;
-use crate::components::{Identity, Needs, Personality, Residence, Vitals};
+use crate::components::{Employment, Identity, Needs, Personality, Residence, Vitals};
 use crate::needs::NeedTable;
 use crate::store::Knowledge;
 use magnat_core::{
-    CitizenId, DayOfWeek, DecisionReason, HouseholdId, MinuteOfDay, Money, NeedKind, PlaceKind,
-    PlaceRef, SimMinute, TransportMode, WorldCoord, Q,
+    BuildingId, CitizenId, DayOfWeek, DecisionReason, Entity, HouseholdId, MinuteOfDay, Money,
+    NeedKind, PlaceKind, PlaceRef, SimMinute, SiteId, TransportMode, WorldCoord, Q,
 };
 use magnat_spatial::{Aabb2, CategoryGrid, GridSpec, Vec2};
 
@@ -207,6 +207,46 @@ pub fn knowledge_key(place: PlaceRef) -> Option<u32> {
         PlaceRef::Site(s) => Some(s.entity().index()),
         PlaceRef::District(_) | PlaceRef::Coord(_) => None,
     }
+}
+
+/// Odwrotność [`knowledge_key`]: miejsce z samego indeksu encji.
+///
+/// Konwencja kluczy jest jedna na cały projekt i ustala ją Etap 8 (M3d §5.9): budynki
+/// numerowane od zera, zakłady od `1 << 24`. Dzięki temu `Residence.building`
+/// i `Employment.site` — oba zwykłe `u32` — dają się odróżnić bez dodatkowego pola,
+/// a magazyn wiedzy ma jedną przestrzeń kluczy bez kolizji.
+///
+/// `sim/agents` zna **konwencję**, a nie miasto: skąd się biorą numery, wie generator
+/// populacji, który jako jedyny widzi jednocześnie budynki M2 i mieszkańców.
+pub const SITE_KEY_BASE: u32 = 1 << 24;
+
+/// Miejsce z klucza wiedzy. `None` dla `PlanSlot::NO_TARGET`.
+#[inline]
+#[must_use]
+pub fn place_from_key(key: u32) -> Option<PlaceRef> {
+    if key == u32::MAX {
+        return None;
+    }
+    let e = Entity::new(key, std::num::NonZeroU32::new(1).expect("1 != 0"));
+    Some(if key >= SITE_KEY_BASE {
+        PlaceRef::Site(SiteId(e))
+    } else {
+        PlaceRef::Building(BuildingId(e))
+    })
+}
+
+/// Dom mieszkańca jako `PlaceRef`; `None`, gdy nie ma lokalu.
+#[inline]
+#[must_use]
+pub fn home_of(r: &Residence) -> Option<PlaceRef> {
+    place_from_key(r.building).filter(|_| r.building != Residence::HOMELESS)
+}
+
+/// Zakład (albo szkoła ucznia) jako `PlaceRef`; `None`, gdy nie ma pracy.
+#[inline]
+#[must_use]
+pub fn site_of(e: &Employment) -> Option<PlaceRef> {
+    place_from_key(e.site).filter(|_| e.site != Employment::NO_SITE)
 }
 
 // ── typy kontraktu ──────────────────────────────────────────────────────────────

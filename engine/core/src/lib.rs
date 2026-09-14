@@ -46,7 +46,7 @@ pub use ids::{
 pub use money::split_proportional;
 pub use rng::{rng, Rng, StreamId, NO_ENTITY};
 pub use schema::ComponentSchemaId;
-pub use time::{Cadence, DayOfWeek, MinuteOfDay, SimCalendar};
+pub use time::{Cadence, DayOfWeek, MinuteOfDay, SimCalendar, SimClock, SimSpeed};
 pub use types::{
     DistrictId, Energy, GoodId, JobRoleId, Mass, Money, Mood, Qty, RecipeId, SimInstant, SimMinute,
     Tick, Volume, Q,

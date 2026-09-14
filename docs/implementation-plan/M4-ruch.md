@@ -372,3 +372,16 @@ w WP8 (mikro) i WP3 (mezo). Gdyby faza musiała zostać przycięta, jedyna bezpi
 **odłożenie części WP8** (zmiana pasa i ronda) do M11: warstwa mikro nie ma skutków ekonomicznych,
 więc jej uproszczenie nie rusza żadnego kontraktu poza wizualnym. Odwrotna redukcja — przycięcie
 WP3 lub WP9 — jest niedopuszczalna: to one niosą kontrakt §17.4.
+
+## Zmiany wpisane po M3
+
+Zgodnie z `K-18`. To są rzeczy, o których M4 wie **na pewno** po zamknięciu M3d;
+M4 nie jest tu przeprojektowywany.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| Z-1 ★ | **Punktem podmiany jest `sim::agents::Sources.travel`**, nie wywołania w planerze. M4 wymienia jedno pole zasobu `AgentSources` i **kasuje moduł `walk` w całości** (M3 §6.2) | Planer i systemy doby wołają `&dyn TravelOracle`; `Sources` trzyma dziś `WalkOracle` konkretnie, bo jedyna implementacja żyje w tym samym crate'cie. Po wymianie typ pola staje się `Box<dyn TravelOracle>` albo typem M4 — żadne wywołanie się nie zmienia |
+| Z-2 ★ | **`Mobility` ma dziś tempo spadku 0 i to M4 je wpisuje** (`data/needs/needs.ron`, korekta H-3) | Potrzeba mobilności ma `AbsenceRisk` 1000 i żadnego sposobu zaspokojenia, dopóki nie ma środków transportu. Zostawiona ze spadkiem zatrzymywała całe miasto w pracy w drugiej dobie. M4 wnosi mechanizm (dostęp do trasy, pojazd, komunikacja) i razem z nim tempo oraz `satisfaction` |
+| Z-3 ★ | **Etap 8 dostarcza sieć pieszą jako dwie płaskie tablice** (`Populated.nodes`, `Populated.segments`), przeliczone z `RoadNetwork` M2 na centymetry. M4 buduje `RoadGraph` z `RoadNetwork` bezpośrednio i te dwie tablice znikają razem z modułem `walk` | Konwersja jest jedną pętlą i należy do `sim/world`, bo `sim/agents` nie zależy od `sim/world` (korekta E-7). M4 nie ma powodu jej przejmować |
+| Z-4 | **Warstwa Mikro jest już wpięta jako system `WalkMicroSystem`** (`Cadence::EveryMicroTick`, 600 podkroków po 100 ms) i **nie zapisuje niczego do stanu ekonomicznego** | M4 zastępuje `PedestrianBuffer` jednym buforem dla pieszych, pojazdów i pasażerów (decyzja 9.17). Częstotliwość i kontrakt „mikro nie ma prawa zapisu" są już zadeklarowane w kodzie, więc M4 podmienia treść, a nie miejsce |
+| Z-5 | **Spóźnienia wobec planu już istnieją i mają obsługę**: `ReplanCause::Late { delay_min }` wyzwala przeplanowanie przyrostowe z debouncingiem 15 minut | M4 dokłada drugą przyczynę spóźnienia (korek), a nie ścieżkę sterowania — ta jest zbudowana i zmierzona (0,1 % przybyć, 2,1 min średnio) |

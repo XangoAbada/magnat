@@ -546,10 +546,16 @@ fn bench_gossip_day() {
         na_dobe.as_secs_f64() * 1e3,
         zaludnienie.as_secs_f64()
     );
+    // Próg zależy od profilu, bo zapas „rzędu wielkości" nim nie był: zmierzone
+    // w release 63,6 ms (korekta A-20), w debug **725 ms** — czyli jedenaście razy
+    // więcej, a próg stał na 400 ms i test oblewał na czystym `master`. Bramką
+    // regresji jest `m3c-1 spoleczenstwo` w criterion; ten test pilnuje rzędu
+    // wielkości i ma to robić w obu profilach (korekta H-21).
+    let prog = if cfg!(debug_assertions) { 2_000 } else { 200 };
     assert!(
-        na_dobe.as_millis() <= 400,
-        "dobowa plotka i relacje: {:.1} ms wobec progu 400 ms (profil debug ma zapas \
-         rzędu wielkości; bramką regresji jest `m3c-1 spoleczenstwo` w criterion)",
-        na_dobe.as_secs_f64() * 1e3
+        na_dobe.as_millis() <= prog,
+        "dobowa plotka i relacje: {:.1} ms wobec progu {prog} ms (profil {})",
+        na_dobe.as_secs_f64() * 1e3,
+        if cfg!(debug_assertions) { "debug" } else { "release" }
     );
 }

@@ -54,5 +54,52 @@ fn przebiegi(c: &mut Criterion) {
     g.finish();
 }
 
-criterion_group!(benches, generacja, przebiegi);
+/// Etap 8 — zaludnienie miasta (M3d §5.9, WP10).
+///
+/// Bramka **progowa** jest w runnerze `headless population`, który zna rozmiar miasta
+/// i wypisuje czas każdego kroku; tu chodzi o regresję. Miasto powstaje raz, poza
+/// pomiarem: mierzymy zaludnianie, a nie generację M2, którą mierzy `m1-1`.
+fn zaludnianie(c: &mut Criterion) {
+    use magnat_agents::{register, society, DemographyTable, NeedTable};
+    use magnat_ecs::World;
+    use magnat_voxel::MaterialRegistry;
+    use magnat_world::{
+        generate_city, generate_population, CityPlan, PopulationParams, Terrain,
+    };
+    use std::sync::Arc;
+
+    let pool = JobPool::new(0);
+    let p = params(WorldSize::Small4km, Region::Lowland);
+    let (dane, _) = generate(p, &pool).expect("świat");
+    let reg = Arc::new(MaterialRegistry::load_dir(&magnat_world::data_path("materials")).unwrap());
+    let terrain = Terrain::new(dane, reg);
+    let miasto = generate_city(&CityPlan::from_world(&p), &terrain, terrain.materials(), &pool)
+        .expect("miasto");
+
+    let mut g = c.benchmark_group("m3d-1 Etap 8");
+    g.sample_size(10);
+    g.bench_function("4km", |b| {
+        b.iter(|| {
+            let mut world = World::new(p.seed);
+            register(&mut world, NeedTable::load_default().unwrap());
+            society::register_society(&mut world, DemographyTable::load_default().unwrap());
+            black_box(
+                generate_population(
+                    &mut world,
+                    &miasto,
+                    &PopulationParams {
+                        commute_swaps: Some(50_000),
+                        ..PopulationParams::default()
+                    },
+                )
+                .unwrap()
+                .report
+                .citizens,
+            )
+        });
+    });
+    g.finish();
+}
+
+criterion_group!(benches, generacja, przebiegi, zaludnianie);
 criterion_main!(benches);

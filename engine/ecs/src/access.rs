@@ -20,6 +20,8 @@ pub struct Access {
     declared: Vec<(ComponentId, bool)>,
     /// System używa `CommandBuffer` ⇒ wymaga bariery po sobie.
     structural: bool,
+    /// System bierze świat na wyłączność: nic nie biegnie obok niego (M3d §5.12).
+    exclusive: bool,
 }
 
 impl Access {
@@ -53,6 +55,27 @@ impl Access {
 
     pub fn set_structural(&mut self, v: bool) {
         self.structural = v;
+    }
+
+    /// System wyłączny: konfliktuje z **każdym** innym, więc ląduje sam na swoim
+    /// poziomie, a jako strukturalny domyka też etap.
+    ///
+    /// Potrzebny tam, gdzie krok symulacji jest gotową funkcją nad całym światem
+    /// i nie da się go opisać zbiorem komponentów — w M3 dotyczy to demografii,
+    /// migracji i statusu (M3d §5.12, korekta E-16): `demography::step_day` czyta
+    /// i pisze praktycznie wszystko o mieszkańcu, a rozpisanie tego na deklaracje
+    /// dostępu nie kupiłoby ani jednej krawędzi DAG, bo i tak konfliktowałoby
+    /// z każdym sąsiadem.
+    pub fn set_exclusive(&mut self, v: bool) {
+        self.exclusive = v;
+        if v {
+            self.structural = true;
+        }
+    }
+
+    #[must_use]
+    pub fn is_exclusive(&self) -> bool {
+        self.exclusive
     }
 
     #[must_use]
@@ -92,6 +115,9 @@ impl Access {
     /// konfliktują, nie widzą nawzajem swoich zapisów i mogą biec równolegle.
     #[must_use]
     pub fn conflicts_with(&self, other: &Access) -> bool {
+        if self.exclusive || other.exclusive {
+            return true;
+        }
         intersects(&self.writes_components, &other.reads_components)
             || intersects(&other.writes_components, &self.reads_components)
             || intersects(&self.writes_resources, &other.reads_resources)

@@ -493,3 +493,15 @@ bycia pierwszym vertical slice'em. Punkt kontrolny po WP5: istnieje grywalna pę
 (otwórz sklep → ustal cenę → obserwuj klientów). Jeśli do tego momentu budżet fazy jest przekroczony,
 kandydatami do przesunięcia do M7 są WP11 i eksperymenty cenowe z WP6 — **nie** WP13,
 bo balansator w CI jest wskazany w §20.4 jako główna mitygacja ryzyka projektu.
+
+## Zmiany wpisane po M3
+
+Zgodnie z `K-18`. To są rzeczy, o których M5 wie **na pewno** po zamknięciu M3d.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| Z-1 ★ | **Punktem podmiany jest `sim::agents::Sources.places: Box<dyn PlaceProvider>`** w zasobie `AgentSources`. M5 wstawia tam indeks ofert i nie zmienia ani jednej linii w `planner.rs` ani w `DayLoopSystem` | Kryterium akceptacyjne nr 7 fazy M3 mówi o planerze; pętla doby wywołuje `fulfil` przez ten sam trait. Atrapy `FlakyPlaces` i `PanickingPlaces` zostają jako testy kontraktowe i M5 ma je nadal przechodzić |
+| Z-2 ★ | **`FulfilOutcome::Done.satisfaction` jest przyrostem i stosuje się go na końcu wizyty**, a czas wizyty nie liczy się do spadku tej potrzeby (korekta H-4) | M5 zastępuje stałą z `data/needs/needs.ron` wartością zależną od kupionego dobra. Semantyka („przyrost", „na końcu") jest kontraktem pętli doby, a nie szczegółem atrapy |
+| Z-3 ★ | **`Safety`, `Housing` i `Status` mają dziś tempo spadku 0** (korekta H-3); `Status` i `Housing` czekają na M5/M9 | Potrzeba, która spada, a której nic nie podnosi, dochodzi do zera u wszystkich i wypycha z miasta każdego po kolei przez progi migracji. Tempo wnosi faza, która wnosi mechanizm — dla statusu jest nim konsumpcja statusowa z §6.4 |
+| Z-4 | **Kalibracja potrzeb jest zadaniem balansatora, nie M3.** Zmierzone po 30 dobach gry (81 tys. mieszkańców): głód 16/100, sen 15/100, higiena 26/100, wypoczynek 36/100, kontakty 33/100 — mierzone o północy | Tabela §5.5 nie była nigdy puszczana przez wielodobowy przebieg razem z planerem. Liczby są punktem wyjścia dla `tools/balansator`, a nie wynikiem do przyjęcia: scenariusz `headless m3day` wypisuje je po każdym przebiegu |
+| Z-5 | **`Household.stock` zużywa się o jeden dzień na dobę** (`HouseholdStockSystem`, `Cadence::EveryDay`) i to on wyzwala zakupy przez próg w fazie 3 planera | M5 zastępuje ten system realną konsumpcją towarów z partiami. Próg wyzwalający zakupy zostaje ten sam — tak jak zapowiada M3 §6.2 |

@@ -41,12 +41,21 @@ const LIMIT_SREDNIA: usize = 900;
 const LIMIT_NAJGORSZY: usize = 3000;
 
 /// Budżet z M1 §4 WP-V2: 0,8 ms na rdzeń — **za sam meshing**.
-const LIMIT_MESH_MS: f64 = 0.8;
+///
+/// **Próg zależy od profilu (korekta H-27, M3d).** Budżet z planu opisuje grę, a gra
+/// chodzi w release. Ten sam meshing w profilu debug zajmuje 11,9 ms/chunk na terenie
+/// górskim — piętnaście razy dłużej, bo `greedy_quads` to ciasna pętla po wokselach,
+/// której `debug` nie wektoryzuje ani nie inline'uje. Test oblewał na czystym `master`
+/// (sprawdzone w osobnym worktree na `c9864ea`: 11,71 ms), więc nie jest to regresja
+/// M3d — jest to budżet release'owy sprawdzany w debugu. Limit debugowy istnieje po to,
+/// żeby wychwycić regresję rzędu wielkości; wartość release'owa nie rusza się.
+const LIMIT_MESH_MS: f64 = if cfg!(debug_assertions) { 24.0 } else { 0.8 };
 /// Materializacja chunka z `ColumnSource`. Planu nie ma dla niej wprost (§5.9 podaje
 /// 0,4 ms na kafel 256 × 256 m, czyli inną jednostkę), więc limit jest ustalany tutaj
 /// i liczony z tego, co musi się zmieścić w klatce: przy 64 chunkach na klatkę
 /// i ośmiu rdzeniach 1 ms na chunk daje 8 ms pracy w tle, poniżej budżetu ramki.
-const LIMIT_FILL_MS: f64 = 1.0;
+/// Próg debugowy jak przy `LIMIT_MESH_MS` (H-27).
+const LIMIT_FILL_MS: f64 = if cfg!(debug_assertions) { 12.0 } else { 1.0 };
 
 fn teren(region: Region) -> Terrain {
     let pool = JobPool::new(0);
@@ -141,7 +150,9 @@ fn bench_mesh_chunk() {
 
 #[test]
 fn bench_lod3_chunk() {
-    // Budżet z M1 §4 WP-V3: agregat LOD3 w ≤ 1,5 ms.
+    // Budżet z M1 §4 WP-V3: agregat LOD3 w ≤ 1,5 ms — w release. W debugu 8,1 ms
+    // i tak samo na czystym `master` (H-27, patrz `LIMIT_MESH_MS`).
+    const LIMIT_LOD3_MS: f64 = if cfg!(debug_assertions) { 16.0 } else { 1.5 };
     let t = teren(Region::Mountain);
     let coord = ChunkCoord::new(2, 2, 0);
     let start = std::time::Instant::now();
@@ -149,8 +160,8 @@ fn bench_lod3_chunk() {
     magnat_voxel::aggregate(&t, coord, 3, &mut b);
     let ms = start.elapsed().as_secs_f64() * 1000.0;
     assert!(
-        ms <= 1.5,
-        "agregat LOD3 zajął {ms:.2} ms wobec limitu 1,5 ms"
+        ms <= LIMIT_LOD3_MS,
+        "agregat LOD3 zajął {ms:.2} ms wobec limitu {LIMIT_LOD3_MS} ms"
     );
 }
 

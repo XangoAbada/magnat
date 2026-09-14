@@ -10,6 +10,8 @@
 mod agents;
 mod century;
 mod day;
+mod m3day;
+mod population;
 mod testworld;
 mod worldgen;
 
@@ -103,6 +105,10 @@ enum Command {
     Day(day::DayArgs),
     /// Sto lat gry w trybie demograficznym: cykl życia, migracja, status (M3c).
     Century(century::CenturyArgs),
+    /// Etap 8: zaludnienie miasta M2 i cztery dopasowania statystyczne (M3d).
+    Population(population::PopulationArgs),
+    /// Artefakt fazy M3: doba w zaludnionym mieście przez systemy ECS §5.12 (M3d).
+    M3day(m3day::M3DayArgs),
 }
 
 fn uruchom() -> Result<std::process::ExitCode, Box<dyn std::error::Error>> {
@@ -115,6 +121,8 @@ fn uruchom() -> Result<std::process::ExitCode, Box<dyn std::error::Error>> {
         Some(Command::Agents(a)) => return agents::run(a),
         Some(Command::Day(a)) => return day::run(a),
         Some(Command::Century(a)) => return century::run(a),
+        Some(Command::Population(a)) => return population::run(a),
+        Some(Command::M3day(a)) => return m3day::run(a),
         None => {}
     }
 

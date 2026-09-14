@@ -51,7 +51,7 @@
             visit_min: 20,
             decay_centi_per_hour: 420,
             critical: 25,
-            satisfaction: 35,
+            satisfaction: 100,           // kąpiel przywraca higienę w całości (korekta H-5)
             places: [Home],
             effects: [
                 (effect: HealthLoss, magnitude: 10),
@@ -75,7 +75,7 @@
         (
             key: "Safety",
             visit_min: 15,
-            decay_centi_per_hour: 15,    // 0,15 pkt/h, modyfikowane przestępczością (M8)
+            decay_centi_per_hour: 0,     // M8 (przestępczość) — patrz nagłówek
             critical: 25,
             satisfaction: 0,
             places: [],
@@ -86,7 +86,7 @@
         (
             key: "Housing",
             visit_min: 15,
-            decay_centi_per_hour: 5,     // 0,05 pkt/h + skok przy zmianie wielkości GD
+            decay_centi_per_hour: 0,     // M5/M9 (lokal) — patrz nagłówek
             critical: 25,
             satisfaction: 0,
             places: [],
@@ -97,7 +97,7 @@
         (
             key: "Mobility",
             visit_min: 15,
-            decay_centi_per_hour: 420,
+            decay_centi_per_hour: 0,     // M4 (dostęp do trasy) — patrz nagłówek
             critical: 25,
             satisfaction: 0,
             places: [],
@@ -141,7 +141,7 @@
         (
             key: "Status",
             visit_min: 30,
-            decay_centi_per_hour: 10,
+            decay_centi_per_hour: 0,     // M5 (konsumpcja) — patrz nagłówek
             critical: 25,
             satisfaction: 0,
             places: [],

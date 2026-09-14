@@ -88,6 +88,15 @@ impl SystemDesc {
         self
     }
 
+    /// System wyłączny: dostaje `&mut World` przez [`SystemCtx::world_mut`] i biegnie
+    /// sam. Determinizm jest wtedy trywialny — nie ma z kim się ścigać — a cena
+    /// jest jawna: ten system nie korzysta ze zrównoleglenia.
+    #[must_use]
+    pub fn exclusive(mut self) -> SystemDesc {
+        self.access.set_exclusive(true);
+        self
+    }
+
     #[must_use]
     pub fn after(mut self, other: SystemId) -> SystemDesc {
         self.after.push(other);
@@ -148,6 +157,21 @@ impl<'w> SystemCtx<'w> {
             std::any::type_name::<T>()
         );
         w.resource::<T>()
+    }
+
+    /// Cały świat do zapisu — **wyłącznie dla systemu wyłącznego** (`SystemDesc::exclusive`).
+    ///
+    /// Scheduler stawia taki system sam na swoim poziomie i domyka nim etap, więc
+    /// wyłączna pożyczka jest tu prawdziwa, a nie deklarowana. Bez tej furtki nie da
+    /// się opakować kroku, który jest funkcją nad całym światem (M3d §5.12).
+    pub fn world_mut(&mut self) -> &mut World {
+        debug_assert!(
+            self.access.is_exclusive(),
+            "world_mut w systemie, który nie jest wyłączny — scheduler puści obok niego              inny system i pożyczka przestanie być wyłączna"
+        );
+        // SAFETY: system wyłączny konfliktuje z każdym innym, więc jest jedynym
+        // systemem na swoim poziomie; nikt inny nie trzyma w tej chwili pożyczki świata.
+        unsafe { self.world.world_mut() }
     }
 
     /// Zasób do zapisu. Dwa systemy z niezadeklarowanym `res_mut` na ten sam zasób

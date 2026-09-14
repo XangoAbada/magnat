@@ -159,6 +159,15 @@ pub struct ArchetypeSpec {
     /// Dobowe zużycie materiałów eksploatacyjnych przy skali bazowej, w gramach.
     #[serde(default)]
     pub consumes: Vec<(String, i64)>,
+    /// Rodzaj miejsca, w którym mieszkaniec zaspokaja potrzebę (M3d, Etap 8 krok 0).
+    ///
+    /// `None` = zakład jest wyłącznie miejscem pracy. Odwzorowanie stoi w danych,
+    /// a nie w `match` po kluczu archetypu, bo rozstrzyga o tym, **do czego** miasto
+    /// służy mieszkańcom — a to zmienia się z epoką i z profilem, nie z kodem.
+    /// `PlaceKind` mieszka w `core` (K-8), więc `data/buildings/` nie wprowadza
+    /// własnego słownika.
+    #[serde(default)]
+    pub place_kind: Option<magnat_core::PlaceKind>,
 }
 
 fn jeden() -> f32 {

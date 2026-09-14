@@ -216,3 +216,13 @@ zajmują zmiany przyniesione przez M3a, a `D` — korekty własne M3a.
 | F-14 | **Dojazd, który nie mieści się przed północą, nie wchodzi do planu skrócony** — nie wchodzi wcale | Skrócony slot kłamałby o czasie dojścia i rozjeżdżał plan z ruchem dokładnie tak, jak opisuje F-8. Plan nie przechodzi przez północ (§5.4), więc podróż przez północ nie ma w nim reprezentacji |
 | F-15 ★ | **Zmierzone progi §7.5 dla tej podfazy:** `plan_day` 0,78 µs (próg 10), `plan_day_explained` 0,84 µs, `replan` 0,69 µs (próg 5), `estimate` zimno 3 µs (próg 80) i z cache'u 0,039 µs (próg 0,2), krok Mikro dla 5 tys. pieszych 47 µs (próg 2 ms) | Wszystkie z zapasem rzędu wielkości, co jest istotne dla ryzyka R6: M5 wstawi do `candidates` funkcję użyteczności §6.4 i zje ten zapas. Bramka regresji to `benches/agents_bench.rs` (grupy `m3b-1 planer`, `m3b-2 ruch`) plus `scripts/bench_guard.py` |
 | F-16 | **`plan_no_economy_types` rozszerzony** (domknięcie B-5): skanuje `places.rs` i `planner.rs`, a dla planera dokłada zakaz `StreetGraph` i `crate::walk` | Ryzyko R1 i R2 w jednym teście: planer nie ma prawa znać ani ceny, ani trasy. `places.rs` wolno sięgać do prędkości marszu, bo `InfinitePlaces` przelicza nią zasięg osobisty na promień |
+
+## Zmiany wpisane po M3d
+
+Zgodnie z `K-18`. Uzasadnienia w tabeli `H-n` dokumentu `M3d-populacja-i-ui.md`.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| F-17 ★ | **`param` w `PlanSlot.reason` slotu fazy 2 niesie indeks potrzeby, nie jej poziom** (korekta H-10) | Pętla zdarzeń musi z samego slotu odczytać, **co on zaspokaja** — a rodzaj czynności tego nie mówi: poranna toaleta jest slotem `Idle`. Faza 3 pakowała indeks potrzeby od początku, faza 2 pakowała poziom, który i tak siedzi w `Needs` i wraca w pełnym uzasadnieniu z `plan_day_explained`. Złoty plik `anna_day.txt` się nie zmienił, bo wydruk diagnostyczny czyta `param` tylko przy pustym logu |
+| F-18 | **Spóźnienie pieszego jest normą i wyzwala `ReplanCause::Late`** (korekta H-12) | Niezmiennik „slot `Commute` trwa tyle, ile `TravelOracle` liczy dla jego pary miejsc" obowiązuje **w chwili planowania**. Plan powstaje o północy, a prędkość marszu zależy od energii i zdrowia, które przez dobę spadają — planer nie ma jak tego wiedzieć. Zmierzone: 2,1 min opóźnienia przy 0,1 % przybyć |
+| F-19 | `walk::dijkstra` idzie **A\*** z heurystyką euklidesową; wynik identyczny, przeszukanie kilkakrotnie mniejsze (korekta H-13) | Odcinek ulicy jest łamaną, więc odległość w linii prostej jest heurystyką dopuszczalną i spójną. Bez tego Etap 8 zjadał 25 s z budżetu 30 s na samych dojazdach metropolii |

@@ -210,6 +210,19 @@ impl DayCanvas {
         self.slots.is_full()
     }
 
+    /// Wczytuje zapisany plan z areny z powrotem na kanwę — wejście przeplanowania
+    /// i karty inspekcji. Cele slotów odtwarza się z ich kluczy, bo arena trzyma
+    /// sam indeks encji (§5.1).
+    pub fn load(&mut self, slots: &[PlanSlot]) {
+        self.slots.clear();
+        self.places.clear();
+        for s in slots.iter().take(MAX_SLOTS) {
+            self.slots.push(*s);
+            self.places
+                .push(crate::places::place_from_key(s.target).unwrap_or_default());
+        }
+    }
+
     pub fn clear(&mut self) {
         self.slots.clear();
         self.places.clear();
@@ -856,7 +869,7 @@ fn faza2_potrzeby(ctx: &PlanCtx<'_>, canvas: &mut DayCanvas, log: &mut Log<'_>) 
             wake,
             ctx.home,
             powod_snu,
-            poziom_snu.get(),
+            NeedKind::Sleep.as_index() as u8,
         );
     }
     let bed = bed.max(ostatni_koniec(canvas).saturating_add(30)).min(1439);
@@ -890,7 +903,7 @@ fn faza2_potrzeby(ctx: &PlanCtx<'_>, canvas: &mut DayCanvas, log: &mut Log<'_>) 
                 dur,
                 ctx.home,
                 powod_snu,
-                poziom_snu.get(),
+                NeedKind::Sleep.as_index() as u8,
             );
         }
     }
@@ -912,7 +925,7 @@ fn faza2_potrzeby(ctx: &PlanCtx<'_>, canvas: &mut DayCanvas, log: &mut Log<'_>) 
                 need: NeedKind::Hygiene,
                 level: higiena,
             },
-            higiena.get(),
+            NeedKind::Hygiene.as_index() as u8,
         );
     }
 
@@ -947,7 +960,7 @@ fn faza2_potrzeby(ctx: &PlanCtx<'_>, canvas: &mut DayCanvas, log: &mut Log<'_>) 
             posilek,
             ActivityKind::Eat,
             powod_jedzenia,
-            glod.get(),
+            NeedKind::Hunger.as_index() as u8,
         );
         match wynik {
             Some(_) => zjadl += 1,

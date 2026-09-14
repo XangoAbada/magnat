@@ -36,7 +36,7 @@ pub struct NeedEffect {
 }
 
 /// Parametry jednej potrzeby.
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize)]
 pub struct NeedSpec {
     /// Klucz tekstowy = nazwa wariantu `NeedKind` (bez rozróżniania wielkości liter).
     pub key: String,
@@ -102,6 +102,19 @@ pub struct NeedTable {
 }
 
 impl NeedTable {
+    /// Tabela pusta — dwanaście potrzeb o zerowym tempie spadku i bez miejsc.
+    ///
+    /// Nie jest to stan produkcyjny: potrzeba, która nie spada, wygląda jak zaspokojona
+    /// na zawsze. Istnieje dla ścieżek, które `PlanCtx` wymaga, a które tabeli nie
+    /// czytają (podróż zna tylko widok mieszkańca) — i dla testów, które o potrzeby
+    /// nie pytają.
+    #[must_use]
+    pub fn empty() -> NeedTable {
+        NeedTable {
+            specs: vec![NeedSpec::default(); NEED_COUNT],
+        }
+    }
+
     /// Wczytanie i **walidacja przed użyciem** (00 §5): plik musi opisywać każdą
     /// potrzebę dokładnie raz. Brak wpisu nie może dawać cichego zera — potrzeba,
     /// która nie spada, wygląda w symulacji jak zaspokojona na zawsze.
@@ -445,5 +458,26 @@ mod tests {
         let mut pusto = Vec::new();
         deprivation_of(&Needs::default(), &t, &mut pusto);
         assert!(pusto.is_empty());
+    }
+
+    #[test]
+    fn potrzeba_bez_sposobu_zaspokojenia_nie_spada() {
+        // Korekta H-3 (M3d). Potrzeba, ktorej nic nie podnosi, a ktora spada, dochodzi
+        // do zera u **wszystkich** mieszkancow — i wtedy jej skutki przestaja cokolwiek
+        // roznicowac. Mobilnosc z `AbsenceRisk` 1000 zatrzymala w ten sposob cale miasto
+        // w pracy w drugiej dobie przebiegu `m3day`. Tempo spadku wpisuje faza, ktora
+        // wnosi mechanizm: M4 (trasa), M8 (przestepczosc), M5/M9 (lokal, konsumpcja).
+        let t = NeedTable::load_default().expect("data/needs/needs.ron");
+        for n in NeedKind::ALL {
+            let s = t.spec(*n);
+            if !s.places.is_empty() || s.satisfaction > 0 {
+                continue;
+            }
+            assert_eq!(
+                s.decay_centi_per_hour, 0,
+                "potrzeba {n:?} spada ({} setnych/h), a nic jej nie podnosi",
+                s.decay_centi_per_hour
+            );
+        }
     }
 }

@@ -24,6 +24,7 @@ pub mod io;
 pub mod noise;
 pub mod params;
 pub mod pipeline;
+pub mod population;
 pub mod query;
 pub mod terrain;
 
@@ -81,5 +82,9 @@ pub use pipeline::{generate, GenCtx, GenPass, WorldGenReport, WorldStats, PASSES
 pub use query::{
     Buildability, Crossing, NavigableClass, ObstacleBitset, TerrainQuery, TileCoord, WaterCell,
     TILE_M,
+};
+pub use population::{
+    generate_population, home_place, site_place, PopulationError, PopulationParams,
+    PopulationReport, Populated, COMMUTE_BINS, SITE_KEY_BASE,
 };
 pub use terrain::Terrain;

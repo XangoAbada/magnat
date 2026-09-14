@@ -47,6 +47,7 @@ pub mod planner;
 pub mod social;
 pub mod society;
 pub mod store;
+pub mod systems;
 
 // K-2: graf pieszy należy do M4. Moduł jest prywatny i taki zostaje — na zewnątrz
 // wychodzi wyłącznie `WalkOracle` jako implementacja wspólnego traitu, bez ani jednego
@@ -75,8 +76,9 @@ pub use needs::{
 pub use places::{
     choose_place, default_hours, knowledge_key, CitizenView, EmptyPlaces, FlakyPlaces,
     FulfilOutcome, FulfilRequest, InfinitePlaces, KnowledgeView, OpenHours, PanickingPlaces,
-    PlaceCandidate, PlaceEntry, PlaceProvider, PlaceTable, TravelEstimate, TravelOracle,
-    TripHandle, TripRequest, MAX_CANDIDATES, MAX_ON_ROUTE,
+    home_of, place_from_key, site_of, PlaceCandidate, PlaceEntry, PlaceProvider, PlaceTable,
+    TravelEstimate, TravelOracle, TripHandle, TripRequest, MAX_CANDIDATES, MAX_ON_ROUTE,
+    SITE_KEY_BASE,
 };
 pub use planner::{
     load_plan, plan_day, plan_day_explained, render_day_debug, replan, replan_explained_into,
@@ -89,8 +91,8 @@ pub use store::{
 };
 pub use demography::{
     citizen_by_index, compatibility, household_by_index, knowledge_ref, powiaz, relations_ref,
-    DayReport, DemographyError, DemographyTable, InheritanceHook, LifeQueue, LifeTask, LifeTaskKind,
-    MonthReport, NoInheritance, Population, StatusWeights, DAYS_PER_YEAR, DEMOGRAPHY_SHARDS,
+    Ages, DayReport, DemographyError, DemographyTable, InheritanceHook, LifeQueue, LifeTask, LifeTaskKind,
+    MonthReport, NoInheritance, Population, StatusWeights, przeklasyfikuj, DAYS_PER_YEAR, DEMOGRAPHY_SHARDS,
 };
 pub use migration::{
     attractiveness, seed_population, shock_retire_jobs, spawn_household, spawn_household_aged, zaloz_gospodarstwo, HomeSlot, JobSlot, MigrationReport,
@@ -102,5 +104,10 @@ pub use social::{
 };
 pub use society::{
     households, is_month_start, population, register_society, total_money, SocietyReport,
+};
+pub use systems::{
+    bootstrap_day, micro_count, register_day, set_lod, AgentSources, CitizenSnapshot, DayLoopSystem,
+    DayStats, HouseholdStockSystem, ReplanCooldownSystem, SkillDriftSystem, SocietySystem, Sources,
+    Trace, TraceEntry, WalkMicroSystem, MAX_TASK_TRAVEL_MIN, MAX_WATCHED, TRACE_LEN, WEEK_SHARDS,
 };
 pub use walk::WalkOracle;

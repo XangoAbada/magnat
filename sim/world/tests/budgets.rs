@@ -15,7 +15,14 @@ use magnat_world::{
 /// Twardy limit CI dla mapy 4 km (M1 §5.9). Cel to 1,0 s, limit 2,5 s — mierzymy limit,
 /// bo maszyna CI bywa wolniejsza od deweloperskiej i test ma łapać regresje rzędu wielkości,
 /// a nie wahania obciążenia.
-const LIMIT_4KM_MS: f64 = 2_500.0;
+///
+/// **Próg zależy od profilu (korekta H-25, M3d).** Limit 2,5 s stoi wobec pomiaru
+/// w release (1,7 s na pięć regionów), a generator w profilu debug liczy ten sam świat
+/// **2,6 s na jeden region** — i test oblewał na czystym `master`, zanim M3d czegokolwiek
+/// dotknął. Sprawdzone w osobnym worktree na `c9864ea`: 2586 ms. Nagłówek obiecywał
+/// „regresje rzędu wielkości, a nie wahania obciążenia" — próg oddalony o 4 % od
+/// zmierzonego czasu mierzy dokładnie te wahania. W release nic się nie zmienia.
+const LIMIT_4KM_MS: f64 = if cfg!(debug_assertions) { 8_000.0 } else { 2_500.0 };
 const LIMIT_16KM_MS: f64 = 20_000.0;
 /// Stan trwały mapy 16 km w RAM (M1 §5.9: ≤ 60 MB).
 const LIMIT_PERSISTENT_16KM: usize = 60 * 1024 * 1024;

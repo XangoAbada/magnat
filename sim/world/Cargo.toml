@@ -15,6 +15,8 @@ bench = false
 [dependencies]
 magnat-core = { workspace = true }
 magnat-jobs = { workspace = true }
+magnat-agents = { workspace = true }
+magnat-ecs = { workspace = true }
 magnat-spatial = { workspace = true }
 magnat-voxel = { workspace = true }
 glam = { workspace = true }
@@ -25,6 +27,7 @@ zstd = { workspace = true }
 ron = { workspace = true }
 
 [dev-dependencies]
+magnat-io = { workspace = true }
 ron = { workspace = true }
 proptest = { workspace = true }
 criterion = { workspace = true }

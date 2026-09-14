@@ -292,6 +292,15 @@ pub struct JobRole {
     pub shift: ShiftKey,
     /// Widełki bazowe w epoce współczesnej, grosze miesięcznie brutto.
     pub wage_base: (i64, i64, i64),
+    /// Prestiż zawodu 0..=100 — składnik „zawód" funkcji statusu (M3c §5.8).
+    /// Etap 8 przepisuje go do `CityFacts.job_prestige` (M3d, korekta E-14).
+    #[serde(default = "prestiz_neutralny")]
+    pub prestige: u8,
+}
+
+/// Rola bez wpisanego prestiżu jest zawodem przeciętnym, nie zawodem bez znaczenia.
+fn prestiz_neutralny() -> u8 {
+    50
 }
 
 /// Zmiana w danych. Osobny typ od [`ShiftId`], bo ten drugi jest kontraktem dla M3

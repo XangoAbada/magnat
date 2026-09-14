@@ -1,0 +1,11 @@
+# Końce linii: w repozytorium i w drzewie roboczym zawsze LF.
+#
+# Bez tego pliku `core.autocrlf=true` — domyślne na Windowsie — przepisuje pliki
+# tekstowe na CRLF przy każdym checkoucie. Dla kodu to kosmetyka, dla **złotych
+# plików testów** to czerwony test: renderer pisze `\n`, a porównanie jest bajt
+# w bajt. Złapane w M3d, gdy `git stash pop` przepisał `engine/ui/tests/golden/*`
+# i dwa testy akceptacyjne padły bez jednej zmiany w kodzie.
+* text=auto eol=lf
+
+# Złote pliki nie są normalizowane w ogóle: mają być tym, co renderer wypisał.
+**/tests/golden/** -text

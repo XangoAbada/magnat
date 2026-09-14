@@ -11,6 +11,10 @@
 // Dopóki ich nie ma, przelicznik `m2_per_workplace` stoi tutaj.
 //
 // Kwoty w **groszach miesięcznie, brutto** (00 §2: pieniądz to i64 w groszach).
+//
+// `prestige` (0..=100) to składnik „zawód" funkcji statusu (M3c §5.8), wnoszony przez
+// Etap 8 jako `CityFacts.job_prestige` (M3d, korekta E-14). Stoi w danych, a nie w kodzie,
+// bo jest oceną społeczną epoki — M10 przestraja go razem z historią „na sucho".
 (
     schema_version: 1,
 
@@ -28,6 +32,7 @@
     roles: [
         (
             key: "retail_clerk",
+            prestige: 40,
             unit: Retail,
             m2_per_workplace: 48,
             shift: II,
@@ -35,6 +40,7 @@
         ),
         (
             key: "office_clerk",
+            prestige: 62,
             unit: Office,
             m2_per_workplace: 24,
             shift: I,
@@ -42,6 +48,7 @@
         ),
         (
             key: "production_worker",
+            prestige: 45,
             unit: Workshop,
             m2_per_workplace: 72,
             shift: III,
@@ -49,6 +56,7 @@
         ),
         (
             key: "warehouse_operator",
+            prestige: 38,
             unit: Storage,
             m2_per_workplace: 420,
             shift: II,

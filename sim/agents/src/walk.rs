@@ -472,16 +472,26 @@ fn dijkstra(
         return Some(wejscie.saturating_add(wyjscie));
     }
 
+    // A*, nie czysta Dijkstra: cel jest znany, a odległość euklidesowa do niego jest
+    // heurystyką **dopuszczalną i spójną** — odcinek ulicy jest łamaną, więc nigdy
+    // nie jest krótszy od odcinka między swoimi końcami. Wynik jest ten sam co
+    // Dijkstry (pilnuje tego `astar_daje_te_sama_odleglosc_co_dijkstra`), a przy
+    // dojazdach rzędu pięciu kilometrów w sieci metropolii przeszukanie jest
+    // kilkakrotnie mniejsze. Bez tego Etap 8 zjada 25 s z budżetu 30 s (§7.4).
+    let cel_wezla = graf.nodes[meta as usize];
+    let h = |n: u32| euclid_cm(graf.nodes[n as usize], cel_wezla);
+
     s.nowa_generacja();
     let gen = s.gen;
     s.dist[start as usize] = 0;
     s.prev[start as usize] = u32::MAX;
     s.stamp[start as usize] = gen;
-    s.heap.push(Reverse((0u32, start)));
+    s.heap.push(Reverse((h(start), start)));
 
     let mut wynik = None;
-    while let Some(Reverse((d, n))) = s.heap.pop() {
-        if s.dist[n as usize] < d {
+    while let Some(Reverse((f, n))) = s.heap.pop() {
+        let d = s.dist[n as usize];
+        if s.stamp[n as usize] != gen || f != d.saturating_add(h(n)) {
             continue; // nieaktualny wpis — kopiec nie umie zmniejszać klucza
         }
         if n == meta {
@@ -498,7 +508,7 @@ fn dijkstra(
                 s.dist[*m as usize] = nd;
                 s.prev[*m as usize] = n;
                 s.stamp[*m as usize] = gen;
-                s.heap.push(Reverse((nd, *m)));
+                s.heap.push(Reverse((nd.saturating_add(h(*m)), *m)));
             }
         }
     }

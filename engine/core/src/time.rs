@@ -261,6 +261,129 @@ impl Cadence {
     }
 }
 
+/// Prędkość biegu symulacji (PRD §14.5, decyzja 9.1 fazy M3).
+///
+/// **Prędkość nie wpływa na wynik.** Zmienia wyłącznie, ile ticków ekonomicznych
+/// wypada na sekundę czasu realnego — sam tick jest zawsze tą samą minutą gry
+/// i liczy się tak samo. Test `det_speed_invariance` porównuje hash doby przy 1×
+/// i przy 10×: musi być identyczny.
+///
+/// 50× i tryb makro dokłada M12; wariant dopisuje się **na końcu** (00 §3.1).
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Default, Serialize, Deserialize)]
+#[repr(u8)]
+pub enum SimSpeed {
+    Paused = 0,
+    #[default]
+    X1 = 1,
+    X3 = 2,
+    X10 = 3,
+}
+
+impl SimSpeed {
+    pub const ALL: &'static [SimSpeed] = &[
+        SimSpeed::Paused,
+        SimSpeed::X1,
+        SimSpeed::X3,
+        SimSpeed::X10,
+    ];
+
+    /// Minut gry na sekundę czasu realnego. 1× = 1 minuta/s, czyli doba w 24 minuty.
+    #[inline]
+    #[must_use]
+    pub const fn minutes_per_second(self) -> u32 {
+        match self {
+            SimSpeed::Paused => 0,
+            SimSpeed::X1 => 1,
+            SimSpeed::X3 => 3,
+            SimSpeed::X10 => 10,
+        }
+    }
+
+    #[inline]
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            SimSpeed::Paused => "Paused",
+            SimSpeed::X1 => "X1",
+            SimSpeed::X3 => "X3",
+            SimSpeed::X10 => "X10",
+        }
+    }
+}
+
+/// Zegar gry: ile minut symulacji należy wykonać za miniony czas realny.
+///
+/// Zegar **nie jest stanem symulacji** i nie wchodzi do hasha (00 §3.6) — jest
+/// przelicznikiem po stronie prezentacji. Kod symulacji nie widzi go wcale, bo
+/// widziałby wtedy czas rzeczywisty (00 §3.5). Jedyne, co z niego wychodzi, to liczba
+/// ticków do wykonania; każdy z nich jest tą samą minutą gry niezależnie od prędkości.
+///
+/// Reszta milisekund **zostaje w akumulatorze**, a nie jest zaokrąglana: bez tego
+/// przy 1× i klatce 16 ms nie ruszyłaby ani jedna minuta.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub struct SimClock {
+    tick: Tick,
+    speed: SimSpeed,
+    /// Nieskonsumowane milisekundy czasu realnego × minuty/s; dzielnik to 1000.
+    accum: u32,
+}
+
+impl SimClock {
+    #[must_use]
+    pub const fn new(start: Tick) -> SimClock {
+        SimClock {
+            tick: start,
+            speed: SimSpeed::X1,
+            accum: 0,
+        }
+    }
+
+    #[inline]
+    #[must_use]
+    pub const fn tick(self) -> Tick {
+        self.tick
+    }
+
+    #[inline]
+    #[must_use]
+    pub const fn speed(self) -> SimSpeed {
+        self.speed
+    }
+
+    /// Zmiana prędkości kasuje akumulator, żeby przełączenie nie wnosiło ułamka minuty
+    /// naliczonego według poprzedniej prędkości.
+    #[inline]
+    pub fn set_speed(&mut self, speed: SimSpeed) {
+        self.speed = speed;
+        self.accum = 0;
+    }
+
+    #[inline]
+    #[must_use]
+    pub const fn calendar(self) -> SimCalendar {
+        SimCalendar::new(self.tick)
+    }
+
+    /// Ile minut gry minęło przez `dt_ms` czasu realnego. Wywołujący ma wykonać
+    /// dokładnie tyle ticków — zegar sam siebie przy tym przesuwa.
+    ///
+    /// `cap` ogranicza skok po zacięciu klatki: bez niego okno przywrócone po minucie
+    /// w tle próbowałoby dogonić 600 minut gry w jednej klatce.
+    pub fn advance(&mut self, dt_ms: u32, cap: u32) -> u32 {
+        let na_sekunde = self.speed.minutes_per_second();
+        if na_sekunde == 0 {
+            return 0;
+        }
+        self.accum = self
+            .accum
+            .saturating_add(dt_ms.saturating_mul(na_sekunde));
+        let minut = (self.accum / 1000).min(cap);
+        self.accum -= minut.saturating_mul(1000);
+        self.tick = Tick(self.tick.0 + u64::from(minut));
+        minut
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -330,5 +453,25 @@ mod tests {
         // Mikro biegnie w każdej minucie; 600 podkroków dzieje się wewnątrz systemu.
         assert!(Cadence::EveryMicroTick.due(Tick(1)));
         assert_eq!(MICRO_STEPS_PER_TICK, 600);
+    }
+
+    #[test]
+    fn predkosc_zmienia_tempo_a_nie_ziarnistosc() {
+        // Doba gry to zawsze 1440 ticków — przy 1× trwa 1440 s realnych, przy 10× 144 s.
+        for (predkosc, sekundy) in [(SimSpeed::X1, 1440u32), (SimSpeed::X3, 480), (SimSpeed::X10, 144)] {
+            let mut z = SimClock::new(Tick(0));
+            z.set_speed(predkosc);
+            let mut minut = 0u32;
+            for _ in 0..sekundy * 1000 / 16 {
+                minut += z.advance(16, 1000);
+            }
+            // Reszta akumulatora bierze się z dzielenia sekundy na klatki po 16 ms.
+            assert!((1430..=1440).contains(&minut), "{predkosc:?}: {minut}");
+            assert_eq!(z.tick().0, u64::from(minut));
+        }
+        let mut z = SimClock::new(Tick(7));
+        z.set_speed(SimSpeed::Paused);
+        assert_eq!(z.advance(10_000, 1000), 0);
+        assert_eq!(z.tick().0, 7);
     }
 }

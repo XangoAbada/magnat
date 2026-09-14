@@ -1,0 +1,121 @@
+// Generacja populacji — Etap 8 (M3d §5.9, PRD §4.2).
+//
+// Tu stoi to, czego generator NIE ma prawa mieć w kodzie: kształt piramidy wieku,
+// skład gospodarstw, rozkład wykształcenia i dopasowanie kierunku do roli. Hazardy
+// demograficzne (umieralność, płodność, migracja) są obok, w `demography.ron` — ten
+// plik opisuje **stan startowy**, tamten **przejścia**.
+//
+// Wszystkie udziały są w **promilach** i muszą sumować się do 1000; walidator to
+// sprawdza i odmawia ładowania, bo rozkład sumujący się do 998 daje piramidę, której
+// test χ² nie odróżni od błędu generatora.
+//
+// `epoch` odsyła do klucza z `data/epochs/epochs.ron` — miasto startujące w 1890 ma
+// inną piramidę niż to z 1990 i to jest treść parametru, a nie ozdoba. Epoka bez wpisu
+// dostaje `default`.
+(
+    schema_version: 1,
+
+    // Piramida wieku: 22 pasma pięcioletnie, od 0–4 do 105–109. Wiek powyżej 109
+    // wpada do ostatniego pasma — sufit twardy jest w `demography.ron` (`ages.max`).
+    default_pyramid: "contemporary",
+    pyramids: [
+        // Miasto przedprzemysłowe i przemysłowe: dużo dzieci, krótkie życie.
+        (epoch: "medieval",   bands: [122, 111, 106, 100, 94, 87, 78, 69, 60, 51, 42, 33, 24, 13, 7, 3, 0, 0, 0, 0, 0, 0]),
+        (epoch: "industrial", bands: [122, 111, 106, 100, 94, 87, 78, 69, 60, 51, 42, 33, 24, 13, 7, 3, 0, 0, 0, 0, 0, 0]),
+        (epoch: "interwar",   bands: [122, 111, 106, 100, 94, 87, 78, 69, 60, 51, 42, 33, 24, 13, 7, 3, 0, 0, 0, 0, 0, 0]),
+        // Powojenne wyże i transformacja: piramida jeszcze szeroka u dołu.
+        (epoch: "postwar",    bands: [70, 62, 64, 66, 70, 76, 80, 78, 74, 70, 64, 58, 52, 42, 32, 22, 12, 6, 2, 0, 0, 0]),
+        (epoch: "transition", bands: [70, 62, 64, 66, 70, 76, 80, 78, 74, 70, 64, 58, 52, 42, 32, 22, 12, 6, 2, 0, 0, 0]),
+        // Współczesność: wybrzuszenie w wieku 30–45, długi ogon starości.
+        (epoch: "contemporary", bands: [45, 52, 53, 48, 52, 65, 80, 83, 76, 70, 60, 62, 68, 66, 52, 34, 20, 10, 4, 0, 0, 0]),
+    ],
+
+    // Skład gospodarstw. Losowany typ jest **punktem wyjścia**: liczbę dzieci skaluje
+    // generator tak, żeby pula dzieci z piramidy wyszła na zero (krok 2 §5.9). Bez tego
+    // skład i piramida mówiłyby o dwóch różnych miastach.
+    households: [
+        (adults: 1, children: 0, weight: 210),
+        (adults: 2, children: 0, weight: 200),
+        (adults: 2, children: 1, weight: 150),
+        (adults: 2, children: 2, weight: 130),
+        (adults: 2, children: 3, weight:  50),
+        (adults: 1, children: 1, weight:  60),
+        (adults: 1, children: 2, weight:  30),
+        (adults: 3, children: 0, weight:  60),
+        (adults: 3, children: 1, weight:  40),
+        (adults: 3, children: 2, weight:  40),
+        (adults: 4, children: 0, weight:  30),
+    ],
+
+    // Wykształcenie dorosłego: udziały `EduLevel` None/Primary/Vocational/Secondary/Higher.
+    education: [
+        (epoch: "medieval",     levels: [420, 480,  70,  25,   5]),
+        (epoch: "industrial",   levels: [300, 520, 120,  45,  15]),
+        (epoch: "interwar",     levels: [150, 480, 230, 110,  30]),
+        (epoch: "postwar",      levels: [ 40, 250, 380, 250,  80]),
+        (epoch: "transition",   levels: [ 15, 130, 330, 370, 155]),
+        (epoch: "contemporary", levels: [  5,  60, 260, 400, 275]),
+    ],
+
+    // Kierunek wykształcenia dla każdego, kto ma więcej niż podstawowe:
+    // Technical / Humanities / Medical / Economic / Artistic.
+    fields: [340, 200, 110, 240, 110],
+
+    // Dopasowanie kierunku do roli, 0..=100. Wiersz = klucz roli z `data/jobs/roles.ron`,
+    // kolumna = `EduField` w kolejności None, Technical, Humanities, Medical, Economic,
+    // Artistic. To jest jedyne źródło `skill_match` z kroku 5 — rola bez wiersza dostaje
+    // 50 w każdej kolumnie, czyli „nie wiadomo", a nie „nie pasuje".
+    skill_fit: [
+        (role: "retail_clerk",       fit: [35, 40, 50, 40, 75, 55]),
+        (role: "office_clerk",       fit: [25, 55, 65, 35, 85, 45]),
+        (role: "production_worker",  fit: [40, 85, 30, 25, 35, 45]),
+        (role: "warehouse_operator", fit: [55, 65, 30, 25, 40, 30]),
+    ],
+
+    // Osobowość (krok 4). `mean` i `spread` opisują rozkład trójkątny w skali 0..=100,
+    // `edu_bias` i `status_bias` to **korelacja wyrażona w danych**, a nie w kodzie:
+    // przesunięcie średniej o tyle punktów na jeden stopień wykształcenia i na jeden
+    // decyl dochodu gospodarstwa.
+    //
+    // ponytail: rozkład trójkątny zamiast Beta z §5.9. Sufit nazwany: trójkąt nie umie
+    // rozkładu dwumodalnego ani skośnego inaczej niż przez przesunięcie średniej.
+    // Beta wejdzie wtedy, gdy M5 albo M10 pokaże cechę, dla której to ma znaczenie —
+    // `det_math` i tak musiałby wtedy dostać własną implementację (K-6).
+    //
+    // Kolejność: Ambition, Thrift, PriceSensitivity, Loyalty, Sociability, Openness,
+    // Risk, Conscientiousness (`TraitId` w `engine/core`).
+    traits: [
+        (mean: 48, spread: 42, edu_bias:  4, status_bias:  2),
+        (mean: 52, spread: 40, edu_bias: -2, status_bias: -3),
+        (mean: 58, spread: 38, edu_bias: -5, status_bias: -6),
+        (mean: 50, spread: 40, edu_bias: -1, status_bias:  1),
+        (mean: 50, spread: 44, edu_bias:  1, status_bias:  2),
+        (mean: 47, spread: 42, edu_bias:  6, status_bias:  2),
+        (mean: 45, spread: 44, edu_bias:  1, status_bias:  3),
+        (mean: 53, spread: 38, edu_bias:  3, status_bias:  1),
+    ],
+
+    // Krok 7: cel histogramu czasu dojazdu. `sigma_centi` to setne części σ rozkładu
+    // logarytmiczno-normalnego; 62 daje p90 ≈ 2,2 × mediany.
+    commute: (median_min: 24, sigma_centi: 62),
+
+    // Krok 5: docelowe bezrobocie w promilach aktywnych zawodowo.
+    unemployment_permille: 65,
+
+    // Krok 8: zasiew wiedzy (§5.7). Promień wokół domu w metrach i oceny wpisów.
+    knowledge: (
+        home_radius_m: 400,
+        home_score: 55,
+        route_score: 35,
+        work_score: 80,
+        max_near_home: 12,
+    ),
+
+    // Krok 9: ilu współpracowników i ilu sąsiadów dostaje mieszkaniec na starcie.
+    starting_relations: (
+        coworkers_min: 3,
+        coworkers_max: 8,
+        neighbours_min: 2,
+        neighbours_max: 5,
+    ),
+)

@@ -180,21 +180,41 @@ fn czas_do_zera_zgadza_sie_z_tabela_paragrafu_5_5() {
     // gdyby dane się od niej oderwały, ten test ma paść, a nie zostać poprawiony.
     // Kolumna „pełna → 0" jest konsekwencją tempa, nie drugim parametrem —
     // po korekcie D-2 podaje wartości dokładne, a nie zaokrąglone do ładnej liczby.
-    const TABELA_H: [(NeedKind, f64); 11] = [
+    //
+    // **Korekta D-15 (wpisana po M3d):** cztery potrzeby wypadły z tej tabeli, bo mają
+    // dziś tempo 0. `Safety`, `Housing`, `Mobility` i `Status` nie mają w M3 ani miejsca
+    // zaspokojenia, ani mechanizmu odbudowy, więc spadek doprowadzał je do zera
+    // u **wszystkich** i ich skutki przestawały cokolwiek różnicować — mobilność
+    // z `AbsenceRisk` 1000 zatrzymała w drugiej dobie całe miasto w pracy. Tempo wpisze
+    // faza, która wniesie mechanizm: M4, M8, M5/M9. Ich wiersze są niżej, jako lista
+    // potrzeb zdarzeniowych — żeby ta zmiana **też** miała strażnika.
+    const TABELA_H: [(NeedKind, f64); 7] = [
         (NeedKind::Hunger, 16.7),
         (NeedKind::Sleep, 23.8),
         (NeedKind::Hygiene, 23.8),
-        (NeedKind::Safety, 27.8 * 24.0),
-        (NeedKind::Housing, 83.3 * 24.0),
-        (NeedKind::Mobility, 23.8),
         (NeedKind::Clothing, 6.9 * 24.0),
         (NeedKind::Leisure, 33.3),
         (NeedKind::Social, 40.0),
-        (NeedKind::Status, 41.7 * 24.0),
         (NeedKind::Development, 83.3 * 24.0),
+    ];
+    /// Potrzeby zdarzeniowe: nie spadają same, bo w M3 nic ich nie podnosi.
+    const ZDARZENIOWE: [NeedKind; 5] = [
+        NeedKind::Health,
+        NeedKind::Safety,
+        NeedKind::Housing,
+        NeedKind::Mobility,
+        NeedKind::Status,
     ];
 
     let tabela = NeedTable::load_default().expect("data/needs/needs.ron");
+    for need in ZDARZENIOWE {
+        assert_eq!(
+            tabela.decay_between(need, 0, 60 * 24 * 400),
+            0,
+            "{} spada, a nic jej w M3 nie podnosi (korekta D-15)",
+            need.name()
+        );
+    }
     for (need, godziny) in TABELA_H {
         // Szukamy minuty, w której poziom faktycznie dochodzi do zera — przez tę samą
         // funkcję, której używa system, a nie przez odwrócenie wzoru.

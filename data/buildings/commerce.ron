@@ -10,21 +10,21 @@
     schema_version: 1,
     archetypes: [
         // ── handel detaliczny: normatywy z §5.8 pkt 2 ───────────────────────────────
-        (key: "corner_shop",     sector: Retail, zones: ["commercial"], min_parcel_m2: 120,  m2_per_workplace: 54, wage_mult: 0.92, per_pop: Some(1500),  weight: 70, consumes: [("cardboard", 6_000)]),
-        (key: "supermarket",     sector: Retail, zones: ["commercial"], min_parcel_m2: 1800, m2_per_workplace: 67, wage_mult: 0.96, per_pop: Some(12000), consumes: [("cardboard", 60_000)]),
-        (key: "discount_store",  sector: Retail, zones: ["commercial"], min_parcel_m2: 1400, m2_per_workplace: 88, wage_mult: 0.90, per_pop: Some(10000), consumes: [("cardboard", 45_000)]),
-        (key: "hypermarket",     sector: Retail, zones: ["commercial"], min_parcel_m2: 6000, m2_per_workplace: 77, wage_mult: 0.98, per_pop: Some(60000), consumes: [("cardboard", 180_000)]),
+        (key: "corner_shop",     sector: Retail, zones: ["commercial"], min_parcel_m2: 120,  m2_per_workplace: 54, wage_mult: 0.92, per_pop: Some(1500), place_kind: Some(Grocery),  weight: 70, consumes: [("cardboard", 6_000)]),
+        (key: "supermarket",     sector: Retail, zones: ["commercial"], min_parcel_m2: 1800, m2_per_workplace: 67, wage_mult: 0.96, per_pop: Some(12000), place_kind: Some(Grocery), consumes: [("cardboard", 60_000)]),
+        (key: "discount_store",  sector: Retail, zones: ["commercial"], min_parcel_m2: 1400, m2_per_workplace: 88, wage_mult: 0.90, per_pop: Some(10000), place_kind: Some(Grocery), consumes: [("cardboard", 45_000)]),
+        (key: "hypermarket",     sector: Retail, zones: ["commercial"], min_parcel_m2: 6000, m2_per_workplace: 77, wage_mult: 0.98, per_pop: Some(60000), place_kind: Some(Grocery), consumes: [("cardboard", 180_000)]),
         (key: "petrol_station",  sector: Retail, zones: ["commercial", "logistics"], min_parcel_m2: 700, m2_per_workplace: 144, wage_mult: 0.98, per_pop: Some(8000), consumes: [("fuel_petrol", 900_000), ("fuel_diesel", 400_000)]),
-        (key: "pharmacy",        sector: Retail, zones: ["commercial"], min_parcel_m2: 120, m2_per_workplace: 42, wage_mult: 1.18, per_pop: Some(7000)),
-        (key: "bakery_shop",     sector: Retail, zones: ["commercial"], min_parcel_m2: 100, m2_per_workplace: 38, wage_mult: 0.90, per_pop: Some(6000)),
-        (key: "specialty_shop",  sector: Retail, zones: ["commercial"], min_parcel_m2: 150, m2_per_workplace: 48, wage_mult: 1.02, per_pop: Some(9000), weight: 45),
-        (key: "market_hall",     sector: Retail, zones: ["commercial"], min_parcel_m2: 2500, m2_per_workplace: 96, wage_mult: 0.88, per_pop: Some(50000)),
+        (key: "pharmacy",        sector: Retail, zones: ["commercial"], min_parcel_m2: 120, m2_per_workplace: 42, wage_mult: 1.18, per_pop: Some(7000), place_kind: Some(Pharmacy)),
+        (key: "bakery_shop",     sector: Retail, zones: ["commercial"], min_parcel_m2: 100, m2_per_workplace: 38, wage_mult: 0.90, per_pop: Some(6000), place_kind: Some(Grocery)),
+        (key: "specialty_shop",  sector: Retail, zones: ["commercial"], min_parcel_m2: 150, m2_per_workplace: 48, wage_mult: 1.02, per_pop: Some(9000), place_kind: Some(Clothing), weight: 45),
+        (key: "market_hall",     sector: Retail, zones: ["commercial"], min_parcel_m2: 2500, m2_per_workplace: 96, wage_mult: 0.88, per_pop: Some(50000), place_kind: Some(Grocery)),
         (key: "car_dealer",      sector: Retail, zones: ["commercial", "logistics"], min_parcel_m2: 1500, m2_per_workplace: 120, wage_mult: 1.16, per_pop: Some(45000)),
 
         // ── usługi konsumenckie: wypełniacze strefy handlowej ───────────────────────
-        (key: "restaurant",      sector: Services, zones: ["commercial"], min_parcel_m2: 150, m2_per_workplace: 35, wage_mult: 0.92, weight: 55),
-        (key: "service_point",   sector: Services, zones: ["commercial"], min_parcel_m2: 90,  m2_per_workplace: 45, wage_mult: 0.96, weight: 60),
-        (key: "hotel",           sector: Services, zones: ["commercial", "office"], min_parcel_m2: 900, m2_per_workplace: 72, wage_mult: 1.04, weight: 12),
+        (key: "restaurant",      sector: Services, zones: ["commercial"], min_parcel_m2: 150, m2_per_workplace: 35, wage_mult: 0.92, weight: 55, place_kind: Some(Eatery)),
+        (key: "service_point",   sector: Services, zones: ["commercial"], min_parcel_m2: 90,  m2_per_workplace: 45, wage_mult: 0.96, weight: 60, place_kind: Some(Social)),
+        (key: "hotel",           sector: Services, zones: ["commercial", "office"], min_parcel_m2: 900, m2_per_workplace: 72, wage_mult: 1.04, weight: 12, place_kind: Some(Social)),
 
         // ── biura: mix epoki (§5.8 pkt 3) ──────────────────────────────────────────
         (key: "design_office",   sector: Office, zones: ["office", "commercial"], min_parcel_m2: 400, m2_per_workplace: 26, wage_mult: 1.10, weight: 60, epochs: ["postwar", "transition"], consumes: [("paper", 9_000)]),
