@@ -1,0 +1,32 @@
+// Wzorce układu ulic w pierścieniach miasta (M2 §5.2, tabela „Wzorce globalne").
+//
+// Pierścień jest opisany **względnym** promieniem: ułamkiem promienia obszaru
+// zurbanizowanego, a nie metrami — ten sam plik obsługuje wtedy miasto 40-tysięczne
+// i metropolię. Kolejność wierszy jest istotna: wygrywa pierwszy, którego
+// `max_radius_frac` nie jest mniejszy od promienia punktu.
+//
+// Kolejność pierścieni odtwarza historię zabudowy, bo miasto rosło koncentrycznie:
+// nieregularny rdzeń → planowane śródmieście XIX w. → blokowisko → planowane
+// przedmieścia → promieniste wyloty. Pierścienie epok (§5.3) zbuduje na tym M2c.
+(
+    schema_version: 1,
+
+    rings: [
+        // Średniowieczny rdzeń: ulice bez planu, wyprowadzone z topografii.
+        ( max_radius_frac: 0.15, pattern: Organic,    grid_angle_deg: 0.0 ),
+        // Śródmieście XIX-wieczne: regularna siatka na kącie miasta.
+        ( max_radius_frac: 0.40, pattern: Grid,       grid_angle_deg: 0.0 ),
+        // Blokowisko: siatka o potrojonym module kolektora, bez ulic wewnętrznych.
+        ( max_radius_frac: 0.62, pattern: Superblock, grid_angle_deg: 0.0 ),
+        // Przedmieścia planowane: siatka obrócona względem śródmieścia, bo powstawały
+        // wzdłuż innych dróg wylotowych.
+        ( max_radius_frac: 0.85, pattern: Grid,       grid_angle_deg: 30.0 ),
+        // Poza miastem: wszystko biegnie promieniście do i od centrum.
+        ( max_radius_frac: 2.50, pattern: Radial,     grid_angle_deg: 0.0 ),
+    ],
+
+    // Powyżej tego nachylenia wzorzec ustępuje przed terenem (`Contour`).
+    // 6 jednostek `slope_at` ≈ 9,4%, czyli tuż nad limitem kolektora z tabeli klas:
+    // tam, gdzie siatka i tak nie miałaby prawa się utrzymać.
+    contour_slope: 6,
+)

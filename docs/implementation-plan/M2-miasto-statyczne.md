@@ -112,13 +112,17 @@ dopiero po ostatniej podfazie; podfaza zamyka się własnym kryterium ze swojego
 | Podfaza | WP | §5 | Wynik do pokazania | Dokument |
 |---|---|---|---|---|
 | **M2a — Indeksy przestrzenne** | WP1, WP2 | 5.1 | `cargo bench -p magnat-spatial` na danych syntetycznych: cztery struktury odpowiadają na zapytania w budżecie, bez generatora miasta. | `M2a-indeksy-przestrzenne.md` |
-| **M2b — Szkielet transportu** | WP3, WP4, WP5, WP6 | 5.2 | `headless generate --preview roads` → PNG z bramami, arteriami, strukturami inżynierskimi, torami i konturami kwartałów. | `M2b-szkielet-transportu.md` |
-| **M2c — Strefy, parcele, dzielnice** | WP7, WP8, WP9 | 5.3, 5.4, 5.5 | Podgląd: mapa stref i parcel z granicami dzielnic; kliknięcie parceli daje strefę, właściciela, frontę drogową i dzielnicę. | `M2c-strefy-parcele-dzielnice.md` |
+| **M2b — Szkielet transportu** | WP3, WP4, WP5, WP6 | 5.2 | `headless preview --field roads` → PNG z bramami, arteriami, strukturami inżynierskimi i konturami kwartałów. | `M2b-szkielet-transportu.md` |
+| **M2c — Strefy, parcele, dzielnice** | WP7, WP5b, WP8, WP9 | 5.3, 5.4, 5.5 | Podgląd: mapa stref i parcel z granicami dzielnic; kliknięcie parceli daje strefę, właściciela, frontę drogową i dzielnicę. | `M2c-strefy-parcele-dzielnice.md` |
 | **M2d — Zabudowa** | WP10, WP11, WP12 | 5.6 | Miasto w voxelach: budynki wygenerowane z gramatyki, z piętrami, lokalami i stanowiskami pracy. | `M2d-zabudowa.md` |
 | **M2e — Gospodarka bazowa i wycena** | WP13, WP14, WP15, WP16, WP17 | 5.7, 5.8 | Pełny artefakt fazy z §1 dokumentu fazy: `GenerationReport`, nakładka wartości gruntu z rozbiciem na czynniki, zielone `--test consistency`. | `M2e-gospodarka-bazowa-i-wycena.md` |
 
 Ścieżka krytyczna: WP1 → WP2 → WP4 → WP6 → WP7 → WP8 → WP11 → WP12 → WP14 → WP15 → WP17.
 WP3, WP9, WP10, WP13, WP16 można prowadzić równolegle.
+
+**Korekta po M2b:** kolej towarowa (druga połowa WP5) przenosi się do M2c jako **WP5b**,
+bo jej trasy prowadzą do klastrów stref, a strefy powstają dopiero w WP7. Ścieżka krytyczna
+się nie zmienia — już zakładała `WP4 → WP6 → WP7`. Szczegóły: korekta B1 w dokumencie M2b.
 
 ---
 
@@ -179,7 +183,8 @@ w `GenerationReport`; **nie** dopisujemy własnego liczenia z surowych danych wy
 **`sim/world`** (rozszerzenie):
 `CityPlan`, `GenerationReport`, `world_hash_m2()`,
 `generate_city(&CityPlan, &Terrain, &mut World) -> GenerationReport`;
-`RoadNetwork`, `RoadSegment`, `RoadNode`, `RoadClass`, `RoadStructure`, `RoadFlags`, `CityGate`, `GateKind`;
+`RoadNetwork`, `RoadSegment`, `RoadNode` (z `z_dm` — rzędną niwelety, korekta B20 w M2b),
+`RoadClass`, `ClassSpec`, `RoadStructure`, `RoadFlags`, `NodeFlags`, `CityGate`, `GateKind`, `GateProfile`;
 `District`, `DistrictKind`, `StyleId`, `EpochId`, `Block`, `BlockId`;
 `ZoneKind`, `ResDensity`; `Parcel`, `ParcelOwner`, `ParcelStatus`, `Frontage`, `PolyArena`, `PolyRef`;
 `Building`, `Entrance`, `EntranceKind`, `Unit`, `UnitKind`, `UnitOccupant`, `Workplace`, `ShiftId`;

@@ -6,9 +6,14 @@
 use clap::Args as ClapArgs;
 use magnat_devtools::png;
 use magnat_jobs::JobPool;
-use magnat_world::{generate as generate_world, Difficulty, WorldData, WorldGenParams};
+use magnat_voxel::MaterialRegistry;
+use magnat_world::{
+    generate as generate_world, generate_city, CityPlan, Difficulty, RoadClass, RoadStructure,
+    Terrain, WorldData, WorldGenParams,
+};
 use std::path::PathBuf;
 use std::process::ExitCode;
+use std::sync::Arc;
 
 #[derive(ClapArgs, Debug)]
 pub struct GenerateArgs {
@@ -159,7 +164,8 @@ pub struct PreviewArgs {
     #[arg(long, default_value = "mixed")]
     profile: String,
 
-    /// Pole do narysowania: `height` | `water` | `biome` | `temp` | `precip` | `fertility`.
+    /// Pole do narysowania: `height` | `water` | `biome` | `temp` | `precip` | `fertility`
+    /// | `roads` (szkielet transportu miasta, M2b).
     #[arg(long, default_value = "height")]
     field: String,
 
@@ -179,6 +185,10 @@ pub fn preview(a: &PreviewArgs) -> Result<ExitCode, Box<dyn std::error::Error>> 
     let pool = JobPool::new(a.threads);
     let (world, report) = generate_world(p, &pool)?;
     eprintln!("generacja {:.1} ms", report.total_millis);
+
+    if a.field == "roads" {
+        return preview_roads(a, world);
+    }
 
     let src = world.height.dim();
     let step = (src as u32).div_ceil(a.max_px).max(1) as usize;
@@ -296,4 +306,120 @@ fn biome_color(b: magnat_core::Biome) -> [u8; 3] {
         Sand => [220, 205, 150],
         Snow => [240, 245, 250],
     }
+}
+
+/// Podgląd szkieletu transportu miasta (M2b, „wynik do pokazania").
+///
+/// Sanity-check bez GPU: na cieniowanym terenie rysowane są osie dróg w barwach klas,
+/// struktury inżynierskie, bramy i obrysy kwartałów. Ten obrazek jest przyrządem —
+/// błąd w L-systemie widać na nim natychmiast, a w liczbach dopiero po zastanowieniu.
+fn preview_roads(
+    a: &PreviewArgs,
+    world: WorldData,
+) -> Result<ExitCode, Box<dyn std::error::Error>> {
+    let params = world.params;
+    let reg = Arc::new(MaterialRegistry::load_dir(&magnat_world::data_path(
+        "materials",
+    ))?);
+    let terrain = Terrain::new(world, reg);
+    let plan = CityPlan::from_world(&params);
+
+    let start = std::time::Instant::now();
+    let city = generate_city(&plan, &terrain)?;
+    eprintln!("miasto {:.1} ms", start.elapsed().as_secs_f64() * 1000.0);
+    for l in city.report.lines() {
+        println!("{l}");
+    }
+
+    let map_m = params.size.meters();
+    let w = a.max_px.min(map_m) as usize;
+    let skala = w as f32 / map_m as f32;
+    let mut px = vec![0u8; w * w * 3];
+
+    // Tło: teren w szarościach, woda na niebiesko — żeby było widać, czemu droga skręca.
+    let src = terrain.data().height.dim();
+    for iy in 0..w {
+        for ix in 0..w {
+            let sx = (ix * src / w).min(src - 1);
+            let sy = (iy * src / w).min(src - 1);
+            let i = terrain.data().height.idx(sx, sy);
+            let h = terrain.data().height[i];
+            let c = if terrain.data().water[i].class().is_water() {
+                [30, 50, 90]
+            } else {
+                let v = (110.0 + f32::from(h) / 12.0).clamp(40.0, 210.0) as u8;
+                [v, v, (v as u16 * 15 / 16) as u8]
+            };
+            let o = ((w - 1 - iy) * w + ix) * 3;
+            px[o..o + 3].copy_from_slice(&c);
+        }
+    }
+
+    let mut put = |x: i32, y: i32, c: [u8; 3]| {
+        if x < 0 || y < 0 || x >= w as i32 || y >= w as i32 {
+            return;
+        }
+        let o = ((w - 1 - y as usize) * w + x as usize) * 3;
+        px[o..o + 3].copy_from_slice(&c);
+    };
+    let mut line = |a: magnat_spatial::Vec2, b: magnat_spatial::Vec2, c: [u8; 3], gruba: bool| {
+        let (x0, y0) = (a.x * skala, a.y * skala);
+        let (x1, y1) = (b.x * skala, b.y * skala);
+        let n = ((x1 - x0).abs().max((y1 - y0).abs()) as i32).max(1);
+        for k in 0..=n {
+            let t = k as f32 / n as f32;
+            let (x, y) = ((x0 + (x1 - x0) * t) as i32, (y0 + (y1 - y0) * t) as i32);
+            put(x, y, c);
+            if gruba {
+                put(x + 1, y, c);
+                put(x, y + 1, c);
+            }
+        }
+    };
+
+    // Kwartały najpierw — drogi mają je przykryć, nie odwrotnie.
+    for b in &city.blocks.blocks {
+        let poly = city.roads.geom.get(b.poly);
+        for i in 0..poly.len() {
+            line(poly[i], poly[(i + 1) % poly.len()], [70, 120, 70], false);
+        }
+    }
+
+    for s in &city.roads.segments {
+        let barwa = match s.structure {
+            RoadStructure::Bridge { .. } => [255, 80, 80],
+            RoadStructure::Tunnel { .. } => [170, 70, 200],
+            _ => match s.class {
+                RoadClass::Highway => [250, 200, 40],
+                RoadClass::Arterial => [250, 140, 40],
+                RoadClass::Collector => [240, 240, 240],
+                RoadClass::Local => [190, 190, 190],
+                RoadClass::Service => [150, 150, 150],
+                RoadClass::Pedestrian => [140, 200, 140],
+                RoadClass::RailFreight | RoadClass::RailPassenger => [40, 40, 40],
+            },
+        };
+        let gruba = matches!(s.class, RoadClass::Highway | RoadClass::Arterial);
+        let pts = city.roads.geom.get(s.geom);
+        for i in 0..pts.len() - 1 {
+            line(pts[i], pts[i + 1], barwa, gruba);
+        }
+    }
+
+    // Bramy i środek miasta — krzyżyki, żeby było widać, skąd i dokąd sieć rośnie.
+    let mut krzyzyk = |p: magnat_spatial::Vec2, c: [u8; 3]| {
+        let (x, y) = ((p.x * skala) as i32, (p.y * skala) as i32);
+        for d in -4..=4 {
+            put(x + d, y, c);
+            put(x, y + d, c);
+        }
+    };
+    for g in &city.roads.gates {
+        krzyzyk(g.pos, [255, 0, 255]);
+    }
+    krzyzyk(city.center, [0, 255, 255]);
+
+    let bytes = png::write_rgb(&a.out, w as u32, w as u32, &px)?;
+    println!("{} — {}×{} px, {} B", a.out.display(), w, w, bytes);
+    Ok(ExitCode::SUCCESS)
 }

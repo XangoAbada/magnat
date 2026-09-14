@@ -50,7 +50,13 @@ pub enum StreamId {
     WorldDetail = 110,
     // 111–119 zarezerwowane dla M1.
 
-    // ── M2: 120..=139 ──  dalej wg siatki wyżej
+    // ── M2: 120..=139 ── generator miasta; wartości imiennie z M2 §6 i niezmienne.
+    /// Wybór miejsca bramy wśród trzech najlepszych kandydatów (M2 §5.2).
+    Gates = 120,
+    /// L-system arterii — klucz `seq` propozycji (M2 §5.2).
+    RoadsL = 121,
+    // 122–139 zarezerwowane dla M2 (RoadRail, Blocks, Zoning, … — dopisywane przez podfazy,
+    // które ich faktycznie użyją; wartości z tabeli w M2 §6).
 }
 
 /// Encja zastępcza dla losowania bez encji (zdarzenie globalne, generator świata).
@@ -265,5 +271,7 @@ mod tests {
         assert_eq!(StreamId::EngineSelfTest as u16, 1);
         assert_eq!(StreamId::WorldLandmask as u16, 100);
         assert_eq!(StreamId::WorldDetail as u16, 110);
+        assert_eq!(StreamId::Gates as u16, 120);
+        assert_eq!(StreamId::RoadsL as u16, 121);
     }
 }

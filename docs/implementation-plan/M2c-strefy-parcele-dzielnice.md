@@ -7,8 +7,8 @@ zostają w dokumencie fazy — tu jest wyłącznie to, co robisz w tej porcji.
 
 | | |
 |---|---|
-| **Wejście** | M2b (kwartały), M2a (pola skalarne, `multi_source_dijkstra`). |
-| **Pakiety robocze** | WP7, WP8, WP9 |
+| **Wejście** | M2b (kwartały, bramy, `RoadNetwork`), M2a (pola skalarne, `multi_source_dijkstra`). |
+| **Pakiety robocze** | WP7, WP8, WP9, **WP5b** (kolej towarowa — przeniesiona z M2b, korekta B1) |
 | **Projekt techniczny** | §5.3, §5.4, §5.5 |
 | **Wynik do pokazania** | Podgląd: mapa stref i parcel z granicami dzielnic; kliknięcie parceli daje strefę, właściciela, frontę drogową i dzielnicę. |
 | **Kryterium zamknięcia** | Kryteria WP7–WP9; zero nakładek wielokątów > 1 m², pokrycie dzielnicami bez dziur. |
@@ -24,6 +24,7 @@ Etapy 4 i 5: strefowanie kwotowe z pierścieniami epok, sieć ulic lokalnych, po
 |---|---|---|---|---|
 | WP7 | Strefowanie z kwotami + pierścienie epok | WP2, WP6 | pola punktowe, przydział kwotowy per kwartał, pierścienie wieku zabudowy | udział każdej strefy w granicach ±3 pp. wobec profilu; brak strefy przemysłowej ciężkiej z nawietrznej względem R1–R3 przy dominującym wietrze (test miękki, próg 90%) |
 | WP8 | Sieć lokalna + podział na parcele | WP7 | podział kwartału (rekurencyjny OBB + ulice), pasowy podział na działki wg wymiarów strefy | 100% parcel ma niezerową frontę drogową (poza `Green`/`Water`); zero nakładek wielokątów > 1 m² |
+| WP5b | Kolej towarowa | WP7 | A* najtańszej ścieżki dla torów od bramy `RailFreight` do klastrów `IndustryHeavy`/`Logistics`, scalanie wspólnych prefiksów, rozjazdy; opis w §5.2 (`M2b-szkielet-transportu.md`) | każda strefa przemysłowa/logistyczna ma bocznicę ≤ 1,2 km od kwartału; brak toru o nachyleniu > 2%. **Przeniesione z M2b**: trasy prowadzą do stref, więc nie da się ich wyznaczyć przed Etapem 4 |
 | WP9 | Dzielnice i ich tożsamość | WP7, WP8 | Voronoi po kwartałach + doginanie granic do arterii/rzek, nazwy, reputacja, `income_tier` | 10–40 dzielnic, pokrycie obszaru zurbanizowanego bez dziur i nakładek; nazwy unikalne |
 
 ---
@@ -109,12 +110,17 @@ Złożoność O(B·Z + B log B), B ≈ 6 000 kwartałów, Z = 16 → pomijalne.
 
 #### Kwartały
 
-`RoadNetwork` jest grafem planarnym (po kroku 5 ograniczeń lokalnych każde przecięcie ma
-węzeł; mosty i tunele są wyłączone z planaryzacji i oznaczane `RoadFlags::GRADE_SEPARATED`).
-Ściany wyznaczamy obchodem półkrawędzi: w każdym węźle krawędzie posortowane po kącie,
-następna półkrawędź = „najbardziej w prawo". O(E). Ściana zewnętrzna (o ujemnym polu)
-odrzucana. Kwartały o powierzchni < 300 m² scalane z sąsiadem o najdłuższej wspólnej
-granicy.
+**Zrobione w M2b (WP6)** — tu zostaje opis, bo numeracja §5.x jest z dokumentu fazy.
+
+`RoadNetwork` jest grafem planarnym (po ograniczeniu lokalnym 4 każde przecięcie ma węzeł).
+Z planaryzacji wypadają **tylko te** krawędzie, które faktycznie krzyżują się z inną bez
+węzła — most albo tunel nad drogą po gruncie; obie dostają wtedy `RoadFlags::GRADE_SEPARATED`.
+Nasyp bezkolizyjny **nie jest** (korekta B13/B14 w M2b). Ściany wyznaczamy obchodem
+półkrawędzi: w każdym węźle krawędzie posortowane po kącie (pseudokątem, bo `atan2` jest
+zakazane w kodzie symulacji — 00 §K-6), następna półkrawędź = „najbardziej w prawo". O(E).
+Ściana zewnętrzna (o polu niedodatnim) odrzucana. Kwartały o powierzchni < 300 m² są
+**odrzucane**, nie scalane — patrz korekta B19 w M2b. Obrys użytkowy kwartału powstaje przez
+odsunięcie ściany do wewnątrz o połowę pasa drogowego każdej krawędzi, z ogranicznikiem ostrza.
 
 ```rust
 pub struct Block {

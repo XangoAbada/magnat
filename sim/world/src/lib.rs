@@ -12,6 +12,7 @@
 #![forbid(unsafe_code)]
 
 pub mod assets;
+pub mod city;
 pub mod climate;
 pub mod data;
 pub mod deposit;
@@ -27,6 +28,13 @@ pub mod query;
 pub mod terrain;
 
 pub use assets::{data_dir, data_path};
+pub use city::blocks::{Block, BlockId, BlockSet};
+pub use city::gates::{CityGate, GateKind, GateProfile};
+pub use city::road::{
+    street_lines, FurnitureKind, NodeFlags, NodeId, PolyArena, PolyRef, RoadClass, RoadFlags,
+    RoadNetwork, RoadNode, RoadSegment, RoadStructure, SegmentId, StreetFurniture, StreetLine,
+};
+pub use city::{generate_city, CityData, CityGenError, CityPlan, GenerationReport};
 pub use climate::ClimateCell;
 pub use data::{
     HeightDm, LakeCells, RiverCell, RiverNetwork, RiverSegment, WaterBits, WaterClass, WorldData,

@@ -1,0 +1,18 @@
+// Profil gospodarczy miasta: rolniczy (M2 §5.2, PRD §4.1).
+//
+// M2b używa z tego pliku wyłącznie sekcji bramowej. Kwoty stref (`mix[z][epoch]`)
+// dołoży M2c przy Etapie 4 — do tego samego pliku, z podbiciem `schema_version`.
+//
+// `required` niesie **krotność**: dwa wpisy `Highway` to dwa wjazdy z dwóch stron mapy.
+// Miasto z jednym wjazdem nie ma jak domknąć sieci arterii w cykl (reguła P4).
+// `optional` to jedno losowanie na rodzaj, prawdopodobieństwo 0..=1.
+// Rolnictwo wozi płody drogą do najbliższego skupu, nie koleją dalekobieżną —
+// bocznica jest tu udogodnieniem, nie warunkiem.
+(
+    schema_version: 1,
+    required: [Highway, Highway],
+    optional: [
+        (RailFreight, 0.5),
+        (RailPassenger, 0.35),
+    ],
+)

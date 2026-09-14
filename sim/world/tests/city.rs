@@ -1,0 +1,438 @@
+//! Kryteria zamknięcia podfazy **M2b** (WP3–WP6) — M2 §4, tabela pakietów roboczych.
+//!
+//! Testy siedzą na prawdziwym terenie, nie na syntetycznej płaszczyźnie: cały sens
+//! ograniczeń lokalnych L-systemu polega na tym, że teren mówi „nie", a na płaskim placu
+//! nie mówi nigdy.
+//!
+//! Cena tej decyzji: każdy test generuje świat (~2 s w `debug`, ~0,3 s w `release`).
+//! Zgodnie z konwencją `budgets.rs` i `determinism.rs` są więc oznaczone `#[ignore]`
+//! i uruchamiane jawnie:
+//! `cargo test --release -p magnat-world --test city -- --include-ignored`
+//! (job CI `determinism`).
+
+use magnat_jobs::JobPool;
+use magnat_voxel::MaterialRegistry;
+use magnat_world::city::{blocks, dangling_high_class, is_connected};
+use magnat_world::{
+    generate, generate_city, CityPlan, Difficulty, EconomyProfile, Epoch, GateKind, Region,
+    RoadClass, RoadStructure, Terrain, TerrainQuery, WorldGenParams, WorldSize,
+};
+use std::sync::Arc;
+
+fn teren(seed: u64, region: Region) -> Terrain {
+    let pool = JobPool::new(0);
+    let params = WorldGenParams {
+        seed,
+        size: WorldSize::Small4km,
+        region,
+        epoch: Epoch::Y1990,
+        profile: EconomyProfile::Mixed,
+        difficulty: Difficulty::Normal,
+    };
+    let (data, _) = generate(params, &pool).unwrap();
+    let reg = Arc::new(MaterialRegistry::load_dir(&magnat_world::data_path("materials")).unwrap());
+    Terrain::new(data, reg)
+}
+
+fn plan(seed: u64, region: Region, profile: EconomyProfile) -> CityPlan {
+    CityPlan {
+        seed,
+        size: WorldSize::Small4km,
+        region,
+        epoch: Epoch::Y1990,
+        profile,
+        difficulty: Difficulty::Normal,
+        target_pop: magnat_world::city::target_pop(WorldSize::Small4km),
+    }
+}
+
+/// WP4: „2 przebiegi tego samego seeda → identyczny bajt w bajt `RoadNetwork`",
+/// a przy okazji kryterium zamknięcia całej podfazy.
+#[test]
+#[ignore = "dwie generacje świata — CI uruchamia jawnie przez --include-ignored"]
+fn dwa_przebiegi_daja_identyczna_siec() {
+    let t = teren(0x00C0_FFEE, Region::River);
+    let p = plan(0x00C0_FFEE, Region::River, EconomyProfile::Mixed);
+    let a = generate_city(&p, &t).unwrap();
+    let b = generate_city(&p, &t).unwrap();
+
+    assert_eq!(a.roads.hash(), b.roads.hash(), "hash sieci się rozjechał");
+    // Hash mógłby kolidować; równość strukturalna jest mocniejsza i tania.
+    assert_eq!(a.roads, b.roads, "sieć nie jest identyczna bajt w bajt");
+    assert_eq!(a.blocks, b.blocks, "kwartały nie są identyczne");
+    assert_eq!(a.center, b.center);
+    assert!(
+        a.roads.segments.len() > 50,
+        "sieć zbyt uboga, żeby test cokolwiek dowodził: {} segmentów",
+        a.roads.segments.len()
+    );
+}
+
+/// Ziarno jest jedynym wejściem, więc jego zmiana musi zmienić miasto.
+#[test]
+#[ignore = "dwie generacje świata — CI uruchamia jawnie przez --include-ignored"]
+fn inne_ziarno_daje_inne_miasto() {
+    let (t1, t2) = (teren(1, Region::Lowland), teren(2, Region::Lowland));
+    let a = generate_city(&plan(1, Region::Lowland, EconomyProfile::Mixed), &t1).unwrap();
+    let b = generate_city(&plan(2, Region::Lowland, EconomyProfile::Mixed), &t2).unwrap();
+    assert_ne!(a.roads.hash(), b.roads.hash());
+}
+
+/// WP3: „dla 20 seedów × 5 profili: każdy wymagany typ bramy istnieje, leży na terenie
+/// zgodnym z typem (port na wodzie żeglownej, lotnisko na terenie o nachyleniu < 3%)".
+///
+/// Region jest dobrany do profilu, a nie losowy: profil portowy wymaga bramy portowej,
+/// a ta nie ma prawa powstać w regionie bez żeglownej wody — i to nie jest wada
+/// generatora, tylko warunek zadania.
+#[test]
+#[ignore = "100 generacji terenu (~40 s w release) — CI uruchamia jawnie przez --ignored"]
+fn bramy_wymagane_istnieja_i_leza_na_wlasciwym_terenie() {
+    // Profile pogrupowane po regionie: teren zależy od (ziarno, region), więc dla pięciu
+    // profili wystarczą dwie generacje na ziarno, a nie pięć.
+    let grupy: [(Region, &[EconomyProfile]); 2] = [
+        (
+            Region::Lowland,
+            &[
+                EconomyProfile::Industrial,
+                EconomyProfile::University,
+                EconomyProfile::Agricultural,
+            ],
+        ),
+        (
+            Region::Coastal,
+            &[EconomyProfile::Port, EconomyProfile::Tourist],
+        ),
+    ];
+    for seed in 1..=20u64 {
+        for (region, profile) in grupy {
+            let t = teren(seed, region);
+            for prof in profile.iter().copied() {
+                let c = generate_city(&plan(seed, region, prof), &t).unwrap();
+                assert!(
+                    c.report.missing_gates.is_empty(),
+                    "seed {seed} profil {prof:?}: brak bram {:?}",
+                    c.report.missing_gates
+                );
+                // „Brama istnieje" znaczy: jest w gotowej sieci, a nie tylko w planie.
+                // Bramy kolejowe są w tej podfazie odłożone (tory buduje M2c), więc
+                // szukamy ich na liście odłożonych.
+                for k in profil_wymaga(prof) {
+                    let jest = if k.is_rail() {
+                        c.report.deferred_gates.iter().any(|(x, _)| *x == k)
+                    } else {
+                        c.roads.gates.iter().any(|g| g.kind == k)
+                    };
+                    assert!(
+                        jest,
+                        "seed {seed} profil {prof:?}: brama {k:?} nie trafiła do sieci"
+                    );
+                }
+                for g in &c.roads.gates {
+                    let (x, y) = (g.pos.x as i32, g.pos.y as i32);
+                    match g.kind {
+                        GateKind::Port => assert!(
+                            t.navigable(x, y).is_some() && t.water_depth_at(x, y) >= 60,
+                            "seed {seed}: port poza wodą żeglowną o głębokości 6 m"
+                        ),
+                        // < 3% → ≤ 1 jednostka `slope_at` (0,03 · 64 = 1,92).
+                        GateKind::Airport => assert!(
+                            t.slope_at(x, y) <= 1,
+                            "seed {seed}: lotnisko na nachyleniu > 3%"
+                        ),
+                        _ => assert!(
+                            t.water_at(x, y).depth_dm == 0,
+                            "seed {seed}: brama {:?} w wodzie",
+                            g.kind
+                        ),
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Wymagania bramowe profilu — czytane z tego samego pliku, co generator.
+fn profil_wymaga(p: EconomyProfile) -> Vec<GateKind> {
+    let txt = std::fs::read_to_string(magnat_world::data_path(&format!(
+        "zoning/profile_{}.ron",
+        p.key()
+    )))
+    .expect("profil strefowania");
+    let g: magnat_world::GateProfile = ron::from_str(&txt).expect("profil strefowania");
+    let mut v = g.required;
+    v.sort_unstable();
+    v.dedup();
+    v
+}
+
+/// WP4: „sieć bez wiszących końców klasy ≥ Collector".
+///
+/// Dodatkowo spójność: sieć w kilku kawałkach spełniałaby literę kryterium i nie byłaby
+/// miastem. To jest wstęp do testu T1 z §7, który domknie się dopiero w M2e.
+#[test]
+#[ignore = "pięć generacji świata — CI uruchamia jawnie przez --include-ignored"]
+fn siec_bez_wiszacych_koncow_i_w_jednym_kawalku() {
+    for (seed, region) in [
+        (7u64, Region::Lowland),
+        (7, Region::Mountain),
+        (7, Region::River),
+        (7, Region::Coastal),
+        (7, Region::Desert),
+    ] {
+        let t = teren(seed, region);
+        let c = generate_city(&plan(seed, region, EconomyProfile::Mixed), &t).unwrap();
+        let wiszace = dangling_high_class(&c.roads);
+        assert!(
+            wiszace.is_empty(),
+            "{region:?}: {} wiszących końców klasy ≥ Collector",
+            wiszace.len()
+        );
+        assert!(is_connected(&c.roads), "{region:?}: sieć nie jest spójna");
+        assert!(
+            c.roads.gates.len() >= 2,
+            "{region:?}: {} bram przetrwało domknięcie sieci",
+            c.roads.gates.len()
+        );
+    }
+}
+
+/// WP5 (część strukturalna): most, tunel i nasyp mieszczą się w limitach swojej klasy.
+///
+/// Kolej towarowa jest w M2c — powód w nagłówku `lsystem.rs` i w „Korektach planu".
+#[test]
+#[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
+fn struktury_miesza_sie_w_limitach_klasy() {
+    let t = teren(11, Region::Mountain);
+    let c = generate_city(&plan(11, Region::Mountain, EconomyProfile::Mixed), &t).unwrap();
+    for s in &c.roads.segments {
+        let spec = s.class.spec();
+        let dl_m = f64::from(s.length_dm) / 10.0;
+        match s.structure {
+            RoadStructure::Bridge { .. } => assert!(
+                dl_m <= f64::from(spec.bridge_max_m) + 1.0,
+                "most {dl_m:.0} m przy limicie {} m dla {:?}",
+                spec.bridge_max_m,
+                s.class
+            ),
+            RoadStructure::Tunnel { .. } => {
+                assert!(spec.tunnel_trigger_m > 0, "tunel klasy {:?}", s.class);
+                assert!(dl_m <= f64::from(spec.tunnel_max_m) + 1.0);
+            }
+            RoadStructure::Embankment { height_dm } => {
+                assert!(height_dm <= 80, "nasyp {height_dm} dm > 8 m");
+            }
+            RoadStructure::AtGrade => {}
+        }
+        // Segment po gruncie nie ma prawa przekroczyć niwelety swojej klasy.
+        // Mierzymy spadek między **rzędnymi niwelety**, a nie wysokościami terenu:
+        // droga jest w przekroju cięciwą między swoimi końcami, a różnicę pokrywa
+        // nasyp albo wykop (patrz „Korekty planu", ograniczenie lokalne 1).
+        if matches!(s.structure, RoadStructure::AtGrade) && s.class.is_driveable() {
+            let (na, nb) = (c.roads.nodes[s.a.0 as usize], c.roads.nodes[s.b.0 as usize]);
+            let dh = f64::from((nb.z_dm - na.z_dm).abs()) * 0.1;
+            let dl = f64::from((nb.pos - na.pos).length()).max(1.0);
+            let niweleta = ((dh / dl) * 64.0) as u8;
+            // Tolerancja jednej jednostki: rzędne są zaokrąglane do decymetra, a połówka
+            // segmentu powstała z podziału bywa krótka — 5 dm błędu na 3 m daje właśnie
+            // jedną jednostkę. To błąd zapisu, nie złamanie limitu klasy.
+            assert!(
+                niweleta <= spec.max_slope_units() + 1,
+                "{:?} o niwelecie {niweleta} przy limicie {}",
+                s.class,
+                spec.max_slope_units()
+            );
+        }
+    }
+}
+
+/// WP6: kwartały wyznaczone obchodem półkrawędzi domykają bilans pól.
+///
+/// **Korekta kryterium** (uzasadnienie w dokumencie podfazy): sformułowanie z planu
+/// „suma pól kwartałów + pas drogowy = pole obszaru zurbanizowanego" jest spełnione
+/// tożsamościowo, bo pas drogowy liczymy jako różnicę ściany i kwartału. Sprawdzamy
+/// zamiast tego dwie rzeczy, które naprawdę mogą się nie zgodzić: wzór Eulera dla grafu
+/// planarnego i zgodność sumy ścian z polem obrysu zewnętrznego.
+#[test]
+#[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
+fn kwartaly_domykaja_bilans_pol() {
+    let t = teren(3, Region::Lowland);
+    let c = generate_city(&plan(3, Region::Lowland, EconomyProfile::Mixed), &t).unwrap();
+    assert!(
+        c.blocks.blocks.len() >= 10,
+        "tylko {} kwartałów",
+        c.blocks.blocks.len()
+    );
+
+    // Planarność: żadne dwie krawędzie grafu ścian nie przecinają się bez węzła.
+    // To jest założenie, na którym stoi cały obchód półkrawędzi — jedno przecięcie
+    // bez węzła scala dwie ściany w jedną i wzór Eulera przestaje się zgadzać.
+    let uzyte: Vec<_> = c
+        .roads
+        .segments
+        .iter()
+        .filter(|s| {
+            s.class.is_driveable() && !s.flags.contains(magnat_world::RoadFlags::GRADE_SEPARATED)
+        })
+        .map(|s| (c.roads.pos(s.a), c.roads.pos(s.b)))
+        .collect();
+    let mut kolizje = 0;
+    for i in 0..uzyte.len() {
+        for j in i + 1..uzyte.len() {
+            if przecinaja(uzyte[i], uzyte[j]) {
+                kolizje += 1;
+            }
+        }
+    }
+    assert_eq!(
+        kolizje, 0,
+        "{kolizje} przecięć krawędzi bez węzła — graf nie jest planarny"
+    );
+
+    // Wzór Eulera dla grafu planarnego o C składowych: ścian jest E − V + 1 + C,
+    // a obchód półkrawędzi daje jedną orbitę na ścianę **wewnętrzną** plus po jednej
+    // na obwód każdej składowej — razem E − V + 2·C. Porównujemy liczbę orbit, bo to
+    // wielkość czysto kombinatoryczna: nie zależy od tego, jak klasyfikujemy ścianę
+    // po polu, więc mierzy dokładnie to, co ma zmierzyć — poprawność obchodu.
+    let (v, e, skladowe) = blocks::face_graph_stats(&c.roads);
+    let oczekiwane = e as i64 - v as i64 + 2 * skladowe as i64;
+    assert_eq!(
+        i64::from(c.blocks.orbits),
+        oczekiwane,
+        "orbit {}, a wzór Eulera daje {oczekiwane} (V={v}, E={e}, C={skladowe})",
+        c.blocks.orbits
+    );
+
+    // Bilans pól: suma kwartałów + pas drogowy = suma ścian, co do 0,5%.
+    let suma_kwartalow: f64 = c.blocks.blocks.iter().map(|b| f64::from(b.area_m2)).sum();
+    let razem = suma_kwartalow + c.blocks.road_area_m2;
+    let blad = (razem - c.blocks.urban_area_m2).abs() / c.blocks.urban_area_m2;
+    assert!(
+        blad <= 0.005,
+        "bilans pól rozjechał się o {:.3}% (kwartały {suma_kwartalow:.0} + drogi {:.0} vs ściany {:.0})",
+        blad * 100.0,
+        c.blocks.road_area_m2,
+        c.blocks.urban_area_m2
+    );
+}
+
+/// Kontrakt dla M3 (M2 §6): odcinki centrolinii bez grafu.
+#[test]
+#[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
+fn street_lines_zwraca_kazdy_segment() {
+    let t = teren(5, Region::Lowland);
+    let c = generate_city(&plan(5, Region::Lowland, EconomyProfile::Mixed), &t).unwrap();
+    let n = magnat_world::street_lines(&c.roads).count();
+    assert_eq!(n, c.roads.segments.len());
+    for l in magnat_world::street_lines(&c.roads) {
+        assert!(l.pts.len() >= 2);
+        assert!(l.length_dm > 0);
+    }
+}
+
+/// Latarnie: wejście dla M11 (M2 §6). Mają istnieć i leżeć przy drodze, nie na niej.
+#[test]
+#[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
+fn latarnie_stoja_przy_jezdni() {
+    let t = teren(5, Region::Lowland);
+    let c = generate_city(&plan(5, Region::Lowland, EconomyProfile::Mixed), &t).unwrap();
+    assert!(!c.roads.furniture.is_empty(), "brak małej architektury");
+    for f in c.roads.furniture.iter().take(200) {
+        let s = &c.roads.segments[f.seg.0 as usize];
+        let (a, b) = (c.roads.pos(s.a), c.roads.pos(s.b));
+        let p = magnat_spatial::Vec2::new(f.pos.x, f.pos.y);
+        let d = (b - a).normalize_or_zero();
+        let odleglosc = (p - a).dot(magnat_spatial::Vec2::new(-d.y, d.x)).abs();
+        assert!(
+            (odleglosc - (f32::from(s.row_m) * 0.5 - 1.5)).abs() < 0.5,
+            "latarnia {odleglosc} m od osi przy ROW {} m",
+            s.row_m
+        );
+    }
+}
+
+/// Budżet czasu z M2 §7 dla miasta małego (40 tys.) — całość ≤ 12 s w CI.
+/// Etap 3 to jego część, więc limit jest tu ostrzejszy.
+#[test]
+#[ignore = "generacja świata i pomiar zegarowy — CI uruchamia jawnie przez --include-ignored"]
+fn etap_3_miesci_sie_w_budzecie_czasu() {
+    let t = teren(9, Region::Lowland);
+    let start = std::time::Instant::now();
+    let c = generate_city(&plan(9, Region::Lowland, EconomyProfile::Mixed), &t).unwrap();
+    let ms = start.elapsed().as_secs_f64() * 1000.0;
+    for l in c.report.lines() {
+        println!("{l}");
+    }
+    assert!(ms < 4000.0, "Etap 3 zajął {ms:.0} ms");
+}
+
+/// Kwartały mają obrys użytkowy mniejszy od ściany grafu — inaczej pas drogowy
+/// nachodziłby na działki (przygotowanie pod T5/T6 w M2e).
+#[test]
+#[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
+fn kwartal_miesci_sie_w_swojej_scianie() {
+    let t = teren(4, Region::Lowland);
+    let c = generate_city(&plan(4, Region::Lowland, EconomyProfile::Mixed), &t).unwrap();
+    for b in c.blocks.blocks.iter().take(200) {
+        let wnetrze = c.roads.geom.get(b.poly);
+        let sciana = c.roads.geom.get(b.face);
+        assert_eq!(wnetrze.len(), sciana.len());
+        assert!(f64::from(b.area_m2) < pole(sciana) + 1.0);
+        assert!(b.area_m2 as f64 >= 300.0);
+    }
+}
+
+/// Przecięcie właściwe dwóch odcinków — w ścisłym wnętrzu obu.
+fn przecinaja(
+    a: (magnat_spatial::Vec2, magnat_spatial::Vec2),
+    b: (magnat_spatial::Vec2, magnat_spatial::Vec2),
+) -> bool {
+    let r = a.1 - a.0;
+    let s = b.1 - b.0;
+    let denom = r.x * s.y - r.y * s.x;
+    if denom.abs() < 1e-6 {
+        // Współliniowe nachodzenie: wyznacznik się zeruje, więc test przecięcia tego
+        // nie widzi — a dla obchodu półkrawędzi jest to ta sama patologia.
+        let q = b.0 - a.0;
+        let odchylka = (q.x * r.y - q.y * r.x).abs() / r.length().max(1.0);
+        if odchylka > 0.5 {
+            return false;
+        }
+        let l = r.length_squared().max(1.0);
+        let (t0, t1) = (q.dot(r) / l, (b.1 - a.0).dot(r) / l);
+        let (lo, hi) = (t0.min(t1), t0.max(t1));
+        return hi > 0.02 && lo < 0.98;
+    }
+    let q = b.0 - a.0;
+    let t = (q.x * s.y - q.y * s.x) / denom;
+    let u = (q.x * r.y - q.y * r.x) / denom;
+    (0.02..0.98).contains(&t) && (0.02..0.98).contains(&u)
+}
+
+fn pole(pts: &[magnat_spatial::Vec2]) -> f64 {
+    let mut a = 0.0;
+    for i in 0..pts.len() {
+        let p = pts[i];
+        let q = pts[(i + 1) % pts.len()];
+        a += f64::from(p.x) * f64::from(q.y) - f64::from(q.x) * f64::from(p.y);
+    }
+    (a * 0.5).abs()
+}
+
+/// Klasy dróg spełniają hierarchię: kolektor nie jest szerszy od arterii.
+#[test]
+fn hierarchia_klas_jest_monotoniczna() {
+    let kolejno = [
+        RoadClass::Highway,
+        RoadClass::Arterial,
+        RoadClass::Collector,
+        RoadClass::Local,
+        RoadClass::Service,
+    ];
+    for w in kolejno.windows(2) {
+        let (a, b) = (w[0].spec(), w[1].spec());
+        assert!(a.row_m >= b.row_m);
+        assert!(a.seg_len_m >= b.seg_len_m);
+        assert!(a.max_slope_pct <= b.max_slope_pct);
+    }
+    let _ = blocks::BlockId(0);
+}

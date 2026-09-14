@@ -1,0 +1,18 @@
+// Profil gospodarczy miasta: przemysłowy (M2 §5.2, PRD §4.1).
+//
+// M2b używa z tego pliku wyłącznie sekcji bramowej. Kwoty stref (`mix[z][epoch]`)
+// dołoży M2c przy Etapie 4 — do tego samego pliku, z podbiciem `schema_version`.
+//
+// `required` niesie **krotność**: dwa wpisy `Highway` to dwa wjazdy z dwóch stron mapy.
+// Miasto z jednym wjazdem nie ma jak domknąć sieci arterii w cykl (reguła P4).
+// `optional` to jedno losowanie na rodzaj, prawdopodobieństwo 0..=1.
+// Przemysł bez bocznicy nie wywiezie produkcji — stąd kolej towarowa w wymaganych.
+(
+    schema_version: 1,
+    required: [Highway, Highway, RailFreight],
+    optional: [
+        (RailPassenger, 0.7),
+        (Port, 0.3),
+        (Airport, 0.2),
+    ],
+)
