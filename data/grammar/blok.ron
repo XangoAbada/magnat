@@ -26,8 +26,8 @@
             height_m: 2.7,
             ground_height_m: 2.9,
             ground: Ref("kondygnacja"),
-            typical: Ref("kondygnacja"),
-            top: Ref("kondygnacja"),
+            typical: Ref("kondygnacja_z_balkonami"),
+            top: Ref("kondygnacja_z_balkonami"),
         ),
         Roof(shape: Flat, material: "roof_felt"),
     ],
@@ -41,6 +41,21 @@
                 (Front, Ref("pasmo_okien")),
                 (Back, Ref("pasmo_okien")),
             ]),
+        ])),
+        // Balkon co drugie pasmo okien. Wysięg 1,2 m mieści się w cofnięciu frontowym (5 m),
+        // więc nie wychodzi z działki nawet na parterze — i dlatego blok może mieć balkony
+        // od ulicy, a kamienica w pierzei tylko od podwórza.
+        ("kondygnacja_z_balkonami", Seq([
+            Ref("kondygnacja"),
+            // Płyta 0,6 m liczona od spodu kondygnacji: przy voxelu 0,5 m w pionie
+            // cieńsza zniknęłaby w zaokrągleniu, a balustrady i tak nie ma czym zrobić.
+            Repeat(axis: U, step_m: 8.8, pad_m: 1.4, rule: Protrude(
+                face: Front, m: 1.2,
+                rule: Split(axis: W, parts: [
+                    (Abs(0.6), Fill("concrete")),
+                    (Rel(1.0), Nothing),
+                ]),
+            )),
         ])),
         ("pasmo_okien", Repeat(axis: U, step_m: 4.4, pad_m: 1.2, rule: Split(axis: W, parts: [
             (Abs(0.9), Nothing),

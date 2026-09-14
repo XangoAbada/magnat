@@ -12,6 +12,7 @@ zostają w dokumencie fazy — tu jest wyłącznie to, co robisz w tej porcji.
 | **Projekt techniczny** | §5.6c |
 | **Wynik do pokazania** | Przelot kamerą nad dzielnicą mieszkaniową, w której **żadne dwa sąsiadujące budynki nie są tym samym budynkiem**: różnią się typem, wysokością, materiałem, dachem albo detalem bryły. Macierz pokrycia (strefa × epoka × styl) bez ani jednej luki. |
 | **Kryterium zamknięcia** | Kryteria WP18–WP20; udział gramatyki awaryjnej < 0,5 %, udział doboru z rozluźnionym filtrem (`relaxed`) < 5 %; test T13 zielony na 32 ziarnach × 4 profile. |
+| **Stan** | WP18 zamknięty (korekty H1–H5). WP19, WP20 przed sobą. |
 | **Poprzednia / następna** | `M2d-zabudowa.md` · `M2e-gospodarka-bazowa-i-wycena.md` |
 
 Domknięcie Etapu 6: jeden brakujący operator bryły (`Protrude`), lukarny w regule `Roof`,
@@ -42,7 +43,7 @@ estetyczny.
 
 | WP | Nazwa | Zależy od | Opis | Kryterium ukończenia |
 |---|---|---|---|---|
-| WP18 | Operator `Protrude` i lukarny | M2d (WP11, WP12) | wariant `Rule::Protrude { face, m, rule }` — wysunięcie zakresu **poza jedną** ścianę; `dormers` w `RoofShape::{Gable, Hip}`; przycięcie wysunięcia do granicy parceli i pasa drogowego | balkon, wykusz i lukarna dają się zapisać w `.ron` bez ani jednej linii Rusta; żadne wysunięcie nie wychodzi poza wielokąt parceli ani nad pas drogowy (rozszerzony T6); budżet `MAX_NODES` trzymany na kamienicy 6-kondygnacyjnej z balkonami na każdym piętrze |
+| ✅ WP18 | Operator `Protrude` i lukarny | M2d (WP11, WP12) | wariant `Rule::Protrude { face, m, rule }` — wysunięcie zakresu **poza jedną** ścianę; `dormers` w regule `Roof`; przycięcie wysunięcia do granicy parceli, z wyjątkiem wysięgu nad chodnikiem powyżej skrajni | balkon, wykusz i lukarna dają się zapisać w `.ron` bez ani jednej linii Rusta; **poniżej skrajni 3,5 m** żadne wysunięcie nie wychodzi poza wielokąt parceli, **powyżej** nie dalej niż 1,5 m; budżet `MAX_NODES` trzymany na kamienicy 6-kondygnacyjnej z balkonami na każdym piętrze (korekta H1) |
 | WP19 | Katalog gramatyk: pokrycie i wariancja | WP18 | rozszerzenie `data/grammar/` z 12 do ~32 plików wg typologii z §5.6c; `Choice` wewnątrz gramatyk na materiał, rytm otworów i kształt dachu | macierz pokrycia (strefa × epoka × styl) **bez luk**: każda kombinacja występująca w mieście ma ≥ 1 gramatykę bez rozluźniania filtrów; fallback < 0,5 %; `relaxed` < 5 % |
 | WP20 | Miara różnorodności + test T13 | WP19 | `BuildingSignature` (4 znaczniki), histogram gramatyk i kolizje sygnatur w `GenerationReport`; test T13 | T13 zielony: udział par identycznych sygnatur w promieniu 60 m < 15 %; entropia rozkładu gramatyk w dzielnicy mieszkaniowej o ≥ 100 budynkach ≥ 1,8 bita; oba progi mierzone na 32 ziarnach × 4 profile |
 
@@ -214,3 +215,34 @@ Zgodnie z `K-18`. Gwiazdką oznaczone te, które zmieniają **zakres albo kryter
 | G2 ★ | **Kolejność wykonania: M2d → M2f → M2e.** M2e zostaje ostatnia i nadal zamyka bramki 1–7 | T10 jest wg F6 zadaniem kalibracyjnym, a jedną z jego trzech dźwigni jest `massing` gramatyk. Katalog rozszerzony po kalibracji = kalibracja dwa razy |
 | G3 ★ | Test **T13** dopisany do §7 dokumentu fazy | „Różnorodny" bez progu jest opinią; `K-18` pkt 3 zabrania kryteriów niemierzalnych |
 | G4 | Zakres WP18 to **jeden** wariant enuma (`Protrude`), nie blok pięciu reguł `Details` | Cztery z pięciu detali z §5.6 są wyrażalne zestawem, który już jest w kodzie (tabela w §5.6c). Nowy operator dostaje tylko to, czego naprawdę nie da się złożyć — ryzyko R4 („gramatyka staje się drugim językiem programowania") rośnie z każdym wariantem |
+
+---
+
+## Korekty planu wpisane po implementacji
+
+Numeracja `H-n`, jak `E-n` w M2d. Gwiazdką te, które zmieniają **zakres albo kryterium**.
+
+| # | Korekta | Dlaczego |
+|---|---|---|
+| H1 ★ | **Kryterium WP18 mówiło co innego niż §5.6c.** Tabela żądała, żeby żadne wysunięcie nie wyszło nad pas drogowy; §5.6c dopuszczał wysięg nad chodnikiem powyżej 3,5 m. Obowiązuje §5.6c, tabela poprawiona | Przy zakazie bezwarunkowym kamienica w pierzei nie ma prawa do **żadnego** balkonu od ulicy, bo `setback_front_m` wynosi tam 0 z definicji zabudowy obrzeżnej. Kryterium byłoby spełnialne wyłącznie przez katalog bez balkonów frontowych — czyli mierzyłoby co innego, niż nazywa (`K-18` pkt 3). Granica 1,5 m jest **wyprowadzona, nie przyjęta**: jezdnia zajmuje 60 % pasa drogowego (`voxels.rs`), najwęższa klasa uliczna `Service` ma `row_m` 8 m, więc pobocze ma 1,6 m z każdej strony. Wysięg 1,5 m nie dosięga jezdni w żadnej klasie i przestaje być prawdziwy dopiero, gdyby doszła klasa węższa niż 8 m |
+| H2 ★ | **`footprint_for` obraca oś `u` tak, żeby ulica była zawsze po stronie `−v`.** Błąd zastany z M2d, nie skutek tej podfazy | `u` brało się z kierunku odcinka drogi, a kierunek odcinka nie mówi, po której jego stronie leży działka. `Face::Front` w gramatyce wypadał więc na podwórzu mniej więcej co drugi budynek: witryna parteru usługowego patrzyła w oficynę, a `Comp(Front, …)` stawiał pas okien od tyłu. W liczbach nie było tego widać — okna były, tylko nie tam. Dla WP18 to warunek konieczny: bez tego `Protrude(Front)` wychodziłby w głąb kwartału i przycięcie kasowałoby go dokładnie tam, gdzie balkon miał powstać. Przy okazji znika rozgałęzienie `front_na_minusie` w cofnięciach i w trakcie — teraz front jest zawsze od `v0` |
+| H3 | **Lukarny są parametrem reguły `Roof`, nie wariantów `RoofShape`** | `dormers` na `RoofShape` trzeba byłoby dopisać osobno do `Gable` i do `Hip`, a walidator i tak musi odrzucić lukarny na dachu płaskim (`DormersOnFlat`). Jedno pole z `#[serde(default)]` nie łamie żadnego pliku z katalogu i daje walidatorowi jedno miejsce do sprawdzenia |
+| H4 | **Zapas na wysunięcie liczy się od lica bryły, nie od lica bieżącego zakresu** | Inaczej `Inset(0,4) → Protrude` na cofniętym poddaszu zjadałby 0,4 m balkonu, choć działka się nie zwęziła. Zakres wie, gdzie jest względem obrysu (`Ctx::base`), więc luz da się policzyć dokładnie zamiast zakładać najgorszy przypadek. Działa też w drugą stronę: zakres po `Offset` ma zapas **mniejszy** o tyle, o ile już wystaje |
+| H5 | **`Building.aabb` obejmuje wysunięcia i lukarny, a nie tylko obrys** | `aabb` ma jednego odbiorcę — selekcję do kadru w M11 (kontrakt §6 fazy). Bryła licząca tylko obrys ucinałaby balkony przy krawędzi ekranu, i to dokładnie przy tej krawędzi, przy której gracz na nie patrzy |
+| H6 | Zapas mierzony liniowo co 0,25 m do `MAX_PROTRUDE_M`, nie połowieniem, i **bez** zapamiętywania go w `GrammarSet` per gramatyka | 64 testy przynależności na kierunek przy 14,5 tys. budynków w kroku, który i tak ma budżet 28 s. Optymalizacja „licz zapas tylko dla gramatyk z `Protrude`" wymagałaby dodatkowego stanu w katalogu i nie ma czego kupić (YAGNI) |
+| H7 | **Obejrzane, nie zmierzone: połać dachu czyta się z odległości dzielnicy jak tektura falista.** Nie jest to skutek WP18 — zrzut z commitu poprzedzającego wygląda tak samo. Zadanie przechodzi do WP19 | Derywacja jest w porządku: kamienica 3-kondygnacyjna daje **3** zagnieżdżone bryły dachu (`v = ±5,3 / ±2,7 / ±0,5`) i 2 lukarny, czyli dokładnie to, co opisuje §5.6b M2d. Falowanie powstaje przy **rasteryzacji**: bryły stoją pod kątem do siatki, więc każda ma własne schodki, a trzy schodkowania nachodzą na siebie. To ta sama klasa zjawiska co korekta E12, tylko w skali, której E12 nie usunęła. Dźwignie należą do WP19 i do M11: mniej stopni na płytkim trakcie, inny materiał okapu, albo profil ciągły z prefabrykatu (M11). **Do WP19 wchodzi też rytm okien** — otwór 2,0 m przy rozstawie 4,6 m zostawia filar 2,6 m, co przy voxelu 1 m daje pionową prążkowanicę na całej pierzei |
+
+---
+
+## Co WP18 zostawia dalszym pakietom
+
+- `Rule::Protrude` i `Roof.dormers` są w języku i w walidatorze; `data/grammar/` używa ich
+  w dwóch plikach (`blok.ron` — balkony frontowe, `kamienica.ron` — balkony od podwórza
+  i lukarny). **WP19 rozstawia je po całym katalogu**, a nie dopisuje operatorów.
+- `BuildReport.{protrusions, protrusions_clipped, protrusions_dropped}` są w raporcie
+  generacji. Pomiar na mieście 8 km, ziarno 7: **8 283 wysunięcia, 19 przyciętych,
+  154 odrzucone** — czyli przycinanie działa i prawie nigdy nie jest potrzebne,
+  bo katalog prosi o wysięgi, które się mieszczą.
+- `Face::Front` jest od tej pory **zawsze** licem od ulicy (korekta H2). Gramatyki pisane
+  w WP19 mogą na tym polegać; wcześniejsze były pisane w świecie, w którym to nie było prawdą.
+

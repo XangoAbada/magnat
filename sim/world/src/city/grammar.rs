@@ -24,6 +24,11 @@ pub const GRAMMAR_SCHEMA_VERSION: u32 = 1;
 pub const MAX_DEPTH: u32 = 12;
 pub const MAX_NODES: u32 = 4096;
 
+/// Największy dopuszczalny wysięg `Protrude`. Nie jest to limit techniczny, tylko
+/// architektoniczny: powyżej dwóch metrów balkon przestaje być balkonem, a zaczyna być
+/// piętrem wspornikowym — i wtedy należy go zapisać jako bryłę, nie jako detal.
+pub const MAX_PROTRUDE_M: f32 = 2.0;
+
 /// Indeks gramatyki w katalogu `data/grammar/`, nadawany przy ładowaniu w kolejności
 /// alfabetycznej klucza — tak jak `GoodId` (00 §5, korekta D8).
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
@@ -122,6 +127,19 @@ pub enum Rule {
         thickness_m: f32,
         faces: Vec<(Face, Rule)>,
     },
+    /// Bryła **na zewnątrz** wskazanej ściany, o wysięgu `m`. Odwrotność `Comp`:
+    /// `Comp` bierze płytę przy ścianie od środka, `Protrude` dokłada bryłę na zewnątrz.
+    /// Balkon, wykusz i ryzalit to ten sam operator z innym `m` i innym wnętrzem.
+    ///
+    /// Jedyny operator, który wychodzi poza obrys posadowiony na parceli, więc jedyny
+    /// przycinany do działki — derywacja zna zapas z `BuildParams::margins` (M2f §5.6c).
+    /// Wyłącznie ściany pionowe: `Top` i `Bottom` odrzuca walidator, bo komin składa się
+    /// z `Comp(Top) → Extrude`, a wysunięcie w dół nie ma czego dotknąć.
+    Protrude {
+        face: Face,
+        m: f32,
+        rule: Box<Rule>,
+    },
     Choice(Vec<(u16, Rule)>),
     If {
         cond: Cond,
@@ -150,6 +168,14 @@ pub enum Rule {
     Roof {
         shape: RoofShape,
         material: String,
+        /// Widełki liczby lukarn na połaci frontowej; `(0, 0)` = brak. Rozstaw wynika
+        /// z długości kalenicy, więc w danych podaje się liczbę, nie pozycje.
+        ///
+        /// Lukarna jest parametrem dachu, a nie operatorem, z tego samego powodu,
+        /// dla którego `Floors` jest regułą domenową: musi znać połać, a połać powstaje
+        /// wewnątrz tej reguły.
+        #[serde(default)]
+        dormers: (u8, u8),
     },
 
     // ── terminale ───────────────────────────────────────────────────────────────────
@@ -281,6 +307,10 @@ pub enum GrammarError {
     TooManyNodes { id: String, nodes: u32 },
     TooDeep { id: String, depth: u32 },
     BadRange { id: String, what: &'static str },
+    /// `Protrude` na ścianie poziomej — patrz komentarz przy wariancie `Rule::Protrude`.
+    ProtrudeFace { id: String },
+    /// Lukarny na dachu płaskim: nie ma połaci, na której miałyby stanąć.
+    DormersOnFlat { id: String },
     DuplicateId(String),
     NoFallback(String),
 }
@@ -316,6 +346,13 @@ impl std::fmt::Display for GrammarError {
             ),
             GrammarError::BadRange { id, what } => {
                 write!(f, "gramatyka {id}: przedział `{what}` jest pusty albo ujemny")
+            }
+            GrammarError::ProtrudeFace { id } => write!(
+                f,
+                "gramatyka {id}: Protrude wolno tylko dla ścian pionowych (Front, Back, Side)"
+            ),
+            GrammarError::DormersOnFlat { id } => {
+                write!(f, "gramatyka {id}: lukarny na dachu płaskim nie mają połaci")
             }
             GrammarError::DuplicateId(id) => write!(f, "gramatyka {id} zdefiniowana dwa razy"),
             GrammarError::NoFallback(z) => write!(
@@ -590,6 +627,31 @@ fn zlicz<'a>(
         | Rule::Inset { rule, .. }
         | Rule::Offset { rule, .. }
         | Rule::Extrude { rule, .. } => zejdz(rule, nodes, stos)?,
+        Rule::Protrude { face, m, rule } => {
+            if !matches!(face, Face::Front | Face::Back | Face::Side) {
+                return Err(GrammarError::ProtrudeFace { id: g.id.clone() });
+            }
+            if !(*m > 0.0 && *m <= MAX_PROTRUDE_M) {
+                return Err(GrammarError::BadRange {
+                    id: g.id.clone(),
+                    what: "Protrude.m",
+                });
+            }
+            zejdz(rule, nodes, stos)?;
+        }
+        Rule::Roof { shape, dormers, .. } => {
+            if dormers.1 > 0 {
+                if matches!(shape, RoofShape::Flat) {
+                    return Err(GrammarError::DormersOnFlat { id: g.id.clone() });
+                }
+                if dormers.0 > dormers.1 {
+                    return Err(GrammarError::BadRange {
+                        id: g.id.clone(),
+                        what: "Roof.dormers",
+                    });
+                }
+            }
+        }
         Rule::If {
             then, otherwise, ..
         } => {
@@ -624,11 +686,7 @@ fn zlicz<'a>(
             stos.pop();
             r?;
         }
-        Rule::Foundation { .. }
-        | Rule::Roof { .. }
-        | Rule::Fill(_)
-        | Rule::Void
-        | Rule::Nothing => {}
+        Rule::Foundation { .. } | Rule::Fill(_) | Rule::Void | Rule::Nothing => {}
     }
     Ok(())
 }
@@ -646,7 +704,8 @@ fn zbierz_materialy(r: &Rule, out: &mut Vec<String>) {
         Rule::Repeat { rule, .. }
         | Rule::Inset { rule, .. }
         | Rule::Offset { rule, .. }
-        | Rule::Extrude { rule, .. } => zbierz_materialy(rule, out),
+        | Rule::Extrude { rule, .. }
+        | Rule::Protrude { rule, .. } => zbierz_materialy(rule, out),
         Rule::If {
             then, otherwise, ..
         } => {
@@ -733,6 +792,56 @@ mod tests {
         ));
         let ok = szkielet(vec![Rule::Fill("brick_red".to_string())], Vec::new());
         assert!(validate(&ok, &m).is_ok());
+    }
+
+    #[test]
+    fn protrude_na_scianie_poziomej_jest_odrzucony() {
+        // Komin składa się z `Comp(Top) → Extrude`, więc `Protrude(Top)` byłby drugą
+        // drogą do tego samego — a wysunięcie w dół nie ma czego dotknąć.
+        let g = szkielet(
+            vec![Rule::Protrude {
+                face: Face::Top,
+                m: 1.0,
+                rule: Box::new(Rule::Fill("stucco".to_string())),
+            }],
+            Vec::new(),
+        );
+        assert!(matches!(
+            validate(&g, &rejestr()),
+            Err(GrammarError::ProtrudeFace { .. })
+        ));
+    }
+
+    #[test]
+    fn za_gleboki_protrude_jest_odrzucony() {
+        let g = szkielet(
+            vec![Rule::Protrude {
+                face: Face::Front,
+                m: MAX_PROTRUDE_M + 0.5,
+                rule: Box::new(Rule::Fill("stucco".to_string())),
+            }],
+            Vec::new(),
+        );
+        assert!(matches!(
+            validate(&g, &rejestr()),
+            Err(GrammarError::BadRange { .. })
+        ));
+    }
+
+    #[test]
+    fn lukarny_na_dachu_plaskim_sa_odrzucone() {
+        let g = szkielet(
+            vec![Rule::Roof {
+                shape: RoofShape::Flat,
+                material: "roof_tile_red".to_string(),
+                dormers: (1, 2),
+            }],
+            Vec::new(),
+        );
+        assert!(matches!(
+            validate(&g, &rejestr()),
+            Err(GrammarError::DormersOnFlat { .. })
+        ));
     }
 
     #[test]

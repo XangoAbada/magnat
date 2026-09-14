@@ -21,7 +21,7 @@
 use super::blocks::BlockSet;
 use super::derive::{self, BuildParams, Derived, Scope};
 use super::districts::DistrictSet;
-use super::grammar::{BuildingGrammar, GrammarId, GrammarSet, UnitClass};
+use super::grammar::{BuildingGrammar, GrammarId, GrammarSet, UnitClass, MAX_PROTRUDE_M};
 use super::parcels::{ParcelSet, ParcelStatus};
 use super::poly;
 use super::road::{PolyArena, PolyRef, RoadClass, RoadFlags, RoadNetwork, SegmentId};
@@ -193,6 +193,12 @@ pub struct BuildReport {
     pub relaxed: u32,
     /// Derywacje przerwane limitem węzłów albo głębokości (M2 §5.6: liczone, nie ciche).
     pub truncated: u32,
+    /// Wysunięcia (`Protrude`): postawione, przycięte do granicy działki i odrzucone
+    /// jako płytsze niż voxel. Bez tych trzech liczb nie widać, czy balkonów nie ma,
+    /// bo gramatyka ich nie chce, czy dlatego, że nigdzie się nie mieszczą (M2f §5.6c).
+    pub protrusions: u32,
+    pub protrusions_clipped: u32,
+    pub protrusions_dropped: u32,
     /// Budynki w strefie `Logistics`/`IndustryHeavy` bez drogi bez `NO_HEAVY` w zasięgu
     /// (korekta D7) — rampa nie powstała i ma to być widać.
     pub ramp_missing: u32,
@@ -329,12 +335,22 @@ pub fn footprint_for(
         return None;
     }
     let obb = poly::min_area_obb(obrys);
-    let u = match front_dir {
+    let os = match front_dir {
         Some(d) if d.length_squared() > 0.25 => d.normalize(),
         _ => obb.axis,
     };
-    let v = Vec2::new(-u.y, u.x);
     let srodek = poly::centroid(obrys);
+
+    // **Ulica jest zawsze po stronie „minus" osi `v`.** Kierunek odcinka drogi nie mówi,
+    // po której jego stronie leży działka, więc bez tego obrotu `Face::Front` w gramatyce
+    // wypadał na podwórzu mniej więcej co drugi budynek — witryna parteru usługowego
+    // patrzyła w oficynę, a balkon z `Protrude(Front)` wychodziłby w głąb kwartału.
+    // Obrót o 180° nie zmienia prostokąta, tylko jego orientację.
+    let u = match front_point {
+        Some(fp) if (fp - srodek).dot(Vec2::new(-os.y, os.x)) > 0.0 => -os,
+        _ => os,
+    };
+    let v = Vec2::new(-u.y, u.x);
 
     // Rozpiętość działki w układzie (u, v).
     let (mut u0, mut u1, mut v0, mut v1) = (f32::MAX, f32::MIN, f32::MAX, f32::MIN);
@@ -347,23 +363,13 @@ pub fn footprint_for(
         v1 = v1.max(dv);
     }
 
-    // Po której stronie osi `v` jest ulica. Bez tego cofnięcie frontowe wypadałoby
-    // w połowie przypadków od podwórza i budynek stałby tyłem do ulicy.
-    let front_na_minusie = front_point.is_none_or(|fp| (fp - srodek).dot(v) < 0.0);
-    let (cof_min, cof_max) = if front_na_minusie {
-        (massing.setback_front_m, massing.setback_back_m)
-    } else {
-        (massing.setback_back_m, massing.setback_front_m)
-    };
-    let mut a = v0 + cof_min;
-    let mut b = v1 - cof_max;
+    // Front jest po stronie `v0` z założenia (obrót osi wyżej), więc cofnięcia idą
+    // wprost, bez rozróżniania przypadków.
+    let a = v0 + massing.setback_front_m;
+    let mut b = v1 - massing.setback_back_m;
     // Trakt: budynek nie rozlewa się na całą głębokość działki.
     if b - a > massing.max_depth_m {
-        if front_na_minusie {
-            b = a + massing.max_depth_m;
-        } else {
-            a = b - massing.max_depth_m;
-        }
+        b = a + massing.max_depth_m;
     }
     let (su0, su1) = (u0 + massing.setback_side_m, u1 - massing.setback_side_m);
     if su1 - su0 < MIN_BOK_M || b - a < MIN_BOK_M {
@@ -398,6 +404,51 @@ pub fn footprint_for(
         u,
         glam::Vec3::new(half_u, half_v, 0.0),
     ))
+}
+
+/// Największy wysięg z granicy działki nad chodnik — powyżej skrajni z `OVERHANG_MIN_Z_M`.
+///
+/// Nie mierzymy szerokości chodnika, tylko korzystamy z tego, że jest on **zawsze szerszy**:
+/// jezdnia zajmuje 60 % pasa drogowego (`voxels.rs`), a najwęższy pas uliczny to `Service`
+/// z 8 m, czyli 1,6 m pobocza z każdej strony. Wysięg 1,5 m nie dosięga więc jezdni w żadnej
+/// klasie. Gdyby doszła klasa węższa niż 8 m, ta liczba przestaje być prawdziwa i trzeba
+/// będzie liczyć pobocze z `row_m` odcinka frontowego.
+const OVERHANG_M: f32 = 1.5;
+
+/// Krok i zasięg pomiaru zapasu. Ćwierć metra to czwarta część voxela poziomego —
+/// dokładniej mierzyć nie ma po co, bo i tak wszystko wyląduje na siatce metrowej.
+const ZAPAS_KROK_M: f32 = 0.25;
+
+/// Ile bryła może urosnąć w danym kierunku, zanim wyjdzie z wielokąta działki.
+///
+/// Liniowo, nie połowieniem: zakres ma osiem kroków, a `miesci_sie` bada osiem punktów,
+/// więc całość to 64 testy przynależności na kierunek — mniej, niż kosztowałoby
+/// pilnowanie niezmienników wyszukiwania binarnego (00, „Dobre praktyki": boring over clever).
+fn zapas(obrys: &[Vec2], c: Vec2, u: Vec2, v: Vec2, hu: f32, hv: f32, dir: Axis2) -> f32 {
+    let mut ostatni = 0.0;
+    let mut d = ZAPAS_KROK_M;
+    while d <= MAX_PROTRUDE_M + 1e-3 {
+        let (pc, phu, phv) = match dir {
+            Axis2::Front => (c - v * (d * 0.5), hu, hv + d * 0.5),
+            Axis2::Back => (c + v * (d * 0.5), hu, hv + d * 0.5),
+            Axis2::Side => (c, hu + d, hv),
+        };
+        if !miesci_sie(obrys, pc, u, v, phu, phv) {
+            break;
+        }
+        ostatni = d;
+        d += ZAPAS_KROK_M;
+    }
+    ostatni
+}
+
+/// Kierunek pomiaru zapasu. `Side` mierzy obie strony naraz, bo `Protrude(Side)`
+/// stawia obie i obowiązuje ciaśniejsza.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Axis2 {
+    Front,
+    Back,
+    Side,
 }
 
 /// Rozpiętość wielokąta w układzie `(u, v)`: szerokość wzdłuż `u` i głębokość wzdłuż `v`.
@@ -638,6 +689,9 @@ pub fn build_all(
         if p.derived.truncated {
             out.report.truncated += 1;
         }
+        out.report.protrusions += p.derived.protrusions;
+        out.report.protrusions_clipped += p.derived.protrusions_clipped;
+        out.report.protrusions_dropped += p.derived.protrusions_dropped;
         queue_building(q, &p);
         let (units_from, dwell, wp) = interiors(input, &mut out, &p, id, parcels);
         let footprint = geom.push(&rogi(&p.base));
@@ -771,6 +825,41 @@ fn plan_building(
     );
     let base_z_m = ((lo + hi) * 0.5 * 2.0).round() * 0.5;
 
+    // Zapas na wysunięcia mierzy się raz, przed derywacją — `Protrude` dostaje cztery
+    // liczby zamiast wielokąta, bo derywacja nie ma prawa znać geometrii działki.
+    let srodek_base = Vec2::new(base.center.x, base.center.y);
+    let v_base = base.v();
+    let margins = derive::Margins {
+        front_m: zapas(
+            obrys,
+            srodek_base,
+            base.u,
+            v_base,
+            base.half.x,
+            base.half.y,
+            Axis2::Front,
+        ),
+        back_m: zapas(
+            obrys,
+            srodek_base,
+            base.u,
+            v_base,
+            base.half.x,
+            base.half.y,
+            Axis2::Back,
+        ),
+        side_m: zapas(
+            obrys,
+            srodek_base,
+            base.u,
+            v_base,
+            base.half.x,
+            base.half.y,
+            Axis2::Side,
+        ),
+        overhang_front_m: if p.frontage.is_none() { 0.0 } else { OVERHANG_M },
+    };
+
     let derived = derive::derive(
         g,
         input.materials,
@@ -782,6 +871,7 @@ fn plan_building(
             base_z_m,
             world_seed: input.plan.seed,
             building_index: i,
+            margins,
         },
     );
     if derived.parts.is_empty() {
@@ -868,6 +958,21 @@ fn bryla(p: &Planned) -> Aabb3 {
             r.y,
             p.base_z_m + f32::from(p.derived.height_dm) / 10.0,
         ));
+    }
+    // Balkony, wykusze i lukarny wychodzą poza obrys. Bez nich `aabb` odcinałby detal
+    // przy krawędzi kadru w M11 — a to jest jedyny odbiorca tego pola (kontrakt §6).
+    for part in &p.derived.parts {
+        if part.carve {
+            continue;
+        }
+        let (dol, gora) = (
+            part.scope.center.z - part.scope.half.z,
+            part.scope.center.z + part.scope.half.z,
+        );
+        for r in rogi(&part.scope) {
+            a = a.union_point(glam::Vec3::new(r.x, r.y, dol));
+            a = a.union_point(glam::Vec3::new(r.x, r.y, gora));
+        }
     }
     a
 }
@@ -1170,8 +1275,139 @@ mod tests {
     }
 
     #[test]
+    fn front_zawsze_patrzy_na_ulice() {
+        // `Face::Front` w gramatyce to lico od ulicy. Kierunek odcinka drogi nie mówi,
+        // po której stronie leży działka, więc bez obrotu osi witryna parteru wypadała
+        // na podwórzu mniej więcej co drugi budynek — i żaden test tego nie widział.
+        let dzialka = kwadrat(40.0);
+        for ulica in [Vec2::new(20.0, -5.0), Vec2::new(20.0, 45.0)] {
+            for kierunek in [Vec2::new(1.0, 0.0), Vec2::new(-1.0, 0.0)] {
+                let s = footprint_for(&dzialka, Some(kierunek), Some(ulica), &massing(2.0, 2.0, 2.0))
+                    .expect("obrys");
+                let v = s.v();
+                let do_ulicy = ulica - Vec2::new(s.center.x, s.center.y);
+                assert!(
+                    do_ulicy.dot(v) < 0.0,
+                    "ulica {ulica:?} wypadła po dodatniej stronie osi v (kierunek {kierunek:?})"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn zapas_konczy_sie_na_granicy_dzialki() {
+        // Bryła 20 × 20 pośrodku działki 30 × 30 ma po 5 m luzu z każdej strony,
+        // ale `Protrude` i tak nie sięgnie dalej niż `MAX_PROTRUDE_M`.
+        let dzialka = kwadrat(30.0);
+        let c = Vec2::new(15.0, 15.0);
+        let (u, v) = (Vec2::new(1.0, 0.0), Vec2::new(0.0, 1.0));
+        for dir in [Axis2::Front, Axis2::Back, Axis2::Side] {
+            let z = zapas(&dzialka, c, u, v, 10.0, 10.0, dir);
+            assert!(
+                (z - MAX_PROTRUDE_M).abs() < ZAPAS_KROK_M,
+                "{dir:?}: zapas {z} m przy 5 m luzu i limicie {MAX_PROTRUDE_M} m"
+            );
+        }
+        // Bryła wypełniająca działkę nie ma zapasu w żadną stronę.
+        for dir in [Axis2::Front, Axis2::Back, Axis2::Side] {
+            assert_eq!(zapas(&dzialka, c, u, v, 15.0, 15.0, dir), 0.0, "{dir:?}");
+        }
+    }
+
+    #[test]
     fn za_mala_dzialka_nie_dostaje_budynku() {
         assert!(footprint_for(&kwadrat(6.0), None, None, &massing(3.0, 3.0, 3.0)).is_none());
+    }
+
+    /// Złożenie całej ścieżki przycinania: obrys z `footprint_for`, zapas z `zapas`,
+    /// derywacja z katalogu z repo. To jest „rozszerzony T6" z kryterium WP18 —
+    /// osobno przetestowane są obie połowy, ale dopiero tu widać, czy się składają.
+    #[test]
+    fn zadne_wysuniecie_nie_wychodzi_z_dzialki_ponizej_skrajni() {
+        use crate::city::derive::{Margins, OVERHANG_MIN_Z_M};
+        use crate::city::grammar::GrammarSet;
+
+        let mats = magnat_voxel::MaterialRegistry::load_dir(&crate::assets::data_path("materials"))
+            .expect("materiały");
+        let set =
+            GrammarSet::load_dir(&crate::assets::data_path("grammar"), &mats).expect("gramatyki");
+
+        // Działka 24 × 40 z ulicą pod spodem. Prostokąt jest wypukły, więc ośmiopunktowy
+        // test przynależności w `zapas` jest tu dokładny, a nie przybliżony.
+        let dzialka = vec![
+            Vec2::new(0.0, 0.0),
+            Vec2::new(24.0, 0.0),
+            Vec2::new(24.0, 40.0),
+            Vec2::new(0.0, 40.0),
+        ];
+        let kierunek = Vec2::new(1.0, 0.0);
+        let ulica = Vec2::new(12.0, -4.0);
+        let base_z = 50.0;
+
+        let mut widziane = 0;
+        for g in set.all() {
+            let Some(base) = footprint_for(&dzialka, Some(kierunek), Some(ulica), &g.massing)
+            else {
+                continue;
+            };
+            let c = Vec2::new(base.center.x, base.center.y);
+            let v = base.v();
+            let margins = Margins {
+                front_m: zapas(&dzialka, c, base.u, v, base.half.x, base.half.y, Axis2::Front),
+                back_m: zapas(&dzialka, c, base.u, v, base.half.x, base.half.y, Axis2::Back),
+                side_m: zapas(&dzialka, c, base.u, v, base.half.x, base.half.y, Axis2::Side),
+                overhang_front_m: OVERHANG_M,
+            };
+            let out = derive::derive(
+                g,
+                &mats,
+                base,
+                BuildParams {
+                    zone: ZoneKind::Residential(super::super::zoning::ResDensity::R3),
+                    epoch_ring: 1,
+                    land_value_per_m2: (g.applies.land_value.0 + g.applies.land_value.1) / 2,
+                    base_z_m: base_z,
+                    world_seed: 0x00C0_FFEE,
+                    building_index: 3,
+                    margins,
+                },
+            );
+            widziane += out.protrusions;
+            for part in out.parts.iter().filter(|p| !p.carve) {
+                let dol = part.scope.center.z - part.scope.half.z;
+                for r in rogi(&part.scope) {
+                    if poly::contains(&dzialka, r) {
+                        continue;
+                    }
+                    assert!(
+                        dol >= base_z + OVERHANG_MIN_Z_M - 1e-3,
+                        "gramatyka {}: bryła poza działką na wysokości {:.2} m nad posadowieniem",
+                        g.id,
+                        dol - base_z
+                    );
+                    let d = odleglosc_do_wielokata(&dzialka, r);
+                    assert!(
+                        d <= OVERHANG_M + 0.05,
+                        "gramatyka {}: wysięg {d:.2} m poza działkę przy limicie {OVERHANG_M} m",
+                        g.id
+                    );
+                }
+            }
+        }
+        assert!(
+            widziane > 0,
+            "żadna gramatyka z katalogu nie postawiła wysunięcia — test nie bada niczego"
+        );
+    }
+
+    fn odleglosc_do_wielokata(pts: &[Vec2], p: Vec2) -> f32 {
+        let mut d = f32::MAX;
+        for i in 0..pts.len() {
+            let (a, b) = (pts[i], pts[(i + 1) % pts.len()]);
+            let (q, _) = poly::closest_on_segment(a, b, p);
+            d = d.min((q - p).length());
+        }
+        d
     }
 
     #[test]

@@ -300,6 +300,10 @@ impl GenerationReport {
                 self.build.left_vacant,
                 self.build.ramp_missing
             ));
+            v.push(format!(
+                "  detal bryły: {} wysunięć ({} przyciętych do działki, {} odrzuconych jako płytsze niż voxel)",
+                self.build.protrusions, self.build.protrusions_clipped, self.build.protrusions_dropped
+            ));
             if self.build.fallback > 0 {
                 v.push(format!(
                     "  awaryjne wg stref: {}",

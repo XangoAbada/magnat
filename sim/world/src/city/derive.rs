@@ -138,6 +138,37 @@ impl Scope {
         s
     }
 
+    /// Bryła **na zewnątrz** wskazanej ściany, o wysięgu `m`. Odwrotność [`Scope::faces`]:
+    /// tamta bierze płytę od środka, ta dokłada ją poza licem. `Side` daje dwie.
+    ///
+    /// Ściany poziome nie dają nic — odrzuca je walidator, a derywacja nie ma się tu
+    /// czym bronić poza pustą listą (komin to `Comp(Top) → Extrude`, nie `Protrude`).
+    fn protrusions(&self, face: Face, m: f32) -> SmallVec<[Scope; 2]> {
+        let mut out = SmallVec::new();
+        match face {
+            Face::Front => out.push(
+                self.with_extent(Axis::V, m)
+                    .shifted(Axis::V, -self.half.y - m * 0.5),
+            ),
+            Face::Back => out.push(
+                self.with_extent(Axis::V, m)
+                    .shifted(Axis::V, self.half.y + m * 0.5),
+            ),
+            Face::Side => {
+                out.push(
+                    self.with_extent(Axis::U, m)
+                        .shifted(Axis::U, -self.half.x - m * 0.5),
+                );
+                out.push(
+                    self.with_extent(Axis::U, m)
+                        .shifted(Axis::U, self.half.x + m * 0.5),
+                );
+            }
+            Face::Top | Face::Bottom => {}
+        }
+        out
+    }
+
     /// Płyta o grubości `t` przy wskazanej ścianie. `Side` daje dwie — lewą i prawą.
     fn faces(&self, face: Face, t: f32) -> SmallVec<[Scope; 2]> {
         let mut out = SmallVec::new();
@@ -195,6 +226,28 @@ pub struct Part {
     pub carve: bool,
 }
 
+/// Najmniejsze sensowne wysunięcie. Voxel ma metr w poziomie, więc balkon cieńszy niż to
+/// nie ma się gdzie zrasteryzować — zamiast półbalkonu zostaje nic, i jest to policzone
+/// (M2f §5.6c, konsekwencja korekty E12 z M2d).
+pub const MIN_PROTRUDE_M: f32 = 1.0;
+
+/// Skrajnia pionowa nad chodnikiem. Poniżej niej wysunięcie nie może wyjść poza działkę,
+/// powyżej — może, bo wykusz nad chodnikiem nikomu nie wchodzi w drogę, a balkon
+/// na wysokości parteru tak.
+pub const OVERHANG_MIN_Z_M: f32 = 3.5;
+
+/// Ile bryła może wystawać poza obrys, zanim wyjdzie z działki. Liczone w [`super::build`],
+/// bo tam jest wielokąt parceli; derywacja dostaje gotowe cztery liczby.
+#[derive(Clone, Copy, PartialEq, Debug, Default)]
+pub struct Margins {
+    pub front_m: f32,
+    pub back_m: f32,
+    pub side_m: f32,
+    /// Dodatkowy wysięg nad chodnikiem, dozwolony wyłącznie powyżej [`OVERHANG_MIN_Z_M`].
+    /// Zero dla działki bez frontu drogowego — nie ma wtedy chodnika, nad którym wisieć.
+    pub overhang_front_m: f32,
+}
+
 /// Parametry wejściowe budynku — cztery kanały z M2 §5.6 plus tożsamość do RNG.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct BuildParams {
@@ -207,6 +260,8 @@ pub struct BuildParams {
     pub base_z_m: f32,
     pub world_seed: u64,
     pub building_index: u32,
+    /// Zapas na wysunięcia (`Protrude`) — patrz [`Margins`].
+    pub margins: Margins,
 }
 
 /// Wynik derywacji jednego budynku.
@@ -223,12 +278,22 @@ pub struct Derived {
     /// Budżet węzłów albo głębokość przekroczone — liczone w `GenerationReport`,
     /// nigdy nie jest cichym obcięciem (M2 §5.6).
     pub truncated: bool,
+    /// Wysunięcia postawione, przycięte do granicy działki i odrzucone jako zbyt płytkie.
+    /// Trzy liczby, nie jedna: „balkony są, ale płytsze" to co innego niż „balkonów nie ma",
+    /// a bez rozróżnienia nie widać, czy brakuje miejsca, czy gramatyka prosi o za dużo.
+    pub protrusions: u32,
+    pub protrusions_clipped: u32,
+    pub protrusions_dropped: u32,
 }
 
 struct Ctx<'a> {
     g: &'a BuildingGrammar,
     mats: &'a MaterialRegistry,
     p: BuildParams,
+    /// Obrys posadowiony na parceli. Zapas na wysunięcia liczy się względem **jego** lica,
+    /// a nie lica bieżącego zakresu: balkon na cofniętym poddaszu ma tyle samo miejsca
+    /// co na piętrze poniżej, bo działka nie zwęża się razem z bryłą.
+    base: Scope,
     out: Derived,
     /// Numer węzła w porządku DFS — drugi składnik klucza RNG.
     node: u32,
@@ -240,6 +305,37 @@ struct Ctx<'a> {
 }
 
 impl Ctx<'_> {
+    /// Ile jeszcze wolno wysunąć się poza wskazaną ścianę zakresu `s`.
+    fn margines(&self, face: Face, s: &Scope) -> f32 {
+        let b = &self.base;
+        let d = Vec2::new(s.center.x - b.center.x, s.center.y - b.center.y);
+        let m = &self.p.margins;
+        // Luz: o ile lico zakresu jest **schowane** względem lica bryły. Ujemny znaczy,
+        // że zakres już wystaje (np. po `Offset`) i zapas odpowiednio topnieje.
+        let (zapas, luz) = match face {
+            Face::Front => {
+                let nad_chodnikiem = s.center.z - s.half.z >= self.p.base_z_m + OVERHANG_MIN_Z_M;
+                let z = if nad_chodnikiem {
+                    m.front_m.max(m.overhang_front_m)
+                } else {
+                    m.front_m
+                };
+                (z, d.dot(b.v()) - s.half.y + b.half.y)
+            }
+            Face::Back => (m.back_m, b.half.y - d.dot(b.v()) - s.half.y),
+            // Obie ściany boczne powstają jednym `Protrude`, więc obowiązuje ciaśniejsza.
+            Face::Side => {
+                let du = d.dot(b.u);
+                (
+                    m.side_m,
+                    (du - s.half.x + b.half.x).min(b.half.x - du - s.half.x),
+                )
+            }
+            Face::Top | Face::Bottom => (0.0, 0.0),
+        };
+        (zapas + luz).max(0.0)
+    }
+
     fn rng(&mut self) -> Rng {
         self.node += 1;
         rng(
@@ -268,6 +364,7 @@ pub fn derive(
         g,
         mats,
         p,
+        base,
         out: Derived::default(),
         node: 0,
         top_z: p.base_z_m,
@@ -360,6 +457,20 @@ fn apply(ctx: &mut Ctx, r: &Rule, s: Scope, depth: u32) {
                 }
             }
         }
+        Rule::Protrude { face, m, rule } => {
+            let d = m.min(ctx.margines(*face, &s));
+            if d < MIN_PROTRUDE_M {
+                ctx.out.protrusions_dropped += 1;
+                return;
+            }
+            if d < *m - 1e-3 {
+                ctx.out.protrusions_clipped += 1;
+            }
+            for kawalek in s.protrusions(*face, d) {
+                ctx.out.protrusions += 1;
+                apply(ctx, rule, kawalek, depth + 1);
+            }
+        }
         Rule::Choice(v) => {
             let suma: u32 = v.iter().map(|(w, _)| u32::from(*w)).sum();
             if suma == 0 {
@@ -441,7 +552,11 @@ fn apply(ctx: &mut Ctx, r: &Rule, s: Scope, depth: u32) {
             typical,
             top,
         ),
-        Rule::Roof { shape, material } => dach(ctx, s, *shape, material),
+        Rule::Roof {
+            shape,
+            material,
+            dormers,
+        } => dach(ctx, s, *shape, material, *dormers),
     }
 }
 
@@ -559,7 +674,7 @@ fn liczba_kondygnacji(ctx: &mut Ctx, count: (u8, u8)) -> u8 {
 /// Dach. Spadzisty jest schodkowany: każdy stopień to jedna bryła, bo `EditOp` nie zna
 /// płaszczyzny skośnej. Przy voxelu 0,5 m stopnie są poniżej progu widoczności z wysokości,
 /// z której M2 pokazuje miasto; profil ciągły to detal wizualny, czyli M11.
-fn dach(ctx: &mut Ctx, s: Scope, shape: RoofShape, material: &str) {
+fn dach(ctx: &mut Ctx, s: Scope, shape: RoofShape, material: &str, dormers: (u8, u8)) {
     /// Najmniejsze **poziome** cofnięcie stopnia połaci. Voxel ma 1 m w poziomie,
     /// więc stopień węższy niż to obraca się w kratownicę: dwie zagnieżdżone bryły
     /// obrócone pod kątem rasteryzują się z własnym schodkiem, a schodki się mijają.
@@ -618,7 +733,58 @@ fn dach(ctx: &mut Ctx, s: Scope, shape: RoofShape, material: &str) {
                 });
             }
             ctx.top_z = bottom + wys;
+            lukarny(ctx, s, bottom, wys, m, dormers);
         }
+    }
+}
+
+/// Lukarny na połaci frontowej. Wymiary są podyktowane rastrem, nie architekturą:
+/// przy voxelu 1 m w poziomie i 0,5 m w pionie lukarna węższa niż dwa metry albo niższa
+/// niż półtora znika w zaokrągleniu, więc mniejszej nie ma po co stawiać (korekta E12).
+///
+/// Bryła idzie **od okapu w głąb**, czyli przebija połać — i o to chodzi: to, co wystaje
+/// ponad spadek, jest lukarną, a reszta chowa się w dachu.
+fn lukarny(ctx: &mut Ctx, s: Scope, bottom: f32, wys: f32, m: MaterialId, dormers: (u8, u8)) {
+    const SZER_M: f32 = 2.0;
+    const GLEB_M: f32 = 3.0;
+    const WYS_M: f32 = 1.5;
+    /// Prześwit między sąsiednimi lukarnami; poniżej tego zlewają się w attykę.
+    const ODSTEP_M: f32 = 1.5;
+
+    if dormers.1 == 0 || wys < WYS_M + 1.0 {
+        return;
+    }
+    let (lo, hi) = (dormers.0.min(dormers.1), dormers.1);
+    let mut r = ctx.rng();
+    let ile = if hi > lo {
+        lo + (r.next_u32() % u32::from(hi - lo + 1)) as u8
+    } else {
+        lo
+    };
+    // Kalenica musi pomieścić tyle lukarn z prześwitami; nadmiar obcinamy, nie ściskamy.
+    let mieszczace = ((s.half.x * 2.0) / (SZER_M + ODSTEP_M)).floor().max(0.0) as u32;
+    let n = u32::from(ile).min(mieszczace);
+    if n == 0 {
+        return;
+    }
+    // Lukarna siedzi na dolnej trzeciej połaci — wyżej wychodzi z kalenicy, niżej z okapu.
+    let dol = bottom + (wys - WYS_M) * 0.35;
+    let gleb = GLEB_M.min(s.half.y);
+    for i in 0..n {
+        let u_mid = (i as f32 + 0.5) / n as f32 * s.half.x * 2.0 - s.half.x;
+        let srodek = s
+            .shifted(Axis::U, u_mid)
+            .shifted(Axis::V, -s.half.y + gleb * 0.5)
+            .center;
+        ctx.out.parts.push(Part {
+            scope: Scope {
+                center: glam::Vec3::new(srodek.x, srodek.y, dol + WYS_M * 0.5),
+                u: s.u,
+                half: glam::Vec3::new(SZER_M * 0.5, gleb * 0.5, WYS_M * 0.5),
+            },
+            material: m,
+            carve: false,
+        });
     }
 }
 
@@ -643,6 +809,15 @@ mod tests {
             base_z_m: 50.0,
             world_seed: 0x00C0_FFEE,
             building_index: idx,
+            // Działka testowa jest większa od bryły o dwa metry z każdej strony —
+            // tyle, żeby wysunięcia miały gdzie wyjść i żeby przycięcie dało się wymusić
+            // osobno, zerując zapas.
+            margins: Margins {
+                front_m: 2.0,
+                back_m: 2.0,
+                side_m: 2.0,
+                overhang_front_m: 0.0,
+            },
         }
     }
 
@@ -737,6 +912,206 @@ mod tests {
         assert_eq!(a.floor_heights_dm, b.floor_heights_dm);
     }
 
+    /// Minimalna gramatyka z jednym wysunięciem na wskazanej kondygnacji.
+    /// Trzy kondygnacje po 3 m, więc spód parteru jest na 0, a spód ostatniej na 6 m —
+    /// po obu stronach skrajni `OVERHANG_MIN_Z_M`, co daje się rozróżnić testem.
+    fn z_wysunieciem(face: Face, m: f32, gdzie_parter: bool) -> BuildingGrammar {
+        use crate::city::grammar::{Applies, Interior, Massing, UnitSpec, GRAMMAR_SCHEMA_VERSION};
+        let balkon = Rule::Protrude {
+            face,
+            m,
+            rule: Box::new(Rule::Fill("concrete".to_string())),
+        };
+        let pusto = Rule::Fill("stucco".to_string());
+        BuildingGrammar {
+            schema_version: GRAMMAR_SCHEMA_VERSION,
+            id: "test_protrude".to_string(),
+            applies: Applies {
+                zones: vec!["r3".to_string()],
+                epochs: Vec::new(),
+                styles: Vec::new(),
+                land_value: (0, 1_000_000),
+                frontage_m: (5.0, 50.0),
+                depth_m: (5.0, 50.0),
+                weight: 10,
+                coverage: 1.0,
+            },
+            massing: Massing {
+                setback_front_m: 0.0,
+                setback_side_m: 0.0,
+                setback_back_m: 0.0,
+                courtyard_min_m2: 0.0,
+                max_depth_m: 30.0,
+            },
+            rules: vec![Rule::Floors {
+                count: (3, 3),
+                height_m: 3.0,
+                ground_height_m: 3.0,
+                ground: Box::new(if gdzie_parter {
+                    balkon.clone()
+                } else {
+                    pusto.clone()
+                }),
+                typical: Box::new(pusto.clone()),
+                top: Box::new(if gdzie_parter { pusto } else { balkon }),
+            }],
+            refs: Vec::new(),
+            interior: Interior {
+                ground: UnitSpec {
+                    kind: UnitClass::Dwelling,
+                    area_m2: (40, 90),
+                },
+                typical: UnitSpec {
+                    kind: UnitClass::Dwelling,
+                    area_m2: (40, 90),
+                },
+                top: UnitSpec {
+                    kind: UnitClass::Dwelling,
+                    area_m2: (40, 90),
+                },
+                circulation_share: 0.1,
+            },
+        }
+    }
+
+    fn params_z_zapasem(margins: Margins) -> BuildParams {
+        let mut p = params(30_000, 1);
+        p.margins = margins;
+        p
+    }
+
+    #[test]
+    fn protrude_wychodzi_poza_lico_bryly() {
+        // Sedno operatora: `Comp` bierze płytę od środka, `Protrude` dokłada ją na zewnątrz.
+        let (_, m) = katalog();
+        let g = z_wysunieciem(Face::Front, 1.2, false);
+        let base = zakres(12.0, 16.0);
+        let out = derive(
+            &g,
+            &m,
+            base,
+            params_z_zapasem(Margins {
+                front_m: 2.0,
+                back_m: 2.0,
+                side_m: 2.0,
+                overhang_front_m: 0.0,
+            }),
+        );
+        assert_eq!(out.protrusions, 1, "wysunięcie nie powstało");
+        assert_eq!(out.protrusions_dropped, 0);
+        // Oś `v` rośnie w głąb działki, więc lico frontowe bryły jest na `-half.y`.
+        let lico = base.center.y - base.half.y;
+        let balkon = out
+            .parts
+            .iter()
+            .find(|p| p.scope.center.y < lico)
+            .expect("bryła przed licem frontowym");
+        let wysieg = lico - (balkon.scope.center.y - balkon.scope.half.y);
+        assert!(
+            (wysieg - 1.2).abs() < 1e-2,
+            "wysięg {wysieg} m zamiast 1,2 m"
+        );
+    }
+
+    #[test]
+    fn bez_miejsca_na_dzialce_wysuniecia_nie_ma_i_jest_policzone() {
+        // Cicho pominięty balkon jest gorszy od braku balkonu: nie widać, że katalog
+        // prosi o coś, czego działka nie ma jak pomieścić.
+        let (_, m) = katalog();
+        let g = z_wysunieciem(Face::Back, 1.2, false);
+        let out = derive(&g, &m, zakres(12.0, 16.0), params_z_zapasem(Margins::default()));
+        assert_eq!(out.protrusions, 0);
+        assert_eq!(out.protrusions_dropped, 1, "odrzucenie nie zostało policzone");
+    }
+
+    #[test]
+    fn wysieg_nad_chodnikiem_dopiero_powyzej_skrajni() {
+        // Działka bez zapasu od frontu, ale z prawem wysięgu nad chodnikiem: balkon
+        // na ostatniej kondygnacji (spód 6 m) wolno, na parterze (spód 0 m) nie.
+        let (_, m) = katalog();
+        let zapas = Margins {
+            front_m: 0.0,
+            back_m: 0.0,
+            side_m: 0.0,
+            overhang_front_m: 1.2,
+        };
+        let gora = derive(
+            &z_wysunieciem(Face::Front, 1.2, false),
+            &m,
+            zakres(12.0, 16.0),
+            params_z_zapasem(zapas),
+        );
+        let parter = derive(
+            &z_wysunieciem(Face::Front, 1.2, true),
+            &m,
+            zakres(12.0, 16.0),
+            params_z_zapasem(zapas),
+        );
+        assert_eq!(gora.protrusions, 1, "balkon powyżej skrajni ma stanąć");
+        assert_eq!(parter.protrusions, 0, "balkon nad jezdnią na parterze — nie");
+        assert_eq!(parter.protrusions_dropped, 1);
+    }
+
+    #[test]
+    fn wysuniecie_z_cofnietego_poddasza_ma_pelen_zapas() {
+        // Zapas liczy się od lica **bryły**, nie od lica zakresu: gdyby liczył się od zakresu,
+        // `Inset` przed `Protrude` zjadałby balkon, choć działka się nie zwęziła.
+        let (_, m) = katalog();
+        let mut g = z_wysunieciem(Face::Back, 1.2, false);
+        let Rule::Floors { top, .. } = &mut g.rules[0] else {
+            unreachable!("gramatyka testowa ma jedną regułę Floors")
+        };
+        **top = Rule::Inset {
+            m: 0.8,
+            rule: top.clone(),
+        };
+        let out = derive(
+            &g,
+            &m,
+            zakres(12.0, 16.0),
+            params_z_zapasem(Margins {
+                front_m: 0.0,
+                back_m: 1.2,
+                side_m: 0.0,
+                overhang_front_m: 0.0,
+            }),
+        );
+        assert_eq!(out.protrusions, 1);
+        assert_eq!(out.protrusions_clipped, 0, "zapas policzony od lica zakresu");
+    }
+
+    #[test]
+    fn lukarny_stoja_na_polaci_i_trzymaja_sie_widelek() {
+        let (_, m) = katalog();
+        let mut g = z_wysunieciem(Face::Back, 1.2, false);
+        g.rules.push(Rule::Roof {
+            shape: RoofShape::Gable { pitch_deg: 45 },
+            material: "roof_tile_red".to_string(),
+            dormers: (2, 3),
+        });
+        let bez = {
+            let mut h = g.clone();
+            h.rules.pop();
+            h.rules.push(Rule::Roof {
+                shape: RoofShape::Gable { pitch_deg: 45 },
+                material: "roof_tile_red".to_string(),
+                dormers: (0, 0),
+            });
+            derive(&h, &m, zakres(18.0, 16.0), params_z_zapasem(Margins::default()))
+        };
+        let z_lukarnami = derive(
+            &g,
+            &m,
+            zakres(18.0, 16.0),
+            params_z_zapasem(Margins::default()),
+        );
+        let ile = z_lukarnami.parts.len() - bez.parts.len();
+        assert!(
+            (2..=3).contains(&ile),
+            "{ile} lukarn zamiast 2–3 z widełek"
+        );
+    }
+
     #[test]
     fn kazda_gramatyka_z_repo_stawia_cos_i_miesci_sie_w_budzecie() {
         let (g, m) = katalog();
@@ -751,6 +1126,21 @@ mod tests {
                 gram.id
             );
             assert!(!out.truncated, "gramatyka {} przekroczyła budżet", gram.id);
+            // Budżet węzłów przy **maksymalnych** wymiarach z `applies`: `Repeat`
+            // rozwija się dopiero przy znanych wymiarach, więc to jest przypadek najgorszy,
+            // a średnie wymiary nie mówią o nim nic (kryterium WP18).
+            let max = derive(
+                gram,
+                &m,
+                zakres(gram.applies.frontage_m.1, gram.applies.depth_m.1),
+                params(gram.applies.land_value.1, 1),
+            );
+            assert!(
+                !max.truncated,
+                "gramatyka {} przekroczyła budżet przy największej działce ({} węzłów)",
+                gram.id,
+                max.nodes
+            );
             assert!(out.floors >= 1, "gramatyka {} bez kondygnacji", gram.id);
             assert_eq!(
                 out.floor_heights_dm.len(),
