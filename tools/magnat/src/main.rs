@@ -286,6 +286,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         numer_klatki: 0,
         koniec: false,
         obrot: false,
+        przesuw: false,
+        przeciagniecie_px: 0.0,
         ostatnia_mysz: None,
         ostatnia_klatka: Instant::now(),
         klatki: 0,
@@ -409,6 +411,8 @@ fn swiatla_testowe(
 const WZROST_OCZU_M: f32 = 1.7;
 /// Krok lotu swobodnego na jedno naciśnięcie klawisza.
 const KROK_LOTU_M: f64 = 12.0;
+/// Do tylu pikseli przeciągnięcia puszczenie prawego przycisku jest jeszcze kliknięciem.
+const PROG_KLIKNIECIA_PX: f64 = 4.0;
 
 /// Klatki rozgrzewkowe przed pomiarem.
 const BENCH_ROZGRZEWKA: u32 = 60;
@@ -474,6 +478,10 @@ struct App {
     numer_klatki: u32,
     koniec: bool,
     obrot: bool,
+    /// Przeciąganie prawym przyciskiem i suma jego drogi w pikselach — poniżej
+    /// `PROG_KLIKNIECIA_PX` puszczenie przycisku liczy się jako kliknięcie, nie przesuw.
+    przesuw: bool,
+    przeciagniecie_px: f64,
     ostatnia_mysz: Option<(f64, f64)>,
     ostatnia_klatka: Instant,
     klatki: u32,
@@ -628,11 +636,23 @@ impl ApplicationHandler for App {
                 }
             }
             WindowEvent::MouseInput { state, button, .. } => {
-                // Prawy przycisk to inspekcja (§1 pkt 5): promień przez kursor w teren
-                // i karta na konsolę. Konsola, bo UI dokłada dopiero M11 — a inspektor
-                // ma działać teraz, żeby było czym sprawdzić kontrakt `TerrainQuery`.
-                if button == MouseButton::Right && state == ElementState::Pressed {
-                    self.inspekcja();
+                // Prawy przycisk robi dwie rzeczy rozróżniane przeciągnięciem: trzymany
+                // i ciągnięty przesuwa kamerę, puszczony w miejscu robi inspekcję
+                // (§1 pkt 5) — promień przez kursor w teren i karta na konsolę.
+                // Konsola, bo UI dokłada dopiero M11.
+                if button == MouseButton::Right {
+                    match state {
+                        ElementState::Pressed => {
+                            self.przesuw = true;
+                            self.przeciagniecie_px = 0.0;
+                        }
+                        ElementState::Released => {
+                            self.przesuw = false;
+                            if self.przeciagniecie_px < PROG_KLIKNIECIA_PX {
+                                self.inspekcja();
+                            }
+                        }
+                    }
                 }
                 if button == MouseButton::Left {
                     // Klik w pieszego (decyzja 9.3). Pytamy bufor ID **przed** ustawieniem
@@ -653,10 +673,17 @@ impl ApplicationHandler for App {
             }
             WindowEvent::CursorMoved { position, .. } => {
                 let p = (position.x, position.y);
-                if self.obrot {
-                    if let Some(prev) = self.ostatnia_mysz {
-                        let (dx, dy) = ((p.0 - prev.0) as f32, (p.1 - prev.1) as f32);
+                if let Some(prev) = self.ostatnia_mysz {
+                    let (dx, dy) = ((p.0 - prev.0) as f32, (p.1 - prev.1) as f32);
+                    if self.obrot {
                         self.camera.orbit_rotate(-dx * 0.005, dy * 0.005);
+                    }
+                    if self.przesuw {
+                        self.przeciagniecie_px += f64::from(dx.abs() + dy.abs());
+                        // „Chwyt" za teren: punkt pod kursorem ma zostać pod kursorem,
+                        // więc cel jedzie w stronę przeciwną do ruchu myszy.
+                        let k = self.metry_na_piksel();
+                        self.camera.orbit_pan(-dx * k, dy * k);
                     }
                 }
                 self.ostatnia_mysz = Some(p);
@@ -831,6 +858,21 @@ impl App {
             None => renderer.set_overlay(None),
         }
         eprintln!("nakładka: {}", self.nakladka.nazwa());
+    }
+
+    /// Ile metrów na płaszczyźnie celu odpowiada jednemu pikselowi ekranu.
+    ///
+    /// Bez tego przesuw byłby albo ślamazarny z orbity, albo nie do opanowania
+    /// z poziomu ulicy — dystans orbity zmienia się tu o trzy rzędy wielkości.
+    fn metry_na_piksel(&self) -> f32 {
+        let CameraMode::Orbit { dist, .. } = self.camera.mode else {
+            return 0.0;
+        };
+        let h = self
+            .renderer
+            .as_ref()
+            .map_or(1080, |r| r.gpu.config.height.max(1));
+        2.0 * dist * (self.camera.fov_deg.to_radians() * 0.5).tan() / h as f32
     }
 
     /// Wypisuje kartę inspekcji punktu pod kursorem.

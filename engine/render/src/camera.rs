@@ -241,9 +241,11 @@ impl CameraState {
         };
         let (s, c) = (f64::from(yaw.sin()), f64::from(yaw.cos()));
         if let CameraMode::Orbit { target, .. } = &mut self.mode {
-            // Oś „w prawo" na ekranie to oś prostopadła do kierunku patrzenia w poziomie.
-            target.x += f64::from(right_m) * c - f64::from(up_m) * s;
-            target.y -= f64::from(right_m) * s + f64::from(up_m) * c;
+            // Oś „w prawo" na ekranie to `forward × Z` (baza prawoskrętna, up = +Z),
+            // czyli (−cos yaw, sin yaw); „w górę" rzutowane na poziom to sam kierunek
+            // patrzenia, czyli (−sin yaw, −cos yaw).
+            target.x -= f64::from(right_m) * c + f64::from(up_m) * s;
+            target.y += f64::from(right_m) * s - f64::from(up_m) * c;
         }
     }
 
@@ -342,6 +344,33 @@ mod tests {
             (c.target() - c.eye()).normalize().distance(patrzy) < TOL_M,
             "pierwsza osoba obróciła kamerę"
         );
+    }
+
+    #[test]
+    fn pan_przesuwa_cel_w_osiach_ekranu() {
+        // Przeciąganie ma być „chwytem" za teren: cel jedzie dokładnie w ekranowe prawo
+        // i w ekranową górę. Znak łatwo tu odwrócić i nikt tego nie zauważy w typie,
+        // więc bazę liczymy z kierunku patrzenia, nie z pamięci.
+        let mut c = CameraState::default();
+        let CameraMode::Orbit { .. } = c.mode else {
+            panic!("domyślna kamera nie jest orbitą");
+        };
+        c.orbit_rotate(0.7, 0.0);
+        let prawo = c.forward().cross(Vec3::Z).normalize();
+        let gora = {
+            let f = c.forward();
+            Vec3::new(f.x, f.y, 0.0).normalize()
+        };
+
+        let przed = c.target();
+        c.orbit_pan(10.0, 0.0);
+        let d = (c.target() - przed).as_vec3();
+        assert!(d.dot(prawo) > 9.99, "pan w prawo poszedł nie w prawo: {d:?}");
+
+        let przed = c.target();
+        c.orbit_pan(0.0, 10.0);
+        let d = (c.target() - przed).as_vec3();
+        assert!(d.dot(gora) > 9.99, "pan w górę poszedł nie w górę: {d:?}");
     }
 
     #[test]
