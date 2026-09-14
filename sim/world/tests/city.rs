@@ -230,7 +230,7 @@ fn struktury_miesza_sie_w_limitach_klasy() {
     )
     .unwrap();
     for s in &c.roads.segments {
-        let spec = s.class.spec();
+        let spec = magnat_world::city::road::spec(s.class);
         let dl_m = f64::from(s.length_dm) / 10.0;
         match s.structure {
             RoadStructure::Bridge { .. } => assert!(
@@ -487,7 +487,10 @@ fn hierarchia_klas_jest_monotoniczna() {
         RoadClass::Service,
     ];
     for w in kolejno.windows(2) {
-        let (a, b) = (w[0].spec(), w[1].spec());
+        let (a, b) = (
+            magnat_world::city::road::spec(w[0]),
+            magnat_world::city::road::spec(w[1]),
+        );
         assert!(a.row_m >= b.row_m);
         assert!(a.seg_len_m >= b.seg_len_m);
         assert!(a.max_slope_pct <= b.max_slope_pct);

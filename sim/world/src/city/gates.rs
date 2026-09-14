@@ -333,8 +333,8 @@ fn place_edge_gate(
 /// Koszt wprowadzenia drogi w głąb lądu. `None` = kandydat dyskwalifikowany.
 fn edge_probe_cost(t: &dyn TerrainQuery, pos: Vec2, dir: Vec2, kind: GateKind) -> Option<i32> {
     let max_slope = match kind {
-        GateKind::Highway => super::road::RoadClass::Highway.spec().max_slope_units(),
-        _ => super::road::RoadClass::RailFreight.spec().max_slope_units(),
+        GateKind::Highway => super::road::spec(super::road::RoadClass::Highway).max_slope_units(),
+        _ => super::road::spec(super::road::RoadClass::RailFreight).max_slope_units(),
     };
     let mut cost = 0i32;
     let mut przeprawy = 0;

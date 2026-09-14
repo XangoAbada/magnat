@@ -5,6 +5,9 @@
 //! i kierunki ruchu są wyprowadzane z tego przez M4 przy budowie `RoadGraph` — i dlatego
 //! `RoadSegment` nie ma pola, które istniałoby tylko po to, żeby przez drogę przejechać.
 
+/// `RoadClass` mieszka w `engine/core` (K-23) — reeksport, żeby nazwy z M2 §6 zostały.
+pub use magnat_core::RoadClass;
+
 use magnat_core::DistrictId;
 use magnat_spatial::{Aabb2, Vec2};
 
@@ -81,85 +84,25 @@ impl PolyArena {
 /// Klasa drogi. Kolejność wariantów jest kolejnością **malejącej rangi** dla dróg
 /// kołowych; do porównań służy jednak [`RoadClass::rank`], a nie `Ord` — inaczej
 /// „klasa ≥ Collector" czytałoby się odwrotnie, niż znaczy.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
-pub enum RoadClass {
-    Highway,
-    Arterial,
-    Collector,
-    Local,
-    Service,
-    Pedestrian,
-    RailFreight,
-    RailPassenger,
+/// Parametry klasy drogi. `RoadClass` mieszka w `engine/core` (K-23) — tu zostają
+/// wyłącznie dane generacji miasta, których M4 nie potrzebuje.
+#[must_use]
+pub const fn spec(class: RoadClass) -> ClassSpec {
+    SPECS[class as usize]
 }
 
-impl RoadClass {
-    /// Ranga: im wyżej w hierarchii ulicznej, tym większa. Tory mają rangę 0 —
-    /// nie uczestniczą w hierarchii dróg kołowych i nigdy nie są celem snapowania.
-    #[must_use]
-    pub const fn rank(self) -> u8 {
-        match self {
-            RoadClass::Highway => 6,
-            RoadClass::Arterial => 5,
-            RoadClass::Collector => 4,
-            RoadClass::Local => 3,
-            RoadClass::Service => 2,
-            RoadClass::Pedestrian => 1,
-            RoadClass::RailFreight | RoadClass::RailPassenger => 0,
-        }
-    }
-
-    /// Czy klasa niesie ruch kołowy (wchodzi do testu spójności T1 i do wyznaczania
-    /// kwartałów).
-    #[must_use]
-    pub const fn is_driveable(self) -> bool {
-        matches!(
-            self,
-            RoadClass::Highway
-                | RoadClass::Arterial
-                | RoadClass::Collector
-                | RoadClass::Local
-                | RoadClass::Service
-        )
-    }
-
-    #[must_use]
-    pub const fn is_rail(self) -> bool {
-        matches!(self, RoadClass::RailFreight | RoadClass::RailPassenger)
-    }
-
-    /// Czy klasa zabrania ruchu ciężkiego — flaga [`RoadFlags::NO_HEAVY`].
-    ///
-    /// **Korekta D6 (M2d).** Do M2c flagę dostawała każda klasa o jakimkolwiek limicie
-    /// tonażu, czyli także kolektor (40 t). Test T4 fazy wymaga rampy „przy drodze bez
-    /// `NO_HEAVY`", a strefy przemysłowe frontują zwykle do kolektora — kryterium było
-    /// więc niespełnialne z powodu progu w jednej linii, nie z powodu urbanistyki.
-    /// Próg 24 t to typowa masa całkowita trzyosiowej ciężarówki: poniżej niej droga
-    /// faktycznie zabrania ruchu ciężkiego, powyżej tylko ogranicza.
-    #[must_use]
-    pub const fn forbids_heavy(self) -> bool {
-        let t = self.spec().max_tonnage_t;
-        matches!(self, RoadClass::Pedestrian) || (t > 0 && t < 24)
-    }
-
-    #[must_use]
-    pub const fn key(self) -> &'static str {
-        match self {
-            RoadClass::Highway => "highway",
-            RoadClass::Arterial => "arterial",
-            RoadClass::Collector => "collector",
-            RoadClass::Local => "local",
-            RoadClass::Service => "service",
-            RoadClass::Pedestrian => "pedestrian",
-            RoadClass::RailFreight => "rail_freight",
-            RoadClass::RailPassenger => "rail_passenger",
-        }
-    }
-
-    #[must_use]
-    pub const fn spec(self) -> ClassSpec {
-        SPECS[self as usize]
-    }
+/// Czy klasa zabrania ruchu ciężkiego — flaga [`RoadFlags::NO_HEAVY`].
+///
+/// **Korekta D6 (M2d).** Do M2c flagę dostawała każda klasa o jakimkolwiek limicie
+/// tonażu, czyli także kolektor (40 t). Test T4 fazy wymaga rampy „przy drodze bez
+/// `NO_HEAVY`", a strefy przemysłowe frontują zwykle do kolektora — kryterium było
+/// więc niespełnialne z powodu progu w jednej linii, nie z powodu urbanistyki.
+/// Próg 24 t to typowa masa całkowita trzyosiowej ciężarówki: poniżej niej droga
+/// faktycznie zabrania ruchu ciężkiego, powyżej tylko ogranicza.
+#[must_use]
+pub const fn forbids_heavy(class: RoadClass) -> bool {
+    let t = spec(class).max_tonnage_t;
+    matches!(class, RoadClass::Pedestrian) || (t > 0 && t < 24)
 }
 
 /// Parametry klasy drogi — tabela z M2 §5.2, w kodzie w jednym miejscu.
@@ -628,9 +571,9 @@ mod tests {
     #[test]
     fn prog_nachylenia_zgadza_sie_z_tabela() {
         // 5% → tan 0,05 → 0,05·64 = 3,2 → 3 jednostki `slope_at`.
-        assert_eq!(RoadClass::Highway.spec().max_slope_units(), 3);
-        assert_eq!(RoadClass::Service.spec().max_slope_units(), 9);
-        assert_eq!(RoadClass::RailFreight.spec().max_slope_units(), 1);
+        assert_eq!(spec(RoadClass::Highway).max_slope_units(), 3);
+        assert_eq!(spec(RoadClass::Service).max_slope_units(), 9);
+        assert_eq!(spec(RoadClass::RailFreight).max_slope_units(), 1);
     }
 
     #[test]

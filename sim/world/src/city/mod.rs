@@ -1288,7 +1288,7 @@ fn place_furniture(
 ) -> Vec<StreetFurniture> {
     let mut out = Vec::new();
     for (i, s) in segments.iter().enumerate() {
-        let spacing = f32::from(s.class.spec().lamp_spacing_m);
+        let spacing = f32::from(road::spec(s.class).lamp_spacing_m);
         if spacing <= 0.0 || !matches!(s.structure, road::RoadStructure::AtGrade) {
             continue;
         }

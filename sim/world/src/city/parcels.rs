@@ -314,7 +314,7 @@ fn split_recursive(
     } else {
         RoadClass::Local
     };
-    let row = f32::from(class.spec().row_m);
+    let row = f32::from(super::road::spec(class).row_m);
 
     // Punkt cięcia: 0,5 ± U(−0,12; 0,12) wzdłuż dłuższej osi (M2 §5.4).
     let u = 0.5 + (r.gen_range_u32(241) as f32 / 1000.0 - 0.12);
@@ -343,7 +343,7 @@ fn split_recursive(
         anchor_b: sb.owner[o1].seg().map(|seg| Anchor { seg, pos: pb }),
     });
 
-    let owner = Owner::Street(class.rank(), class.spec().row_m);
+    let owner = Owner::Street(class.rank(), super::road::spec(class).row_m);
     let a = cut(&sb, origin + axis * (row * 0.5), axis, owner);
     let b = cut(&sb, origin - axis * (row * 0.5), -axis, owner);
     for h in [a, b] {
@@ -621,13 +621,13 @@ fn push_street(
     class: RoadClass,
     ciezki: bool,
 ) {
-    let spec = class.spec();
+    let spec = super::road::spec(class);
     let (pa, pb) = (net.nodes[a.0 as usize].pos, net.nodes[b.0 as usize].pos);
     let mut flags = RoadFlags::SIDEWALK;
     if spec.lanes_bwd == 0 {
         flags = flags.with(RoadFlags::ONEWAY);
     }
-    if class.forbids_heavy() && !ciezki {
+    if super::road::forbids_heavy(class) && !ciezki {
         flags = flags.with(RoadFlags::NO_HEAVY);
     }
     net.segments.push(RoadSegment {
@@ -890,7 +890,7 @@ pub fn subdivide(
         let (na, nb) = (net.nodes[a.0 as usize], net.nodes[b.0 as usize]);
         let dh = f64::from((nb.z_dm - na.z_dm).abs()) * 0.1;
         let dl = f64::from((nb.pos - na.pos).length()).max(1.0);
-        if ((dh / dl) * 64.0) as u8 > st.class.spec().max_slope_units() {
+        if ((dh / dl) * 64.0) as u8 > super::road::spec(st.class).max_slope_units() {
             zbyt_strome += 1;
             continue;
         }

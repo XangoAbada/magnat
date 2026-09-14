@@ -11,6 +11,7 @@ mod agents;
 mod century;
 mod day;
 mod m3day;
+mod nav;
 mod population;
 mod testworld;
 mod worldgen;
@@ -109,6 +110,8 @@ enum Command {
     Population(population::PopulationArgs),
     /// Artefakt fazy M3: doba w zaludnionym mieście przez systemy ECS §5.12 (M3d).
     M3day(m3day::M3DayArgs),
+    /// Graf nawigacyjny i router: inspektor krawędzi, budżety zapytań (M4a).
+    Nav(nav::NavArgs),
 }
 
 fn uruchom() -> Result<std::process::ExitCode, Box<dyn std::error::Error>> {
@@ -123,6 +126,7 @@ fn uruchom() -> Result<std::process::ExitCode, Box<dyn std::error::Error>> {
         Some(Command::Century(a)) => return century::run(a),
         Some(Command::Population(a)) => return population::run(a),
         Some(Command::M3day(a)) => return m3day::run(a),
+        Some(Command::Nav(a)) => return nav::run(a),
         None => {}
     }
 

@@ -49,5 +49,13 @@
   "m3a-1 des/doba 200 tys. agentow": 61285981.66666667,
   "m3a-2 potrzeby/godzina 400 tys. (skutki deprywacji)": 239801.64937166794,
   "m3a-2 potrzeby/tick 400 tys. (spadek, shard 1_60)": 64941.23388581952,
-  "m3a-3 populacja/spawn 400 tys. mieszkancow": 3405636000.0
+  "m3a-3 populacja/spawn 400 tys. mieszkancow": 3405636000.0,
+  "m4a-1 graph/budowa sieci 100x100x10": 6497970.634920634,
+  "m4a-2 alt/trasa bez landmarkow (dijkstra)": 381853.5211267605,
+  "m4a-2 alt/trasa z landmarkami": 65446.68150411906,
+  "m4a-2 cache/get (trafienie)": 6.317283842675267,
+  "m4a-2 cache/insert": 12.853876652425521,
+  "m4a-2 cch/kustomizacja 3 profile": 108847730.0,
+  "m4a-2 cch/query heavy_day (co 7. ulica z limitem 10 t)": 37829.0,
+  "m4a-2 cch/query passenger (188k wezlow sieci drogowej)": 43056.0
 }

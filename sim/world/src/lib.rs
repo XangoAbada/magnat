@@ -21,6 +21,7 @@ pub mod gen;
 pub mod geology;
 pub mod grid;
 pub mod io;
+pub mod nav_build;
 pub mod noise;
 pub mod params;
 pub mod pipeline;
@@ -74,6 +75,7 @@ pub use deposit::{Deposit, DepositId, DepositShape};
 pub use geology::{ColumnStack, GeologyModel, TerrainLayer};
 pub use grid::Grid2;
 pub use io::{load_mgw, save_mgw, WorldIoError, MGW_VERSION};
+pub use nav_build::{build_nav, NavBuildError, NavBuildReport};
 pub use params::{
     Difficulty, EconomyProfile, Epoch, ParamError, Region, WorldGenParams, WorldSize,
     CLIMATE_CELL_M, WORK_CELL_M,

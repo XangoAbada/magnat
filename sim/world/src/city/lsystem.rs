@@ -255,7 +255,7 @@ impl<'a> Builder<'a> {
         structure: RoadStructure,
         extra: RoadFlags,
     ) -> SegmentId {
-        let spec = class.spec();
+        let spec = super::road::spec(class);
         let (pa, pb) = (self.nodes[a.0 as usize].pos, self.nodes[b.0 as usize].pos);
         let geom = self.geom.push(&[pa, pb]);
         let mut flags = extra.with(RoadFlags::SIDEWALK);
@@ -265,7 +265,7 @@ impl<'a> Builder<'a> {
         if class.is_rail() {
             flags = RoadFlags::RAIL.with(extra);
         }
-        if class.forbids_heavy() {
+        if super::road::forbids_heavy(class) {
             flags = flags.with(RoadFlags::NO_HEAVY);
         }
         let id = SegmentId(self.segments.len() as u32);
@@ -465,7 +465,7 @@ impl<'a> Builder<'a> {
     /// Próba wyprowadzenia segmentu z propozycji. Zwraca węzeł końcowy i to,
     /// czy kontynuacja ma sens (scalenie z istniejącym węzłem ją wygasza).
     fn grow(&mut self, prop: &Proposal, near: &mut Vec<u32>) -> Option<(NodeId, Vec2, bool)> {
-        let spec = prop.class.spec();
+        let spec = super::road::spec(prop.class);
         let from = self.nodes[prop.from.0 as usize].pos;
         let mut r = rng(self.plan.seed, StreamId::RoadsL, prop.seq, Tick(0));
 
@@ -886,7 +886,7 @@ pub fn grow_network(
         // przy 1209 segmentach na budżecie 1600 i zostawała drzewem.
         let p_end = b.nodes[node.0 as usize].pos;
         let r_end = (p_end - gp.center).length();
-        let spec = prop.class.spec();
+        let spec = super::road::spec(prop.class);
         let limit_generacji = prop.gen + 1 > spec.max_gen;
         let mut r = rng(plan.seed, StreamId::RoadsL, prop.seq, Tick(1));
 

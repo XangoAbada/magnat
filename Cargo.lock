@@ -1466,6 +1466,7 @@ dependencies = [
  "magnat-ecs",
  "magnat-io",
  "magnat-jobs",
+ "magnat-nav",
  "magnat-spatial",
  "magnat-ui",
  "magnat-voxel",
@@ -1491,6 +1492,16 @@ version = "0.1.0"
 dependencies = [
  "parking_lot",
  "rayon",
+]
+
+[[package]]
+name = "magnat-nav"
+version = "0.1.0"
+dependencies = [
+ "criterion",
+ "magnat-core",
+ "magnat-jobs",
+ "smallvec",
 ]
 
 [[package]]
@@ -1568,6 +1579,7 @@ dependencies = [
  "magnat-ecs",
  "magnat-io",
  "magnat-jobs",
+ "magnat-nav",
  "magnat-spatial",
  "magnat-voxel",
  "proptest",

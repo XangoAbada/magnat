@@ -143,6 +143,76 @@ vocab_enum! {
 /// Liczba kategorii zapasu — rozmiar tablicy `Household.stock`.
 pub const STOCK_CAT_COUNT: usize = StockCat::ALL.len();
 
+vocab_enum! {
+    /// Klasa drogi w hierarchii ulicznej. **Kolejność jest kontraktem** — indeksuje
+    /// tablicę `SPECS` generatora miasta w `sim/world`.
+    ///
+    /// W `core`, bo mówią nią dwie fazy i nie mogą jej sobie podać: M2 (`sim/world`)
+    /// planuje sieć i nadaje klasę, M4 (`engine/nav`) buduje z niej graf przejezdny.
+    /// Zależność `engine/nav → sim/world` jest niedopuszczalna, bo `sim/world` zależy
+    /// od `sim/agents`, a `sim/agents` od M4b zależy od `engine/nav` (`Z-1`) — powstałby
+    /// dokładnie ten cykl, przed którym broni `K-8`. Dalsi konsumenci: M8 (remonty
+    /// i regulacje ruchu), M11 (render sieci wg klasy).
+    ///
+    /// `core` nie dostaje przy tym parametrów klasy: `ClassSpec` (szerokość pasa,
+    /// długość odcinka, limity mostu i tunelu) zostaje w `sim/world`, bo to dane
+    /// generacji miasta, a nie słownik.
+    RoadClass {
+        Highway, Arterial, Collector, Local, Service, Pedestrian, RailFreight, RailPassenger,
+    }
+}
+
+impl RoadClass {
+    /// Ranga: im wyżej w hierarchii ulicznej, tym większa. Tory mają rangę 0 —
+    /// nie uczestniczą w hierarchii dróg kołowych i nigdy nie są celem snapowania.
+    #[must_use]
+    pub const fn rank(self) -> u8 {
+        match self {
+            RoadClass::Highway => 6,
+            RoadClass::Arterial => 5,
+            RoadClass::Collector => 4,
+            RoadClass::Local => 3,
+            RoadClass::Service => 2,
+            RoadClass::Pedestrian => 1,
+            RoadClass::RailFreight | RoadClass::RailPassenger => 0,
+        }
+    }
+
+    /// Czy klasa niesie ruch kołowy (wchodzi do testu spójności T1 fazy M2 i do
+    /// wyznaczania kwartałów).
+    #[must_use]
+    pub const fn is_driveable(self) -> bool {
+        matches!(
+            self,
+            RoadClass::Highway
+                | RoadClass::Arterial
+                | RoadClass::Collector
+                | RoadClass::Local
+                | RoadClass::Service
+        )
+    }
+
+    #[must_use]
+    pub const fn is_rail(self) -> bool {
+        matches!(self, RoadClass::RailFreight | RoadClass::RailPassenger)
+    }
+
+    /// Klucz tekstowy — stabilny identyfikator w `data/` i w zapisie gry.
+    #[must_use]
+    pub const fn key(self) -> &'static str {
+        match self {
+            RoadClass::Highway => "highway",
+            RoadClass::Arterial => "arterial",
+            RoadClass::Collector => "collector",
+            RoadClass::Local => "local",
+            RoadClass::Service => "service",
+            RoadClass::Pedestrian => "pedestrian",
+            RoadClass::RailFreight => "rail_freight",
+            RoadClass::RailPassenger => "rail_passenger",
+        }
+    }
+}
+
 impl StockCat {
     /// Potrzeba, którą uzupełnia zakup w tej kategorii. Odwzorowanie jest tutaj,
     /// a nie w danych, bo jest **definicją kategorii**, nie parametrem do strojenia:

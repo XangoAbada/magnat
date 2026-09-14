@@ -64,7 +64,7 @@ pub fn build_rail(
     segments_before: usize,
 ) -> RailReport {
     let mut rep = RailReport::default();
-    let spec = RoadClass::RailFreight.spec();
+    let spec = super::road::spec(RoadClass::RailFreight);
     let cele = klastry(blocks, zones, centroid, segments_before, f);
     let bramy: Vec<&GateSpot> = gp.gates.iter().filter(|g| g.kind.is_rail()).collect();
     if bramy.is_empty() || cele.is_empty() {

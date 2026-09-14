@@ -53,6 +53,6 @@ pub use types::{
 };
 pub use vocab::{
     ActivityKind, Biome, CommitmentKind, DeprivationEffect, LifeEventKind, MigrationKind, NeedKind,
-    PlaceKind, PlaceRef, ResourceKind, StockCat, TraitId, TransportMode, UtilityKind,
+    PlaceKind, PlaceRef, ResourceKind, RoadClass, StockCat, TraitId, TransportMode, UtilityKind,
     UtilityService, WorldCoord, NEED_COUNT, STOCK_CAT_COUNT,
 };

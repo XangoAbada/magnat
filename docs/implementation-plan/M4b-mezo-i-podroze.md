@@ -155,3 +155,19 @@ i ekonomię; kontrakt zdarzenia się nie zmieni.
 
 EV: ta sama ścieżka, `FuelKind::Electric`, ładowarka jako `FuelStation` o długim czasie obsługi.
 Obciążenie sieci energetycznej — M8 (M4 emituje tylko `Energy` pobraną).
+
+---
+
+## Zmiany wpisane po M4a
+
+Zgodnie z `K-18`. To są rzeczy, o których M4b wie **na pewno** po zamknięciu M4a;
+M4b nie jest tu przeprojektowywany. Gwiazdka = zmiana zakresu albo kryterium.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| Y-1 ★ | **3,5 % węzłów drogowych metropolii leży poza największą składową silnie spójną** (11 603 z 12 031 słabo spójnych) i **2,8 % losowych par origin–cel nie ma trasy**. M4b musi to rozstrzygnąć **w wyborze środka transportu**, nie w przejeździe: `Router::route → None` dla samochodu znaczy „ten mieszkaniec nie dojedzie autem", a nie „podróż się nie udała" | Zmierzone w `headless nav --size 16km` po dołożeniu do walidatora składowej silnej (`J-18` w M4a). Różnica bierze się z ulic jednokierunkowych: węzeł na końcu jednokierunkowej ślepej uliczki jest **słabo** spójny z miastem i nieosiągalny naprawdę. Konsekwencja jest twarda, bo M4 §7.1 wymaga `no_mid_trip_restriction_failure == 0`: niewykonalność ma się objawiać przy planowaniu. Router już to robi — brakuje ramienia po stronie mieszkańca |
+| Y-2 ★ | **Punktem podmiany jest `Sources.travel`, a moduł `walk` kasuje się w całości** (`Z-1`, `Z-3`). M4a **nie ruszył** `sim/agents` ani `population::siec_piesza` — oba czekają na M4b. Warstwa pieszo-rowerowa w `engine/nav` jest gotowa: 12 145 węzłów, 29 170 krawędzi, składowa silna == słaba, A\* landmarkowy **5,8× szybszy** od czystej Dijkstry | M4a dostarczał graf i router, nie podróże. Podmiana `TravelOracle` wymaga `TripRequest` i kolejki DES, czyli WP4 — robienie jej wcześniej rozdzieliłoby jedną zmianę na dwa commity wbrew regule „podfaza = jeden commit" |
+| Y-3 | **`Router::route` bierze `&mut self` i zwraca `Option<Arc<Route>>`** (`J-13` w M4a). Routing **równoległy** nie istnieje i to M4b ma go zaprojektować, jeśli go potrzebuje — budżet §7.3 zakłada rozłożenie zapytań na 8 wątków | Bufory wyszukiwania i cache wymagają `&mut`, a `Mutex` na tej ścieżce zjadłby budżet, którego broni. Zmierzone dziś: metropolia, p95 **32,8 µs** na zapytanie z rozpakowaniem trasy, trafialność cache w scenariuszu dwuprzebiegowym. 100 zapytań na minutę gry to **3,3 ms jednowątkowo** wobec budżetu 1,5 ms — więc albo sesja per wątek, albo mniej zapytań dzięki cache'owi. Liczba jest znana, decyzja należy do M4b |
+| Y-4 | **Pojemność `RouteCache` jest wymaganiem wdrożeniowym, nie parametrem do strojenia** (`J-12`): ≥ 2× liczba odrębnych par origin–cel, a klucz niesie kubełek godzinowy, więc par jest ~2× liczba dojeżdżających | Trafialność ≥ 90 % osiąga się przy pojemności 16 384 na 5 000 par (918 ‰); przy 8 192 spada do 763 ‰. M4b zna liczbę mieszkańców i to on musi wyliczyć pojemność z niej, a nie przyjąć stałą |
+| Y-5 | **`Route.planned_cost` jest dziś `Money::ZERO`** i to WP5 ma go wypełnić. `Route.cost_cs` niesie koszt w setnych sekundy — to, co router naprawdę minimalizował | Zerowa kwota jest uczciwsza niż zmyślona: cennik paliwa wchodzi z WP5, taryfa z M4c/WP10. Pole istnieje, żeby M4b nie musiał zmieniać kształtu `Route` |
+| Y-6 | **Warstwa kolejowa metropolii ma 20 węzłów w składowej i 12 032 izolowane** — to bocznice towarowe M2, nie sieć pasażerska | `RoadClass::RailPassenger` istnieje jako klasa i rodzaj bramy, ale **żaden generator jej nie zapisuje** (M2 `rail.rs` stawia wyłącznie `RailFreight`). Kolej pasażerska jako środek transportu nie ma więc na czym jeździć — dotyczy to `TransportMode::Rail` w wyborze środka (M4c/WP6) i linii szynowych w WP10 |

@@ -4,6 +4,7 @@ members = [
     "engine/core",
     "engine/ecs",
     "engine/jobs",
+    "engine/nav",
     "engine/io",
     "engine/devtools",
     "engine/render",
@@ -29,6 +30,7 @@ publish = false
 magnat-core = { path = "engine/core" }
 magnat-ecs = { path = "engine/ecs" }
 magnat-jobs = { path = "engine/jobs" }
+magnat-nav = { path = "engine/nav" }
 magnat-io = { path = "engine/io" }
 magnat-devtools = { path = "engine/devtools" }
 magnat-render = { path = "engine/render" }

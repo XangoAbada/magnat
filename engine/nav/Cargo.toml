@@ -1,0 +1,26 @@
+[package]
+name = "magnat-nav"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+# Testy jednostkowe nie są benchmarkami (jak w pozostałych crate'ach — M1 §D-8).
+[lib]
+bench = false
+
+[dependencies]
+magnat-core = { workspace = true }
+magnat-jobs = { workspace = true }
+smallvec = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+
+[lints]
+workspace = true
+
+[[bench]]
+name = "nav_bench"
+harness = false
