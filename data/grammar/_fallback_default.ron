@@ -1,0 +1,56 @@
+// Gramatyka awaryjna (M2 §5.6): parcela, dla której żadna gramatyka nie przeszła filtru
+// `applies`, dostaje **tę** i licznik w `GenerationReport`. Test akceptacyjny: udział
+// fallbacku < 2%. Nie jest to gramatyka „byle jaka" — ma wyglądać jak skromny budynek,
+// a nie jak pudełko, bo inaczej awaria maskuje się jako styl.
+//
+// `_fallback_<strefa>` przykrywa tę gramatykę dla wskazanej strefy; bez takiego pliku
+// obowiązuje ta.
+(
+    schema_version: 1,
+    id: "_fallback_default",
+    applies: (
+        zones: [],
+        epochs: [],
+        styles: [],
+        land_value: (0, 100000000),
+        frontage_m: (3.0, 400.0),
+        depth_m: (3.0, 400.0),
+        weight: 1,
+    ),
+    massing: (
+        setback_front_m: 2.0,
+        setback_side_m: 1.5,
+        setback_back_m: 2.0,
+        max_depth_m: 14.0,
+    ),
+    rules: [
+        Foundation(depth_m: 1.2, material: "concrete", basements: 0),
+        Floors(
+            count: (1, 2),
+            height_m: 3.0,
+            ground_height_m: 3.2,
+            ground: Ref("sciana"),
+            typical: Ref("sciana"),
+            top: Ref("sciana"),
+        ),
+        Roof(shape: Flat, material: "roof_felt"),
+    ],
+    refs: [
+        ("sciana", Seq([
+            Fill("stucco"),
+            Comp(thickness_m: 1.2, faces: [
+                (Front, Repeat(axis: U, step_m: 4.8, pad_m: 1.4, rule: Split(axis: W, parts: [
+                    (Abs(0.9), Nothing),
+                    (Abs(1.4), Void),
+                    (Rel(1.0), Nothing),
+                ]))),
+            ]),
+        ])),
+    ],
+    interior: (
+        ground: (kind: Workshop, area_m2: (30, 120)),
+        typical: (kind: Workshop, area_m2: (30, 120)),
+        top: (kind: Storage, area_m2: (30, 120)),
+        circulation_share: 0.10,
+    ),
+)

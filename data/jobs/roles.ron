@@ -1,0 +1,58 @@
+// Role zawodowe i widełki płacowe (M2 §6, kontrakt dla M3 — decyzja 9.1/8).
+//
+// To są **widełki, nie pensje**. Pensja emergentna z licytacji o pracownika należy do M7;
+// M2 daje przedział startowy, żeby Etap 8 (M3) miał czym dopasować dochody rodzin
+// do wartości mieszkań. Para do zestawienia: `WageBand.median` ↔ `Unit.rent_hint`
+// ↔ `Parcel.land_value_per_m2`.
+//
+// Katalog jest **minimalny z rozmysłem**: jedna rola na rodzaj lokalu. Pełny katalog
+// ról zawodowych należy do M7 (rynek pracy), a archetypy zakładów — które przeliczają
+// powierzchnię na stanowiska i mnożą widełki przez `wage_mult` — do M2e (WP13).
+// Dopóki ich nie ma, przelicznik `m2_per_workplace` stoi tutaj.
+//
+// Kwoty w **groszach miesięcznie, brutto** (00 §2: pieniądz to i64 w groszach).
+(
+    schema_version: 1,
+
+    // Mnożnik płac w pierścieniu epoki. Nie jest to model inflacji — ten należy do M5 —
+    // tylko różnica poziomu życia między epoką, w której powstała zabudowa, a dziś.
+    epoch_wage_mult: [
+        ("medieval", 0.15),
+        ("industrial", 0.24),
+        ("interwar", 0.36),
+        ("postwar", 0.58),
+        ("transition", 0.78),
+        ("contemporary", 1.0),
+    ],
+
+    roles: [
+        (
+            key: "retail_clerk",
+            unit: Retail,
+            m2_per_workplace: 30,
+            shift: II,
+            wage_base: (260000, 330000, 470000),
+        ),
+        (
+            key: "office_clerk",
+            unit: Office,
+            m2_per_workplace: 14,
+            shift: I,
+            wage_base: (380000, 520000, 880000),
+        ),
+        (
+            key: "production_worker",
+            unit: Workshop,
+            m2_per_workplace: 45,
+            shift: III,
+            wage_base: (310000, 420000, 610000),
+        ),
+        (
+            key: "warehouse_operator",
+            unit: Storage,
+            m2_per_workplace: 260,
+            shift: II,
+            wage_base: (290000, 380000, 520000),
+        ),
+    ],
+)

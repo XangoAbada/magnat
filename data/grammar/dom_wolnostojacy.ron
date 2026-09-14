@@ -1,0 +1,68 @@
+// R1 — dom wolnostojący na dużej działce. Cofnięty od ulicy i od granic, dach spadzisty,
+// poddasze zawężone (`Inset`). Pierścienie międzywojenne i późniejsze: przed 1918 domu
+// wolnostojącego w mieście praktycznie nie ma, jest przedmieście albo wieś.
+(
+    schema_version: 1,
+    id: "dom_wolnostojacy",
+    applies: (
+        zones: ["r1"],
+        epochs: ["interwar", "postwar", "transition", "contemporary"],
+        styles: [],
+        land_value: (0, 4000000),
+        frontage_m: (8.0, 90.0),
+        depth_m: (8.0, 300.0),
+        weight: 40,
+    ),
+    massing: (
+        setback_front_m: 6.0,
+        setback_side_m: 3.5,
+        setback_back_m: 8.0,
+        max_depth_m: 13.0,
+    ),
+    rules: [
+        Foundation(depth_m: 1.4, material: "concrete", basements: 1),
+        Floors(
+            count: (1, 2),
+            height_m: 2.8,
+            ground_height_m: 3.0,
+            ground: Ref("parter"),
+            typical: Ref("pietro"),
+            top: Ref("pietro"),
+        ),
+        Roof(shape: Hip(pitch_deg: 35), material: "roof_tile_red"),
+    ],
+    refs: [
+        ("parter", Seq([
+            Fill("plaster_white"),
+            Comp(thickness_m: 1.2, faces: [
+                (Front, Repeat(axis: U, step_m: 4.6, pad_m: 1.3, rule: Split(axis: W, parts: [
+                    (Abs(0.9), Nothing),
+                    (Abs(1.4), Void),
+                    (Rel(1.0), Nothing),
+                ]))),
+                (Side, Repeat(axis: V, step_m: 5.0, pad_m: 1.5, rule: Split(axis: W, parts: [
+                    (Abs(1.0), Nothing),
+                    (Abs(1.2), Void),
+                    (Rel(1.0), Nothing),
+                ]))),
+            ]),
+        ])),
+        // Piętro odsunięte o 10 cm od lica parteru — cień pod okapem, widoczny z ulicy.
+        ("pietro", Inset(m: 0.1, rule: Seq([
+            Fill("plaster_white"),
+            Comp(thickness_m: 1.2, faces: [
+                (Front, Repeat(axis: U, step_m: 4.8, pad_m: 1.4, rule: Split(axis: W, parts: [
+                    (Abs(0.8), Nothing),
+                    (Abs(1.2), Void),
+                    (Rel(1.0), Nothing),
+                ]))),
+            ]),
+        ]))),
+    ],
+    interior: (
+        ground: (kind: Dwelling, area_m2: (60, 120)),
+        typical: (kind: Dwelling, area_m2: (60, 120)),
+        top: (kind: Dwelling, area_m2: (50, 100)),
+        circulation_share: 0.06,
+    ),
+)

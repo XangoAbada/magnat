@@ -384,6 +384,45 @@ fn inspect_parcel(city: &CityData, p: magnat_spatial::Vec2) -> Vec<String> {
         block.id.0, block.neighborhood, block.epoch_ring
     ));
     v.push(format!(
+        "wartość gruntu (pass_1): {:.2} zł/m² · łącznie {:.0} zł",
+        parcel.land_value_per_m2.0 as f64 / 100.0,
+        (parcel.land_value_per_m2.0 as f64 / 100.0) * f64::from(parcel.area_m2)
+    ));
+    match parcel.building {
+        None => v.push("zabudowa: brak".to_string()),
+        Some(id) => {
+            let b = &city.buildings.buildings[id.0.index() as usize];
+            let lokale = &city.buildings.units[b.units.start as usize..b.units.end as usize];
+            let stanowisk: u32 = lokale.iter().map(|u| u.workplaces.len() as u32).sum();
+            v.push(format!(
+                "budynek #{}: gramatyka {} · {} kondygnacji (+{} podziemnych) · {:.1} m · {} m² brutto · stan {}/100",
+                id.0.index(),
+                b.grammar.0,
+                b.floors,
+                b.basements,
+                f64::from(b.height_dm) / 10.0,
+                b.gross_area_m2,
+                b.condition.get()
+            ));
+            v.push(format!(
+                "lokale: {} ({} mieszkań) · stanowisk pracy {} · czynsz wywoławczy {:.0}–{:.0} zł/mies.",
+                lokale.len(),
+                lokale.iter().filter(|u| u.kind.is_dwelling()).count(),
+                stanowisk,
+                lokale.iter().map(|u| u.rent_hint.0).min().unwrap_or(0) as f64 / 100.0,
+                lokale.iter().map(|u| u.rent_hint.0).max().unwrap_or(0) as f64 / 100.0
+            ));
+            v.push(format!(
+                "wejścia: {}",
+                b.entrances
+                    .iter()
+                    .map(|e| format!("{:?}@seg{}", e.kind, e.seg.0))
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            ));
+        }
+    }
+    v.push(format!(
         "dzielnica {}: {} ({:?}, styl {}) · dochód {}/4 · reputacja {} · przestępczość {} · pojemność {} os.",
         parcel.district.0,
         d.name,
@@ -404,10 +443,7 @@ fn inspect_parcel(city: &CityData, p: magnat_spatial::Vec2) -> Vec<String> {
 /// wypełnienie parcel barwą strefy i granice dzielnic. Ten obrazek jest przyrządem —
 /// błąd w L-systemie albo w podziale na działki widać na nim natychmiast, a w liczbach
 /// dopiero po zastanowieniu.
-fn preview_city(
-    a: &PreviewArgs,
-    world: WorldData,
-) -> Result<ExitCode, Box<dyn std::error::Error>> {
+fn preview_city(a: &PreviewArgs, world: WorldData) -> Result<ExitCode, Box<dyn std::error::Error>> {
     let params = world.params;
     let reg = Arc::new(MaterialRegistry::load_dir(&magnat_world::data_path(
         "materials",
@@ -416,7 +452,8 @@ fn preview_city(
     let plan = CityPlan::from_world(&params);
 
     let start = std::time::Instant::now();
-    let city = generate_city(&plan, &terrain)?;
+    let pool = JobPool::new(a.threads);
+    let city = generate_city(&plan, &terrain, terrain.materials(), &pool)?;
     eprintln!("miasto {:.1} ms", start.elapsed().as_secs_f64() * 1000.0);
     for l in city.report.lines() {
         println!("{l}");
@@ -484,7 +521,10 @@ fn preview_city(
         for parcel in &city.parcels.parcels {
             let poly = city.roads.geom.get(parcel.poly);
             let c = zone_color(parcel.zone);
-            let (mut lo, mut hi) = (magnat_spatial::Vec2::splat(f32::MAX), magnat_spatial::Vec2::splat(f32::MIN));
+            let (mut lo, mut hi) = (
+                magnat_spatial::Vec2::splat(f32::MAX),
+                magnat_spatial::Vec2::splat(f32::MIN),
+            );
             for q in poly {
                 lo = magnat_spatial::Vec2::new(lo.x.min(q.x), lo.y.min(q.y));
                 hi = magnat_spatial::Vec2::new(hi.x.max(q.x), hi.y.max(q.y));
@@ -502,8 +542,8 @@ fn preview_city(
             }
             for iy in y0.max(0)..=y1.min(w as i32 - 1) {
                 for ix in x0.max(0)..=x1.min(w as i32 - 1) {
-                    let q = origin
-                        + magnat_spatial::Vec2::new(ix as f32 / skala, iy as f32 / skala);
+                    let q =
+                        origin + magnat_spatial::Vec2::new(ix as f32 / skala, iy as f32 / skala);
                     if magnat_world::city::poly::contains(poly, q) {
                         let o = ((w - 1 - iy as usize) * w + ix as usize) * 3;
                         px[o..o + 3].copy_from_slice(&c);
@@ -512,7 +552,6 @@ fn preview_city(
             }
         }
     }
-
 
     let mut put = |x: i32, y: i32, c: [u8; 3]| {
         if x < 0 || y < 0 || x >= w as i32 || y >= w as i32 {
@@ -580,8 +619,8 @@ fn preview_city(
         // Granica dzielnicy: segment, po którego dwóch stronach leżą różne dzielnice.
         let mut po_segmencie = vec![[u16::MAX; 2]; city.roads.segments.len()];
         for b in &city.blocks.blocks {
-            for &sid in &city.blocks.bounding_items
-                [b.bounding.start as usize..b.bounding.end as usize]
+            for &sid in
+                &city.blocks.bounding_items[b.bounding.start as usize..b.bounding.end as usize]
             {
                 let slot = &mut po_segmencie[sid.0 as usize];
                 if slot[0] == u16::MAX {

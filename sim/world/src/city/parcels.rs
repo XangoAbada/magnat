@@ -424,16 +424,14 @@ fn strip_parcels(
         // Krawędź frontowa: najwyższa klasa drogi, przy remisie najdłuższa,
         // przy dalszym remisie najniższy indeks krawędzi (M2 §5.4).
         let n = sb.pts.len();
-        let front = (0..n)
-            .filter(|&i| sb.owner[i].rank() > 0)
-            .max_by(|&i, &j| {
-                let dl = |k: usize| (sb.pts[(k + 1) % n] - sb.pts[k]).length();
-                sb.owner[i]
-                    .rank()
-                    .cmp(&sb.owner[j].rank())
-                    .then(dl(i).total_cmp(&dl(j)))
-                    .then(j.cmp(&i))
-            });
+        let front = (0..n).filter(|&i| sb.owner[i].rank() > 0).max_by(|&i, &j| {
+            let dl = |k: usize| (sb.pts[(k + 1) % n] - sb.pts[k]).length();
+            sb.owner[i]
+                .rank()
+                .cmp(&sb.owner[j].rank())
+                .then(dl(i).total_cmp(&dl(j)))
+                .then(j.cmp(&i))
+        });
         let Some(fi) = front else { break };
 
         let a = sb.pts[fi];
@@ -622,7 +620,7 @@ fn push_street(
     if spec.lanes_bwd == 0 {
         flags = flags.with(RoadFlags::ONEWAY);
     }
-    if spec.max_tonnage_t > 0 {
+    if class.forbids_heavy() {
         flags = flags.with(RoadFlags::NO_HEAVY);
     }
     net.segments.push(RoadSegment {
@@ -1030,10 +1028,7 @@ fn zaczep_na_segmencie(
     splits: &mut u32,
 ) -> NodeId {
     let s = net.segments[cur.0 as usize];
-    let (p0, p1) = (
-        net.nodes[s.a.0 as usize].pos,
-        net.nodes[s.b.0 as usize].pos,
-    );
+    let (p0, p1) = (net.nodes[s.a.0 as usize].pos, net.nodes[s.b.0 as usize].pos);
     let (q, t) = poly::closest_on_segment(p0, p1, pos);
     let dl = (p1 - p0).length();
     if t * dl < MIN_STUB_M {
@@ -1064,10 +1059,7 @@ fn zaczep_na_lokalnych(
     for k in 0..lokalne.len() {
         let seg = lokalne[k];
         let s = net.segments[seg.0 as usize];
-        let (p0, p1) = (
-            net.nodes[s.a.0 as usize].pos,
-            net.nodes[s.b.0 as usize].pos,
-        );
+        let (p0, p1) = (net.nodes[s.a.0 as usize].pos, net.nodes[s.b.0 as usize].pos);
         let (q, t) = poly::closest_on_segment(p0, p1, pos);
         if (q - pos).length() > MIN_STUB_M {
             continue;

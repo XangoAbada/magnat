@@ -164,3 +164,49 @@ mod tests {
         assert!(r.intersects_segment(Vec2::new(5.0, 5.0), Vec2::new(5.0, 50.0)));
     }
 }
+
+/// Bryła ograniczająca w metrach — `Building.aabb` z kontraktu dla M11 (M2 §6).
+///
+/// Osobny typ zamiast `core::IAabb3`, bo tamten żyje w voxelach (0,5 m) i jest
+/// całkowitoliczbowy: selekcja do kadru porównuje go z piramidą widzenia w metrach,
+/// a zaokrąglanie do voxela zdarzałoby się dokładnie na granicy kadru.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub struct Aabb3 {
+    pub min: glam::Vec3,
+    pub max: glam::Vec3,
+}
+
+impl Aabb3 {
+    pub const EMPTY: Aabb3 = Aabb3 {
+        min: glam::Vec3::new(f32::INFINITY, f32::INFINITY, f32::INFINITY),
+        max: glam::Vec3::new(f32::NEG_INFINITY, f32::NEG_INFINITY, f32::NEG_INFINITY),
+    };
+
+    #[must_use]
+    pub const fn new(min: glam::Vec3, max: glam::Vec3) -> Aabb3 {
+        Aabb3 { min, max }
+    }
+
+    #[must_use]
+    pub fn is_empty(self) -> bool {
+        self.max.x < self.min.x || self.max.y < self.min.y || self.max.z < self.min.z
+    }
+
+    #[must_use]
+    pub fn union_point(self, p: glam::Vec3) -> Aabb3 {
+        Aabb3 {
+            min: self.min.min(p),
+            max: self.max.max(p),
+        }
+    }
+
+    #[must_use]
+    pub fn intersects(self, o: Aabb3) -> bool {
+        self.min.x <= o.max.x
+            && self.max.x >= o.min.x
+            && self.min.y <= o.max.y
+            && self.max.y >= o.min.y
+            && self.min.z <= o.max.z
+            && self.max.z >= o.min.z
+    }
+}

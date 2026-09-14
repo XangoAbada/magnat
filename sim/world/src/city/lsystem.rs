@@ -265,7 +265,7 @@ impl<'a> Builder<'a> {
         if class.is_rail() {
             flags = RoadFlags::RAIL.with(extra);
         }
-        if matches!(class, RoadClass::Pedestrian) || spec.max_tonnage_t > 0 {
+        if class.forbids_heavy() {
             flags = flags.with(RoadFlags::NO_HEAVY);
         }
         let id = SegmentId(self.segments.len() as u32);

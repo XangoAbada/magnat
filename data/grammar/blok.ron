@@ -1,0 +1,57 @@
+// R4 — blok wielorodzinny 4–11 kondygnacji. Wielka płyta w pierścieniu powojennym,
+// tynk cienkowarstwowy w późniejszych. Pasmowe okna zamiast pojedynczych: to jest
+// różnica, którą widać z odległości dzielnicy.
+(
+    schema_version: 1,
+    id: "blok",
+    applies: (
+        zones: ["r4"],
+        epochs: ["postwar", "transition", "contemporary"],
+        styles: [],
+        land_value: (0, 12000000),
+        frontage_m: (12.0, 200.0),
+        depth_m: (8.0, 160.0),
+        weight: 50,
+    ),
+    massing: (
+        setback_front_m: 5.0,
+        setback_side_m: 4.0,
+        setback_back_m: 6.0,
+        max_depth_m: 13.0,
+    ),
+    rules: [
+        Foundation(depth_m: 2.0, material: "concrete", basements: 1),
+        Floors(
+            count: (4, 11),
+            height_m: 2.7,
+            ground_height_m: 2.9,
+            ground: Ref("kondygnacja"),
+            typical: Ref("kondygnacja"),
+            top: Ref("kondygnacja"),
+        ),
+        Roof(shape: Flat, material: "roof_felt"),
+    ],
+    refs: [
+        ("kondygnacja", Seq([
+            Choice([
+                (6, Fill("concrete_panel")),
+                (4, Fill("plaster_white")),
+            ]),
+            Comp(thickness_m: 1.2, faces: [
+                (Front, Ref("pasmo_okien")),
+                (Back, Ref("pasmo_okien")),
+            ]),
+        ])),
+        ("pasmo_okien", Repeat(axis: U, step_m: 4.4, pad_m: 1.2, rule: Split(axis: W, parts: [
+            (Abs(0.9), Nothing),
+            (Abs(1.4), Void),
+            (Rel(1.0), Nothing),
+        ]))),
+    ],
+    interior: (
+        ground: (kind: Dwelling, area_m2: (34, 72)),
+        typical: (kind: Dwelling, area_m2: (34, 72)),
+        top: (kind: Dwelling, area_m2: (34, 72)),
+        circulation_share: 0.16,
+    ),
+)

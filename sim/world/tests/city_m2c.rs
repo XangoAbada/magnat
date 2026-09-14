@@ -41,7 +41,7 @@ fn miasto_z_terenem(seed: u64, size: WorldSize, region: Region) -> (CityData, Te
         difficulty: Difficulty::Normal,
         target_pop: magnat_world::city::target_pop(size),
     };
-    let c = generate_city(&plan, &t).unwrap();
+    let c = generate_city(&plan, &t, t.materials(), &JobPool::new(0)).unwrap();
     (c, t)
 }
 
@@ -182,7 +182,10 @@ fn parcele_nie_nakladaja_sie() {
             .parcels
             .tree
             .at_point(srodek, |id| {
-                poly::contains(geom.get(c.parcels.parcels[id.0.index() as usize].poly), srodek)
+                poly::contains(
+                    geom.get(c.parcels.parcels[id.0.index() as usize].poly),
+                    srodek,
+                )
             })
             .expect("punkt wewnątrz działki musi trafiać w jakąś działkę");
         assert_eq!(
@@ -298,7 +301,10 @@ fn dzielnice_pokrywaja_miasto_i_maja_unikalne_nazwy() {
 #[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
 fn kazdy_klaster_przemyslowy_ma_bocznice() {
     let c = miasto(0x00C0_FFEE, WorldSize::Medium8km, Region::Lowland);
-    assert!(c.report.rail.track_km > 1.0, "nie powstał ani kilometr toru");
+    assert!(
+        c.report.rail.track_km > 1.0,
+        "nie powstał ani kilometr toru"
+    );
     assert!(
         c.report.rail.max_grade_pct <= 2.01,
         "tor o nachyleniu {:.2}%",
@@ -370,8 +376,8 @@ fn dwa_przebiegi_daja_identyczne_miasto() {
     let t = Terrain::new(data, reg);
     let plan = CityPlan::from_world(&params);
 
-    let a = generate_city(&plan, &t).unwrap();
-    let b = generate_city(&plan, &t).unwrap();
+    let a = generate_city(&plan, &t, t.materials(), &JobPool::new(0)).unwrap();
+    let b = generate_city(&plan, &t, t.materials(), &JobPool::new(0)).unwrap();
 
     assert_eq!(a.report.city_hash, b.report.city_hash, "hash miasta");
     assert_eq!(a.zones.zone, b.zones.zone, "strefy");
@@ -389,7 +395,10 @@ fn dwa_przebiegi_daja_identyczne_miasto() {
 fn pierscienie_epok_rosna_od_centrum() {
     let c = miasto(3, WorldSize::Medium8km, Region::Lowland);
     let n = c.zones.rings.len();
-    assert!(n >= 4, "miasto z 1990 ma mieć co najmniej cztery pierścienie");
+    assert!(
+        n >= 4,
+        "miasto z 1990 ma mieć co najmniej cztery pierścienie"
+    );
 
     let mut srednia = vec![(0.0f64, 0u32); n];
     for (i, b) in c.blocks.blocks.iter().enumerate() {
@@ -425,7 +434,12 @@ fn pojemnosc_dzielnic_jest_w_rzedzie_wielkosci_celu() {
         "pojemność {suma} wobec celu {cel}"
     );
     // Przedziały dochodowe muszą być rozdane, a nie zostać na wartości startowej.
-    let tiers: Vec<u8> = c.districts.districts.iter().map(|d| d.income_tier).collect();
+    let tiers: Vec<u8> = c
+        .districts
+        .districts
+        .iter()
+        .map(|d| d.income_tier)
+        .collect();
     assert!(
         tiers.contains(&0) && tiers.contains(&4),
         "przedziały dochodowe nie pokrywają skali: {tiers:?}"

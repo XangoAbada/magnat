@@ -1,0 +1,79 @@
+// R3 — kamienica czynszowa w pierzei. Przykład wzorcowy z M2 §5.6: parter usługowy
+// wyższy od pięter (stąd osobne `ground_height_m`), zabudowa obrzeżna bez cofnięć,
+// dziedziniec, gdy działka jest głęboka.
+(
+    schema_version: 1,
+    id: "kamienica",
+    applies: (
+        zones: ["r3", "commercial"],
+        epochs: ["medieval", "industrial", "interwar"],
+        styles: ["old_town", "inner_city", "port_quarter"],
+        land_value: (1800, 9000000),
+        frontage_m: (5.0, 44.0),
+        depth_m: (8.0, 120.0),
+        weight: 45,
+    ),
+    massing: (
+        setback_front_m: 0.0,
+        setback_side_m: 0.0,
+        setback_back_m: 2.0,
+        courtyard_min_m2: 90.0,
+        max_depth_m: 16.0,
+    ),
+    rules: [
+        Foundation(depth_m: 2.5, material: "brick_red", basements: 1),
+        Floors(
+            count: (3, 6),
+            height_m: 3.2,
+            ground_height_m: 4.2,
+            ground: Ref("parter_uslugowy"),
+            typical: Ref("pietro"),
+            top: Ref("poddasze"),
+        ),
+        Roof(shape: Gable(pitch_deg: 40), material: "roof_tile_red"),
+    ],
+    refs: [
+        // Parter: witryny niemal na całą wysokość i przejazd bramny, gdy front szeroki.
+        ("parter_uslugowy", Seq([
+            Fill("brick_red"),
+            Comp(thickness_m: 1.2, faces: [
+                (Front, Repeat(axis: U, step_m: 5.0, pad_m: 1.5, rule: Split(axis: W, parts: [
+                    (Abs(0.5), Nothing),
+                    (Abs(2.9), Void),
+                    (Rel(1.0), Nothing),
+                ]))),
+            ]),
+        ])),
+        ("pietro", Seq([
+            Choice([
+                (5, Fill("stucco")),
+                (3, Fill("brick_red")),
+                (2, Fill("brick_yellow")),
+            ]),
+            Comp(thickness_m: 1.25, faces: [
+                (Front, Repeat(axis: U, step_m: 4.6, pad_m: 1.3, rule: Split(axis: W, parts: [
+                    (Abs(0.9), Nothing),
+                    (Abs(1.4), Void),
+                    (Rel(1.0), Nothing),
+                ]))),
+                (Back, Repeat(axis: U, step_m: 4.8, pad_m: 1.4, rule: Split(axis: W, parts: [
+                    (Abs(1.0), Nothing),
+                    (Abs(1.4), Void),
+                    (Rel(1.0), Nothing),
+                ]))),
+            ]),
+        ])),
+        // Ostatnia kondygnacja cofnięta pod okap; przy drogiej ziemi bywa pełnym piętrem.
+        ("poddasze", If(
+            cond: LandValueAtLeast(4500000),
+            then: Ref("pietro"),
+            otherwise: Inset(m: 0.4, rule: Ref("pietro")),
+        )),
+    ],
+    interior: (
+        ground: (kind: Retail, area_m2: (45, 120)),
+        typical: (kind: Dwelling, area_m2: (38, 95)),
+        top: (kind: Dwelling, area_m2: (30, 60)),
+        circulation_share: 0.14,
+    ),
+)

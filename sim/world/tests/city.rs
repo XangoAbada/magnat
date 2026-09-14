@@ -53,8 +53,8 @@ fn plan(seed: u64, region: Region, profile: EconomyProfile) -> CityPlan {
 fn dwa_przebiegi_daja_identyczna_siec() {
     let t = teren(0x00C0_FFEE, Region::River);
     let p = plan(0x00C0_FFEE, Region::River, EconomyProfile::Mixed);
-    let a = generate_city(&p, &t).unwrap();
-    let b = generate_city(&p, &t).unwrap();
+    let a = generate_city(&p, &t, t.materials(), &JobPool::new(0)).unwrap();
+    let b = generate_city(&p, &t, t.materials(), &JobPool::new(0)).unwrap();
 
     assert_eq!(a.roads.hash(), b.roads.hash(), "hash sieci się rozjechał");
     // Hash mógłby kolidować; równość strukturalna jest mocniejsza i tania.
@@ -73,8 +73,20 @@ fn dwa_przebiegi_daja_identyczna_siec() {
 #[ignore = "dwie generacje świata — CI uruchamia jawnie przez --include-ignored"]
 fn inne_ziarno_daje_inne_miasto() {
     let (t1, t2) = (teren(1, Region::Lowland), teren(2, Region::Lowland));
-    let a = generate_city(&plan(1, Region::Lowland, EconomyProfile::Mixed), &t1).unwrap();
-    let b = generate_city(&plan(2, Region::Lowland, EconomyProfile::Mixed), &t2).unwrap();
+    let a = generate_city(
+        &plan(1, Region::Lowland, EconomyProfile::Mixed),
+        &t1,
+        t1.materials(),
+        &JobPool::new(0),
+    )
+    .unwrap();
+    let b = generate_city(
+        &plan(2, Region::Lowland, EconomyProfile::Mixed),
+        &t2,
+        t2.materials(),
+        &JobPool::new(0),
+    )
+    .unwrap();
     assert_ne!(a.roads.hash(), b.roads.hash());
 }
 
@@ -107,7 +119,13 @@ fn bramy_wymagane_istnieja_i_leza_na_wlasciwym_terenie() {
         for (region, profile) in grupy {
             let t = teren(seed, region);
             for prof in profile.iter().copied() {
-                let c = generate_city(&plan(seed, region, prof), &t).unwrap();
+                let c = generate_city(
+                    &plan(seed, region, prof),
+                    &t,
+                    t.materials(),
+                    &JobPool::new(0),
+                )
+                .unwrap();
                 assert!(
                     c.report.missing_gates.is_empty(),
                     "seed {seed} profil {prof:?}: brak bram {:?}",
@@ -175,7 +193,13 @@ fn siec_bez_wiszacych_koncow_i_w_jednym_kawalku() {
         (7, Region::Desert),
     ] {
         let t = teren(seed, region);
-        let c = generate_city(&plan(seed, region, EconomyProfile::Mixed), &t).unwrap();
+        let c = generate_city(
+            &plan(seed, region, EconomyProfile::Mixed),
+            &t,
+            t.materials(),
+            &JobPool::new(0),
+        )
+        .unwrap();
         let wiszace = dangling_high_class(&c.roads);
         assert!(
             wiszace.is_empty(),
@@ -198,7 +222,13 @@ fn siec_bez_wiszacych_koncow_i_w_jednym_kawalku() {
 #[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
 fn struktury_miesza_sie_w_limitach_klasy() {
     let t = teren(11, Region::Mountain);
-    let c = generate_city(&plan(11, Region::Mountain, EconomyProfile::Mixed), &t).unwrap();
+    let c = generate_city(
+        &plan(11, Region::Mountain, EconomyProfile::Mixed),
+        &t,
+        t.materials(),
+        &JobPool::new(0),
+    )
+    .unwrap();
     for s in &c.roads.segments {
         let spec = s.class.spec();
         let dl_m = f64::from(s.length_dm) / 10.0;
@@ -251,7 +281,13 @@ fn struktury_miesza_sie_w_limitach_klasy() {
 #[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
 fn kwartaly_domykaja_bilans_pol() {
     let t = teren(3, Region::Lowland);
-    let c = generate_city(&plan(3, Region::Lowland, EconomyProfile::Mixed), &t).unwrap();
+    let c = generate_city(
+        &plan(3, Region::Lowland, EconomyProfile::Mixed),
+        &t,
+        t.materials(),
+        &JobPool::new(0),
+    )
+    .unwrap();
     assert!(
         c.blocks.blocks.len() >= 10,
         "tylko {} kwartałów",
@@ -318,7 +354,13 @@ fn kwartaly_domykaja_bilans_pol() {
 #[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
 fn street_lines_zwraca_kazdy_segment() {
     let t = teren(5, Region::Lowland);
-    let c = generate_city(&plan(5, Region::Lowland, EconomyProfile::Mixed), &t).unwrap();
+    let c = generate_city(
+        &plan(5, Region::Lowland, EconomyProfile::Mixed),
+        &t,
+        t.materials(),
+        &JobPool::new(0),
+    )
+    .unwrap();
     let n = magnat_world::street_lines(&c.roads).count();
     assert_eq!(n, c.roads.segments.len());
     for l in magnat_world::street_lines(&c.roads) {
@@ -332,7 +374,13 @@ fn street_lines_zwraca_kazdy_segment() {
 #[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
 fn latarnie_stoja_przy_jezdni() {
     let t = teren(5, Region::Lowland);
-    let c = generate_city(&plan(5, Region::Lowland, EconomyProfile::Mixed), &t).unwrap();
+    let c = generate_city(
+        &plan(5, Region::Lowland, EconomyProfile::Mixed),
+        &t,
+        t.materials(),
+        &JobPool::new(0),
+    )
+    .unwrap();
     assert!(!c.roads.furniture.is_empty(), "brak małej architektury");
     for f in c.roads.furniture.iter().take(200) {
         let s = &c.roads.segments[f.seg.0 as usize];
@@ -355,7 +403,13 @@ fn latarnie_stoja_przy_jezdni() {
 fn etap_3_miesci_sie_w_budzecie_czasu() {
     let t = teren(9, Region::Lowland);
     let start = std::time::Instant::now();
-    let c = generate_city(&plan(9, Region::Lowland, EconomyProfile::Mixed), &t).unwrap();
+    let c = generate_city(
+        &plan(9, Region::Lowland, EconomyProfile::Mixed),
+        &t,
+        t.materials(),
+        &JobPool::new(0),
+    )
+    .unwrap();
     let ms = start.elapsed().as_secs_f64() * 1000.0;
     for l in c.report.lines() {
         println!("{l}");
@@ -369,7 +423,13 @@ fn etap_3_miesci_sie_w_budzecie_czasu() {
 #[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
 fn kwartal_miesci_sie_w_swojej_scianie() {
     let t = teren(4, Region::Lowland);
-    let c = generate_city(&plan(4, Region::Lowland, EconomyProfile::Mixed), &t).unwrap();
+    let c = generate_city(
+        &plan(4, Region::Lowland, EconomyProfile::Mixed),
+        &t,
+        t.materials(),
+        &JobPool::new(0),
+    )
+    .unwrap();
     for b in c.blocks.blocks.iter().take(200) {
         let wnetrze = c.roads.geom.get(b.poly);
         let sciana = c.roads.geom.get(b.face);

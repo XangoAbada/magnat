@@ -1,0 +1,71 @@
+// R5 — wieżowiec mieszkalny. Podstawa szersza od trzonu (`Inset` powyżej parteru),
+// elewacja szklana. Filtr wartości gruntu jest tu ostry: wieżowiec na tanim gruncie
+// nie powstaje, bo to ziemia, nie konstrukcja, wymusza budowanie w górę.
+(
+    schema_version: 1,
+    id: "wiezowiec",
+    applies: (
+        zones: ["r5"],
+        epochs: ["postwar", "transition", "contemporary"],
+        styles: [],
+        land_value: (2500000, 40000000),
+        frontage_m: (16.0, 160.0),
+        depth_m: (14.0, 200.0),
+        weight: 35,
+    ),
+    massing: (
+        setback_front_m: 6.0,
+        setback_side_m: 6.0,
+        setback_back_m: 6.0,
+        max_depth_m: 30.0,
+    ),
+    rules: [
+        Foundation(depth_m: 4.5, material: "concrete", basements: 2),
+        Floors(
+            count: (12, 26),
+            height_m: 3.0,
+            ground_height_m: 4.5,
+            ground: Ref("podstawa"),
+            typical: Ref("trzon"),
+            top: Ref("trzon"),
+        ),
+        Roof(shape: Flat, material: "roof_sheet"),
+    ],
+    refs: [
+        ("podstawa", Seq([
+            Fill("concrete"),
+            Comp(thickness_m: 1.2, faces: [
+                (Front, Repeat(axis: U, step_m: 3.6, pad_m: 0.4, rule: Split(axis: W, parts: [
+                    (Abs(0.6), Nothing),
+                    (Rel(1.0), Fill("glass")),
+                    (Abs(0.6), Nothing),
+                ]))),
+            ]),
+        ])),
+        // Trzon węższy od podstawy o 1,5 m — cofnięcie widoczne z poziomu ulicy.
+        ("trzon", Inset(m: 1.5, rule: Seq([
+            Fill("concrete_panel"),
+            Comp(thickness_m: 1.2, faces: [
+                (Front, Ref("pasmo")),
+                (Back, Ref("pasmo")),
+                (Side, Ref("pasmo_bok")),
+            ]),
+        ]))),
+        ("pasmo", Repeat(axis: U, step_m: 4.4, pad_m: 1.2, rule: Split(axis: W, parts: [
+            (Abs(0.8), Nothing),
+            (Rel(1.0), Fill("glass")),
+            (Abs(0.5), Nothing),
+        ]))),
+        ("pasmo_bok", Repeat(axis: V, step_m: 4.4, pad_m: 1.2, rule: Split(axis: W, parts: [
+            (Abs(0.8), Nothing),
+            (Rel(1.0), Fill("glass")),
+            (Abs(0.5), Nothing),
+        ]))),
+    ],
+    interior: (
+        ground: (kind: Retail, area_m2: (60, 200)),
+        typical: (kind: Dwelling, area_m2: (42, 110)),
+        top: (kind: Dwelling, area_m2: (60, 160)),
+        circulation_share: 0.22,
+    ),
+)

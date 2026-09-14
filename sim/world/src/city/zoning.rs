@@ -35,11 +35,7 @@ pub const FIELD_CELL_M: u16 = 16;
 pub const MAX_URBAN_BLOCK_M2: f64 = 300_000.0;
 
 /// Strefy otwarte — jedyne, jakie może dostać kwartał pozamiejski.
-const RURAL_ZONES: [ZoneKind; 3] = [
-    ZoneKind::Agriculture,
-    ZoneKind::Green,
-    ZoneKind::Extraction,
-];
+const RURAL_ZONES: [ZoneKind; 3] = [ZoneKind::Agriculture, ZoneKind::Green, ZoneKind::Extraction];
 
 // ── Klasy stref ──────────────────────────────────────────────────────────────────────
 
@@ -247,10 +243,7 @@ pub fn build_fields(
     center: Vec2,
 ) -> CityFields {
     let map = plan.map_size_m() as f32;
-    let spec = GridSpec::covering(
-        Aabb2::new(Vec2::ZERO, Vec2::new(map, map)),
-        FIELD_CELL_M,
-    );
+    let spec = GridSpec::covering(Aabb2::new(Vec2::ZERO, Vec2::new(map, map)), FIELD_CELL_M);
     let n = spec.cell_count();
     let cell_m = f32::from(FIELD_CELL_M);
 
@@ -444,7 +437,8 @@ impl std::error::Error for EpochError {}
 
 impl EpochTable {
     pub fn load() -> Result<EpochTable, EpochError> {
-        let txt = std::fs::read_to_string(data_path("epochs/epochs.ron")).map_err(EpochError::Io)?;
+        let txt =
+            std::fs::read_to_string(data_path("epochs/epochs.ron")).map_err(EpochError::Io)?;
         let t: EpochTable = ron::from_str(&txt).map_err(EpochError::Ron)?;
         if t.schema_version != EPOCH_SCHEMA_VERSION {
             return Err(EpochError::Schema {
@@ -897,7 +891,11 @@ pub fn assign_zones(
         let wybor = ranking
             .iter()
             .find(|(z, _)| left[*z] >= a)
-            .or_else(|| ranking.iter().max_by(|x, y| left[x.0].total_cmp(&left[y.0])))
+            .or_else(|| {
+                ranking
+                    .iter()
+                    .max_by(|x, y| left[x.0].total_cmp(&left[y.0]))
+            })
             .map(|(z, _)| *z);
         let Some(z) = wybor else {
             // Kwartał, któremu każde weto odmówiło każdej strefy — teren nie pozwala.
@@ -963,8 +961,7 @@ pub fn assign_zones(
     let mut nierozwiazane = 0u32;
     let blisko_mieszkaniowki = |i: usize, zone: &[ZoneKind]| -> bool {
         (0..n).any(|j| {
-            zone[j].is_residential()
-                && (s.centroid[j] - s.centroid[i]).length() < w.heavy_buffer_m
+            zone[j].is_residential() && (s.centroid[j] - s.centroid[i]).length() < w.heavy_buffer_m
         })
     };
     // Drugie kryterium tego samego przebiegu: zakład ma stać **z podwietrznej** miasta.
@@ -973,9 +970,7 @@ pub fn assign_zones(
     // dlatego naprawa jawna (korekta C12).
     let pod_wiatr = |i: usize| s.downwind[i] >= 0.5;
     for i in 0..n {
-        if zone[i] != ZoneKind::IndustryHeavy
-            || (!blisko_mieszkaniowki(i, &zone) && pod_wiatr(i))
-        {
+        if zone[i] != ZoneKind::IndustryHeavy || (!blisko_mieszkaniowki(i, &zone) && pod_wiatr(i)) {
             continue;
         }
         // **Zamiana, nie przeniesienie** (korekta C12). Przeniesienie kwartału na

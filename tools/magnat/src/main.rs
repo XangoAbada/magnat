@@ -19,8 +19,8 @@ mod stream;
 use clap::Parser;
 use magnat_core::SimMinute;
 use magnat_render::{CameraMode, GpuContext, Renderer};
-use magnat_voxel::MaterialRegistry;
-use magnat_world::{generate, Difficulty, TerrainQuery, WorldGenParams};
+use magnat_voxel::{EditIndex, MaterialRegistry};
+use magnat_world::{generate, generate_city, CityPlan, Difficulty, TerrainQuery, WorldGenParams};
 use std::sync::Arc;
 use std::time::Instant;
 use winit::application::ApplicationHandler;
@@ -113,6 +113,11 @@ struct Args {
     /// 170 to przesilenie letnie w kalendarzu 360-dniowym (00 §K-1).
     #[arg(long, default_value_t = 170)]
     day: u64,
+
+    /// Pomija generację miasta i pokazuje czysty teren M1. Istnieje po to, żeby
+    /// regresję terenu dało się zdiagnozować bez zabudowy zasłaniającej widok (WP12b).
+    #[arg(long, default_value_t = false)]
+    no_city: bool,
 }
 
 fn parse_seed(s: &str) -> Result<u64, Box<dyn std::error::Error>> {
@@ -158,6 +163,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ))?);
     let terrain = Arc::new(magnat_world::Terrain::new(data, materials.clone()));
 
+    // Miasto (M2d, WP12b). Bez tego kroku klient pokazuje krajobraz M1 — i dokładnie
+    // tak zachowuje się `--no-city`.
+    let (edits, centrum) = if args.no_city {
+        (Arc::new(EditIndex::default()), None)
+    } else {
+        let plan = CityPlan::from_world(&params);
+        let start = Instant::now();
+        let city = generate_city(&plan, terrain.as_ref(), &materials, &pool)?;
+        for line in city.report.lines() {
+            eprintln!("{line}");
+        }
+        eprintln!(
+            "miasto {:.2} s · {} komend voxelowych w {} wpisach indeksu",
+            start.elapsed().as_secs_f64(),
+            city.edits.commands().len(),
+            city.edits.entries()
+        );
+        let c = city.center;
+        (Arc::new(city.edits), Some((c.x as i32, c.y as i32)))
+    };
+
     // Inspekcja punktu bez otwierania okna — ta sama karta co po kliknięciu prawym.
     if let Some(punkt) = args.inspect.as_deref() {
         let (a, b) = punkt
@@ -193,8 +219,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .ok_or("--target oczekuje `x,y` w metrach")?;
                 Some((a.trim().parse()?, b.trim().parse()?))
             }
-            None => None,
+            // Bez jawnego celu kamera staje **nad miastem**, a nie nad środkiem mapy:
+            // miasto rzadko leży dokładnie w środku, a widok pustego pola nie jest
+            // artefaktem tej podfazy (WP12b pkt 3).
+            None => centrum,
         },
+        edits,
         bench: args.bench,
         bench_czas_s: 0.0,
         bench_etapy: Vec::new(),
@@ -346,6 +376,7 @@ fn startowa_kamera(dist: f32) -> magnat_render::CameraState {
 struct App {
     terrain: Arc<magnat_world::Terrain>,
     materials: Arc<MaterialRegistry>,
+    edits: Arc<EditIndex>,
     params: WorldGenParams,
     window: Option<Arc<Window>>,
     renderer: Option<Renderer>,
@@ -443,7 +474,11 @@ impl ApplicationHandler for App {
             }
         }
 
-        let mut streamer = stream::Streamer::new(self.terrain.clone(), self.materials.clone());
+        let mut streamer = stream::Streamer::new(
+            self.terrain.clone(),
+            self.materials.clone(),
+            self.edits.clone(),
+        );
         if let Some(r) = self.lod0_radius {
             streamer.wymus_lod0(r);
         }

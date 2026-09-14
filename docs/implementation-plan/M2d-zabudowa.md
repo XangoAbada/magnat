@@ -282,3 +282,91 @@ w tej samej zmianie. Gwiazdką oznaczone te, które zmieniają **zakres albo kry
 potrzebuje osobnego zestawu dla kwartałów, które M2c oznaczył jako pozamiejskie
 (`Agriculture` o działkach 3–20 ha) — zabudowa zagrodowa rządzi się inną skalą niż
 miejska i pierwotny szkic gramatyki jej nie przewiduje.
+
+**Rozstrzygnięte przy starcie:** zabudowa zagrodowa **nie potrzebuje osobnego zestawu
+gramatyk, tylko własnych cofnięć** — `data/grammar/zagroda.ron` wyraża skalę przez
+`massing` (dom przy drodze, reszta działki zostaje polem), a nie przez nowe operatory.
+Gdyby bryła skalowała się z działką, gospodarstwo na 20 ha dostałoby budynek o boku 400 m.
+
+---
+
+## Korekty planu wpisane po implementacji
+
+Numeracja `E-n`; odwołania z kodu (`korekta E3`) wskazują na tę tabelę. Gwiazdką
+oznaczone te, które zmieniają **zakres albo kryterium**, a nie tylko sposób liczenia.
+
+| # | Korekta | Dlaczego |
+|---|---|---|
+| E1 ★ | **`engine/voxel` dostaje bryłę zorientowaną**: `Obb3`, `EditOp::Prism` i `CarveShape::Prism`. §5.6b zakłada `Terrace`/`Fill` na `IAabb3` | Ulica biegnie pod dowolnym kątem, a budynek stoi równolegle do swojej ulicy. Prostopadłościan osiowy obejmuje przy 45° √2 razy szerszy pas — czyli sąsiednią działkę — a rozbicie bryły na komendy-wiersze daje przy 50 tys. budynków **miliony** komend zamiast tysięcy. Obrót wyłącznie wokół pionu; test przynależności to same porównania, więc determinizm zostaje |
+| E2 | Klucz porządku kanonicznego `EditQueue` domknięty **odciskiem treści operacji** | Dwie komendy o tym samym źródle, zasięgu i randze (dwa okna w jednej ścianie, dwa `Fill` różnym materiałem) miały dotąd **równy** klucz, a `sort_by_key` jest stabilny — o kolejności decydowała kolejność `push`, czyli harmonogram wątków. Dokładnie to, czego zakazuje nagłówek modułu `edit` |
+| E3 ★ | Komendy miasta stosowane **leniwie**, przez nowy `EditIndex` (komendy + kubełki chunków), a nie przez `EditOverlay` | `EditOverlay` trzyma **każdy zmieniony voxel**. Miasto to ~50 tys. budynków po kilkanaście tysięcy voxeli — setki milionów wpisów, dziesiątki gigabajtów. Indeks trzyma komendy (metropolia: 600 tys.) i rasteryzuje je przy materializacji chunka. Ta sama rasteryzacja, ten sam wynik. Nakładka zostaje dla edycji **runtime'owych** (M6 drążący kopalnię w trakcie gry) |
+| E4 | `EditOverlay::apply_to` i rasteryzacja przyjmują **`lod`** | Nakładka jest indeksowana w LOD0. Bez rzutowania na grubszą siatkę miasto znikało poza pierścieniem LOD0 (192 m), czyli w każdym widoku dzielnicy. Błąd był w M1 od początku, ale nie miał konsumenta |
+| E5 ★ | **`Workplace` powstaje w M2d** z rodzaju lokalu i `data/jobs/roles.ron`, z `site: Option<SiteId> = None`. Liczbę stanowisk i przypisanie do zakładu nadpisuje M2e (WP13) | §5.6 mówi „liczba `Workplace` wynika z archetypu zakładu (Etap 7)", ale archetypy (`data/buildings/`) powstają dopiero w M2e, a „wynik do pokazania" tej podfazy brzmi „budynki mają piętra, lokale **i stanowiska pracy**". Bez przelicznika w `data/jobs/` kontrakt `wage_band` dla M3 (§6, decyzja 9.1/8) też nie miałby wartości. Przelicznik `m2_per_workplace` stoi tymczasowo przy roli, nie przy archetypie |
+| E6 ★ | **`Green` i `Extraction` nie dostają zabudowy w M2d.** Budżet §7 fazy przypisuje im 300 i 120 budynków — te obiekty należą do Etapu 7 (M2e §5.8 pkt 5: „jedna parcela = jedno gospodarstwo/kopalnia") | Park, w którym każda działka dostaje budynek awaryjny, przestaje być parkiem — a właśnie tak wyglądał pierwszy przebieg. Kopalnia nie jest bryłą z gramatyki, tylko zakładem na złożu |
+| E7 ★ | Parcela o froncie **< 6 m** nie dostaje gramatyki, także awaryjnej: jest odpadem podziału pasowego i zostaje pusta | Bez tej bramki udział gramatyki awaryjnej mierzył **ziarnistość podziału na parcele** (6,4 % na mieście 4 km), a nie luki w katalogu gramatyk — czyli kryterium „< 2 %" badało coś innego, niż nazywa. Po bramce: 0,4 % (4 km) i 1,1 % (8 km, metropolia) |
+| E8 | Filtry `applies` rozluźniane **etapami w ustalonej kolejności** (epoka → styl dzielnicy → wartość gruntu), z osobnym licznikiem `relaxed` w raporcie. Strefa i wymiary działki nie są pomijane nigdy | Miasto z 1990 ma kwartały z pięciu epok, a katalog nie pokrywa każdej kombinacji (strefa × epoka × styl). Bez rozluźniania 46 % budynków szło na gramatykę awaryjną. Licznik jest po to, żeby luka w danych była widoczna, zamiast chować się pod „działa" |
+| E9 | Nowe pole `Applies.coverage`: udział pasujących działek, które ta gramatyka faktycznie zabudowuje | Filtr `applies` mówi „czy wolno", nie „jak często". Bez pokrycia każde pole rolne dostawało zagrodę. To jedyny sposób, w jaki M2 tworzy **świadomie** pustą działkę |
+| E10 | Cele operatora `Ref(id)` mieszkają w polu `refs:` pliku gramatyki | §5.6 używa `Ref("parter_uslugowy")`, nie mówiąc, gdzie leży cel. Lista par, nie mapa — kolejność w danych ma być kolejnością w pamięci (00 §3.2) |
+| E11 | `massing` to **jedna struktura** (cofnięcia, próg dziedzińca, maksymalna głębokość traktu), nie enum `Perimeter / Freestanding / Hall` | Warianty różniłyby się wyłącznie wartościami tych samych pól. Trzy warianty o identycznym kształcie to abstrakcja bez drugiego konsumenta (00, „Dobre praktyki": YAGNI przed SOLID) |
+| E12 ★ | Dach spadzisty jest **schodkowany bryłami zagnieżdżonymi**, a stopień ma co najmniej **2,5 m wysięgu poziomego** (≤ 6 stopni) | §5.6b twierdzi, że „przy voxelu 0,5 m stopnie są poniżej progu widoczności". Voxel ma **1 m w poziomie** i 0,5 m w pionie (`CHUNK_SPAN_M`/`CHUNK_DIM` wobec `VOXEL_HEIGHT_DM`), więc dwie zagnieżdżone bryły obrócone pod kątem rasteryzują się z własnym schodkiem i schodki się mijają — dach wychodzi dziurawy jak wafel. Widać to **tylko** na podglądzie; żaden test tego nie łapie. Bryły zagnieżdżone (każda od podstawy połaci, nie jedna na drugiej) wykluczają szczelinę z definicji |
+| E13 ★ | Kryterium WP15a `avg(OldTown) > avg(Suburb)` zastąpione porównaniem **grup**: rdzeń (`OldTown` + `InnerCity`) wobec obrzeża (`Suburb` + `Village`) | `DistrictKind::OldTown` dostaje wyłącznie dzielnica, której **dominującym** pierścieniem jest najstarsza epoka, a ta ma z `data/epochs/` 3 % powierzchni. Na większości ziaren nie ma ani jednej takiej dzielnicy i porównanie wypadało „0 vs 0" — czyli kryterium spełnione tożsamościowo, czego zakazuje `K-18` pkt 3. To samo dotyczy testu T12 fazy |
+| E14 | `RoadFlags::NO_HEAVY` poprawione zgodnie z **D6**: flaga dla `Pedestrian` i klas o tonażu < 24 t (`Local` 18 t, `Service` 8 t); `Collector` (40 t) ją traci. Reguła w jednym miejscu — `RoadClass::forbids_heavy()` | Zaplanowane w D6, wykonane tutaj: bez tego test T4 („rampa przy drodze bez `NO_HEAVY`") był niespełnialny, bo strefy przemysłowe frontują zwykle do kolektora. Przy okazji zniknął duplikat progu w dwóch miejscach (L-system i ulice lokalne) |
+| E15 | `data/jobs/roles.ron` powstaje **w M2d** | §6 fazy wymienia `data/jobs/` w „konsumuję", ale żadna podfaza nie była jego właścicielem. Katalog jest minimalny z rozmysłem — jedna rola na rodzaj lokalu; pełny katalog ról to M7 |
+| E16 | `data/materials/building.ron` — mury, dachy i nawierzchnie dołożone do rejestru M1 | `data/materials/` miało wyłącznie materiały terenowe. Rejestr scala katalog i nadaje `MaterialId` po posortowanym kluczu, więc dopisanie pliku przenumerowuje identyfikatory — i właśnie dlatego w zapisie gry trzyma się klucz tekstowy (00 §5) |
+| E17 | `generate_city` przyjmuje `&MaterialRegistry` i `&JobPool` | Gramatyka odwołuje się do materiałów po kluczu, a derywacja 50 tys. budynków jest jedynym zrównoleglonym krokiem fazy. Sygnatura z §6 nie przewidywała ani jednego, ani drugiego |
+| E18 | `Building.aabb` wymagał typu, którego nie było: `Aabb3` dopisany do `engine/spatial` | `core::IAabb3` żyje w voxelach i jest całkowitoliczbowy, a selekcja do kadru (M11) porównuje bryłę z piramidą widzenia **w metrach** |
+| E19 | Niwelacja parceli i pasa drogowego to **para brył** (wypełnienie pod niweletą + wykop nad nią), a nie `EditOp::Terrace` | Konsekwencja E1: `Terrace` przyjmuje wyłącznie `IAabb3`. Kolejność warstw rozstrzyga wtedy `EditSource` — źródło jest **pierwszym** kluczem porządku kanonicznego, więc numery źródeł są kolejnością robót na budowie: ziemia, nawierzchnia, bryły, otwory, tunele. §5.6b rozstrzygał tę kolejność geometrią („podbudowa jeden voxel pod niweletą"), co przestało wystarczać, gdy doszły otwory okienne |
+
+### Zmierzone
+
+| Miara | Metropolia 16 km (400 tys.) | Miasto 8 km (120 tys.) | Miasto 4 km (40 tys.) |
+|---|---|---|---|
+| wycena `pass_1` | 8 ms | 3 ms | 0,5 ms |
+| gramatyka + derywacja + wnętrza (8 wątków) | 131 ms | 41 ms | 10 ms |
+| warstwa transportowa w voxelach | 805 ms | 295 ms | 43 ms |
+| indeks edycji (kubełkowanie po chunkach) | 722 ms | 216 ms | 41 ms |
+| **razem M2d** | **~1,7 s** | ~0,55 s | ~95 ms |
+| budynki | 14 510 | 5 146 | 1 135 |
+| lokale / mieszkania | 157 360 / 117 557 | 55 619 / 40 810 | 13 306 / 10 131 |
+| stanowiska pracy | 263 603 | 98 085 | 24 875 |
+| gramatyka awaryjna | 1,1 % | 1,1 % | 0,4 % |
+| rozluźnień filtru `applies` | 1 978 | 295 | 402 |
+| działki bez zabudowy (odpad podziału) | 3 094 | 1 148 | 186 |
+| komendy voxelowe (zabudowa + drogi) | 553 197 + 46 196 | 193 727 + 17 741 | 50 tys. + 3,3 tys. |
+| FPS w widoku dzielnicy (RTX 4070 Ti SUPER) | — | mediana 1 249, 1 % low 198 | — |
+
+Budżet §7 dla metropolii: „derywacja gramatyki + zapis voxeli (równolegle) ≤ 28 s" —
+zmierzone 1,7 s, z czego sama derywacja 0,13 s. Zapas jest tak duży, bo voxele **nie są**
+materializowane w generacji: powstają komendy, a rasteryzacja dzieje się dopiero przy
+wczytaniu chunka (korekta E3).
+
+Dwie liczby **nie** trzymają budżetów §7 i nie jest to wada tej podfazy: budynków
+w metropolii jest 14,5 tys. wobec ~49,5 tys., a mieszkań 117 tys. wobec 167 tys.
+Idą one w ślad za liczbą parcel (18,3 tys. wobec ~42 tys.), którą M2c zgłosił już jako
+rozjazd gęstości. Bilans mieszkań i stanowisk (test T10) zamyka się w M2e — tam, gdzie
+jest czym kalibrować.
+
+### Kontrola wzrokowa
+
+Podgląd w kliencie jest tu przyrządem, nie ilustracją. Trzy rzeczy wyszły **wyłącznie**
+z obejrzenia miasta i żaden test ich nie widział:
+
+1. **Dachów nie było w ogóle.** Reguła `Roof` dostaje zakres bryły o zerowej wysokości
+   (leży na rzędnej posadowienia) i wypadała na wspólnym warunku „zakres zdegenerowany".
+   W liczbach nie widać tego niczym: budynki mają wysokość, lokale i stanowiska.
+2. **Dach spadzisty wychodził kratownicą** — korekta E12. Powód leży w rasteryzacji,
+   nie w geometrii: przy voxelu 1 m w poziomie stopnie cieńsze niż ~2 m mijają się.
+3. **Okna czytały się jako sztruks.** Otwór co 3 m przy voxelu 1 m to dwa voxele muru
+   na dwa voxele otworu — z odległości dzielnicy jednolita pionowa prążkowanica.
+   Rozstaw 4,5–5 m i otwór 1,2–1,4 m wysokości dają ścianę, na której widać okna.
+
+## Czego ta podfaza nie zostawia następnej
+
+- `Parcel.land_value_per_m2` jest wypełnione (`pass_1`) i **jest wejściem** doboru
+  gramatyki, nie jej wynikiem. M2e liczy `pass_2` na tym samym `ValueCtx`.
+- `Parcel.status` = `Built` i `Parcel.building` wskazują budynek wszędzie tam, gdzie coś
+  stanęło. Działki `Vacant` to albo odpad podziału, albo świadome pokrycie gramatyki.
+- `Workplace` istnieje i ma widełki, ale **nie ma zakładu** (`site: None`) — to jest
+  jedyna rzecz, którą M2e musi w tych rekordach dopisać (albo nadpisać ich liczbę).
+- `CityData.edits` niesie komplet komend voxelowych z indeksem chunkowym; konsument
+  stosuje je przy materializacji. Nakładka per voxel nie powstaje nigdzie w generacji.

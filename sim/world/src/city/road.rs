@@ -128,6 +128,20 @@ impl RoadClass {
         matches!(self, RoadClass::RailFreight | RoadClass::RailPassenger)
     }
 
+    /// Czy klasa zabrania ruchu ciężkiego — flaga [`RoadFlags::NO_HEAVY`].
+    ///
+    /// **Korekta D6 (M2d).** Do M2c flagę dostawała każda klasa o jakimkolwiek limicie
+    /// tonażu, czyli także kolektor (40 t). Test T4 fazy wymaga rampy „przy drodze bez
+    /// `NO_HEAVY`", a strefy przemysłowe frontują zwykle do kolektora — kryterium było
+    /// więc niespełnialne z powodu progu w jednej linii, nie z powodu urbanistyki.
+    /// Próg 24 t to typowa masa całkowita trzyosiowej ciężarówki: poniżej niej droga
+    /// faktycznie zabrania ruchu ciężkiego, powyżej tylko ogranicza.
+    #[must_use]
+    pub const fn forbids_heavy(self) -> bool {
+        let t = self.spec().max_tonnage_t;
+        matches!(self, RoadClass::Pedestrian) || (t > 0 && t < 24)
+    }
+
     #[must_use]
     pub const fn key(self) -> &'static str {
         match self {

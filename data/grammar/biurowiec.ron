@@ -1,0 +1,82 @@
+// Biurowiec. Dwa warianty w jednej gramatyce, rozstrzygane `If` po wartości gruntu:
+// na drogim gruncie kurtyna szklana i większa wysokość, na tańszym — tynk i cztery piętra.
+// To jest dokładnie to, do czego `If` istnieje: czyta parametr wejściowy, nie stan.
+(
+    schema_version: 1,
+    id: "biurowiec",
+    applies: (
+        zones: ["office"],
+        epochs: ["interwar", "postwar", "transition", "contemporary"],
+        styles: [],
+        land_value: (0, 30000000),
+        frontage_m: (8.0, 200.0),
+        depth_m: (8.0, 200.0),
+        weight: 45,
+    ),
+    massing: (
+        setback_front_m: 3.0,
+        setback_side_m: 2.0,
+        setback_back_m: 4.0,
+        max_depth_m: 22.0,
+    ),
+    rules: [
+        Foundation(depth_m: 3.0, material: "concrete", basements: 2),
+        Floors(
+            count: (4, 14),
+            height_m: 3.4,
+            ground_height_m: 4.4,
+            ground: Ref("parter"),
+            typical: Ref("kondygnacja"),
+            top: Ref("kondygnacja"),
+        ),
+        Roof(shape: Flat, material: "roof_sheet"),
+    ],
+    refs: [
+        ("parter", Seq([
+            Fill("concrete"),
+            Comp(thickness_m: 1.2, faces: [
+                (Front, Split(axis: W, parts: [
+                    (Abs(0.4), Nothing),
+                    (Rel(1.0), Fill("glass")),
+                    (Abs(0.8), Nothing),
+                ])),
+            ]),
+        ])),
+        ("kondygnacja", If(
+            cond: LandValueAtLeast(3500000),
+            then: Ref("kurtyna"),
+            otherwise: Ref("tynk"),
+        )),
+        ("kurtyna", Seq([
+            Fill("concrete_panel"),
+            Comp(thickness_m: 1.2, faces: [
+                (Front, Split(axis: W, parts: [
+                    (Abs(0.7), Nothing),
+                    (Rel(1.0), Fill("glass")),
+                    (Abs(0.4), Nothing),
+                ])),
+                (Back, Split(axis: W, parts: [
+                    (Abs(0.7), Nothing),
+                    (Rel(1.0), Fill("glass")),
+                    (Abs(0.4), Nothing),
+                ])),
+            ]),
+        ])),
+        ("tynk", Seq([
+            Fill("stucco"),
+            Comp(thickness_m: 1.25, faces: [
+                (Front, Repeat(axis: U, step_m: 3.0, pad_m: 0.7, rule: Split(axis: W, parts: [
+                    (Abs(0.9), Nothing),
+                    (Abs(1.4), Void),
+                    (Rel(1.0), Nothing),
+                ]))),
+            ]),
+        ])),
+    ],
+    interior: (
+        ground: (kind: Retail, area_m2: (60, 300)),
+        typical: (kind: Office, area_m2: (80, 600)),
+        top: (kind: Office, area_m2: (80, 600)),
+        circulation_share: 0.20,
+    ),
+)

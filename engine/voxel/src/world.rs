@@ -9,7 +9,7 @@
 //! (M1 ryzyko R5). Przekroczenie budżetu obniża promień LOD0, a nie wyczerpuje pamięć.
 
 use crate::chunk::{Chunk, ChunkCoord, ChunkState, ChunkStorage, CHUNK_DIM, CHUNK_VOXELS};
-use crate::edit::{bucket_by_chunk, find_overlaps, EditQueue, EditReport, VoxelEditCmd};
+use crate::edit::{find_overlaps, EditQueue, EditReport, VoxelEditCmd};
 use crate::lod::{aggregate, MAX_LOD};
 use crate::material::{LocalIdx, MaterialId};
 use crate::ColumnSource;
@@ -134,15 +134,71 @@ impl EditOverlay {
         self.chunks.get(&coord).map(Vec::as_slice)
     }
 
-    /// Nakłada zmiany na świeżo zmaterializowany chunk.
-    pub fn apply_to(&self, coord: ChunkCoord, b: &mut ChunkBuilder) {
-        let Some(lista) = self.chunks.get(&coord) else {
+    /// Nakłada zmiany na świeżo zmaterializowany chunk **danego poziomu szczegółowości**.
+    ///
+    /// Nakładka jest zawsze indeksowana w LOD0, bo w tych jednostkach przychodzą komendy.
+    /// Chunk LOD n pokrywa `2^n` chunków LOD0 w każdej osi, więc trzeba przejrzeć wszystkie
+    /// i zrzutować voxele na grubszą siatkę. Bez tego budynek znika, gdy tylko kamera
+    /// odsunie się poza pierścień LOD0 (192 m) — czyli w każdym widoku dzielnicy.
+    pub fn apply_to(&self, coord: ChunkCoord, lod: u8, b: &mut ChunkBuilder) {
+        let d = CHUNK_DIM as i32;
+        if lod == 0 {
+            if let Some(lista) = self.chunks.get(&coord) {
+                for (local, m) in lista {
+                    let (x, y, z) = crate::chunk::unlin(*local as usize);
+                    b.set(x as i32, y as i32, z as i32, *m);
+                }
+            }
             return;
-        };
-        for (local, m) in lista {
-            let (x, y, z) = crate::chunk::unlin(*local as usize);
-            b.set(x as i32, y as i32, z as i32, *m);
         }
+        let n = 1i32 << lod;
+        let (x0, y0, z0) = (coord.x * n, coord.y * n, i32::from(coord.z) * n);
+        // Zakres po `x` wycina `BTreeMap`; `y` i `z` odsiewa filtr. Porządek iteracji
+        // pozostaje porządkiem klucza, więc o zwycięzcy kolizji decyduje ten sam
+        // deterministyczny wybór przy 1 i przy 16 wątkach (00 §3.2).
+        let lo = ChunkCoord::new(x0, i32::MIN, i16::MIN);
+        let hi = ChunkCoord::new(x0 + n - 1, i32::MAX, i16::MAX);
+        for (c, lista) in self.chunks.range(lo..=hi) {
+            if c.y < y0 || c.y >= y0 + n || i32::from(c.z) < z0 || i32::from(c.z) >= z0 + n {
+                continue;
+            }
+            let (dx, dy, dz) = ((c.x - x0) * d, (c.y - y0) * d, (i32::from(c.z) - z0) * d);
+            for (local, m) in lista {
+                let (x, y, z) = crate::chunk::unlin(*local as usize);
+                b.set(
+                    (dx + x as i32) >> lod,
+                    (dy + y as i32) >> lod,
+                    (dz + z as i32) >> lod,
+                    *m,
+                );
+            }
+        }
+    }
+
+    /// Wpisuje do nakładki zbiór komend w **porządku kanonicznym** i zwraca dotknięte chunki.
+    pub fn extend_from(&mut self, cmds: &[VoxelEditCmd]) -> (Vec<ChunkCoord>, u64) {
+        let dim = CHUNK_DIM as i32;
+        let mut dotkniete = Vec::new();
+        let mut zapisanych = 0u64;
+        for (coord, indeksy) in crate::edit::bucket_by_chunk(cmds) {
+            let origin = coord.origin_voxels(0);
+            let mut zapis: SeededMap<u16, MaterialId> = magnat_core::seeded_map();
+            for i in indeksy {
+                crate::edit::rasterize(&cmds[i], origin, 0, dim, &mut |x, y, z, m| {
+                    zapis.insert(crate::chunk::lin(x as u32, y as u32, z as u32) as u16, m);
+                });
+            }
+            // Kolejność zapisu do nakładki: rosnący indeks lokalny, nie kolejność wstawiania
+            // do mapy — nakładka jest stanem trwałym i wchodzi do hasha (00 §3.2, §3.6).
+            let mut wpisy: Vec<(u16, MaterialId)> = zapis.into_iter().collect();
+            wpisy.sort_by_key(|(k, _)| *k);
+            for (local, m) in wpisy {
+                self.set(coord, local, m);
+                zapisanych += 1;
+            }
+            dotkniete.push(coord);
+        }
+        (dotkniete, zapisanych)
     }
 }
 
@@ -307,7 +363,7 @@ impl VoxelWorld {
         let mut b = ChunkBuilder::new(coord, lod, 0);
         aggregate(self.src.as_ref(), coord, lod, &mut b);
         // Nakładka edycji ma pierwszeństwo przed generatorem — to ona jest zapisem gry.
-        self.overlay.apply_to(coord, &mut b);
+        self.overlay.apply_to(coord, lod, &mut b);
 
         let rewizja = self.resident.get(&coord).map_or(0, |c| c.revision);
         let (palette, storage) = b.finish();
@@ -407,20 +463,10 @@ impl VoxelWorld {
             return report;
         }
 
-        for (coord, indeksy) in bucket_by_chunk(&cmds) {
-            report.chunks_touched += 1;
-            let mut zapis: SeededMap<u16, MaterialId> = magnat_core::seeded_map();
-            for i in indeksy {
-                apply_one(&cmds[i], coord, &mut zapis);
-            }
-            // Kolejność zapisu do nakładki: rosnący indeks lokalny, nie kolejność wstawiania
-            // do mapy — nakładka jest stanem trwałym i wchodzi do hasha (00 §3.2, §3.6).
-            let mut wpisy: Vec<(u16, MaterialId)> = zapis.into_iter().collect();
-            wpisy.sort_by_key(|(k, _)| *k);
-            for (local, m) in wpisy {
-                self.overlay.set(coord, local, m);
-                report.voxels_written += 1;
-            }
+        let (dotkniete, zapisanych) = self.overlay.extend_from(&cmds);
+        report.chunks_touched = dotkniete.len();
+        report.voxels_written = zapisanych;
+        for coord in dotkniete {
             if let Some(c) = self.resident.get_mut(&coord) {
                 c.revision += 1;
             }
@@ -432,100 +478,6 @@ impl VoxelWorld {
         }
         report
     }
-}
-
-/// Stosuje jedną komendę w obrębie jednego chunka, zapisując wynik do mapy `indeks → materiał`.
-///
-/// Zapis idzie do mapy, a nie wprost do chunka, bo dwie komendy mogą trafić w ten sam voxel
-/// w jednym punkcie synchronizacji. Wygrywa **późniejsza w porządku kanonicznym** — czyli
-/// ta, która nadpisze wpis (M1 §5.4a: konflikt rozstrzyga się deterministycznie).
-fn apply_one(cmd: &VoxelEditCmd, coord: ChunkCoord, out: &mut SeededMap<u16, MaterialId>) {
-    use crate::edit::{CarveShape, EditOp};
-    let d = CHUNK_DIM as i32;
-    let origin = IVec3::new(coord.x * d, coord.y * d, i32::from(coord.z) * d);
-
-    let mut zapisz = |p: IVec3, m: MaterialId| {
-        let l = IVec3::new(p.x - origin.x, p.y - origin.y, p.z - origin.z);
-        if l.x < 0 || l.y < 0 || l.z < 0 || l.x >= d || l.y >= d || l.z >= d {
-            return;
-        }
-        let idx = crate::chunk::lin(l.x as u32, l.y as u32, l.z as u32) as u16;
-        out.insert(idx, m);
-    };
-
-    match &cmd.op {
-        EditOp::Fill { aabb, material } => {
-            for z in aabb.min.z..aabb.max.z {
-                for y in aabb.min.y..aabb.max.y {
-                    for x in aabb.min.x..aabb.max.x {
-                        zapisz(IVec3::new(x, y, z), *material);
-                    }
-                }
-            }
-        }
-        EditOp::Carve { shape } => match shape {
-            CarveShape::Box(aabb) => {
-                for z in aabb.min.z..aabb.max.z {
-                    for y in aabb.min.y..aabb.max.y {
-                        for x in aabb.min.x..aabb.max.x {
-                            zapisz(IVec3::new(x, y, z), MaterialId::AIR);
-                        }
-                    }
-                }
-            }
-            CarveShape::Tunnel { from, to, radius } => {
-                let a = shape.aabb();
-                let r2 = i64::from(*radius) * i64::from(*radius);
-                for z in a.min.z..a.max.z {
-                    for y in a.min.y..a.max.y {
-                        for x in a.min.x..a.max.x {
-                            if dist_sq_point_segment(IVec3::new(x, y, z), *from, *to) <= r2 {
-                                zapisz(IVec3::new(x, y, z), MaterialId::AIR);
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        EditOp::Terrace {
-            aabb,
-            target_z,
-            material,
-        } => {
-            // Wyrównanie: poniżej poziomu docelowego materiał nasypu, powyżej powietrze.
-            for z in aabb.min.z..aabb.max.z {
-                for y in aabb.min.y..aabb.max.y {
-                    for x in aabb.min.x..aabb.max.x {
-                        let m = if z <= *target_z {
-                            *material
-                        } else {
-                            MaterialId::AIR
-                        };
-                        zapisz(IVec3::new(x, y, z), m);
-                    }
-                }
-            }
-        }
-    }
-}
-
-fn dist_sq_point_segment(p: IVec3, a: IVec3, b: IVec3) -> i64 {
-    let ab = b - a;
-    let ap = p - a;
-    let len_sq = i64::from(ab.x) * i64::from(ab.x)
-        + i64::from(ab.y) * i64::from(ab.y)
-        + i64::from(ab.z) * i64::from(ab.z);
-    if len_sq == 0 {
-        return ap.distance_sq(IVec3::ZERO);
-    }
-    let dot = (i64::from(ap.x) * i64::from(ab.x)
-        + i64::from(ap.y) * i64::from(ab.y)
-        + i64::from(ap.z) * i64::from(ab.z))
-    .clamp(0, len_sq);
-    let cx = i64::from(ap.x) - i64::from(ab.x) * dot / len_sq;
-    let cy = i64::from(ap.y) - i64::from(ab.y) * dot / len_sq;
-    let cz = i64::from(ap.z) - i64::from(ab.z) * dot / len_sq;
-    cx * cx + cy * cy + cz * cz
 }
 
 /// Pomocnik dla testów i dla `engine/render`: rozpakowanie chunka do bufora roboczego.

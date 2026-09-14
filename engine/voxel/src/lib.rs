@@ -20,7 +20,8 @@ pub use chunk::{
     CHUNK_DIM, CHUNK_HEIGHT_M, CHUNK_SPAN_M, CHUNK_VOXELS, VOXEL_HEIGHT_DM,
 };
 pub use edit::{
-    CarveShape, EditOp, EditQueue, EditReport, EditSeq, EditSource, Overlap, Rot90, VoxelEditCmd,
+    rasterize, CarveShape, EditIndex, EditOp, EditQueue, EditReport, EditSeq, EditSource, Obb3,
+    Overlap, Rot90, VoxelEditCmd,
 };
 pub use lod::{aggregate, MAX_LOD};
 pub use material::{

@@ -69,8 +69,14 @@ pub enum StreamId {
     Naming = 127,
     /// Szerokości frontów w podziale pasowym (M2 §5.4).
     Parcels = 128,
-    // 129–139 zarezerwowane dla M2 (BuildingPick, BuildingGrammar, Interiors, FirmSeed,
-    // SitePlacement — dopisywane przez podfazy, które ich użyją; wartości z M2 §6).
+    /// Wybór gramatyki dla parceli (M2 §5.6, M2d).
+    BuildingPick = 129,
+    /// Derywacja gramatyki — klucz `(building_index, node_index)` (M2 §5.6, M2d).
+    BuildingGrammar = 130,
+    /// Podział kondygnacji na lokale, liczba pokoi (M2 §5.6, M2d).
+    Interiors = 131,
+    // 132–139 zarezerwowane dla M2 (FirmSeed, SitePlacement — dopisze M2e;
+    // wartości imiennie w M2 §6 i niezmienne).
 }
 
 /// Encja zastępcza dla losowania bez encji (zdarzenie globalne, generator świata).

@@ -129,6 +129,13 @@ hierarchii tablicowej, czyli przenumerowania kwartałów po przypisaniu dzielnic
 po powstaniu parcel wymagałoby przestawiania dwóch sprzężonych tablic zamiast jednej.
 WP9 nie potrzebuje z WP8 niczego. Szczegóły: korekta C8 w dokumencie M2c.
 
+**Korekta po M2d:** tabela `E-1`–`E-19` w `M2d-zabudowa.md`. Osiem pozycji zmienia zakres
+albo kryterium; trzy dotykają kontraktu z M1, bo `engine/voxel` dostał **bryłę zorientowaną**
+(`Obb3`, `EditOp::Prism`, `CarveShape::Prism`) i **leniwy `EditIndex`** zamiast nakładki
+per voxel — bez pierwszego miasto musiałoby stać w układzie Manhattan, bez drugiego zapis
+zabudowy metropolii to dziesiątki gigabajtów. Zmiany wpisane w przód do M2e: tabela
+`F1`–`F8` w `M2e-gospodarka-bazowa-i-wycena.md`.
+
 **Korekta po M2c, wpisana w przód (`K-18`):** trzy zmiany w podziale pakietów między M2d
 a M2e, uzasadnione w tabeli „Zmiany wpisane po M2c" dokumentu `M2d-zabudowa.md`:
 

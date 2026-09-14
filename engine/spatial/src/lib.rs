@@ -30,6 +30,6 @@ pub mod tree;
 pub use csr::{BatchResult, CategoryGrid, CsrGrid, SpatialStats};
 pub use dynamic::DynamicGrid;
 pub use field::{ScalarField, UNREACHABLE};
-pub use geom::{Aabb2, Vec2};
+pub use geom::{Aabb2, Aabb3, Vec2};
 pub use spec::{morton2, CellId, CellRange, GridSpec, RowSpans};
 pub use tree::ParcelTree;

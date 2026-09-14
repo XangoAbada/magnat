@@ -11,31 +11,37 @@
 //! kwartały, a po powstaniu parcel trzeba by przestawiać dwie tablice zamiast jednej.
 
 pub mod blocks;
+pub mod build;
+pub mod derive;
 pub mod districts;
 pub mod gates;
+pub mod grammar;
 pub mod lsystem;
 pub mod parcels;
 pub mod pattern;
 pub mod poly;
 pub mod rail;
 pub mod road;
+pub mod value;
+pub mod voxels;
 pub mod zoning;
 
 use crate::assets::data_path;
 use crate::params::{Difficulty, EconomyProfile, Epoch, Region, WorldGenParams, WorldSize};
 use crate::query::TerrainQuery;
 use blocks::BlockSet;
+use build::UnitKind;
 use districts::{DistrictNames, DistrictSet};
 use gates::{CityGate, GateKind, GateProfile};
 use magnat_core::{StateHash, StateHasher};
 use magnat_spatial::Vec2;
 use parcels::ParcelSet;
 use pattern::RingTable;
-use zoning::{CityFields, EpochTable, ZoneKind, ZoneResult, ZoningWeights};
 use road::{
     FurnitureKind, NodeFlags, NodeId, PolyArena, RoadClass, RoadFlags, RoadNetwork, RoadNode,
     RoadSegment, SegmentId, StreetFurniture,
 };
+use zoning::{CityFields, EpochTable, ZoneKind, ZoneResult, ZoningWeights};
 
 /// Wejście generatora miasta (PRD §4.1). Wszystko, czego trzeba, żeby z samego ziarna
 /// odtworzyć miasto — i nic ponadto.
@@ -157,6 +163,17 @@ pub struct GenerationReport {
     pub local_streets: u32,
     pub segment_splits: u32,
     pub rail: rail::RailReport,
+    // ── M2d ──────────────────────────────────────────────────────────────────────────
+    /// Etap 6: budynki, lokale, stanowiska, gramatyka awaryjna.
+    pub build: build::BuildReport,
+    /// Warstwa transportowa w voxelach (§5.6b).
+    pub road_voxels: voxels::RoadVoxelReport,
+    /// Wartość gruntu po `pass_1` (WP15a): mediana i skrajne dzielnice.
+    pub land_value_median: magnat_core::Money,
+    /// Średnia w dzielnicach rdzenia (starówka + śródmieście) i obrzeża (przedmieście
+    /// + wieś) — para z kryterium WP15a.
+    pub land_value_core: magnat_core::Money,
+    pub land_value_fringe: magnat_core::Money,
     pub stage_millis: Vec<(&'static str, f64)>,
     pub road_hash: StateHash,
     /// Odcisk warstwy M2c: strefy, dzielnice, parcele. Wchodzi do `world_hash_m2` (M2e).
@@ -266,6 +283,49 @@ impl GenerationReport {
                 self.rail.unreachable,
                 self.rail.max_grade_pct
             ));
+            v.push(format!(
+                "zabudowa: {} budynków · {} lokali ({} mieszkań) · {} stanowisk · fallback {} ({:.1}%) · rozluźnień {} · za małe {} · puste z zamiaru {} · bez rampy {}",
+                self.build.buildings,
+                self.build.units,
+                self.build.dwellings,
+                self.build.workplaces,
+                self.build.fallback,
+                if self.build.buildings > 0 {
+                    f64::from(self.build.fallback) * 100.0 / f64::from(self.build.buildings)
+                } else {
+                    0.0
+                },
+                self.build.relaxed,
+                self.build.too_small,
+                self.build.left_vacant,
+                self.build.ramp_missing
+            ));
+            if self.build.fallback > 0 {
+                v.push(format!(
+                    "  awaryjne wg stref: {}",
+                    ZoneKind::ALL
+                        .iter()
+                        .filter(|z| self.build.fallback_zone[z.index()] > 0)
+                        .map(|z| format!("{} {}", z.key(), self.build.fallback_zone[z.index()]))
+                        .collect::<Vec<_>>()
+                        .join(" · ")
+                ));
+            }
+            v.push(format!(
+                "voxele: {} komend zabudowy + {} komend drogowych na {} segmentach ({} schodkowanych, {} mostów, {} tuneli)",
+                self.build.edit_commands,
+                self.road_voxels.commands,
+                self.road_voxels.segments,
+                self.road_voxels.stepped,
+                self.road_voxels.bridges,
+                self.road_voxels.tunnels
+            ));
+            v.push(format!(
+                "wartość gruntu (pass_1): mediana {:.2} zł/m² · rdzeń {:.2} · obrzeże {:.2}",
+                self.land_value_median.0 as f64 / 100.0,
+                self.land_value_core.0 as f64 / 100.0,
+                self.land_value_fringe.0 as f64 / 100.0
+            ));
             v.push(format!("hash miasta: {:032x}", self.city_hash.0));
         }
         for (n, ms) in &self.stage_millis {
@@ -309,6 +369,14 @@ pub struct CityData {
     pub zones: ZoneResult,
     pub districts: DistrictSet,
     pub parcels: ParcelSet,
+    /// Etap 6 — budynki, lokale, stanowiska (M2d).
+    pub buildings: build::BuildingSet,
+    /// Komendy voxelowe całej generacji, z indeksem chunkowym.
+    ///
+    /// **Nie nakładka per voxel**: miasto to setki milionów zmienionych voxeli, a komend
+    /// jest kilkaset tysięcy. Konsument (klient graficzny, headless) stosuje je przy
+    /// materializacji chunka — patrz `magnat_voxel::EditIndex`.
+    pub edits: magnat_voxel::EditIndex,
     pub report: GenerationReport,
 }
 
@@ -317,6 +385,7 @@ pub enum CityGenError {
     Profile(String),
     Rings(pattern::RingError),
     Data(zoning::EpochError),
+    Grammar(grammar::GrammarError),
 }
 
 impl std::fmt::Display for CityGenError {
@@ -325,6 +394,7 @@ impl std::fmt::Display for CityGenError {
             CityGenError::Profile(s) => write!(f, "{s}"),
             CityGenError::Rings(e) => write!(f, "{e}"),
             CityGenError::Data(e) => write!(f, "{e}"),
+            CityGenError::Grammar(e) => write!(f, "{e}"),
         }
     }
 }
@@ -349,13 +419,25 @@ fn load_profile(plan: &CityPlan) -> Result<GateProfile, CityGenError> {
     Ok(p)
 }
 
-/// Generacja miasta: Etap 3 (M2b) oraz Etapy 4 i 5 (M2c).
-pub fn generate_city(plan: &CityPlan, t: &dyn TerrainQuery) -> Result<CityData, CityGenError> {
+/// Generacja miasta: Etap 3 (M2b), Etapy 4 i 5 (M2c) oraz Etap 6 z wyceną `pass_1` (M2d).
+///
+/// `mats` i `pool` doszły w M2d: gramatyka odwołuje się do materiałów po kluczu, a derywacja
+/// 50 tys. budynków jest jedynym zrównoleglonym krokiem fazy. Sygnatura z §6 dokumentu fazy
+/// nie przewidywała ani jednego, ani drugiego (korekta E2).
+pub fn generate_city(
+    plan: &CityPlan,
+    t: &dyn TerrainQuery,
+    mats: &magnat_voxel::MaterialRegistry,
+    pool: &magnat_jobs::JobPool,
+) -> Result<CityData, CityGenError> {
     let profile = load_profile(plan)?;
     let rings_tbl = RingTable::load().map_err(CityGenError::Rings)?;
     let epochs = EpochTable::load().map_err(CityGenError::Data)?;
     let weights = ZoningWeights::load().map_err(CityGenError::Data)?;
     let names = DistrictNames::load().map_err(CityGenError::Data)?;
+    let grammars = grammar::GrammarSet::load_dir(&data_path("grammar"), mats)
+        .map_err(CityGenError::Grammar)?;
+    let jobs = build::JobTable::load().map_err(CityGenError::Data)?;
     let mut stage = Vec::new();
     let mut zegar = std::time::Instant::now();
     let mut tik = |stage: &mut Vec<(&'static str, f64)>, n: &'static str| {
@@ -399,7 +481,7 @@ pub fn generate_city(plan: &CityPlan, t: &dyn TerrainQuery) -> Result<CityData, 
     tik(&mut stage, "strefy i pierścienie epok");
 
     // Dzielnice **przed** parcelami: przypisanie przenumerowuje kwartały (korekta C8).
-    let districts = districts::build_districts(
+    let mut districts = districts::build_districts(
         plan,
         t,
         &mut roads,
@@ -432,10 +514,49 @@ pub fn generate_city(plan: &CityPlan, t: &dyn TerrainQuery) -> Result<CityData, 
     );
     tik(&mut stage, "kolej towarowa");
 
-    let parcel_set = parcels::subdivide(plan, t, &mut roads, &mut geom, &mut blocks, &zones);
+    let mut parcel_set = parcels::subdivide(plan, t, &mut roads, &mut geom, &mut blocks, &zones);
     tik(&mut stage, "sieć lokalna i parcele");
 
     districts::assign_road_districts(&mut roads, &blocks);
+
+    // ── M2d ─────────────────────────────────────────────────────────────────────────
+    // `pass_1` **przed** zabudową (korekta D1): wartość gruntu jest wejściem doboru
+    // gramatyki i liczby kondygnacji, nie jej wynikiem.
+    let vctx = value::ValueCtx {
+        fields: &fields,
+        roads: &roads,
+        geom: &geom,
+        blocks: &blocks,
+        districts: &districts,
+        rings: zones.rings.len() as u8,
+    };
+    value::pass_1(&vctx, &mut parcel_set);
+    tik(&mut stage, "wycena gruntu (pass_1)");
+
+    let edits = magnat_voxel::EditQueue::new();
+    let build_input = build::BuildInput {
+        plan,
+        terrain: t,
+        roads: &roads,
+        blocks: &blocks,
+        zones: &zones,
+        districts: &districts,
+        grammars: &grammars,
+        materials: mats,
+        jobs: &jobs,
+    };
+    let buildings = build::build_all(&build_input, &mut geom, &mut parcel_set, &edits, pool);
+    // Obietnica korekty C9 z M2c: pojemność dzielnicy liczona z mieszkań, nie z gęstości
+    // strefy. Dopiero teraz jest z czego — do M2d `Unit` nie istniał.
+    build::recompute_pop_capacity(&mut districts, &parcel_set, &buildings);
+    tik(&mut stage, "gramatyka i zabudowa");
+
+    let road_voxels = voxels::queue_roads(&edits, &roads, &districts, t, mats);
+    tik(&mut stage, "warstwa transportowa w voxelach");
+
+    let edit_index = magnat_voxel::EditIndex::build(&edits);
+    tik(&mut stage, "indeks edycji voxeli");
+
     roads.geom = geom;
 
     let mut warnings = Vec::new();
@@ -557,9 +678,14 @@ pub fn generate_city(plan: &CityPlan, t: &dyn TerrainQuery) -> Result<CityData, 
         local_streets: parcel_set.local_streets,
         segment_splits: parcel_set.splits,
         rail: rail_rep,
+        build: buildings.report.clone(),
+        road_voxels,
+        land_value_median: mediana_wartosci(&parcel_set),
+        land_value_core: value::average_by_kind(&districts, &parcel_set, &value::CORE_KINDS),
+        land_value_fringe: value::average_by_kind(&districts, &parcel_set, &value::FRINGE_KINDS),
         stage_millis: stage,
         road_hash: roads.hash(),
-        city_hash: city_hash(&blocks, &zones, &districts, &parcel_set),
+        city_hash: city_hash(&blocks, &zones, &districts, &parcel_set, &buildings),
         warnings,
     };
 
@@ -572,8 +698,25 @@ pub fn generate_city(plan: &CityPlan, t: &dyn TerrainQuery) -> Result<CityData, 
         zones,
         districts,
         parcels: parcel_set,
+        buildings,
+        edits: edit_index,
         report,
     })
+}
+
+/// Mediana wartości gruntu po działkach zabudowywalnych — jedna liczba do raportu.
+fn mediana_wartosci(parcels: &ParcelSet) -> magnat_core::Money {
+    let mut v: Vec<i64> = parcels
+        .parcels
+        .iter()
+        .filter(|p| p.zone.parcelled())
+        .map(|p| p.land_value_per_m2.0)
+        .collect();
+    if v.is_empty() {
+        return magnat_core::Money(0);
+    }
+    v.sort_unstable();
+    magnat_core::Money(v[v.len() / 2])
 }
 
 /// Odcisk warstwy M2c. Kolejność jest kolejnością tablic, a te powstają deterministycznie
@@ -584,6 +727,7 @@ pub fn city_hash(
     zones: &ZoneResult,
     districts: &DistrictSet,
     parcels: &ParcelSet,
+    buildings: &build::BuildingSet,
 ) -> StateHash {
     let mut h = StateHasher::new();
     h.write_u32(blocks.blocks.len() as u32);
@@ -618,6 +762,50 @@ pub fn city_hash(
         h.write_u32(p.frontage.seg.0);
         h.write_u32(p.frontage.t0.to_bits());
         h.write_u32(p.frontage.t1.to_bits());
+        h.write_i64(p.land_value_per_m2.0);
+    }
+    // ── M2d: zabudowa i wnętrza ─────────────────────────────────────────────────────
+    h.write_u32(buildings.buildings.len() as u32);
+    for b in &buildings.buildings {
+        h.write_u32(b.parcel.0.index());
+        h.write_u16(b.grammar.0);
+        h.write_u8(b.epoch.0);
+        h.write_u8(b.floors);
+        h.write_u8(b.basements);
+        h.write_u16(b.height_dm);
+        h.write_u32(b.gross_area_m2);
+        h.write_u8(b.condition.get());
+        for fh in &b.floor_heights_dm {
+            h.write_u16(*fh);
+        }
+        h.write_u32(b.entrances.len() as u32);
+        for e in &b.entrances {
+            h.write_u32(e.seg.0);
+            h.write_u32(e.t.to_bits());
+            h.write_u8(e.kind as u8);
+        }
+    }
+    h.write_u32(buildings.units.len() as u32);
+    for u in &buildings.units {
+        h.write_u32(u.building.0.index());
+        h.write_i64(i64::from(u.floor));
+        h.write_u16(u.area_m2);
+        h.write_i64(u.rent_hint.0);
+        h.write_u8(match u.kind {
+            UnitKind::Dwelling { rooms } => 16 + rooms,
+            UnitKind::Retail => 1,
+            UnitKind::Office => 2,
+            UnitKind::Workshop => 3,
+            UnitKind::Storage => 4,
+            UnitKind::Common => 5,
+        });
+    }
+    h.write_u32(buildings.workplaces.len() as u32);
+    for w in &buildings.workplaces {
+        h.write_u32(w.unit.0);
+        h.write_u16(w.role.0);
+        h.write_u8(w.shift as u8);
+        h.write_i64(w.wage_band.median.0);
     }
     h.finish()
 }

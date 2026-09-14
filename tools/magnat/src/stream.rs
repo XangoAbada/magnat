@@ -15,8 +15,8 @@
 use magnat_jobs::JobPool;
 use magnat_render::{CameraState, Renderer};
 use magnat_voxel::{
-    build_mesh, ChunkBuilder, ChunkCoord, ChunkMesh, ColumnSource, MaterialRegistry, ViewPoint,
-    VoxelWorld, CHUNK_DIM, LOD_RADII_M, MAX_LOD,
+    build_mesh, ChunkBuilder, ChunkCoord, ChunkMesh, ColumnSource, EditIndex, MaterialRegistry,
+    ViewPoint, VoxelWorld, CHUNK_DIM, LOD_RADII_M, MAX_LOD,
 };
 use magnat_world::{Terrain, TerrainQuery};
 use std::collections::{BTreeMap, BTreeSet};
@@ -53,6 +53,10 @@ struct Slot {
 pub struct Streamer {
     terrain: Arc<Terrain>,
     materials: Arc<MaterialRegistry>,
+    /// Komendy voxelowe miasta (M2d, WP12b). Stosowane **przy materializacji**, a nie
+    /// przez nakładkę per voxel: miasto zmienia setki milionów voxeli, a komend jest
+    /// kilkaset tysięcy. Pusty indeks = widok czystego terenu M1 (`--no-city`).
+    edits: Arc<EditIndex>,
     pool: JobPool,
     na_gpu: BTreeSet<Slot>,
     /// Wymuszony promień LOD0 w metrach — tylko do pomiaru z §7.4 („3000 chunków LOD0").
@@ -61,13 +65,18 @@ pub struct Streamer {
 }
 
 impl Streamer {
-    pub fn new(terrain: Arc<Terrain>, materials: Arc<MaterialRegistry>) -> Streamer {
+    pub fn new(
+        terrain: Arc<Terrain>,
+        materials: Arc<MaterialRegistry>,
+        edits: Arc<EditIndex>,
+    ) -> Streamer {
         Streamer {
             pool: JobPool::new(0),
             na_gpu: BTreeSet::new(),
             wymuszony_lod0_m: None,
             terrain,
             materials,
+            edits,
         }
     }
 
@@ -118,12 +127,15 @@ impl Streamer {
         // jest czysty (M1 §5.2), więc nie ma czego synchronizować.
         let terrain = self.terrain.as_ref();
         let materials = self.materials.as_ref();
+        let edits = self.edits.as_ref();
         let gotowe: Vec<(Slot, ChunkMesh)> = magnat_jobs::map_reduce_indexed(
             &self.pool,
             &zadania,
             |_, (slot, _)| {
                 let mut b = ChunkBuilder::new(slot.coord, slot.lod, 1);
                 terrain.fill_chunk(slot.coord, slot.lod, &mut b);
+                // Miasto ma pierwszeństwo przed terenem — to ono jest stanem trwałym.
+                edits.apply_to(slot.coord, slot.lod, &mut b);
                 (*slot, build_mesh(&b, materials))
             },
             |mut acc: Vec<(Slot, ChunkMesh)>, v| {

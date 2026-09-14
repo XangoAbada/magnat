@@ -1,0 +1,58 @@
+// Instytucje: szkoła, przychodnia, urząd, remiza. Jedna gramatyka na wszystkie, bo
+// w M2 różni je wyłącznie archetyp zakładu (Etap 7, M2e), a nie bryła. Rozpoznawalny
+// ma być gmach, nie funkcja — funkcję pokaże karta inspekcji.
+(
+    schema_version: 1,
+    id: "gmach_publiczny",
+    applies: (
+        zones: ["institutional"],
+        epochs: [],
+        styles: [],
+        land_value: (0, 20000000),
+        frontage_m: (8.0, 300.0),
+        depth_m: (8.0, 250.0),
+        weight: 50,
+    ),
+    massing: (
+        setback_front_m: 8.0,
+        setback_side_m: 6.0,
+        setback_back_m: 8.0,
+        max_depth_m: 24.0,
+    ),
+    rules: [
+        Foundation(depth_m: 2.0, material: "concrete", basements: 1),
+        Floors(
+            count: (2, 4),
+            height_m: 3.6,
+            ground_height_m: 4.2,
+            ground: Ref("kondygnacja"),
+            typical: Ref("kondygnacja"),
+            top: Ref("kondygnacja"),
+        ),
+        Roof(shape: Hip(pitch_deg: 25), material: "roof_tile_red"),
+    ],
+    refs: [
+        ("kondygnacja", Seq([
+            Choice([
+                (5, Fill("stucco")),
+                (3, Fill("brick_yellow")),
+                (2, Fill("plaster_white")),
+            ]),
+            Comp(thickness_m: 1.2, faces: [
+                (Front, Ref("rzad_okien")),
+                (Back, Ref("rzad_okien")),
+            ]),
+        ])),
+        ("rzad_okien", Repeat(axis: U, step_m: 5.0, pad_m: 1.5, rule: Split(axis: W, parts: [
+            (Abs(1.0), Nothing),
+            (Abs(2.0), Void),
+            (Rel(1.0), Nothing),
+        ]))),
+    ],
+    interior: (
+        ground: (kind: Office, area_m2: (60, 400)),
+        typical: (kind: Office, area_m2: (60, 400)),
+        top: (kind: Office, area_m2: (60, 400)),
+        circulation_share: 0.24,
+    ),
+)

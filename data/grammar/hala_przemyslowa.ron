@@ -1,0 +1,70 @@
+// Przemysł lekki i ciężki: jedna hala o dużym rzucie i jednej wysokiej kondygnacji.
+// Kominy i czerpnie na dachu powstają operatorem `Extrude` na płycie górnej — to jedyne
+// miejsce w katalogu, w którym wysokość bryły bierze się z reguły, a nie z kondygnacji.
+(
+    schema_version: 1,
+    id: "hala_przemyslowa",
+    applies: (
+        zones: ["industry_light", "industry_heavy"],
+        epochs: ["industrial", "interwar", "postwar", "transition", "contemporary"],
+        styles: [],
+        land_value: (0, 4000000),
+        frontage_m: (12.0, 600.0),
+        depth_m: (12.0, 600.0),
+        weight: 50,
+    ),
+    massing: (
+        setback_front_m: 12.0,
+        setback_side_m: 8.0,
+        setback_back_m: 8.0,
+        max_depth_m: 90.0,
+    ),
+    rules: [
+        Foundation(depth_m: 1.8, material: "concrete", basements: 0),
+        Floors(
+            count: (1, 1),
+            height_m: 11.0,
+            ground_height_m: 11.0,
+            ground: Ref("hala"),
+            typical: Ref("hala"),
+            top: Ref("hala"),
+        ),
+        Roof(shape: Flat, material: "roof_sheet"),
+    ],
+    refs: [
+        ("hala", Seq([
+            Choice([
+                (5, Fill("steel_clad")),
+                (3, Fill("brick_red")),
+                (2, Fill("concrete_panel")),
+            ]),
+            // Pas świetlików pod okapem — hala bez tego jest jednolitą płytą.
+            Comp(thickness_m: 1.2, faces: [
+                (Front, Split(axis: W, parts: [
+                    (Rel(1.0), Nothing),
+                    (Abs(1.6), Repeat(axis: U, step_m: 4.5, pad_m: 0.8, rule: Fill("glass"))),
+                    (Abs(1.2), Nothing),
+                ])),
+                (Side, Split(axis: W, parts: [
+                    (Rel(1.0), Nothing),
+                    (Abs(1.6), Repeat(axis: V, step_m: 4.5, pad_m: 0.8, rule: Fill("glass"))),
+                    (Abs(1.2), Nothing),
+                ])),
+            ]),
+            // Komin: płyta górna, mocno zawężona, wyciągnięta w górę.
+            Comp(thickness_m: 1.0, faces: [
+                (Top, If(
+                    cond: WidthAtLeast(40.0),
+                    then: Inset(m: 14.0, rule: Extrude(m: 22.0, rule: Fill("brick_red"))),
+                    otherwise: Nothing,
+                )),
+            ]),
+        ])),
+    ],
+    interior: (
+        ground: (kind: Workshop, area_m2: (300, 6000)),
+        typical: (kind: Workshop, area_m2: (300, 6000)),
+        top: (kind: Workshop, area_m2: (300, 6000)),
+        circulation_share: 0.08,
+    ),
+)

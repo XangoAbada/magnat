@@ -1,0 +1,71 @@
+// Rolnictwo — zabudowa zagrodowa. Odpowiedź na pytanie postawione w nagłówku M2d
+// („czy działki 3–20 ha potrzebują osobnego zestawu gramatyk"): **nie potrzebują osobnego
+// języka, tylko własnych cofnięć.** Skalę zagrody wyraża `massing`: dom stoi przy drodze,
+// a reszta działki zostaje polem. Gdyby zamiast tego zabudowa skalowała się z działką,
+// gospodarstwo na 20 ha dostałoby budynek o boku 400 m.
+(
+    schema_version: 1,
+    id: "zagroda",
+    applies: (
+        zones: ["agriculture"],
+        epochs: [],
+        styles: [],
+        land_value: (0, 800000),
+        frontage_m: (5.0, 2000.0),
+        depth_m: (5.0, 2000.0),
+        weight: 50,
+        // Nie każde pole ma zabudowanie — większość działek rolnych to sam grunt.
+        coverage: 0.35,
+    ),
+    massing: (
+        // Cofnięcia liczone tak, żeby po nich zostało kilkadziesiąt metrów przy drodze,
+        // niezależnie od tego, ile hektarów ma działka. Nadmiar ucina `max_depth_m`.
+        setback_front_m: 8.0,
+        setback_side_m: 6.0,
+        setback_back_m: 6.0,
+        max_depth_m: 16.0,
+    ),
+    rules: [
+        Foundation(depth_m: 0.8, material: "concrete", basements: 0),
+        Floors(
+            count: (1, 2),
+            height_m: 2.7,
+            ground_height_m: 2.9,
+            ground: Ref("dom"),
+            typical: Ref("dom"),
+            top: Ref("dom"),
+        ),
+        Roof(shape: Gable(pitch_deg: 42), material: "roof_tile_red"),
+    ],
+    refs: [
+        ("dom", Seq([
+            // Zagroda nigdy nie zajmuje całego frontu: część to podwórze i stodoła,
+            // której M2 nie modeluje osobno.
+            Split(axis: U, parts: [
+                (Rel(1.0), Nothing),
+                (Abs(14.0), Ref("bryla")),
+                (Rel(1.0), Nothing),
+            ]),
+        ])),
+        ("bryla", Seq([
+            Choice([
+                (4, Fill("plaster_white")),
+                (3, Fill("brick_red")),
+                (2, Fill("timber")),
+            ]),
+            Comp(thickness_m: 1.25, faces: [
+                (Front, Repeat(axis: U, step_m: 4.6, pad_m: 1.3, rule: Split(axis: W, parts: [
+                    (Abs(0.9), Nothing),
+                    (Abs(1.2), Void),
+                    (Rel(1.0), Nothing),
+                ]))),
+            ]),
+        ])),
+    ],
+    interior: (
+        ground: (kind: Dwelling, area_m2: (55, 110)),
+        typical: (kind: Dwelling, area_m2: (55, 110)),
+        top: (kind: Storage, area_m2: (40, 90)),
+        circulation_share: 0.06,
+    ),
+)

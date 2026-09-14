@@ -18,7 +18,7 @@ use super::zoning::{CityFields, EpochId, StyleId, ZoneKind, ZoneResult};
 use super::CityPlan;
 use crate::assets::data_path;
 use crate::query::TerrainQuery;
-use magnat_core::{rng, DistrictId, Money, Q, StreamId, Tick};
+use magnat_core::{rng, DistrictId, Money, StreamId, Tick, Q};
 use magnat_spatial::Vec2;
 use serde::{Deserialize, Serialize};
 use std::ops::Range;
@@ -360,7 +360,10 @@ fn klastry_przemyslowe(
                 }
             }
         }
-        let pole: f64 = grupa.iter().map(|&i| f64::from(blocks.blocks[i].area_m2)).sum();
+        let pole: f64 = grupa
+            .iter()
+            .map(|&i| f64::from(blocks.blocks[i].area_m2))
+            .sum();
         if pole >= CLUSTER_MIN_M2 {
             let suma = grupa.iter().fold(Vec2::ZERO, |a, &i| a + centroid[i]);
             out.push(suma / grupa.len() as f32);
@@ -547,10 +550,7 @@ fn tozsamosc(
         .enumerate()
         .max_by(|a, b| a.1.total_cmp(b.1).then(b.0.cmp(&a.0)))
         .map_or(0u8, |(i, _)| i as u8);
-    let srodek = idx
-        .clone()
-        .fold(Vec2::ZERO, |s, i| s + centroid[i])
-        / idx.len().max(1) as f32;
+    let srodek = idx.clone().fold(Vec2::ZERO, |s, i| s + centroid[i]) / idx.len().max(1) as f32;
 
     let mieszkaniowa = (0..5).map(|i| pole[i]).sum::<f64>() / calosc.max(1.0);
     let port_blisko = net
@@ -686,7 +686,12 @@ fn blisko_wody(t: &dyn TerrainQuery, p: Vec2) -> bool {
 /// Obrys dzielnicy: łańcuch segmentów granicznych (tych, po których drugiej stronie
 /// leży inna dzielnica albo nic). Gdy łańcuch się nie domyka — otoczka wypukła
 /// centroidów, bo pusty obrys byłby gorszy od przybliżonego.
-fn obrys(net: &RoadNetwork, blocks: &BlockSet, geom: &mut PolyArena, zakres: Range<u32>) -> PolyRef {
+fn obrys(
+    net: &RoadNetwork,
+    blocks: &BlockSet,
+    geom: &mut PolyArena,
+    zakres: Range<u32>,
+) -> PolyRef {
     let mut punkty: Vec<Vec2> = Vec::new();
     for i in zakres.start as usize..zakres.end as usize {
         let b = &blocks.blocks[i];

@@ -1,0 +1,55 @@
+// Handel wolnostojący: pawilon, dyskont, salon. Jedna kondygnacja o dużym rzucie,
+// witryna na całej pierzei frontowej, parking zostaje niezabudowany (stąd duże cofnięcia).
+//
+// `coverage` niższe od 1: w strefie handlowej stoją też kamienice i biurowce, a pawilon
+// ma być jednym z kilku rozwiązań, nie domyślnym.
+(
+    schema_version: 1,
+    id: "pawilon_handlowy",
+    applies: (
+        zones: ["commercial"],
+        epochs: ["postwar", "transition", "contemporary"],
+        styles: [],
+        land_value: (0, 8000000),
+        frontage_m: (10.0, 260.0),
+        depth_m: (10.0, 400.0),
+        weight: 30,
+        coverage: 0.85,
+    ),
+    massing: (
+        setback_front_m: 10.0,
+        setback_side_m: 4.0,
+        setback_back_m: 4.0,
+        max_depth_m: 45.0,
+    ),
+    rules: [
+        Foundation(depth_m: 1.0, material: "concrete", basements: 0),
+        Floors(
+            count: (1, 2),
+            height_m: 4.0,
+            ground_height_m: 5.0,
+            ground: Ref("hala_sprzedazy"),
+            typical: Ref("hala_sprzedazy"),
+            top: Ref("hala_sprzedazy"),
+        ),
+        Roof(shape: Flat, material: "roof_sheet"),
+    ],
+    refs: [
+        ("hala_sprzedazy", Seq([
+            Fill("concrete_panel"),
+            Comp(thickness_m: 1.2, faces: [
+                (Front, Split(axis: W, parts: [
+                    (Abs(0.5), Nothing),
+                    (Abs(3.0), Inset(m: 2.0, rule: Fill("glass"))),
+                    (Rel(1.0), Nothing),
+                ])),
+            ]),
+        ])),
+    ],
+    interior: (
+        ground: (kind: Retail, area_m2: (120, 2400)),
+        typical: (kind: Retail, area_m2: (120, 2400)),
+        top: (kind: Storage, area_m2: (100, 900)),
+        circulation_share: 0.12,
+    ),
+)

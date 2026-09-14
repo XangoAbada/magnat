@@ -1,0 +1,147 @@
+// Materiały zabudowy i nawierzchni (M2d). Osobny plik od `terrain.ron`, bo rządzą się
+// inną logiką: teren wynika z geologii, a te są wyborem epoki i stylu. Rejestr scala
+// oba katalogi i nadaje `MaterialId` po **posortowanym kluczu**, więc dopisanie materiału
+// przenumerowuje identyfikatory — i właśnie dlatego w zapisie gry trzyma się klucz
+// tekstowy, nie indeks (00 §5).
+//
+// `bearing_capacity` nie ma tu znaczenia (to nośność gruntu pod fundamentem, nie muru),
+// `hardness` konsumuje M6 przy rozbiórce. `density_kg_m3` wchodzi do bilansu masy
+// materiałów budowlanych, kiedy M6 zacznie je produkować.
+(
+    schema_version: 1,
+    materials: [
+        // ── mury ────────────────────────────────────────────────────────────────────
+        (
+            key: "brick_red",
+            albedo: (150, 78, 58),
+            roughness: 210,
+            flags: ["SOLID", "DIGGABLE"],
+            hardness: 45,
+            density_kg_m3: 1800,
+        ),
+        (
+            key: "brick_yellow",
+            albedo: (186, 160, 112),
+            roughness: 205,
+            flags: ["SOLID", "DIGGABLE"],
+            hardness: 45,
+            density_kg_m3: 1750,
+        ),
+        (
+            key: "stucco",
+            albedo: (206, 196, 176),
+            roughness: 190,
+            flags: ["SOLID", "DIGGABLE"],
+            hardness: 20,
+            density_kg_m3: 1600,
+        ),
+        (
+            key: "plaster_white",
+            albedo: (226, 224, 216),
+            roughness: 180,
+            flags: ["SOLID", "DIGGABLE"],
+            hardness: 18,
+            density_kg_m3: 1500,
+        ),
+        (
+            key: "concrete",
+            albedo: (146, 146, 142),
+            roughness: 195,
+            flags: ["SOLID", "DIGGABLE"],
+            hardness: 70,
+            density_kg_m3: 2400,
+        ),
+        (
+            key: "concrete_panel",
+            albedo: (170, 168, 158),
+            roughness: 200,
+            flags: ["SOLID", "DIGGABLE"],
+            hardness: 65,
+            density_kg_m3: 2300,
+        ),
+        (
+            key: "steel_clad",
+            albedo: (128, 134, 140),
+            roughness: 90,
+            flags: ["SOLID"],
+            hardness: 90,
+            density_kg_m3: 7800,
+        ),
+        (
+            key: "timber",
+            albedo: (128, 98, 62),
+            roughness: 215,
+            flags: ["SOLID", "DIGGABLE"],
+            hardness: 12,
+            density_kg_m3: 600,
+        ),
+        (
+            key: "glass",
+            albedo: (118, 148, 162),
+            roughness: 20,
+            flags: ["SOLID", "TRANSPARENT"],
+            hardness: 8,
+            density_kg_m3: 2500,
+        ),
+        // ── dachy ───────────────────────────────────────────────────────────────────
+        (
+            key: "roof_tile_red",
+            albedo: (142, 66, 46),
+            roughness: 220,
+            flags: ["SOLID", "DIGGABLE"],
+            hardness: 30,
+            density_kg_m3: 1900,
+        ),
+        (
+            key: "roof_felt",
+            albedo: (52, 50, 50),
+            roughness: 230,
+            flags: ["SOLID", "DIGGABLE"],
+            hardness: 10,
+            density_kg_m3: 1100,
+        ),
+        (
+            key: "roof_sheet",
+            albedo: (96, 104, 110),
+            roughness: 110,
+            flags: ["SOLID"],
+            hardness: 60,
+            density_kg_m3: 7800,
+        ),
+        // ── nawierzchnie (§5.6b) ────────────────────────────────────────────────────
+        (
+            key: "asphalt",
+            albedo: (58, 58, 60),
+            roughness: 225,
+            flags: ["SOLID", "DIGGABLE"],
+            hardness: 35,
+            density_kg_m3: 2300,
+        ),
+        (
+            key: "cobble",
+            albedo: (112, 108, 104),
+            roughness: 235,
+            flags: ["SOLID", "DIGGABLE"],
+            hardness: 55,
+            density_kg_m3: 2500,
+        ),
+        (
+            key: "roadbed",
+            albedo: (124, 120, 112),
+            roughness: 230,
+            flags: ["SOLID", "DIGGABLE", "BUILDABLE"],
+            hardness: 25,
+            density_kg_m3: 2000,
+            bearing_capacity: 180,
+        ),
+        (
+            key: "rail_ballast",
+            albedo: (104, 100, 96),
+            roughness: 240,
+            flags: ["SOLID", "DIGGABLE", "BUILDABLE"],
+            hardness: 40,
+            density_kg_m3: 1700,
+            bearing_capacity: 160,
+        ),
+    ],
+)
