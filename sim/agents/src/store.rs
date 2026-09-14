@@ -253,6 +253,30 @@ impl<T: Copy + Default> Slab<T> {
         r.len = n as u8;
     }
 
+    /// Usuwa wpis o indeksie `i`, zachowując kolejność pozostałych.
+    ///
+    /// Kolejność, a nie `swap_remove`: relacje i wiedza są rangowane przy wypychaniu
+    /// 33. wpisu, a `swap_remove` zmieniałby, kogo wypchnie następne przepełnienie —
+    /// czyli stan świata — w sposób zależny od historii usunięć. Blok, z którego
+    /// usunięto ostatni wpis, wraca na wolną listę (`prop_knowledge_bound` liczy
+    /// zajęte bloki i wyciek byłby w nim widoczny).
+    pub fn remove_at(&mut self, r: &mut SlabRef, i: usize) {
+        if r.is_empty() || i >= r.len as usize {
+            return;
+        }
+        let cap = SLAB_CLASSES[r.class as usize];
+        let start = r.handle as usize * cap;
+        let pool = &mut self.pools[r.class as usize];
+        for j in i..r.len as usize - 1 {
+            pool.data[start + j] = pool.data[start + j + 1];
+        }
+        pool.data[start + r.len as usize - 1] = T::default();
+        r.len -= 1;
+        if r.len == 0 {
+            self.free(r);
+        }
+    }
+
     /// Zwalnia blok. Zawartość jest **zerowana**, żeby dwa przebiegi o tej samej
     /// historii alokacji dawały identyczny hash niezależnie od tego, co w bloku było.
     pub fn free(&mut self, r: &mut SlabRef) {

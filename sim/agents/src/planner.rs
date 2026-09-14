@@ -77,14 +77,32 @@ pub struct HouseholdView<'a> {
     /// Dni zapasu per `StockCat` (M3c §5.6). W M3 abstrakcyjne; M5 zastąpi realnym
     /// towarem, a próg wyzwalający zakupy zostanie ten sam.
     pub stock: &'a [u8; STOCK_CAT_COUNT],
-    /// Szkoły dzieci, które odprowadza **ten** mieszkaniec (podział ról w GD).
+    /// Szkoły dzieci, które **rano odprowadza** ten mieszkaniec (podział ról w GD).
     pub escorts: &'a [PlaceRef],
+    /// Szkoły dzieci, które **po południu odbiera** ten mieszkaniec (korekta C-8).
+    ///
+    /// Osobna lista, bo to zwykle inna osoba: szkoła kończy się o 14:00, a zmiana
+    /// dzienna o 16:00, więc odbiera ten, kto kończy wcześniej (`household::roles`).
+    /// Dla jedynego dorosłego w gospodarstwie obie listy są takie same.
+    pub pickups: &'a [PlaceRef],
 }
 
 impl HouseholdView<'_> {
     /// Zapas pełny — gospodarstwo bez braków. Wartość do testów i do scenariuszy,
     /// w których zapasów jeszcze nikt nie prowadzi.
     pub const FULL: [u8; STOCK_CAT_COUNT] = [30; STOCK_CAT_COUNT];
+
+    /// Widok gospodarstwa bez dzieci do odprowadzenia i z pełnym zapasem — punkt
+    /// wyjścia dla testów i scenariuszy, które gospodarstw jeszcze nie prowadzą.
+    #[must_use]
+    pub fn empty(id: HouseholdId, stock: &[u8; STOCK_CAT_COUNT]) -> HouseholdView<'_> {
+        HouseholdView {
+            id,
+            stock,
+            escorts: &[],
+            pickups: &[],
+        }
+    }
 }
 
 // ── kontekst planowania ─────────────────────────────────────────────────────────
@@ -480,7 +498,7 @@ fn faza1_zobowiazania(
             // ogon zmiany rozpoczętej wczoraj i początek dzisiejszej.
             if ctx.employment.works_on(poprzedni_dzien(ctx.dow)) {
                 wstaw_zobowiazanie(canvas, log, stats, ActivityKind::Work, 0, b.get(), cel);
-                dojazd_po(ctx, canvas, log, stats, b.get(), cel, ctx.home);
+                powrot(ctx, canvas, log, stats, b.get(), cel);
             }
             let start = a.get();
             dojazd_przed(ctx, canvas, log, stats, start, ctx.home, cel);
@@ -497,7 +515,7 @@ fn faza1_zobowiazania(
             let (start, dur) = (a.get(), b.get() - a.get());
             dojazd_przed(ctx, canvas, log, stats, start, ctx.home, cel);
             wstaw_zobowiazanie(canvas, log, stats, ActivityKind::Work, start, dur, cel);
-            dojazd_po(ctx, canvas, log, stats, start + dur, cel, ctx.home);
+            powrot(ctx, canvas, log, stats, start + dur, cel);
         }
     } else if uczen {
         let cel = ctx.school.expect("uczeń bez szkoły");
@@ -512,7 +530,7 @@ fn faza1_zobowiazania(
             cel,
         );
         dojazd_po(ctx, canvas, log, stats, SCHOOL_CLOSE, cel, ctx.home);
-    } else if !ctx.household.escorts.is_empty() {
+    } else if !ctx.household.escorts.is_empty() || !ctx.household.pickups.is_empty() {
         // Nie pracuje, ale odprowadza: dwie osobne wyprawy dom → szkoła → dom.
         odprowadzenie_osobne(ctx, canvas, log, stats);
     }
@@ -649,6 +667,63 @@ fn dojazd_przed(
     );
 }
 
+/// Powrót z pracy do domu — prosto albo **przez szkołę po dziecko** (korekta C-8).
+///
+/// Trzy sloty zamiast jednego, z tego samego powodu co przy odprowadzaniu rano: każdy
+/// `Commute` musi trwać dokładnie tyle, ile `TravelOracle` liczy dla jego pary miejsc,
+/// bo przy wykonaniu planu `begin_trip` dostanie właśnie tę parę.
+fn powrot(
+    ctx: &PlanCtx<'_>,
+    canvas: &mut DayCanvas,
+    log: &mut Log<'_>,
+    stats: &mut PlanStats,
+    depart: u16,
+    from: PlaceRef,
+) {
+    let Some(szkola) = ctx.household.pickups.first().copied() else {
+        dojazd_po(ctx, canvas, log, stats, depart, from, ctx.home);
+        return;
+    };
+    let do_szkoly = minuty(ctx, from, szkola, depart);
+    let do_domu = minuty(ctx, szkola, ctx.home, depart);
+    let calosc = do_szkoly
+        .saturating_add(ESCORT_HANDOVER_MIN)
+        .saturating_add(do_domu);
+    if u32::from(depart) + u32::from(calosc) > 1440 {
+        // Nie mieści się przed północą — wtedy nie wchodzi wcale, tak samo jak
+        // pojedynczy dojazd (korekta F-14). Odbiór dziecka jest zobowiązaniem,
+        // ale plan nie przechodzi przez północ.
+        return;
+    }
+    wstaw_dojazd(
+        canvas,
+        log,
+        stats,
+        depart,
+        do_szkoly,
+        szkola,
+        CommitmentKind::Childcare,
+    );
+    wstaw_zobowiazanie(
+        canvas,
+        log,
+        stats,
+        ActivityKind::Errand,
+        depart + do_szkoly,
+        ESCORT_HANDOVER_MIN,
+        szkola,
+    );
+    wstaw_dojazd(
+        canvas,
+        log,
+        stats,
+        depart + do_szkoly + ESCORT_HANDOVER_MIN,
+        do_domu,
+        ctx.home,
+        CommitmentKind::Commute,
+    );
+}
+
 fn dojazd_po(
     ctx: &PlanCtx<'_>,
     canvas: &mut DayCanvas,
@@ -699,16 +774,22 @@ fn wstaw_dojazd(
 
 /// Odprowadzenie bez pracy własnej: dom → szkoła → dom, rano i po odbiór po południu.
 /// Każdy odcinek osobnym slotem, z tego samego powodu co wyżej.
+///
+/// Rano jedzie się do szkoły z `escorts`, po południu do tej z `pickups` — dla jedynego
+/// dorosłego w gospodarstwie to ta sama szkoła, ale dla dwojga rodziców podział ról
+/// może przypisać poranek jednemu, a popołudnie drugiemu (korekta C-8).
 fn odprowadzenie_osobne(
     ctx: &PlanCtx<'_>,
     canvas: &mut DayCanvas,
     log: &mut Log<'_>,
     stats: &mut PlanStats,
 ) {
-    let Some(szkola) = ctx.household.escorts.first().copied() else {
-        return;
-    };
-    for (kiedy, do_szkoly) in [(SCHOOL_OPEN, true), (SCHOOL_CLOSE, false)] {
+    let kursy = [
+        (SCHOOL_OPEN, true, ctx.household.escorts.first().copied()),
+        (SCHOOL_CLOSE, false, ctx.household.pickups.first().copied()),
+    ];
+    for (kiedy, do_szkoly, szkola) in kursy {
+        let Some(szkola) = szkola else { continue };
         let tam = minuty(ctx, ctx.home, szkola, kiedy);
         let start = if do_szkoly {
             kiedy.saturating_sub(tam + ESCORT_HANDOVER_MIN)

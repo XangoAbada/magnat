@@ -143,3 +143,17 @@ ma stabilizować, nie sterować; sterowanie zabiłoby emergencję, którą balan
 większe koperty GD → więcej zakupów powyżej progu → szybsze schodzenie zapasów →
 `adj_stock` dodatni → wyższe ceny ofert → wyższe CPI. Test negatywny w CI (grep) pilnuje,
 żeby nikt nie „poprawił" tego skrótem.
+
+---
+
+## Zmiany wpisane po M3c
+
+Zgodnie z `K-18`. Wpisane jest **tylko to, co wiadomo na pewno** po zamknięciu M3c —
+podfaza nie jest tu przeprojektowywana.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| ★ | **`HouseholdBudget` z §5.9 stoi na komponencie `Household` (M3c §5.6), a nie obok niego.** `income_monthly` **już tam jest** i wypełnia je generacja populacji; `cash`, `bank`, `savings` i `debt` też. Budżet M5 dokłada koperty, koszty stałe, kredyty i zaległości, a pola pieniężne **czyta i pisze w komponencie** | Dwa źródła salda gospodarstwa rozjeżdżają się przy pierwszej transakcji, a testu, który by to złapał, nie ma po żadnej ze stron. `society::total_money` sumuje dziś pieniądz z `Wealth` mieszkańców i z `Household`; gdyby M5 trzymał saldo u siebie, test zachowania pieniądza (00 §6) przestałby cokolwiek znaczyć |
+| ★ | **`NeedId` w sygnaturach §5.9 to `core::NeedKind`** (dwanaście wariantów, K-20), a klucz koperty zakupowej to `core::StockCat` (osiem kategorii). `StockCat::need()` mówi, którą potrzebę uzupełnia zakup w danej kategorii | Typ `NeedId` nie powstał i nie powstanie — słownik potrzeb mieszka w `core` od M3a. `Household.stock: [u8; STOCK_CAT_COUNT]` jest indeksowany `StockCat` i to on jest polem, które M5 zastępuje realnym towarem (zapowiedź z §6.2 dokumentu fazy M3) |
+| ★ | **„Typ GD" w `data/economy/envelopes.ron` to `HouseholdKind`**, wyliczany ze **składu** gospodarstwa (`household::classify`), a nie przechowywany jako deklaracja | Rodzina po wyprowadzce dzieci przestaje być rodziną z dziećmi w tej samej minucie, w której ostatnie z nich wychodzi — bez osobnej mechaniki „przekwalifikowania". Wagi kopert per typ zmieniają się wtedy same |
+| | **Katalog `data/economy/` nie jest w liście z `00` §5**, która deklaruje się jako kompletna. M5 dopisuje go tam razem z pierwszym plikiem | Ta sama sytuacja co `data/ui/` przy M2 (`K-19`): lista jest kompletna, więc brak wpisu jest jej błędem, nie luką |

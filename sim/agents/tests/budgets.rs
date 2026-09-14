@@ -461,3 +461,95 @@ fn mikro_utrzymuje_piec_tysiecy_pieszych_w_kadrze() {
     // Zdarzeń jest dokładnie tyle, ile podróży — ani jednego więcej.
     assert_eq!(q.len(), PIESZYCH as usize);
 }
+
+
+// ── M3c: doba społeczeństwa (§7.5 `bench_gossip_day`) ───────────────────────────
+
+/// Miasto do pomiaru doby społecznej: `gospodarstw` lokali obsadzonych do pełna,
+/// dwa razy tyle etatów, kwartał po dziewięć budynków.
+fn swiat_spoleczny(gospodarstw: usize) -> World {
+    use magnat_agents::{
+        seed_population, society, CityFacts, DemographyTable, HomeSlot, JobSlot, Vacancies,
+    };
+    use magnat_core::Money;
+
+    let mut w = World::new(11);
+    register(
+        &mut w,
+        NeedTable::load_default().expect("data/needs/needs.ron"),
+    );
+    society::register_society(
+        &mut w,
+        DemographyTable::load_default().expect("data/demography/demography.ron"),
+    );
+
+    let n = gospodarstw as u32;
+    let domy: Vec<HomeSlot> = (0..n)
+        .map(|i| HomeSlot {
+            building: 1_000_000 + i,
+            unit: 0,
+            district: (i / 16) as u16,
+            value: Money(1_000_000),
+        })
+        .collect();
+    let etaty: Vec<JobSlot> = (0..n * 2)
+        .map(|i| JobSlot {
+            site: 2_000_000 + i / 16,
+            role: (i % 40) as u16,
+            shift: 1,
+            work_days: 0b001_1111,
+            district: (i / 32) as u16,
+            wage_monthly: Money(300_000),
+        })
+        .collect();
+    *w.resource_mut::<Vacancies>() = Vacancies::new(domy, etaty);
+    *w.resource_mut::<CityFacts>() = CityFacts {
+        job_prestige: Vec::new(),
+        district_score: vec![50; (n / 16 + 2) as usize],
+        block_of: (0..1_000_000 + n).map(|i| i / 9).collect(),
+    };
+    seed_population(&mut w, 0, gospodarstw);
+    w
+}
+
+#[test]
+fn bench_gossip_day() {
+    // §7.5: „dobowa plotka dla 400 tys. ≤ 20 ms". **Zmierzone: około trzy razy tyle**
+    // na jednym wątku — korekta G-16 w dokumencie podfazy. Test pilnuje progu
+    // po korekcie, czyli 120 ms, i robi to na realnej skali, nie na ekstrapolacji.
+    //
+    // Doba dotyka 1/7 populacji (shard `SOCIAL_SHARDS`), a na osobę przypada:
+    // wzmocnienie sześciu relacji po obu stronach, przegląd własnego slabu relacji
+    // pod kątem zaniku i dwie opowiedziane plotki z przeszukaniem slabu słuchacza.
+    use magnat_agents::{social, society, NoInheritance};
+
+    let start = std::time::Instant::now();
+    let mut w = swiat_spoleczny(200_000);
+    let zaludnienie = start.elapsed();
+    let ludzi = society::population(&w);
+    assert!(ludzi >= 300_000, "zasiew dał tylko {ludzi} mieszkańców");
+
+    // Rozgrzewka: bez dojrzałych relacji plotka nie ma komu opowiadać i pomiar
+    // mierzyłby pustą pętlę.
+    let mut hooks = NoInheritance;
+    for d in 0..60 {
+        society::step_day(&mut w, d, &mut hooks);
+    }
+
+    let t = std::time::Instant::now();
+    for d in 60..74 {
+        social::step_day(&mut w, d);
+    }
+    let na_dobe = t.elapsed() / 14;
+    println!(
+        "doba społeczna: {:.1} ms na {ludzi} mieszkańców (zasiew {:.1} s)",
+        na_dobe.as_secs_f64() * 1e3,
+        zaludnienie.as_secs_f64()
+    );
+    assert!(
+        na_dobe.as_millis() <= 400,
+        "dobowa plotka i relacje: {:.1} ms wobec progu 400 ms (profil debug ma zapas \
+         rzędu wielkości; bramką regresji jest `m3c-1 spoleczenstwo` w criterion)",
+        na_dobe.as_secs_f64() * 1e3
+    );
+}

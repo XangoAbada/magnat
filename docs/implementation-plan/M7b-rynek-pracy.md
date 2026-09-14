@@ -150,3 +150,16 @@ pub struct RoleStats {
 
 `LaborMarketStats` widzą i gracz, i AI — to zamierzone: **płace w ofertach są jawne, koszty
 jednostkowe nie są**.
+
+---
+
+## Zmiany wpisane po M3c
+
+Zgodnie z `K-18`. Wpisane jest **tylko to, co wiadomo na pewno** po zamknięciu M3c.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| ★ | **M7 przejmuje pulę etatów `sim::agents::migration::Vacancies`** razem z `Employment`. Dziś pula jest płaską listą `JobSlot { site, role, shift, work_days, district, wage_monthly }` wypełnianą przez Etap 8 z `Workplace` M2 i jest **jedynym** miejscem, w którym „miasto ma pracę" cokolwiek znaczy | Do M7 nie ma rynku pracy: etat się bierze i oddaje, nie negocjuje. Pula jest za to wejściem regulatora populacji z M3c §5.7 (napływ ∝ `min(wakaty, pustostany)`), więc **nie wolno jej po prostu usunąć** — M7 ma ją zastąpić czymś, co nadal odpowiada na pytanie „ile jest wolnych etatów i gdzie" |
+| ★ | **Każde wyjście z rynku pracy musi przejść przez `migration::release_job_of`.** Zgon, emerytura i wyjazd z miasta już tędy idą; M7 dokłada zwolnienie i zmianę pracy | Etat, który nie wraca do puli, znika z miasta na zawsze. Zmierzone w M3c (korekta G-7): bez tego `min(wakaty, pustostany)` schodzi do zera, napływ wygasa i po stu latach z 5 257 mieszkańców zostaje 105. To jest domknięcie księgowe pojemności miasta, nie szczegół implementacji |
+| ★ | **`DeprivationEffect::ProductivityLoss` i `AmbitionGain` czekają w `data/needs/needs.ron` na M7** — `needs::deprivation_of` już je wystawia, nikt ich nie stosuje (rozstrzygnięcie D-6 z M3a, potwierdzone w M3c dla `StatusLoss`) | Ten sam wzorzec, którym M3c wziął `StatusLoss`: skutek progowy stosuje faza, która jest jego właścicielem, a wartości siedzą w danych od M3a, żeby nikt ich nie wymyślał od nowa |
+| | **`Employment.role` jest indeksem do `data/jobs/`, a prestiż zawodu czyta `social::CityFacts.job_prestige`** — tablica wypełniana z zewnątrz, dziś przez Etap 8 | `sim/agents` nie zna katalogu zawodów. Gdy `job_prestige` jest pusta, funkcja statusu przybliża prestiż kompetencją (bezrobotny 10, emeryt 40, uczeń 45, pracujący 40 + połowa poziomu w roli) — jawny `ponytail:` w `social::prestiz`, który znika, gdy tablica jest wypełniona |

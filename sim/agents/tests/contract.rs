@@ -308,6 +308,7 @@ fn planer_stoi_na_traitach_a_nie_na_implementacjach() {
                 id: HouseholdId(encja(11)),
                 stock: &stock,
                 escorts: &escorts,
+                pickups: &escorts,
             },
             employment: &employment,
             known: KnowledgeView::new(&wpisy),

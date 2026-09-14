@@ -16,8 +16,18 @@
 //! - **ruch pieszy** (`walk`) — odległość sieciowa po centroliniach ulic z M2 za
 //!   `TravelOracle`, plus warstwa Mikro interpolująca pozycję po polilinii trasy.
 //!
-//! Czego tu nie ma i gdzie to jest: gospodarstwa domowe, demografia, relacje i plotka —
-//! M3c; generacja populacji, systemy ECS i UI — M3d.
+//! Podfaza M3c dołożyła **społeczeństwo**:
+//! - **gospodarstwo domowe** (`household`) — skład, podział ról, typ liczony ze składu,
+//! - **demografia** (`demography`) — hazardy roczne raz w roku po shardzie 1/360,
+//!   terminarz porodów i wyzdrowień, dziedziczenie za `InheritanceHook`,
+//! - **migracja** (`migration`) — napływ i odpływ sterowany wakatami i pustostanami;
+//!   jedyny regulator populacji, bez spawnowania do celu,
+//! - **status, relacje i plotka** (`social`) — klasa jako przedział statusu, wiedza
+//!   o miejscach rozchodząca się wyłącznie przez kontakt,
+//! - **rytm doby i miesiąca** (`society`) — kolejność wywołań, która ma znaczenie.
+//!
+//! Czego tu nie ma i gdzie to jest: generacja populacji (Etap 8), systemy ECS
+//! z §5.12 i UI — M3d.
 //!
 //! Cały crate jest **kodem symulacji**: obowiązuje zakaz libm (00 §K-6) i zakaz
 //! iterowania po `HashMap` (00 §3.2). Zależy od `core`, `ecs` i `spatial` — i **nie
@@ -27,10 +37,15 @@
 
 pub mod arrayvec;
 pub mod components;
+pub mod demography;
 pub mod des;
+pub mod migration;
+pub mod household;
 pub mod needs;
 pub mod places;
 pub mod planner;
+pub mod social;
+pub mod society;
 pub mod store;
 
 // K-2: graf pieszy należy do M4. Moduł jest prywatny i taki zostaje — na zewnątrz
@@ -45,6 +60,10 @@ pub use components::{
     Vitals, Wealth, HOT_COMPONENT_BYTES,
 };
 pub use components::{KnowledgeRef, RelationsRef};
+pub use household::{
+    add_member, classify, members_of, remove_member, roles, Household, HouseholdKind,
+    HouseholdOverflow, HouseholdRoles, MemberView, HH_INLINE_MEMBERS, HH_MAX_MEMBERS, MAX_ESCORTED,
+};
 pub use des::{
     order_key, EventKind, EventQueue, HhEventKind, ReplanCause, SimEvent, REPLAN_BUDGET_PER_TICK,
     REPLAN_COOLDOWN_MIN, WHEEL_MINUTES,
@@ -67,5 +86,21 @@ pub use planner::{
 pub use store::{
     Knowledge, KnowledgeKind, KnowledgeSlab, PlanSlab, PlanSlot, Relation, RelationKind,
     RelationSlab, Slab, SlabRef, SLAB_CLASSES, SLAB_MAX,
+};
+pub use demography::{
+    citizen_by_index, compatibility, household_by_index, knowledge_ref, powiaz, relations_ref,
+    DayReport, DemographyError, DemographyTable, InheritanceHook, LifeQueue, LifeTask, LifeTaskKind,
+    MonthReport, NoInheritance, Population, StatusWeights, DAYS_PER_YEAR, DEMOGRAPHY_SHARDS,
+};
+pub use migration::{
+    attractiveness, seed_population, shock_retire_jobs, spawn_household, spawn_household_aged, zaloz_gospodarstwo, HomeSlot, JobSlot, MigrationReport,
+    Unsettled, UnsettledState, Vacancies,
+};
+pub use social::{
+    awareness_of, knows_place, learn_place, status_of, CityFacts, SocialClass, SocialIndex,
+    SocialReport, StatusBreakdown, StatusDistribution, StatusInput, StatusReport, SOCIAL_SHARDS,
+};
+pub use society::{
+    households, is_month_start, population, register_society, total_money, SocietyReport,
 };
 pub use walk::WalkOracle;

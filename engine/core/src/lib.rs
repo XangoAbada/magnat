@@ -52,7 +52,7 @@ pub use types::{
     Tick, Volume, Q,
 };
 pub use vocab::{
-    ActivityKind, Biome, CommitmentKind, DeprivationEffect, NeedKind, PlaceKind, PlaceRef,
-    ResourceKind, StockCat, TraitId, TransportMode, UtilityKind, UtilityService, WorldCoord,
-    NEED_COUNT, STOCK_CAT_COUNT,
+    ActivityKind, Biome, CommitmentKind, DeprivationEffect, LifeEventKind, MigrationKind, NeedKind,
+    PlaceKind, PlaceRef, ResourceKind, StockCat, TraitId, TransportMode, UtilityKind,
+    UtilityService, WorldCoord, NEED_COUNT, STOCK_CAT_COUNT,
 };

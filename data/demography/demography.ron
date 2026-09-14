@@ -1,0 +1,183 @@
+// Hazardy demograficzne (M3c §5.6, §5.7, §5.8).
+//
+// Wszystkie stopy roczne odnoszą się do roku **360-dniowego** (K-1). Hazard roczny
+// stosuje się dokładnie raz w roku: system demografii jest shardowany 1/360 po indeksie
+// encji, więc każdy mieszkaniec dostaje jedno losowanie na rok, w swojej dobie.
+//
+// Liczby są kalibrowane pod **stabilność stulecia**, a nie pod konkretny kraj ani rok:
+// kryterium WP7 mówi, że populacja po 100 latach ma zostać w przedziale [0,5×, 2,0×].
+// Balansator M5 i historia „na sucho" M10 przestroją je na epoki.
+(
+    schema_version: 1,
+
+    ages: (
+        // Od tego wieku mieszkaniec jest dorosły: może odprowadzać, robić zakupy,
+        // wejść w związek i założyć własne gospodarstwo.
+        adult: 18,
+        // Poniżej tego wieku dziecko wymaga odprowadzenia do szkoły (C-8).
+        escort: 10,
+        school_start: 7,
+        school_end: 18,
+        work_start: 18,
+        retirement: 65,
+        senior: 65,
+        // Twardy sufit: `prop_no_immortals` nie dopuszcza żywego powyżej 120 lat,
+        // a hazard sam z siebie zostawia ogon.
+        max: 110,
+        // Od tego wieku dorosły próbuje wyprowadzić się z gospodarstwa rodziców —
+        // i to jest zawór, przez który nadwyżka urodzeń wychodzi z miasta (§5.7).
+        leave_nest: 25,
+    ),
+
+    // Umieralność roczna na 100 000 osób, pasmami wieku. Zakresy są domknięte obustronnie
+    // i muszą pokrywać 0..=`ages.max` bez dziur — walidator to sprawdza.
+    mortality: [
+        (from:   0, to:   0, per_100k:   400),
+        (from:   1, to:   4, per_100k:    25),
+        (from:   5, to:  14, per_100k:    12),
+        (from:  15, to:  24, per_100k:    60),
+        (from:  25, to:  34, per_100k:    90),
+        (from:  35, to:  44, per_100k:   170),
+        (from:  45, to:  54, per_100k:   400),
+        (from:  55, to:  64, per_100k:   950),
+        (from:  65, to:  74, per_100k:  2200),
+        (from:  75, to:  84, per_100k:  5800),
+        (from:  85, to:  94, per_100k: 15000),
+        (from:  95, to: 104, per_100k: 30000),
+        (from: 105, to: 110, per_100k: 60000),
+    ],
+    // Mnożnik umieralności przy zerowym zdrowiu, w promilach (1000 = bez zmiany).
+    // Zdrowie 100 → ×1,0; zdrowie 0 → ×2,0. Liniowo pomiędzy.
+    mortality_sick_permille: 2000,
+
+    // Płodność roczna na 100 000 kobiet w pasmie wieku matki. Suma po latach
+    // (× szerokość pasma / 100 000) to **surowy** TFR: tu 3,5. Realizowany jest
+    // wyraźnie niższy, bo mnożą go trzy korekty poniżej (kolejność dziecka, brak
+    // partnera, ciasnota) oraz sama mechanika: ciąża trwa 270 z 360 dób, więc kobieta,
+    // która właśnie zaszła w ciążę, na następnym losowaniu rocznym najczęściej jeszcze
+    // jest w ciąży. Liczba jest skalibrowana pod `m3_century`, a nie przepisana
+    // z rocznika statystycznego — kalibrację epok wnosi balansator M5.
+    fertility: [
+        (from: 15, to: 19, per_100k:  1800),
+        (from: 20, to: 24, per_100k: 13000),
+        (from: 25, to: 29, per_100k: 23000),
+        (from: 30, to: 34, per_100k: 21000),
+        (from: 35, to: 39, per_100k:  9500),
+        (from: 40, to: 44, per_100k:  1900),
+        (from: 45, to: 49, per_100k:   120),
+    ],
+    // Mnożnik wg liczby dzieci już w gospodarstwie (promile), indeks = liczba dzieci.
+    // Poza tablicą obowiązuje ostatnia wartość.
+    fertility_parity_permille: [1150, 1050, 700, 380, 180, 80],
+    // Mnożnik dla matki bez partnera.
+    fertility_single_permille: 600,
+    // Mnożnik przy potrzebie `Housing` poniżej progu — ciasnota odkłada dziecko.
+    fertility_housing_permille: 600,
+    fertility_housing_threshold: 35,
+    // Ciąża w dobach roku 360-dniowego.
+    gestation_days: 270,
+
+    // Choroba: roczny hazard na 100 000, pasmami wieku. Choroba **obniża `Health`**
+    // (rozstrzygnięcie C-9) — planer nie potrzebuje wtedy osobnej flagi w `PlanCtx`,
+    // bo wyzwalacz „chory → wizyta u lekarza" już czyta `Needs[Health]`.
+    illness: [
+        (from:   0, to:   4, per_100k: 140000),
+        (from:   5, to:  17, per_100k:  90000),
+        (from:  18, to:  44, per_100k:  70000),
+        (from:  45, to:  64, per_100k: 110000),
+        (from:  65, to: 110, per_100k: 180000),
+    ],
+    illness_health_drop: (min: 10, max: 60),
+    illness_days: (min: 2, max: 14),
+    // Poniżej tego poziomu higieny hazard choroby rośnie o połowę.
+    illness_hygiene_threshold: 30,
+
+    // Związki. Hazard **miesięczny** w promilach, pasmami wieku.
+    partnering: [
+        (from: 18, to: 24, permille: 22),
+        (from: 25, to: 34, permille: 30),
+        (from: 35, to: 49, permille: 14),
+        (from: 50, to: 64, permille:  6),
+        (from: 65, to: 110, permille: 2),
+    ],
+    partner_max_status_delta: 20,
+    partner_max_age_delta: 8,
+    partner_min_relation_weight: 40,
+    // Wspólne gospodarstwo po tylu dobach związku o wadze ≥ `wedding_min_weight`.
+    wedding_min_days: 180,
+    wedding_min_weight: 70,
+
+    // Rozstanie. Hazard miesięczny w promilach.
+    divorce_base_permille: 2,
+    divorce_stress_permille: 5,
+    divorce_stress_threshold: 60,
+    divorce_debt_permille: 4,
+    // Dług większy niż tyle miesięcznych dochodów dokłada `divorce_debt_permille`.
+    divorce_debt_to_income: 6,
+    // Przez tyle dób po zamieszkaniu razem para się nie rozstaje.
+    divorce_grace_days: 360,
+
+    // Status społeczny (§5.8). Wagi sumują się do 100 — walidator sprawdza.
+    status_weights: (
+        income: 25,
+        wealth: 15,
+        education: 15,
+        occupation: 20,
+        address: 15,
+        // M3 nie ma konsumpcji statusowej; M5 wypełnia i wtedy waga rośnie kosztem `income`.
+        consumption: 0,
+        family: 10,
+    ),
+
+    // Migracja — jedyny regulator populacji (§5.7).
+    migration: (
+        // Ilu promili z `min(wakaty, pustostany)` przyjeżdża w miesiącu przy pełnej
+        // atrakcyjności. Mała stała: regulator pierwszego rzędu z małym wzmocnieniem
+        // nie oscyluje, a kryterium WP8 zabrania amplitudy powyżej 30 %.
+        k_in_permille: 150,
+        // Po tylu miesiącach bez pracy któregokolwiek dorosłego gospodarstwo wyjeżdża.
+        jobless_months_to_leave: 3,
+        // Gospodarstwo bez lokalu wyjeżdża po tylu dobach (grace period §5.7).
+        settle_grace_days: 90,
+        // Potrzeby, poniżej których gospodarstwo zaczyna rozważać wyjazd.
+        housing_need_threshold: 20,
+        safety_need_threshold: 15,
+        // Miesięczny hazard wyjazdu z powodu potrzeb, w promilach.
+        need_leave_permille: 25,
+        // Miesięczny hazard wyjazdu **przemnożony przez udział dorosłych bez pracy**
+        // w gospodarstwie. Gospodarstwo, w którym połowa dorosłych nie ma etatu, wyjeżdża
+        // z hazardem 22,5 ‰ na miesiąc — czyli w ciągu roku z prawdopodobieństwem ~24 %.
+        // To jest główne wzmocnienie pętli ujemnego sprzężenia i to ono decyduje, jak
+        // szybko miasto wraca do równowagi po szoku (kryterium WP8: ≤ 5 lat gry).
+        jobless_leave_permille: 45,
+        // Rozkład liczebności przyjeżdżających gospodarstw (losowanie z tej listy).
+        arrival_sizes: [1, 1, 1, 2, 2, 2, 3, 3, 4],
+        // Wiek dorosłego przyjezdnego: `min` + losowe `spread` lat.
+        arrival_adult_age_min: 21,
+        arrival_adult_age_spread: 28,
+    ),
+
+    // Relacje i plotka (§5.8).
+    social: (
+        // Waga −1 za każdy pełny tydzień bez kontaktu.
+        relation_decay_per_week: 1,
+        // Przyrost wagi za **tydzień** wspólnych zmian i za tydzień sąsiedztwa.
+        // §5.8 mówi „+1 za dobę wspólnej zmiany"; przebieg relacji jest shardowany 1/7,
+        // czyli obejmuje cały tydzień naraz — stąd pięć (dni roboczych) i trzy.
+        coworker_gain_per_week: 5,
+        coworker_max: 70,
+        neighbour_gain_per_week: 3,
+        neighbour_max: 50,
+        family_weight: 90,
+        // Ilu współpracowników i ilu sąsiadów utrzymuje jedna osoba. To jest liczba
+        // **bliskich** kontaktów, nie wielkość zakładu: pracuje się z dwudziestoma,
+        // rozmawia z trzema.
+        close_contacts: 5,
+        // Plotka: do ilu relacji naraz i od jakiej wagi.
+        gossip_targets: 2,
+        gossip_min_weight: 40,
+        gossip_score_penalty: 10,
+        // Ocena wpisu wiedzy zdobytego z trasy dojścia (§5.7).
+        route_score: 35,
+    ),
+)

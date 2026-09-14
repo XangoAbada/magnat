@@ -205,6 +205,7 @@ impl Scena {
                 id: magnat_core::HouseholdId(encja(100)),
                 stock: &self.stock,
                 escorts: &self.escorts,
+                pickups: &self.escorts,
             },
             employment: &self.employment,
             known: KnowledgeView::new(&self.wiedza),
@@ -224,6 +225,64 @@ fn ma_rodzaj(canvas: &DayCanvas, k: ActivityKind) -> bool {
 }
 
 // ── testy ───────────────────────────────────────────────────────────────────────
+
+#[test]
+fn odbior_dziecka_wraca_przez_szkole_a_bez_niego_prosto() {
+    // Korekta C-8: popołudniowy odbiór dziecka należy do M3c i wchodzi do planu jako
+    // trzy sloty (praca → szkoła, przekazanie, szkoła → dom), tak samo jak poranne
+    // odprowadzenie. Kto nie odbiera, wraca prosto — i to jest cała różnica.
+    let s = Scena::anna();
+    let brak: Vec<PlaceRef> = Vec::new();
+
+    let mut z_odbiorem = DayCanvas::new();
+    plan_day(&s.ctx(), &mut z_odbiorem);
+
+    let mut ctx = s.ctx();
+    ctx.household = HouseholdView {
+        id: magnat_core::HouseholdId(encja(100)),
+        stock: &s.stock,
+        escorts: &s.escorts,
+        pickups: &brak,
+    };
+    let mut bez_odbioru = DayCanvas::new();
+    plan_day(&ctx, &mut bez_odbioru);
+
+    let po_pracy = |c: &DayCanvas| -> Vec<(u16, u8)> {
+        c.slots()
+            .iter()
+            .filter(|x| x.start_min >= 16 * 60 && x.start_min < 17 * 60)
+            .map(|x| (x.start_min, x.kind))
+            .collect()
+    };
+    let z = po_pracy(&z_odbiorem);
+    let b = po_pracy(&bez_odbioru);
+    assert!(
+        z.len() > b.len(),
+        "odbiór nie dołożył slotów: {z:?} vs {b:?}"
+    );
+    assert!(
+        z_odbiorem.slots().iter().any(|x| {
+            x.kind == ActivityKind::Errand as u8 && x.start_min > 16 * 60
+        }),
+        "brak przekazania dziecka po południu"
+    );
+    assert!(
+        !bez_odbioru.slots().iter().any(|x| {
+            x.kind == ActivityKind::Errand as u8 && x.start_min > 16 * 60
+        }),
+        "mieszkaniec bez przypisanego odbioru poszedł po dziecko"
+    );
+
+    // Oba plany zostają spójne: żadnych nakładek i żadnego przejścia przez północ.
+    for c in [&z_odbiorem, &bez_odbioru] {
+        let mut koniec = 0u16;
+        for x in c.slots() {
+            assert!(x.start_min >= koniec, "nakładanie slotów");
+            koniec = x.end_min();
+        }
+        assert!(koniec <= 1440);
+    }
+}
 
 #[test]
 fn plan_golden_anna() {

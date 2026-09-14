@@ -26,7 +26,10 @@
 
 use crate::time::MinuteOfDay;
 use crate::types::Q;
-use crate::vocab::{CommitmentKind, DeprivationEffect, NeedKind, PlaceRef, StockCat, TraitId};
+use crate::vocab::{
+    CommitmentKind, DeprivationEffect, LifeEventKind, MigrationKind, NeedKind, PlaceRef, StockCat,
+    TraitId,
+};
 use serde::{Deserialize, Serialize};
 
 /// JEDEN enum dla całej gry. Bez `#[non_exhaustive]`. Celowo.
@@ -98,6 +101,25 @@ pub enum DecisionReason {
     ModeWalkOnly { minutes: u16 } = 113,
     /// Wizyta zaspokoiła potrzebę o `gain` punktów (`PlaceProvider::fulfil`).
     NeedSatisfied { need: NeedKind, gain: Q } = 114,
+    /// Dobór partnera (M3c §5.6): `compatibility` to zgodność statusu i wieku
+    /// w skali Q, `candidates` — ilu kandydatów było w grafie relacji. Zero kandydatów
+    /// nie produkuje tego powodu; produkuje brak decyzji.
+    PartnerChosen { compatibility: Q, candidates: u8 } = 115,
+    /// Rozstanie (M3c §5.6). `stress` to stres bardziej zestresowanego z pary,
+    /// `years_together` — długość związku w latach gry (360 dni), nasycone na 255.
+    SeparationFiled { stress: Q, years_together: u8 } = 116,
+    /// Gospodarstwo przyjechało albo wyjechało (M3c §5.7). `months_jobless` mówi,
+    /// ile miesięcy żaden dorosły nie miał pracy — przy `Arrived` zawsze 0.
+    MigrationDecision {
+        kind: MigrationKind,
+        months_jobless: u8,
+    } = 117,
+    /// Udział w spadku po zmarłym (M3c §5.6). `permille` sumuje się do 1000 między
+    /// wszystkimi `heirs`; reszta z dzielenia idzie do pierwszego wg `entity_index`.
+    Inheritance { permille: u16, heirs: u8 } = 118,
+    /// Zdarzenie cyklu życia, które nie jest wyborem mieszkańca (M3c §5.6):
+    /// narodziny, poczęcie, emerytura, choroba, wyzdrowienie, zgon.
+    LifeEvent { kind: LifeEventKind } = 119,
     // ── M4 — ruch: 200..=299 ─────────────────────────────────────────────────────
     // ModeChosen { mode: TransportMode, minutes: u16 } = 200,
     // ── M5 — gospodarka detaliczna: 300..=399 ────────────────────────────────────
@@ -132,6 +154,11 @@ impl DecisionReason {
             DecisionReason::Deprivation { .. } => 112,
             DecisionReason::ModeWalkOnly { .. } => 113,
             DecisionReason::NeedSatisfied { .. } => 114,
+            DecisionReason::PartnerChosen { .. } => 115,
+            DecisionReason::SeparationFiled { .. } => 116,
+            DecisionReason::MigrationDecision { .. } => 117,
+            DecisionReason::Inheritance { .. } => 118,
+            DecisionReason::LifeEvent { .. } => 119,
         }
     }
 }
@@ -185,7 +212,7 @@ mod tests {
             113
         );
 
-        // Blok M3 po M3b: 100..=114 bez dziur i bez przestawień. Lista jest
+        // Blok M3 po M3c: 100..=119 bez dziur i bez przestawień. Lista jest
         // wypisana jawnie, bo to jej **liczby** są kontraktem (M3 §6.4), a nie
         // kolejność deklaracji w pliku.
         let wszystkie = [
@@ -246,10 +273,29 @@ mod tests {
                 need: NeedKind::Hunger,
                 gain: Q::new(40),
             },
+            DecisionReason::PartnerChosen {
+                compatibility: Q::new(80),
+                candidates: 4,
+            },
+            DecisionReason::SeparationFiled {
+                stress: Q::new(70),
+                years_together: 12,
+            },
+            DecisionReason::MigrationDecision {
+                kind: MigrationKind::Arrived,
+                months_jobless: 0,
+            },
+            DecisionReason::Inheritance {
+                permille: 500,
+                heirs: 2,
+            },
+            DecisionReason::LifeEvent {
+                kind: LifeEventKind::Died,
+            },
         ];
         let numery: Vec<u16> = wszystkie.iter().map(|r| r.discriminant()).collect();
         assert_eq!(numery[0], 0);
-        assert_eq!(numery[1..], (100..=114).collect::<Vec<u16>>()[..]);
+        assert_eq!(numery[1..], (100..=119).collect::<Vec<u16>>()[..]);
     }
 
     #[test]

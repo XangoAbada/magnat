@@ -8,6 +8,7 @@
 #![forbid(unsafe_code)]
 
 mod agents;
+mod century;
 mod day;
 mod testworld;
 mod worldgen;
@@ -100,6 +101,8 @@ enum Command {
     Agents(agents::AgentsArgs),
     /// Doba mieszkańca: planer, kolejka zdarzeń, ruch pieszy (M3b).
     Day(day::DayArgs),
+    /// Sto lat gry w trybie demograficznym: cykl życia, migracja, status (M3c).
+    Century(century::CenturyArgs),
 }
 
 fn uruchom() -> Result<std::process::ExitCode, Box<dyn std::error::Error>> {
@@ -111,6 +114,7 @@ fn uruchom() -> Result<std::process::ExitCode, Box<dyn std::error::Error>> {
         Some(Command::Preview(a)) => return worldgen::preview(a),
         Some(Command::Agents(a)) => return agents::run(a),
         Some(Command::Day(a)) => return day::run(a),
+        Some(Command::Century(a)) => return century::run(a),
         None => {}
     }
 

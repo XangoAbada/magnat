@@ -780,6 +780,9 @@ pub fn register_components(world: &mut magnat_ecs::World) {
     world.register_component::<KnowledgeRef>();
     world.register_component::<RelationsRef>();
     world.register_component::<Lifecycle>();
+    // Gospodarstwo jest osobną encją, nie komponentem mieszkańca (M3c §5.6) —
+    // rejestruje się je tutaj, bo snapshot ma je nieść tak samo jak resztę.
+    world.register_component::<crate::household::Household>();
 }
 
 /// Zasoby fazy i ich haki do hasha stanu.

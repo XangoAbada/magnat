@@ -197,7 +197,7 @@ fn populacja(c: &mut Criterion) {
     g.finish();
 }
 
-criterion_group!(benches, des, potrzeby, populacja, planer, ruch);
+criterion_group!(benches, des, potrzeby, populacja, planer, ruch, spoleczenstwo);
 criterion_main!(benches);
 
 // ── M3b: planer dnia i ruch pieszy ──────────────────────────────────────────────
@@ -358,6 +358,7 @@ impl Mieszkaniec {
                 )),
                 stock: &self.stock,
                 escorts: &self.escorts,
+                pickups: &self.escorts,
             },
             employment: &self.employment,
             known: magnat_agents::KnowledgeView::new(&self.wiedza),
@@ -482,6 +483,102 @@ fn ruch(c: &mut Criterion) {
         b.iter(|| {
             ms += 100;
             oracle.oracle.micro_step(black_box(ms));
+        });
+    });
+    g.finish();
+}
+
+
+// ── M3c: demografia, migracja, plotka ───────────────────────────────────────────
+
+/// Miasto do pomiaru społeczeństwa: `n` lokali, `n` etatów, zasiew do pełna.
+///
+/// Jedna doba dotyka **1/360 populacji** hazardami i **1/7** relacjami i plotką, więc
+/// mierzony jest realny koszt doby, a nie koszt pełnego przebiegu po wszystkich.
+fn swiat_spoleczny(gospodarstw: usize) -> magnat_ecs::World {
+    use magnat_agents::{society, CityFacts, DemographyTable, HomeSlot, JobSlot, Vacancies};
+    use magnat_core::Money;
+
+    let mut w = magnat_ecs::World::new(11);
+    register(&mut w, tabela());
+    society::register_society(
+        &mut w,
+        DemographyTable::load_default().expect("data/demography/demography.ron"),
+    );
+
+    let n = (gospodarstw * 2) as u32;
+    let domy: Vec<HomeSlot> = (0..n)
+        .map(|i| HomeSlot {
+            building: 1_000_000 + i,
+            unit: 0,
+            district: (i / 16) as u16,
+            value: Money(1_000_000),
+        })
+        .collect();
+    let etaty: Vec<JobSlot> = (0..n)
+        .map(|i| JobSlot {
+            site: 2_000_000 + i / 8,
+            role: (i % 40) as u16,
+            shift: 1,
+            work_days: 0b001_1111,
+            district: (i / 16) as u16,
+            wage_monthly: Money(300_000),
+        })
+        .collect();
+    *w.resource_mut::<Vacancies>() = Vacancies::new(domy, etaty);
+    *w.resource_mut::<CityFacts>() = CityFacts {
+        job_prestige: Vec::new(),
+        district_score: vec![50; (n / 16 + 1) as usize],
+        block_of: (0..1_000_000 + n).map(|i| i / 9).collect(),
+    };
+    magnat_agents::seed_population(&mut w, 0, gospodarstw);
+    w
+}
+
+fn spoleczenstwo(c: &mut Criterion) {
+    use magnat_agents::{demography, social, society, NoInheritance};
+
+    let mut g = c.benchmark_group("m3c-1 spoleczenstwo");
+    g.sample_size(20);
+
+    // §7.5: `bench_gossip_day` — dobowa plotka. Shard 1/7 znaczy, że doba dotyka
+    // siódmej części populacji; próg 20 ms dotyczy 400 tys. mieszkańców, tu mierzymy
+    // koszt jednostkowy, a bramka regresji porównuje go z linią bazową (D-8).
+    g.bench_function("plotka i relacje, doba 20 tys. mieszkańców", |b| {
+        let mut w = swiat_spoleczny(10_000);
+        let mut hooks = NoInheritance;
+        // Rozgrzewka: bez dojrzałych relacji plotka nie ma komu opowiadać i pomiar
+        // mierzyłby pustą pętlę.
+        for d in 0..90 {
+            society::step_day(&mut w, d, &mut hooks);
+        }
+        let mut dzien = 90u64;
+        b.iter(|| {
+            dzien += 1;
+            black_box(social::step_day(&mut w, dzien));
+        });
+    });
+
+    g.bench_function("hazardy demograficzne, doba 20 tys. mieszkańców", |b| {
+        let mut w = swiat_spoleczny(10_000);
+        let mut hooks = NoInheritance;
+        let mut dzien = 0u64;
+        b.iter(|| {
+            dzien += 1;
+            black_box(demography::step_day(&mut w, dzien, &mut hooks));
+        });
+    });
+
+    g.bench_function("miesiac: status, gospodarstwa, migracja", |b| {
+        let mut w = swiat_spoleczny(10_000);
+        let mut hooks = NoInheritance;
+        for d in 0..30 {
+            society::step_day(&mut w, d, &mut hooks);
+        }
+        let mut miesiac = 1u64;
+        b.iter(|| {
+            miesiac += 1;
+            black_box(society::step_day(&mut w, miesiac * 30, &mut hooks));
         });
     });
     g.finish();

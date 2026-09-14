@@ -6,10 +6,11 @@ citizen 77 | day 3 | Thursday | age 34
 07:42-07:52 Errand   #5       Commitment { kind: Childcare }
 07:52-08:00 Commute  #2       Commitment { kind: Commute }
 08:00-16:00 Work     #2       Commitment { kind: Work }
-16:00-16:04 Commute  #3       StockBelowThreshold { cat: Food, days_left: 1 }
-16:04-16:34 Shop     #3       ChosenOnRoute { detour_min: 0, direct_min: 12 }
-16:34-16:42 Commute  home     Commitment { kind: Commute }
-16:42-17:00 Idle     home     FreeTimePreference { trait_id: Conscientiousness, weight: 0 }
+16:00-16:08 Commute  #5       Commitment { kind: Childcare }
+16:08-16:18 Errand   #5       Commitment { kind: Childcare }
+16:18-16:22 Commute  #3       StockBelowThreshold { cat: Food, days_left: 1 }
+16:22-16:52 Shop     #3       ChosenOnRoute { detour_min: 8, direct_min: 4 }
+16:52-17:00 Commute  home     Commitment { kind: Commute }
 17:00-17:30 Eat      home     NeedCritical { need: Hunger, level: Q(45) }
 17:30-22:27 Leisure  home     FreeTimePreference { trait_id: Openness, weight: 39 }
 22:27-00:00 Sleep    home     NeedCritical { need: Sleep, level: Q(35) }

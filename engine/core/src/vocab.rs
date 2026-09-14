@@ -164,6 +164,28 @@ impl StockCat {
 }
 
 vocab_enum! {
+    /// Kierunek i powód decyzji migracyjnej gospodarstwa — ładunek
+    /// `DecisionReason::MigrationDecision` (M3c §5.7).
+    ///
+    /// W `core`, bo jest ładunkiem centralnego enuma (K-12): ładunek nie może pochodzić
+    /// z crate'u, który od `core` zależy. Czyta go M8 (polityka mieszkaniowa miasta)
+    /// i M10 (historia „na sucho").
+    MigrationKind {
+        Arrived, LeftJobless, LeftHousing, LeftUnsettled,
+    }
+}
+
+vocab_enum! {
+    /// Zdarzenie cyklu życia mieszkańca — ładunek `DecisionReason::LifeEvent` (M3c §5.6).
+    ///
+    /// Tu, a nie w `sim/agents`, z tego samego powodu co `MigrationKind`. M7 czyta
+    /// `Retired` (zwolnienie etatu), M8 `Died` i `FellIll` (usługi publiczne).
+    LifeEventKind {
+        Born, Conceived, Retired, FellIll, Recovered, Died,
+    }
+}
+
+vocab_enum! {
     /// Rodzaj czynności w planie dnia. Konsument: M3 (planer + DES), M4 (skąd dokąd),
     /// M9 (oś czasu w karcie inspekcji).
     ActivityKind {

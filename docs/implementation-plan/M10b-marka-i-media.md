@@ -250,3 +250,15 @@ Odbiorca aktualizuje opinię proporcjonalnie do `credibility × jego zaufanie do
 publikował rzeczy niezgodne z obserwacją odbiorcy, traci u niego zaufanie — wiarygodność jest
 per-para, tak jak marka. Reużywamy do tego ten sam slot `BrandAffinity` (tytuł ma `BrandId`) —
 zero nowych struktur.
+
+---
+
+## Zmiany wpisane po M3c
+
+Zgodnie z `K-18`. Wpisane jest **tylko to, co wiadomo na pewno** po zamknięciu M3c.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| ★ | **Świadomość marki stoi na gotowym mechanizmie: `social::awareness_of(world, target)` zwraca „ilu wie z ilu", a `social::learn_place` jest jedynym wejściem wiedzy** — używają go plotka (§5.8), widoczność z trasy i zasiew Etapu 8. Reklama to **czwarte źródło tego samego wpisu**: `KnowledgeKind::Ad` istnieje w `store::KnowledgeKind` od M3a i nie wymaga nowej struktury | Jedno wejście znaczy jeden limit 32 wpisów na mieszkańca i jedna reguła wypychania najsłabszego (ocena × świeżość). Kampania reklamowa, która dopisywałaby wiedzę obok, obchodziłaby limit pamięci z §17.7 i psuła rangowanie |
+| ★ | **Zasięg plotki jest skalibrowany i zmierzony w M3c**: nowe miejsce zna 89 % mieszkańców w promieniu kilometra po 30 dobach i poniżej 5 % powyżej pięciu. To jest **linia bazowa**, wobec której mierzy się skuteczność reklamy | Kryterium WP9 fazy M3 powstało dokładnie po to, żeby M10 miał na czym stanąć. Kampania, która daje mniej niż darmowa plotka, jest błędem kalibracji, a nie „słabą kampanią" — i bez tej liczby nie dałoby się tego odróżnić |
+| | **Wiedza zdobyta z reklamy nie ma prawa wygrywać z „byłem tam".** `learn_place` nadpisuje rodzaj istniejącego wpisu tylko wtedy, gdy nowe źródło jest **mocniejsze**, a mocniejsze znaczy **niższa dyskryminanta** `KnowledgeKind`: `Visited` (0), `Heard` (1), `SeenOnRoute` (2), `Ad` (3). Ocena wpisu bierze przy tym maksimum, więc reklama może podnieść ocenę, ale nie zamieni „byłem tam" na „słyszałem" | Inaczej kampania kasowałaby własne doświadczenie klienta, a marka przestałaby być nadbudową nad jakością — co jest wprost wbrew PRD §6 |
