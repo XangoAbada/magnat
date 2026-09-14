@@ -11,6 +11,7 @@ magnat-core = { workspace = true }
 magnat-devtools = { workspace = true }
 magnat-jobs = { workspace = true }
 magnat-voxel = { workspace = true }
+magnat-spatial = { workspace = true }
 magnat-world = { workspace = true }
 magnat-render = { workspace = true }
 magnat-sim-snapshot = { workspace = true }

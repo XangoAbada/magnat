@@ -1186,6 +1186,7 @@ dependencies = [
  "magnat-jobs",
  "magnat-render",
  "magnat-sim-snapshot",
+ "magnat-spatial",
  "magnat-voxel",
  "magnat-world",
  "winit",

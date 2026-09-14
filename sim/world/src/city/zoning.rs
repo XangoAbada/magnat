@@ -232,6 +232,38 @@ impl CityFields {
     }
 }
 
+/// Zdejmuje zakaz ruchu ciężkiego z ulic obsługujących kwartały przemysłowe i logistyczne.
+///
+/// L-system nadaje `NO_HEAVY` po **tonażu klasy**, bo w Etapie 3 nie ma jeszcze stref —
+/// a ulica klasy `Local` obsługująca estakadę magazynów jest drogą zakładową i tonażu
+/// osobowego nie ma. Bez tej poprawki hala w głębi strefy nie miała gdzie postawić rampy:
+/// zmierzone na macierzy 32 ziarna × 4 profile — 37 światów ze 128 oblewało T4
+/// (korekta I-9). Ulice arterii i kolektorów tonażu i tak nie ograniczają.
+pub fn allow_heavy_on_industrial_streets(
+    net: &mut RoadNetwork,
+    blocks: &super::blocks::BlockSet,
+    zones: &ZoneResult,
+) {
+    for (i, b) in blocks.blocks.iter().enumerate() {
+        if !matches!(
+            zones.zone[i],
+            ZoneKind::IndustryLight | ZoneKind::IndustryHeavy | ZoneKind::Logistics | ZoneKind::Extraction
+        ) {
+            continue;
+        }
+        for &s in &blocks.bounding_items[b.bounding.start as usize..b.bounding.end as usize] {
+            let seg = &mut net.segments[s.0 as usize];
+            // Ciąg pieszy zostaje pieszy — po deptaku ciężarówka nie pojedzie niezależnie
+            // od tego, co jest za nim.
+            if matches!(seg.class, super::road::RoadClass::Pedestrian) || seg.class.is_rail() {
+                continue;
+            }
+            seg.flags = super::road::RoadFlags(seg.flags.0 & !super::road::RoadFlags::NO_HEAVY.0);
+            seg.max_tonnage_t = 0;
+        }
+    }
+}
+
 /// Pola wpływu dla całego miasta. Siedem przebiegów Dijkstry po siatce 16 m — przy
 /// metropolii 1 mln komórek to ~35 ms każdy (zmierzone w M2a).
 #[must_use]

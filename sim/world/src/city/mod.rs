@@ -12,16 +12,20 @@
 
 pub mod blocks;
 pub mod build;
+pub mod catalog;
 pub mod derive;
 pub mod districts;
 pub mod gates;
 pub mod grammar;
+pub mod inspect;
 pub mod lsystem;
+pub mod overlay;
 pub mod parcels;
 pub mod pattern;
 pub mod poly;
 pub mod rail;
 pub mod road;
+pub mod sites;
 pub mod value;
 pub mod voxels;
 pub mod zoning;
@@ -174,6 +178,22 @@ pub struct GenerationReport {
     /// + wieś) — para z kryterium WP15a.
     pub land_value_core: magnat_core::Money,
     pub land_value_fringe: magnat_core::Money,
+    // ── M2e ──────────────────────────────────────────────────────────────────────────
+    /// Etap 7: firmy, zakłady, normatywy.
+    pub sites: sites::SiteReport,
+    /// Domknięcie łańcuchów produktowych (WP14).
+    pub closure: sites::ClosureReport,
+    /// Wartość gruntu po `pass_2` — te same trzy liczby co dla `pass_1`, żeby dało się
+    /// zobaczyć, co zmienił Etap 7.
+    pub land_value_median_2: magnat_core::Money,
+    pub land_value_core_2: magnat_core::Money,
+    pub land_value_fringe_2: magnat_core::Money,
+    /// Odcisk całej warstwy M2 — `city_hash` plus Etap 7 (D1/D5 z §7 fazy).
+    pub world_hash_m2: StateHash,
+    /// Zastosowane współczynniki kalibracji T10: zagęszczenie mieszkań i przelicznik
+    /// stanowisk. 1,0 znaczy „nie było czego kalibrować"; wartość na granicy widełek
+    /// znaczy, że teren nie pozwolił dojść do `target_pop` i T10 może nie przejść.
+    pub dwelling_scale: f32,
     pub stage_millis: Vec<(&'static str, f64)>,
     pub road_hash: StateHash,
     /// Odcisk warstwy M2c: strefy, dzielnice, parcele. Wchodzi do `world_hash_m2` (M2e).
@@ -374,7 +394,71 @@ impl GenerationReport {
                 self.land_value_core.0 as f64 / 100.0,
                 self.land_value_fringe.0 as f64 / 100.0
             ));
+            v.push(format!(
+                "wartość gruntu (pass_2): mediana {:.2} zł/m² · rdzeń {:.2} · obrzeże {:.2}",
+                self.land_value_median_2.0 as f64 / 100.0,
+                self.land_value_core_2.0 as f64 / 100.0,
+                self.land_value_fringe_2.0 as f64 / 100.0
+            ));
+            v.push(format!(
+                "etap 7: {} firm · {} zakładów · normatywy {}/{} · z łańcuchów {} · budynki dostawione {} (nieudane {}) · bez zakładu {}",
+                self.sites.firms,
+                self.sites.sites,
+                self.sites.norm_placed,
+                self.sites.norm_target,
+                self.sites.from_chain,
+                self.sites.buildings_added,
+                self.sites.buildings_failed,
+                self.sites.parcels_without_site
+            ));
+            if !self.sites.unplaced.is_empty() {
+                v.push(format!(
+                    "  bez działki: {}",
+                    self.sites
+                        .unplaced
+                        .iter()
+                        .map(|(k, n)| format!("{k} ×{n}"))
+                        .collect::<Vec<_>>()
+                        .join(" · ")
+                ));
+            }
+            v.push(format!(
+                "  sektory: {}",
+                sites::SectorId::ALL
+                    .iter()
+                    .filter(|s| self.sites.by_sector[**s as usize] > 0)
+                    .map(|s| format!("{} {}", s.key(), self.sites.by_sector[*s as usize]))
+                    .collect::<Vec<_>>()
+                    .join(" · ")
+            ));
+            v.push(format!(
+                "domknięcie łańcuchów: brakujące {} · import {} towarów · najgorszy stosunek {} {:.2} · nadwyżki uboczne {}",
+                if self.closure.missing.is_empty() {
+                    "brak".to_string()
+                } else {
+                    self.closure.missing.join(", ")
+                },
+                self.closure.imported.len(),
+                self.closure.worst.0,
+                self.closure.worst.1,
+                self.closure.byproduct_surplus.len()
+            ));
+            if !self.closure.imported.is_empty() {
+                v.push(format!(
+                    "  import (t/dobę): {}",
+                    self.closure
+                        .imported
+                        .iter()
+                        .map(|(k, t)| format!("{k} {}", t / 1000))
+                        .collect::<Vec<_>>()
+                        .join(" · ")
+                ));
+            }
+            for e in &self.closure.errors {
+                v.push(format!("  BŁĄD DOMKNIĘCIA: {e}"));
+            }
             v.push(format!("hash miasta: {:032x}", self.city_hash.0));
+            v.push(format!("hash M2: {:032x}", self.world_hash_m2.0));
         }
         for (n, ms) in &self.stage_millis {
             v.push(format!("  {n}: {ms:.1} ms"));
@@ -419,6 +503,14 @@ pub struct CityData {
     pub parcels: ParcelSet,
     /// Etap 6 — budynki, lokale, stanowiska (M2d).
     pub buildings: build::BuildingSet,
+    /// Etap 7 — firmy i zakłady jako obiekty danych (M2e).
+    pub sites: sites::SiteSet,
+    /// Pola dostępności `pass_2` — wejście nakładki wartości gruntu i karty inspekcji.
+    pub access: value::AccessFields,
+    /// Katalog towarów i receptur, na którym domknięto łańcuchy. Trzymany, bo karta
+    /// inspekcji i raport mówią o towarach kluczami, a nie indeksami.
+    pub catalog: catalog::Catalog,
+    pub site_catalog: sites::SiteCatalog,
     /// Komendy voxelowe całej generacji, z indeksem chunkowym.
     ///
     /// **Nie nakładka per voxel**: miasto to setki milionów zmienionych voxeli, a komend
@@ -434,6 +526,8 @@ pub enum CityGenError {
     Rings(pattern::RingError),
     Data(zoning::EpochError),
     Grammar(grammar::GrammarError),
+    Catalog(catalog::CatalogError),
+    Sites(sites::SiteDataError),
 }
 
 impl std::fmt::Display for CityGenError {
@@ -443,6 +537,8 @@ impl std::fmt::Display for CityGenError {
             CityGenError::Rings(e) => write!(f, "{e}"),
             CityGenError::Data(e) => write!(f, "{e}"),
             CityGenError::Grammar(e) => write!(f, "{e}"),
+            CityGenError::Catalog(e) => write!(f, "{e}"),
+            CityGenError::Sites(e) => write!(f, "{e}"),
         }
     }
 }
@@ -486,6 +582,16 @@ pub fn generate_city(
     let grammars = grammar::GrammarSet::load_dir(&data_path("grammar"), mats)
         .map_err(CityGenError::Grammar)?;
     let jobs = build::JobTable::load().map_err(CityGenError::Data)?;
+    // Epoka **startowa** miasta to ostatni pierścień z `data/epochs/` — to ona decyduje
+    // o koszyku potrzeb i o tym, które archetypy w ogóle występują.
+    let rings_epoch = epochs.rings_for(plan.epoch);
+    let epoch_key: String = rings_epoch
+        .last()
+        .map_or_else(|| "contemporary".to_string(), |e| e.key.clone());
+    let epoch_key = epoch_key.as_str();
+    let catalog = catalog::load_default(epoch_key).map_err(CityGenError::Catalog)?;
+    let site_catalog =
+        sites::SiteCatalog::load_default(&catalog, &grammars).map_err(CityGenError::Sites)?;
     let mut stage = Vec::new();
     let mut zegar = std::time::Instant::now();
     let mut tik = |stage: &mut Vec<(&'static str, f64)>, n: &'static str| {
@@ -526,6 +632,9 @@ pub fn generate_city(
         rings,
         gp.center,
     );
+    // Zakaz ruchu ciężkiego jest nadawany po tonażu klasy w Etapie 3, kiedy stref
+    // jeszcze nie ma. Teraz są — i ulica obsługująca halę przestaje być ulicą osiedlową.
+    zoning::allow_heavy_on_industrial_streets(&mut roads, &blocks, &zones);
     tik(&mut stage, "strefy i pierścienie epok");
 
     // Dzielnice **przed** parcelami: przypisanie przenumerowuje kwartały (korekta C8).
@@ -577,27 +686,77 @@ pub fn generate_city(
         blocks: &blocks,
         districts: &districts,
         rings: zones.rings.len() as u8,
+        access: None,
     };
     value::pass_1(&vctx, &mut parcel_set);
     tik(&mut stage, "wycena gruntu (pass_1)");
 
     let edits = magnat_voxel::EditQueue::new();
-    let build_input = build::BuildInput {
-        plan,
-        terrain: t,
-        roads: &roads,
-        blocks: &blocks,
-        zones: &zones,
-        districts: &districts,
-        grammars: &grammars,
-        materials: mats,
-        jobs: &jobs,
+    // Blok, bo `BuildInput` trzyma `&districts`, a `recompute_pop_capacity` zaraz za nim
+    // potrzebuje `&mut`. Zakres pożyczenia jest tu treścią, nie formalnością.
+    let (buildings, dwelling_scale, sites, land_value_pass_1) = {
+        let build_input = build::BuildInput {
+            plan,
+            terrain: t,
+            roads: &roads,
+            blocks: &blocks,
+            zones: &zones,
+            districts: &districts,
+            grammars: &grammars,
+            materials: mats,
+            jobs: &jobs,
+        };
+        let mut buildings =
+            build::build_all(&build_input, &mut geom, &mut parcel_set, &edits, pool);
+        // Kalibracja pojemności mieszkaniowej do `target_pop` (T10, korekta I-6) — przed
+        // Etapem 7, bo zakłady odwołują się do zakresów lokali.
+        let dwelling_scale = build::rescale_dwellings(&mut buildings, plan.target_pop);
+        tik(&mut stage, "gramatyka i zabudowa");
+
+        // ── M2e ─────────────────────────────────────────────────────────────────────
+        // `pass_2` nadpisze `land_value_per_m2`, więc trzy liczby z `pass_1` zapamiętujemy
+        // teraz — raport ma pokazywać, co zmienił Etap 7, a nie samą wartość końcową.
+        let lv1 = (
+            mediana_wartosci(&parcel_set),
+            value::average_by_kind(&districts, &parcel_set, &value::CORE_KINDS),
+            value::average_by_kind(&districts, &parcel_set, &value::FRINGE_KINDS),
+        );
+        // Etap 7: obsada budynków firmami-danymi i domknięcie łańcuchów produktowych.
+        let sites = sites::populate(
+            &build_input,
+            &catalog,
+            &site_catalog,
+            epoch_key,
+            &mut geom,
+            &mut parcel_set,
+            &mut buildings,
+            &edits,
+        );
+        (buildings, dwelling_scale, sites, lv1)
     };
-    let buildings = build::build_all(&build_input, &mut geom, &mut parcel_set, &edits, pool);
     // Obietnica korekty C9 z M2c: pojemność dzielnicy liczona z mieszkań, nie z gęstości
-    // strefy. Dopiero teraz jest z czego — do M2d `Unit` nie istniał.
+    // strefy. Dopiero teraz jest z czego — do M2d `Unit` nie istniał. Po Etapie 7,
+    // bo on dostawia budynki na zieleni i w wydobyciu (korekta F2).
     build::recompute_pop_capacity(&mut districts, &parcel_set, &buildings);
-    tik(&mut stage, "gramatyka i zabudowa");
+    tik(&mut stage, "etap 7 — firmy i domknięcie łańcuchów");
+
+    // `pass_2` **po** Etapie 7 (§5.7): dostęp do pracy i handlu nie istnieje wcześniej,
+    // bo nie ma jeszcze ani stanowisk, ani sklepów.
+    let access = value::build_access(plan, &geom, &parcel_set, &buildings, &sites, &site_catalog);
+    {
+        let vctx2 = value::ValueCtx {
+            fields: &fields,
+            roads: &roads,
+            geom: &geom,
+            blocks: &blocks,
+            districts: &districts,
+            rings: zones.rings.len() as u8,
+            access: Some(&access),
+        };
+        value::pass_2(&vctx2, &mut parcel_set);
+    }
+    value::set_district_averages(&mut districts, &parcel_set);
+    tik(&mut stage, "wycena gruntu (pass_2)");
 
     let road_voxels = voxels::queue_roads(&edits, &roads, &districts, t, mats);
     tik(&mut stage, "warstwa transportowa w voxelach");
@@ -627,6 +786,15 @@ pub fn generate_city(
                 g.pos.y
             ));
         }
+    }
+    // Spójność sieci jezdnej **po** wszystkich krokach, które ją mutują (kolej, dzielnice,
+    // ulice lokalne) — `finalize` zostawia jedną składową, ale kolejne etapy dokładają
+    // segmenty i test T1 mierzy stan końcowy, nie stan po Etapie 3.
+    let (skladowe, najwieksza, jezdnych) = skladowe_jezdne(&roads);
+    if skladowe > 1 {
+        warnings.push(format!(
+            "sieć jezdna rozpadła się na {skladowe} składowych; największa ma {najwieksza} z {jezdnych} segmentów (T1)"
+        ));
     }
     if blocks.blocks.is_empty() {
         warnings.push("graf dróg nie zamknął ani jednego kwartału".to_string());
@@ -728,9 +896,19 @@ pub fn generate_city(
         rail: rail_rep,
         build: buildings.report.clone(),
         road_voxels,
-        land_value_median: mediana_wartosci(&parcel_set),
-        land_value_core: value::average_by_kind(&districts, &parcel_set, &value::CORE_KINDS),
-        land_value_fringe: value::average_by_kind(&districts, &parcel_set, &value::FRINGE_KINDS),
+        land_value_median: land_value_pass_1.0,
+        land_value_core: land_value_pass_1.1,
+        land_value_fringe: land_value_pass_1.2,
+        sites: sites.report.clone(),
+        closure: sites.closure.clone(),
+        land_value_median_2: mediana_wartosci(&parcel_set),
+        land_value_core_2: value::average_by_kind(&districts, &parcel_set, &value::CORE_KINDS),
+        land_value_fringe_2: value::average_by_kind(&districts, &parcel_set, &value::FRINGE_KINDS),
+        dwelling_scale,
+        world_hash_m2: world_hash_m2(
+            &city_hash(&blocks, &zones, &districts, &parcel_set, &buildings),
+            &sites,
+        ),
         stage_millis: stage,
         road_hash: roads.hash(),
         city_hash: city_hash(&blocks, &zones, &districts, &parcel_set, &buildings),
@@ -747,6 +925,10 @@ pub fn generate_city(
         districts,
         parcels: parcel_set,
         buildings,
+        sites,
+        access,
+        catalog,
+        site_catalog,
         edits: edit_index,
         report,
     })
@@ -854,6 +1036,50 @@ pub fn city_hash(
         h.write_u16(w.role.0);
         h.write_u8(w.shift as u8);
         h.write_i64(w.wage_band.median.0);
+    }
+    h.finish()
+}
+
+/// Odcisk całej warstwy M2 (D1 i D5 z §7 fazy, dok. 00 §3.6).
+///
+/// Buduje się na `city_hash`, a nie obok niego (korekta F5): tamten obejmuje już strefy,
+/// dzielnice, parcele, budynki, lokale, stanowiska i `land_value_per_m2`. Tu dochodzi
+/// Etap 7 — firmy, zakłady i wynik domknięcia łańcuchów.
+#[must_use]
+pub fn world_hash_m2(city: &StateHash, sites: &sites::SiteSet) -> StateHash {
+    let mut h = StateHasher::new();
+    h.write_u64(city.0 as u64);
+    h.write_u64((city.0 >> 64) as u64);
+    h.write_u32(sites.firms.len() as u32);
+    for f in &sites.firms {
+        for b in f.name.as_bytes() {
+            h.write_u8(*b);
+        }
+        h.write_u8(f.sector as u8);
+        h.write_u32(f.sites.len() as u32);
+    }
+    h.write_u32(sites.sites.len() as u32);
+    for s in &sites.sites {
+        h.write_u32(s.firm.0.index());
+        h.write_u32(s.building.0.index());
+        h.write_u32(s.parcel.0.index());
+        h.write_u16(s.archetype.0);
+        h.write_u16(s.capacity_scale);
+        h.write_u32(s.units.start);
+        h.write_u32(s.units.end);
+        h.write_u32(s.workplaces.start);
+        h.write_u32(s.workplaces.end);
+        for r in &s.recipes {
+            h.write_u16(r.0);
+        }
+    }
+    // Wynik domknięcia wchodzi do odcisku, bo zmienia `capacity_scale` — a to jest stan
+    // trwały, z którego M6 wyprowadzi zdolności produkcyjne.
+    for (k, t) in &sites.closure.imported {
+        for b in k.as_bytes() {
+            h.write_u8(*b);
+        }
+        h.write_i64(*t);
     }
     h.finish()
 }
@@ -1104,6 +1330,47 @@ pub fn dangling_high_class(net: &RoadNetwork) -> Vec<NodeId> {
         })
         .map(|(i, _)| NodeId(i as u32))
         .collect()
+}
+
+/// Składowe spójne sieci jezdnej: ile ich jest, ile segmentów ma największa i ile
+/// jest segmentów jezdnych razem. Diagnostyka T1 — sama odpowiedź „nie jest spójna"
+/// nie mówi, czy odpadł kwartał, czy pojedynczy ślepy zaułek.
+#[must_use]
+pub fn skladowe_jezdne(net: &RoadNetwork) -> (u32, u32, u32) {
+    let jezdny = |s: &RoadSegment| s.class.is_driveable() && !s.flags.contains(RoadFlags::RAIL);
+    let ile_jezdnych = net.segments.iter().filter(|s| jezdny(s)).count() as u32;
+    let mut seen = vec![false; net.nodes.len()];
+    let mut skladowych = 0u32;
+    let mut najwieksza = 0u32;
+    for start in 0..net.nodes.len() {
+        if seen[start]
+            || !net
+                .segments_at(NodeId(start as u32))
+                .iter()
+                .any(|s| jezdny(&net.segments[s.0 as usize]))
+        {
+            continue;
+        }
+        skladowych += 1;
+        let mut n = 0u32;
+        let mut stos = vec![NodeId(start as u32)];
+        seen[start] = true;
+        while let Some(v) = stos.pop() {
+            for &s in net.segments_at(v) {
+                if !jezdny(&net.segments[s.0 as usize]) {
+                    continue;
+                }
+                n += 1;
+                let o = net.other_end(s, v);
+                if !seen[o.0 as usize] {
+                    seen[o.0 as usize] = true;
+                    stos.push(o);
+                }
+            }
+        }
+        najwieksza = najwieksza.max(n / 2);
+    }
+    (skladowych, najwieksza, ile_jezdnych)
 }
 
 /// Czy sieć jezdna jest jedną składową spójną (wstęp do testu T1 z M2 §7).

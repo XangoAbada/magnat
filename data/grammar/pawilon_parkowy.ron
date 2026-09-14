@@ -1,0 +1,67 @@
+// Zieleń miejska — pawilon parkowy (M2e, korekta F2 do M2d).
+//
+// M2d nie stawia na zieleni ani jednej bryły z rozmysłu: gramatyka awaryjna na każdej
+// działce parkowej robi z parku osiedle (korekta E6). Budżet §7 fazy daje zieleni 300
+// budynków w metropolii, więc coś tam stać ma — tylko rzadko i mało.
+//
+// Ta gramatyka **nie jest wybierana przez `pick_grammar`**: strefa `Green` nadal wypada
+// z Etapu 6. Sięga po nią Etap 7, imiennie, przez pole `grammar` archetypu — czyli tam,
+// gdzie wiadomo, że na tej działce ma stanąć obiekt, a nie „jakaś zabudowa".
+(
+    schema_version: 1,
+    id: "pawilon_parkowy",
+    applies: (
+        zones: ["green"],
+        epochs: [],
+        styles: [],
+        land_value: (0, 100000000),
+        frontage_m: (4.0, 4000.0),
+        depth_m: (4.0, 4000.0),
+        weight: 1,
+    ),
+    massing: (
+        setback_front_m: 6.0,
+        setback_side_m: 6.0,
+        setback_back_m: 6.0,
+        // Pawilon zostaje pawilonem także na działce dziesięciohektarowej.
+        max_depth_m: 10.0,
+    ),
+    rules: [
+        Foundation(depth_m: 0.6, material: "concrete", basements: 0),
+        Floors(
+            count: (1, 1),
+            height_m: 3.4,
+            ground_height_m: 3.4,
+            ground: Ref("sciana"),
+            typical: Ref("sciana"),
+            top: Ref("sciana"),
+        ),
+        Choice([
+            (3, Roof(shape: Gable(pitch_deg: 28), material: "roof_tile_red")),
+            (2, Roof(shape: Hip(pitch_deg: 24), material: "roof_tile_red")),
+            (1, Roof(shape: Flat, material: "roof_felt")),
+        ]),
+    ],
+    refs: [
+        ("sciana", Seq([
+            Choice([
+                (3, Fill("timber")),
+                (2, Fill("brick_red")),
+                (1, Fill("plaster_white")),
+            ]),
+            Comp(thickness_m: 1.2, faces: [
+                (Front, Repeat(axis: U, step_m: 3.2, pad_m: 0.8, rule: Split(axis: W, parts: [
+                    (Abs(0.8), Nothing),
+                    (Abs(1.8), Void),
+                    (Rel(1.0), Nothing),
+                ]))),
+            ]),
+        ])),
+    ],
+    interior: (
+        ground: (kind: Retail, area_m2: (25, 70)),
+        typical: (kind: Retail, area_m2: (25, 70)),
+        top: (kind: Storage, area_m2: (20, 50)),
+        circulation_share: 0.08,
+    ),
+)

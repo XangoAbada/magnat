@@ -11,7 +11,7 @@
         styles: [],
         land_value: (600000, 9000000),
         frontage_m: (12.0, 70.0),
-        depth_m: (12.0, 250.0),
+        depth_m: (5.0, 250.0),
         weight: 30,
         coverage: 0.7,
     ),
@@ -19,7 +19,7 @@
         setback_front_m: 7.0,
         setback_side_m: 4.0,
         setback_back_m: 9.0,
-        max_depth_m: 14.0,
+        max_depth_m: 13.2,
     ),
     rules: [
         Foundation(depth_m: 1.8, material: "sandstone", basements: 1),

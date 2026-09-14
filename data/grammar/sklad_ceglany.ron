@@ -7,11 +7,11 @@
     id: "sklad_ceglany",
     applies: (
         zones: ["logistics", "industry_light"],
-        epochs: ["industrial", "interwar", "postwar"],
+        epochs: ["medieval", "industrial", "interwar", "postwar"],
         styles: [],
         land_value: (0, 4000000),
         frontage_m: (10.0, 120.0),
-        depth_m: (10.0, 250.0),
+        depth_m: (5.0, 250.0),
         weight: 40,
     ),
     massing: (

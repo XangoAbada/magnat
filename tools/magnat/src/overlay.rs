@@ -8,7 +8,7 @@
 //! Wartości są **kwantowane do bajtu**, bo nakładka służy do oglądania, nie do liczenia.
 //! Kto potrzebuje dokładnej liczby, klika w teren i czyta ją w inspektorze (§1 pkt 5).
 
-use magnat_world::{Terrain, WaterClass};
+use magnat_world::{CityData, Terrain, WaterClass};
 
 /// Który podgląd jest włączony. `Brak` to normalny render.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
@@ -24,11 +24,14 @@ pub enum Nakladka {
     Opady,
     Geologia,
     Zloza,
+    /// M2e, WP16 — jedyna nakładka **danych miejskich**, a nie terenu. Paleta i progi
+    /// z `data/ui/overlays.ron`, żeby podgląd headless i klient pokazywały to samo.
+    WartoscGruntu,
 }
 
 impl Nakladka {
     /// Kolejność przełączania klawiszem `F3`.
-    const KOLEJNOSC: [Nakladka; 10] = [
+    const KOLEJNOSC: [Nakladka; 11] = [
         Nakladka::Brak,
         Nakladka::Wysokosc,
         Nakladka::Splyw,
@@ -39,6 +42,7 @@ impl Nakladka {
         Nakladka::Opady,
         Nakladka::Geologia,
         Nakladka::Zloza,
+        Nakladka::WartoscGruntu,
     ];
 
     #[must_use]
@@ -62,6 +66,7 @@ impl Nakladka {
             "precip" => Nakladka::Opady,
             "geology" => Nakladka::Geologia,
             "deposits" => Nakladka::Zloza,
+            "land-value" => Nakladka::WartoscGruntu,
             _ => return None,
         })
     }
@@ -79,6 +84,10 @@ impl Nakladka {
             Nakladka::Opady => "opady",
             Nakladka::Geologia => "warstwa geologiczna 4 m pod powierzchnią",
             Nakladka::Zloza => "złoża",
+            // ponytail: nazwa z tabeli w kodzie, bo `engine/ui` i `data/locale/` powstają
+            // w M3 — plik `data/ui/overlays.ron` niesie już `loc_key`, pod który podłączy
+            // się tamta faza (CLAUDE.md, „Język i lokalizacja").
+            Nakladka::WartoscGruntu => "wartość gruntu",
         }
     }
 
@@ -104,9 +113,12 @@ pub struct Pole {
 /// Wszystko liczy się z **już policzonych** danych generatora (`WorldData`), a nie z zapytań
 /// punktowych: pole ma milion komórek, a zapytania liczą szum i interpolację na każdą z nich.
 #[must_use]
-pub fn zbuduj(terrain: &Terrain, co: Nakladka) -> Option<Pole> {
+pub fn zbuduj(terrain: &Terrain, city: Option<&CityData>, co: Nakladka) -> Option<Pole> {
     if co == Nakladka::Brak {
         return None;
+    }
+    if co == Nakladka::WartoscGruntu {
+        return wartosc_gruntu(city?);
     }
     let dane = terrain.data();
     let dim = dane.height.dim();
@@ -165,7 +177,7 @@ pub fn zbuduj(terrain: &Terrain, co: Nakladka) -> Option<Pole> {
                     );
                     warstwa_pod_powierzchnia(terrain, x, y)
                 }
-                Nakladka::Zloza => 0,
+                Nakladka::Zloza | Nakladka::WartoscGruntu => 0,
             };
         }
     }
@@ -179,6 +191,36 @@ pub fn zbuduj(terrain: &Terrain, co: Nakladka) -> Option<Pole> {
         cell_m: magnat_world::WORK_CELL_M as f32,
         values,
         palette: paleta(co),
+    })
+}
+
+/// Nakładka wartości gruntu (M2e, WP16). Raster i paleta pochodzą z `sim/world`, więc
+/// klient nie zna ani progów, ani jednostki — zna je plik danych.
+fn wartosc_gruntu(city: &CityData) -> Option<Pole> {
+    let tab = match magnat_world::OverlayTable::load() {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("nakładka wartości gruntu: {e}");
+            return None;
+        }
+    };
+    let spec = tab.get("land_value").ok()?;
+    let (dim, cell_m, values) = magnat_world::city::overlay::land_value_raster(city, spec);
+    // Legenda na konsolę — barwa bez jednostki nie jest informacją (kryterium WP16).
+    eprintln!(
+        "legenda wartości gruntu ({}): {}",
+        spec.unit,
+        spec.legend()
+            .iter()
+            .map(|(_, v)| format!("{:.0}", *v as f64 / 100.0))
+            .collect::<Vec<_>>()
+            .join(" · ")
+    );
+    Some(Pole {
+        dim,
+        cell_m,
+        values,
+        palette: spec.palette(),
     })
 }
 
@@ -321,6 +363,7 @@ mod tests {
             Nakladka::Opady,
             Nakladka::Geologia,
             Nakladka::Zloza,
+            Nakladka::WartoscGruntu,
         ] {
             assert!(widziane.contains(&wymagana), "brak nakładki {wymagana:?}");
         }

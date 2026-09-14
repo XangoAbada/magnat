@@ -607,12 +607,19 @@ fn split_segment(net: &mut RoadNetwork, geom: &mut PolyArena, s: SegmentId, p: V
 }
 
 /// Dopisanie ulicy lokalnej między dwoma węzłami.
+///
+/// `ciezki` zdejmuje `NO_HEAVY` niezależnie od tonażu klasy: ulica **wewnątrz kwartału
+/// przemysłowego albo logistycznego jest drogą zakładową** i ciężarówka ma po niej
+/// jeździć, bo po to tam jest. Bez tego wyjątku hala w głębi strefy była otoczona
+/// wyłącznie ulicami z zakazem i nie miała gdzie postawić rampy — zmierzone na macierzy
+/// 32 × 4: 39 światów ze 128 oblewało T4 (korekta I-9).
 fn push_street(
     net: &mut RoadNetwork,
     geom: &mut PolyArena,
     a: NodeId,
     b: NodeId,
     class: RoadClass,
+    ciezki: bool,
 ) {
     let spec = class.spec();
     let (pa, pb) = (net.nodes[a.0 as usize].pos, net.nodes[b.0 as usize].pos);
@@ -620,7 +627,7 @@ fn push_street(
     if spec.lanes_bwd == 0 {
         flags = flags.with(RoadFlags::ONEWAY);
     }
-    if class.forbids_heavy() {
+    if class.forbids_heavy() && !ciezki {
         flags = flags.with(RoadFlags::NO_HEAVY);
     }
     net.segments.push(RoadSegment {
@@ -888,7 +895,20 @@ pub fn subdivide(
             continue;
         }
         lokalne.push(SegmentId(net.segments.len() as u32));
-        push_street(net, geom, a, b, st.class);
+        push_street(
+            net,
+            geom,
+            a,
+            b,
+            st.class,
+            matches!(
+                zones.zone[bi],
+                ZoneKind::IndustryLight
+                    | ZoneKind::IndustryHeavy
+                    | ZoneKind::Logistics
+                    | ZoneKind::Extraction
+            ),
+        );
         local_streets += 1;
     }
     rebuild_adjacency(net);

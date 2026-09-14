@@ -45,12 +45,25 @@ pub use city::road::{
     street_lines, FurnitureKind, NodeFlags, NodeId, PolyArena, PolyRef, RoadClass, RoadFlags,
     RoadNetwork, RoadNode, RoadSegment, RoadStructure, SegmentId, StreetFurniture, StreetLine,
 };
-pub use city::value::{LandValueBreakdown, LandValueFactor, ValueCtx};
+pub use city::value::{
+    land_value_at, AccessFields, LandValueBreakdown, LandValueFactor, ValueCtx,
+};
+// M2e — Etap 7 i wycena `pass_2`: kontrakt dla M5 (ceny startowe, `SiteSeed` sklepów),
+// M6 (`SiteSeed.{archetype, recipes, capacity_scale}`, `ClosureReport`) i M7 (`FirmSeed`).
+pub use city::catalog::{Catalog, CatalogError, Good, GoodUnit, Recipe, RecipeSource};
+pub use city::inspect::{parcel_at, parcel_card};
+pub use city::overlay::{OverlaySpec, OverlayTable, OVERLAY_CELL_M};
+pub use city::sites::{
+    supply_closure_check, Archetype, ClosureReport, FirmSeed, SectorId, SiteArchetypeId,
+    SiteCatalog, SiteReport, SiteSeed, SiteSet,
+};
 pub use city::zoning::{
     CityFields, EpochId, EpochSpec, EpochTable, ResDensity, StyleId, ZoneField, ZoneKind, ZoneMix,
     ZoneResult, ZoningWeights,
 };
-pub use city::{city_hash, generate_city, CityData, CityGenError, CityPlan, GenerationReport};
+pub use city::{
+    city_hash, generate_city, world_hash_m2, CityData, CityGenError, CityPlan, GenerationReport,
+};
 pub use climate::ClimateCell;
 pub use data::{
     HeightDm, LakeCells, RiverCell, RiverNetwork, RiverSegment, WaterBits, WaterClass, WorldData,

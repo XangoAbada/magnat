@@ -1,0 +1,37 @@
+// Surowce — towary, które wchodzą do gospodarki z wydobycia, rolnictwa albo z importu
+// (M2 §5.8, katalog minimalny; właścicielem docelowego katalogu ~400 towarów jest M6).
+//
+// `external_base_price` to **grosze za 1000 jednostek natywnych**: za kilogram dla
+// towarów `Grams`, za sztukę dla `Milliunits` (1000 milisztuk = 1 sztuka). Jedno pole,
+// więc nie da się mieć stanu „importowalny bez ceny" (M2 §9.1/16). `None` = towaru
+// nie sprowadzi żaden dostawca zewnętrzny i musi powstać na miejscu.
+//
+// `import_via` puste = wszystkie bramy towarowe (droga, kolej, port). W M2 zostaje puste
+// wszędzie **z rozmysłu**: jedyną bramą wspólną dla wszystkich profili jest `Highway`
+// (patrz `required` w `data/zoning/`), więc zawężenie listy do kolei albo portu wywracałoby
+// domknięcie łańcuchów w mieście rolniczym — i byłoby to zerwanie chronologii, nie realizm.
+// Zawężenie należy do M6, razem z dynamicznym limitem przepustowości importu.
+(
+    schema_version: 1,
+    goods: [
+        // ── kopaliny ────────────────────────────────────────────────────────────────
+        (key: "coal",          unit: Grams, density_g_per_l: 800,  external_base_price: Some((18))),
+        (key: "iron_ore",      unit: Grams, density_g_per_l: 2500, external_base_price: Some((12))),
+        (key: "limestone",     unit: Grams, density_g_per_l: 1600, external_base_price: Some((6))),
+        (key: "sand",          unit: Grams, density_g_per_l: 1500, external_base_price: Some((4))),
+        (key: "gravel",        unit: Grams, density_g_per_l: 1700, external_base_price: Some((5))),
+        (key: "clay",          unit: Grams, density_g_per_l: 1700, external_base_price: Some((5))),
+        (key: "crude_oil",     unit: Grams, density_g_per_l: 870,  external_base_price: Some((95))),
+        (key: "natural_gas",   unit: Grams, density_g_per_l: 1,    external_base_price: Some((70))),
+
+        // Woda surowa nie ma dostawcy zewnętrznego: miasto bierze ją z własnego ujęcia
+        // albo nie ma jej wcale. To jedyny towar w katalogu M2 bez ceny importowej
+        // i celowo — domknięcie musi umieć postawić zakład, a nie tylko kupić brakujące.
+        (key: "water_raw",     unit: Grams, density_g_per_l: 1000, external_base_price: None),
+
+        // ── surowce leśne i te, dla których region nie ma własnego źródła ────────────
+        (key: "timber",        unit: Grams, density_g_per_l: 600,  external_base_price: Some((28))),
+        (key: "cotton",        unit: Grams, density_g_per_l: 400,  external_base_price: Some((420))),
+        (key: "tobacco_leaf",  unit: Grams, density_g_per_l: 300,  external_base_price: Some((980))),
+    ],
+)

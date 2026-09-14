@@ -8,8 +8,8 @@ use magnat_devtools::png;
 use magnat_jobs::JobPool;
 use magnat_voxel::MaterialRegistry;
 use magnat_world::{
-    generate as generate_world, generate_city, CityData, CityPlan, Difficulty, ResDensity,
-    RoadClass, RoadStructure, Terrain, WorldData, WorldGenParams, ZoneKind,
+    generate as generate_world, generate_city, CityPlan, Difficulty, ResDensity, RoadClass,
+    RoadStructure, Terrain, WorldData, WorldGenParams, ZoneKind,
 };
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -166,7 +166,7 @@ pub struct PreviewArgs {
 
     /// Pole do narysowania: `height` | `water` | `biome` | `temp` | `precip` | `fertility`
     /// | `roads` (szkielet transportu miasta, M2b) | `zones` (strefy, parcele i granice
-    /// dzielnic, M2c).
+    /// dzielnic, M2c) | `value` (nakładka wartości gruntu, M2e).
     #[arg(long, default_value = "height")]
     field: String,
 
@@ -197,7 +197,7 @@ pub fn preview(a: &PreviewArgs) -> Result<ExitCode, Box<dyn std::error::Error>> 
     let (world, report) = generate_world(p, &pool)?;
     eprintln!("generacja {:.1} ms", report.total_millis);
 
-    if a.field == "roads" || a.field == "zones" {
+    if a.field == "roads" || a.field == "zones" || a.field == "value" {
         return preview_city(a, world);
     }
 
@@ -343,99 +343,6 @@ fn zone_color(z: ZoneKind) -> [u8; 3] {
     }
 }
 
-/// Karta inspekcji parceli (M2 §1, artefakt 2; wymóg wyjaśnialności — dok. 00 §7).
-fn inspect_parcel(city: &CityData, p: magnat_spatial::Vec2) -> Vec<String> {
-    let geom = &city.roads.geom;
-    let trafiona = city.parcels.tree.at_point(p, |id| {
-        let i = id.0.index() as usize;
-        magnat_world::city::poly::contains(geom.get(city.parcels.parcels[i].poly), p)
-    });
-    let Some(id) = trafiona else {
-        return vec![format!("{:.0},{:.0}: brak parceli", p.x, p.y)];
-    };
-    let parcel = &city.parcels.parcels[id.0.index() as usize];
-    let block = &city.blocks.blocks[parcel.block.0 as usize];
-    let d = &city.districts.districts[parcel.district.0 as usize];
-    let mut v = vec![
-        format!(
-            "parcela #{} · {} · {} m² · {:?}",
-            id.0.index(),
-            parcel.zone.key(),
-            parcel.area_m2,
-            parcel.status
-        ),
-        format!("właściciel: {:?}", parcel.owner),
-    ];
-    if parcel.frontage.is_none() {
-        v.push("front: brak (podwórko)".to_string());
-    } else {
-        let seg = &city.roads.segments[parcel.frontage.seg.0 as usize];
-        v.push(format!(
-            "front: segment {} ({}) · t {:.3}..{:.3} · {:.1} m",
-            parcel.frontage.seg.0,
-            seg.class.key(),
-            parcel.frontage.t0,
-            parcel.frontage.t1,
-            (parcel.frontage.t1 - parcel.frontage.t0) * f64::from(seg.length_dm) as f32 / 10.0
-        ));
-    }
-    v.push(format!(
-        "kwartał {} · osiedle {} · pierścień epoki {}",
-        block.id.0, block.neighborhood, block.epoch_ring
-    ));
-    v.push(format!(
-        "wartość gruntu (pass_1): {:.2} zł/m² · łącznie {:.0} zł",
-        parcel.land_value_per_m2.0 as f64 / 100.0,
-        (parcel.land_value_per_m2.0 as f64 / 100.0) * f64::from(parcel.area_m2)
-    ));
-    match parcel.building {
-        None => v.push("zabudowa: brak".to_string()),
-        Some(id) => {
-            let b = &city.buildings.buildings[id.0.index() as usize];
-            let lokale = &city.buildings.units[b.units.start as usize..b.units.end as usize];
-            let stanowisk: u32 = lokale.iter().map(|u| u.workplaces.len() as u32).sum();
-            v.push(format!(
-                "budynek #{}: gramatyka {} · {} kondygnacji (+{} podziemnych) · {:.1} m · {} m² brutto · stan {}/100",
-                id.0.index(),
-                b.grammar.0,
-                b.floors,
-                b.basements,
-                f64::from(b.height_dm) / 10.0,
-                b.gross_area_m2,
-                b.condition.get()
-            ));
-            v.push(format!(
-                "lokale: {} ({} mieszkań) · stanowisk pracy {} · czynsz wywoławczy {:.0}–{:.0} zł/mies.",
-                lokale.len(),
-                lokale.iter().filter(|u| u.kind.is_dwelling()).count(),
-                stanowisk,
-                lokale.iter().map(|u| u.rent_hint.0).min().unwrap_or(0) as f64 / 100.0,
-                lokale.iter().map(|u| u.rent_hint.0).max().unwrap_or(0) as f64 / 100.0
-            ));
-            v.push(format!(
-                "wejścia: {}",
-                b.entrances
-                    .iter()
-                    .map(|e| format!("{:?}@seg{}", e.kind, e.seg.0))
-                    .collect::<Vec<_>>()
-                    .join(" ")
-            ));
-        }
-    }
-    v.push(format!(
-        "dzielnica {}: {} ({:?}, styl {}) · dochód {}/4 · reputacja {} · przestępczość {} · pojemność {} os.",
-        parcel.district.0,
-        d.name,
-        d.kind,
-        d.style.0,
-        d.income_tier,
-        d.reputation.get(),
-        d.crime.get(),
-        d.pop_capacity
-    ));
-    v
-}
-
 /// Podgląd miasta (M2b: `--field roads`, M2c: `--field zones`).
 ///
 /// Sanity-check bez GPU: na cieniowanym terenie rysowane są osie dróg w barwach klas,
@@ -464,7 +371,7 @@ fn preview_city(a: &PreviewArgs, world: WorldData) -> Result<ExitCode, Box<dyn s
             .ok_or("--inspect oczekuje `x,y` w metrach")?;
         let p = magnat_spatial::Vec2::new(x.trim().parse()?, y.trim().parse()?);
         println!("── karta inspekcji ──");
-        for l in inspect_parcel(&city, p) {
+        for l in magnat_world::parcel_card(&city, p) {
             println!("{l}");
         }
     }
@@ -514,6 +421,47 @@ fn preview_city(a: &PreviewArgs, world: WorldData) -> Result<ExitCode, Box<dyn s
             let o = ((w - 1 - iy) * w + ix) * 3;
             px[o..o + 3].copy_from_slice(&c);
         }
+    }
+
+    // Nakładka wartości gruntu (WP16) — ta sama paleta i te same progi co w kliencie,
+    // bo obie czytają `data/ui/overlays.ron`. Podgląd headless jest dowodem, że nakładka
+    // nie jest efektem shadera, tylko danych.
+    if a.field == "value" {
+        let tab = magnat_world::OverlayTable::load()?;
+        let spec = tab.get("land_value")?;
+        let paleta = spec.palette();
+        let (dim, cell_m, raster) = magnat_world::city::overlay::land_value_raster(&city, spec);
+        for iy in 0..w {
+            for ix in 0..w {
+                let q = origin + magnat_spatial::Vec2::new(ix as f32 / skala, iy as f32 / skala);
+                let (gx, gy) = ((q.x / cell_m) as i64, (q.y / cell_m) as i64);
+                if gx < 0 || gy < 0 || gx >= i64::from(dim) || gy >= i64::from(dim) {
+                    continue;
+                }
+                let idx = raster[gy as usize * dim as usize + gx as usize];
+                if idx == 0 && raster[gy as usize * dim as usize + gx as usize] == 0 {
+                    // Zero znaczy „poza działkami" — teren ma zostać widoczny.
+                    continue;
+                }
+                let c = paleta[idx as usize];
+                let o = ((w - 1 - iy) * w + ix) * 3;
+                for k in 0..3 {
+                    px[o + k] = ((u16::from(px[o + k]) * u16::from(255 - c[3])
+                        + u16::from(c[k]) * u16::from(c[3]))
+                        / 255) as u8;
+                }
+            }
+        }
+        // Legenda w konsoli: bez niej barwa nie ma jednostki (kryterium WP16).
+        println!(
+            "legenda ({}): {}",
+            spec.unit,
+            spec.legend()
+                .iter()
+                .map(|(_, v)| format!("{:.0}", *v as f64 / 100.0))
+                .collect::<Vec<_>>()
+                .join(" · ")
+        );
     }
 
     // Parcele wypełnione barwą strefy — tylko w trybie `zones`.

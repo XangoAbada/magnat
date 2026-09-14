@@ -1,0 +1,62 @@
+// Wydobycie — budynek nadszybia albo zaplecza kopalni odkrywkowej (M2e, korekta F2).
+//
+// Kopalnia jest **zakładem na złożu**, a nie bryłą z gramatyki: §5.8 pkt 5 mówi wprost
+// „jedna parcela = jedno gospodarstwo/kopalnia". To, co tu stoi, to zaplecze — wieża
+// szybowa, warsztat, sortownia. Reszta działki zostaje wyrobiskiem, którego M2 nie
+// modeluje w voxelach (to jest temat M6, razem z wyczerpywaniem złoża).
+//
+// Jak `pawilon_parkowy`: strefa `Extraction` nie wchodzi do Etapu 6, więc tę gramatykę
+// wskazuje imiennie archetyp z `data/buildings/`.
+(
+    schema_version: 1,
+    id: "zaklad_wydobywczy",
+    applies: (
+        zones: ["extraction"],
+        epochs: [],
+        styles: [],
+        land_value: (0, 100000000),
+        frontage_m: (5.0, 4000.0),
+        depth_m: (5.0, 4000.0),
+        weight: 1,
+    ),
+    massing: (
+        setback_front_m: 12.0,
+        setback_side_m: 10.0,
+        setback_back_m: 10.0,
+        max_depth_m: 26.0,
+    ),
+    rules: [
+        Foundation(depth_m: 1.6, material: "concrete", basements: 0),
+        Floors(
+            count: (2, 5),
+            height_m: 4.2,
+            ground_height_m: 5.0,
+            ground: Ref("sciana"),
+            typical: Ref("sciana"),
+            top: Ref("sciana"),
+        ),
+        Roof(shape: Flat, material: "roof_felt"),
+    ],
+    refs: [
+        ("sciana", Seq([
+            Choice([
+                (3, Fill("brick_red")),
+                (2, Fill("concrete")),
+                (1, Fill("steel_clad")),
+            ]),
+            Comp(thickness_m: 1.4, faces: [
+                (Front, Repeat(axis: U, step_m: 5.4, pad_m: 1.6, rule: Split(axis: W, parts: [
+                    (Abs(1.6), Nothing),
+                    (Abs(1.4), Void),
+                    (Rel(1.0), Nothing),
+                ]))),
+            ]),
+        ])),
+    ],
+    interior: (
+        ground: (kind: Workshop, area_m2: (60, 200)),
+        typical: (kind: Workshop, area_m2: (60, 200)),
+        top: (kind: Storage, area_m2: (60, 200)),
+        circulation_share: 0.12,
+    ),
+)

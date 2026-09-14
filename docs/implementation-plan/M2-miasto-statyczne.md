@@ -144,6 +144,13 @@ per voxel — bez pierwszego miasto musiałoby stać w układzie Manhattan, bez 
 zabudowy metropolii to dziesiątki gigabajtów. Zmiany wpisane w przód do M2e: tabela
 `F1`–`F8` w `M2e-gospodarka-bazowa-i-wycena.md`.
 
+**Korekta po M2e:** tabela `I-1`–`I-17` w `M2e-gospodarka-bazowa-i-wycena.md`. Dziewięć
+pozycji zmienia zakres albo kryterium; wszystkie dotyczą sekcji 7 tego dokumentu i są
+wpisane wyżej, przy odpowiednich testach. Dwie z nich są **znaleziskami o cudzych
+podfazach**, nie o M2e: osierocony segment ulicy lokalnej (I-14) i niezgodność
+`Block.area_m2` z sumą działek kwartału (I-15) — obie należą do M2c i obie mają teraz
+ostrzeżenie w raporcie albo test, więc nie znikną po cichu.
+
 **Korekta po M2c, wpisana w przód (`K-18`):** trzy zmiany w podziale pakietów między M2d
 a M2e, uzasadnione w tabeli „Zmiany wpisane po M2c" dokumentu `M2d-zabudowa.md`:
 
@@ -315,18 +322,18 @@ ani czasu przejazdu, bo to domena M4. Dopóki M4 nie istnieje, M3 może użyć
 
 | # | Test | Kryterium |
 |---|---|---|
-| T1 | Spójność grafu dróg | jedna składowa spójna po segmentach jezdnych (bez `Pedestrian`); każda brama osiągalna z centroidu |
-| T2 | Odporność na odcięcie | żadna dzielnica nie jest połączona z resztą miasta pojedynczym segmentem (test mostów grafu: `bridges(G) ∩ granice_dzielnic = ∅`) |
-| T3 | Dostępność budynków | BFS po grafie pieszym od bram dosięga 100% `Entrance`; każde `Entrance` ma drogę w promieniu 50 m |
-| T4 | Rampy | 100% budynków na `Logistics`/`IndustryHeavy` ma `EntranceKind::Ramp` przy drodze bez `NO_HEAVY` |
-| T5 | Brak nakładek parcel | pole przecięcia dowolnej pary parcel ≤ 1 m² (testowane przez `ParcelTree::query_rect`) |
+| T1 | Spójność grafu dróg | główna składowa niesie ≥ 99,5 % segmentów jezdnych (bez `Pedestrian`), rozpad ma ostrzeżenie w raporcie; każda brama w tej składowej. **Korekta I-9… patrz I-14**: w 2 światach ze 128 zostaje jeden osierocony segment ulicy lokalnej — usterka M2c, nie podział miasta |
+| T2 | Odporność na odcięcie | żadna dzielnica o ≥ 5 % pojemności miasta nie łączy się z sąsiadami mniej niż dwoma segmentami jezdnymi. **Korekta I-8**: wariant z mostami grafu odrzucony — miasto nad rzeką z jedną przeprawą ma most będący mostem grafu i to jest geografia |
+| T3 | Dostępność budynków | każdy budynek na działce ≤ 1 ha ma wejście z drogą w promieniu 50 m (tolerancja 0,2 %). **Korekta I-10**: BFS po grafie pieszym domknie się w M4, który ten graf buduje (`K-2`); działki powyżej hektara dojeżdżają drogą wewnętrzną, której M2 nie modeluje |
+| T4 | Rampy | żadna rampa nie stoi przy drodze z `NO_HEAVY`; budynków strefy ciężkiej bez rampy < 2,5 %. **Korekta I-9**: `NO_HEAVY` zdejmowane z ulic obsługujących kwartały przemysłowe (droga zakładowa), promień poszukiwania rampy dwustopniowy |
+| T5 | Brak nakładek parcel | żaden punkt wnętrza działki (środek ciężkości i punkty w połowie drogi do wierzchołków) nie leży w innej działce tego kwartału. **Korekta I-15**: bilans 'suma pól działek ≤ pole kwartału' wyjęty z kryterium — wywalał się bez ani jednej nakładki, bo `Block.area_m2` bywa mniejsze od sumy działek z tego kwartału wyciętych (znalezisko dla M2c i M4) |
 | T6 | Budynek w parceli | obrys budynku ⊆ wielokąt parceli, tolerancja 0,1 m; brak kolizji z pasem drogowym, wodą, torem |
 | T7 | Fronta drogowa | 100% parcel poza `Green`/`Water`/`Extraction` ma `Frontage` o długości > 0 |
 | T8 | Pokrycie dzielnicami | dzielnice pokrywają obszar zurbanizowany bez dziur i nakładek; każdy kwartał w dokładnie jednej dzielnicy; 10 ≤ D ≤ 40 |
 | T9 | Kwoty stref | udział każdej strefy w ±3 pp. wobec profilu |
-| T10 | Bilans lokali i stanowisk | Σ mieszkań × wielkość GD epoki ∈ [0,97; 1,08] × `target_pop`; Σ stanowisk ∈ [0,95; 1,12] × oczekiwanych etatów |
-| T11 | Domknięcie łańcuchów | `missing == []`; ∀g: `0,85 ≤ supply/demand ≤ 1,30` |
-| T12 | Sanity wyceny | `avg_land_value(OldTown) > avg_land_value(Suburb)`; parcela sąsiadująca z `IndustryHeavy` poniżej mediany dzielnicy; brak wartości ≤ 0 |
+| T10 | Bilans lokali i stanowisk | Σ mieszkań × 2,4 ∈ [0,97; 1,08] × `target_pop`; Σ stanowisk ∈ [0,95; 1,12] × `target_pop` × 0,53125. **Korekta I-6**: obie liczby są **kalibrowane konstrukcyjnie** po Etapie 6 (podział powierzchni mieszkalnej na lokale, globalny mnożnik „m² na stanowisko”), bo rozrzut wynikający z terenu wynosi 0,61–1,08 i nie da się go domknąć stałą w danych |
+| T11 | Domknięcie łańcuchów | `missing == []`; ∀g: `supply/demand ≥ 0,85`, a `≤ 1,30` dla towarów, które są dla którejś receptury **wyjściem wiodącym**. **Korekta I-4**: produkt uboczny (skóra z rzeźni, benzyna z rafinerii) wolno mieć w nadmiarze — nadwyżka wychodzi z miasta i jest w raporcie osobno |
+| T12 | Sanity wyceny | średnia rdzenia (`OldTown` + `InnerCity`) > średnia obrzeża (`Suburb` + `Village`), liczona **po parcelach mieszkaniowych** (F3, I-16); mediana czynnika `Pollution` przy przemyśle ciężkim ≤ 0,94 i o ≥ 0,04 niższa niż dalej niż 800 m (I-12); brak wartości ≤ 0 |
 | T13 | Różnorodność zabudowy (M2f) | udział budynków o **identycznej** `BuildingSignature` wśród budynków w promieniu 60 m < 15 %; entropia Shannona rozkładu **sygnatur** ≥ 1,8 bita w dzielnicy mieszkaniowej o ≥ 100 budynkach i ≥ 4,0 bita w całym mieście; udział gramatyki awaryjnej < 0,5 %, udział doboru z rozluźnionym filtrem < 5 %. Progi skalibrowane pomiarem, mierzone na 32 ziarnach × 4 profile (korekta H12) |
 
 ### Determinizm (dok. 00 §3.6)
@@ -396,7 +403,7 @@ Obszar zurbanizowany ~70 km², kwartałów ~6 000, dzielnic 32.
 | stanowiska 212 tys. × 16 B | 3,4 MB |
 | drogi: segmenty + węzły + CSR + geometria | 1,6 MB |
 | kwartały 6 tys., dzielnice 32 | 0,5 MB |
-| `SiteSeed` / `FirmSeed` ~7 tys. | 0,8 MB |
+| `SiteSeed` / `FirmSeed` ~4 tys. firm i ~4 tys. zakładów (zmierzone: 3 888 / 3 908) | 0,9 MB |
 | `ScalarField` × 6 trwałych (1 mln komórek × 2 B) | 12,0 MB |
 | indeksy: `ParcelTree` + `CsrGrid` budynków + `CategoryGrid` | 4,0 MB |
 | `DynamicGrid` dla 400 tys. encji (rezerwacja dla M3/M4) | 4,0 MB |
@@ -455,8 +462,8 @@ komponenty jest zachowane.
 
 | # | Decyzja | Blokuje | Propozycja M2 | Stan |
 |---|---|---|---|---|
-| 3 | Moment, w którym wartość gruntu przestaje być statyczna (M5 transakcje / M10 pełny model) | WP15b | pole `Parcel.land_value_per_m2` zostaje, M5/M10 je nadpisują; **bez** traita `LandValueSource` — jedna implementacja nie potrzebuje abstrakcji | propozycja bez sprzeciwu |
-| 5 | Czy `Institutional` (szkoły, szpitale) obsadza M2 jako `SiteSeed` należący do `City`, czy czeka na M8 | WP13 | M2 obsadza i daje stanowiska (M3 potrzebuje nauczycieli i lekarzy jako miejsc pracy); M8 dokłada budżet, politykę i jakość usługi | propozycja bez sprzeciwu |
+| 3 | Moment, w którym wartość gruntu przestaje być statyczna (M5 transakcje / M10 pełny model) | WP15b | pole `Parcel.land_value_per_m2` zostaje, M5/M10 je nadpisują; **bez** traita `LandValueSource` — jedna implementacja nie potrzebuje abstrakcji | **przyjęta i zrealizowana w M2e.** Pole jest zwykłym `Money` na parceli, `land_value_at` liczy rozbicie na żądanie; żadnego traitu nie ma |
+| 5 | Czy `Institutional` (szkoły, szpitale) obsadza M2 jako `SiteSeed` należący do `City`, czy czeka na M8 | WP13 | M2 obsadza i daje stanowiska (M3 potrzebuje nauczycieli i lekarzy jako miejsc pracy); M8 dokłada budżet, politykę i jakość usługi | **przyjęta i zrealizowana w M2e.** Dziewięć archetypów publicznych z normatywami ludnościowymi, `ParcelOwner::City`, `SectorId::is_municipal`. Zieleń dostała to samo traktowanie (F2) |
 | 21 | Gdzie biegnie granica detalu architektonicznego między M2 a M11. Blok `Details` z §5.6 (gzyms, opaska, pilaster, balkon, komin, lukarna) nigdy nie wszedł do enuma `Rule` i nie miał właściciela | WP18 | **Granicą jest rozmiar voxela, nie rodzaj detalu.** Voxel ma 1 m w poziomie, a korekta E12 zmierzyła, że detal cieńszy niż ~2 m rasteryzuje się na mijające się stopnie. M2 wyraża więc detal **od ~1 m w górę** — balkon, wykusz, ryzalit, lukarna, komin, uskok bryły — jednym nowym operatorem `Protrude { face, m, rule }`, bo cztery z pięciu pozycji z `Details` są już wyrażalne istniejącym zestawem (tabela w §5.6c M2f). Detal **subwoxelowy** (gzyms 0,4 m, opaska okienna, pilaster, boniowanie) nie jest w M2 wyrażalny w ogóle — nie z braku operatora, tylko z braku miejsca w rastrze — i należy do M11 jako prefab `Place` albo mesh. Zgodne z 9.1/10: bryła i otwory zostają w M2, M11 dokłada warianty terminali | propozycja domyślna, przyjęta w `M2f-roznorodnosc-zabudowy.md` |
 | 22 | Docelowy rozmiar katalogu `data/grammar/` i kto go utrzymuje po zamknięciu M2 | WP19 | **~32 pliki w M2f, dobrane macierzą pokrycia (strefa × epoka × styl), nie upodobaniem** — próg jest mierzony testem T13 i udziałem fallbacku, a nie liczbą plików. Wariancja wewnątrz pliku (`Choice` na materiał, rytm otworów i dach) ma być wyczerpana przed napisaniem nowego pliku: nowa gramatyka powstaje wtedy, gdy różni się **bryłą**. Dalszy wzrost katalogu po M2 to zawartość, nie faza — po M12d `data/grammar/` jest katalogiem moddowalnym (wpis G1 w `M12d-modding.md`) | propozycja domyślna, przyjęta w `M2f-roznorodnosc-zabudowy.md` |
 

@@ -1,0 +1,33 @@
+// Archetypy zakładów — usługi publiczne i zieleń (PRD §7.2, M2 §5.8 pkt 4, decyzja 9.2/5).
+//
+// Zakłady `Public` należą do miasta (`ParcelOwner::City`) i **M2 je obsadza**, bo M3
+// potrzebuje nauczycieli i lekarzy jako miejsc pracy. Budżet, polityka i jakość usługi
+// to M8 — tutaj jest budynek, etaty i normatyw, i nic ponadto.
+//
+// Zieleń dostaje obiekty dopiero tu (korekta F2): M2d nie stawia na niej ani jednej bryły,
+// bo gramatyka awaryjna na działce parkowej robi z parku osiedle.
+(
+    schema_version: 1,
+    archetypes: [
+        // ── normatywy publiczne z §5.8 pkt 4 ───────────────────────────────────────
+        (key: "school",          sector: Public, zones: ["institutional"], min_parcel_m2: 2500, m2_per_workplace: 74, wage_mult: 1.00, per_pop: Some(1200), consumes: [("paper", 12_000), ("books", 900)]),
+        (key: "kindergarten",    sector: Public, zones: ["institutional"], min_parcel_m2: 900, m2_per_workplace: 45, wage_mult: 0.90, per_pop: Some(2000), consumes: [("paper", 3_000), ("toys", 400)]),
+        (key: "clinic",          sector: Public, zones: ["institutional", "commercial"], min_parcel_m2: 700, m2_per_workplace: 51, wage_mult: 1.24, per_pop: Some(8000), consumes: [("medicine", 24_000)]),
+        (key: "hospital",        sector: Public, zones: ["institutional"], min_parcel_m2: 12000, m2_per_workplace: 61, wage_mult: 1.30, per_pop: Some(120000), consumes: [("medicine", 340_000), ("detergent", 60_000)]),
+        (key: "police_station",  sector: Public, zones: ["institutional"], min_parcel_m2: 900,  m2_per_workplace: 48, wage_mult: 1.10, per_pop: Some(40000)),
+        (key: "fire_station",    sector: Public, zones: ["institutional"], min_parcel_m2: 1400, m2_per_workplace: 88, wage_mult: 1.08, per_pop: Some(35000), consumes: [("fuel_diesel", 120_000)]),
+        (key: "town_hall",       sector: Public, zones: ["institutional", "office"], min_parcel_m2: 1800, m2_per_workplace: 32, wage_mult: 1.14, per_pop: Some(400000), consumes: [("paper", 40_000)]),
+        (key: "library",         sector: Public, zones: ["institutional"], min_parcel_m2: 800,  m2_per_workplace: 96, wage_mult: 0.94, per_pop: Some(45000), consumes: [("books", 1_800)]),
+        (key: "museum",          sector: Public, zones: ["institutional"], min_parcel_m2: 1500, m2_per_workplace: 136, wage_mult: 0.96, per_pop: Some(90000)),
+
+        // Wypełniacz strefy publicznej: urząd dzielnicowy, przychodnia branżowa, dom kultury.
+        (key: "public_office",   sector: Public, zones: ["institutional"], min_parcel_m2: 400, m2_per_workplace: 38, wage_mult: 1.02, weight: 80, consumes: [("paper", 6_000)]),
+
+        // ── zieleń ─────────────────────────────────────────────────────────────────
+        // Normatyw zamiast wagi: park obsadzony wypełniaczem dostałby pawilon na każdej
+        // działce, a budżet §7 fazy daje zieleni 300 budynków na 900 działek.
+        (key: "park_service",    sector: Green, zones: ["green"], min_parcel_m2: 1500, m2_per_workplace: 240, wage_mult: 0.88, per_pop: Some(6000),  grammar: Some("pawilon_parkowy"), consumes: [("fuel_petrol", 20_000)]),
+        (key: "sports_ground",   sector: Green, zones: ["green"], min_parcel_m2: 4000, m2_per_workplace: 288, wage_mult: 0.90, per_pop: Some(25000), grammar: Some("pawilon_parkowy")),
+        (key: "allotment_hut",   sector: Green, zones: ["green"], min_parcel_m2: 600,  m2_per_workplace: 480, wage_mult: 0.84, per_pop: Some(18000), grammar: Some("pawilon_parkowy")),
+    ],
+)

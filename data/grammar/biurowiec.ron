@@ -6,11 +6,11 @@
     id: "biurowiec",
     applies: (
         zones: ["office"],
-        epochs: ["interwar", "postwar", "transition", "contemporary"],
+        epochs: ["postwar", "transition", "contemporary"],
         styles: [],
         land_value: (0, 30000000),
         frontage_m: (8.0, 200.0),
-        depth_m: (8.0, 200.0),
+        depth_m: (5.0, 200.0),
         weight: 45,
     ),
     massing: (

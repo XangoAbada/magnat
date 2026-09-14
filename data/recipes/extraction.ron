@@ -1,0 +1,80 @@
+// Punkty wejścia łańcuchów: wydobycie (M2 §5.8, KROK 1).
+//
+// `source: Extraction(_)` jest **jawną flagą**, nie domysłem z pustych `inputs` (M2 §9.1/14).
+// Bilans masy `Σ inputs == Σ outputs + process_loss` obowiązuje wyłącznie `Manufacturing`:
+// masa kopaliny pochodzi ze złoża, a złoże nie jest towarem.
+//
+// Ilości są w **gramach na szarżę**, czas w minutach; `duration_minutes: 1440` znaczy
+// „to jest wydajność dobowa". `yield` nie jest polem — liczy się z tych dwóch (M2 §9.1/16).
+//
+// `labour` to **osobominuty szarży**, czyli wielkość kosztowa (M2 §9.1/13). Obsada etatowa
+// stoi po drugiej stronie granicy, w `data/buildings/*.ron` — to są dwie różne liczby.
+(
+    schema_version: 1,
+    recipes: [
+        (
+            key: "coal_mining",
+            source: Extraction(Coal),
+            outputs: [("coal", 1_200_000_000)],
+            duration_minutes: 1440,
+            labour: [("production_worker", 420_000)],
+            machine_class: "shaft_mining",
+        ),
+        (
+            key: "iron_ore_mining",
+            source: Extraction(IronOre),
+            outputs: [("iron_ore", 900_000_000)],
+            duration_minutes: 1440,
+            labour: [("production_worker", 300_000)],
+            machine_class: "open_pit",
+        ),
+        (
+            key: "aggregate_quarry",
+            source: Extraction(Aggregate),
+            outputs: [("sand", 500_000_000), ("gravel", 700_000_000)],
+            duration_minutes: 1440,
+            labour: [("production_worker", 120_000)],
+            machine_class: "open_pit",
+        ),
+        (
+            key: "limestone_quarry",
+            source: Extraction(Aggregate),
+            outputs: [("limestone", 800_000_000)],
+            duration_minutes: 1440,
+            labour: [("production_worker", 110_000)],
+            machine_class: "open_pit",
+        ),
+        (
+            key: "clay_pit",
+            source: Extraction(ClayDeposit),
+            outputs: [("clay", 400_000_000)],
+            duration_minutes: 1440,
+            labour: [("production_worker", 60_000)],
+            machine_class: "open_pit",
+        ),
+        (
+            key: "oil_well",
+            source: Extraction(Oil),
+            outputs: [("crude_oil", 300_000_000)],
+            duration_minutes: 1440,
+            labour: [("production_worker", 90_000)],
+            machine_class: "well",
+        ),
+        (
+            key: "gas_well",
+            source: Extraction(Gas),
+            outputs: [("natural_gas", 60_000_000)],
+            duration_minutes: 1440,
+            labour: [("production_worker", 70_000)],
+            machine_class: "well",
+        ),
+        (
+            key: "water_intake",
+            source: Extraction(Groundwater),
+            outputs: [("water_raw", 20_000_000_000)],
+            duration_minutes: 1440,
+            labour: [("production_worker", 40_000)],
+            machine_class: "pumping",
+        ),
+    ],
+)

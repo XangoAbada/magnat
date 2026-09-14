@@ -1,0 +1,56 @@
+// Koszyk potrzeb epoki — **gramy na mieszkańca na dobę** (M2 §5.8, def(3)).
+//
+// Dlaczego tutaj, a nie w `data/goods/`: schemat `Good` należy do M6 i nie ma powodu,
+// żeby model potrzeb wchodził mu do struktury towaru. Dlaczego nie w `data/needs/`:
+// ten katalog należy do modelu potrzeb M3/M5 i powstanie razem z nim. To jest liczba
+// **wejściowa do walidacji bilansu**, a nie model konsumpcji — mieszkańców w M2 nie ma.
+//
+// `water_raw` jest w koszyku, choć woda jest **mediem**, nie zakupem: docelowo należy
+// do `UtilityService::Water` i do M8. W M2 nie ma mieszkańców ani sieci przesyłowych,
+// a bilans musi znać zapotrzebowanie miasta na wodę, bo od niego zależy liczba ujęć.
+// Kiedy M8 zbuduje wodociąg, ta pozycja z koszyka znika.
+//
+// Klucz to epoka **startowa** miasta, czyli ostatni pierścień z `data/epochs/`:
+// 1950 i 1970 → `postwar`, 1990 → `transition`, 2010 i 2020 → `contemporary`.
+// Epok starszych nie ma, bo `Epoch` zaczyna się w 1950 — pierścień `medieval` opisuje
+// zabudowę, nie rok, w którym gra się zaczyna.
+(
+    schema_version: 1,
+    baskets: [
+        // ── 1950 i 1970: dużo chleba i ziemniaka, mało dóbr trwałych ────────────────
+        ("postwar", [
+            ("water_raw", 85_000), ("bread", 260), ("milk", 300), ("cheese", 12), ("meat", 85), ("poultry_meat", 20),
+            ("vegetables", 220), ("fruit", 90), ("potato", 300), ("sugar", 34),
+            ("beer", 120), ("juice", 15), ("cigarettes", 5),
+            ("soap", 6), ("detergent", 7), ("cosmetics", 1), ("toilet_paper", 9), ("medicine", 2),
+            ("clothing", 14), ("shoes", 3), ("books", 4), ("toys", 1),
+            ("furniture", 6), ("tv_set", 0), ("refrigerator", 0), ("washing_machine", 0),
+            ("bicycle", 2), ("car", 8),
+            ("fuel_petrol", 35), ("fuel_diesel", 18), ("heating_oil", 70),
+        ]),
+
+        // ── 1990: transformacja ────────────────────────────────────────────────────
+        ("transition", [
+            ("water_raw", 120_000), ("bread", 190), ("milk", 280), ("cheese", 22), ("meat", 115), ("poultry_meat", 45),
+            ("vegetables", 240), ("fruit", 130), ("potato", 210), ("sugar", 38),
+            ("beer", 190), ("juice", 55), ("cigarettes", 4),
+            ("soap", 7), ("detergent", 14), ("cosmetics", 3), ("toilet_paper", 18), ("medicine", 3),
+            ("clothing", 22), ("shoes", 4), ("books", 5), ("toys", 2),
+            ("furniture", 9), ("tv_set", 1), ("refrigerator", 1), ("washing_machine", 1),
+            ("bicycle", 1), ("car", 40),
+            ("fuel_petrol", 110), ("fuel_diesel", 35), ("heating_oil", 55),
+        ]),
+
+        // ── 2010 i 2020: mniej węglowodanów, więcej wszystkiego innego ──────────────
+        ("contemporary", [
+            ("water_raw", 145_000), ("bread", 150), ("milk", 230), ("cheese", 34), ("meat", 125), ("poultry_meat", 80),
+            ("vegetables", 260), ("fruit", 170), ("potato", 150), ("sugar", 40),
+            ("beer", 230), ("juice", 90), ("cigarettes", 2),
+            ("soap", 8), ("detergent", 20), ("cosmetics", 6), ("toilet_paper", 24), ("medicine", 5),
+            ("clothing", 30), ("shoes", 6), ("books", 4), ("toys", 4),
+            ("furniture", 12), ("tv_set", 2), ("refrigerator", 2), ("washing_machine", 2),
+            ("bicycle", 2), ("car", 70),
+            ("fuel_petrol", 150), ("fuel_diesel", 60), ("heating_oil", 30),
+        ]),
+    ],
+)

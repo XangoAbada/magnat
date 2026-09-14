@@ -10,14 +10,14 @@
         styles: [],
         land_value: (2500000, 40000000),
         frontage_m: (13.0, 160.0),
-        depth_m: (14.0, 200.0),
+        depth_m: (5.0, 200.0),
         weight: 35,
     ),
     massing: (
         setback_front_m: 6.0,
         setback_side_m: 6.0,
         setback_back_m: 6.0,
-        max_depth_m: 30.0,
+        max_depth_m: 28.2,
     ),
     rules: [
         Foundation(depth_m: 4.5, material: "concrete", basements: 2),

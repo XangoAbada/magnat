@@ -306,6 +306,7 @@ fn rozbicie_wyceny_sumuje_sie_do_wyniku() {
         blocks: &c.blocks,
         districts: &c.districts,
         rings: c.zones.rings.len() as u8,
+        access: None,
     };
     let mut z_wplywem = 0;
     for i in 0..c.parcels.parcels.len().min(500) {

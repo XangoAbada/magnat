@@ -6,11 +6,11 @@
     id: "kamienica_biurowa",
     applies: (
         zones: ["office", "commercial"],
-        epochs: ["industrial", "interwar"],
+        epochs: ["medieval", "industrial", "interwar"],
         styles: [],
         land_value: (0, 30000000),
         frontage_m: (10.0, 70.0),
-        depth_m: (10.0, 140.0),
+        depth_m: (5.0, 140.0),
         weight: 35,
     ),
     massing: (

@@ -6,11 +6,11 @@
     id: "szkola",
     applies: (
         zones: ["institutional"],
-        epochs: ["interwar", "postwar", "transition", "contemporary"],
+        epochs: [],
         styles: [],
         land_value: (0, 16000000),
         frontage_m: (18.0, 160.0),
-        depth_m: (14.0, 250.0),
+        depth_m: (5.0, 250.0),
         weight: 35,
     ),
     massing: (

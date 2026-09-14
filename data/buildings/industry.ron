@@ -1,0 +1,72 @@
+// Archetypy zakładów — przetwórstwo (PRD §7.2, M2 §5.8 pkt 1).
+//
+// Ciężkie i uciążliwe siedzi w `industry_heavy`, przetwórstwo lekkie i spożywcze
+// w `industry_light`. Strefa nie jest ozdobą: to ona rozstrzyga, na której parceli
+// zakład wolno postawić, a `min_parcel_m2` — czy się tam zmieści.
+//
+// `weight` > 0 znaczy „ten archetyp bywa też wypełniaczem": kiedy popyt nie potrzebuje
+// kolejnej huty, a działka przemysłowa stoi pusta, wypełniacz dostaje ją zamiast niej.
+// Zakłady o `weight: 0` stawia wyłącznie bilans popytu albo szablon łańcucha.
+(
+    schema_version: 1,
+    archetypes: [
+        // ── metalurgia i chemia ciężka ──────────────────────────────────────────────
+        (key: "coking_plant",     sector: Industry, zones: ["industry_heavy"], min_parcel_m2: 9000,  m2_per_workplace: 240, wage_mult: 1.16, recipes: ["coking"]),
+        (key: "ironworks",        sector: Industry, zones: ["industry_heavy"], min_parcel_m2: 14000, m2_per_workplace: 240, wage_mult: 1.20, recipes: ["blast_furnace"]),
+        (key: "steelworks",       sector: Industry, zones: ["industry_heavy"], min_parcel_m2: 14000, m2_per_workplace: 224, wage_mult: 1.20, recipes: ["steelmaking"]),
+        (key: "rolling_mill",     sector: Industry, zones: ["industry_heavy"], min_parcel_m2: 10000, m2_per_workplace: 192, wage_mult: 1.14, recipes: ["rolling_mill"]),
+        (key: "cement_plant",     sector: Industry, zones: ["industry_heavy"], min_parcel_m2: 11000, m2_per_workplace: 256, wage_mult: 1.10, recipes: ["cement_plant"]),
+        (key: "glassworks",       sector: Industry, zones: ["industry_heavy"], min_parcel_m2: 7000,  m2_per_workplace: 176, wage_mult: 1.08, recipes: ["glassworks"]),
+        (key: "brickworks",       sector: Industry, zones: ["industry_heavy", "industry_light"], min_parcel_m2: 6000, m2_per_workplace: 208, wage_mult: 1.02, recipes: ["brickworks"]),
+        (key: "refinery",         sector: Industry, zones: ["industry_heavy"], min_parcel_m2: 16000, m2_per_workplace: 320, wage_mult: 1.32, recipes: ["refinery"]),
+        (key: "petrochemical",    sector: Industry, zones: ["industry_heavy"], min_parcel_m2: 12000, m2_per_workplace: 288, wage_mult: 1.28, recipes: ["petrochemical"]),
+        (key: "fertilizer_plant", sector: Industry, zones: ["industry_heavy"], min_parcel_m2: 10000, m2_per_workplace: 272, wage_mult: 1.18, recipes: ["fertilizer_plant"]),
+        (key: "chemical_works",   sector: Industry, zones: ["industry_heavy"], min_parcel_m2: 8000,  m2_per_workplace: 224, wage_mult: 1.16, recipes: ["chemical_works"]),
+        (key: "car_plant",        sector: Industry, zones: ["industry_heavy"], min_parcel_m2: 18000, m2_per_workplace: 144,  wage_mult: 1.22, recipes: ["car_plant"]),
+        // Wypełniacz strefy ciężkiej: kuźnia, hartownia, zakład remontowy.
+        (key: "heavy_workshop",   sector: Industry, zones: ["industry_heavy"], min_parcel_m2: 1500,  m2_per_workplace: 160, wage_mult: 1.06, weight: 60),
+
+        // ── materiały, drewno, papier ───────────────────────────────────────────────
+        (key: "concrete_plant",   sector: Industry, zones: ["industry_light", "logistics", "industry_heavy", "extraction"], min_parcel_m2: 1200, m2_per_workplace: 192, wage_mult: 1.04, recipes: ["concrete_plant"]),
+        (key: "sawmill",          sector: Industry, zones: ["industry_light"], min_parcel_m2: 4000, m2_per_workplace: 176, wage_mult: 0.98, recipes: ["sawmill"]),
+        (key: "plywood_mill",     sector: Industry, zones: ["industry_light"], min_parcel_m2: 4500, m2_per_workplace: 160, wage_mult: 1.00, recipes: ["plywood_mill"]),
+        (key: "paper_mill",       sector: Industry, zones: ["industry_light", "industry_heavy"], min_parcel_m2: 7000, m2_per_workplace: 192, wage_mult: 1.06, recipes: ["paper_mill"]),
+        (key: "cardboard_mill",   sector: Industry, zones: ["industry_light"], min_parcel_m2: 3000, m2_per_workplace: 144,  wage_mult: 1.00, recipes: ["cardboard_mill"]),
+        (key: "tissue_mill",      sector: Industry, zones: ["industry_light"], min_parcel_m2: 3000, m2_per_workplace: 144,  wage_mult: 1.00, recipes: ["tissue_mill"]),
+
+        // ── włókiennictwo i wyroby ──────────────────────────────────────────────────
+        (key: "textile_mill",     sector: Industry, zones: ["industry_light"], min_parcel_m2: 4000, m2_per_workplace: 72, wage_mult: 0.92, recipes: ["textile_mill"]),
+        (key: "clothing_factory", sector: Industry, zones: ["industry_light"], min_parcel_m2: 2500, m2_per_workplace: 48, wage_mult: 0.90, recipes: ["clothing_factory"]),
+        (key: "shoe_factory",     sector: Industry, zones: ["industry_light"], min_parcel_m2: 2500, m2_per_workplace: 51, wage_mult: 0.92, recipes: ["shoe_factory"]),
+        (key: "furniture_works",  sector: Industry, zones: ["industry_light"], min_parcel_m2: 4000, m2_per_workplace: 88, wage_mult: 1.00, recipes: ["furniture_factory"]),
+        (key: "electronics_plant",sector: Industry, zones: ["industry_light"], min_parcel_m2: 5000, m2_per_workplace: 56, wage_mult: 1.10, recipes: ["electronics_plant"]),
+        (key: "fridge_plant",     sector: Industry, zones: ["industry_light", "industry_heavy"], min_parcel_m2: 6000, m2_per_workplace: 80, wage_mult: 1.08, recipes: ["fridge_plant"]),
+        (key: "washer_plant",     sector: Industry, zones: ["industry_light", "industry_heavy"], min_parcel_m2: 6000, m2_per_workplace: 80, wage_mult: 1.08, recipes: ["washer_plant"]),
+        (key: "bicycle_plant",    sector: Industry, zones: ["industry_light"], min_parcel_m2: 3500, m2_per_workplace: 67, wage_mult: 1.02, recipes: ["bicycle_plant"]),
+        (key: "printing_house",   sector: Industry, zones: ["industry_light"], min_parcel_m2: 2000, m2_per_workplace: 61, wage_mult: 1.04, recipes: ["printing_house"]),
+        (key: "toy_factory",      sector: Industry, zones: ["industry_light"], min_parcel_m2: 2500, m2_per_workplace: 58, wage_mult: 0.94, recipes: ["toy_factory"]),
+        (key: "soap_plant",       sector: Industry, zones: ["industry_light"], min_parcel_m2: 2500, m2_per_workplace: 96, wage_mult: 1.00, recipes: ["soap_plant"]),
+        (key: "detergent_plant",  sector: Industry, zones: ["industry_light"], min_parcel_m2: 2500, m2_per_workplace: 96, wage_mult: 1.00, recipes: ["detergent_plant"]),
+        (key: "cosmetics_plant",  sector: Industry, zones: ["industry_light"], min_parcel_m2: 2000, m2_per_workplace: 72, wage_mult: 1.06, recipes: ["cosmetics_plant"]),
+        (key: "pharma_plant",     sector: Industry, zones: ["industry_light"], min_parcel_m2: 3000, m2_per_workplace: 64, wage_mult: 1.24, recipes: ["pharma_plant"]),
+        (key: "cigarette_factory",sector: Industry, zones: ["industry_light"], min_parcel_m2: 3000, m2_per_workplace: 88, wage_mult: 1.12, recipes: ["cigarette_factory"]),
+
+        // ── przetwórstwo spożywcze ──────────────────────────────────────────────────
+        (key: "grain_mill",       sector: Industry, zones: ["industry_light"], min_parcel_m2: 2500, m2_per_workplace: 144, wage_mult: 0.96, recipes: ["milling"]),
+        (key: "bread_plant",      sector: Industry, zones: ["industry_light"], min_parcel_m2: 1200, m2_per_workplace: 64, wage_mult: 0.94, recipes: ["bakery"]),
+        (key: "yeast_plant",      sector: Industry, zones: ["industry_light"], min_parcel_m2: 2000, m2_per_workplace: 112, wage_mult: 0.98, recipes: ["yeast_plant"]),
+        (key: "sugar_refinery",   sector: Industry, zones: ["industry_light", "industry_heavy"], min_parcel_m2: 8000, m2_per_workplace: 176, wage_mult: 1.02, recipes: ["sugar_refinery"]),
+        (key: "oil_press",        sector: Industry, zones: ["industry_light"], min_parcel_m2: 3000, m2_per_workplace: 136, wage_mult: 0.98, recipes: ["oil_press"]),
+        (key: "dairy_plant",      sector: Industry, zones: ["industry_light"], min_parcel_m2: 3000, m2_per_workplace: 88, wage_mult: 0.96, recipes: ["dairy"]),
+        (key: "meat_plant",       sector: Industry, zones: ["industry_light"], min_parcel_m2: 3500, m2_per_workplace: 77, wage_mult: 0.98, recipes: ["meat_plant"]),
+        (key: "poultry_plant",    sector: Industry, zones: ["industry_light"], min_parcel_m2: 3000, m2_per_workplace: 77, wage_mult: 0.96, recipes: ["poultry_plant"]),
+        (key: "brewery",          sector: Industry, zones: ["industry_light"], min_parcel_m2: 4000, m2_per_workplace: 128, wage_mult: 1.04, recipes: ["brewery"]),
+        (key: "juice_plant",      sector: Industry, zones: ["industry_light"], min_parcel_m2: 2500, m2_per_workplace: 104, wage_mult: 0.98, recipes: ["juice_plant"]),
+        (key: "feed_mill",        sector: Industry, zones: ["industry_light"], min_parcel_m2: 2500, m2_per_workplace: 152, wage_mult: 0.94, recipes: ["feed_mill"]),
+
+        // Wypełniacze strefy lekkiej: to one stoją na większości działek przemysłowych.
+        (key: "machine_shop",     sector: Industry, zones: ["industry_light"], min_parcel_m2: 600, m2_per_workplace: 88, wage_mult: 1.02, weight: 90),
+        (key: "repair_works",     sector: Industry, zones: ["industry_light"], min_parcel_m2: 500, m2_per_workplace: 96, wage_mult: 0.98, weight: 70),
+        (key: "small_manufactory",sector: Industry, zones: ["industry_light"], min_parcel_m2: 400, m2_per_workplace: 72, wage_mult: 0.92, weight: 60),
+    ],
+)

@@ -5,12 +5,16 @@
     schema_version: 1,
     id: "kamienica",
     applies: (
-        zones: ["r3", "commercial"],
+        // R4 i R5 **w epokach przedblokowych**: gęsta zabudowa mieszkaniowa z 1890 roku
+        // jest kamienicą, a nie blokiem, którego wtedy nie było. Bez tego pierścień
+        // średniowieczny i przemysłowy w strefie R4 nie miał ani jednej gramatyki
+        // i dobór lądował na rozluźnieniu filtru epoki — 15,5 % budynków (korekta I-13).
+        zones: ["r3", "r4", "r5", "commercial", "office"],
         epochs: ["medieval", "industrial", "interwar"],
-        styles: ["old_town", "inner_city", "port_quarter"],
+        styles: [],
         land_value: (1800, 9000000),
-        frontage_m: (5.0, 44.0),
-        depth_m: (8.0, 120.0),
+        frontage_m: (5.0, 120.0),
+        depth_m: (5.0, 120.0),
         weight: 45,
     ),
     massing: (
@@ -18,7 +22,7 @@
         setback_side_m: 0.0,
         setback_back_m: 2.0,
         courtyard_min_m2: 90.0,
-        max_depth_m: 16.0,
+        max_depth_m: 15.0,
     ),
     rules: [
         Foundation(depth_m: 2.5, material: "brick_red", basements: 1),

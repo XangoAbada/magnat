@@ -96,7 +96,7 @@ struct Args {
     inspect: Option<String>,
 
     /// Nakładka debug na starcie: `height`, `flow`, `water`, `biome`, `temp-jan`,
-    /// `temp-jul`, `precip`, `geology`, `deposits`. W oknie przełącza je `F3`.
+    /// `temp-jul`, `precip`, `geology`, `deposits`, `land-value`. W oknie przełącza je `F3`.
     #[arg(long)]
     overlay: Option<String>,
 
@@ -165,8 +165,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Miasto (M2d, WP12b). Bez tego kroku klient pokazuje krajobraz M1 — i dokładnie
     // tak zachowuje się `--no-city`.
-    let (edits, centrum) = if args.no_city {
-        (Arc::new(EditIndex::default()), None)
+    let (city, edits, centrum) = if args.no_city {
+        (None, Arc::new(EditIndex::default()), None)
     } else {
         let plan = CityPlan::from_world(&params);
         let start = Instant::now();
@@ -181,7 +181,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             city.edits.entries()
         );
         let c = city.center;
-        (Arc::new(city.edits), Some((c.x as i32, c.y as i32)))
+        let edits = Arc::new(city.edits.clone());
+        (Some(Arc::new(city)), edits, Some((c.x as i32, c.y as i32)))
     };
 
     // Inspekcja punktu bez otwierania okna — ta sama karta co po kliknięciu prawym.
@@ -189,10 +190,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let (a, b) = punkt
             .split_once(',')
             .ok_or("--inspect oczekuje `x,y` w metrach")?;
-        print!(
-            "{}",
-            inspect::karta(&terrain, a.trim().parse()?, b.trim().parse()?)
-        );
+        let (x, y): (i32, i32) = (a.trim().parse()?, b.trim().parse()?);
+        print!("{}", inspect::karta(&terrain, x, y));
+        if let Some(c) = &city {
+            for l in magnat_world::parcel_card(c, magnat_spatial::Vec2::new(x as f32, y as f32)) {
+                println!("{l}");
+            }
+        }
         return Ok(());
     }
 
@@ -225,6 +229,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             None => centrum,
         },
         edits,
+        city,
         bench: args.bench,
         bench_czas_s: 0.0,
         bench_etapy: Vec::new(),
@@ -377,6 +382,9 @@ struct App {
     terrain: Arc<magnat_world::Terrain>,
     materials: Arc<MaterialRegistry>,
     edits: Arc<EditIndex>,
+    /// Miasto (M2e, WP16) — nakładka wartości gruntu i karta inspekcji parceli czytają
+    /// je bezpośrednio; bez `--no-city` jest zawsze.
+    city: Option<Arc<magnat_world::CityData>>,
     params: WorldGenParams,
     window: Option<Arc<Window>>,
     renderer: Option<Renderer>,
@@ -462,7 +470,7 @@ impl ApplicationHandler for App {
         // Nakładka wybrana z wiersza poleceń musi trafić do renderera zaraz po jego
         // powstaniu — `przelacz_nakladke` przesunęłoby ją o jedną pozycję.
         if self.nakladka != overlay::Nakladka::Brak {
-            if let Some(p) = overlay::zbuduj(&self.terrain, self.nakladka) {
+            if let Some(p) = overlay::zbuduj(&self.terrain, self.city.as_deref(), self.nakladka) {
                 renderer.set_overlay(Some(magnat_render::TerrainOverlay {
                     cell_m: p.cell_m,
                     dim: p.dim,
@@ -659,7 +667,7 @@ impl App {
         let Some(renderer) = self.renderer.as_mut() else {
             return;
         };
-        match overlay::zbuduj(&self.terrain, self.nakladka) {
+        match overlay::zbuduj(&self.terrain, self.city.as_deref(), self.nakladka) {
             Some(p) => {
                 renderer.set_overlay(Some(magnat_render::TerrainOverlay {
                     cell_m: p.cell_m,
@@ -700,7 +708,17 @@ impl App {
         let kierunek = (p.truncate() / p.w).normalize_or_zero();
 
         match inspect::trafienie(&self.terrain, self.camera.eye(), kierunek, 4000.0) {
-            Some((x, y)) => eprint!("{}", inspect::karta(&self.terrain, x, y)),
+            Some((x, y)) => {
+                eprint!("{}", inspect::karta(&self.terrain, x, y));
+                // Karta parceli **tą samą funkcją** co `headless preview --inspect`:
+                // kryterium WP16 mówi, że klient ma pokazać to samo co wersja headless,
+                // a dwie kopie tej listy rozjechałyby się przy pierwszym nowym polu.
+                if let Some(c) = &self.city {
+                    for l in magnat_world::parcel_card(c, magnat_spatial::Vec2::new(x as f32, y as f32)) {
+                        eprintln!("{l}");
+                    }
+                }
+            }
             None => eprintln!("inspekcja: promień nie trafił w teren"),
         }
     }

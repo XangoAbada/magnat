@@ -10,7 +10,7 @@
         styles: [],
         land_value: (0, 5000000),
         frontage_m: (12.0, 160.0),
-        depth_m: (12.0, 300.0),
+        depth_m: (5.0, 300.0),
         weight: 40,
     ),
     massing: (

@@ -6,11 +6,11 @@
     id: "hala_przemyslowa",
     applies: (
         zones: ["industry_light", "industry_heavy"],
-        epochs: ["industrial", "interwar", "postwar", "transition", "contemporary"],
+        epochs: [],
         styles: [],
         land_value: (0, 4000000),
         frontage_m: (10.0, 600.0),
-        depth_m: (12.0, 600.0),
+        depth_m: (5.0, 600.0),
         weight: 50,
     ),
     massing: (

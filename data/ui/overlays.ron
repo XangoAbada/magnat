@@ -1,0 +1,37 @@
+// Nakładki danych na terenie (M2 §5.7 „Nakładka UI", PRD §14.2).
+//
+// M2 dostarcza **jedną** nakładkę — wartość gruntu — i to jest zamierzone: reszta listy
+// z §14.2 powstaje wraz z fazami, które produkują dane. Ten plik jest miejscem, do którego
+// każda z nich dopisze swój wpis, a nie zestawem ośmiu pustych szablonów.
+//
+// `stops` to progi w **groszach za m²** i barwa RGBA nad progiem. Paleta jest monotoniczna
+// w jasności, więc czyta się też na monochromatycznym zrzucie i przy deuteranopii.
+// `loc_key` wskaże wpis w `data/locale/`, kiedy `engine/ui` powstanie w M3; do tego czasu
+// klient wypisuje nazwę do konsoli z tabeli zapasowej w kodzie.
+(
+    schema_version: 1,
+    overlays: [
+        (
+            key: "land_value",
+            loc_key: "overlay.land_value",
+            unit: "zł/m²",
+            // Progi dobrane do rozpiętości `pass_2` w mieście z 1990: mediana wypada
+            // w okolicach 450 zł/m², starówka i biurowce sięgają kilku tysięcy.
+            // Rampa typu „magma": jasność rośnie **monotonicznie** od granatu do kremu.
+            // Klasyczna paleta turbo (granat → zieleń → żółć → czerwień) tego nie robi:
+            // czerwień jest ciemniejsza od żółci, więc na wydruku i przy deuteranopii
+            // najdroższa działka wygląda na tańszą od średniej. Test pilnuje monotoniczności.
+            stops: [
+                (0,       (20, 15, 55, 190)),
+                (10_000,  (60, 20, 95, 195)),
+                (25_000,  (110, 30, 110, 200)),
+                (45_000,  (160, 45, 95, 205)),
+                (70_000,  (205, 70, 70, 210)),
+                (110_000, (235, 110, 50, 215)),
+                (180_000, (250, 160, 50, 220)),
+                (300_000, (253, 205, 90, 225)),
+                (600_000, (255, 245, 220, 230)),
+            ],
+        ),
+    ],
+)

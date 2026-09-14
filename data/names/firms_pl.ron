@@ -1,0 +1,21 @@
+// Nazwy firm — generowane proceduralnie, **nie są lokalizacją UI** (CLAUDE.md).
+// Nie tłumaczy się ich: firma w polskim mieście nazywa się po polsku także w angielskiej
+// wersji językowej, tak samo jak ulica i dzielnica.
+//
+// Wzorzec: `{człon} „{dzielnica}"`, a przy powtórzeniu dochodzi liczba rzymska.
+// Człon dobiera sektor, bo „Huta «Wola»" i „Piekarnia «Wola»" to dwa różne światy,
+// a dzielnica jest tą częścią nazwy, która wiąże firmę z miejscem.
+(
+    schema_version: 1,
+    by_sector: [
+        (Industry,   ["Zakłady Przemysłowe", "Fabryka", "Kombinat", "Wytwórnia", "Huta", "Zakłady Mechaniczne"]),
+        (Logistics,  ["Baza Transportowa", "Składy", "Przedsiębiorstwo Spedycyjne", "Hurtownia"]),
+        (Retail,     ["Sklep", "Dom Handlowy", "Delikatesy", "Pawilon Handlowy", "Spółdzielnia Handlowa"]),
+        (Services,   ["Zakład Usługowy", "Punkt Usługowy", "Spółdzielnia Pracy", "Przedsiębiorstwo Usługowe"]),
+        (Office,     ["Biuro Projektów", "Przedsiębiorstwo", "Centrala", "Kontor"]),
+        (Public,     ["Placówka Miejska", "Zakład Miejski", "Jednostka Miejska"]),
+        (Agriculture,["Gospodarstwo", "Spółdzielnia Rolnicza", "Ferma", "Państwowe Gospodarstwo"]),
+        (Extraction, ["Kopalnia", "Zakład Wydobywczy", "Kamieniołom", "Ujęcie"]),
+        (Green,      ["Zieleń Miejska", "Zarząd Parków", "Ośrodek Rekreacji"]),
+    ],
+)

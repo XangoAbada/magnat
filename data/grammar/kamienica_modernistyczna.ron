@@ -6,12 +6,12 @@
     schema_version: 1,
     id: "kamienica_modernistyczna",
     applies: (
-        zones: ["r3", "commercial"],
+        zones: ["r3", "r4", "commercial"],
         epochs: ["interwar", "postwar"],
         styles: [],
         land_value: (0, 14000000),
-        frontage_m: (9.0, 60.0),
-        depth_m: (10.0, 140.0),
+        frontage_m: (9.0, 120.0),
+        depth_m: (5.0, 140.0),
         weight: 40,
     ),
     massing: (
@@ -19,7 +19,7 @@
         setback_side_m: 0.0,
         setback_back_m: 4.0,
         courtyard_min_m2: 110.0,
-        max_depth_m: 15.0,
+        max_depth_m: 14.1,
     ),
     rules: [
         Foundation(depth_m: 2.4, material: "concrete", basements: 1),

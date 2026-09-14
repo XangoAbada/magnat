@@ -1,0 +1,39 @@
+// Towary konsumpcyjne — to one stoją w koszyku potrzeb epoki (`data/chains/needs.ron`)
+// i to ich popyt zamyka bilans z KROKU 5 domknięcia (M2 §5.8).
+//
+// Sztukowe mają `unit: Milliunits` i **wymagany** `unit_mass_g`: ilości w recepturach
+// są zawsze w gramach, więc bez masy sztuki nie dałoby się policzyć bilansu masy
+// na jednej skali. Cena importowa jest wtedy za sztukę, nie za kilogram.
+(
+    schema_version: 1,
+    goods: [
+        // ── żywność ─────────────────────────────────────────────────────────────────
+        (key: "bread",        unit: Grams, density_g_per_l: 300,  external_base_price: Some((190))),
+        (key: "milk",         unit: Grams, density_g_per_l: 1030, external_base_price: Some((135))),
+        (key: "cheese",       unit: Grams, density_g_per_l: 1090, external_base_price: Some((1450))),
+        (key: "meat",         unit: Grams, density_g_per_l: 1020, external_base_price: Some((1180))),
+        (key: "poultry_meat", unit: Grams, density_g_per_l: 1020, external_base_price: Some((780))),
+        (key: "beer",         unit: Grams, density_g_per_l: 1008, external_base_price: Some((210))),
+        (key: "juice",        unit: Grams, density_g_per_l: 1045, external_base_price: Some((260))),
+
+        // ── chemia gospodarcza i higiena ────────────────────────────────────────────
+        (key: "soap",         unit: Grams, density_g_per_l: 850,  external_base_price: Some((680))),
+        (key: "detergent",    unit: Grams, density_g_per_l: 1050, external_base_price: Some((520))),
+        (key: "cosmetics",    unit: Grams, density_g_per_l: 960,  external_base_price: Some((2400))),
+        (key: "toilet_paper", unit: Grams, density_g_per_l: 280,  external_base_price: Some((390))),
+        (key: "medicine",     unit: Grams, density_g_per_l: 900,  external_base_price: Some((9800))),
+        (key: "cigarettes",   unit: Grams, density_g_per_l: 320,  external_base_price: Some((4200))),
+
+        // ── wyroby sztukowe ─────────────────────────────────────────────────────────
+        (key: "clothing",         unit: Milliunits, density_g_per_l: 400,  unit_mass_g: 400,     external_base_price: Some((4800))),
+        (key: "shoes",            unit: Milliunits, density_g_per_l: 500,  unit_mass_g: 800,     external_base_price: Some((9600))),
+        (key: "books",            unit: Milliunits, density_g_per_l: 700,  unit_mass_g: 450,     external_base_price: Some((2100))),
+        (key: "toys",             unit: Milliunits, density_g_per_l: 300,  unit_mass_g: 350,     external_base_price: Some((2600))),
+        (key: "furniture",        unit: Milliunits, density_g_per_l: 350,  unit_mass_g: 28_000,  external_base_price: Some((56_000))),
+        (key: "tv_set",           unit: Milliunits, density_g_per_l: 400,  unit_mass_g: 22_000,  external_base_price: Some((180_000))),
+        (key: "refrigerator",     unit: Milliunits, density_g_per_l: 300,  unit_mass_g: 60_000,  external_base_price: Some((210_000))),
+        (key: "washing_machine",  unit: Milliunits, density_g_per_l: 350,  unit_mass_g: 70_000,  external_base_price: Some((240_000))),
+        (key: "bicycle",          unit: Milliunits, density_g_per_l: 250,  unit_mass_g: 15_000,  external_base_price: Some((88_000))),
+        (key: "car",              unit: Milliunits, density_g_per_l: 300,  unit_mass_g: 950_000, external_base_price: Some((2_900_000))),
+    ],
+)

@@ -1,0 +1,81 @@
+// Szablony łańcuchów przemysłowych (M2 §5.8 pkt 1).
+//
+// Szablon nie rozstrzyga, **ile** zakładów powstanie — to wynika z bilansu popytu
+// (KROK 5 domknięcia). Rozstrzyga, **gdzie i razem z kim**: zakłady jednego szablonu
+// lądują w jednym klastrze przemysłowym, w kolejności szablonu, i tworzą jedną firmę
+// wielozakładową. Stąd bierze się to, że koksownia stoi obok huty, a nie na drugim
+// końcu miasta — a nie z osobnej reguły sąsiedztwa.
+//
+// `profiles` puste = szablon dotyczy każdego profilu gospodarczego.
+// `epochs` puste = każdej epoki startowej.
+(
+    schema_version: 1,
+    chains: [
+        (
+            key: "steel_basic",
+            archetypes: ["coking_plant", "ironworks", "steelworks", "rolling_mill"],
+            profiles: ["industrial", "mixed", "port"],
+            weight: 40,
+        ),
+        (
+            key: "building_materials",
+            archetypes: ["cement_plant", "concrete_plant", "brickworks", "glassworks"],
+            profiles: [],
+            weight: 30,
+        ),
+        (
+            key: "petrochemistry",
+            archetypes: ["refinery", "petrochemical", "fertilizer_plant", "chemical_works"],
+            profiles: ["industrial", "port", "mixed"],
+            weight: 26,
+        ),
+        (
+            key: "wood_and_paper",
+            archetypes: ["sawmill", "plywood_mill", "paper_mill", "cardboard_mill", "tissue_mill"],
+            profiles: [],
+            weight: 28,
+        ),
+        (
+            key: "food_processing",
+            archetypes: ["grain_mill", "bread_plant", "dairy_plant", "meat_plant", "poultry_plant"],
+            profiles: [],
+            weight: 34,
+        ),
+        (
+            key: "agro_processing",
+            archetypes: ["sugar_refinery", "oil_press", "feed_mill", "juice_plant", "brewery"],
+            profiles: ["agricultural", "mixed", "tourist"],
+            weight: 30,
+        ),
+        (
+            key: "textile",
+            archetypes: ["textile_mill", "clothing_factory", "shoe_factory"],
+            profiles: [],
+            weight: 22,
+        ),
+        (
+            key: "consumer_durables",
+            archetypes: ["electronics_plant", "fridge_plant", "washer_plant", "bicycle_plant"],
+            profiles: ["industrial", "mixed", "university"],
+            weight: 24,
+        ),
+        (
+            key: "automotive",
+            archetypes: ["car_plant", "rolling_mill"],
+            profiles: ["industrial", "mixed"],
+            weight: 16,
+        ),
+        (
+            key: "household_chemistry",
+            archetypes: ["soap_plant", "detergent_plant", "cosmetics_plant", "pharma_plant"],
+            profiles: [],
+            weight: 22,
+        ),
+        (
+            key: "light_manufacture",
+            archetypes: ["furniture_works", "printing_house", "toy_factory", "cigarette_factory"],
+            profiles: [],
+            weight: 20,
+        ),
+    ],
+)

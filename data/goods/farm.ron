@@ -1,0 +1,16 @@
+// Płody rolne (M2 §5.8). Wchodzą do gospodarki przez receptury `Agriculture`,
+// czyli przez jawny punkt wejścia domknięcia — nie przez „puste inputs" (M2 §9.1/14).
+(
+    schema_version: 1,
+    goods: [
+        (key: "wheat",       unit: Grams, density_g_per_l: 780,  external_base_price: Some((52))),
+        (key: "potato",      unit: Grams, density_g_per_l: 700,  external_base_price: Some((38))),
+        (key: "sugar_beet",  unit: Grams, density_g_per_l: 650,  external_base_price: Some((21))),
+        (key: "rapeseed",    unit: Grams, density_g_per_l: 690,  external_base_price: Some((96))),
+        (key: "vegetables",  unit: Grams, density_g_per_l: 600,  external_base_price: Some((140))),
+        (key: "fruit",       unit: Grams, density_g_per_l: 620,  external_base_price: Some((190))),
+        (key: "milk_raw",    unit: Grams, density_g_per_l: 1030, external_base_price: Some((88))),
+        (key: "livestock",   unit: Grams, density_g_per_l: 900,  external_base_price: Some((330))),
+        (key: "poultry",     unit: Grams, density_g_per_l: 900,  external_base_price: Some((290))),
+    ],
+)

@@ -6,12 +6,12 @@
     schema_version: 1,
     id: "kamienica_secesyjna",
     applies: (
-        zones: ["r3", "commercial"],
+        zones: ["r3", "r4", "r5", "commercial"],
         epochs: ["industrial", "interwar"],
         styles: ["old_town", "inner_city", "port_quarter"],
         land_value: (900000, 9000000),
-        frontage_m: (9.0, 40.0),
-        depth_m: (10.0, 120.0),
+        frontage_m: (9.0, 110.0),
+        depth_m: (5.0, 120.0),
         weight: 30,
     ),
     massing: (
@@ -19,7 +19,7 @@
         setback_side_m: 0.0,
         setback_back_m: 3.0,
         courtyard_min_m2: 80.0,
-        max_depth_m: 17.0,
+        max_depth_m: 16.0,
     ),
     rules: [
         Foundation(depth_m: 2.8, material: "sandstone", basements: 1),

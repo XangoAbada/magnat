@@ -37,6 +37,29 @@ pub enum DistrictKind {
 }
 
 impl DistrictKind {
+    /// Bazowy prestiż rodzaju dzielnicy — mnożnik czynnika `DistrictPrestige` w `pass_2`
+    /// (M2e, WP15b).
+    ///
+    /// To nie jest dostrojenie testu T12, tylko **treść** tego czynnika: §5.7 wymienia
+    /// „prestiż dzielnicy" wśród czynników `pass_2`, a prestiż dzielnicy to dokładnie to,
+    /// czym ona jest. Starówka jest droga dlatego, że jest starówką, a nie dlatego, że ma
+    /// akurat wyższą punktację hałasu. Reputacja i przestępczość modulują tę bazę,
+    /// bo one się zmieniają, a rodzaj dzielnicy nie.
+    #[must_use]
+    pub const fn prestige(self) -> f32 {
+        match self {
+            DistrictKind::OldTown => 1.58,
+            DistrictKind::InnerCity => 1.42,
+            DistrictKind::Campus => 1.14,
+            DistrictKind::PortQuarter => 1.00,
+            DistrictKind::Suburb => 0.94,
+            DistrictKind::BlockEstate => 0.90,
+            DistrictKind::GreenBelt => 0.88,
+            DistrictKind::IndustrialBelt => 0.80,
+            DistrictKind::Village => 0.66,
+        }
+    }
+
     /// Czy dzielnica jest **mieszkaniowa** — próg entropii gramatyk z testu T13 dotyczy
     /// tylko takich. Osiedle płytowe ma prawo być monotonne, bo takie jest; pas przemysłowy
     /// ma trzy rodzaje hal i to jest komplet, a nie uboga różnorodność (M2f, WP20).

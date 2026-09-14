@@ -1,0 +1,48 @@
+// Archetypy zakładów — sektor pierwotny: wydobycie, rolnictwo, leśnictwo
+// (PRD §7.2, M2 §5.8 pkt 5; „jedna parcela = jedno gospodarstwo/kopalnia").
+//
+// Podział wobec `data/recipes/` jest rozstrzygnięciem 9.1/13 i **nie wolno go zlewać**:
+// receptura niesie pracochłonność szarży w osobominutach i abstrakcyjną klasę maszyny,
+// archetyp — strefę, minimalną działkę, obsadę etatową (`m2_per_workplace`) i mnożnik
+// widełek płacowych. To są dwie różne liczby o dwóch różnych właścicielach (M2 i M7).
+//
+// `needs_deposit` — złoże wymagane pod parcelą (M1 `deposit_at`, K-13). `None` znaczy
+// „zakład nie potrzebuje złoża": ujęcie wody bierze ją z rzeki, a nie z warstwy
+// wodonośnej, i gdyby wymagało złoża, miasto bez wodonośca nie domknęłoby łańcuchów.
+//
+// `consumes` — dobowe zużycie materiałów eksploatacyjnych przy skali bazowej, w gramach.
+// To jest trzeci człon def(3) domknięcia („media i materiały eksploatacyjne archetypów").
+(
+    schema_version: 1,
+    archetypes: [
+        // ── wydobycie ───────────────────────────────────────────────────────────────
+        (key: "coal_mine",        sector: Extraction, zones: ["extraction"], min_parcel_m2: 4000, m2_per_workplace: 256, wage_mult: 1.22, recipes: ["coal_mining"],      needs_deposit: Some(Coal),        grammar: Some("zaklad_wydobywczy")),
+        (key: "iron_mine",        sector: Extraction, zones: ["extraction"], min_parcel_m2: 4000, m2_per_workplace: 288, wage_mult: 1.18, recipes: ["iron_ore_mining"],  needs_deposit: Some(IronOre),     grammar: Some("zaklad_wydobywczy")),
+        (key: "aggregate_pit",    sector: Extraction, zones: ["extraction"], min_parcel_m2: 3000, m2_per_workplace: 352, wage_mult: 1.05, recipes: ["aggregate_quarry"], needs_deposit: Some(Aggregate),   grammar: Some("zaklad_wydobywczy")),
+        (key: "limestone_works",  sector: Extraction, zones: ["extraction"], min_parcel_m2: 3000, m2_per_workplace: 352, wage_mult: 1.05, recipes: ["limestone_quarry"], needs_deposit: Some(Aggregate),   grammar: Some("zaklad_wydobywczy")),
+        (key: "clay_pit_works",   sector: Extraction, zones: ["extraction"], min_parcel_m2: 2500, m2_per_workplace: 384, wage_mult: 1.00, recipes: ["clay_pit"],         needs_deposit: Some(ClayDeposit), grammar: Some("zaklad_wydobywczy")),
+        (key: "oil_field",        sector: Extraction, zones: ["extraction"], min_parcel_m2: 3000, m2_per_workplace: 416, wage_mult: 1.30, recipes: ["oil_well"],         needs_deposit: Some(Oil),         grammar: Some("zaklad_wydobywczy")),
+        (key: "gas_field",        sector: Extraction, zones: ["extraction"], min_parcel_m2: 3000, m2_per_workplace: 448, wage_mult: 1.30, recipes: ["gas_well"],         needs_deposit: Some(Gas),         grammar: Some("zaklad_wydobywczy")),
+        (key: "waterworks",       sector: Extraction, zones: ["extraction", "industry_light", "logistics", "agriculture", "green"], min_parcel_m2: 600, m2_per_workplace: 480, wage_mult: 1.00, recipes: ["water_intake"], grammar: Some("zaklad_wydobywczy"), consumes: [("fuel_diesel", 40_000)]),
+
+        // Wypełniacz strefy wydobywczej: skład kruszywa bez własnego złoża. Bez niego
+        // działka `Extraction` bez złoża zostawałaby pusta, a strefa jest przydzielona.
+        (key: "extraction_yard",  sector: Extraction, zones: ["extraction"], min_parcel_m2: 800,  m2_per_workplace: 480, wage_mult: 0.98, weight: 40, grammar: Some("zaklad_wydobywczy")),
+
+        // ── rolnictwo i leśnictwo ───────────────────────────────────────────────────
+        (key: "wheat_farm",       sector: Agriculture, zones: ["agriculture"], min_parcel_m2: 20000, m2_per_workplace: 1440, wage_mult: 0.82, recipes: ["wheat_farming"], grammar: Some("zagroda")),
+        (key: "potato_farm",      sector: Agriculture, zones: ["agriculture"], min_parcel_m2: 15000, m2_per_workplace: 1280, wage_mult: 0.82, recipes: ["potato_farming"], grammar: Some("zagroda")),
+        (key: "sugar_beet_farm",  sector: Agriculture, zones: ["agriculture"], min_parcel_m2: 18000, m2_per_workplace: 1360, wage_mult: 0.82, recipes: ["sugar_beet_farming"], grammar: Some("zagroda")),
+        (key: "rapeseed_farm",    sector: Agriculture, zones: ["agriculture"], min_parcel_m2: 18000, m2_per_workplace: 1360, wage_mult: 0.82, recipes: ["rapeseed_farming"], grammar: Some("zagroda")),
+        (key: "market_garden",    sector: Agriculture, zones: ["agriculture"], min_parcel_m2: 6000,  m2_per_workplace: 672, wage_mult: 0.86, recipes: ["vegetable_farming"], grammar: Some("zagroda")),
+        (key: "orchard_farm",     sector: Agriculture, zones: ["agriculture"], min_parcel_m2: 8000,  m2_per_workplace: 736, wage_mult: 0.86, recipes: ["orchard"], grammar: Some("zagroda")),
+        (key: "dairy_farm",       sector: Agriculture, zones: ["agriculture"], min_parcel_m2: 12000, m2_per_workplace: 512, wage_mult: 0.90, recipes: ["dairy_farm"], grammar: Some("zagroda")),
+        (key: "cattle_farm",      sector: Agriculture, zones: ["agriculture"], min_parcel_m2: 14000, m2_per_workplace: 544, wage_mult: 0.90, recipes: ["cattle_farm"], grammar: Some("zagroda")),
+        (key: "poultry_farm",     sector: Agriculture, zones: ["agriculture"], min_parcel_m2: 9000,  m2_per_workplace: 576, wage_mult: 0.88, recipes: ["poultry_farm"], grammar: Some("zagroda")),
+        // Wypełniacz wsi: siedlisko, które żywi siebie, a nie miasto. Bez niego działka
+        // rolna bez przydziału z bilansu zostawałaby bez zakładu, a obsadzenie jej
+        // gospodarstwem towarowym zalałoby miasto zbożem, którego nikt nie zamawiał.
+        (key: "smallholding",     sector: Agriculture, zones: ["agriculture"], min_parcel_m2: 200,   m2_per_workplace: 1440, wage_mult: 0.78, weight: 120, grammar: Some("zagroda")),
+        (key: "forest_district",  sector: Agriculture, zones: ["agriculture", "green"], min_parcel_m2: 25000, m2_per_workplace: 1920, wage_mult: 0.92, recipes: ["forestry"], grammar: Some("pawilon_parkowy")),
+    ],
+)

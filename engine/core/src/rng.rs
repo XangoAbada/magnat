@@ -75,8 +75,11 @@ pub enum StreamId {
     BuildingGrammar = 130,
     /// Podział kondygnacji na lokale, liczba pokoi (M2 §5.6, M2d).
     Interiors = 131,
-    // 132–139 zarezerwowane dla M2 (FirmSeed, SitePlacement — dopisze M2e;
-    // wartości imiennie w M2 §6 i niezmienne).
+    /// Wybór szablonu łańcucha i nazwy firm (M2 §5.8, M2e).
+    FirmSeed = 132,
+    /// Remisy przy sadzeniu zakładów i placówek handlu (M2 §5.8, M2e).
+    SitePlacement = 133,
+    // 134–139 zarezerwowane dla M2.
 }
 
 /// Encja zastępcza dla losowania bez encji (zdarzenie globalne, generator świata).

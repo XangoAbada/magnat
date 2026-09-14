@@ -12,7 +12,7 @@
         styles: [],
         land_value: (0, 2500000),
         frontage_m: (6.0, 60.0),
-        depth_m: (7.0, 300.0),
+        depth_m: (5.0, 300.0),
         weight: 35,
         coverage: 0.85,
     ),
@@ -20,7 +20,7 @@
         setback_front_m: 3.0,
         setback_side_m: 2.0,
         setback_back_m: 6.0,
-        max_depth_m: 9.0,
+        max_depth_m: 8.5,
     ),
     rules: [
         Foundation(depth_m: 0.8, material: "limestone", basements: 0),

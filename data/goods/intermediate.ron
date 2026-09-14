@@ -1,0 +1,40 @@
+// Półprodukty (M2 §5.8). Żaden z nich nie trafia do koszyka potrzeb mieszkańca — są
+// wejściem innych receptur, czyli to na nich stoją cykle z §5.8 („rafineria ↔ elektrownia,
+// huta ↔ fabryka maszyn"). Każdy taki cykl ma mieć wejście z importu albo wydobycia;
+// tego pilnuje walidator, nie dobra wola danych.
+(
+    schema_version: 1,
+    goods: [
+        // ── hutnictwo i materiały budowlane ─────────────────────────────────────────
+        (key: "coke",            unit: Grams, density_g_per_l: 500,  external_base_price: Some((40))),
+        (key: "pig_iron",        unit: Grams, density_g_per_l: 7000, external_base_price: Some((90))),
+        (key: "steel",           unit: Grams, density_g_per_l: 7850, external_base_price: Some((150))),
+        (key: "steel_sheet",     unit: Grams, density_g_per_l: 7850, external_base_price: Some((210))),
+        (key: "steel_sections",  unit: Grams, density_g_per_l: 7850, external_base_price: Some((190))),
+        (key: "cement",          unit: Grams, density_g_per_l: 1400, external_base_price: Some((26))),
+        (key: "concrete",        unit: Grams, density_g_per_l: 2400, external_base_price: None),
+        (key: "bricks",          unit: Grams, density_g_per_l: 1800, external_base_price: Some((34))),
+        (key: "glass",           unit: Grams, density_g_per_l: 2500, external_base_price: Some((120))),
+
+        // ── drewno, papier, chemia ──────────────────────────────────────────────────
+        (key: "lumber",          unit: Grams, density_g_per_l: 550,  external_base_price: Some((62))),
+        (key: "plywood",         unit: Grams, density_g_per_l: 620,  external_base_price: Some((105))),
+        (key: "paper",           unit: Grams, density_g_per_l: 800,  external_base_price: Some((150))),
+        (key: "cardboard",       unit: Grams, density_g_per_l: 700,  external_base_price: Some((115))),
+        (key: "plastic_granule", unit: Grams, density_g_per_l: 950,  external_base_price: Some((310))),
+        (key: "fuel_petrol",     unit: Grams, density_g_per_l: 745,  external_base_price: Some((190))),
+        (key: "fuel_diesel",     unit: Grams, density_g_per_l: 830,  external_base_price: Some((175))),
+        (key: "heating_oil",     unit: Grams, density_g_per_l: 860,  external_base_price: Some((140))),
+        (key: "fertilizer",      unit: Grams, density_g_per_l: 1100, external_base_price: Some((78))),
+        (key: "detergent_base",  unit: Grams, density_g_per_l: 1050, external_base_price: Some((260))),
+        (key: "textile_fabric",  unit: Grams, density_g_per_l: 450,  external_base_price: Some((620))),
+        (key: "leather",         unit: Grams, density_g_per_l: 860,  external_base_price: Some((890))),
+
+        // ── półprodukty spożywcze ───────────────────────────────────────────────────
+        (key: "flour",           unit: Grams, density_g_per_l: 590,  external_base_price: Some((74))),
+        (key: "yeast",           unit: Grams, density_g_per_l: 1050, external_base_price: Some((310))),
+        (key: "sugar",           unit: Grams, density_g_per_l: 850,  external_base_price: Some((160))),
+        (key: "rapeseed_oil",    unit: Grams, density_g_per_l: 915,  external_base_price: Some((420))),
+        (key: "fodder",          unit: Grams, density_g_per_l: 620,  external_base_price: Some((58))),
+    ],
+)
