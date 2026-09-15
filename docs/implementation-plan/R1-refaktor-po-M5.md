@@ -12,9 +12,9 @@ potrzebny; jeśli nie pokaże, `R2` nie powstanie i to będzie dowód, że regu�
 | | |
 |---|---|
 | **Wejście** | M5e zamknięte (wszystkie bramki fazy M5), `master` zielony. |
-| **Pakiety robocze** | R-WP1…R-WP10 |
+| **Pakiety robocze** | R-WP1…R-WP12 |
 | **Wynik do pokazania** | `master` z identycznymi hashami świata i zerem plików produkcyjnych powyżej 1200 linii kodu poza jawną listą wyjątków; skrypt `scripts/struct_guard.py` w CI i reguła w `CLAUDE.md`, która każe agentowi sprawdzić własną pracę, zanim ją zacommituje. |
-| **Kryterium zamknięcia** | Kryteria R-WP1…R-WP10 (§4) plus siedem kryteriów akceptacji z §7. Twarde: **żaden hash nie zmienił się o bit**. |
+| **Kryterium zamknięcia** | Kryteria R-WP1…R-WP12 (§4) plus siedem kryteriów akceptacji z §7. Twarde: **żaden hash nie zmienił się o bit**. |
 | **Poprzednia / następna** | `M5e-panel-balansator-domkniecie.md` · `M6a-katalog-i-partia.md` |
 
 ---
@@ -61,7 +61,7 @@ to że wszystko leży w jednym kawałku. R1 przesuwa granice modułów i nie dot
 
 ### Wchodzi
 
-- Podział dziewięciu plików produkcyjnych na moduły wzdłuż szwów wypisanych w §4.
+- Podział jedenastu plików produkcyjnych na moduły wzdłuż szwów wypisanych w §4.
 - Przeniesienie symboli między modułami tej samej skrzyni, z zachowaniem widoczności.
 - Reguła w `CLAUDE.md` i skrypt `scripts/struct_guard.py` z §6 — jedyna trwała zmiana zachowania
   narzędzi, jaką ten dokument wnosi.
@@ -129,7 +129,7 @@ i nikt by nie zobaczył, czy w ogóle cokolwiek wykrywa.
 
 | WP | Nazwa | Zależy od | Rozmiar | Status |
 |---|---|---|---|---|
-| R-WP1 | Reguła i skrypt kontroli strukturalnej | — | M | `[ ]` |
+| R-WP1 | Reguła i skrypt kontroli strukturalnej | — | M | `[x]` |
 | R-WP2 | `tools/magnat/src/main.rs` | R-WP1 | S | `[ ]` |
 | R-WP3 | `engine/render/src/renderer.rs` | R-WP1 | L | `[ ]` |
 | R-WP4 | `sim/world/src/population/mod.rs` | R-WP1 | L | `[ ]` |
@@ -138,11 +138,14 @@ i nikt by nie zobaczył, czy w ogóle cokolwiek wykrywa.
 | R-WP7 | `sim/agents/src/demography.rs` | R-WP1 | M | `[ ]` |
 | R-WP8 | `sim/world/src/city/build.rs` | R-WP5 | M | `[ ]` |
 | R-WP9 | `sim/world/src/city/mod.rs` | R-WP5, R-WP8 | S | `[ ]` |
-| R-WP10 | `transit.rs`, `micro.rs`, usunięcie rusztowań | R-WP2…R-WP9 | M | `[ ]` |
+| R-WP11 | `sim/agents/src/planner.rs` | R-WP1 | M | `[ ]` |
+| R-WP12 | `sim/economy/src/market.rs` | R-WP1 | L | `[ ]` |
+| R-WP10 | `transit.rs`, `micro.rs`, usunięcie rusztowań | R-WP2…R-WP9, R-WP11, R-WP12 | M | `[ ]` |
 
-R-WP2…R-WP9 są wzajemnie niezależne poza wypisanymi zależnościami i można je przestawiać.
-Kolejność w tabeli jest kolejnością rosnącego ryzyka: R-WP2 nie dotyka symulacji wcale, R-WP3 nie
-dotyka determinizmu, a R-WP4, R-WP7 i R-WP9 dotykają obu.
+R-WP2…R-WP9, R-WP11 i R-WP12 są wzajemnie niezależne poza wypisanymi zależnościami i można je
+przestawiać. Kolejność w tabeli jest kolejnością rosnącego ryzyka: R-WP2 nie dotyka symulacji wcale,
+R-WP3 nie dotyka determinizmu, a R-WP4, R-WP7, R-WP9 i R-WP12 dotykają obu. R-WP10 zostaje ostatni,
+bo prostuje importy po **wszystkich** podziałach — stąd numer niezgodny z pozycją w tabeli.
 
 ---
 
@@ -331,6 +334,98 @@ porównanie hashy — dlatego procedura z §3 wymaga zapisania ich **przed** zmi
 
 ---
 
+### R-WP11 — `sim/agents/src/planner.rs` (1818 → 5 plików)
+
+Pakiet dopisany po R-WP1 (`D-1` w tabeli zmian na końcu dokumentu): `planner.rs` ma **1772 linie kodu produkcyjnego**
+i nie było go na liście, mimo że przekracza próg błędu tak samo jak dziewięć pozostałych.
+
+Szew biegnie wzdłuż czterech faz planera doby: faza 1 (zobowiązania) podróżuje i jest
+niewywłaszczalna, fazy 2 i 4 wypełniają luki tam, gdzie mieszkaniec już jest, a faza 3 jako jedyna
+pyta `PlaceProvider` i `TravelOracle` o wybór miejsca. Kanwa i uzasadnienia są wspólne dla czterech.
+
+| Nowy plik | Zawartość | ~linii |
+|---|---|---|
+| `planner/canvas.rs` | `Gap`, `DayCanvas`, `PlanStats`, `insert`, `remove`, `gaps`, `place_at`, `origin_of`, `slot_starting_at`, `required_place_at`, `first_start`, `load`, `wstaw`, `podsumuj`, `render_day_debug` | 375 |
+| `planner/commitments.rs` | faza 1: `faza1_zobowiazania`, `absencja`, `poprzedni_dzien`, `wstaw_zobowiazanie`, `dojazd_przed`, `powrot`, `dojazd_po`, `minuty`, `wstaw_dojazd`, `odprowadzenie_osobne`, `SCHOOL_OPEN`, `SCHOOL_CLOSE`, `ESCORT_HANDOVER_MIN` | 380 |
+| `planner/rhythm.rs` | fazy 2 i 4: `faza2_potrzeby`, `chronotyp`, `ostatni_koniec`, `najdluzsza_luka`, `wstaw_w_oknie`, `faza4_czas_wolny`, `wybierz_zajecie`, `PREP_MIN`, `HYGIENE_TRIGGER`, `LEISURE_MIN_GAP` | 330 |
+| `planner/tasks.rs` | faza 3: `Zadanie`, `lista_zadan`, `Wybor`, `Okno`, `faza3_zadania`, `najlepsza_realizacja`, `rozwaz`, `aktywnosc_zadania`, `W_DETOUR`, `STOCK_THRESHOLD_DAYS`, `HEALTH_TRIGGER`, `CLOTHING_TRIGGER` | 430 |
+| `planner/mod.rs` | `MAX_SLOTS`, `HouseholdView`, `PlanCtx`, `ReasonEntry`, `ReasonLog`, `Log`, `plan_day`, `plan_day_explained`, `uloz`, `replan*`, `request_replan`, `tick_replan_cooldown`, `store_plan`, `load_plan` | 410 |
+
+`Log` zostaje w `mod.rs`, a nie w osobnym `reasons.rs`: dotyka go każda z czterech faz, więc osobny
+plik miałby 160 linii i sześć krawędzi zależności zamiast jednej. To samo rozstrzygnięcie co przy
+kluczach strumieni w `demography/mod.rs` (R-WP7). Nazwa `planner/rhythm.rs`, a nie `needs.rs`, bo
+`needs` jest w tym crate'cie zajęte przez `crate::needs::NeedTable`.
+
+**Ostrzeżenie o determinizmie.** Losowania są dwa i oba idą przez `PlanCtx::rng_for`, czyli
+`rng(seed, StreamId::DayPlan, citizen_idx, Tick(day*1440 + minute))` — strumień jest wyprowadzany
+z minuty, nie sekwencyjny, więc samo przeniesienie kodu nie przesuwa stanu RNG. Zmienia go
+natomiast każde dotknięcie argumentu `minute`. Poza tym w hash wchodzą cztery kolejności:
+iteracja po `NeedKind::ALL` i `StockCat::ALL` (remisy rozstrzyga pierwszy w tablicy), kolejność
+zadań w `faza3_zadania` (każde wstawienie przesuwa indeksy slotów), kolejność dwóch przebiegów
+w `najlepsza_realizacja` (luki przed slotami `Commute` — `rozwaz` rozstrzyga remis przez „pierwszy
+wygrywa") i dwa przebiegi `for dlugie in [true, false]` w `faza4_czas_wolny`.
+
+Jedyna niemechaniczna część podziału to widoczności: `Gap`, `Log`, `wstaw`, `podsumuj`, `uloz`,
+`PlanCtx::rng_for`, `minuty`, cztery `faza*` i prywatne metody `DayCanvas` muszą stać się
+`pub(super)`. Nic z tego nie wypływa poza `planner/`, bo `mod.rs` re-eksportuje dzisiejsze 16
+symboli bez zmiany.
+
+**Kryterium:** hash świata po 360 dobach niezmieniony; `det_plan_pure` i `plan_explain_matches`
+bez zmian; złoty wydruk `render_day_debug` bajt w bajt; `lib.rs` i `systems.rs` bez zmiany ani
+jednej linii; żaden nowy plik powyżej 500 linii.
+
+---
+
+### R-WP12 — `sim/economy/src/market.rs` (3228 → katalog `market/`, 9 plików)
+
+Jedenasty plik listy, zapowiedziany w trzech tabelach „Zmiany wpisane po M5c/M5d/M5e" na końcu
+tego dokumentu, ale bez własnego wiersza w §4 — pakiet dopisany po R-WP1 (`D-1`). Największy plik
+produkcyjny w repo i jedyny z **trzema** blokami `impl` powyżej 500 linii (860, 821, 510).
+M6 dopisuje do niego rynek B2B, więc termin „przed M6a" obowiązuje tak samo jak przy R-WP5.
+
+**Kierunek: `market.rs` → katalog `market/`, nie moduły siostrzane.** To warunek techniczny,
+nie estetyka: Rust udostępnia elementy prywatne modułowi definiującemu **i jego potomkom**, więc
+`market/fulfil.rs` widzi wszystkie pola `MarketInner` przez `use super::*`. Wariant siostrzany
+(`market_fulfil.rs`) wymagałby `pub(crate)` na trzydziestu polach i jest z tego powodu odrzucony.
+Wpis po M5c mówił „przez `pub(crate)` na polach albo przez `impl Market` w modułach potomnych" —
+druga droga jest darmowa, pierwsza nie jest potrzebna wcale.
+
+| Nowy plik | Zawartość | ~linii |
+|---|---|---|
+| `market/mod.rs` | nagłówek, importy, stałe półki, `PurchaseIntent`, `PlannedPurchase`, `MarketStats`, `HouseholdSnapshot`, `ShopSeed`, `Bank`, `HouseholdMonth`, `HouseholdMonthReport`, `MarketInner`, `Market`, `new`, `lock`, `set_tick`, `tick`, `rebuild_index`, `refresh_households`, `snapshot`, `has_home_stock`, `vot_for`, `buyer_state`, `post_purchase`, `post_receipt`, `wholesale_memo`, `impl HashState for Market` | 470 |
+| `market/api.rs` | szew (d) i gettery: `stats`, `shop_count`, `offer_count`, `price_at`, `set_price`, `shelf_qty`, `backroom_qty`, `inventory_value`, `offer_of`, `set_supply_shock`, `good_of_key`, `shop_pos`, `account_of`, `rest_of_world`, `sites`, `set_tracking`, `lost_sales`, `lost_histogram`, `policy_of`, `reprice_log`, `observed_of`, `observe_delay`, `elasticity_of`, `income_statement`, `balance_sheet`, `cash_flow`, `ledger_balance` | 250 |
+| `market/lifecycle.rs` | szew (a): `open_shop`, `record_capital`, `stock_initial`, `deliver_now` | 270 |
+| `market/restock.rs` | szew (b): `restock_shelves`, `reorder_and_receive`, `expire_goods`, `docelowy_zapas` | 250 |
+| `market/price_day.rs` | szew (c): `observe_competitors`, `reprice_all`, `set_policy`, `preview_policy`, `price_of`, `REPRICE_LOG` | 290 |
+| `market/close.rs` | szew (f′), kapitał obrotowy firmy: `close_month`, `service_working_capital`, `maybe_borrow_working_capital` | 250 |
+| `market/household.rs` | szew (f), gospodarstwo i kredyt konsumencki: `household_month`, `open_bank`, `bank`, `budget_of`, `loan`, `loan_count`, `credit_outstanding`, `budget_log`, `cpi_*`, `base_rate`, `roll_cpi_day`, `close_cpi_month`, `log_budget`, `take_from_household`, `pay_installment`, `apply_for_credit`, `overspend_bp` | 380 |
+| `market/fulfil.rs` | szewy (e) i (h): `impl PlaceProvider for Market`, `Market::fulfil`, `take_intents`, `return_goods`, `record_sale`, `cats_of`, `shop_coord`, `who_key`, `MAX_LINES` | 620 |
+| `market/readout.rs` | szew (g): `balance_sample`, `shop_panel` | 310 |
+
+**Kolejność wewnątrz pakietu, od najbezpieczniejszego:** `readout.rs` → `api.rs` → `household.rs`
+→ `lifecycle.rs` → `restock.rs` → `price_day.rs` → `close.rs` → `fulfil.rs`. Pierwsze dwa nie mogą
+zmienić hasha nawet przy błędzie implementacji: `hash_state` haszuje `offers`, `shops`, `intents`,
+`budgets`, `loans`, `bank` i `cpi`, a te dwa pliki biorą `self.lock()` bez `mut`. Ostatni jest
+jednocześnie największy i jedyny dotykający `K-6`.
+
+**Ostrzeżenie o determinizmie.** W pliku nie ma stanowego RNG — pięć losowań jest licznikowych,
+wyprowadzonych z `MarketInner.seed`, więc przeniesienie metody jest neutralne pod warunkiem, że
+argumenty kluczujące (`firm.entity().index()`, `t`, `world_seed`) nie zmienią się ani o jeden.
+Ryzyko leży w pokusie „przy okazji" uporządkowania parametrów. Poza tym trzy porządki iteracji
+wchodzą do wyniku i **nie wolno ich ujednolicać**: `by_site` (`BTreeMap<SiteId, u32>`, w hashu),
+`shops` po indeksie (kolejność zakładania sklepów — inna niż `by_site`; tak chodzą `expire_goods`,
+`restock_shelves`, `reorder_and_receive` i `close_month`) oraz `controllers` po `GoodId`. Sortowanie
+w `candidates` jest jedynym miejscem, w którym ustala się kolejność sumowania w softmaksie (`K-6`):
+sort → obliczenie → `choose_offer` zostaje w tej kolejności. Bufory (`offer_buf`, `cand_buf`,
+`util_buf`, `order_buf`, `deliv_buf`, `obs_buf`, `entry_buf`) nie wchodzą do hasha, ale karmią
+te sortowania — zmiana miejsca `clear()` jest niewidoczna w diffie i widoczna w hashu.
+
+**Kryterium:** `run_mezo.hashes` niezmienione; `MarketStats`, `BalanceSample` i `ShopPanelSnapshot`
+identyczne co do pola na przebiegu bramek G1–G9 balansatora; żaden blok `impl` powyżej 500 linii;
+`market/mod.rs` poniżej 500.
+
+---
+
 ### R-WP10 — `transit.rs`, `micro.rs` i usunięcie rusztowań
 
 Dwa ostatnie podziały o mniejszym zysku, plus sprzątanie po całym R1.
@@ -348,7 +443,7 @@ ma funkcje wolne, więc wychodzi bez zmiany API. Zmiana pasów (`zmien_pasy`, `s
 `transit/mod.rs`. `advance` ma 176 linii i jest kandydatem sam w sobie, ale dzieli się go tylko
 wtedy, gdy wychodzi to bez zmiany kolejności zdarzeń.
 
-**Sprzątanie:** usunięcie wszystkich `pub use` rusztowań dodanych w R-WP2…R-WP9 i poprawienie
+**Sprzątanie:** usunięcie wszystkich `pub use` rusztowań dodanych w R-WP2…R-WP9, R-WP11 i R-WP12 oraz poprawienie
 ścieżek importu w całym workspace (`D-R3`). Zmiana mechaniczna, weryfikowana przez kompilator
 w całości, ma prawo dotknąć stu plików.
 
@@ -580,8 +675,10 @@ na 590. Propozycja: tak, w tym samym pakiecie co `oracle.rs`, bo te dwa pliki dz
 | R-WP7 | `sim/agents/src/demography.rs` | 1 998 | 4 | M |
 | R-WP8 | `sim/world/src/city/build.rs` | 1 877 | 5 | M |
 | R-WP9 | `sim/world/src/city/mod.rs` | 1 410 | 4 | S |
+| R-WP11 | `sim/agents/src/planner.rs` | 1 818 | 5 | M |
+| R-WP12 | `sim/economy/src/market.rs` | 3 228 | 9 | L |
 | R-WP10 | `transit.rs`, `micro.rs` + prostowanie importów | 2 897 + rozsiane | 6 | M |
-| | **Razem** | **~18 600 z 74 600 linii kodu produkcyjnego (25 %)** | **46 z 9** | |
+| | **Razem** | **~23 600 z 74 600 linii kodu produkcyjnego (32 %)** | **60 z 11** | |
 
 Żaden wiersz nie wnosi ani nie usuwa funkcjonalności. Liczba linii po podziale ma być większa
 o narzut nagłówków modułów i deklaracji `use` — szacunkowo 3–5 %, i to jest cena, nie oszczędność.
@@ -607,7 +704,12 @@ gdzie indziej, niż zakłada `M6d-zloza-i-koniec-dostawcy-zewnetrznego.md`).
 
 | # | Zmiana | Dlaczego |
 |---|---|---|
-| | | |
+| D-1 ★ | **Dochodzą dwa pakiety: R-WP11 (`sim/agents/src/planner.rs`, 1 772 linie kodu) i R-WP12 (`sim/economy/src/market.rs`, 3 228).** Oba przekraczają próg błędu i żaden nie miał wiersza w §4. R-WP10 zależy teraz także od nich, bo prostuje importy po wszystkich podziałach | Wpisane przy zamknięciu R-WP1, znalezione pierwszym przebiegiem `scripts/struct_guard.py --all` — czyli dokładnie przez narzędzie, które R-WP1 miał dostarczyć. Bez tych dwóch wierszy R1 **nie mógł spełnić własnego kryterium akceptacji nr 4** („żaden plik produkcyjny powyżej 1200 linii poza listą wyjątków z §5"), bo dwa pliki powyżej progu nie należały do żadnego pakietu. `market.rs` był zresztą zapowiedziany w trzech tabelach „Zmiany wpisane po M5c/M5d/M5e" jako „jedenasty plik" — zabrakło tylko przełożenia tego na §4; `planner.rs` nie był wymieniony nigdzie |
+| D-2 | **Hook jest typu `PreToolUse` na `Bash` i wchodzi tuż przed `git commit`, a nie typu `Stop`**, jak mówi §6 wariant B. Logika siedzi w `scripts/struct_guard.py --hook` (czyta zdarzenie z wejścia, oddaje `additionalContext`), a `.claude/settings.json` ma jedną linię polecenia | Ten sam paragraf §6 wymaga, żeby kontrola działała **„przed commitem, nie po"**. Hook typu `Stop` odpala się po zakończeniu tury agenta, czyli po commicie — sprzeczność wewnątrz jednej sekcji. `PreToolUse` trafia w moment dosłownie opisany w regule i nie potrzebuje zabezpieczenia przed pętlą (`stop_hook_active`). Hook **nie oddaje `permissionDecision`**, więc zwykła zgoda na `git commit` przebiega bez zmian — informuje, nie blokuje, zgodnie z „czego kontrola nie robi" |
+| D-3 | **`market.rs` ma 3 228 linii, nie „~3 000", i trzy bloki `impl` powyżej 500** (860, 821, 510), a nie jeden. Szew (f) rozpada się na dwa: `service_working_capital` i `maybe_borrow_working_capital` sięgają `self.shops` czternaście razy i `self.budgets` ani razu — to kapitał obrotowy **firmy**, wołany z `close_month`, a nie miesiąc gospodarstwa. Dochodzi ósmy szew (h): rozliczenie transakcji (`take_intents`, `return_goods`, `record_sale`, ~98 linii), nierozdzielne od (e). `close_month` (73 linie) nie należał do żadnego szwu i idzie z (f′) | Wpis po M5d nazywał (f) „najczystszym szwem z całej szóstki" i to było nieprawdą — pomiar odwołań pokazał, że połowa (f) dotyka sklepów. Teza o (g) jako jedynym szwie bez zapisu **potwierdza się**: `balance_sample` i `shop_panel` biorą `self.lock()` bez `mut`, a `hash_state` haszuje wyłącznie pola, których one nie ruszają |
+| D-4 | **`MarketInner` nie potrzebuje `pub(crate)` na polach**, wbrew ograniczeniu z wpisu po M5c. Warunkiem jest katalog `market/` (moduły potomne), nie moduły siostrzane `market_*.rs` | Rust udostępnia elementy prywatne modułowi definiującemu **i wszystkim jego potomkom**, więc `use super::*` wystarcza. Ograniczenie z M5c dotyczyło wariantu siostrzanego, który z tego właśnie powodu odpada |
+| D-5 | **Kolumna „dziś" w tabeli progów §6 jest nieaktualna** (mierzona przy pisaniu dokumentu, w trakcie M5c). Pomiar `struct_guard.py --all` na `master` po M5e: 206 plików produkcyjnych, plik 15 ostrzeżeń / 10 błędów (+3 wyjątki), `impl` 7 / 8, funkcja 22 / 12, `mod.rs` 0 / 2 | Nie jest to korekta progów — `D-R1` zostaje bez zmian. Liczby urosły, bo M5d i M5e dopisały ~1 700 linii do `market.rs`, a to jest właśnie zjawisko, które reguła z §6 ma łapać. Kolumna zostaje w dokumencie jako zapis stanu z chwili pisania; stan bieżący daje skrypt |
+| D-6 | **Definicja „linii kodu" jest rozstrzygnięta i zmierzona:** wszystkie linie pliku poza blokiem `#[cfg(test)]`, razem z pustymi i komentarzami | §1 podawał liczby bez definicji. Kalibracja zgadza się co do jednej linii z §5 dla całej trójki wyjątków (`cch.rs` 942, `det_math.rs` 876, `graph.rs` 1064) i dla `renderer.rs` (2693), więc to jest ta definicja, którą liczono ręcznie — skrypt ją tylko utrwala |
 
 ---
 

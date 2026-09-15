@@ -180,6 +180,24 @@ jobs:
       - name: porównanie z linią bazową (10 % ostrzeżenie, 25 % błąd — D-8)
         run: python3 scripts/bench_guard.py benches/baseline.json
 
+  struct-guard:
+    name: kontrola strukturalna (progi R1 §6)
+    runs-on: ubuntu-latest
+    # Tryb ostrzegawczy (R-WP1, `D-R2`): job raportuje, nie blokuje. Jest trzecim
+    # poziomem po regule w `CLAUDE.md` i hooku — siatką bezpieczeństwa na wypadek
+    # pracy bez agenta. `continue-on-error` schodzi dopiero wtedy, gdy kolumna
+    # „błąd" pokaże zera poza wyjątkami z R1 §5, czyli po zamknięciu R-WP10;
+    # do tego czasu czerwony job byłby stanem normalnym, a to psuje każdą bramkę.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: test wykrywacza
+        # Bramka, która nigdy nie świeci na czerwono, nie jest bramką — ta sama
+        # zasada co w `sim/economy/tests/single_entry_point.rs` (M5a).
+        run: python3 scripts/struct_guard.py --self-test
+      - name: cztery metryki na całym repozytorium
+        run: python3 scripts/struct_guard.py --all
+
   balansator:
     name: bramki balansatora (G1–G9, M5e/WP13)
     runs-on: ubuntu-latest

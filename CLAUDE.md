@@ -115,6 +115,30 @@ Zasady:
 - Jeśli praca ujawniła, że plan fazy jest błędny — popraw plan i odnotuj to w dzienniku,
   zamiast odhaczać zadanie, które opisuje coś innego niż zrobiono.
 
+## Reguła: przegląd strukturalny po zamkniętym pakiecie
+
+Przed commitem zamykającym pakiet roboczy sprawdź pliki, które ta praca zmieniła, pod cztery
+progi (`python scripts/struct_guard.py --changed`): plik 800/1200 linii kodu, blok `impl` 300/500,
+funkcja 150/250, `mod.rs` z własnym kodem 300/600.
+
+Przekroczony próg nie jest błędem i nie blokuje commita. Jest pytaniem, na które trzeba
+odpowiedzieć w jeden z trzech sposobów:
+
+1. **Podziel teraz**, jeśli podział jest mechaniczny (przeniesienie symboli bez zmiany
+   zachowania) i mieści się w tym samym commicie.
+2. **Zaplanuj podział**, jeśli wymaga decyzji albo dotyka determinizmu — wiersz w rejestrze
+   długu strukturalnego w `R1-refaktor-po-M5.md`, z powodem.
+3. **Zostaw świadomie**, jeśli plik jest długi, bo jeden algorytm jest długi — komentarz
+   `ponytail:` nazywający sufit, plus wpis na liście wyjątków w `R1-refaktor-po-M5.md` §5
+   i w `WYJATKI_PLIK` w skrypcie.
+
+Czego nie wolno: zostawić bez odpowiedzi i zostawić `TODO` w kodzie (`K-18` pkt 4).
+Dzieli się pliki, w których są dwa tematy, a nie pliki, które są długie.
+
+Powód, dla którego ta reguła w ogóle jest: przez sześć faz kryterium ukończenia pakietu brzmiało
+„test przechodzi" i to jest właściwe kryterium — ale przechodzący test nie odróżnia czterystu
+linii dopisanych do modułu od czterystu linii dopisanych do worka. Pomiar jest w `R1` §1.
+
 ## Język i lokalizacja
 
 **Angielski:** kod, identyfikatory, nazwy plików i katalogów, klucze w `data/`, nazwy gałęzi,
