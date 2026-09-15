@@ -36,9 +36,10 @@ strumieniu 10⁶ przelewów, tolerancja **0 groszy**; próba przelewu ujemnej kw
 limitu debetu zwraca błąd, nie panikuje.
 
 ### WP2 — Oferta i indeks przestrzenny
-`Offer` jako encja ECS (zgodnie z `OfferId(Entity)` w dok. 00 §2 i §17.2 PRD). Indeks: grid komórek
-z `engine/spatial`, osobna warstwa per kategoria potrzeby. Zapytanie zwraca **identyfikatory**,
-cena czytana na żywo z komponentu — zmiana ceny nie wymaga przebudowy indeksu.
+`Offer` w **dedykowanej arenie**, nie jako encja ECS (`K-16` — korekta dok. 00 §2; mechanizm
+`Arena<T>` jest gotowy w `engine/core/src/arena.rs`). Indeks: grid komórek z `engine/spatial`,
+osobna warstwa per kategoria potrzeby. Zapytanie zwraca **uchwyty**, cena czytana na żywo z areny —
+zmiana ceny nie wymaga przebudowy indeksu.
 Kryterium: `query_offers` dla 5 tys. ofert i promienia 3 km zwraca wynik w < 20 µs (criterion),
 kolejność wyniku identyczna przy dwóch przebiegach i niezależna od kolejności wstawiania.
 
@@ -166,8 +167,12 @@ jest tym samym zamknięta.
 
 ### 5.2 Oferta i indeks przestrzenny (§6.1, §17.5)
 
+Oferta siedzi w **arenie**, nie w ECS (`K-16`). `OfferId` to `{ index: u32, generation: NonZeroU32 }`
+z `engine/core`, a nie `Entity`: uchwyt po zwolnieniu nigdy nie jest ponownie ważny, arena wchodzi
+do funkcji haszującej w kolejności indeksów, a snapshot i zapis traktują ją jak sekcję ECS.
+
 ```rust
-/// Encja ECS. Jedyny nośnik ceny w grze — nie istnieje żadna globalna cena towaru.
+/// Wpis areny ofert. Jedyny nośnik ceny w grze — nie istnieje żadna globalna cena towaru.
 pub struct Offer {
     pub seller: FirmId,
     pub site: SiteId,            // sklep = nośnik lokalizacji i dostępności

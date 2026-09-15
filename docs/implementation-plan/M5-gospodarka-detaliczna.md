@@ -36,7 +36,7 @@ jest agregatem po ofertach — i musi być tak zaimplementowane, nie zasymulowan
 
 | Obszar | Zakres w M5 | PRD |
 |---|---|---|
-| Oferta jako jedyny nośnik ceny | `Offer` jako encja ECS, indeks przestrzenny per kategoria, agregacja do UI | §6.1, §17.5 |
+| Oferta jako jedyny nośnik ceny | `Offer` w **dedykowanej arenie** (`K-16`, nie encja ECS), indeks przestrzenny per kategoria, agregacja do UI | §6.1, §17.5 |
 | Rynek detaliczny B2C | dopasowanie kupujący↔oferta, rozliczenie, kolejność deterministyczna | §6.2 pkt 1 |
 | Decyzja zakupowa | funkcja użyteczności, softmax, próg odłożenia zakupu, wagi z osobowości i statusu | §6.4, §5.4 |
 | Polityki cenowe AI | marża, korekta wg magazynu, obserwacja konkurencji z opóźnieniem 1–7 dni, eksperymenty cenowe, przeceny psującego się | §6.3 |
@@ -356,7 +356,7 @@ balansator wpięty w CI (to jest osobne kryterium — §20.4 wskazuje go jako **
 | R3 | **`settle_transactions` jest sekwencyjny** — przy dużym mieście może stać się wąskim gardłem | średnie / średnie | sekwencyjność dotyczy tylko intencji z bieżącego ticku (≈2 tys.), nie populacji. Ścieżka podniesienia: partycjonowanie po `SiteId` (sklepy są rozłączne, więc równoległość jest legalna) — wdrożyć dopiero gdy benchmark z 7.3 czerwieni się przy 400 tys. (M12) |
 | R4 | **Degeneracja wyboru do monopolu** — wszyscy do najtańszego, konkurencja pada, potem monopolista windzi ceny | średnie / wysokie | softmax zamiast argmax (§6.4), szum, waga odległości, filtr znajomości (§5.7), premia za nowość; bramka G6 (HHI) |
 | R5 | **Dryf zaokrągleń w wycenie zapasów** — bilans przestaje się zamykać po tysiącach transakcji | wysokie (jeśli nieprzewidziane) / wysokie | gałąź „zmiatania reszty" w `take_cogs` (5.8) + test własnościowy P5 |
-| R6 | **Zależność od M4** — człon `g` wymaga kosztu przejazdu w czasie **i** pieniądzu; jeśli M4 daje tylko czas, człon traci sens | średnie / wysokie | zaślepka `travel_cost` z tabeli czasów dzielnica↔dzielnica (§17.6) pozwala rozwijać WP4 równolegle; rozbieżność zapisana w sekcji 9 pkt 3 |
+| R6 | ~~Zależność od M4 — człon `g` wymaga kosztu przejazdu w czasie **i** pieniądzu~~ → **ryzyko zmieniło naturę, nie zniknęło.** Kontrakt jest dostarczony (`TravelOracle::estimate` zwraca minuty **i** `Money`, sekcja 9 pkt 3), ale jest **drogi**: wycenia sześć opcji z routingiem i woła się już ponad milion razy na dobę metropolii bez udziału M5 | średnie / wysokie | wstępny ranking całkowitoliczbowy **przed** wyceną (ta sama mitygacja co R7, i to ona jest teraz właściwa); bramka benchmarkowa na `decide_purchase`; zaślepka z tabeli czasów dzielnica↔dzielnica zostaje jako awaryjna ścieżka rozwoju WP4 |
 | R7 | **Koszt gorącej ścieżki** — 450 tys. decyzji/dobę × 15 kandydatów × 8 członów | średnie / średnie | bufory wielokrotnego użytku, obcięcie K=15 z wstępnym rankingiem całkowitoliczbowym, cache agregatów per dzielnica (§17.5), benchmark jako bramka |
 | R8 | **Zmiana wyceny zapasów WAC → FIFO w M6** zmienia historyczne COGS i psuje porównywalność raportów | średnie / niskie | jawne udokumentowanie w 5.7 pkt 2; decyzja o sposobie migracji — sekcja 9 pkt 5 |
 | R9 | **Brak pętli dochodowej** — w M5 dochód GD jest egzogeniczny (RestOfWorld), więc balansator może „potwierdzać" stabilność, której w M7 zabraknie | wysokie / średnie | scenariusz balansatora `income-shock` (−20% dochodów) już w M5; jawne oznaczenie wyników M5 jako **warunkowych** do czasu M7; ponowne przejście bramek jest kryterium akceptacji M7, nie M5 |
@@ -370,6 +370,14 @@ Runda uzgodnień międzyfazowych zamknęła punkty **6, 8 i 12** oraz wniosła r
 K-1, K-4, K-7, K-8, K-12 (wprowadzone do sekcji 5 i 6). Poniższe punkty pozostają otwarte
 i wymagają rozstrzygnięcia **przed startem fazy**; przy każdym jest propozycja M5, którą przyjmuję
 jako domyślną, jeśli nikt nie zgłosi sprzeciwu.
+
+**Domknięcie po M4 (`K-18`).** Zamknęły się dwa kolejne punkty: **1** — przez `K-16`, i to
+**odwrotnie** niż brzmiała propozycja M5 (oferta jest uchwytem do areny, nie encją ECS) — oraz **3**,
+bo kontrakt kosztu przejazdu został dostarczony i nie trzeba go budować. Przy okazji wyszło, że
+„wymagają rozstrzygnięcia przed startem fazy" jest zbyt szerokie: większość punktów dotyczy
+podfaz, do których jeszcze daleko. **Przed pierwszym pakietem (WP1) trzeba rozstrzygnąć dokładnie
+dwa: 14 i — w wąskiej części — 7.** Oba zamrażają kształt typów, które WP1 tworzy i którymi
+niezmiennik P1/P1b jest testowany. Doszedł jeden nowy punkt, **15**, znaleziony w kodzie M3.
 
 Runda zamykająca M7 dołożyła dwa rozstrzygnięcia, oba **przyjęte** (sekcja 6):
 **D19** — moduł `labor` wchodzi do `sim/economy`, granica z `sim/firms::labor_policy` biegnie
@@ -385,10 +393,19 @@ PublicSpend}`, rozbicie pasywów na `TradePayable`/`TaxPayable`/`WagePayable` (M
 `LostSaleTracking` (M9); miejsce na `LaborMarketStats` przez reużycie istniejącego mechanizmu
 dopasowania zamiast drugiego (M7).
 
-1. **`Offer` jako encja ECS czy komponent półki?**
-   Dok. 00 §2 definiuje `OfferId(Entity)`, a §17.2 PRD wymienia ofertę wśród encji — więc encja.
-   Koszt: 1 encja na (sklep × towar), przy 2 tys. sklepów × 40 towarów = 80 tys. encji.
-   *Propozycja M5: encja. Do potwierdzenia z M0 (budżet encji) i M6 (oferty B2B mnożą tę liczbę).*
+1. ~~**`Offer` jako encja ECS czy komponent półki?**~~ — **ZAMKNIĘTE przez `K-16`.**
+   Rozstrzygnięcie zapadło **odwrotnie** niż brzmiała propozycja M5 i jest wiążące:
+   **oferta nie jest encją ECS**, tylko uchwytem do dedykowanej areny,
+   `OfferId { index: u32, generation: NonZeroU32 }`. Argument z dok. 00 §2 przestał obowiązywać,
+   bo `K-16` jest jawną korektą tamtego paragrafu — `engine/core/src/ids.rs` mówi to wprost.
+   Powód jest ten, który propozycja liczyła jako koszt i odrzuciła: ofert jest rzędu 10⁵,
+   mają skrajnie wysoką rotację, a **żadna nie jest nigdy odpytywana przekrojowo po archetypach** —
+   do oferty dociera się przez półkę albo przez indeks przestrzenny kategorii. Płacenie za nie
+   mutacją strukturalną ECS to koszt bez korzyści.
+   Wymagania nienegocjowalne z `K-16`: arena wchodzi do funkcji haszującej stan w kolejności
+   indeksów, uchwyt po zwolnieniu **nigdy** nie jest ponownie ważny (stąd generacja), a snapshot
+   i zapis traktują arenę jak sekcję ECS. Mechanizm jest gotowy: `engine/core/src/arena.rs`
+   (`Arena<T>`, `ArenaHandle<T>`, `Arena::hash_state`), właściciel M0. M5 dostarcza instancję.
 
 2. **Skąd bierze się dochód GD w M5?**
    M5 potrzebuje dochodu, żeby budżet miał sens; pensje emergentne to M7.
@@ -396,11 +413,22 @@ dopasowania zamiast drugiego (M7).
    z profilu zawodowego mieszkańca (M3). Kto jest właścicielem tej logiki — M3 czy M5? Propozycja: M5,
    bo dotyczy pieniądza; M7 podmienia źródło bez zmiany struktury.* **Do uzgodnienia z M3 i M7.**
 
-3. **Sygnatura `travel_cost` z M4.**
-   Człon `g` wymaga `(SimMinute, Money)` — czasu **i** kosztu pieniężnego (paliwo, bilet, parking).
-   Jeśli M4 zwraca sam czas, M5 musiałby duplikować model kosztu pojazdu.
-   *Propozycja M5: `fn travel_cost(from, to, mode, at) -> TravelCost { time: SimMinute, money: Money }`
-   jako kontrakt M4.* **Do uzgodnienia z M4 — to najtwardsza zależność zewnętrzna tej fazy.**
+3. ~~**Sygnatura `travel_cost` z M4.**~~ — **ZAMKNIĘTE przez M4.**
+   Kontrakt istnieje pod inną nazwą i nie trzeba go budować:
+   `TravelOracle::estimate(from, to, depart, who) -> TravelEstimate { minutes, cost: Money, mode, reason }`
+   (`sim/agents/src/places.rs`). Od M4c `cost` jest realną kwotą — bilet, taryfa taksówki, paliwo
+   i amortyzacja policzone w `GeneralizedCost.money_cost` — więc człon `g` dostaje czas **i** pieniądz
+   z jednego wywołania. Wywołanie jest **bezskutkowe**: pod spodem idzie `plan(commit = false)`,
+   które parking wyłącznie *sprawdza*, nie rezerwuje, nie wstawia pasażera do kolejki przystanku
+   i nie zapisuje nawyku.
+
+   **Otwarte zostaje co innego: koszt tego wywołania.** `estimate` wycenia wszystkie sześć opcji
+   z routingiem, a komentarz `ponytail:` w `sim/traffic/src/oracle.rs` mówi, że woła się już
+   **ponad milion razy na dobę metropolii** — zanim M5 dołoży 3–15 kandydatów na decyzję zakupową.
+   To nie jest brak kontraktu, tylko budżet, i mieszka teraz w ryzykach R6/R7, a nie tutaj.
+   *Do rozstrzygnięcia w WP4, nie przed startem fazy: albo wstępny ranking całkowitoliczbowy
+   odcina kandydatów przed wyceną, albo `estimate` dostaje tańszy wariant „tylko czas i pieniądz
+   dla środka z nawyku".*
 
 4. **Kto jest właścicielem `KnownPlaces` (znajomość sklepów, §5.7)?**
    *Propozycja M5: M3 (to pamięć agenta, obok `ExperienceMemory`); M5 tylko czyta i zgłasza
@@ -423,6 +451,9 @@ dopasowania zamiast drugiego (M7).
    pracowników ani produkcji.
    *Propozycja M5: bank ma `FirmId` i `Ledger` (jak sklep), ale jego „AI" to funkcja `assess_credit`;
    M7 czyni go pełną firmą z załogą i osobowością.* **Do uzgodnienia z M7.**
+   **Blokuje WP1 w jednej, wąskiej części:** sam bank powstaje dopiero w M5d, ale wariant
+   `AccountOwner::Bank(FirmId)` zamraża się razem z enumem w pierwszym pakiecie. Jeśli bank ma
+   **nie** być firmą, ten wariant wygląda inaczej — i lepiej wiedzieć to przed `Books`, niż po.
 
 8. ~~**Hook VAT: pole `Transaction.tax` czy osobny rejestr podatkowy?**~~ — **ZAMKNIĘTE przez M8.**
    Rozgraniczenie: `Transaction.tax` zostaje **wyłącznie dla VAT-u** (nierozłączny od pojedynczej
@@ -440,6 +471,11 @@ dopasowania zamiast drugiego (M7).
     równoległość na poziomie CI.
     *Propozycja M5: biblioteka + `--jobs N` procesów na poziomie CLI (najlepsze z obu).*
     **Do uzgodnienia z M0 — wymaga, żeby `tools/headless` eksponował API, nie tylko `main`.**
+    **Stan faktyczny po M4 (sprawdzony w kodzie):** `tools/headless` **nie ma targetu
+    bibliotecznego** — w `Cargo.toml` nie ma sekcji `[lib]`, a w `src/` jest wyłącznie `main.rs`
+    z modułami prywatnymi. Wariant „biblioteka" wymaga więc realnej zmiany w cudzym crate'cie
+    (właściciel: M0), a nie samego uzgodnienia. Dotyczy WP13, czyli ostatniej podfazy — ale
+    zgłoszone teraz, bo to jest ta klasa rzeczy, którą odkrywa się w tygodniu domknięcia fazy.
 
 11. **Kwantyzacja `ObservedElasticity` w stanie trwałym.**
     Elastyczność jest floatem, ale trafia do stanu trwałego (a więc do hasha i do zapisu).
@@ -460,7 +496,20 @@ dopasowania zamiast drugiego (M7).
     nie używa (pokryte wyłącznie testem P1b). *Propozycja M5: pozostają `pub`, wołane wyłącznie
     z `sim/firms` w M7.* Jeśli M7 potrzebuje innej ziarnistości niż „inwestor + kwota"
     (np. transzy, harmonogramu wejścia) — trzeba to wiedzieć przed zamrożeniem struktury.
-    **Do potwierdzenia z M7.**
+    **Do potwierdzenia z M7. Blokuje WP1**, i mocniej, niż wynikałoby z brzmienia punktu:
+    `MoneySupplyLedger` powstaje w **pierwszym** pakiecie i jest częścią niezmiennika P1/P1b,
+    czyli tego samego testu własnościowego, który jest kryterium zamknięcia M5a. Zmiana ziarnistości
+    kanału po WP1 znaczy przepisanie niezmiennika, a nie dołożenie pola.
+
+15. **Nowe po M4 — `PlaceCandidate` nie niesie kwoty, a człon `g` jej wymaga.**
+    `sim/agents::PlaceCandidate` ma dziś `place`, `travel_min: u16`, `score: i32` i `reason` —
+    **brak pola `Money`**. Komentarz przy `score` zapowiada wyłącznie podmianę znaczenia na
+    „użyteczność §6.4 × 1000", więc kwota nie ma dziś gdzie usiąść. Bez niej M5 musi wołać wycenę
+    przejazdu osobno dla każdego kandydata, co wraca prosto do kosztu z punktu 3.
+    *Propozycja M5: `PlaceCandidate` dostaje `travel_cost: Money` wypełniane przez `PlaceProvider`,
+    bo to ten sam wołający, który już zna `travel_min` — jedno wywołanie zamiast dwóch.
+    Właścicielem struktury jest M3, więc zmiana należy do M5 jako rozszerzenie cudzego typu.*
+    **Do uzgodnienia z M3.** Nie blokuje M5a; blokuje WP4 w M5b.
 
 ---
 
@@ -520,3 +569,7 @@ faza nie jest tu przeprojektowywana. Gwiazdka = zmiana zakresu albo kryterium.
 | T-3 | **Koszt dojazdu do budżetu gospodarstwa bierze się z `TripLedger.total_money`, a amortyzacja z przebiegu** (`D3`) | `wear_gr_per_100km` wchodzi **wyłącznie** do kosztu uogólnionego decyzji; realne obciążenie budżetu nalicza M5 z `VehicleCondition.odometer_cm`. Policzenie amortyzacji drugi raz z ledgera byłoby podwójnym kosztem — i jest to najłatwiejsza pomyłka w tym styku |
 | T-4 | **Karta inspekcji podróży istnieje i pokazuje rozbicie kosztu uogólnionego wszystkich kandydatów w groszach** (`magnat_ui::TripCard`) | M5 pyta „dlaczego nie kupił u mnie" i ma na to gotowy ekran: `NoParkingAtDestination { lots_searched }` i `ModeCompared { chosen, runner_up, delta_gr }` są renderowane przez `engine/ui::describe` i widoczne w karcie. Dokładać trzeba **powód zakupowy**, a nie mechanizm wyjaśniania |
 | T-5 | **`sim/agents` ładuje `data/names/` i wystawia `name_catalog()`**, a `magnat_ui::full_name(&Identity)` formatuje nazwę | Panel sklepu i karta klienta w M5 mają pokazywać osobę, nie numer. Formatera nie trzeba pisać — trzeba go zawołać. Nazwy **nie są lokalizacją UI** i nie mają `LocKey` |
+| T-6 ★ | **Oferta jest uchwytem do areny, nie encją ECS** (`K-16`). Poprawione w trzech miejscach: §2 (tabela zakresu), §9 pkt 1 i `M5a` (opis WP2 oraz §5.2) | Dokument stał w sprzeczności z **wiążącym** rozstrzygnięciem dokumentu nadrzędnego i przegrywał z nim w najgorszy możliwy sposób: nie w dyskusji, tylko w kodzie, który ktoś by napisał. `K-16` jest jawną korektą dok. 00 §2, więc argument „`OfferId(Entity)` jest w §2" przestał obowiązywać w chwili jej wpisania. Mechanizm areny jest gotowy od M0 (`engine/core/src/arena.rs`), a `engine/core/src/ids.rs` mówi wprost, że `OfferId` **nie** jest tam, gdzie reszta identyfikatorów |
+| T-7 ★ | **Kontrakt kosztu przejazdu jest dostarczony; ryzyko R6 zmieniło naturę, a nie zniknęło.** `TravelOracle::estimate` zwraca `TravelEstimate { minutes, cost: Money, mode, reason }`, a wywołanie jest bezskutkowe (`plan(commit = false)`: parking sprawdzany, nie rezerwowany) | §9 pkt 3 nazywał to „najtwardszą zależnością zewnętrzną fazy" i prosił M4 o nową sygnaturę. Nowej sygnatury nie będzie, bo istniejąca robi dokładnie to, o co prosi człon `g`. **Otwarte zostaje co innego i jest to sprawa budżetu, nie kontraktu**: `estimate` wycenia sześć opcji z routingiem i woła się już ponad milion razy na dobę metropolii **bez** udziału M5, a decyzja zakupowa chce 3–15 kandydatów na decyzję. Mitygacją jest wstępny ranking całkowitoliczbowy **przed** wyceną — ta sama, którą R7 ma od początku |
+| T-8 ★ | **Blokery WP1 są dwa i oba są zapisane jako „do potwierdzenia później": punkt 14 i wariant `AccountOwner::Bank(FirmId)` z punktu 7** | `MoneySupplyLedger` z kanałem kapitału zewnętrznego powstaje w **pierwszym** pakiecie i jest częścią niezmiennika P1/P1b — czyli tego samego testu, który jest kryterium zamknięcia M5a. Zmiana ziarnistości kanału po WP1 to przepisanie niezmiennika, nie dołożenie pola. Bank jest z M5d, ale jego wariant w `AccountOwner` zamraża się razem z enumem |
+| T-9 | **Dwie luki w cudzych crate'ach, obie sprawdzone w kodzie**: `sim/agents::PlaceCandidate` nie ma pola `Money` (nowy punkt 15), a `tools/headless` nie ma targetu bibliotecznego, którego wymaga wariant „balansator jako biblioteka" z punktu 10 | Żadna nie blokuje M5a, obie blokują coś później: pierwsza WP4, druga WP13. Zapisane teraz, bo to jest ta klasa rzeczy, którą inaczej odkrywa się w tygodniu domknięcia fazy — a wtedy zmiana w cudzym crate'cie jest już nie poprawką, tylko przeszkodą |

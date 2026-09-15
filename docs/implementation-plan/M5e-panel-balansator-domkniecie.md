@@ -40,6 +40,12 @@ sztucznie wprowadzony błąd (usunięcie dolnego ogranicznika ceny) **czerwieni*
 Rośnie od WP1, nie na końcu. Dopisanie komponentów `sim/economy` do funkcji haszującej stan ECS
 jest warunkiem Definition of Done fazy (dok. 00 §3 pkt 6).
 
+**Uzupełnienie po M4 (`T-6`):** hasza się nie tylko komponenty. **Arena ofert wchodzi do funkcji
+haszującej jako osobna sekcja**, w kolejności indeksów — tego wymaga `K-16` wprost, a mechanizm
+jest gotowy (`World::register_arena_hash::<T>(ArenaKind)` w `engine/ecs`, `Arena::hash_state`
+w `engine/core`). Do dziś **żadna faza nie zarejestrowała ani jednej areny**, więc M5 jest
+pierwszym konsumentem tej ścieżki i pierwszym, który się dowie, czy działa.
+
 ---
 
 ---
