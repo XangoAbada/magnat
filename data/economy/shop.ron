@@ -1,0 +1,86 @@
+// Sklep jako podmiot gospodarczy: osobowość cenowa i koszty stałe (M5c §5.6, §5.8).
+//
+// Ten plik odpowiada na dwa pytania, których `retail.ron` nie zadaje, bo dotyczą
+// **firmy**, a nie towaru: jak ostro sklep reaguje ceną na zapas i na konkurencję
+// oraz ile go miesięcznie kosztuje samo istnienie.
+//
+// `retail.ron` podaje `markup_bp` jako **cenę startową**. Od M5c cenę ustala
+// `reprice`, a marża docelowa jest własnością firmy i bierze się stąd.
+//
+// Widełki `*_min`/`*_max` są losowane **raz na firmę** strumieniem
+// `StreamId::FirmPricing` z kluczem indeksu firmy (00 §3.1), więc dwa sklepy
+// obok siebie mają różny charakter, a ten sam seed daje ten sam charakter.
+// W M7 zastąpi to pełna osobowość właściciela (PRD §12); numer strumienia zostaje.
+//
+// To jest plik, który stroi **balansator** (M5e): `min_margin_bp` jest dolnym
+// ogranicznikiem, którego pilnuje bramka G3 (brak spirali deflacji), a `k_stock`
+// i `k_comp` decydują o reaktywności szoku podaży (G4).
+(
+    schema_version: 1,
+
+    pricing: (
+        // Marża docelowa nad kosztem własnym, w punktach bazowych (3000 = +30 %).
+        target_margin_bp: (min: 2400, max: 4200),
+        // Dolny ogranicznik marży. **Bez niego sklep z nadmiarem zapasu wpada
+        // w spiralę deflacyjną poniżej kosztu** — to jest ryzyko R1 i dokładnie
+        // ten mechanizm, który ma pilnować bramka G3.
+        min_margin_bp: (min: 300, max: 900),
+        max_margin_bp: (min: 9000, max: 16000),
+        // Czułość na zapas: o ile bp ruszy cena przy odchyleniu zapasu o 100 % celu.
+        // Korekta jest przycięta do ⟨−2000, +1500⟩ bp niezależnie od tej wartości.
+        k_stock: (min: 1500, max: 5000),
+        // Czułość na obserwowaną cenę konkurencji; przycięcie ⟨−1500, +1500⟩ bp.
+        k_comp: (min: 2000, max: 6000),
+        // Skłonność do eksperymentu cenowego, 0..=100. Eksperyment rusza powyżej
+        // `experiment_risk_min` i nie częściej niż co `experiment_cooldown_days`.
+        risk: (min: 0, max: 100),
+        experiment_risk_min: 70,
+        experiment_cooldown_days: 30,
+        // Magnitudy eksperymentu: ±3 % … ±10 % (§5.6).
+        experiment_bp: (min: 300, max: 1000),
+        experiment_len_days: 7,
+        // Poniżej tej zmiany logarytmu sprzedaży eksperyment jest nierozstrzygnięty
+        // i elastyczność zostaje bez zmian (§5.6). W tysięcznych.
+        experiment_noise_permille: 50,
+
+        // Przecena psującego się towaru wg pozostałych dni ważności (§5.6).
+        // Czytane od góry: pierwszy próg, w którym się mieścimy, wygrywa.
+        spoilage: [
+            (days_left: 0, adj_bp: -6000),
+            (days_left: 1, adj_bp: -4000),
+            (days_left: 2, adj_bp: -2000),
+        ],
+
+        // Opóźnienie obserwacji konkurencji — zakres z §6.3 PRD. Losowane raz
+        // na firmę; to jest jej „czujność" i źródło realnych błędów decyzyjnych AI.
+        observe_delay_days: (min: 1, max: 7),
+        // Promień, w którym sklep **domyślnie** widzi konkurencję. Polityka
+        // `MatchCompetitor` może zażądać większego („−2 % vs najtańszy w 3 km")
+        // i wtedy ten sklep za niego płaci — reszta rynku nie.
+        //
+        // Liczba jest budżetem, nie estetyką: przy 3 000 m dobowe odświeżenie
+        // obrazu konkurencji dla 2 tys. sklepów metropolii kosztowało 161 ms,
+        // przy 1 200 m schodzi do rzędu kilkunastu. Zasięg 1,2 km to ten sam
+        // promień, w którym `choice.ron` szuka ofert dla mieszkańca — sklep,
+        // którego klient nie rozważa, nie jest konkurentem.
+        observe_radius_m: 1200,
+    ),
+
+    // Koszty stałe zakładu, miesięcznie (kalendarz 360-dniowy, `K-1`).
+    //
+    // `ponytail:` sufit nazwany — czynsz jest stałą z liczby miejsc na półce,
+    // a nie emergentną ceną najmu; media nie zależą od zużycia, płace od załogi.
+    // Ścieżki wyjścia są znane z nazwy i z numeru fazy: czynsz M7/M10
+    // (nieruchomości), media M8 (sieci przesyłowe), płace M7 (rynek pracy).
+    // Do tego czasu koszt istnieje i obciąża wynik — sklep bez kosztów stałych
+    // ma marżę zawyżoną o całą tę pozycję i balansator stroiłby nie ten świat.
+    costs: (
+        rent_gr_per_slot: 42000,
+        utilities_gr_per_slot: 9000,
+        wages_gr_per_slot: 68000,
+        // Wyposażenie lokalu: wartość początkowa środka trwałego per miejsce
+        // na półce i okres amortyzacji liniowej w miesiącach.
+        equipment_gr_per_slot: 900000,
+        depreciation_months: 120,
+    ),
+)

@@ -66,6 +66,13 @@ use crate::shop::{
     ShelfLine, Shop, ShopInventory, ShopLostSales,
 };
 use crate::supply::{line_total, ExternalSupplier, GoodTable, Wholesale, PRICE_UNIT};
+use crate::kernel::BP;
+use crate::ledger::{self, JournalEntry, Ledger, LedgerAccount};
+use crate::pricing::{
+    preview_price, reprice, CompetitorEntry, CompetitorRef, CompetitorSnapshot, FirmPricing,
+    PriceController, PricePolicy, PricingCtx,
+};
+use crate::tax::{NoTax, TaxEngine};
 
 /// Ile jednostek towaru mieści jedno miejsce na półce, ile razy tyle leży na zapleczu
 /// i przy jakim stanie sklep zamawia.
@@ -97,6 +104,11 @@ pub struct PurchaseIntent {
     pub days: u8,
     /// Cena z momentu decyzji (`K-7`: kwota, którą płaci kupujący).
     pub agreed_price: Money,
+    /// Koszt nabycia zdjętego towaru — zdjęty z półki **razem ze sztukami**, więc
+    /// rozliczenie ma czym zaksięgować `Cogs`, a nieudane rozliczenie ma co oddać.
+    /// Bez tego pola koszt przepadałby przy zwrocie i `InventoryGoods` rozjeżdżałby
+    /// się z zapasem (P5) przy każdym nieudanym przelewie.
+    pub cogs: Money,
     pub arrived: Tick,
     pub reason: DecisionReason,
 }
@@ -134,6 +146,15 @@ pub struct MarketStats {
     pub restocks: u64,
     /// Ile razy cena zmieniła się między decyzją a wizytą ponad `price_slippage_bp`.
     pub slippage_rechecks: u64,
+    // ── M5c ──
+    /// Ile ofert zmieniło cenę (dobowy przelot polityk).
+    pub reprices: u64,
+    /// Ile sklepów odświeżyło obraz konkurencji.
+    pub observations: u64,
+    /// Odpisy towaru przeterminowanego.
+    pub write_offs: u64,
+    pub write_off_value: Money,
+    pub expired_qty: i64,
 }
 
 /// Migawka gospodarstwa, której `PlaceProvider` nie ma jak odczytać ze świata.
@@ -185,6 +206,8 @@ struct MarketInner {
     /// dwa zakupy tej samej minuty widziałyby ten sam budżet dwa razy.
     committed: BTreeMap<u32, Money>,
     rest_of_world: AccountId,
+    /// Hak podatkowy (`K-7`). W M5 `NoTax`; M8 wstawia `CityTaxEngine`.
+    tax: Box<dyn TaxEngine>,
     seed: u64,
     tick: Tick,
     stats: MarketStats,
@@ -194,6 +217,9 @@ struct MarketInner {
     util_buf: Vec<f64>,
     order_buf: Vec<usize>,
     deliv_buf: Vec<crate::supply::Delivery>,
+    /// Bufory obserwacji konkurencji — dobowy przelot, nie wolno mu alokować.
+    obs_buf: Vec<(GoodId, Money, u32, SiteId)>,
+    entry_buf: Vec<CompetitorEntry>,
 }
 
 /// Rynek detaliczny: stan współdzielony między zasobem świata a `PlaceProvider`em.
@@ -228,6 +254,7 @@ impl Market {
             intents: Vec::new(),
             committed: BTreeMap::new(),
             rest_of_world,
+            tax: Box::new(NoTax),
             seed,
             tick: Tick(0),
             stats: MarketStats::default(),
@@ -236,6 +263,8 @@ impl Market {
             util_buf: Vec::new(),
             order_buf: Vec::new(),
             deliv_buf: Vec::new(),
+            obs_buf: Vec::new(),
+            entry_buf: Vec::new(),
         })))
     }
 
@@ -340,7 +369,12 @@ impl Market {
     pub fn set_tracking(&self, site: SiteId, level: LostSaleTracking) {
         let mut m = self.lock();
         if let Some(i) = m.by_site.get(&site).copied() {
-            m.shops[i as usize].tracking = level;
+            let s = &mut m.shops[i as usize];
+            s.tracking = level;
+            // Ta sama flaga włącza pierścień dziennika księgowego (§5.8): salda
+            // prowadzą **wszystkie** zakłady, okno zapisów tylko śledzone. Poziom
+            // nie wchodzi do hasha, więc kliknięcie „śledź" nie zmienia świata.
+            s.ledger.set_journal(level != LostSaleTracking::None);
         }
     }
 
@@ -396,6 +430,9 @@ impl Market {
             return false;
         }
 
+        // Osobowość cenowa jest własnością **firmy**, nie zakładu, i losuje się raz
+        // (§5.6). Dwa sklepy tej samej firmy dostaną te same czułości — i tak ma być.
+        let osobowosc = FirmPricing::draw(m.seed, seed.firm.entity().index(), &m.data.pricing);
         let mut shop = Shop {
             site: seed.site,
             firm: seed.firm,
@@ -413,12 +450,18 @@ impl Market {
             },
             assortment: AssortmentPolicy::Auto {
                 max_lines: slots,
-                min_margin_bp: 500,
+                min_margin_bp: osobowosc.min_margin_bp,
             },
             tracking: LostSaleTracking::None,
             lost: ShopLostSales::default(),
             sold_qty: 0,
             revenue: Money::ZERO,
+            pricing: osobowosc,
+            controllers: BTreeMap::new(),
+            observed: CompetitorSnapshot::new(osobowosc.delay_days),
+            ledger: Ledger::new(seed.site, seed.firm, t),
+            reprice_log: Vec::new(),
+            depreciation_monthly: Money::ZERO,
         };
 
         for i in wybor {
@@ -441,21 +484,92 @@ impl Market {
                 cost_total: Money::ZERO,
                 facings: 1,
                 offer,
+                expires: None,
             });
+            // Każdy towar dostaje własny sterownik ceny. AI zaczyna od polityki
+            // dynamicznej — to ona składa cztery korekty z §5.6; gracz podmienia
+            // wariant przez `set_policy`, nie przez inną ścieżkę kodu (WP11).
+            shop.controllers.insert(
+                spec.good,
+                PriceController::new(
+                    PricePolicy::Dynamic {
+                        target_margin_bp: osobowosc.target_margin_bp,
+                        floor_margin_bp: osobowosc.min_margin_bp,
+                        ceil_margin_bp: osobowosc.max_margin_bp,
+                    },
+                    spec.retail_price(),
+                    t,
+                ),
+            );
+            // Zapas nie może przeżyć własnego terminu ważności (M5c). Sklep, który
+            // zamawia osiem wyłożeń chleba o trzydniowym terminie, odpisuje pięć
+            // z nich — i to nie jest zła polityka zakupowa, tylko stała z M5b,
+            // która do M5c nie miała jak zaboleć, bo nic się nie psuło.
+            let krotnosc = if spec.shelf_life_days > 0 {
+                BACKROOM_MULTIPLE.min(i64::from(spec.shelf_life_days))
+            } else {
+                BACKROOM_MULTIPLE
+            };
             shop.inventory.reorder.insert(
                 spec.good,
                 ReorderPolicy {
-                    point: Qty(SHELF_UNITS_PER_FACING * REORDER_POINT_MULTIPLE),
-                    target: Qty(SHELF_UNITS_PER_FACING * BACKROOM_MULTIPLE),
+                    point: Qty(SHELF_UNITS_PER_FACING * REORDER_POINT_MULTIPLE.min(krotnosc)),
+                    target: Qty(SHELF_UNITS_PER_FACING * krotnosc),
                     lead_time_days: spec.lead_time_days,
                 },
             );
             m.index.mark_dirty(CategoryId::Stock(spec.cat));
         }
+        // Wyposażenie lokalu: wkład właściciela, więc druga strona to `Equity`,
+        // a nie przelew. Amortyzacja liniowa schodzi z niego co miesiąc (§5.8).
+        let (wartosc, odpis) = m.data.costs.equipment(slots);
+        shop.depreciation_monthly = odpis;
+        if wartosc.get() > 0 {
+            let _ = ledger::post(
+                &mut shop.ledger,
+                JournalEntry::new(
+                    t,
+                    DecisionReason::Unspecified,
+                    &[
+                        (LedgerAccount::FixedAssets, wartosc),
+                        (LedgerAccount::Equity, Money(-wartosc.get())),
+                    ],
+                ),
+            );
+        }
         let idx = u32::try_from(m.shops.len()).expect("za dużo sklepów");
         m.by_site.insert(seed.site, idx);
         m.shops.push(shop);
         true
+    }
+
+    /// Kapitał obrotowy wniesiony na rachunek sklepu — druga strona przelewu,
+    /// którego `Books` już dokonały.
+    ///
+    /// Osobne wywołanie, bo `open_shop` nie widzi `Books`: pieniądz ma jedno wejście
+    /// (`Books::transfer`) i to wołający nim dysponuje. Bez tego wywołania
+    /// `BankCurrent` w księdze rozjedzie się z saldem konta, a to jest pierwsza
+    /// rzecz, którą sprawdza test WP7.
+    pub fn record_capital(&self, site: SiteId, amount: Money, t: Tick) -> bool {
+        if amount.get() == 0 {
+            return false;
+        }
+        let mut m = self.lock();
+        let Some(i) = m.by_site.get(&site).copied() else {
+            return false;
+        };
+        ledger::post(
+            &mut m.shops[i as usize].ledger,
+            JournalEntry::new(
+                t,
+                DecisionReason::Unspecified,
+                &[
+                    (LedgerAccount::BankCurrent, amount),
+                    (LedgerAccount::Equity, Money(-amount.get())),
+                ],
+            ),
+        )
+        .is_ok()
     }
 
     /// Zatowarowanie startowe: sklep postawiony przez generator ma towar w dniu 0.
@@ -495,6 +609,8 @@ impl Market {
                         .entry(good)
                         .or_default()
                         .receive(q.qty, q.total(), expires);
+                    post_purchase(&mut m.shops[i].ledger, q.total(), t);
+                    post_receipt(&mut m.shops[i].ledger, q.total(), t);
                 }
             }
         }
@@ -515,6 +631,7 @@ impl Market {
         qty: Qty,
         paid: Money,
         expires: Option<SimMinute>,
+        t: Tick,
     ) -> bool {
         let mut m = self.lock();
         let Some(i) = m.by_site.get(&site).copied() else {
@@ -526,6 +643,7 @@ impl Market {
             .entry(good)
             .or_default()
             .receive(qty, paid, expires);
+        post_receipt(&mut m.shops[i as usize].ledger, paid, t);
         true
     }
 
@@ -553,6 +671,7 @@ impl Market {
                     continue;
                 }
                 let cost = line.take(take);
+                let data = line.expires;
                 let Some(sl) = m.shops[i].shelf.line_mut(good) else {
                     continue;
                 };
@@ -561,6 +680,13 @@ impl Market {
                     .cost_total
                     .checked_add(cost)
                     .expect("półka: przepełnienie kosztu linii");
+                // Data ważności idzie z zapleczem na półkę — wcześniejsza z dwóch,
+                // tak samo jak przy dostawie. Bez niej odpis (§5.8) i przecena
+                // psującego się (§5.6) nie miałyby czego czytać o towarze wyłożonym.
+                sl.expires = match (sl.expires, data) {
+                    (Some(a), Some(b)) => Some(SimMinute(a.get().min(b.get()))),
+                    (a, b) => a.or(b),
+                };
                 let (offer, qty) = (sl.offer, sl.qty);
                 if let Some(o) = m.offers.get_mut(offer) {
                     o.available = qty;
@@ -590,6 +716,7 @@ impl Market {
                 .entry(d.good)
                 .or_default()
                 .receive(d.qty, d.paid, d.expires);
+            post_receipt(&mut m.shops[i as usize].ledger, d.paid, t);
         }
         deliv.clear();
         m.deliv_buf = deliv;
@@ -623,6 +750,7 @@ impl Market {
                 {
                     continue;
                 }
+                post_purchase(&mut m.shops[i].ledger, q.total(), t);
                 let _ = m.supplier.place_order(&q, firm, site, t);
             }
         }
@@ -696,6 +824,14 @@ impl Market {
         };
         if let Some(sl) = m.shops[i as usize].shelf.line_mut(intent.good) {
             sl.qty = Qty(sl.qty.get().saturating_add(intent.qty.get()));
+            // Koszt nabycia wraca razem ze sztukami. Gdyby wracały same sztuki,
+            // `InventoryGoods` rozjeżdżałby się z zapasem przy każdym nieudanym
+            // przelewie — a niezmiennik P5 nie ma wyjątku na „prawie się udało"
+            // tak samo, jak nie ma go niezmiennik masy.
+            sl.cost_total = sl
+                .cost_total
+                .checked_add(intent.cogs)
+                .expect("półka: przepełnienie kosztu przy zwrocie");
             let (offer, qty) = (sl.offer, sl.qty);
             if let Some(o) = m.offers.get_mut(offer) {
                 o.available = qty;
@@ -716,6 +852,24 @@ impl Market {
             .revenue
             .checked_add(intent.agreed_price)
             .unwrap_or(s.revenue);
+        // Sprzedaż w księdze: przychód po jednej stronie, koszt własny po drugiej —
+        // **jednym** zapisem, żeby marża nie dała się policzyć z połowy zdarzenia.
+        let _ = ledger::post(
+            &mut s.ledger,
+            JournalEntry::new(
+                intent.arrived,
+                intent.reason,
+                &[
+                    (LedgerAccount::BankCurrent, intent.agreed_price),
+                    (LedgerAccount::Revenue, Money(-intent.agreed_price.get())),
+                    (LedgerAccount::Cogs, intent.cogs),
+                    (LedgerAccount::InventoryGoods, Money(-intent.cogs.get())),
+                ],
+            ),
+        );
+        if let Some(pc) = s.controllers.get_mut(&intent.good) {
+            pc.sold_today = Qty(pc.sold_today.get().saturating_add(intent.qty.get()));
+        }
         m.stats.purchases += 1;
         m.stats.purchased_qty += intent.qty.get();
         m.stats.revenue = m
@@ -724,6 +878,571 @@ impl Market {
             .checked_add(intent.agreed_price)
             .unwrap_or(m.stats.revenue);
     }
+}
+
+/// Ile powodów przecen pamięta zakład śledzony. Tyle, ile mieści panel — pierścień
+/// jest tu po to, żeby gracz zobaczył „czemu wczoraj potaniało", a nie po to, żeby
+/// prowadzić historię cen. Historię prowadzą miesięczne domknięcia księgi.
+const REPRICE_LOG: usize = 64;
+
+// ── M5c: ceny i księgowość ───────────────────────────────────────────────────────
+
+impl Market {
+    /// Odpis towaru przeterminowanego (§5.8). Zwraca łączną wartość odpisu.
+    ///
+    /// Linia zapasu ma **jedną** datę ważności (M5 nie ma partii), więc przeterminowuje
+    /// się w całości naraz. M6 zastąpi to odpisem per `BatchId` i wtedy dopiero będzie
+    /// co odpisywać częściami.
+    pub fn expire_goods(&self, t: Tick) -> Money {
+        let mut m = self.lock();
+        let teraz = t.get();
+        let mut razem = Money::ZERO;
+        for i in 0..m.shops.len() {
+            let mut odpis = Money::ZERO;
+            let mut sztuk = 0i64;
+
+            let zaplecze: Vec<GoodId> = m.shops[i]
+                .inventory
+                .backroom
+                .iter()
+                .filter(|(_, l)| l.qty.get() > 0 && l.expires.is_some_and(|e| e.get() <= teraz))
+                .map(|(g, _)| *g)
+                .collect();
+            for g in zaplecze {
+                if let Some(l) = m.shops[i].inventory.backroom.get_mut(&g) {
+                    let q = l.qty;
+                    sztuk += q.get();
+                    odpis = Money(odpis.get() + l.take(q).get());
+                    l.expires = None;
+                }
+            }
+
+            let polka: Vec<GoodId> = m.shops[i]
+                .shelf
+                .lines
+                .iter()
+                .filter(|l| l.qty.get() > 0 && l.expires.is_some_and(|e| e.get() <= teraz))
+                .map(|l| l.good)
+                .collect();
+            for g in polka {
+                let Some(sl) = m.shops[i].shelf.line_mut(g) else {
+                    continue;
+                };
+                let q = sl.qty;
+                sztuk += q.get();
+                odpis = Money(odpis.get() + sl.take(q).get());
+                sl.expires = None;
+                let offer = sl.offer;
+                if let Some(o) = m.offers.get_mut(offer) {
+                    o.available = Qty::ZERO;
+                }
+            }
+
+            if odpis.get() > 0 {
+                let _ = ledger::post(
+                    &mut m.shops[i].ledger,
+                    JournalEntry::new(
+                        t,
+                        DecisionReason::Unspecified,
+                        &[
+                            (LedgerAccount::WriteOffExpense, odpis),
+                            (LedgerAccount::InventoryGoods, Money(-odpis.get())),
+                        ],
+                    ),
+                );
+                m.stats.write_offs += 1;
+                m.stats.write_off_value = Money(m.stats.write_off_value.get() + odpis.get());
+                m.stats.expired_qty += sztuk;
+                razem = Money(razem.get() + odpis.get());
+            }
+        }
+        razem
+    }
+
+    /// Odświeżenie obrazu cen konkurencji (§6.3). Zwraca liczbę sklepów, które
+    /// coś zobaczyły.
+    ///
+    /// Odświeżają się **tylko** sklepy, którym minęła własna czujność `delay_days`,
+    /// więc sklep zwykle działa na starej cenie konkurenta — i to jest zamierzone:
+    /// stąd biorą się realne błędy decyzyjne AI i pole manewru gracza (przecena
+    /// na trzy dni, zanim konkurencja zauważy).
+    ///
+    /// Jedno zapytanie na **kategorię**, nie na towar: kategorii jest osiem, towarów
+    /// czterdzieści, a `query_offers` i tak zwraca całą warstwę w promieniu.
+    pub fn observe_competitors(&self, t: Tick) -> u64 {
+        let mut m = self.lock();
+        let promien_bazowy = m.data.pricing.observe_radius_m;
+        let mut obs = std::mem::take(&mut m.obs_buf);
+        let mut ofr = std::mem::take(&mut m.offer_buf);
+        let mut wpisy = std::mem::take(&mut m.entry_buf);
+        let mut ile = 0u64;
+
+        for i in 0..m.shops.len() {
+            if !m.shops[i].observed.is_stale(t) {
+                continue;
+            }
+            let mut promien = promien_bazowy;
+            let mut nazwani: Vec<(GoodId, SiteId)> = Vec::new();
+            for (g, pc) in &m.shops[i].controllers {
+                if let PricePolicy::MatchCompetitor {
+                    radius_m, reference, ..
+                } = pc.policy
+                {
+                    promien = promien.max(radius_m);
+                    if let CompetitorRef::Named(s) = reference {
+                        nazwani.push((*g, s));
+                    }
+                }
+            }
+            let (pos, site) = (m.shops[i].pos, m.shops[i].site);
+
+            // 1. Ceny konkurentów w promieniu, tylko dla towarów z naszej półki.
+            obs.clear();
+            let mut kategorie = [StockCat::Food; STOCK_CAT_COUNT];
+            let mut n_kat = 0usize;
+            for l in &m.shops[i].shelf.lines {
+                if let Some(spec) = m.supplier.goods().spec(l.good) {
+                    if !kategorie[..n_kat].contains(&spec.cat) && n_kat < STOCK_CAT_COUNT {
+                        kategorie[n_kat] = spec.cat;
+                        n_kat += 1;
+                    }
+                }
+            }
+            for c in &kategorie[..n_kat] {
+                query_offers(&m.index, CategoryId::Stock(*c), pos, promien, &mut ofr);
+                for id in &ofr {
+                    let Some(o) = m.offers.get(*id) else { continue };
+                    if o.site == site || m.shops[i].shelf.line(o.good).is_none() {
+                        continue;
+                    }
+                    obs.push((o.good, o.unit_price, o.price_rev, o.site));
+                }
+            }
+            // Porządek `(towar, cena, sklep)` — najtańszy i mediana czytają się wprost,
+            // a wynik nie zależy od kolejności zwracanej przez indeks.
+            obs.sort_unstable_by_key(|(g, p, _, s)| (g.get(), p.get(), s.entity().index()));
+
+            // 2. Zbicie do jednego wpisu na towar.
+            wpisy.clear();
+            let mut k = 0usize;
+            while k < obs.len() {
+                let good = obs[k].0;
+                let mut j = k;
+                let mut rev = 0u32;
+                while j < obs.len() && obs[j].0 == good {
+                    rev = rev.wrapping_add(obs[j].2);
+                    j += 1;
+                }
+                let n = j - k;
+                let named = nazwani
+                    .iter()
+                    .find(|(g, _)| *g == good)
+                    .and_then(|(_, s)| price_of(&m, *s, good));
+                wpisy.push(CompetitorEntry {
+                    good,
+                    cheapest: obs[k].1,
+                    cheapest_site: obs[k].3,
+                    median: obs[k + n / 2].1,
+                    named,
+                    offers: n as u32,
+                    seen_at: t,
+                    rev,
+                });
+                k = j;
+            }
+            if !wpisy.is_empty() {
+                ile += 1;
+            }
+            let kopia = wpisy.clone();
+            m.shops[i].observed.replace(kopia, t);
+        }
+        m.stats.observations += ile;
+        obs.clear();
+        ofr.clear();
+        wpisy.clear();
+        m.obs_buf = obs;
+        m.offer_buf = ofr;
+        m.entry_buf = wpisy;
+        ile
+    }
+
+    /// Dobowy przelot polityk cenowych (§5.6). Zwraca liczbę zmienionych ofert.
+    ///
+    /// Woła się **po** [`Market::observe_competitors`] i to jest kontrakt kolejności:
+    /// przecena konkurenta z doby `D` wchodzi do obrazu najwcześniej w dobie `D+1`,
+    /// więc reakcja mieści się w 1..=7 dobach, tak jak żąda kryterium WP6. Odwrotna
+    /// kolejność dopuszczałaby ósmą dobę.
+    pub fn reprice_all(&self, t: Tick) -> u64 {
+        let mut m = self.lock();
+        let seed = m.seed;
+        let MarketInner {
+            shops,
+            offers,
+            data,
+            supplier,
+            tax,
+            stats,
+            ..
+        } = &mut *m;
+        let mut zmian = 0u64;
+        for shop in shops.iter_mut() {
+            let sledzony = shop.tracking != LostSaleTracking::None;
+            let firm_index = shop.firm.entity().index();
+            let (site, osobowosc) = (shop.site, shop.pricing);
+            for li in 0..shop.shelf.lines.len() {
+                let linia = shop.shelf.lines[li];
+                let good = linia.good;
+                let Some(spec) = supplier.goods().spec(good).copied() else {
+                    continue;
+                };
+                let zaplecze = shop
+                    .inventory
+                    .backroom
+                    .get(&good)
+                    .copied()
+                    .unwrap_or_default();
+                let ilosc = zaplecze.qty.get() + linia.qty.get();
+                let koszt = zaplecze.cost_total.get() + linia.cost_total.get();
+                // Koszt własny: średnia ważona zapasu, a przy pustym magazynie cena
+                // hurtowa. Cena nie może zależeć od tego, czy akurat jest towar —
+                // zależy od tego, ile kosztuje go zdobyć.
+                let unit_cost = if ilosc > 0 && koszt > 0 {
+                    Money(koszt).mul_ratio(PRICE_UNIT, ilosc)
+                } else {
+                    spec.wholesale_base
+                };
+                let cel = shop
+                    .inventory
+                    .reorder
+                    .get(&good)
+                    .map_or(SHELF_UNITS_PER_FACING, |r| r.target.get().max(1));
+                let stock_bp = (ilosc.saturating_mul(BP) / cel).clamp(0, 200_000) as i32;
+                let termin = match (zaplecze.expires, linia.expires) {
+                    (Some(a), Some(b)) => Some(a.get().min(b.get())),
+                    (a, b) => a.or(b).map(magnat_core::SimMinute::get),
+                }
+                .map(|e| {
+                    u16::try_from(e.saturating_sub(t.get()) / magnat_core::time::MINUTES_PER_DAY)
+                        .unwrap_or(u16::MAX)
+                });
+                let obserwacja = shop.observed.get(good).copied();
+                let Some(pc) = shop.controllers.get_mut(&good) else {
+                    continue;
+                };
+                let ctx = PricingCtx {
+                    site,
+                    good,
+                    firm_index,
+                    world_seed: seed,
+                    unit_cost,
+                    stock_bp_of_target: stock_bp,
+                    days_to_expiry: termin,
+                    firm: osobowosc,
+                    observed: obserwacja,
+                    params: &data.pricing,
+                    tax: &**tax,
+                };
+                let Some(powod) = reprice(pc, &ctx, t) else {
+                    continue;
+                };
+                let nowa = pc.current;
+                if let Some(o) = offers.get_mut(linia.offer) {
+                    // Zmiana ceny **nie brudzi indeksu** — indeks trzyma uchwyty,
+                    // a cena czyta się z areny na żywo (§5.2, bez zmian od M5a).
+                    o.set_price(nowa);
+                }
+                zmian += 1;
+                if sledzony {
+                    if shop.reprice_log.len() >= REPRICE_LOG {
+                        shop.reprice_log.remove(0);
+                    }
+                    shop.reprice_log.push(powod);
+                }
+            }
+        }
+        stats.reprices += zmian;
+        zmian
+    }
+
+    /// Koszty stałe miesiąca, amortyzacja i domknięcie okresu (§5.8).
+    ///
+    /// Sklep bez środków **nie płaci** i to jest cała „upadłość" w M5 — postępowanie
+    /// prowadzi M7 (`K-10`). Zapis księgowy powstaje wyłącznie po udanym przelewie,
+    /// więc `BankCurrent` nigdy nie rozjeżdża się z saldem konta w `Books`.
+    pub fn close_month(&self, books: &mut Books, t: Tick) -> Money {
+        let mut m = self.lock();
+        let rest = m.rest_of_world;
+        let koszty = m.data.costs;
+        let miesiac = u32::try_from(t.get() / magnat_core::time::MINUTES_PER_MONTH).unwrap_or(0);
+        let mut suma = Money::ZERO;
+        for i in 0..m.shops.len() {
+            let (site, konto, slots) = (m.shops[i].site, m.shops[i].account, m.shops[i].shelf.slots);
+            let (czynsz, media, place) = koszty.monthly(slots);
+            let pozycje: [(Money, TxKind, LedgerAccount); 3] = [
+                (czynsz, TxKind::Rent { site }, LedgerAccount::RentExpense),
+                (
+                    media,
+                    TxKind::Utility {
+                        site,
+                        kind: magnat_core::UtilityService::Electricity,
+                    },
+                    LedgerAccount::UtilitiesExpense,
+                ),
+                (place, TxKind::Wage { site }, LedgerAccount::WagesExpense),
+            ];
+            for (kwota, kind, konto_ks) in pozycje {
+                if kwota.get() <= 0 {
+                    continue;
+                }
+                let memo = TxMemo::new(kind, DecisionReason::Unspecified);
+                if books.transfer(konto, rest, kwota, memo, t).is_err() {
+                    continue;
+                }
+                let _ = ledger::post(
+                    &mut m.shops[i].ledger,
+                    JournalEntry::new(
+                        t,
+                        DecisionReason::Unspecified,
+                        &[
+                            (konto_ks, kwota),
+                            (LedgerAccount::BankCurrent, Money(-kwota.get())),
+                        ],
+                    ),
+                );
+                suma = Money(suma.get() + kwota.get());
+            }
+            // Amortyzacja jest kosztem **bezgotówkowym** — nie ma po niej przelewu
+            // i dlatego nie może iść tą samą ścieżką co czynsz.
+            let odpis = m.shops[i].depreciation_monthly;
+            if odpis.get() > 0 {
+                let _ = ledger::post(
+                    &mut m.shops[i].ledger,
+                    JournalEntry::new(
+                        t,
+                        DecisionReason::Unspecified,
+                        &[
+                            (LedgerAccount::DepreciationExpense, odpis),
+                            (LedgerAccount::AccumDepreciation, Money(-odpis.get())),
+                        ],
+                    ),
+                );
+            }
+            let _ = ledger::close_period(
+                &mut m.shops[i].ledger,
+                miesiac,
+                t,
+                DecisionReason::Unspecified,
+            );
+        }
+        suma
+    }
+
+    // ── polityki cenowe gracza (WP11) ────────────────────────────────────────────
+
+    /// Ustawia politykę cenową towaru. **Ta sama funkcja dla gracza i dla AI** —
+    /// różnica jest w `delegated`, nie w ścieżce kodu (§6.3 PRD).
+    pub fn set_policy(
+        &self,
+        site: SiteId,
+        good: GoodId,
+        policy: PricePolicy,
+        delegated: bool,
+    ) -> bool {
+        let mut m = self.lock();
+        let Some(i) = m.by_site.get(&site).copied() else {
+            return false;
+        };
+        let Some(pc) = m.shops[i as usize].controllers.get_mut(&good) else {
+            return false;
+        };
+        pc.policy = policy;
+        pc.delegated = delegated;
+        true
+    }
+
+    #[must_use]
+    pub fn policy_of(&self, site: SiteId, good: GoodId) -> Option<PricePolicy> {
+        let m = self.lock();
+        let i = m.by_site.get(&site).copied()?;
+        m.shops[i as usize]
+            .controllers
+            .get(&good)
+            .map(|pc| pc.policy)
+    }
+
+    /// „Co by się stało z ceną dziś" — podgląd polityki bez jej zatwierdzania (WP11).
+    ///
+    /// Woła dokładnie to samo składanie co [`Market::reprice_all`], więc podgląd nie
+    /// ma jak rozjechać się z wykonaniem.
+    #[must_use]
+    pub fn preview_policy(&self, site: SiteId, good: GoodId, policy: PricePolicy) -> Option<Money> {
+        let m = self.lock();
+        let i = m.by_site.get(&site).copied()?;
+        let shop = &m.shops[i as usize];
+        let pc = shop.controllers.get(&good)?;
+        let spec = *m.supplier.goods().spec(good)?;
+        let linia = shop.shelf.line(good).copied();
+        let zaplecze = shop
+            .inventory
+            .backroom
+            .get(&good)
+            .copied()
+            .unwrap_or_default();
+        let ilosc = zaplecze.qty.get() + linia.map_or(0, |l| l.qty.get());
+        let koszt = zaplecze.cost_total.get() + linia.map_or(0, |l| l.cost_total.get());
+        let unit_cost = if ilosc > 0 && koszt > 0 {
+            Money(koszt).mul_ratio(PRICE_UNIT, ilosc)
+        } else {
+            spec.wholesale_base
+        };
+        let cel = shop
+            .inventory
+            .reorder
+            .get(&good)
+            .map_or(SHELF_UNITS_PER_FACING, |r| r.target.get().max(1));
+        let ctx = PricingCtx {
+            site,
+            good,
+            firm_index: shop.firm.entity().index(),
+            world_seed: m.seed,
+            unit_cost,
+            stock_bp_of_target: (ilosc.saturating_mul(BP) / cel).clamp(0, 200_000) as i32,
+            days_to_expiry: None,
+            firm: shop.pricing,
+            observed: shop.observed.get(good).copied(),
+            params: &m.data.pricing,
+            tax: &*m.tax,
+        };
+        Some(preview_price(policy, pc, &ctx))
+    }
+
+    /// Powody ostatnich przecen zakładu śledzonego (§7 — wyjaśnialność).
+    #[must_use]
+    pub fn reprice_log(&self, site: SiteId) -> Vec<DecisionReason> {
+        let m = self.lock();
+        m.by_site
+            .get(&site)
+            .map_or_else(Vec::new, |i| m.shops[*i as usize].reprice_log.clone())
+    }
+
+    /// Obraz konkurencji, jaki sklep ma **w tej chwili** — z opóźnieniem, jakie ma.
+    #[must_use]
+    pub fn observed_of(&self, site: SiteId, good: GoodId) -> Option<CompetitorEntry> {
+        let m = self.lock();
+        let i = m.by_site.get(&site).copied()?;
+        m.shops[i as usize].observed.get(good).copied()
+    }
+
+    /// Czujność firmy: co ile dni odświeża obraz cen konkurencji (1..=7).
+    #[must_use]
+    pub fn observe_delay(&self, site: SiteId) -> Option<u8> {
+        let m = self.lock();
+        let i = m.by_site.get(&site).copied()?;
+        Some(m.shops[i as usize].pricing.delay_days)
+    }
+
+    /// Zmierzona elastyczność popytu, jeśli eksperyment ją rozstrzygnął.
+    #[must_use]
+    pub fn elasticity_of(
+        &self,
+        site: SiteId,
+        good: GoodId,
+    ) -> Option<crate::pricing::ObservedElasticity> {
+        let m = self.lock();
+        let i = m.by_site.get(&site).copied()?;
+        m.shops[i as usize].controllers.get(&good)?.elasticity
+    }
+
+    // ── raporty księgowe (§5.8) ──────────────────────────────────────────────────
+
+    #[must_use]
+    pub fn income_statement(
+        &self,
+        site: SiteId,
+        from: Tick,
+        to: Tick,
+    ) -> Option<crate::ledger::IncomeStatement> {
+        let m = self.lock();
+        let i = m.by_site.get(&site).copied()?;
+        Some(ledger::income_statement(
+            &m.shops[i as usize].ledger,
+            from,
+            to,
+        ))
+    }
+
+    #[must_use]
+    pub fn balance_sheet(&self, site: SiteId, at: Tick) -> Option<crate::ledger::BalanceSheet> {
+        let m = self.lock();
+        let i = m.by_site.get(&site).copied()?;
+        Some(ledger::balance_sheet(&m.shops[i as usize].ledger, at))
+    }
+
+    #[must_use]
+    pub fn cash_flow(&self, site: SiteId, from: Tick, to: Tick) -> Option<crate::ledger::CashFlow> {
+        let m = self.lock();
+        let i = m.by_site.get(&site).copied()?;
+        Some(ledger::cash_flow(&m.shops[i as usize].ledger, from, to))
+    }
+
+    /// Saldo pojedynczego konta księgi — lewa strona niezmiennika P5 i test na to,
+    /// czy `BankCurrent` nadąża za rachunkiem w `Books`.
+    #[must_use]
+    pub fn ledger_balance(&self, site: SiteId, account: LedgerAccount) -> Option<Money> {
+        let m = self.lock();
+        let i = m.by_site.get(&site).copied()?;
+        Some(m.shops[i as usize].ledger.balance(account))
+    }
+}
+
+/// Zapłata dostawcy z góry: pieniądz wyszedł, towar jeszcze nie przyjechał.
+///
+/// `TradePayable` chodzi przez ten czas na saldzie Wn — to jest zaliczka, a nie
+/// zobowiązanie. M6 wnosi terminy płatności i saldo staje się tym, czym nazwa
+/// obiecuje; do tego czasu jedno konto niesie obie strony, bo obie są rozrachunkiem
+/// z tym samym dostawcą.
+fn post_purchase(l: &mut Ledger, kwota: Money, t: Tick) {
+    if kwota.get() <= 0 {
+        return;
+    }
+    let _ = ledger::post(
+        l,
+        JournalEntry::new(
+            t,
+            DecisionReason::Unspecified,
+            &[
+                (LedgerAccount::TradePayable, kwota),
+                (LedgerAccount::BankCurrent, Money(-kwota.get())),
+            ],
+        ),
+    );
+}
+
+/// Przyjęcie towaru na stan — dopiero **tu** rośnie `InventoryGoods`, bo dopiero
+/// tu towar istnieje. Gdyby rósł przy zamówieniu, niezmiennik P5 pękałby na każdym
+/// towarze będącym w drodze.
+fn post_receipt(l: &mut Ledger, kwota: Money, t: Tick) {
+    if kwota.get() <= 0 {
+        return;
+    }
+    let _ = ledger::post(
+        l,
+        JournalEntry::new(
+            t,
+            DecisionReason::Unspecified,
+            &[
+                (LedgerAccount::InventoryGoods, kwota),
+                (LedgerAccount::TradePayable, Money(-kwota.get())),
+            ],
+        ),
+    );
+}
+
+/// Cena towaru we wskazanym sklepie — potrzebna wyłącznie przy `CompetitorRef::Named`.
+fn price_of(m: &MarketInner, site: SiteId, good: GoodId) -> Option<Money> {
+    let i = m.by_site.get(&site).copied()?;
+    let line = m.shops[i as usize].shelf.line(good)?;
+    m.offers.get(line.offer).map(|o| o.unit_price)
 }
 
 fn wholesale_memo(good: GoodId, qty: Qty) -> TxMemo {
@@ -1134,9 +1853,10 @@ impl Market {
 
             // Wszystko przeszło: półka schodzi **teraz**, pieniądz w rozliczeniu.
             let dominujacy = dominant_term(&cand, &w, &st);
-            if let Some(sl) = m.shops[i as usize].shelf.line_mut(spec.good) {
-                let _ = sl.take(take);
-            }
+            let koszt_wlasny = m.shops[i as usize]
+                .shelf
+                .line_mut(spec.good)
+                .map_or(Money::ZERO, |sl| sl.take(take));
             if let Some(o) = m.offers.get_mut(line.offer) {
                 o.available = Qty((o.available.get() - take.get()).max(0));
             }
@@ -1164,6 +1884,7 @@ impl Market {
                 qty: take,
                 days: dni_kupione,
                 agreed_price: total,
+                cogs: koszt_wlasny,
                 arrived: tick,
                 reason,
             });
@@ -1248,6 +1969,7 @@ impl HashState for Market {
             it.good.hash_state(h);
             it.qty.hash_state(h);
             it.agreed_price.hash_state(h);
+            it.cogs.hash_state(h);
         }
     }
 }

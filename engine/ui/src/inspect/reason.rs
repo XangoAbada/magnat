@@ -9,7 +9,7 @@ use crate::loc::{Catalog, Locale};
 use magnat_agents::SocialClass;
 use magnat_core::{
     ActivityKind, CommitmentKind, DecisionReason, DeprivationEffect, LifeEventKind, MigrationKind,
-    Money, NeedKind, RejectCause, StockCat, TraitId, TransportMode, UtilityKind,
+    Money, NeedKind, PriceDriver, RejectCause, StockCat, TraitId, TransportMode, UtilityKind,
 };
 
 /// Nazwa potrzeby w języku gracza.
@@ -52,6 +52,12 @@ pub fn utility_term(c: &Catalog, l: Locale, u: UtilityKind) -> String {
 #[must_use]
 pub fn reject_cause(c: &Catalog, l: Locale, r: RejectCause) -> String {
     c.fmt_key(l, &format!("ui.reject.{}", r.name()), &[])
+}
+
+/// Nazwa członu, który przeważył przy przecenie (M5c §5.6).
+#[must_use]
+pub fn price_driver(c: &Catalog, l: Locale, d: PriceDriver) -> String {
+    c.fmt_key(l, &format!("ui.price_driver.{}", d.name()), &[])
 }
 
 /// Nazwa skutku deprywacji.
@@ -362,6 +368,19 @@ pub fn describe(c: &Catalog, l: Locale, r: DecisionReason) -> String {
                 ("co", &need(c, l, n)),
                 ("powod", &reject_cause(c, l, cause)),
                 ("brakowalo", &format!("{},{:03}", gap_permille / 1000, (gap_permille % 1000).abs())),
+            ],
+        ),
+        DecisionReason::Repricing {
+            site: _,
+            good: _,
+            driver,
+            delta_bp,
+        } => c.fmt_key(
+            l,
+            "ui.reason.Repricing",
+            &[
+                ("czlon", &price_driver(c, l, driver)),
+                ("roznica", &procent_bp(i32::from(delta_bp))),
             ],
         ),
     }

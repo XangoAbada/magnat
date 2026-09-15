@@ -608,3 +608,15 @@ gdzie indziej, niż zakłada `M6d-zloza-i-koniec-dostawcy-zewnetrznego.md`).
 | # | Zmiana | Dlaczego |
 |---|---|---|
 | | | |
+
+---
+
+## Zmiany wpisane po M5c
+
+Zgodnie z `K-18`. Wpisane jest **tylko to, co wiadomo na pewno** po zamknięciu M5c.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| ★ | **Dochodzi jedenasty plik: `sim/economy/src/market.rs`** — 1 253 linie przy pisaniu tego dokumentu, **1 975** po M5c. Szwy są widoczne z nazw metod: (a) cykl życia sklepu (`open_shop`, `record_capital`, `stock_initial`, `deliver_now`), (b) zaopatrzenie i półka (`restock_shelves`, `reorder_and_receive`, `expire_goods`), (c) doba cenowa (`observe_competitors`, `reprice_all`, `set_policy`, `preview_policy`), (d) raporty księgowe (cztery cienkie opakowania na `ledger::*`), (e) `PlaceProvider` (`candidates`, `fulfil`) — i to ostatnie jest największym pojedynczym kawałkiem | Plik przekroczył próg 1 200 linii w tej samej podfazie, w której R1 powstał, i z tego samego powodu co reszta listy: dokłada się do niego każda faza, a nikt nie pyta o rozmiar. Ograniczenie jest twardsze niż przy innych plikach: `MarketInner` jest prywatny, a wszystkie te metody sięgają do jego pól, więc podział musi iść przez `pub(crate)` na polach albo przez `impl Market` w modułach potomnych — **nie** przez wyniesienie funkcji wolnych. M6 dopisuje do tego pliku rynek B2B, więc termin „przed M6a" obowiązuje tak samo |
+| | **`sim/economy` ma po M5c 7 555 linii w 13 plikach** (było 4 tys. w 8). Rozkład jest zdrowy poza `market.rs`: `ledger.rs` 782, `pricing.rs` 866, `books.rs` 917, reszta poniżej 600 | Nowe moduły M5c (`kernel`, `ledger`, `pricing`, `tax`) powstały od razu podzielone, więc R1 nie ma tam nic do roboty. To jest przy okazji argument za regułą z R-WP1: plik, który rodzi się z granicą, nie rozlewa się później |
+

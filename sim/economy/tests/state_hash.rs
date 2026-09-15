@@ -32,7 +32,7 @@ fn swiat(seed: u64) -> World {
     );
     for s in &b.sites {
         b.market
-            .deliver_now(*s, good, Qty(10_000), Money(2_000), None);
+            .deliver_now(*s, good, Qty(10_000), Money(2_000), None, Tick(0));
     }
     b.market.restock_shelves();
     b.books
@@ -100,7 +100,7 @@ fn zmiana_ceny_i_stanu_polki_zmienia_hash() {
 
     let w2 = swiat(7);
     let m2 = w2.get_resource::<magnat_economy::Market>().unwrap();
-    m2.deliver_now(site, good, Qty(1_000), Money(200), None);
+    m2.deliver_now(site, good, Qty(1_000), Money(200), None, Tick(0));
     m2.restock_shelves();
     assert_ne!(base, world_state_hash(&w2), "zapas nie ruszył hasha");
 }

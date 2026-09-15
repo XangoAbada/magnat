@@ -5,6 +5,9 @@
 //! dostępu nie kupiłoby ani jednej krawędzi DAG — dałoby za to fałszywą deklarację,
 //! gdyby ktoś czegoś nie wypisał. To jest dokładnie przypadek z `K-21`.
 //!
+//! Od M5c doba sklepu ma własną kolejność kroków (odpis → obserwacja → przecena →
+//! zaopatrzenie) i ona też jest kontraktem — powód przy wywołaniach niżej.
+//!
 //! **Kolejność wobec pętli doby jest kontraktem.** System stoi **przed**
 //! `agents.DayLoop`, bo to on ustawia rynkowi bieżący tick i sprząta po poprzedniej
 //! minucie. Dzięki temu `fulfil` wołany w tej samej minucie widzi właściwy czas
@@ -65,12 +68,31 @@ impl System for MarketSystem {
             pay_incomes(ctx.world_mut(), &market, t);
         }
         if cal.is_day_boundary() {
-            // 4. Dostawy i zamówienia u dostawcy zewnętrznego.
+            // 4. Doba sklepu (M5c). Kolejność jest kontraktem, nie wygodą:
+            //    odpis → obserwacja → przecena → zaopatrzenie.
+            //
+            //    `observe` przed `reprice`, bo przecena konkurenta z doby `D` ma być
+            //    widoczna najwcześniej w dobie `D+1` — inaczej reakcja mieści się
+            //    w 2..=8 dobach zamiast 1..=7 z kryterium WP6.
+            //    Odpis przed obserwacją, żeby cena nie opierała się na zapasie,
+            //    którego już nie ma.
+            market.expire_goods(t);
+            market.observe_competitors(t);
+            market.reprice_all(t);
+            // 5. Dostawy i zamówienia u dostawcy zewnętrznego.
             if let Some(books) = ctx.world_mut().get_resource_mut::<Books>() {
                 market.reorder_and_receive(books, t);
             }
         }
-        // 5. Indeks ofert — przebudowa tylko brudnych warstw.
+        if cal.is_month_boundary() {
+            // 6. Koszty stałe, amortyzacja, domknięcie okresu (M5c §5.8).
+            //    Po zaopatrzeniu, bo miesiąc ma się domknąć na stanie, który
+            //    ta doba zostawiła.
+            if let Some(books) = ctx.world_mut().get_resource_mut::<Books>() {
+                market.close_month(books, t);
+            }
+        }
+        // 7. Indeks ofert — przebudowa tylko brudnych warstw.
         market.rebuild_index(ctx.pool);
     }
 }

@@ -65,5 +65,7 @@
   "m4d-3 zasilenie/3000_pojazdow": 124945.61583577713,
   "m5a books__transfer": 8.597853695733368,
   "m5a query_offers 5k ofert, promień 3 km": 705.1060314539067,
-  "m5a rebuild warstwy 5k ofert": 182049.48113207548
+  "m5a rebuild warstwy 5k ofert": 182049.48113207548,
+  "m5c observe_competitors 2000 sklepów": 27059600.0,
+  "m5c reprice 2000 sklepów": 1083286.1191440139
 }

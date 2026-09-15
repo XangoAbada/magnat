@@ -134,7 +134,12 @@ pub enum StreamId {
     ExternalPriceDrift = 184,
     /// Rozrzut scoringu kredytowego (M5d §5.10).
     CreditScoringJitter = 185,
-    // 186–199 zarezerwowane dla M5 (m.in. rynek pracy od M7); rezerwa dalsza 1180–1199.
+    /// Osobowość cenowa firmy handlowej — czułość na zapas i na konkurencję, widełki
+    /// marży, skłonność do eksperymentu (M5c §5.6). Klucz: indeks firmy, tick 0, więc
+    /// parametry są stałe przez całe życie firmy. W M7 zastąpi to pełna osobowość
+    /// właściciela; numer strumienia zostaje, bo niesie go każdy zapis sprzed M7.
+    FirmPricing = 186,
+    // 187–199 zarezerwowane dla M5 (m.in. rynek pracy od M7); rezerwa dalsza 1180–1199.
 }
 
 /// Encja zastępcza dla losowania bez encji (zdarzenie globalne, generator świata).

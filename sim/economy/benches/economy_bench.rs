@@ -175,11 +175,107 @@ fn bench_uzytecznosc(c: &mut Criterion) {
     });
 }
 
+
+/// Dobowy przelot sklepu (M5c §7.3): `reprice` dla 2 tys. sklepów × asortyment,
+/// budżet **< 40 ms raz na dobę**, i obserwacja konkurencji, która go poprzedza.
+///
+/// Katalog detaliczny M5 ma 18 towarów, więc przy pełnej półce wychodzi 2 000 × 18
+/// sterowników zamiast 2 000 × 40 z dokumentu fazy. Budżet skaluje się liniowo
+/// z liczbą sterowników, więc pomiar czyta się jako „połowa budżetu na połowie
+/// asortymentu" — rozmiar katalogu podnosi M6, nie M5.
+fn bench_doba_sklepu(c: &mut Criterion) {
+    use magnat_agents::{NeedTable, PlaceEntry, PlaceTable};
+    use magnat_core::{PlaceKind, PlaceRef, WorldCoord};
+    use magnat_economy::{
+        AccountKind, AccountOwner, EconomyData, GoodTable, Market, ShopSeed,
+    };
+    use std::sync::Arc;
+
+    const SKLEPOW: u32 = 2_000;
+
+    let data = EconomyData::load_default().expect("data/economy/");
+    let klucze: Vec<String> = data.retail.goods.iter().map(|g| g.key.clone()).collect();
+    let goods = GoodTable::build(&data.retail, |k| {
+        let i = klucze.iter().position(|x| x == k)?;
+        Some((GoodId(i as u16), Money(200), Qty(250)))
+    });
+    let needs = Arc::new(NeedTable::load_default().expect("data/needs/"));
+
+    let sites: Vec<SiteId> = (0..SKLEPOW)
+        .map(|i| SiteId(Entity::new(i, NonZeroU32::MIN)))
+        .collect();
+    let places = Arc::new(PlaceTable::build(
+        sites
+            .iter()
+            .map(|s| {
+                let p = pos_of(*s);
+                PlaceEntry {
+                    place: PlaceRef::Site(*s),
+                    kind: PlaceKind::Grocery,
+                    at: WorldCoord::new((p.x * 100.0) as i32, (p.y * 100.0) as i32, 0),
+                }
+            })
+            .collect(),
+    ));
+
+    let mut books = Books::new();
+    let rest = books.open_account(
+        AccountOwner::RestOfWorld,
+        AccountKind::Current,
+        None,
+        Money::ZERO,
+    );
+    books
+        .endow(rest, Money(1_000_000_000_000), Tick(0))
+        .unwrap();
+    let market = Market::new(city_spec(), 7, data, goods, needs, places, rest);
+    for (i, s) in sites.iter().enumerate() {
+        let firm = FirmId(Entity::new(i as u32, NonZeroU32::MIN));
+        let acc = books.open_account(
+            AccountOwner::Firm(firm),
+            AccountKind::Current,
+            None,
+            Money::ZERO,
+        );
+        assert!(market.open_shop(
+            ShopSeed {
+                site: *s,
+                firm,
+                pos: pos_of(*s),
+                kind: PlaceKind::Grocery,
+                shelf_slots: 18,
+                capacity_m3: 400,
+            },
+            acc,
+            Tick(0),
+        ));
+    }
+    market.stock_initial(&mut books, Tick(0));
+    market.rebuild_index(&JobPool::new(0));
+
+    let mut doba = 0u64;
+    c.bench_function("m5c reprice 2000 sklepów", |b| {
+        b.iter(|| {
+            doba += 1;
+            black_box(market.reprice_all(Tick(doba * 1_440)))
+        });
+    });
+
+    let mut doba2 = 10_000u64;
+    c.bench_function("m5c observe_competitors 2000 sklepów", |b| {
+        b.iter(|| {
+            doba2 += 8;
+            black_box(market.observe_competitors(Tick(doba2 * 1_440)))
+        });
+    });
+}
+
 criterion_group!(
     benches,
     bench_query,
     bench_rebuild,
     bench_transfer,
-    bench_uzytecznosc
+    bench_uzytecznosc,
+    bench_doba_sklepu
 );
 criterion_main!(benches);

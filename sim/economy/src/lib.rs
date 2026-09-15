@@ -17,25 +17,30 @@
 //! - §5.5 — rozliczanie transakcji ([`MarketSystem`], [`PurchaseIntent`]),
 //! - §5.7 — punkt wymiany z M6: [`Wholesale`] i [`ExternalSupplier`].
 //!
-//! Czego tu **nie ma** i gdzie to jest: polityki cenowe i księgowość — M5c; budżety
-//! gospodarstw, banki i inflacja — M5d; panel i balansator — M5e. Rynek B2B i partie
-//! towaru należą do M6, podatki do M8.
+//! Co dokłada **M5c**:
+//! - §5.6 — polityki cenowe AI i gracza ([`PricePolicy`], [`reprice`], obserwacja
+//!   konkurencji z opóźnieniem 1–7 dni, eksperymenty cenowe),
+//! - §5.8 — księgowość zakładu ([`Ledger`], [`post`], [`income_statement`],
+//!   [`balance_sheet`], [`cash_flow`]) i hak podatkowy [`TaxEngine`] (`K-7`),
+//! - [`kernel`] — rdzeń liczbowy (D20), który M10 zawoła tym samym kodem co mezo.
 //!
-//! Podmoduł `kernel` (D20 — rdzeń liczbowy wołany tak samo przez mezo i makro)
-//! powstaje razem ze swoimi funkcjami: `next_price` w M5c/WP6, `take_cogs`
-//! i `ledger_post` w M5c/WP7. W M5b jedyna reguła, która tam trafi, jest już
-//! wydzielona w jednym miejscu ([`shop::take_units`]) i czeka na przeprowadzkę.
+//! Czego tu **nie ma** i gdzie to jest: budżety gospodarstw, banki i inflacja — M5d;
+//! panel i balansator — M5e. Rynek B2B i partie towaru należą do M6, podatki do M8.
 
 #![forbid(unsafe_code)]
 
 pub mod books;
 pub mod choice;
 pub mod data;
+pub mod kernel;
+pub mod ledger;
 pub mod market;
 pub mod offer;
+pub mod pricing;
 pub mod shop;
 pub mod supply;
 pub mod systems;
+pub mod tax;
 
 pub use books::{
     Account, AccountId, AccountKind, AccountOwner, Books, ChargeKind, ExternalInvestorId, LoanId,
@@ -47,8 +52,21 @@ pub use choice::{
     offer_noise, rating_of, status_fit, utility_of_offer, wanted_qty, weights_for, BuyerState,
     Candidate, Choice,
 };
-pub use data::{EconomyData, EconomyDataError, RetailGood, RetailTable, ThresholdSpec,
-    UtilityWeights, ECONOMY_SCHEMA_VERSION};
+pub use data::{EconomyData, EconomyDataError, PricingParams, Range, RetailGood, RetailTable,
+    ShopCosts, SpoilageStep, ThresholdSpec, UtilityWeights, ECONOMY_SCHEMA_VERSION};
+pub use kernel::{
+    clamp_to_margin, ledger_post, next_price, next_price_full, take_cogs, LedgerError,
+    PriceBreakdown, PriceInput, StockValue, BP,
+};
+pub use ledger::{
+    balance_sheet, cash_flow, close_period, income_statement, post, BalanceSheet, CashFlow,
+    IncomeStatement, JournalEntry, Ledger, LedgerAccount, PeriodClose, LEDGER_ACCOUNT_COUNT,
+};
+pub use pricing::{
+    preview_price, reprice, CompetitorEntry, CompetitorRef, CompetitorSnapshot, FirmPricing,
+    ObservedElasticity, PriceController, PriceExperiment, PricePolicy, PricingCtx,
+};
+pub use tax::{NoTax, TaxEngine};
 pub use market::{Market, MarketStats, PurchaseIntent, ShopSeed};
 pub use offer::{
     price_stats, query_offers, CategoryId, Offer, OfferId, OfferIndex, PriceBasis, PriceStats,

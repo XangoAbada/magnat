@@ -26,10 +26,10 @@
 
 use crate::ids::SiteId;
 use crate::time::MinuteOfDay;
-use crate::types::Q;
+use crate::types::{GoodId, Q};
 use crate::vocab::{
     CommitmentKind, DeprivationEffect, LifeEventKind, MigrationKind, NeedKind, PlaceRef,
-    RejectCause, StockCat, TraitId, TransportMode, UtilityKind,
+    PriceDriver, RejectCause, StockCat, TraitId, TransportMode, UtilityKind,
 };
 use serde::{Deserialize, Serialize};
 
@@ -197,7 +197,16 @@ pub enum DecisionReason {
         cause: RejectCause,
         gap_permille: i16,
     } = 302,
-    // 303–399 zarezerwowane dla M5 (`Repricing` w M5c, `CreditDecision` w M5d).
+    /// Sklep zmienił cenę oferty (M5c §5.6). `driver` mówi, który człon korekty
+    /// przeważył, `delta_bp` — o ile zmieniła się cena względem poprzedniej.
+    /// To jest odpowiedź na pytanie gracza „czemu u konkurenta potaniało".
+    Repricing {
+        site: SiteId,
+        good: GoodId,
+        driver: PriceDriver,
+        delta_bp: i16,
+    } = 303,
+    // 304–399 zarezerwowane dla M5 (`CreditDecision` w M5d).
     // ... kolejne fazy dopisują własne bloki na końcu pliku
 }
 
@@ -244,6 +253,7 @@ impl DecisionReason {
             DecisionReason::ShopChosen { .. } => 300,
             DecisionReason::OfferRejected { .. } => 301,
             DecisionReason::PurchaseDeferred { .. } => 302,
+            DecisionReason::Repricing { .. } => 303,
         }
     }
 }

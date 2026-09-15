@@ -109,7 +109,7 @@ dopiero po ostatniej podfazie; podfaza zamyka się własnym kryterium ze swojego
 |---|---|---|---|---|
 | **M5a — Pieniądz i oferta** | WP1, WP2 | 5.1, 5.2 | Test zachowania pieniądza zielony **zanim** powstanie pierwsza transakcja detaliczna — później nie da się go wprowadzić bez przepisywania. | `M5a-pieniadz-i-oferta.md` |
 | **M5b — Sklep i zakup** `[x]` | WP3, WP4, WP5 | 5.3, 5.4, 5.5, 5.7 | Mieszkaniec wychodzi po chleb, wybiera ofertę i wraca; pieniądz i sztuki zgadzają się po obu stronach. | `M5b-sklep-i-zakup.md` |
-| **M5c — Ceny i księgowość** | WP6, WP7, WP11 | 5.6, 5.8 | Sklep AI podnosi cenę przy niedoborze i obniża przy zaleganiu; rachunek wyników i bilans domykają się co do grosza. | `M5c-ceny-i-ksiegowosc.md` |
+| **M5c — Ceny i księgowość** `[x]` | WP6, WP7, WP11 | 5.6, 5.8 | Sklep AI podnosi cenę przy niedoborze i obniża przy zaleganiu; rachunek wyników i bilans domykają się co do grosza. | `M5c-ceny-i-ksiegowosc.md` |
 | **M5d — Budżety, banki, inflacja** | WP8, WP9, WP10 | 5.9, 5.10 | Inflacja emergentna: koszyk CPI liczony z transakcji świata, stopa bazowa reagująca na niego bez ręcznego sterowania. | `M5d-budzety-banki-inflacja.md` |
 | **M5e — Panel, balansator, domknięcie** | WP12, WP13, WP14 | 5.11, 5.12 | Pełny artefakt fazy z §1 dokumentu fazy: otwórz sklep, ustal ceny, obserwuj klientów; balansator w CI. | `M5e-panel-balansator-domkniecie.md` |
 
@@ -300,7 +300,8 @@ osobnym refaktorem na końcu.
 | `utility_of_offer` | < 120 ns na kandydata |
 | `purchase_decision` — cała doba (≈450 tys. decyzji × ≤15 kandydatów) | < 900 ms CPU łącznie, ≤ 3 ms na tick minutowy w szczycie |
 | `settle_transactions` (tick szczytowy, ≈2 tys. intencji) | < 1,5 ms (sekwencyjny — to jest górna granica, patrz ryzyko R3) |
-| `reprice` dla 2 tys. sklepów × 40 towarów | < 40 ms raz na dobę |
+| `reprice` dla 2 tys. sklepów × 40 towarów | < 40 ms raz na dobę (**zmierzone 1,11 ms** przy 18 towarach katalogu M5) |
+| `observe_competitors` — pełne odświeżenie obrazu konkurencji 2 tys. sklepów | < 40 ms (ścieżka dopisana po M5c; **zmierzone 27,4 ms** przy promieniu 1 200 m) |
 | Pamięć: `Offer` | **≤ 56 B** (skorygowane po M5a, `U-5`); `ShopLostSales` ≤ 256 wpisów × 16 B na sklep |
 
 Zero alokacji w `gather_candidates` i `utility_of_offer` (bufory wielokrotnego użytku) — weryfikowane
@@ -489,10 +490,14 @@ dopasowania zamiast drugiego (M7).
     (właściciel: M0), a nie samego uzgodnienia. Dotyczy WP13, czyli ostatniej podfazy — ale
     zgłoszone teraz, bo to jest ta klasa rzeczy, którą odkrywa się w tygodniu domknięcia fazy.
 
-11. **Kwantyzacja `ObservedElasticity` w stanie trwałym.**
-    Elastyczność jest floatem, ale trafia do stanu trwałego (a więc do hasha i do zapisu).
-    *Propozycja M5: przechowywać jako `i32` w bp; float tylko jako wartość pośrednia w obliczeniu.*
-    Decyzja wewnętrzna M5, zgłoszona dla spójności z dok. 00 §2.
+11. ~~**Kwantyzacja `ObservedElasticity` w stanie trwałym.**~~ — **ZAMKNIĘTE w M5c (`W-9`)**
+    zgodnie z propozycją: `ObservedElasticity.e_bp: i32` w punktach bazowych, float wyłącznie
+    jako wartość pośrednia w `det_math::ln`. Przy okazji z tego samego powodu
+    `PriceController.last_experiment` jest `Option<Tick>`, a nie `Tick`: `Tick(0)` jako „nigdy"
+    zablokowałby eksperymenty przez pierwsze 30 dób świata.
+    Poprzednie brzmienie:
+    *Elastyczność jest floatem, ale trafia do stanu trwałego (a więc do hasha i do zapisu).
+    Propozycja M5: przechowywać jako `i32` w bp; float tylko jako wartość pośrednia w obliczeniu.*
 
 12. ~~**Nazwa typu `PriceePolicy`**~~ — **ZAMKNIĘTE.** Potwierdzone: `PricePolicy`.
 
@@ -535,6 +540,25 @@ dopasowania zamiast drugiego (M7).
     bo to ten sam wołający, który już zna `travel_min` — jedno wywołanie zamiast dwóch.
     Właścicielem struktury jest M3, więc zmiana należy do M5 jako rozszerzenie cudzego typu.*
     **Do uzgodnienia z M3.** Nie blokuje M5a; blokuje WP4 w M5b.
+
+16. **Nowe, otwarte po M5c — kto daje konto stacji paliw, przewoźnikowi, taksówce i parkingowi.**
+    Niezmiennik świata z `U-17` brzmi `society::total_money + Books::total_balance() == const`
+    i **nie domyka się**, kiedy w scenariuszu jeździ ruch: mieszkaniec płaci za paliwo,
+    bilet i taryfę z komponentu `Wealth`, a drugą stroną jest `FuelLedger`/`FareLedger`
+    z `sim/traffic` — rejestr, nie konto. Po dopisaniu obu rejestrów do sumy zostaje
+    **−5,6 tys. zł przez 31 dób i +63,2 tys. zł przez 40 dób** na 100 mln zł w mieście
+    28 tys. mieszkańców — czyli rzędu 0,006–0,06 %, ale **ze zmianą znaku**, więc
+    kanałów bez pary jest co najmniej dwa i działają w przeciwne strony. Taryfa
+    taksówkowa (`FareLedger.taxi_revenue`) jest podejrzanym numer jeden: rośnie
+    o 200 tys. zł przez 40 dób, a w `sim/traffic` nie ma odpowiadającego jej zapisu
+    po stronie `Wealth`. Przy przebiegu 8-dobowym (M5b) nie było tego widać, bo obie
+    strony były poza sumą.
+    *Propozycja M5: konto dostaje stację paliw M5d razem z obrotem stacji (`T-2` mówi
+    wprost „M5 podmienia ciało na ofertę w `sim/economy`"), a przewoźnika i parking
+    M7/M8; do tego czasu bramką scenariusza jest niezmiennik P1 w księgach
+    (tolerancja 0) i domknięcie księgowości zakładu, a suma świata jest **mierzona
+    i wypisywana z rozbiciem**, nie bramkowana.* **Do uzgodnienia z M4 — kanał bez pary
+    trzeba znaleźć przed wpięciem stacji, inaczej M5d odziedziczy go razem z kontem.**
 
 ---
 
@@ -621,3 +645,20 @@ faza nie jest tu przeprojektowywana. Gwiazdka = zmiana zakresu albo kryterium.
 | U-23 ★ | **Decyzja otwarta nr 15 rozstrzygnięta inaczej, niż brzmiała propozycja: `PlaceCandidate` NIE dostaje pola `Money`.** Człon `g` liczy w M5b wyłącznie koszt czasu (`travel_min · vot`), a pieniężna część dojazdu jest zerem z nazwanym sufitem | Propozycja zakładała, że `PlaceProvider` zna koszt przejazdu — nie zna: `candidates` nie dostaje `TravelOracle`, a wołanie go 3–15 razy na decyzję to dokładnie koszt, przed którym ostrzegają R6 i R7 (`estimate` wycenia sześć opcji z routingiem i woła się już ponad milion razy na dobę **bez** udziału M5). Dopisanie pola do cudzej struktury jest tanie; wypełnienie go nie jest. Ścieżka wyjścia zostaje zapisana w kodzie przy `Candidate.travel_money` i wraca, kiedy pomiar pokaże, że czas sam nie wystarcza |
 | U-24 | **Budżet §7.3 dla `purchase_decision` mierzy się osobno od podróży, które ta decyzja generuje** | Scenariusz `m5shop` pokazał wzrost czasu doby z 0,6 s do ~10 s po uruchomieniu zakupów, a `utility_of_offer` mierzy 14,7 ns wobec budżetu 120 ns. Różnica jest w routerze M4: każdy zakup to dwa wywołania `begin_trip`. Bramka benchmarkowa fazy (WP14) musi to rozdzielać, inaczej zaczerwieni się na koszcie cudzego modułu |
 | U-25 | **Katalog `data/economy/` powstał** i jest dopisany do listy w dokumencie 00 §5: `weights.ron` (wagi użyteczności per potrzeba), `choice.ron` (temperatura, szum, progi, promień, budżety odniesienia), `retail.ron` (kategoria, trwałość, dostawa, narzut per towar, asortyment per rodzaj sklepu) | Lista katalogów w §5 deklaruje się jako kompletna, więc brak wpisu byłby jej błędem, nie luką — ta sama sytuacja co `data/ui/` przy M2 (`K-19`) |
+
+---
+
+## Zmiany wpisane po M5c
+
+Zgodnie z `K-18`. To są rzeczy, o których wiemy **na pewno** po zamknięciu M5c;
+faza nie jest tu przeprojektowywana. Gwiazdka = zmiana zakresu albo kryterium.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| X-1 ★ | **Dolny ogranicznik ceny schodzi razem z przeceną psującego się towaru** (`W-2` w `M5c`). Podłoga to `unit_cost · (10 000 + min_margin_bp + adj_spoil)` | §5.6 opisywał podłogę bez tego członu, przez co `adj_spoil` nigdy nie mógł zadziałać: −60 % od ceny z marżą 30 % to 104 gr, a podłoga przy marży minimalnej 5 % stoi na 210 gr. Kryterium „przecena psującego się" spełniałoby się tożsamościowo — czwarty raz w projekcie, kiedy kryterium mierzyło co innego niż ścieżka wywołań (po M2e, WP14 M4 i `S-4`). Bramka G3 nie traci przez to nic: dla towaru nieulegającego zepsuciu `adj_spoil == 0` |
+| X-2 ★ | **Kolejność kroków doby sklepu jest kontraktem**: odpis → obserwacja → przecena → zaopatrzenie, a domknięcie miesiąca po zaopatrzeniu (`W-13`). Warunek odświeżenia obrazu to `wiek >= delay_days`, nie `>` | Kryterium WP6 żąda reakcji na przecenę konkurenta w **1..=7 dobach**. Odwrotna kolejność `observe`/`reprice` daje 2..=8, a warunek `>` daje 1..=8. Obie pomyłki widać dopiero na rozkładzie ze 100 firm, nie na pojedynczym przypadku — i dlatego test kryterium jest zbudowany tak, jak jest |
+| X-3 ★ | **Koszty stałe zakładu weszły do M5c razem z `data/economy/shop.ron`** (`W-10`): czynsz, media, płace i amortyzacja wyposażenia. §5.8 wymienia je wśród zdarzeń księgowych, ale §4 nie przypisywał ich żadnemu pakietowi | To jest przypadek (5) z `K-18` — „pakiet obiecuje coś, czego żaden pakiet nie jest właścicielem". Sklep bez kosztów stałych ma marżę zawyżoną o całą tę pozycję, więc bramki G1–G3 stroiłyby nie ten świat. Sufity są nazwane w danych razem ze ścieżkami wyjścia: czynsz M7/M10, media M8, płace M7 |
+| X-4 ★ | **Niezmiennik świata sprawdza się przez `society::total_money`, nigdy przez własną sumę po gospodarstwach.** Scenariusz `m5shop` sumował `Household.{cash, bank, savings}` i pomijał `Population::escheat`, `Population::emigrated` oraz `Wealth` mieszkańca | Gospodarstwo znika ze świata przy zgonie, przy scaleniu po ślubie i przy wyprowadzce, a wszystkie trzy zdarzenia wypadają na **granicy miesiąca**. Przebieg 8-dobowy (M5b) pokazywał więc różnicę 0 gr i wyglądał na zielony; przy 31 dobach ta sama arytmetyka dawała −135 tys. zł i wyglądała jak wyciek pieniądza w M5c, którego nie ma. Wniosek jest ogólniejszy niż ta jedna linia: **niezmiennik pieniądza testuje się na przebiegu dłuższym niż miesiąc gry**, bo krótszy nie uruchamia demografii ani migracji |
+| X-5 ★ | **Domyślny promień obserwacji konkurencji to 1 200 m** (`W-14`), a `MatchCompetitor` może zażądać większego i wtedy płaci za niego ten sklep. §7.3 dostało własną linię budżetu dla `observe_competitors` | Pomiar: 161 ms przy 3 000 m wobec 27,4 ms przy 1 200 m dla 2 tys. sklepów. Ścieżka rośnie z **kwadratu** gęstości sklepów w promieniu, więc jest jedyną dobową ścieżką fazy, która skaluje się gorzej niż liniowo — i dlatego ma osobną bramkę benchmarkową, a nie wspólną z `reprice` |
+| | **`PurchaseIntent` niesie koszt własny sprzedanego towaru** (`W-4`). `fulfil` zdejmował z półki sztuki i odrzucał zwrócony koszt, a `return_goods` oddawał same sztuki | Bez tego `InventoryGoods` rozjeżdżał się z wyceną zapasu przy każdym nieudanym rozliczeniu, czyli P5 pękał w miejscu, którego M5b nie mógł zobaczyć — księgi jeszcze nie było. Kontrakt `LostSaleTracking` i `ShopLostSales` bez zmian |
+| | **Dokument 00 rośnie o `K-30`** (słowniki, które M5 wnosi do `engine/core`: `PriceDriver`) oraz o `shop.ron` w liście katalogów §5 | `UtilityKind` opisuje wymiar oceny **kupującego**, nie człon korekty **sprzedawcy**; wciśnięcie tam `Stock` i `Spoilage` zepsułoby kartę mieszkańca po stronie M3. Ładunek centralnego enuma musi mieszkać w `core` (`K-12`, `K-20`) |

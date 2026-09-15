@@ -60,6 +60,18 @@ pub fn goods(data: &EconomyData) -> GoodTable {
     })
 }
 
+/// Towar po kluczu tekstowym z `retail.ron`.
+#[must_use]
+pub fn good_by_key(data: &EconomyData, key: &str) -> GoodId {
+    let i = data
+        .retail
+        .goods
+        .iter()
+        .position(|g| g.key == key)
+        .expect("towar spoza data/economy/retail.ron");
+    GoodId(i as u16)
+}
+
 /// Pierwszy towar kategorii — ten, po który decyzja zakupowa sięga najpierw.
 #[must_use]
 pub fn first_good(data: &EconomyData, cat: StockCat) -> GoodId {
@@ -143,6 +155,9 @@ pub fn bench(seed: u64, pos: &[Vec2]) -> Bench {
             acc,
             Tick(0),
         ));
+        // Kapitał wniesiony na rachunek musi trafić też do księgi zakładu (M5c §5.8),
+        // inaczej `BankCurrent` od pierwszej minuty nie zgadza się z saldem konta.
+        market.record_capital(sites[i], Money(50_000_000), Tick(0));
     }
     Bench {
         market,

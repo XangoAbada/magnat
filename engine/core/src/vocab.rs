@@ -144,6 +144,27 @@ vocab_enum! {
 pub const STOCK_CAT_COUNT: usize = StockCat::ALL.len();
 
 vocab_enum! {
+    /// Który człon korekty przeważył przy zmianie ceny (M5c §5.6) — ładunek
+    /// `DecisionReason::Repricing`.
+    ///
+    /// W `core` z tego samego powodu co `StockCat` i `RejectCause` (`K-20`): ładunek
+    /// centralnego enuma nie może pochodzić z crate'u, który od `core` zależy.
+    /// Kolejność jest kontraktem, bo `as_index()` indeksuje histogram powodów przecen
+    /// w panelu sklepu (M5e).
+    ///
+    /// - `Cost` — ruszył się koszt własny; marża docelowa bez zmian.
+    /// - `Stock` — zapas odbiegł od celu (nadmiar w dół, brak w górę).
+    /// - `Competitor` — obserwowana cena konkurenta (z opóźnieniem 1–7 dni).
+    /// - `Experiment` — trwający eksperyment cenowy albo zmierzona elastyczność.
+    /// - `Spoilage` — przecena towaru przy kończącym się terminie ważności.
+    /// - `Floor` / `Ceiling` — cena oparła się o dolny albo górny ogranicznik marży.
+    /// - `Policy` — zmiana wynika wprost z polityki (ręczna cena, dopasowanie do konkurenta).
+    PriceDriver {
+        Cost, Stock, Competitor, Experiment, Spoilage, Floor, Ceiling, Policy,
+    }
+}
+
+vocab_enum! {
     /// Dlaczego oferta odpadła albo zakup się nie odbył (M5b §5.4, PRD §14.1).
     ///
     /// W `core`, bo jest **ładunkiem centralnego enuma** `DecisionReason` — ta sama

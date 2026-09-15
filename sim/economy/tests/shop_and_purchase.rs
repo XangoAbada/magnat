@@ -38,6 +38,7 @@ fn zatowarowany(seed: u64, pos: &[Vec2], units: i64) -> Bench {
             Qty(units * 1_000),
             Money(units * WHOLESALE_BASE),
             None,
+            Tick(0),
         );
     }
     b.market.restock_shelves();
@@ -65,7 +66,7 @@ fn polka_i_zaplecze_to_dwa_stany() {
     let (site, g) = (b.sites[0], towar());
     // Towar na zapleczu **nie jest** na sprzedaż: oferta widzi wyłącznie półkę.
     b.market
-        .deliver_now(site, g, Qty(50_000), Money(10_000), None);
+        .deliver_now(site, g, Qty(50_000), Money(10_000), None, Tick(0));
     assert_eq!(b.market.backroom_qty(site, g), Some(Qty(50_000)));
     assert_eq!(b.market.shelf_qty(site, g), Some(Qty::ZERO));
 
@@ -293,7 +294,7 @@ fn kazda_decyzja_ma_powod() {
         .map(|i| {
             let budzet = if i == 5 { 1 } else { 1_000_000 };
             if i == 5 {
-                b.market.deliver_now(site, towar(), Qty(4_000), Money(800), None);
+                b.market.deliver_now(site, towar(), Qty(4_000), Money(800), None, Tick(0));
                 b.market.restock_shelves();
             }
             b.market.fulfil(&zadanie(i, i, site, budzet))

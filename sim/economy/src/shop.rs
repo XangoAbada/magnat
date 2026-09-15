@@ -13,6 +13,9 @@ use magnat_core::{
     REJECT_CAUSE_COUNT,
 };
 
+use crate::ledger::Ledger;
+use crate::pricing::{CompetitorSnapshot, FirmPricing, PriceController};
+
 /// Linia zapasu. `expires` to **jedna data na linię** — M5 nie ma partii, więc
 /// dostawa dokłada się do istniejącej linii i przesuwa datę na wcześniejszą z dwóch
 /// (ostrożniej, nie „średnio"). M6 zastępuje to `BatchId` i wyceną FIFO.
@@ -55,25 +58,21 @@ impl StockLine {
 ///
 /// Jedna funkcja dla zaplecza i dla półki, bo to jest jedna reguła domenowa
 /// (DRY dotyczy wiedzy): wycena średnią ważoną schodzi tak samo po obu stronach.
-/// M5c/WP7 przenosi ją do `kernel` jako `take_cogs`, razem z księgowaniem.
+///
+/// **Ciało przeniosło się w M5c do [`crate::kernel::take_cogs`]** (D20 — makro M10
+/// ma wołać ten sam kod co mezo). Tutaj została wyłącznie wygodna nakładka na parę
+/// pól w miejscu, bo tak wygląda linia zapasu; zachowanie jest identyczne co do
+/// grosza i pilnuje tego złoty plik ciągu hashy.
 pub fn take_units(qty: &mut Qty, cost_total: &mut Money, take: Qty) -> Money {
-    debug_assert!(take.get() >= 0, "ilość zdejmowana musi być nieujemna");
-    let have = qty.get();
-    let take = take.get().min(have);
-    if take <= 0 {
-        return Money::ZERO;
-    }
-    if take == have {
-        let all = *cost_total;
-        *qty = Qty::ZERO;
-        *cost_total = Money::ZERO;
-        return all;
-    }
-    let cost = cost_total.mul_ratio(take, have);
-    *qty = Qty(have - take);
-    *cost_total = cost_total
-        .checked_sub(cost)
-        .expect("zapas: koszt nie może zejść poniżej zera");
+    let (cost, reszta) = crate::kernel::take_cogs(
+        crate::kernel::StockValue {
+            qty: *qty,
+            cost_total: *cost_total,
+        },
+        take,
+    );
+    *qty = reszta.qty;
+    *cost_total = reszta.cost_total;
     cost
 }
 
@@ -111,6 +110,10 @@ pub struct ShelfLine {
     /// Ile miejsc na półce; limit ekspozycji, czyli sufit `qty`.
     pub facings: u16,
     pub offer: crate::offer::OfferId,
+    /// Data ważności towaru **wyłożonego** — przychodzi z zaplecza przy uzupełnianiu
+    /// półki (M5c). Bez niej odpis przeterminowanego (§5.8) i przecena psującego się
+    /// (§5.6) widziałyby wyłącznie zaplecze, a psuje się to, co leży na wierzchu.
+    pub expires: Option<SimMinute>,
 }
 
 impl ShelfLine {
@@ -268,7 +271,25 @@ pub struct Shop {
     pub lost: ShopLostSales,
     /// Licznik sprzedanych sztuk od początku świata — wejście do metryk balansatora.
     pub sold_qty: i64,
+    /// Szybki podgląd obrotu dla scenariusza. **Liczbą w panelu jest `Revenue`
+    /// z [`Ledger`]**, nie to pole — księga jest źródłem prawdy o wyniku (§5.8).
     pub revenue: Money,
+    // ── M5c ──
+    /// Osobowość cenowa firmy: czułości i widełki marży (§5.6).
+    pub pricing: FirmPricing,
+    /// Sterownik ceny per towar. `BTreeMap`, więc iteracja idzie po `GoodId`
+    /// i nie zależy od kolejności wstawiania (00 §3.2).
+    pub controllers: BTreeMap<GoodId, PriceController>,
+    /// Obraz cen konkurencji z opóźnieniem 1–7 dni (§6.3).
+    pub observed: CompetitorSnapshot,
+    /// Księga zakładu (§5.8).
+    pub ledger: Ledger,
+    /// Powody ostatnich przecen — wyjaśnialność §7 dla zakładów śledzonych.
+    /// Nie wchodzi do hasha z tego samego powodu co pierścień utraconych sprzedaży:
+    /// prowadzi go wyłącznie zakład oznaczony, a oznaczenie nie jest stanem świata.
+    pub reprice_log: Vec<magnat_core::DecisionReason>,
+    /// Miesięczny odpis amortyzacyjny wyposażenia, liniowy.
+    pub depreciation_monthly: Money,
 }
 
 impl HashState for StockLine {
@@ -305,6 +326,16 @@ impl HashState for Shop {
         }
         h.write_i64(self.sold_qty);
         self.revenue.hash_state(h);
+        // M5c: stan cenowy i księgowy jest **stanem trwałym**, więc wchodzi do hasha
+        // (00 §3.6). Poziom śledzenia i pierścień dziennika — nie (`U-22`).
+        h.write_u32(self.controllers.len() as u32);
+        for (g, pc) in &self.controllers {
+            g.hash_state(h);
+            pc.hash_state(h);
+        }
+        self.observed.hash_state(h);
+        self.ledger.hash_state(h);
+        self.depreciation_monthly.hash_state(h);
     }
 }
 
@@ -354,6 +385,7 @@ mod tests {
             cost_total: Money::ZERO,
             facings: 1,
             offer: crate::offer::OfferId::from_bits(1 << 32).unwrap(),
+            expires: None,
         };
         assert!(s.insert(l(7)));
         assert!(s.insert(l(3)));

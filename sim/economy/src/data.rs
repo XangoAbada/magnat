@@ -1,9 +1,12 @@
 //! Dane gospodarki detalicznej — `data/economy/` (M5b §5.3, §5.4).
 //!
-//! Trzy pliki, trzech różnych właścicieli zmiany:
+//! Cztery pliki, czterech różnych właścicieli zmiany:
 //! - `weights.ron` — wagi bazowe funkcji użyteczności per potrzeba; zmienia je projektant,
 //! - `choice.ron` — temperatura, szum, progi, promień; zmienia je **balansator** (M5e),
-//! - `retail.ron` — kategoria, trwałość, czas dostawy i narzut per towar; zmienia je modder.
+//! - `retail.ron` — kategoria, trwałość, czas dostawy i narzut per towar; zmienia je modder,
+//! - `shop.ron` — osobowość cenowa firmy i koszty stałe zakładu (M5c); stroi je
+//!   **balansator**, bo to `min_margin_bp` stąd jest dolnym ogranicznikiem, którego
+//!   pilnuje bramka G3 (brak spirali deflacji).
 //!
 //! Żaden z nich nie powtarza `data/goods/`: cena hurtowa, gęstość i masa sztuki
 //! zostają w katalogu towarów, bo to jedno źródło prawdy o towarze (00 §5).
@@ -14,7 +17,7 @@
 
 use std::path::Path;
 
-use magnat_core::{Money, NeedKind, PlaceKind, StockCat, NEED_COUNT, STOCK_CAT_COUNT};
+use magnat_core::{Money, NeedKind, PlaceKind, Rng, StockCat, NEED_COUNT, STOCK_CAT_COUNT};
 use serde::Deserialize;
 
 pub const ECONOMY_SCHEMA_VERSION: u32 = 1;
@@ -242,6 +245,94 @@ impl RetailTable {
     }
 }
 
+// ── shop.ron ─────────────────────────────────────────────────────────────────────
+
+/// Widełki parametru losowanego raz na firmę (M5c §5.6).
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Deserialize)]
+pub struct Range {
+    pub min: i32,
+    pub max: i32,
+}
+
+impl Range {
+    /// Losuje z zakresu domkniętego. Pusty albo odwrócony zakres daje `min` —
+    /// dane wadliwe nie mają prawa panikować w środku generacji świata.
+    pub fn pick(self, r: &mut Rng) -> i32 {
+        if self.max <= self.min {
+            return self.min;
+        }
+        let szerokosc = u32::try_from(i64::from(self.max) - i64::from(self.min) + 1).unwrap_or(1);
+        self.min + r.gen_range_u32(szerokosc) as i32
+    }
+}
+
+/// Próg przeceny psującego się towaru: „zostało ≤ `days_left` dni → korekta `adj_bp`".
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Deserialize)]
+pub struct SpoilageStep {
+    pub days_left: u16,
+    pub adj_bp: i32,
+}
+
+/// Parametry polityki cenowej — wejście [`crate::pricing::FirmPricing::draw`]
+/// i [`crate::pricing::reprice`].
+#[derive(Clone, Debug, Deserialize)]
+pub struct PricingParams {
+    pub target_margin_bp: Range,
+    pub min_margin_bp: Range,
+    pub max_margin_bp: Range,
+    pub k_stock: Range,
+    pub k_comp: Range,
+    pub risk: Range,
+    pub experiment_risk_min: i32,
+    pub experiment_cooldown_days: u16,
+    pub experiment_bp: Range,
+    pub experiment_len_days: u8,
+    pub experiment_noise_permille: i32,
+    /// Czytane od góry: pierwszy próg, w którym się mieścimy, wygrywa. Loader
+    /// **sortuje rosnąco po `days_left`**, więc kolejność w pliku nie jest kontraktem.
+    pub spoilage: Vec<SpoilageStep>,
+    pub observe_delay_days: Range,
+    pub observe_radius_m: u32,
+}
+
+/// Koszty stałe zakładu, miesięcznie (kalendarz 360-dniowy, `K-1`).
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Deserialize)]
+pub struct ShopCosts {
+    pub rent_gr_per_slot: i64,
+    pub utilities_gr_per_slot: i64,
+    pub wages_gr_per_slot: i64,
+    pub equipment_gr_per_slot: i64,
+    pub depreciation_months: u32,
+}
+
+impl ShopCosts {
+    /// Suma kosztów stałych sklepu o tylu miejscach na półce.
+    #[must_use]
+    pub fn monthly(&self, slots: u16) -> (Money, Money, Money) {
+        let n = i64::from(slots.max(1));
+        (
+            Money(self.rent_gr_per_slot * n),
+            Money(self.utilities_gr_per_slot * n),
+            Money(self.wages_gr_per_slot * n),
+        )
+    }
+
+    /// Wartość początkowa wyposażenia i miesięczny odpis liniowy.
+    #[must_use]
+    pub fn equipment(&self, slots: u16) -> (Money, Money) {
+        let wartosc = Money(self.equipment_gr_per_slot * i64::from(slots.max(1)));
+        let odpis = wartosc.div_round_half_up(i64::from(self.depreciation_months.max(1)));
+        (wartosc, odpis)
+    }
+}
+
+#[derive(Deserialize)]
+struct ShopFile {
+    schema_version: u32,
+    pricing: PricingParams,
+    costs: ShopCosts,
+}
+
 // ── złożone dane fazy ────────────────────────────────────────────────────────────
 
 /// Wszystko, co decyzja zakupowa czyta z `data/economy/`.
@@ -259,6 +350,8 @@ pub struct EconomyData {
     pub purchase_days: u8,
     pub home_stock_min_days: u8,
     pub retail: RetailTable,
+    pub pricing: PricingParams,
+    pub costs: ShopCosts,
 }
 
 impl EconomyData {
@@ -384,6 +477,25 @@ impl EconomyData {
             }
         }
 
+        let mut sf: ShopFile = read(&dir.join("shop.ron"), "economy/shop.ron")?;
+        if sf.schema_version != ECONOMY_SCHEMA_VERSION {
+            return Err(EconomyDataError::Schema {
+                file: "economy/shop.ron",
+                found: sf.schema_version,
+                want: ECONOMY_SCHEMA_VERSION,
+            });
+        }
+        if sf.pricing.spoilage.is_empty() {
+            return Err(EconomyDataError::Missing {
+                file: "economy/shop.ron",
+                key: "pricing.spoilage",
+            });
+        }
+        // Progi przeceny czyta się „pierwszy pasujący wygrywa", więc muszą iść od
+        // najkrótszego terminu. Sortowanie tutaj znaczy, że kolejność w pliku nie
+        // jest kontraktem i modder nie zepsuje przeceny przestawieniem wierszy.
+        sf.pricing.spoilage.sort_by_key(|s| s.days_left);
+
         Ok(EconomyData {
             weights,
             thresholds,
@@ -402,6 +514,8 @@ impl EconomyData {
                 goods: rf.goods,
                 shop_kinds: rf.shop_kinds,
             },
+            pricing: sf.pricing,
+            costs: sf.costs,
         })
     }
 

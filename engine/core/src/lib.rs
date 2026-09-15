@@ -55,6 +55,6 @@ pub use types::{
 pub use weather::{weather_at, Weather};
 pub use vocab::{
     ActivityKind, Biome, CommitmentKind, DeprivationEffect, LifeEventKind, MigrationKind, NeedKind,
-    PlaceKind, PlaceRef, RejectCause, ResourceKind, RoadClass, StockCat, TraitId, TransportMode,
+    PlaceKind, PlaceRef, PriceDriver, RejectCause, ResourceKind, RoadClass, StockCat, TraitId, TransportMode,
     UtilityKind, UtilityService, WorldCoord, NEED_COUNT, REJECT_CAUSE_COUNT, STOCK_CAT_COUNT,
 };

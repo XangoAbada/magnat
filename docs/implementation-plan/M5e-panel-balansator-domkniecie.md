@@ -110,3 +110,20 @@ pub struct CompetitorRow { pub site: SiteId, pub distance_m: u32,
 tak samo jak AI. Nakładka mapy cieplnej „zasięg sklepu" (§14.2) rysowana z `customers.by_district`.
 
 ---
+
+---
+
+## Zmiany wpisane po M5c
+
+Zgodnie z `K-18`. Wpisane jest **tylko to, co wiadomo na pewno** po zamknięciu M5c —
+podfaza nie jest tu przeprojektowywana.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| ★ | **Meta-test bramki G3 jest zmianą jednej linii w `kernel::next_price_full`.** „Usunięcie dolnego ogranicznika ceny musi zaczerwienić bramkę deflacji" ma teraz konkretny adres: `let floor = mul_bp(cost, BP + min_margin_bp + adj_spoil)` | Kryterium WP13 mówiło „sztucznie wprowadzony błąd", nie mówiąc gdzie. Po wydzieleniu rdzenia (D20) ogranicznik jest jedną linią w jednej funkcji bez stanu, więc meta-test da się napisać jako test rdzenia z podmienionym wejściem, a nie jako przebieg z pokiereszowanym kodem produkcyjnym |
+| ★ | **`MarketStats` urosło o pięć pozycji, które balansator ma zbierać**: `reprices`, `observations`, `write_offs`, `write_off_value`, `expired_qty`. Lista metryk w §7.4 dokumentu fazy wymienia rozkład cen, CPI, marże, bankructwa, `deferral_rate`, `stockout_rate` i HHI — odpisy towaru przeterminowanego nie były tam wymienione, a są **pierwszym** objawem złej kalibracji zamówień | Zmierzone w scenariuszu `m5shop` (8 dób, 60 sklepów): 230 odpisów za 2,3 mln zł przy obrocie 1,2 mln zł. To nie jest szum — to sygnał, że `ReorderPolicy` zamawia na 8 dni sprzedaży towar o 3-dniowym terminie. Bramka na stosunek `write_off_value` do obrotu jest tańsza niż wypatrzenie tego w rozkładzie marż |
+| ★ | **Panel sklepu ma gotowe wejścia i nie potrzebuje nowych struktur po stronie `sim/economy`.** `FinanceSummary` z §5.12 wypełnia się z `Market::{income_statement, balance_sheet, cash_flow}`, `ShelfRow.policy` z `Market::policy_of`, `ShelfRow.unit_cost`/`margin_bp` z `LedgerAccount::{Cogs, Revenue}`, `CompetitorRow.observed_age_days` z `CompetitorEntry.seen_at`, a „dlaczego potaniało" z `Market::reprice_log` | WP12 jest przez to pracą po stronie `engine/ui`, a nie po obu stronach. Jedyne, czego nie ma, to `ShelfRow.turnover_7d` — obrót tygodniowy wymaga okna, którego `PriceController` nie prowadzi (ma dobę bieżącą i poprzednią, na potrzeby eksperymentu) |
+| ★ | **Podgląd „co by się stało z ceną dziś" istnieje jako `Market::preview_policy`** i woła **to samo** składanie co `reprice` | To jest połowa WP11, która należała do UI. Osobna arytmetyka podglądu rozjechałaby się z wykonaniem przy pierwszej zmianie wzoru, a gracz zobaczyłby to dopiero po zatwierdzeniu polityki |
+| | **`cash_flow` dla zakładu **nieśledzonego** zwraca `complete: false`.** Pierścień dziennika prowadzą wyłącznie zakłady oznaczone (`W-7` w dokumencie M5c) | Panel musi to pokazać, a nie przemilczeć: liczba obcięta oknem dziennika wygląda jak liczba prawdziwa. Zakład gracza jest zawsze śledzony, więc dla niego problem nie występuje — ale karta konkurenta już tak |
+| | **Kolejność kroków doby sklepu jest kontraktem** (`W-13`): odpis → obserwacja → przecena → zaopatrzenie, a miesiąc domyka się po zaopatrzeniu. Tabela systemów w §5.11 wymienia je bez kolejności | Przy odwrotnej kolejności `observe`/`reprice` reakcja na przecenę konkurenta mieści się w 2..=8 dobach zamiast 1..=7 i kryterium WP6 pęka **na rozkładzie**, a nie na pojedynczym przypadku. Tabela §5.11 opisuje częstotliwości, więc wystarczy dopisać tam, że te cztery systemy mają ustaloną kolejność wewnątrz doby |
+| | **`observe_competitors` dostało budżet w §7.3**: pełne odświeżenie 2 tys. sklepów < 40 ms, zmierzone 27,4 ms przy promieniu 1 200 m. §7.3 tej ścieżki nie miało, bo powstała dopiero w M5c | Bramka benchmarkowa WP14 musi ją mierzyć osobno od `reprice` (1,11 ms) — obie są dobowe, ale rosną z czego innego: `reprice` z liczby sterowników, `observe` z **kwadratu** gęstości sklepów w promieniu |
