@@ -130,7 +130,7 @@ i nikt by nie zobaczył, czy w ogóle cokolwiek wykrywa.
 | WP | Nazwa | Zależy od | Rozmiar | Status |
 |---|---|---|---|---|
 | R-WP1 | Reguła i skrypt kontroli strukturalnej | — | M | `[x]` |
-| R-WP2 | `tools/magnat/src/main.rs` | R-WP1 | S | `[ ]` |
+| R-WP2 | `tools/magnat/src/main.rs` | R-WP1 | S | `[x]` |
 | R-WP3 | `engine/render/src/renderer.rs` | R-WP1 | L | `[ ]` |
 | R-WP4 | `sim/world/src/population/mod.rs` | R-WP1 | L | `[ ]` |
 | R-WP5 | `sim/world/src/city/sites.rs` | R-WP1 | M | `[ ]` |
@@ -692,7 +692,9 @@ Pusta na start. Wiersz wpisuje się w tym samym commicie, w którym próg zosta�
 
 | # | Plik | Metryka i wartość | Świadomie zostawione, bo | Ścieżka wyjścia |
 |---|---|---|---|---|
-| | | | | |
+| 1 | `tools/magnat/src/app.rs` | blok `impl App` — 460 linii (ostrzeżenie od 300) | Dziesięć metod pętli okna, każda potrzebuje `&mut self` do tych samych pól stanu klienta. Podział przez `impl App` w modułach potomnych jest możliwy, ale dopiero wtedy, gdy będzie wiadomo, wzdłuż czego — dziś nie ma drugiego tematu, jest jeden temat o dziesięciu krokach | M11 (prezentacja) dokłada tu animacje, wnętrza i budżet klatki. Wtedy szew się pokaże sam i próg błędu 500 padnie w tej samej fazie |
+| 2 | `tools/magnat/src/app.rs` | `App::klatka` — 249 linii (błąd od 250) | Robi w jednym ciągu osiem rzeczy (czas gry, clamp kamery, scena pomiarowa, strumieniowanie, zrzut PNG, próbka benchmarku, klatka UI, tytuł okna) i **każdy podział przestawia kolejność wywołań**, czego R1 §3 reguła 2 zakazuje bezwarunkowo | M11b (animacja i LOD) albo M11e (budżet klatki) — obie i tak muszą tę funkcję rozłożyć, żeby zmierzyć koszt per etap |
+| 3 | `tools/magnat/src/main.rs` | `main` — 154 linie (ostrzeżenie od 150), z czego ~80 to literał `App { … }` o 46 polach | Ten literał jest jedynym powodem, dla którego 46 pól `App` musi być `pub(crate)`. Zamiana na `App::from_args(...)` kasuje jedno i drugie, ale to **nowy symbol i zmiana kształtu wywołania** — poza zakresem R1 (§2 „nie wchodzi") | Konstruktor `App::from_args` przy pierwszej fazie, która i tak dotyka konstrukcji klienta (M9b rdzeń UI albo M11) |
 
 ---
 
@@ -709,6 +711,7 @@ gdzie indziej, niż zakłada `M6d-zloza-i-koniec-dostawcy-zewnetrznego.md`).
 | D-3 | **`market.rs` ma 3 228 linii, nie „~3 000", i trzy bloki `impl` powyżej 500** (860, 821, 510), a nie jeden. Szew (f) rozpada się na dwa: `service_working_capital` i `maybe_borrow_working_capital` sięgają `self.shops` czternaście razy i `self.budgets` ani razu — to kapitał obrotowy **firmy**, wołany z `close_month`, a nie miesiąc gospodarstwa. Dochodzi ósmy szew (h): rozliczenie transakcji (`take_intents`, `return_goods`, `record_sale`, ~98 linii), nierozdzielne od (e). `close_month` (73 linie) nie należał do żadnego szwu i idzie z (f′) | Wpis po M5d nazywał (f) „najczystszym szwem z całej szóstki" i to było nieprawdą — pomiar odwołań pokazał, że połowa (f) dotyka sklepów. Teza o (g) jako jedynym szwie bez zapisu **potwierdza się**: `balance_sample` i `shop_panel` biorą `self.lock()` bez `mut`, a `hash_state` haszuje wyłącznie pola, których one nie ruszają |
 | D-4 | **`MarketInner` nie potrzebuje `pub(crate)` na polach**, wbrew ograniczeniu z wpisu po M5c. Warunkiem jest katalog `market/` (moduły potomne), nie moduły siostrzane `market_*.rs` | Rust udostępnia elementy prywatne modułowi definiującemu **i wszystkim jego potomkom**, więc `use super::*` wystarcza. Ograniczenie z M5c dotyczyło wariantu siostrzanego, który z tego właśnie powodu odpada |
 | D-5 | **Kolumna „dziś" w tabeli progów §6 jest nieaktualna** (mierzona przy pisaniu dokumentu, w trakcie M5c). Pomiar `struct_guard.py --all` na `master` po M5e: 206 plików produkcyjnych, plik 15 ostrzeżeń / 10 błędów (+3 wyjątki), `impl` 7 / 8, funkcja 22 / 12, `mod.rs` 0 / 2 | Nie jest to korekta progów — `D-R1` zostaje bez zmian. Liczby urosły, bo M5d i M5e dopisały ~1 700 linii do `market.rs`, a to jest właśnie zjawisko, które reguła z §6 ma łapać. Kolumna zostaje w dokumencie jako zapis stanu z chwili pisania; stan bieżący daje skrypt |
+| D-7 | **Rusztowania `pub use` z procedury §3 pkt 2 nie powstają w crate'ach binarnych.** R-WP2 ich nie potrzebował: `magnat` jest binarką, więc wszystkie wywołania są wewnątrz crate'u i ścieżki poprawia się od razu jawnymi `use`, a kompilator weryfikuje je w całości. R-WP10 nie ma po tym pakiecie nic do posprzątania | Powód, dla którego rusztowanie w ogóle istnieje (§3 pkt 5, ryzyko R-6), znika, gdy zbiór wywołań jest zamknięty w jednym crate'cie i mieści się w jednym diffie. To samo będzie dotyczyć każdego pakietu, którego podział nie wychodzi poza crate — wpisane, żeby R-WP10 nie szukał czegoś, czego nie ma |
 | D-6 | **Definicja „linii kodu" jest rozstrzygnięta i zmierzona:** wszystkie linie pliku poza blokiem `#[cfg(test)]`, razem z pustymi i komentarzami | §1 podawał liczby bez definicji. Kalibracja zgadza się co do jednej linii z §5 dla całej trójki wyjątków (`cch.rs` 942, `det_math.rs` 876, `graph.rs` 1064) i dla `renderer.rs` (2693), więc to jest ta definicja, którą liczono ręcznie — skrypt ją tylko utrwala |
 
 ---
