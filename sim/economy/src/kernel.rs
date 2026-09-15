@@ -116,7 +116,8 @@ pub fn next_price_full(i: PriceInput) -> PriceBreakdown {
     let adj_elast = i.adj_elast_bp.clamp(-500, 500);
     let adj_spoil = i.adj_spoil_bp.clamp(-6_000, 0);
 
-    let suma = i64::from(adj_stock) + i64::from(adj_comp) + i64::from(adj_elast) + i64::from(adj_spoil);
+    let suma =
+        i64::from(adj_stock) + i64::from(adj_comp) + i64::from(adj_elast) + i64::from(adj_spoil);
     let surowa = mul_bp(base, BP + suma);
 
     // Podłoga chroni przed **spiralą deflacyjną**, nie przed wyprzedażą towaru,
@@ -154,7 +155,12 @@ pub fn next_price(i: PriceInput) -> Money {
 /// marży. Ogranicznik obowiązuje **każdą** ścieżkę, nie tylko `Dynamic` — inaczej
 /// polityka „−2 % od najtańszego" schodziłaby poniżej kosztu razem z konkurentem.
 #[must_use]
-pub fn clamp_to_margin(price: Money, unit_cost: Money, min_bp: i32, max_bp: i32) -> (Money, bool, bool) {
+pub fn clamp_to_margin(
+    price: Money,
+    unit_cost: Money,
+    min_bp: i32,
+    max_bp: i32,
+) -> (Money, bool, bool) {
     let cost = unit_cost.get().max(0);
     let floor = mul_bp(cost, BP + i64::from(min_bp));
     let ceil = mul_bp(cost, BP + i64::from(max_bp)).max(floor);

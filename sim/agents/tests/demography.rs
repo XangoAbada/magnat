@@ -190,7 +190,9 @@ fn prop_no_orphan_household() {
     }
 
     for c in world.resource::<Population>().citizens() {
-        let id = world.get::<Identity>(*c).expect("mieszkaniec bez tożsamości");
+        let id = world
+            .get::<Identity>(*c)
+            .expect("mieszkaniec bez tożsamości");
         assert!(id.is_alive(), "martwy mieszkaniec w spisie");
         let hh = demography::household_by_index(&world, id.household);
         assert!(
@@ -212,7 +214,10 @@ fn prop_household_membership() {
     let mut widziani: Vec<u32> = Vec::new();
     let gospodarstwa: Vec<Entity> = world.resource::<Population>().households().to_vec();
     for hh_e in &gospodarstwa {
-        let hh = world.get::<Household>(*hh_e).copied().expect("gospodarstwo");
+        let hh = world
+            .get::<Household>(*hh_e)
+            .copied()
+            .expect("gospodarstwo");
         let sklad = household::members_of(
             hh_e.index(),
             &hh,
@@ -225,7 +230,10 @@ fn prop_household_membership() {
             hh_e.index()
         );
         for m in sklad.iter() {
-            assert!(!widziani.contains(m), "mieszkaniec {m} w dwóch gospodarstwach");
+            assert!(
+                !widziani.contains(m),
+                "mieszkaniec {m} w dwóch gospodarstwach"
+            );
             widziani.push(*m);
             let c = demography::citizen_by_index(&world, *m).expect("członek spoza spisu");
             assert_eq!(
@@ -249,7 +257,10 @@ fn prop_no_immortals() {
     przebieg(&mut world, 0, 3_600);
     let dzis = 3_600i32;
     for c in world.resource::<Population>().citizens() {
-        let wiek = world.get::<Identity>(*c).expect("tożsamość").age_years(dzis);
+        let wiek = world
+            .get::<Identity>(*c)
+            .expect("tożsamość")
+            .age_years(dzis);
         assert!(wiek <= 120, "mieszkaniec {} ma {wiek} lat", c.index());
         assert!(wiek >= 0, "mieszkaniec urodzony w przyszłości");
     }
@@ -368,7 +379,8 @@ fn prop_inheritance_conservation() {
     przebieg(&mut world, 0, 1_440);
     let po = society::total_money(&world);
     assert_eq!(
-        przed, po,
+        przed,
+        po,
         "pieniądz zmienił się o {} groszy przez cztery lata gry",
         po - przed
     );
@@ -596,7 +608,10 @@ fn wp9_plotka_zna_kilometr_i_nie_zna_pieciu() {
             dalecy = (dalecy.0 + zna, dalecy.1 + 1);
         }
     }
-    assert!(bliscy.1 > 20 && dalecy.1 > 20, "za mało próbek: {bliscy:?} {dalecy:?}");
+    assert!(
+        bliscy.1 > 20 && dalecy.1 > 20,
+        "za mało próbek: {bliscy:?} {dalecy:?}"
+    );
 
     let blisko = f64::from(bliscy.0) * 100.0 / f64::from(bliscy.1);
     let daleko = f64::from(dalecy.0) * 100.0 / f64::from(dalecy.1);

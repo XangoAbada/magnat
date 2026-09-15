@@ -24,9 +24,9 @@
 pub mod mezo;
 pub mod micro;
 pub mod mode;
+pub mod oracle;
 pub mod overlay;
 pub mod parking;
-pub mod oracle;
 pub mod spec;
 pub mod systems;
 pub mod transit;
@@ -42,29 +42,29 @@ pub use micro::{
     PedestrianBuffer, VehicleBuffer, VehicleFeed, CALIBRATION_VEHICLE_CM, IDM_SCHEMA_VERSION,
     MICRO_UNIT_CAP, NO_EDGE,
 };
-pub use overlay::{
-    rasterize_edges, rasterize_points, OverlayInputs, TrafficField, TrafficOverlay,
-    TrafficOverlaySnapshot,
-};
 pub use mode::{
     evaluate_modes, Candidate, DiscomfortBreakdown, GeneralizedCost, Infeasible, ModeChoiceParams,
     ModeContext, ModeDecision, OptionOffer, ShareRange, TravelOption, MODE_CHOICE_SCHEMA_VERSION,
 };
-pub use parking::{
-    ParkingDenied, ParkingKind, ParkingLot, ParkingRegistry, ParkingSlotRef, CURB_WALK_RADIUS_M,
-    MAX_LOTS_SEARCHED, NO_LOT,
-};
 pub use oracle::{
     speed_pct, walk_minutes_for, DriverEntry, OracleHandle, Station, TrafficOracle,
     FUEL_RESERVE_FACTOR, WALK_SPEED_CM_PER_MIN,
+};
+pub use overlay::{
+    rasterize_edges, rasterize_points, OverlayInputs, TrafficField, TrafficOverlay,
+    TrafficOverlaySnapshot,
+};
+pub use parking::{
+    ParkingDenied, ParkingKind, ParkingLot, ParkingRegistry, ParkingSlotRef, CURB_WALK_RADIUS_M,
+    MAX_LOTS_SEARCHED, NO_LOT,
 };
 pub use spec::{
     DataError, FuelKind, VdfClass, VdfTable, VehicleCatalog, VehicleClassId, VehicleClassSpec,
     VDF_SCHEMA_VERSION, VEHICLES_SCHEMA_VERSION,
 };
 pub use systems::{
-    TripLog, TripRecord,
-    register_traffic, FareLedger, FuelLedger, TrafficServices, TrafficSystem, VehicleWearSystem,
+    register_traffic, FareLedger, FuelLedger, TrafficServices, TrafficSystem, TripLog, TripRecord,
+    VehicleWearSystem,
 };
 pub use transit::{
     LineId, OperatorRef, Timetable, TransitEvent, TransitJourney, TransitLine, TransitMode,

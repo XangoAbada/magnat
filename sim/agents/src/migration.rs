@@ -17,7 +17,7 @@
 //! wieku, dochód↔wartość lokalu, histogram dojazdu — i nadpisuje, co potrzebuje.
 
 use crate::components::{
-    AgentState, Employment, Identity, KnowledgeRef, Lifecycle, Needs, PlanRef, Personality,
+    AgentState, Employment, Identity, KnowledgeRef, Lifecycle, Needs, Personality, PlanRef,
     RelationsRef, Residence, Skills, Vitals, Wealth,
 };
 use crate::demography::{
@@ -584,7 +584,9 @@ pub fn wyprowadz(world: &mut World, hh_e: Entity, cmd: &mut CommandBuffer) -> u3
             value: Money::ZERO,
         });
     }
-    world.resource_mut::<HouseholdOverflow>().clear_household(idx);
+    world
+        .resource_mut::<HouseholdOverflow>()
+        .clear_household(idx);
     world.resource_mut::<Unsettled>().forget(idx);
     world.resource_mut::<Population>().remove_household(hh_e);
     world.resource_mut::<Population>().departures += u64::from(n);
@@ -738,8 +740,8 @@ pub fn spawn_household_aged(
 
     let mut czlonkowie: Vec<Entity> = Vec::with_capacity(usize::from(adults + children));
     for i in 0..adults {
-        let wiek = i32::from(adult_age_min)
-            + r.gen_range_u32(u32::from(adult_age_spread).max(1)) as i32;
+        let wiek =
+            i32::from(adult_age_min) + r.gen_range_u32(u32::from(adult_age_spread).max(1)) as i32;
         // Para dorosłych jest różnopłciowa z konstrukcji (dwoje pierwszych), bo to ona
         // ma rodzić dzieci; dorosły samotny dostaje płeć z losowania. Bez tego miasto
         // ma systematycznie za mało kobiet w wieku rozrodczym i umiera na demografię,
@@ -776,14 +778,7 @@ pub fn spawn_household_aged(
             l.flags |= Lifecycle::FLAG_PARTNERED;
         }
         let waga = world.resource::<DemographyTable>().social().family_weight;
-        demography::powiaz(
-            world,
-            a,
-            b,
-            crate::store::RelationKind::Partner,
-            waga,
-            day,
-        );
+        demography::powiaz(world, a, b, crate::store::RelationKind::Partner, waga, day);
     }
     let waga = world.resource::<DemographyTable>().social().family_weight;
     for i in 0..usize::from(adults) {
@@ -859,14 +854,7 @@ pub fn seed_population(world: &mut World, day: u64, households: usize) -> u32 {
         let ages = world.resource::<DemographyTable>().ages();
         let rozpietosc = ages.max.saturating_sub(ages.adult).saturating_sub(25);
         spawn_household_aged(
-            world,
-            day,
-            &mut r,
-            dorosli,
-            dzieci,
-            home,
-            ages.adult,
-            rozpietosc,
+            world, day, &mut r, dorosli, dzieci, home, ages.adult, rozpietosc,
         );
         ludzi += u32::from(rozmiar);
     }
@@ -1042,9 +1030,7 @@ fn usamodzielnienie(world: &mut World, day: u64, raport: &mut MigrationReport) {
             continue;
         }
 
-        let dzielnica = world
-            .get::<Residence>(e)
-            .map_or(u16::MAX, |r| r.district);
+        let dzielnica = world.get::<Residence>(e).map_or(u16::MAX, |r| r.district);
         if world.resource::<Vacancies>().has_home_in(dzielnica)
             && zaloz_gospodarstwo(world, e, day).is_some()
         {

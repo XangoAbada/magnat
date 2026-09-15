@@ -11,7 +11,7 @@
 //! i jadący naraz — był niemożliwy strukturalnie, a nie przez dyscyplinę.
 
 use crate::spec::{FuelKind, VehicleClassId, VehicleClassSpec};
-use magnat_core::{HashState, Money, PlaceRef, Q, SimMinute, StateHasher, Volume};
+use magnat_core::{HashState, Money, PlaceRef, SimMinute, StateHasher, Volume, Q};
 use magnat_ecs::Component;
 
 /// Właściciel pojazdu.
@@ -133,7 +133,8 @@ impl FuelTank {
             _pad: [0; 7],
             capacity: spec.tank_ml * crate::mezo::UL_PER_ML,
             level: spec.tank_ml * crate::mezo::UL_PER_ML,
-            refuel_threshold: spec.tank_ml * crate::mezo::UL_PER_ML
+            refuel_threshold: spec.tank_ml
+                * crate::mezo::UL_PER_ML
                 * i64::from(spec.refuel_threshold_permille)
                 / 1000,
         }
@@ -167,7 +168,11 @@ impl FuelTank {
     /// dla paliw ciekłych. Zaokrąglenie jest jawne, bo to granica jednostek.
     #[must_use]
     pub fn volume(&self) -> Volume {
-        Volume(Money(self.level).div_round_half_up(crate::mezo::UL_PER_ML).0)
+        Volume(
+            Money(self.level)
+                .div_round_half_up(crate::mezo::UL_PER_ML)
+                .0,
+        )
     }
 }
 
@@ -217,7 +222,10 @@ impl VehicleLocation {
     /// zbiór miejsc przypisania pola, ma być tym, czego szuka się przy podejrzeniu
     /// pojazdu widma.
     pub fn depart(&mut self, edge: u32) {
-        debug_assert!(self.is_parked(), "pojazd wyrusza, choć nie jest zaparkowany");
+        debug_assert!(
+            self.is_parked(),
+            "pojazd wyrusza, choć nie jest zaparkowany"
+        );
         self.kind = LocationKind::OnEdge as u8;
         self.edge = edge;
     }

@@ -160,13 +160,19 @@ pub fn settle_edge(
 
     // Czas: cm × 36 / dekakm/h = setne sekundy. Ta sama arytmetyka, której używa
     // `RoadEdge::free_flow_cs` na wagi routera — inna dałaby plan niezgodny z przejazdem.
-    let travel_cs = (dist_cm * 36 / u64::from(v)).max(1).min(u64::from(u32::MAX)) as u32;
-    let exit_cs = entry_cs + u64::from(travel_cs) + u64::from(stops_at_entry_node) * u64::from(HEADWAY_CS);
+    let travel_cs = (dist_cm * 36 / u64::from(v))
+        .max(1)
+        .min(u64::from(u32::MAX)) as u32;
+    let exit_cs =
+        entry_cs + u64::from(travel_cs) + u64::from(stops_at_entry_node) * u64::from(HEADWAY_CS);
 
     // Paliwo. Baza w mikrolitrach: ml/100 km × cm / 10 000 = µl.
     let mut fuel_ul = i64::from(spec.base_ml_per_100km) * (dist_cm as i64) / 10_000;
     fuel_ul = mul_permille(fuel_ul, veh.cat.speed_factor(link.mean_speed_dkmh));
-    fuel_ul = mul_permille(fuel_ul, load_factor_permille(veh.cat, spec.kerb_mass_g, load));
+    fuel_ul = mul_permille(
+        fuel_ul,
+        load_factor_permille(veh.cat, spec.kerb_mass_g, load),
+    );
     fuel_ul = mul_permille(fuel_ul, grade_factor_permille(veh.cat, edge.grade_permille));
     fuel_ul += i64::from(stops_at_entry_node) * i64::from(spec.idle_ml_per_stop) * UL_PER_ML;
     if cold_start {
@@ -370,8 +376,12 @@ impl MezoState {
             let e = &road.edges[i];
             let q = self.queues[i];
             let link = &mut self.links[i];
-            link.mean_speed_dkmh =
-                vdf.speed_dkmh(e.class, link.free_flow_dkmh, q.occupancy, q.storage_capacity);
+            link.mean_speed_dkmh = vdf.speed_dkmh(
+                e.class,
+                link.free_flow_dkmh,
+                q.occupancy,
+                q.storage_capacity,
+            );
             link.queue_len_cm = u32::from(q.occupancy) * vdf.jam_spacing_cm();
         }
         for q in &mut self.queues {
@@ -535,8 +545,24 @@ mod tests {
             cat: &cat,
             class: cat.by_key("car_medium").expect("car_medium"),
         };
-        let a = settle_edge(&road.edges[0], &st.links[0], &veh, Mass(80_000), 123, 2, true);
-        let b = settle_edge(&road.edges[0], &st.links[0], &veh, Mass(80_000), 123, 2, true);
+        let a = settle_edge(
+            &road.edges[0],
+            &st.links[0],
+            &veh,
+            Mass(80_000),
+            123,
+            2,
+            true,
+        );
+        let b = settle_edge(
+            &road.edges[0],
+            &st.links[0],
+            &veh,
+            Mass(80_000),
+            123,
+            2,
+            true,
+        );
         assert_eq!(a, b);
         // Kilometr przy 6,2–7,6 l/100 km to dziesiątki mililitrów, nie zero.
         assert!(a.fuel_ul > 50_000, "{} µl na 1 km", a.fuel_ul);
@@ -548,8 +574,12 @@ mod tests {
             arrivals_last_min: 8,
             arrivals_this_min: 0,
         };
-        let (t_sygnal, s_sygnal) =
-            settle_node(NodeControl::Signal(magnat_nav::SignalPlanId(0)), TurnPriority::Major, &n, 0);
+        let (t_sygnal, s_sygnal) = settle_node(
+            NodeControl::Signal(magnat_nav::SignalPlanId(0)),
+            TurnPriority::Major,
+            &n,
+            0,
+        );
         assert!(t_sygnal > 0 && s_sygnal == 1);
 
         let (t_glowna, s_glowna) = settle_node(

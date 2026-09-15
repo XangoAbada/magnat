@@ -13,7 +13,7 @@ use magnat_agents::{
     request_replan, store_plan, tick_replan_cooldown, AgentState, DayCanvas, Employment,
     EmptyPlaces, FlakyPlaces, HouseholdView, Identity, InfinitePlaces, Knowledge, KnowledgeKind,
     KnowledgeView, NeedTable, Needs, Personality, PlaceEntry, PlaceTable, PlanCtx, PlanRef,
-    PlanSlab, ReasonLog, ReplanCause, Residence, ShiftKind, Vitals, StraightLineTravel, MAX_SLOTS,
+    PlanSlab, ReasonLog, ReplanCause, Residence, ShiftKind, StraightLineTravel, Vitals, MAX_SLOTS,
 };
 use magnat_core::{
     ActivityKind, BuildingId, CitizenId, DayOfWeek, DecisionReason, Entity, NeedKind, PlaceKind,
@@ -261,15 +261,17 @@ fn odbior_dziecka_wraca_przez_szkole_a_bez_niego_prosto() {
         "odbiór nie dołożył slotów: {z:?} vs {b:?}"
     );
     assert!(
-        z_odbiorem.slots().iter().any(|x| {
-            x.kind == ActivityKind::Errand as u8 && x.start_min > 16 * 60
-        }),
+        z_odbiorem
+            .slots()
+            .iter()
+            .any(|x| { x.kind == ActivityKind::Errand as u8 && x.start_min > 16 * 60 }),
         "brak przekazania dziecka po południu"
     );
     assert!(
-        !bez_odbioru.slots().iter().any(|x| {
-            x.kind == ActivityKind::Errand as u8 && x.start_min > 16 * 60
-        }),
+        !bez_odbioru
+            .slots()
+            .iter()
+            .any(|x| { x.kind == ActivityKind::Errand as u8 && x.start_min > 16 * 60 }),
         "mieszkaniec bez przypisanego odbioru poszedł po dziecko"
     );
 

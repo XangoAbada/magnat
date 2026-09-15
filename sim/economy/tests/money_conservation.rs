@@ -141,7 +141,13 @@ fn nieudana_operacja_nie_zostawia_sladu() {
         Err(TxError::NonPositive)
     );
     assert_eq!(
-        b.create_credit(AccountId::OUTSIDE, Money(5), LoanId(1), DecisionReason::Unspecified, Tick(0)),
+        b.create_credit(
+            AccountId::OUTSIDE,
+            Money(5),
+            LoanId(1),
+            DecisionReason::Unspecified,
+            Tick(0)
+        ),
         Err(TxError::Unknown)
     );
     assert_eq!(

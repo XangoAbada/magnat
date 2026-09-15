@@ -11,8 +11,8 @@ use magnat_jobs::JobPool;
 use magnat_traffic::TrafficOracle;
 use magnat_voxel::MaterialRegistry;
 use magnat_world::{
-    generate, generate_city, generate_population, CityData, CityPlan, Difficulty,
-    PopulationParams, Terrain, WorldGenParams,
+    generate, generate_city, generate_population, CityData, CityPlan, Difficulty, PopulationParams,
+    Terrain, WorldGenParams,
 };
 use std::sync::Arc;
 
@@ -28,7 +28,9 @@ fn miasto(seed: u64) -> CityData {
     };
     params.validate().expect("parametry");
     let (data, _) = generate(params, &pool).expect("świat");
-    let reg = Arc::new(MaterialRegistry::load_dir(&magnat_world::data_path("materials")).expect("materiały"));
+    let reg = Arc::new(
+        MaterialRegistry::load_dir(&magnat_world::data_path("materials")).expect("materiały"),
+    );
     let terrain = Terrain::new(data, reg);
     let plan = CityPlan::from_world(&params);
     generate_city(&plan, &terrain, terrain.materials(), &pool).expect("miasto")
@@ -37,7 +39,10 @@ fn miasto(seed: u64) -> CityData {
 fn swiat(seed: u64) -> World {
     let mut w = World::new(seed);
     register(&mut w, NeedTable::load_default().expect("data/needs/"));
-    society::register_society(&mut w, DemographyTable::load_default().expect("data/demography/"));
+    society::register_society(
+        &mut w,
+        DemographyTable::load_default().expect("data/demography/"),
+    );
     w
 }
 
@@ -51,8 +56,7 @@ fn trasy_samochodowe_sa_ciagle_i_bez_zakazanych_manewrow() {
     let p = generate_population(&mut world, &city, &PopulationParams::default()).expect("Etap 8");
     let oracle: &TrafficOracle = &p.traffic;
 
-    let miejsca: Vec<magnat_core::PlaceRef> =
-        p.places.entries().iter().map(|e| e.place).collect();
+    let miejsca: Vec<magnat_core::PlaceRef> = p.places.entries().iter().map(|e| e.place).collect();
     assert!(miejsca.len() > 100, "za mało miejsc do próbkowania");
 
     let mut tras = 0u32;
@@ -71,7 +75,13 @@ fn trasy_samochodowe_sa_ciagle_i_bez_zakazanych_manewrow() {
         match oracle.car_route(a, b, magnat_core::MinuteOfDay::new(8 * 60)) {
             Some(route) => {
                 tras += 1;
-                trasy.push(route.legs.iter().flat_map(|l| l.edges.iter().copied()).collect());
+                trasy.push(
+                    route
+                        .legs
+                        .iter()
+                        .flat_map(|l| l.edges.iter().copied())
+                        .collect(),
+                );
             }
             None => bez_trasy += 1,
         }
@@ -100,7 +110,10 @@ fn trasy_samochodowe_sa_ciagle_i_bez_zakazanych_manewrow() {
          zabronionych manewrów {zakazane}"
     );
     assert!(tras > 100, "router nie oddał ani stu tras");
-    assert_eq!(nieciagle, 0, "trasa zawiera przejście między rozłącznymi krawędziami");
+    assert_eq!(
+        nieciagle, 0,
+        "trasa zawiera przejście między rozłącznymi krawędziami"
+    );
     assert_eq!(
         zakazane, 0,
         "trasa zawiera manewr oznaczony jako zabroniony — mezo zakończy ją porażką"

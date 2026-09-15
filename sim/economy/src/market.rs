@@ -752,12 +752,21 @@ impl Market {
                         continue;
                     };
                     if books
-                        .transfer(account, rest, q.total(), wholesale_memo(
-                            good,
-                            q.qty,
-                            m.supplier.goods().spec(good).map_or(StockCat::Other, |s| s.cat),
-                            0,
-                        ), t)
+                        .transfer(
+                            account,
+                            rest,
+                            q.total(),
+                            wholesale_memo(
+                                good,
+                                q.qty,
+                                m.supplier
+                                    .goods()
+                                    .spec(good)
+                                    .map_or(StockCat::Other, |s| s.cat),
+                                0,
+                            ),
+                            t,
+                        )
                         .is_err()
                     {
                         continue;
@@ -914,12 +923,21 @@ impl Market {
                 // Sklep bez środków nie zamawia — i to jest cała „upadłość" w M5b.
                 // Prawdziwe postępowanie prowadzi M7 (`K-10`).
                 if books
-                    .transfer(account, rest, q.total(), wholesale_memo(
+                    .transfer(
+                        account,
+                        rest,
+                        q.total(),
+                        wholesale_memo(
                             good,
                             q.qty,
-                            m.supplier.goods().spec(good).map_or(StockCat::Other, |s| s.cat),
+                            m.supplier
+                                .goods()
+                                .spec(good)
+                                .map_or(StockCat::Other, |s| s.cat),
                             0,
-                        ), t)
+                        ),
+                        t,
+                    )
                     .is_err()
                 {
                     continue;
@@ -1726,7 +1744,10 @@ impl Market {
                 } else if let Some(spec) = m.supplier.goods().spec(l.good) {
                     zywe[spec.cat.as_index()] = true;
                 }
-                per_good.entry(l.good.0).or_default().push(o.unit_price.get());
+                per_good
+                    .entry(l.good.0)
+                    .or_default()
+                    .push(o.unit_price.get());
             }
         }
         let prices = per_good
@@ -1760,7 +1781,12 @@ impl Market {
                 let Some(pc) = s.controllers.get(&l.good) else {
                     continue;
                 };
-                let zaplecze = s.inventory.backroom.get(&l.good).copied().unwrap_or_default();
+                let zaplecze = s
+                    .inventory
+                    .backroom
+                    .get(&l.good)
+                    .copied()
+                    .unwrap_or_default();
                 let ilosc = zaplecze.qty.get() + l.qty.get();
                 let koszt = zaplecze.cost_total.get() + l.cost_total.get();
                 let unit_cost = if ilosc > 0 && koszt > 0 {
@@ -1946,9 +1972,7 @@ impl Market {
                 .collect(),
             // Pierścień jest indeksowany dobą modulo 7; panel dostaje go obróconego
             // tak, żeby ostatnia pozycja była dobą migawki (patrz `CustomerStats`).
-            daily: std::array::from_fn(|i| {
-                s.customers.daily[(doba as usize + 1 + i) % 7]
-            }),
+            daily: std::array::from_fn(|i| s.customers.daily[(doba as usize + 1 + i) % 7]),
             total: s.customers.total,
         };
 
@@ -2036,13 +2060,7 @@ impl Market {
 /// Pokrycie: `lead_time + 2` doby, przycięte terminem ważności. Dwie doby zapasu
 /// ponad czas dostawy to bufor na wahania ruchu, nie model — model zapasu z kosztem
 /// braku i kosztem kapitału należy do M6 razem z realnym dostawcą.
-fn docelowy_zapas(
-    shop: &Shop,
-    good: GoodId,
-    p: &ReorderPolicy,
-    goods: &GoodTable,
-    t: Tick,
-) -> i64 {
+fn docelowy_zapas(shop: &Shop, good: GoodId, p: &ReorderPolicy, goods: &GoodTable, t: Tick) -> i64 {
     let tygodniowo = shop
         .controllers
         .get(&good)
@@ -2530,7 +2548,10 @@ impl MarketInner {
         );
         // Kreacja pieniądza: depozyt powstaje na koncie banku, a stamtąd kanałem
         // sektora gospodarstw wchodzi do komponentu.
-        if books.create_credit(bank.account, limit, id, reason, t).is_err() {
+        if books
+            .create_credit(bank.account, limit, id, reason, t)
+            .is_err()
+        {
             return;
         }
         let memo = TxMemo::new(TxKind::LoanDraw { loan: id }, reason);

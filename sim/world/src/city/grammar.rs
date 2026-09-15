@@ -252,11 +252,9 @@ impl GrammarSet {
     /// Czy katalog ma dla tej kombinacji choć jedną gramatykę **niebędącą awaryjną**.
     #[must_use]
     pub fn covered(&self, zone: &str, epoch: &str, style: &str) -> bool {
-        self.items
-            .iter()
-            .any(|g| {
-                !g.id.starts_with("_fallback") && g.applies.covers(zone, Some(epoch), Some(style))
-            })
+        self.items.iter().any(|g| {
+            !g.id.starts_with("_fallback") && g.applies.covers(zone, Some(epoch), Some(style))
+        })
     }
 }
 
@@ -337,19 +335,50 @@ impl BuildingGrammar {
 #[derive(Debug)]
 pub enum GrammarError {
     Io(std::io::Error),
-    Parse { file: String, msg: String },
-    SchemaVersion { file: String, got: u32 },
-    UnknownMaterial { id: String, key: String },
-    UnknownZone { id: String, key: String },
-    UnknownRef { id: String, key: String },
-    RefCycle { id: String, key: String },
-    TooManyNodes { id: String, nodes: u32 },
-    TooDeep { id: String, depth: u32 },
-    BadRange { id: String, what: &'static str },
+    Parse {
+        file: String,
+        msg: String,
+    },
+    SchemaVersion {
+        file: String,
+        got: u32,
+    },
+    UnknownMaterial {
+        id: String,
+        key: String,
+    },
+    UnknownZone {
+        id: String,
+        key: String,
+    },
+    UnknownRef {
+        id: String,
+        key: String,
+    },
+    RefCycle {
+        id: String,
+        key: String,
+    },
+    TooManyNodes {
+        id: String,
+        nodes: u32,
+    },
+    TooDeep {
+        id: String,
+        depth: u32,
+    },
+    BadRange {
+        id: String,
+        what: &'static str,
+    },
     /// `Protrude` na ścianie poziomej — patrz komentarz przy wariancie `Rule::Protrude`.
-    ProtrudeFace { id: String },
+    ProtrudeFace {
+        id: String,
+    },
     /// Lukarny na dachu płaskim: nie ma połaci, na której miałyby stanąć.
-    DormersOnFlat { id: String },
+    DormersOnFlat {
+        id: String,
+    },
     DuplicateId(String),
     NoFallback(String),
 }

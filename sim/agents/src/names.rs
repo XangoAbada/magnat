@@ -40,12 +40,26 @@ pub const NAMES_SCHEMA_VERSION: u32 = 1;
 
 #[derive(Debug)]
 pub enum NameError {
-    Io { file: String, msg: String },
-    Ron { file: String, msg: String },
-    Schema { file: String, found: u32 },
-    Empty { file: String },
+    Io {
+        file: String,
+        msg: String,
+    },
+    Ron {
+        file: String,
+        msg: String,
+    },
+    Schema {
+        file: String,
+        found: u32,
+    },
+    Empty {
+        file: String,
+    },
     /// Suma pul przekroczyła zakres `u16`, czyli szerokość pola w `Identity`.
-    TooMany { what: &'static str, count: usize },
+    TooMany {
+        what: &'static str,
+        count: usize,
+    },
     NoRegions,
 }
 
@@ -112,9 +126,7 @@ static CATALOG: OnceLock<NameCatalog> = OnceLock::new();
 /// tak samo jak `data_dir()`, bo świat bez pul nazw nie da się uruchomić w żadnym trybie.
 #[must_use]
 pub fn catalog() -> &'static NameCatalog {
-    CATALOG.get_or_init(|| {
-        NameCatalog::load().unwrap_or_else(|e| panic!("data/names/: {e}"))
-    })
+    CATALOG.get_or_init(|| NameCatalog::load().unwrap_or_else(|e| panic!("data/names/: {e}")))
 }
 
 fn czytaj(path: &PathBuf) -> Result<String, NameError> {
@@ -315,7 +327,11 @@ mod tests {
     fn pula_laduje_sie_i_ma_wszystkie_regiony() {
         let c = kat();
         assert!(c.region_count() >= 2, "multiregionowość zniknęła z danych");
-        assert_eq!(c.region_code(0), "pl", "region rodzimy przestał być pierwszy");
+        assert_eq!(
+            c.region_code(0),
+            "pl",
+            "region rodzimy przestał być pierwszy"
+        );
         for r in 0..c.region_count() {
             let i = usize::from(r);
             assert!(c.male_len[i] > 0 && c.first_off[i + 1] - c.first_off[i] > c.male_len[i]);
@@ -351,7 +367,12 @@ mod tests {
             let region = c.pick_region(&mut r);
             let male = i % 3 != 0;
             let f = c.pick_first(region, male, &mut r);
-            assert_eq!(c.first_is_male(f), male, "imię {} nie ma tej płci", c.first_name(f));
+            assert_eq!(
+                c.first_is_male(f),
+                male,
+                "imię {} nie ma tej płci",
+                c.first_name(f)
+            );
         }
     }
 
@@ -387,6 +408,9 @@ mod tests {
             }
         }
         assert!(odmiennych > 0, "pula rodzima nie ma nazwisk odmiennych");
-        assert!(nieodmiennych > 0, "pula rodzima nie ma nazwisk nieodmiennych");
+        assert!(
+            nieodmiennych > 0,
+            "pula rodzima nie ma nazwisk nieodmiennych"
+        );
     }
 }

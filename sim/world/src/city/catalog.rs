@@ -68,7 +68,8 @@ impl Good {
     #[must_use]
     pub fn gates(&self) -> &[GateKind] {
         if self.import_via.is_empty() {
-            const TOWAROWE: [GateKind; 3] = [GateKind::Highway, GateKind::RailFreight, GateKind::Port];
+            const TOWAROWE: [GateKind; 3] =
+                [GateKind::Highway, GateKind::RailFreight, GateKind::Port];
             &TOWAROWE
         } else {
             &self.import_via
@@ -89,7 +90,10 @@ impl RecipeSource {
     /// Czy receptura jest punktem wejścia domknięcia (KROK 1 z §5.8).
     #[must_use]
     pub const fn is_entry(self) -> bool {
-        matches!(self, RecipeSource::Extraction(_) | RecipeSource::Agriculture)
+        matches!(
+            self,
+            RecipeSource::Extraction(_) | RecipeSource::Agriculture
+        )
     }
 }
 
@@ -186,12 +190,27 @@ struct NeedsFile {
 #[derive(Debug)]
 pub enum CatalogError {
     Io(std::io::Error),
-    Ron { file: String, msg: String },
-    Schema { file: String, found: u32, want: u32 },
+    Ron {
+        file: String,
+        msg: String,
+    },
+    Schema {
+        file: String,
+        found: u32,
+        want: u32,
+    },
     DuplicateGood(String),
     DuplicateRecipe(String),
-    UnknownGood { recipe: String, good: String },
-    MassBalance { recipe: String, inputs: i64, outputs: i64, loss: i64 },
+    UnknownGood {
+        recipe: String,
+        good: String,
+    },
+    MassBalance {
+        recipe: String,
+        inputs: i64,
+        outputs: i64,
+        loss: i64,
+    },
     BadDuration(String),
     MissingUnitMass(String),
     NoOutputs(String),
@@ -259,7 +278,12 @@ impl Catalog {
     /// po czym **waliduje** całość. Błąd danych jest błędem, nie ostrzeżeniem:
     /// katalog z dziurą daje miasto, które nie domyka Etapu 7, a to widać dopiero
     /// na końcu generacji.
-    pub fn load(goods_dir: &Path, recipes_dir: &Path, needs: &Path, epoch_key: &str) -> Result<Catalog, CatalogError> {
+    pub fn load(
+        goods_dir: &Path,
+        recipes_dir: &Path,
+        needs: &Path,
+        epoch_key: &str,
+    ) -> Result<Catalog, CatalogError> {
         let mut goods: Vec<Good> = Vec::new();
         for path in pliki_ron(goods_dir)? {
             let name = path.display().to_string();
@@ -332,12 +356,13 @@ impl Catalog {
             let rozwiaz = |v: &[(String, i64)]| -> Result<Vec<(GoodId, i64)>, CatalogError> {
                 v.iter()
                     .map(|(k, m)| {
-                        idx.get(k.as_str()).copied().map(|g| (g, *m)).ok_or_else(|| {
-                            CatalogError::UnknownGood {
+                        idx.get(k.as_str())
+                            .copied()
+                            .map(|g| (g, *m))
+                            .ok_or_else(|| CatalogError::UnknownGood {
                                 recipe: spec.key.clone(),
                                 good: k.clone(),
-                            }
-                        })
+                            })
                     })
                     .collect()
             };
@@ -580,7 +605,11 @@ mod tests {
     fn katalog_danych_domyka_sie() {
         let c = katalog();
         assert!(c.goods.len() >= 55, "katalog ma {} towarów", c.goods.len());
-        assert!(c.recipes.len() >= 40, "katalog ma {} receptur", c.recipes.len());
+        assert!(
+            c.recipes.len() >= 40,
+            "katalog ma {} receptur",
+            c.recipes.len()
+        );
         c.validate_reachability().expect("graf produktów");
     }
 

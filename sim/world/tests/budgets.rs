@@ -22,7 +22,11 @@ use magnat_world::{
 /// dotknął. Sprawdzone w osobnym worktree na `c9864ea`: 2586 ms. Nagłówek obiecywał
 /// „regresje rzędu wielkości, a nie wahania obciążenia" — próg oddalony o 4 % od
 /// zmierzonego czasu mierzy dokładnie te wahania. W release nic się nie zmienia.
-const LIMIT_4KM_MS: f64 = if cfg!(debug_assertions) { 8_000.0 } else { 2_500.0 };
+const LIMIT_4KM_MS: f64 = if cfg!(debug_assertions) {
+    8_000.0
+} else {
+    2_500.0
+};
 const LIMIT_16KM_MS: f64 = 20_000.0;
 /// Stan trwały mapy 16 km w RAM (M1 §5.9: ≤ 60 MB).
 const LIMIT_PERSISTENT_16KM: usize = 60 * 1024 * 1024;

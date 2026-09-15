@@ -28,10 +28,7 @@ const MINUTA_MS: u64 = 60_000;
 
 fn krawedz(i: u32) -> [WorldCoord; 2] {
     let y = (i as i32) * 2_000;
-    [
-        WorldCoord::new(0, y, 0),
-        WorldCoord::new(DLUGOSC_CM, y, 0),
-    ]
+    [WorldCoord::new(0, y, 0), WorldCoord::new(DLUGOSC_CM, y, 0)]
 }
 
 /// Warstwa z `n` pojazdami rozstawionymi po `KRAWEDZI` krawędziach, oknem obejmującym

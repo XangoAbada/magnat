@@ -10,7 +10,9 @@
 //! nie przechowuje.
 
 use magnat_agents::Identity;
-use magnat_core::{BuildingId, DecisionReason, Entity, Money, PlaceRef, SimMinute, SiteId, Weather};
+use magnat_core::{
+    BuildingId, DecisionReason, Entity, Money, PlaceRef, SimMinute, SiteId, Weather,
+};
 use magnat_nav::EdgeId;
 use magnat_traffic::{
     evaluate_modes, FuelTank, Infeasible, LedgerEntry, ModeChoiceParams, ModeContext, ModeDecision,
@@ -103,10 +105,7 @@ fn decyzja() -> ModeDecision {
                     ..OptionOffer::default()
                 }),
             ),
-            (
-                TravelOption::CarHousehold,
-                Err(Infeasible::CarInUseBy(81)),
-            ),
+            (TravelOption::CarHousehold, Err(Infeasible::CarInUseBy(81))),
             (
                 TravelOption::Taxi,
                 Err(Infeasible::BeyondBudget { fare_gr: 3_180 }),
@@ -367,7 +366,10 @@ fn brak_parkingu_przeslania_porownanie_srodkow() {
         .iter()
         .find(|k| !k.chosen && k.cost.is_none())
         .expect("auto jest na liście odrzuconych");
-    assert!(auto.note.contains("11"), "karta nie mówi, ilu parkingów szukał");
+    assert!(
+        auto.note.contains("11"),
+        "karta nie mówi, ilu parkingów szukał"
+    );
     assert!(
         karta.split.is_none(),
         "podróż bez wpisów nie ma prawa pokazać rozbioru czasu"

@@ -247,7 +247,10 @@ pub fn allow_heavy_on_industrial_streets(
     for (i, b) in blocks.blocks.iter().enumerate() {
         if !matches!(
             zones.zone[i],
-            ZoneKind::IndustryLight | ZoneKind::IndustryHeavy | ZoneKind::Logistics | ZoneKind::Extraction
+            ZoneKind::IndustryLight
+                | ZoneKind::IndustryHeavy
+                | ZoneKind::Logistics
+                | ZoneKind::Extraction
         ) {
             continue;
         }

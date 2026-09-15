@@ -19,11 +19,11 @@
 //! „symulacja nie używa f32". Pieniądza to nie dotyka — do funkcji wchodzi on
 //! wyłącznie jako **stosunek** kwoty do budżetu odniesienia, a wychodzi jako wybór.
 
+use magnat_agents::{Knowledge, KnowledgeKind};
 use magnat_core::{
     det_math, mix64, rng, GoodId, Money, Qty, RejectCause, SiteId, StockCat, StreamId, Tick,
     UtilityKind, Q,
 };
-use magnat_agents::{Knowledge, KnowledgeKind};
 
 use crate::data::{EconomyData, UtilityWeights};
 use crate::offer::OfferId;

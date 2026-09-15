@@ -365,7 +365,10 @@ mod tests {
         let przed = c.target();
         c.orbit_pan(10.0, 0.0);
         let d = (c.target() - przed).as_vec3();
-        assert!(d.dot(prawo) > 9.99, "pan w prawo poszedł nie w prawo: {d:?}");
+        assert!(
+            d.dot(prawo) > 9.99,
+            "pan w prawo poszedł nie w prawo: {d:?}"
+        );
 
         let przed = c.target();
         c.orbit_pan(0.0, 10.0);

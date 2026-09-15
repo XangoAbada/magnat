@@ -617,13 +617,21 @@ fn zastosuj(world: &mut World, fleet: &[Entity], ev: TrafficEvent, satysfakcja: 
             tank_level_ul,
             ledger,
         } => {
-            zaparkuj(world, fleet, vehicle, dest, tank_level_ul, ledger.distance_cm);
+            zaparkuj(
+                world,
+                fleet,
+                vehicle,
+                dest,
+                tank_level_ul,
+                ledger.distance_cm,
+            );
             {
                 let l = world.resource_mut::<FuelLedger>();
                 l.burned_ul += ledger.total_fuel_ul;
             }
             przybycie(world, traveller, slot, at, satysfakcja);
-            let spoznienie = at.0.saturating_sub(ledger.depart.0 + u64::from(planned_minutes));
+            let spoznienie =
+                at.0.saturating_sub(ledger.depart.0 + u64::from(planned_minutes));
             let s = world.resource_mut::<DayStats>();
             s.trips += 1;
             let _ = spoznienie;
@@ -722,7 +730,10 @@ impl System for VehicleWearSystem {
     fn run(&mut self, ctx: &mut SystemCtx<'_>) {
         for c in ctx.query::<&mut VehicleCondition, ()>().iter() {
             if c.odometer_cm >= c.next_service_cm {
-                c.wear = c.wear.saturating_add(VehicleWearSystem::WEAR_PER_SERVICE).min(100);
+                c.wear = c
+                    .wear
+                    .saturating_add(VehicleWearSystem::WEAR_PER_SERVICE)
+                    .min(100);
                 c.next_service_cm = c
                     .next_service_cm
                     .saturating_add(VehicleCondition::SERVICE_INTERVAL_CM);

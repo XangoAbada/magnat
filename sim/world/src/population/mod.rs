@@ -25,19 +25,19 @@ pub mod table;
 use crate::city::build::{ShiftId, UnitKind};
 use crate::city::sites::SectorId;
 use crate::city::CityData;
+use crate::traffic_build::FleetReport;
 use magnat_agents::{
     demography, household, migration, social, Ages, ArrayVec, CitizenView, CityFacts,
     DemographyTable, Employment, HomeSlot, Household, HouseholdOverflow, Identity, JobSlot,
     KnowledgeKind, Needs, Personality, PlaceEntry, PlaceTable, RelationKind, Residence, ShiftKind,
     SkillSlot, Skills, Vacancies, Vitals, MAX_ON_ROUTE,
 };
-use magnat_traffic::{OracleHandle, TrafficOracle};
-use crate::traffic_build::FleetReport;
 use magnat_core::{
-    det_math, rng, BuildingId, CitizenId, Entity, Money, PlaceKind,
-    PlaceRef, Rng, SiteId, StreamId, Tick, WorldCoord,
+    det_math, rng, BuildingId, CitizenId, Entity, Money, PlaceKind, PlaceRef, Rng, SiteId,
+    StreamId, Tick, WorldCoord,
 };
 use magnat_ecs::World;
+use magnat_traffic::{OracleHandle, TrafficOracle};
 use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 use std::sync::Arc;
@@ -56,7 +56,6 @@ pub const SITE_KEY_BASE: u32 = 1 << 24;
 pub const COMMUTE_BINS: usize = 12;
 /// Szerokość kubełka w minutach; ostatni jest otwarty.
 pub const COMMUTE_BIN_MIN: u16 = 5;
-
 
 #[inline]
 #[must_use]
@@ -504,7 +503,6 @@ fn fakty_miasta(city: &CityData, jobs: &crate::city::build::JobTable) -> CityFac
     }
 }
 
-
 // ── pula wieku (krok 1) ─────────────────────────────────────────────────────────
 
 /// Wielozbiór wieków z piramidy. Nie lista osób: osoby powstają dopiero przy spawnie,
@@ -798,11 +796,13 @@ fn umiejetnosci(
     work_start: u8,
     r: &mut Rng,
 ) -> Skills {
-    let mut out = Skills([SkillSlot {
-        role: Skills::ROLE_NONE,
-        level: 0,
-        decay: 0,
-    }; 4]);
+    let mut out = Skills(
+        [SkillSlot {
+            role: Skills::ROLE_NONE,
+            level: 0,
+            decay: 0,
+        }; 4],
+    );
     if wiek < i32::from(work_start) || jobs.roles.is_empty() {
         return out;
     }
@@ -847,10 +847,11 @@ pub fn generate_population(
 ) -> Result<Populated, PopulationError> {
     let mut zegar = std::time::Instant::now();
     let mut czasy: Vec<(&'static str, f32)> = Vec::new();
-    let odcinek = |nazwa: &'static str, czasy: &mut Vec<(&'static str, f32)>, z: &mut std::time::Instant| {
-        czasy.push((nazwa, z.elapsed().as_secs_f32()));
-        *z = std::time::Instant::now();
-    };
+    let odcinek =
+        |nazwa: &'static str, czasy: &mut Vec<(&'static str, f32)>, z: &mut std::time::Instant| {
+            czasy.push((nazwa, z.elapsed().as_secs_f32()));
+            *z = std::time::Instant::now();
+        };
 
     let t = PopulationTable::load()?;
     let jobs_table = crate::city::build::JobTable::load()
@@ -922,8 +923,7 @@ pub fn generate_population(
         // a Etap 8 ma je z piramidy epoki. Kolejność członków jest kolejnością spawnu —
         // najpierw dorośli, potem dzieci (§5.9 krok 2).
         let hh_c = *world.get::<Household>(hh).expect("gospodarstwo po spawnie");
-        let sklad =
-            household::members_of(hh.index(), &hh_c, world.resource::<HouseholdOverflow>());
+        let sklad = household::members_of(hh.index(), &hh_c, world.resource::<HouseholdOverflow>());
         for (k, m) in sklad.iter().enumerate() {
             let wiek = if k < s.adults.len() {
                 s.adults[k]
@@ -1258,8 +1258,8 @@ fn dopasuj_prace(
     kandydaci.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
 
     // Ilu ma zostać bez pracy: dokładnie tylu, ilu każe cel bezrobocia (§5.9 krok 5).
-    let limit = ((u64::from(active) * u64::from(1000 - unemp.min(1000)) / 1000) as usize)
-        .min(etaty.len());
+    let limit =
+        ((u64::from(active) * u64::from(1000 - unemp.min(1000)) / 1000) as usize).min(etaty.len());
 
     let mut employed = 0usize;
     let mut fit_ok = 0u32;
@@ -1690,11 +1690,7 @@ fn dopasuj_mieszkania(
 
 /// Ilu pracujących ma dojazd nie dłuższy niż `cel`.
 fn policz_krotsze(zaloga: &[Vec<Pracownik>], cel: u16) -> u32 {
-    zaloga
-        .iter()
-        .flatten()
-        .filter(|p| p.commute <= cel)
-        .count() as u32
+    zaloga.iter().flatten().filter(|p| p.commute <= cel).count() as u32
 }
 
 /// Odległość od stanu „mediana = cel". Mediana to pierwsza minuta, w której skumulowany
@@ -1914,16 +1910,21 @@ fn zasiej_wiedze(
         }
 
         // Miejsce pracy i miejsca widoczne z trasy dom↔praca.
-        let praca = world
-            .get::<Employment>(*c)
-            .and_then(|e| site_place(e.site));
+        let praca = world.get::<Employment>(*c).and_then(|e| site_place(e.site));
         if let Some(p) = praca {
             if let Some(k) = magnat_agents::knowledge_key(p) {
                 social::learn_place(world, *c, k, KnowledgeKind::Visited, seed.work_score, 0);
                 wpisow += 1;
             }
             for k in korytarz(places, at, p, &mut na_trasie) {
-                social::learn_place(world, *c, k, KnowledgeKind::SeenOnRoute, seed.route_score, 0);
+                social::learn_place(
+                    world,
+                    *c,
+                    k,
+                    KnowledgeKind::SeenOnRoute,
+                    seed.route_score,
+                    0,
+                );
                 wpisow += 1;
             }
         }
@@ -2191,7 +2192,11 @@ mod tests {
         let h = histogram_docelowy(24, 62);
         let suma: u32 = h.iter().sum();
         assert!((980..=1000).contains(&suma), "{suma}");
-        let szczyt = h.iter().enumerate().max_by_key(|(_, v)| **v).map(|(i, _)| i);
+        let szczyt = h
+            .iter()
+            .enumerate()
+            .max_by_key(|(_, v)| **v)
+            .map(|(i, _)| i);
         // Moda rozkładu log-normalnego leży poniżej mediany — kubełek 2 lub 3 (10–20 min).
         assert!(matches!(szczyt, Some(2..=3)), "{szczyt:?}");
     }

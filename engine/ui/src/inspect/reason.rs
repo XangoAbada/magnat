@@ -386,7 +386,10 @@ pub fn describe(c: &Catalog, l: Locale, r: DecisionReason) -> String {
             &[
                 ("co", &need(c, l, n)),
                 ("powod", &reject_cause(c, l, cause)),
-                ("brakowalo", &format!("{},{:03}", gap_permille / 1000, (gap_permille % 1000).abs())),
+                (
+                    "brakowalo",
+                    &format!("{},{:03}", gap_permille / 1000, (gap_permille % 1000).abs()),
+                ),
             ],
         ),
         DecisionReason::Repricing {
@@ -428,10 +431,7 @@ pub fn describe(c: &Catalog, l: Locale, r: DecisionReason) -> String {
                 ("roznica", &procent_bp(i32::from(margin_bp))),
             ],
         ),
-        DecisionReason::BudgetShortfall {
-            cost,
-            gap_permille,
-        } => c.fmt_key(
+        DecisionReason::BudgetShortfall { cost, gap_permille } => c.fmt_key(
             l,
             "ui.reason.BudgetShortfall",
             &[
@@ -586,18 +586,12 @@ mod tests {
                 waited_min: 9,
             },
             DecisionReason::ShopChosen {
-                site: magnat_core::SiteId(magnat_core::Entity::new(
-                    7,
-                    std::num::NonZeroU32::MIN,
-                )),
+                site: magnat_core::SiteId(magnat_core::Entity::new(7, std::num::NonZeroU32::MIN)),
                 dominant: UtilityKind::Price,
                 delta_bp: -1_200,
             },
             DecisionReason::OfferRejected {
-                site: magnat_core::SiteId(magnat_core::Entity::new(
-                    7,
-                    std::num::NonZeroU32::MIN,
-                )),
+                site: magnat_core::SiteId(magnat_core::Entity::new(7, std::num::NonZeroU32::MIN)),
                 cause: RejectCause::OutOfStock,
                 detail: 0,
             },
@@ -607,10 +601,7 @@ mod tests {
                 gap_permille: -140,
             },
             DecisionReason::Repricing {
-                site: magnat_core::SiteId(magnat_core::Entity::new(
-                    7,
-                    std::num::NonZeroU32::MIN,
-                )),
+                site: magnat_core::SiteId(magnat_core::Entity::new(7, std::num::NonZeroU32::MIN)),
                 good: magnat_core::GoodId(3),
                 driver: PriceDriver::Stock,
                 delta_bp: -450,

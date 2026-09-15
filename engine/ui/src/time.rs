@@ -179,7 +179,11 @@ mod tests {
         // To jest wymóg §5.11 wyrażony liczbą: doba to 1440 ticków niezależnie od tego,
         // ile realnego czasu zajmie. Reszta akumulatora bierze się z podziału sekundy
         // na klatki i nie kumuluje się między prędkościami.
-        for (predkosc, sekundy) in [(SimSpeed::X1, 1440u32), (SimSpeed::X3, 480), (SimSpeed::X10, 144)] {
+        for (predkosc, sekundy) in [
+            (SimSpeed::X1, 1440u32),
+            (SimSpeed::X3, 480),
+            (SimSpeed::X10, 144),
+        ] {
             let mut w = TimeControlsWidget::new(Tick(0));
             w.set_speed(predkosc);
             let mut suma = 0u32;

@@ -11,15 +11,15 @@
 //! Uruchomienie: `cargo test --release -p magnat-world --test consistency -- --include-ignored`.
 
 use magnat_jobs::JobPool;
+use magnat_spatial::Vec2;
 use magnat_voxel::MaterialRegistry;
 use magnat_world::city::build::{EntranceKind, MIN_BUDYNKOW_DZIELNICY, PROMIEN_SASIEDZTWA_M};
+use magnat_world::city::is_connected;
 use magnat_world::city::{poly, value};
 use magnat_world::{
     generate, generate_city, CityData, CityPlan, Difficulty, EconomyProfile, Epoch, Region,
     RoadFlags, Terrain, WorldGenParams, WorldSize, ZoneKind,
 };
-use magnat_world::city::is_connected;
-use magnat_spatial::Vec2;
 use std::sync::Arc;
 
 fn miasto(seed: u64, size: WorldSize, region: Region, profile: EconomyProfile) -> CityData {
@@ -91,7 +91,10 @@ fn t1(c: &CityData) -> Option<String> {
     if osierocone.is_empty() {
         None
     } else {
-        Some(format!("bramy poza siecią jezdną: {}", osierocone.join(", ")))
+        Some(format!(
+            "bramy poza siecią jezdną: {}",
+            osierocone.join(", ")
+        ))
     }
 }
 
@@ -141,7 +144,12 @@ fn t2(c: &CityData) -> Option<String> {
         .iter()
         .enumerate()
         .filter(|(i, d)| kontakty[*i] < 2 && f64::from(d.pop_capacity) >= prog)
-        .map(|(i, d)| format!("{} ({} os., {} kontaktów)", d.name, d.pop_capacity, kontakty[i]))
+        .map(|(i, d)| {
+            format!(
+                "{} ({} os., {} kontaktów)",
+                d.name, d.pop_capacity, kontakty[i]
+            )
+        })
         .collect();
     if slabe.is_empty() {
         None
@@ -262,7 +270,9 @@ fn t4(c: &CityData) -> Option<String> {
         }
     }
     if przy_zakazie > 0 {
-        return Some(format!("{przy_zakazie} ramp przy drodze z zakazem ruchu ciężkiego"));
+        return Some(format!(
+            "{przy_zakazie} ramp przy drodze z zakazem ruchu ciężkiego"
+        ));
     }
     let udzial = if ciezkie > 0 {
         f64::from(bez_rampy) * 100.0 / f64::from(ciezkie)
@@ -385,12 +395,22 @@ fn t8(c: &CityData) -> Option<String> {
     if n > 40 {
         return Some(format!("{n} dzielnic (limit 40)"));
     }
-    let mut nazwy: Vec<&str> = c.districts.districts.iter().map(|d| d.name.as_str()).collect();
+    let mut nazwy: Vec<&str> = c
+        .districts
+        .districts
+        .iter()
+        .map(|d| d.name.as_str())
+        .collect();
     nazwy.sort_unstable();
     if nazwy.windows(2).any(|w| w[0] == w[1]) {
         return Some("dwie dzielnice o tej samej nazwie".to_string());
     }
-    let poza = c.blocks.blocks.iter().filter(|b| b.district.0 as usize >= n).count();
+    let poza = c
+        .blocks
+        .blocks
+        .iter()
+        .filter(|b| b.district.0 as usize >= n)
+        .count();
     if poza == 0 {
         None
     } else {
@@ -429,7 +449,9 @@ fn t10(c: &CityData) -> Option<String> {
         ));
     }
     if !(0.95..=1.12).contains(&etaty) {
-        zle.push(format!("stanowiska {etaty:.3} × oczekiwanych (okno 0,95–1,12)"));
+        zle.push(format!(
+            "stanowiska {etaty:.3} × oczekiwanych (okno 0,95–1,12)"
+        ));
     }
     if zle.is_empty() {
         None
@@ -446,7 +468,10 @@ fn t11(c: &CityData) -> Option<String> {
     }
     let mut v = Vec::new();
     if !c.report.closure.missing.is_empty() {
-        v.push(format!("brak źródła dla: {}", c.report.closure.missing.join(", ")));
+        v.push(format!(
+            "brak źródła dla: {}",
+            c.report.closure.missing.join(", ")
+        ));
     }
     v.extend(c.report.closure.errors.iter().cloned());
     Some(v.join(" · "))
@@ -464,9 +489,10 @@ fn t12(c: &CityData) -> Option<String> {
     // Po samej mieszkaniówce (korekta I-16): dzielnica peryferyjna z marketem przy
     // obwodnicy ma średnią podbitą strefą `Commercial`, a porównanie jest o ziemi
     // mieszkaniowej — „starówka droższa od przedmieścia" dotyczy tego, gdzie się mieszka.
-    let rdzen = value::average_by_kind_filtered(&c.districts, &c.parcels, &value::CORE_KINDS, |z| {
-        z.is_residential()
-    });
+    let rdzen =
+        value::average_by_kind_filtered(&c.districts, &c.parcels, &value::CORE_KINDS, |z| {
+            z.is_residential()
+        });
     let obrzeze =
         value::average_by_kind_filtered(&c.districts, &c.parcels, &value::FRINGE_KINDS, |z| {
             z.is_residential()
@@ -500,7 +526,8 @@ fn t12(c: &CityData) -> Option<String> {
         .collect();
     if !ciezkie.is_empty() {
         let kara = |idx: usize| -> f64 {
-            let (_, r) = value::land_value_at(c, magnat_world::city::parcels::parcel_id(idx as u32));
+            let (_, r) =
+                value::land_value_at(c, magnat_world::city::parcels::parcel_id(idx as u32));
             let pp = r
                 .factors
                 .iter()
@@ -574,7 +601,9 @@ fn t13(c: &CityData) -> Option<String> {
         }
         let relaxed = f64::from(b.relaxed) * 100.0 / f64::from(b.buildings);
         if relaxed >= 5.0 {
-            zle.push(format!("dobór z rozluźnionym filtrem {relaxed:.1} % (limit 5)"));
+            zle.push(format!(
+                "dobór z rozluźnionym filtrem {relaxed:.1} % (limit 5)"
+            ));
         }
         if b.city_entropy_mbits < 4000 {
             zle.push(format!(
@@ -627,7 +656,12 @@ fn sprawdz(c: &CityData) -> Vec<String> {
 #[test]
 #[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
 fn trzynascie_testow_na_jednym_miescie() {
-    let c = miasto(7, WorldSize::Medium8km, Region::River, EconomyProfile::Mixed);
+    let c = miasto(
+        7,
+        WorldSize::Medium8km,
+        Region::River,
+        EconomyProfile::Mixed,
+    );
     let naruszenia = sprawdz(&c);
     assert!(
         naruszenia.is_empty(),
@@ -698,8 +732,18 @@ fn macierz_32_ziaren_x_4_profile() {
 #[test]
 #[ignore = "dwie generacje świata — CI uruchamia jawnie przez --include-ignored"]
 fn dwa_przebiegi_daja_ten_sam_hash_m2() {
-    let a = miasto(11, WorldSize::Small4km, Region::Lowland, EconomyProfile::Mixed);
-    let b = miasto(11, WorldSize::Small4km, Region::Lowland, EconomyProfile::Mixed);
+    let a = miasto(
+        11,
+        WorldSize::Small4km,
+        Region::Lowland,
+        EconomyProfile::Mixed,
+    );
+    let b = miasto(
+        11,
+        WorldSize::Small4km,
+        Region::Lowland,
+        EconomyProfile::Mixed,
+    );
     assert_eq!(
         a.report.world_hash_m2, b.report.world_hash_m2,
         "hash M2 zależy od czegoś spoza ziarna"
@@ -722,8 +766,20 @@ fn dwa_przebiegi_daja_ten_sam_hash_m2() {
 #[test]
 #[ignore = "dwie generacje świata — CI uruchamia jawnie przez --include-ignored"]
 fn jeden_watek_daje_to_samo_co_osiem() {
-    let a = miasto_w(5, WorldSize::Small4km, Region::River, EconomyProfile::Mixed, 1);
-    let b = miasto_w(5, WorldSize::Small4km, Region::River, EconomyProfile::Mixed, 8);
+    let a = miasto_w(
+        5,
+        WorldSize::Small4km,
+        Region::River,
+        EconomyProfile::Mixed,
+        1,
+    );
+    let b = miasto_w(
+        5,
+        WorldSize::Small4km,
+        Region::River,
+        EconomyProfile::Mixed,
+        8,
+    );
     assert_eq!(a.report.world_hash_m2, b.report.world_hash_m2);
     assert_eq!(a.report.closure.ratios, b.report.closure.ratios);
 }
@@ -733,9 +789,17 @@ fn jeden_watek_daje_to_samo_co_osiem() {
 #[ignore = "generacja świata i pomiar zegarowy — CI uruchamia jawnie przez --include-ignored"]
 fn miasto_male_miesci_sie_w_budzecie() {
     let start = std::time::Instant::now();
-    let c = miasto(3, WorldSize::Small4km, Region::Lowland, EconomyProfile::Mixed);
+    let c = miasto(
+        3,
+        WorldSize::Small4km,
+        Region::Lowland,
+        EconomyProfile::Mixed,
+    );
     let s = start.elapsed().as_secs_f64();
-    assert!(s < 12.0, "generacja miasta małego trwała {s:.1} s (limit 12)");
+    assert!(
+        s < 12.0,
+        "generacja miasta małego trwała {s:.1} s (limit 12)"
+    );
     // Etap 7 i wycena mają w budżecie §7 odpowiednio 4 s i 3 s — na mieście małym
     // to ułamki sekundy, więc sprawdzamy, że nie urosły o rząd wielkości.
     for (nazwa, ms) in &c.report.stage_millis {
@@ -750,7 +814,12 @@ fn miasto_male_miesci_sie_w_budzecie() {
 #[test]
 #[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
 fn kazda_zabudowana_parcela_niemieszkalna_ma_zaklad() {
-    let c = miasto(7, WorldSize::Medium8km, Region::River, EconomyProfile::Mixed);
+    let c = miasto(
+        7,
+        WorldSize::Medium8km,
+        Region::River,
+        EconomyProfile::Mixed,
+    );
     assert_eq!(
         c.report.sites.parcels_without_site, 0,
         "{} zabudowanych parcel niemieszkalnych bez zakładu",
@@ -777,7 +846,10 @@ fn kazda_zabudowana_parcela_niemieszkalna_ma_zaklad() {
             "zakład bez przypisanych lokali w budynku {i}"
         );
     }
-    assert_eq!(bez_site, 0, "{bez_site} stanowisk w budynku z zakładem bez `site`");
+    assert_eq!(
+        bez_site, 0,
+        "{bez_site} stanowisk w budynku z zakładem bez `site`"
+    );
 }
 
 /// Kryterium WP16: rozbicie wyceny na **co najmniej 8 czynników**, sumujące się
@@ -785,7 +857,12 @@ fn kazda_zabudowana_parcela_niemieszkalna_ma_zaklad() {
 #[test]
 #[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
 fn karta_inspekcji_pokazuje_rozbicie_wyceny() {
-    let c = miasto(7, WorldSize::Medium8km, Region::River, EconomyProfile::Mixed);
+    let c = miasto(
+        7,
+        WorldSize::Medium8km,
+        Region::River,
+        EconomyProfile::Mixed,
+    );
     let geom = &c.roads.geom;
     let (idx, _) = c
         .parcels

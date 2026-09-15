@@ -12,8 +12,8 @@ use magnat_agents::{
     MAX_CANDIDATES,
 };
 use magnat_core::{
-    DecisionReason, Entity, HouseholdId, Money, NeedKind, PlaceRef, Q, Qty, RejectCause, SiteId,
-    StockCat, Tick,
+    DecisionReason, Entity, HouseholdId, Money, NeedKind, PlaceRef, Qty, RejectCause, SiteId,
+    StockCat, Tick, Q,
 };
 use magnat_economy::{settle_transactions, Books, EconomyData, Market, PurchaseIntent};
 use magnat_ecs::World;
@@ -136,7 +136,10 @@ fn zerwanie_dostaw_pustoszy_polke_ale_sklep_zostaje_widoczny() {
         let byl_kandydatem = out.iter().any(|c| c.place == PlaceRef::Site(site));
         match b.market.fulfil(&zadanie(i, 1, site, 1_000_000)) {
             FulfilOutcome::Done { .. } => {
-                assert!(byl_kandydatem, "kupił w sklepie, którego nie było w wyborze");
+                assert!(
+                    byl_kandydatem,
+                    "kupił w sklepie, którego nie było w wyborze"
+                );
                 kupili += 1;
             }
             FulfilOutcome::Refused(r) => {
@@ -178,7 +181,12 @@ fn ciag_wyborow(seed: u64) -> Vec<SiteId> {
         ],
         500,
     );
-    let wiedza = knows(&b.sites.iter().map(|s| PlaceRef::Site(*s)).collect::<Vec<_>>());
+    let wiedza = knows(
+        &b.sites
+            .iter()
+            .map(|s| PlaceRef::Site(*s))
+            .collect::<Vec<_>>(),
+    );
     let mut wybory = Vec::new();
     for i in 0..200u32 {
         let kupujacy = buyer(i % 7, (i % 100) as u8);
@@ -277,7 +285,8 @@ fn podniesienie_ceny_przesuwa_udzial_rynkowy_w_dol() {
         }
     }
     assert_eq!(
-        gorszych, 20,
+        gorszych,
+        20,
         "podwyżka ceny nie obniżyła udziału w {} z 20 populacji",
         20 - gorszych
     );
@@ -294,23 +303,24 @@ fn kazda_decyzja_ma_powod() {
         .map(|i| {
             let budzet = if i == 5 { 1 } else { 1_000_000 };
             if i == 5 {
-                b.market.deliver_now(site, towar(), Qty(4_000), Money(800), None, Tick(0));
+                b.market
+                    .deliver_now(site, towar(), Qty(4_000), Money(800), None, Tick(0));
                 b.market.restock_shelves();
             }
             b.market.fulfil(&zadanie(i, i, site, budzet))
         })
         .collect();
-    assert!(wyniki.iter().any(|w| matches!(w, FulfilOutcome::Done { .. })));
-    assert!(wyniki.iter().any(|w| matches!(w, FulfilOutcome::Refused(_))));
+    assert!(wyniki
+        .iter()
+        .any(|w| matches!(w, FulfilOutcome::Done { .. })));
+    assert!(wyniki
+        .iter()
+        .any(|w| matches!(w, FulfilOutcome::Refused(_))));
     for w in &wyniki {
         let r = match w {
             FulfilOutcome::Done { reason, .. } | FulfilOutcome::Refused(reason) => *reason,
         };
-        assert_ne!(
-            r,
-            DecisionReason::Unspecified,
-            "decyzja bez powodu: {w:?}"
-        );
+        assert_ne!(r, DecisionReason::Unspecified, "decyzja bez powodu: {w:?}");
     }
     // Brak środków ma własny powód, odróżnialny od braku towaru.
     assert!(wyniki.iter().any(|w| matches!(

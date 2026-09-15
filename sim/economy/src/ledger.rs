@@ -188,7 +188,11 @@ impl JournalEntry {
     /// Buduje zapis. Panika przy pustej liście i przy przekroczeniu [`MAX_LINES`] —
     /// oba są błędem wołającego, nie stanem danych.
     #[must_use]
-    pub fn new(tick: Tick, reason: DecisionReason, lines: &[(LedgerAccount, Money)]) -> JournalEntry {
+    pub fn new(
+        tick: Tick,
+        reason: DecisionReason,
+        lines: &[(LedgerAccount, Money)],
+    ) -> JournalEntry {
         assert!(
             !lines.is_empty() && lines.len() <= MAX_LINES,
             "zapis księgowy ma 1..={MAX_LINES} linii, dostał {}",
@@ -456,7 +460,8 @@ pub fn close_period(
         to,
         statement,
         cash_end: Money(
-            ledger.balance(LedgerAccount::Cash).get() + ledger.balance(LedgerAccount::BankCurrent).get(),
+            ledger.balance(LedgerAccount::Cash).get()
+                + ledger.balance(LedgerAccount::BankCurrent).get(),
         ),
         inventory_end: ledger.balance(LedgerAccount::InventoryGoods),
         retained_end: Money(-ledger.balance(LedgerAccount::RetainedEarnings).get()),
@@ -531,7 +536,8 @@ pub fn balance_sheet(l: &Ledger, at: Tick) -> BalanceSheet {
 #[must_use]
 pub fn cash_flow(l: &Ledger, from: Tick, to: Tick) -> CashFlow {
     let mut out = CashFlow {
-        complete: l.window_len() < JOURNAL_WINDOW || l.journal().next().is_some_and(|e| e.tick <= from),
+        complete: l.window_len() < JOURNAL_WINDOW
+            || l.journal().next().is_some_and(|e| e.tick <= from),
         ..CashFlow::default()
     };
     if !l.keep_journal {
@@ -719,8 +725,13 @@ mod tests {
             for t in 0..10u64 {
                 sprzedaz(&mut l, u64::from(m) * 43_200 + t, 260, 200);
             }
-            close_period(&mut l, m, Tick(u64::from(m + 1) * 43_200), DecisionReason::Unspecified)
-                .unwrap();
+            close_period(
+                &mut l,
+                m,
+                Tick(u64::from(m + 1) * 43_200),
+                DecisionReason::Unspecified,
+            )
+            .unwrap();
         }
         let rzis = income_statement(&l, Tick(0), Tick(518_400));
         assert_eq!(rzis.revenue, Money(12 * 10 * 260));

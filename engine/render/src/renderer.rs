@@ -15,9 +15,9 @@ use crate::camera::CameraState;
 use crate::clusters::{self, ClusterConfig, GpuLight, CLUSTER_CAPACITY, CLUSTER_COUNT, CLUSTER_Z};
 use crate::gpu::GpuContext;
 use crate::pick;
-use crate::ui::{UiFrame, UiLayer};
 use crate::shadow::{self, Cascade};
 use crate::sky::{exposure, sample_sky, sky_lut, sun_state, SkySample, SunState, SKY_LUT_SIZE};
+use crate::ui::{UiFrame, UiLayer};
 use glam::{Mat4, Vec3, Vec4};
 use magnat_core::SimMinute;
 use magnat_voxel::{ChunkCoord, ChunkMesh, MaterialRegistry, CHUNK_DIM};
@@ -1553,8 +1553,7 @@ impl Renderer {
         // Stożek jest liczony w układzie **względem kamery** (`view_proj_relative`),
         // więc test przesłania też musi dostać pozycję względną — `upload` odejmuje oko.
         let eye = camera.eye();
-        self.pedestrians
-            .upload(&self.gpu.queue, peds, eye, &planes);
+        self.pedestrians.upload(&self.gpu.queue, peds, eye, &planes);
     }
 
     /// Kursor w pikselach okna albo `None`, gdy wyszedł poza nie. Ustawia, który piksel
@@ -1685,13 +1684,8 @@ impl Renderer {
         let (triangles, odczyt) = self.record_passes(&mut encoder, &view, &self.depth_view, &listy);
         if let Some(f) = ui.as_ref() {
             let rozmiar = [self.gpu.config.width, self.gpu.config.height];
-            self.ui.prepare(
-                &self.gpu.device,
-                &self.gpu.queue,
-                &mut encoder,
-                f,
-                rozmiar,
-            );
+            self.ui
+                .prepare(&self.gpu.device, &self.gpu.queue, &mut encoder, f, rozmiar);
             self.ui.paint(&mut encoder, &view, f, rozmiar);
         }
         self.resolve_timer(&mut encoder);

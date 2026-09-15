@@ -11,7 +11,9 @@
 //! Podróże piesze zostają przy ścieżce M3: pieszy nie tworzy korka, a przepuszczanie
 //! 274 tys. mieszkańców przez kolejki krawędzi kosztowałoby budżet, którego broni §7.3.
 
-use crate::mezo::{settle_edge, settle_node, turn_priority, LedgerEntry, MezoState, VehicleSpecRef, CS_PER_MINUTE};
+use crate::mezo::{
+    settle_edge, settle_node, turn_priority, LedgerEntry, MezoState, VehicleSpecRef, CS_PER_MINUTE,
+};
 use crate::spec::{VdfTable, VehicleCatalog, VehicleClassId};
 use magnat_core::{
     DecisionReason, HashState, Mass, Money, PlaceRef, SimMinute, StateHasher, TransportMode,
@@ -104,7 +106,10 @@ impl Default for TripLedger {
 impl TripLedger {
     #[must_use]
     pub fn minutes(&self) -> u16 {
-        self.arrive.0.saturating_sub(self.depart.0).min(u64::from(u16::MAX)) as u16
+        self.arrive
+            .0
+            .saturating_sub(self.depart.0)
+            .min(u64::from(u16::MAX)) as u16
     }
 
     #[must_use]
@@ -374,7 +379,12 @@ impl TrafficNetwork {
     ///
     /// Bramka okna i sufit rysowania siedzą po stronie `MicroLayer`, więc przy
     /// zamkniętym kadrze (headless) ta pętla kosztuje jedno sprawdzenie na pojazd.
-    pub fn feed_micro(&self, micro: &crate::micro::MicroLayer, road: &RoadGraph, cat: &VehicleCatalog) {
+    pub fn feed_micro(
+        &self,
+        micro: &crate::micro::MicroLayer,
+        road: &RoadGraph,
+        cat: &VehicleCatalog,
+    ) {
         for t in self.trips.iter().flatten() {
             let Some(e) = t.edges.get(t.pos as usize).copied() else {
                 continue;

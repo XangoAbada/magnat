@@ -187,9 +187,9 @@ impl TrafficOverlay {
                 let q = mezo.queues[i];
                 s.flow_vph.push(link.inflow_last_min.saturating_mul(60));
                 let swobodna = link.free_flow_dkmh.max(1);
-                s.speed_permille
-                    .push((u32::from(link.mean_speed_dkmh) * 1000 / u32::from(swobodna)).min(1000)
-                        as u16);
+                s.speed_permille.push(
+                    (u32::from(link.mean_speed_dkmh) * 1000 / u32::from(swobodna)).min(1000) as u16,
+                );
                 let cap = u32::from(q.storage_capacity.max(1));
                 s.queue_permille
                     .push((u32::from(q.occupancy) * 1000 / cap).min(1000) as u16);
@@ -214,9 +214,8 @@ impl TrafficOverlay {
                 let Some(hop) = line.hops.get(usize::from(run.stop_index) - 1) else {
                     continue;
                 };
-                let obciazenie =
-                    (u32::from(run.occupancy) * 1000 / u32::from(run.capacity.max(1))).min(1000)
-                        as u16;
+                let obciazenie = (u32::from(run.occupancy) * 1000 / u32::from(run.capacity.max(1)))
+                    .min(1000) as u16;
                 for e in hop {
                     let slot = &mut s.transit_permille[e.0 as usize];
                     *slot = (*slot).max(obciazenie);
@@ -381,6 +380,10 @@ mod tests {
     fn raster_punktowy_ma_promien_a_nie_pojedynczy_piksel() {
         let lots = [(WorldCoord::new(1_600, 1_600, 0), 800)];
         let r = rasterize_points(&lots, 16, 16, 1);
-        assert_eq!(r.iter().filter(|v| **v == 800).count(), 9, "3×3 wokół punktu");
+        assert_eq!(
+            r.iter().filter(|v| **v == 800).count(),
+            9,
+            "3×3 wokół punktu"
+        );
     }
 }

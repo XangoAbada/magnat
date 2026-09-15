@@ -33,7 +33,10 @@ fn kazdy_shader_jest_poprawnym_modulem_wgsl() {
             "far_terrain.wgsl",
             include_str!("../src/shaders/far_terrain.wgsl"),
         ),
-        ("clusters.wgsl", include_str!("../src/shaders/clusters.wgsl")),
+        (
+            "clusters.wgsl",
+            include_str!("../src/shaders/clusters.wgsl"),
+        ),
         (
             "pedestrian.wgsl",
             include_str!("../src/shaders/pedestrian.wgsl"),

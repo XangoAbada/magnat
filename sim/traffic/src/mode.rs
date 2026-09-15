@@ -131,7 +131,9 @@ pub enum Infeasible {
     /// żadnego ograniczenia zbierała 15 % podróży. Sama cena jej nie hamuje, bo dla
     /// mieszkańca bez auta i bez zasięgu komunikacji jest jedyną szybką opcją —
     /// a w roku 1990 nie była opcją wcale, jeśli kosztowała dniówkę.
-    BeyondBudget { fare_gr: u32 },
+    BeyondBudget {
+        fare_gr: u32,
+    },
 }
 
 /// Rozbicie dyskomfortu na składniki, każdy w groszach (§5.3).
@@ -406,7 +408,8 @@ impl ModeChoiceParams {
             0
         };
 
-        let tlok = i64::from(offer.minutes) * i64::from(offer.crowding_permille)
+        let tlok = i64::from(offer.minutes)
+            * i64::from(offer.crowding_permille)
             * self.crowding_gr_per_min_full
             / 1_000;
 
@@ -427,7 +430,9 @@ impl ModeChoiceParams {
             TravelOption::Bike => 0,
         };
 
-        let ponad_prog = offer.walk_access_min.saturating_sub(self.walk_access_free_min);
+        let ponad_prog = offer
+            .walk_access_min
+            .saturating_sub(self.walk_access_free_min);
         let dojscie = i64::from(ponad_prog) * self.walk_access_gr_per_min;
 
         let discomfort = DiscomfortBreakdown {
@@ -609,7 +614,8 @@ mod tests {
         );
         // Praca jest droższa od zakupów.
         assert!(
-            p.vot_gr_per_min(3_000, TripPurpose::Work) > p.vot_gr_per_min(3_000, TripPurpose::Shopping)
+            p.vot_gr_per_min(3_000, TripPurpose::Work)
+                > p.vot_gr_per_min(3_000, TripPurpose::Shopping)
         );
     }
 
@@ -634,7 +640,11 @@ mod tests {
                 ..
             }
         ));
-        assert_eq!(d.candidates.len(), 2, "karta inspekcji nie widzi wszystkich");
+        assert_eq!(
+            d.candidates.len(),
+            2,
+            "karta inspekcji nie widzi wszystkich"
+        );
     }
 
     #[test]
@@ -671,7 +681,11 @@ mod tests {
         let a = evaluate_modes(&p, &sucho, &oferty(&sucho)).expect("sucho");
         let b = evaluate_modes(&p, &leje, &oferty(&leje)).expect("deszcz");
         assert_eq!(a.chosen, TravelOption::Bike, "rower przegrał przy pogodzie");
-        assert_eq!(b.chosen, TravelOption::Transit, "rowerzysta jedzie w ulewie");
+        assert_eq!(
+            b.chosen,
+            TravelOption::Transit,
+            "rowerzysta jedzie w ulewie"
+        );
     }
 
     #[test]
@@ -737,7 +751,11 @@ mod tests {
             (TravelOption::Transit, Ok(oferta(25, 0))),
         ];
         let d2 = evaluate_modes(&p, &z_nawykiem, &daleko).expect("wybór");
-        assert_eq!(d2.chosen, TravelOption::Transit, "nawyk zwyciężył zdrowy rozsądek");
+        assert_eq!(
+            d2.chosen,
+            TravelOption::Transit,
+            "nawyk zwyciężył zdrowy rozsądek"
+        );
     }
 
     #[test]
@@ -752,7 +770,11 @@ mod tests {
             ],
         )
         .expect("wybór");
-        assert_eq!(d.chosen, TravelOption::Walk, "remis rozstrzygnięty kolejnością ofert");
+        assert_eq!(
+            d.chosen,
+            TravelOption::Walk,
+            "remis rozstrzygnięty kolejnością ofert"
+        );
     }
 
     #[test]

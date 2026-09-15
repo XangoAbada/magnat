@@ -22,13 +22,13 @@ pub mod geology;
 pub mod grid;
 pub mod io;
 pub mod nav_build;
-pub mod traffic_build;
 pub mod noise;
 pub mod params;
 pub mod pipeline;
 pub mod population;
 pub mod query;
 pub mod terrain;
+pub mod traffic_build;
 
 pub use assets::{data_dir, data_path};
 pub use city::blocks::{block_adjacency, Block, BlockId, BlockSet};
@@ -48,9 +48,7 @@ pub use city::road::{
     street_lines, FurnitureKind, NodeFlags, NodeId, PolyArena, PolyRef, RoadClass, RoadFlags,
     RoadNetwork, RoadNode, RoadSegment, RoadStructure, SegmentId, StreetFurniture, StreetLine,
 };
-pub use city::value::{
-    land_value_at, AccessFields, LandValueBreakdown, LandValueFactor, ValueCtx,
-};
+pub use city::value::{land_value_at, AccessFields, LandValueBreakdown, LandValueFactor, ValueCtx};
 // M2e — Etap 7 i wycena `pass_2`: kontrakt dla M5 (ceny startowe, `SiteSeed` sklepów),
 // M6 (`SiteSeed.{archetype, recipes, capacity_scale}`, `ClosureReport`) i M7 (`FirmSeed`).
 pub use city::catalog::{Catalog, CatalogError, Good, GoodUnit, Recipe, RecipeSource};
@@ -82,12 +80,12 @@ pub use params::{
     CLIMATE_CELL_M, WORK_CELL_M,
 };
 pub use pipeline::{generate, GenCtx, GenPass, WorldGenReport, WorldStats, PASSES};
+pub use population::{
+    generate_population, home_place, site_place, Populated, PopulationError, PopulationParams,
+    PopulationReport, COMMUTE_BINS, SITE_KEY_BASE,
+};
 pub use query::{
     Buildability, Crossing, NavigableClass, ObstacleBitset, TerrainQuery, TileCoord, WaterCell,
     TILE_M,
-};
-pub use population::{
-    generate_population, home_place, site_place, PopulationError, PopulationParams,
-    PopulationReport, Populated, COMMUTE_BINS, SITE_KEY_BASE,
 };
 pub use terrain::Terrain;

@@ -20,8 +20,8 @@
 //! z mieszkańcem, który już istnieje.
 
 use crate::components::{
-    AgentState, Employment, Identity, KnowledgeRef, Lifecycle, Needs, PlanRef, Personality,
-    Residence, RelationsRef, Skills, Vitals, Wealth,
+    AgentState, Employment, Identity, KnowledgeRef, Lifecycle, Needs, Personality, PlanRef,
+    RelationsRef, Residence, Skills, Vitals, Wealth,
 };
 use crate::household::{self, Household, HouseholdOverflow, MemberView};
 use crate::store::{KnowledgeSlab, PlanSlab, Relation, RelationKind, RelationSlab, SlabRef};
@@ -41,7 +41,8 @@ pub const DEMOGRAPHY_SHARDS: u64 = 360;
 
 /// Dób w roku gry (K-1). Lokalna stała **nie istnieje** — to re-eksport, żeby
 /// czytający ten plik nie musiał sprawdzać, czy ktoś tu nie policzył roku po swojemu.
-pub const DAYS_PER_YEAR: u64 = magnat_core::time::DAYS_PER_MONTH * magnat_core::time::MONTHS_PER_YEAR;
+pub const DAYS_PER_YEAR: u64 =
+    magnat_core::time::DAYS_PER_MONTH * magnat_core::time::MONTHS_PER_YEAR;
 
 // ── dane (data/demography/demography.ron) ───────────────────────────────────────
 
@@ -189,7 +190,10 @@ impl std::fmt::Display for DemographyError {
             DemographyError::Io(e) => write!(f, "data/demography: {e}"),
             DemographyError::Ron(m) => write!(f, "data/demography: {m}"),
             DemographyError::Schema { found, want } => {
-                write!(f, "data/demography: schema_version {found}, oczekiwano {want}")
+                write!(
+                    f,
+                    "data/demography: schema_version {found}, oczekiwano {want}"
+                )
             }
             DemographyError::AgeGap { at, table } => write!(
                 f,
@@ -372,11 +376,11 @@ impl DemographyTable {
 
 fn pokrycie(t: &[AgeRate], from: u8, to: u8, name: &'static str) -> Result<(), DemographyError> {
     for wiek in from..=to {
-        if !t
-            .iter()
-            .any(|b| wiek >= b.from && wiek <= b.to)
-        {
-            return Err(DemographyError::AgeGap { at: wiek, table: name });
+        if !t.iter().any(|b| wiek >= b.from && wiek <= b.to) {
+            return Err(DemographyError::AgeGap {
+                at: wiek,
+                table: name,
+            });
         }
     }
     Ok(())
@@ -457,25 +461,37 @@ impl Population {
     }
 
     pub fn add_citizen(&mut self, e: Entity) {
-        if let Err(i) = self.citizens.binary_search_by_key(&e.index(), |x| x.index()) {
+        if let Err(i) = self
+            .citizens
+            .binary_search_by_key(&e.index(), |x| x.index())
+        {
             self.citizens.insert(i, e);
         }
     }
 
     pub fn remove_citizen(&mut self, e: Entity) {
-        if let Ok(i) = self.citizens.binary_search_by_key(&e.index(), |x| x.index()) {
+        if let Ok(i) = self
+            .citizens
+            .binary_search_by_key(&e.index(), |x| x.index())
+        {
             self.citizens.remove(i);
         }
     }
 
     pub fn add_household(&mut self, e: Entity) {
-        if let Err(i) = self.households.binary_search_by_key(&e.index(), |x| x.index()) {
+        if let Err(i) = self
+            .households
+            .binary_search_by_key(&e.index(), |x| x.index())
+        {
             self.households.insert(i, e);
         }
     }
 
     pub fn remove_household(&mut self, e: Entity) {
-        if let Ok(i) = self.households.binary_search_by_key(&e.index(), |x| x.index()) {
+        if let Ok(i) = self
+            .households
+            .binary_search_by_key(&e.index(), |x| x.index())
+        {
             self.households.remove(i);
         }
     }
@@ -719,11 +735,7 @@ pub fn demography_system_id() -> SystemId {
 /// potem hazardy shardu. Odwrotna kolejność kazałaby ciężarnej, która dziś umiera,
 /// najpierw urodzić — co jest może i realistyczne, ale przestaje być deterministyczne,
 /// bo zależy od tego, czy jej doba porodu wypadła w jej dobie shardu.
-pub fn step_day(
-    world: &mut World,
-    day: u64,
-    hooks: &mut dyn InheritanceHook,
-) -> DayReport {
+pub fn step_day(world: &mut World, day: u64, hooks: &mut dyn InheritanceHook) -> DayReport {
     let mut raport = DayReport::default();
     terminarz(world, day, &mut raport);
     hazardy(world, day, hooks, &mut raport);
@@ -732,7 +744,9 @@ pub fn step_day(
 
 fn terminarz(world: &mut World, day: u64, raport: &mut DayReport) {
     let mut zadania: Vec<LifeTask> = Vec::new();
-    world.resource_mut::<LifeQueue>().take_due(day, &mut zadania);
+    world
+        .resource_mut::<LifeQueue>()
+        .take_due(day, &mut zadania);
     for t in zadania {
         let Some(actor) = encja(world, t.actor) else {
             continue;
@@ -765,12 +779,7 @@ fn terminarz(world: &mut World, day: u64, raport: &mut DayReport) {
     }
 }
 
-fn hazardy(
-    world: &mut World,
-    day: u64,
-    hooks: &mut dyn InheritanceHook,
-    raport: &mut DayReport,
-) {
+fn hazardy(world: &mut World, day: u64, hooks: &mut dyn InheritanceHook, raport: &mut DayReport) {
     let shard = day % DEMOGRAPHY_SHARDS;
     // `ponytail:` shard jest filtrem w przebiegu po spisie, a nie 360 kubełkami.
     // Sufit znany: jedno dzielenie na mieszkańca na dobę, czyli przy 400 tys.
@@ -1102,19 +1111,17 @@ fn uroda(world: &mut World, matka: Entity, day: u64) -> bool {
     if let Some(o) = ojciec.and_then(|i| encja(world, i)) {
         powiaz(world, o, dziecko, RelationKind::Child, waga, day);
     }
-    for m in household::members_of(
-        hh_idx,
-        &hh_kopia,
-        world.resource::<HouseholdOverflow>(),
-    )
-    .iter()
-    .copied()
-    .collect::<Vec<u32>>()
+    for m in household::members_of(hh_idx, &hh_kopia, world.resource::<HouseholdOverflow>())
+        .iter()
+        .copied()
+        .collect::<Vec<u32>>()
     {
         if m == dziecko.index() || Some(m) == ojciec || m == matka.index() {
             continue;
         }
-        let Some(inny) = encja(world, m) else { continue };
+        let Some(inny) = encja(world, m) else {
+            continue;
+        };
         let rodzenstwo = world
             .get::<Identity>(inny)
             .is_some_and(|i| i.household == hh_idx);
@@ -1127,14 +1134,7 @@ fn uroda(world: &mut World, matka: Entity, day: u64) -> bool {
 
 /// Zawiązuje relację obustronnie. Strona `b` dostaje relację odwrotną: rodzic widzi
 /// dziecko, dziecko rodzica — `prop_relation_symmetry` sprawdza obie strony.
-pub fn powiaz(
-    world: &mut World,
-    a: Entity,
-    b: Entity,
-    kind: RelationKind,
-    weight: u8,
-    day: u64,
-) {
+pub fn powiaz(world: &mut World, a: Entity, b: Entity, kind: RelationKind, weight: u8, day: u64) {
     wpisz_relacje(world, a, b, kind, weight, day);
     wpisz_relacje(world, b, a, odwrotna(kind), weight, day);
 }
@@ -1353,7 +1353,9 @@ fn usun_relacje(world: &mut World, e: Entity) {
         .map(|r| r.other)
         .collect();
     for idx in inni {
-        let Some(inny) = encja(world, idx) else { continue };
+        let Some(inny) = encja(world, idx) else {
+            continue;
+        };
         let Some(r2) = world.get::<RelationsRef>(inny).copied() else {
             continue;
         };
@@ -1425,12 +1427,7 @@ pub fn opusc_gospodarstwo(
 }
 
 /// Rozwiązanie pustego gospodarstwa: lokal wraca do puli, wpisy pomocnicze znikają.
-fn rozwiaz_gospodarstwo(
-    world: &mut World,
-    hh_e: Entity,
-    hh: &Household,
-    cmd: &mut CommandBuffer,
-) {
+fn rozwiaz_gospodarstwo(world: &mut World, hh_e: Entity, hh: &Household, cmd: &mut CommandBuffer) {
     if hh.has_home() {
         world
             .resource_mut::<crate::migration::Vacancies>()
@@ -1466,13 +1463,7 @@ pub fn przeklasyfikuj(world: &mut World, hh_idx: u32, hh: &mut Household, day: u
                 .map(|l| l.partner)
                 .filter(|p| *p != Lifecycle::NO_PARTNER)
                 .is_some_and(|p| sklad.contains(&p));
-            Some(MemberView::new(
-                *m,
-                id,
-                emp,
-                day as i32,
-                partner_w_domu,
-            ))
+            Some(MemberView::new(*m, id, emp, day as i32, partner_w_domu))
         })
         .collect();
     hh.kind = household::classify(&widoki, i32::from(ages.adult), i32::from(ages.senior)) as u8;
@@ -1554,7 +1545,9 @@ fn dobierz_partnerow(world: &mut World, day: u64, raport: &mut MonthReport) {
         let mut najlepszy: Option<(Entity, Q, u8)> = None;
         let mut rozwazonych = 0u8;
         for (inny, waga) in kandydaci {
-            let Some(c) = encja(world, inny) else { continue };
+            let Some(c) = encja(world, inny) else {
+                continue;
+            };
             let Some(cid) = world.get::<Identity>(c).copied() else {
                 continue;
             };
@@ -1684,11 +1677,8 @@ fn polacz_gospodarstwa(world: &mut World, a: u32, b: u32, day: u64) -> bool {
         .get::<Household>(zrodlo.0)
         .copied()
         .unwrap_or_default();
-    let przenoszeni = household::members_of(
-        zrodlo.1,
-        &zrodlowe,
-        world.resource::<HouseholdOverflow>(),
-    );
+    let przenoszeni =
+        household::members_of(zrodlo.1, &zrodlowe, world.resource::<HouseholdOverflow>());
     let mut cel = world
         .get::<Household>(docelowe.0)
         .copied()
@@ -1745,7 +1735,9 @@ fn polacz_gospodarstwa(world: &mut World, a: u32, b: u32, day: u64) -> bool {
     world
         .resource_mut::<crate::migration::Unsettled>()
         .forget(zrodlo.1);
-    world.resource_mut::<Population>().remove_household(zrodlo.0);
+    world
+        .resource_mut::<Population>()
+        .remove_household(zrodlo.0);
     let mut cmd = CommandBuffer::new(demography_system_id());
     cmd.despawn(zrodlo.0);
     magnat_ecs::flush_commands(world, std::slice::from_mut(&mut cmd));
@@ -1796,8 +1788,8 @@ fn rozstania(world: &mut World, day: u64, raport: &mut MonthReport) {
         // momentu, w którym `next_event_day` przestał być terminem ślubu — z dokładnością
         // do miesiąca, bo dokładniejsza data nie ma gdzie mieszkać, a i tak jest tylko
         // treścią wyjaśnienia (00 §7), nie wejściem żadnej reguły.
-        let razem = ((day.saturating_sub(u64::from(l.next_event_day))) / DAYS_PER_YEAR)
-            .min(255) as u8;
+        let razem =
+            ((day.saturating_sub(u64::from(l.next_event_day))) / DAYS_PER_YEAR).min(255) as u8;
         for kto in [e, partner] {
             if let Some(lc) = world.get_mut::<Lifecycle>(kto) {
                 lc.partner = Lifecycle::NO_PARTNER;

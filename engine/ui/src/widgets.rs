@@ -84,10 +84,8 @@ pub fn day_timeline(ui: &mut egui::Ui, m: &CitizenModel, c: &Catalog, l: Locale)
     const WYS: f32 = 18.0;
     let wiersze = m.timeline().rows(c, l);
     let szerokosc = ui.available_width().max(120.0);
-    let (rect, _) = ui.allocate_exact_size(
-        egui::vec2(szerokosc, WYS * 2.0 + 6.0),
-        egui::Sense::hover(),
-    );
+    let (rect, _) =
+        ui.allocate_exact_size(egui::vec2(szerokosc, WYS * 2.0 + 6.0), egui::Sense::hover());
     let malarz = ui.painter_at(rect);
     let na_minute = szerokosc / 1440.0;
 
@@ -174,15 +172,18 @@ pub fn needs(ui: &mut egui::Ui, card: &CitizenCard) {
                 egui::vec2(110.0, 16.0),
                 egui::Label::new(egui::RichText::new(&n.label).small()),
             );
-            let (rect, odp) =
-                ui.allocate_exact_size(egui::vec2(120.0, 12.0), egui::Sense::hover());
+            let (rect, odp) = ui.allocate_exact_size(egui::vec2(120.0, 12.0), egui::Sense::hover());
             let p = ui.painter_at(rect);
             p.rect_filled(rect, 2.0, egui::Color32::from_gray(45));
             let mut wypelnienie = rect;
             wypelnienie.set_width(rect.width() * f32::from(n.level) / 100.0);
             p.rect_filled(wypelnienie, 2.0, kolor_potrzeby(n.level, n.critical));
             odp.on_hover_text(&n.tooltip);
-            ui.label(egui::RichText::new(format!("{}", n.level)).monospace().small());
+            ui.label(
+                egui::RichText::new(format!("{}", n.level))
+                    .monospace()
+                    .small(),
+            );
         });
     }
 }
@@ -196,7 +197,10 @@ pub fn citizen_card(ui: &mut egui::Ui, m: &CitizenModel, c: &Catalog, l: Locale)
             "ui.card.header",
             &[
                 ("imie", &card.header.name),
-                ("wiek", &crate::inspect::reason::years(c, l, card.header.age_years)),
+                (
+                    "wiek",
+                    &crate::inspect::reason::years(c, l, card.header.age_years),
+                ),
                 ("zawod", &card.header.occupation),
                 ("adres", &card.header.address),
             ],
@@ -313,7 +317,10 @@ mod tests {
                     "{l:?}: brak przycisku {etykieta} w {razem}"
                 );
             }
-            assert!(!razem.contains('{'), "{l:?}: niepodstawiony parametr: {razem}");
+            assert!(
+                !razem.contains('{'),
+                "{l:?}: niepodstawiony parametr: {razem}"
+            );
         }
     }
 

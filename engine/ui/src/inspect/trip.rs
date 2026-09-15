@@ -314,7 +314,11 @@ impl TripCard {
             s,
             "{} · {}",
             c.fmt_key(l, "ui.trip.fuel", &[("ile", &litry(self.fuel_ml))]),
-            c.fmt_key(l, "ui.trip.money", &[("kwota", &crate::zlotowki(self.money))]),
+            c.fmt_key(
+                l,
+                "ui.trip.money",
+                &[("kwota", &crate::zlotowki(self.money))]
+            ),
         );
         s
     }
@@ -453,7 +457,10 @@ fn wiersz(
         chosen: k.option == chosen,
         runner_up: runner_up == Some(k.option) && k.option != chosen,
         cost: k.infeasible.is_none().then_some(k.cost),
-        note: k.infeasible.map(|i| infeasible(c, l, i)).unwrap_or_default(),
+        note: k
+            .infeasible
+            .map(|i| infeasible(c, l, i))
+            .unwrap_or_default(),
     }
 }
 
@@ -474,7 +481,14 @@ pub fn infeasible(c: &Catalog, l: Locale, i: Infeasible) -> String {
         Infeasible::CarInUseBy(by) => c.fmt_key(
             l,
             "ui.trip.no.CarInUseBy",
-            &[("kto", &if by == u32::MAX { "?".to_string() } else { by.to_string() })],
+            &[(
+                "kto",
+                &if by == u32::MAX {
+                    "?".to_string()
+                } else {
+                    by.to_string()
+                },
+            )],
         ),
         Infeasible::NoParkingWithinRadius { lots_searched } => c.fmt_key(
             l,
@@ -521,14 +535,19 @@ pub fn place(c: &Catalog, l: Locale, p: PlaceRef) -> String {
             "ui.trip.place.Parcel",
             &[("nr", &e.0.index().to_string())],
         ),
-        PlaceRef::Site(e) => c.fmt_key(l, "ui.trip.place.Site", &[("nr", &e.0.index().to_string())]),
+        PlaceRef::Site(e) => {
+            c.fmt_key(l, "ui.trip.place.Site", &[("nr", &e.0.index().to_string())])
+        }
         PlaceRef::District(d) => {
             c.fmt_key(l, "ui.trip.place.District", &[("nr", &d.0.to_string())])
         }
         PlaceRef::Coord(w) => c.fmt_key(
             l,
             "ui.trip.place.Coord",
-            &[("x", &(w.x / 100).to_string()), ("y", &(w.y / 100).to_string())],
+            &[
+                ("x", &(w.x / 100).to_string()),
+                ("y", &(w.y / 100).to_string()),
+            ],
         ),
     }
 }

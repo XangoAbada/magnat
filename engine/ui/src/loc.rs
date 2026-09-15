@@ -122,10 +122,16 @@ pub const LOCALE_SCHEMA_VERSION: u32 = 1;
 pub enum LocError {
     Io(String, std::io::Error),
     Ron(String, Box<ron::de::SpannedError>),
-    Schema { file: String, found: u32 },
+    Schema {
+        file: String,
+        found: u32,
+    },
     UnknownLocale(String),
     /// Klucz jest w jednym języku, a w drugim go nie ma.
-    KeyMismatch { key: String, missing_in: &'static str },
+    KeyMismatch {
+        key: String,
+        missing_in: &'static str,
+    },
     /// Wpis liczebnikowy nie ma tylu form, ile wymaga język.
     PluralArity {
         key: String,
@@ -180,8 +186,7 @@ impl Catalog {
         for l in Locale::ALL {
             let path = dir.join(format!("{}.ron", l.code()));
             let nazwa = path.display().to_string();
-            let txt =
-                std::fs::read_to_string(&path).map_err(|e| LocError::Io(nazwa.clone(), e))?;
+            let txt = std::fs::read_to_string(&path).map_err(|e| LocError::Io(nazwa.clone(), e))?;
             let f: LocaleFile =
                 ron::from_str(&txt).map_err(|e| LocError::Ron(nazwa.clone(), Box::new(e)))?;
             if f.schema_version != LOCALE_SCHEMA_VERSION {
@@ -277,9 +282,7 @@ impl Catalog {
     #[must_use]
     pub fn plural(&self, locale: Locale, key: LocKey, n: u64) -> String {
         let wzorzec = match &self.entries[locale as usize][key.0 as usize] {
-            Entry::Plural(f) => f
-                .get(locale.plural_form(n))
-                .map_or("", String::as_str),
+            Entry::Plural(f) => f.get(locale.plural_form(n)).map_or("", String::as_str),
             Entry::One(s) => s,
         };
         podstaw(wzorzec, &[("n", &n.to_string())])

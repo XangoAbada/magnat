@@ -215,7 +215,10 @@ impl TrafficOracle {
             .iter()
             .map(|n| WorldCoord::new(n.pos_cm.x, n.pos_cm.y, n.z_cm))
             .collect();
-        let index = build_index(&nodes, nodes.iter().enumerate().map(|(i, p)| (*p, i as u32)));
+        let index = build_index(
+            &nodes,
+            nodes.iter().enumerate().map(|(i, p)| (*p, i as u32)),
+        );
         let mut drivers = drivers;
         drivers.sort_unstable();
         let mut by_household = drivers.clone();
@@ -370,7 +373,9 @@ impl TrafficOracle {
     fn habit_of(&self, citizen: u32) -> Option<TravelOption> {
         let h = self.habit.lock().expect("habit");
         match h.get(citizen as usize).copied() {
-            Some(v) if (v as usize) < TravelOption::ALL.len() => Some(TravelOption::ALL[v as usize]),
+            Some(v) if (v as usize) < TravelOption::ALL.len() => {
+                Some(TravelOption::ALL[v as usize])
+            }
             _ => None,
         }
     }
@@ -516,7 +521,8 @@ impl TrafficOracle {
     pub fn network_walk_minutes(&self, from: PlaceRef, to: PlaceRef, speed_pct: u32) -> u16 {
         let a = self.coord_of(from);
         let b = self.coord_of(to);
-        let zapasowy = || walk_minutes_for(manhattan_cm(a, b) * WALK_DETOUR_NUM / DETOUR_DEN, speed_pct);
+        let zapasowy =
+            || walk_minutes_for(manhattan_cm(a, b) * WALK_DETOUR_NUM / DETOUR_DEN, speed_pct);
         let (Some(od), Some(do_)) = (self.nearest_node(a), self.nearest_node(b)) else {
             return zapasowy();
         };
@@ -588,7 +594,8 @@ impl TrafficOracle {
             }
         }
         let (detour_cm, i) = best?;
-        let detour_min = (detour_cm * 36 / (CAR_FALLBACK_DKMH * 6_000)).clamp(0, i64::from(u16::MAX));
+        let detour_min =
+            (detour_cm * 36 / (CAR_FALLBACK_DKMH * 6_000)).clamp(0, i64::from(u16::MAX));
         Some((self.stations[i as usize], detour_min as u16))
     }
 
@@ -749,8 +756,13 @@ impl TrafficOracle {
         // Rower jest **własnością, nie prawem**. Losowanie idzie raz per mieszkaniec
         // (tick 0), więc jest stałe przez całą sesję i niezależne od liczby wątków
         // (00 §3.1) — nie trzeba go nigdzie trzymać ani haszować.
-        if !magnat_core::rng(self.seed, magnat_core::StreamId::ModeChoice, ctx.citizen, magnat_core::Tick(0))
-            .gen_bool_permille(self.params.bike_ownership_permille)
+        if !magnat_core::rng(
+            self.seed,
+            magnat_core::StreamId::ModeChoice,
+            ctx.citizen,
+            magnat_core::Tick(0),
+        )
+        .gen_bool_permille(self.params.bike_ownership_permille)
         {
             return Err(Infeasible::VehicleBroken);
         }
@@ -1184,7 +1196,6 @@ impl TrafficOracle {
             (u32::from(depart.get()) + u32::from(handle.minutes)).min(1_439) as u16,
         );
     }
-
 }
 
 /// **Oracle trzyma stan symulacji i ten stan musi wchodzić do hasha** (00 §3.6).
@@ -1278,10 +1289,7 @@ impl TravelOracle for OracleHandle {
 
 // ── pomocnicze ──────────────────────────────────────────────────────────────────
 
-fn build_index(
-    nodes: &[WorldCoord],
-    it: impl Iterator<Item = (WorldCoord, u32)>,
-) -> CsrGrid<u32> {
+fn build_index(nodes: &[WorldCoord], it: impl Iterator<Item = (WorldCoord, u32)>) -> CsrGrid<u32> {
     let spec = if nodes.is_empty() {
         GridSpec::new(Vec2::new(0.0, 0.0), NODE_CELL_M, 1, 1)
     } else {

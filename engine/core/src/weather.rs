@@ -67,7 +67,10 @@ impl Weather {
         } else {
             0
         };
-        self.precip_permille.saturating_add(mroz).saturating_add(upal).min(1_000)
+        self.precip_permille
+            .saturating_add(mroz)
+            .saturating_add(upal)
+            .min(1_000)
     }
 }
 
@@ -121,8 +124,16 @@ mod tests {
             lato += i64::from(weather_at(7, rok * DAYS_PER_YEAR + SUMMER_PEAK_DAY).temp_dc);
             zima += i64::from(weather_at(7, rok * DAYS_PER_YEAR + 15).temp_dc);
         }
-        assert!(lato / 10 > 180, "lipiec ma {} dziesiątych stopnia", lato / 10);
-        assert!(zima / 10 < 0, "styczeń ma {} dziesiątych stopnia", zima / 10);
+        assert!(
+            lato / 10 > 180,
+            "lipiec ma {} dziesiątych stopnia",
+            lato / 10
+        );
+        assert!(
+            zima / 10 < 0,
+            "styczeń ma {} dziesiątych stopnia",
+            zima / 10
+        );
     }
 
     #[test]
@@ -132,7 +143,11 @@ mod tests {
         for (i, w) in b.iter().rev().enumerate() {
             assert_eq!(a[i], *w, "pogoda doby {i} zależy od kolejności odpytania");
         }
-        assert_ne!(weather_at(11, 5), weather_at(12, 5), "ziarno nic nie zmienia");
+        assert_ne!(
+            weather_at(11, 5),
+            weather_at(12, 5),
+            "ziarno nic nie zmienia"
+        );
     }
 
     #[test]

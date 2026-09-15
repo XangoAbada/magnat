@@ -168,7 +168,10 @@ pub fn run(a: &CenturyArgs) -> Result<std::process::ExitCode, Box<dyn std::error
         min_pop = min_pop.min(pop);
         max_pop = max_pop.max(pop);
         if pop == 0 {
-            eprintln!("BŁĄD: populacja wygasła w dobie {doba} (rok {})", doba / 360);
+            eprintln!(
+                "BŁĄD: populacja wygasła w dobie {doba} (rok {})",
+                doba / 360
+            );
             return Ok(std::process::ExitCode::FAILURE);
         }
 
@@ -176,7 +179,13 @@ pub fn run(a: &CenturyArgs) -> Result<std::process::ExitCode, Box<dyn std::error
             historia.push(((doba / 360) as u32, pop, ostatnie_bezrobocie));
             let rok = (doba / 360) as u32;
             if rok.is_multiple_of(a.report_every) {
-                wiersz(&world, rok, doba, ostatnie_bezrobocie, raport.migration.as_ref());
+                wiersz(
+                    &world,
+                    rok,
+                    doba,
+                    ostatnie_bezrobocie,
+                    raport.migration.as_ref(),
+                );
             }
         }
         if a.hash_every > 0 && doba % a.hash_every == 0 {
@@ -212,7 +221,10 @@ pub fn run(a: &CenturyArgs) -> Result<std::process::ExitCode, Box<dyn std::error
         eprintln!("BŁĄD: pieniądz {pieniadz_start} → {pieniadz_koniec} (00 §6: tolerancja 0)");
         return Ok(std::process::ExitCode::FAILURE);
     }
-    if !world.resource::<Population>().identity_holds(startowa as u64) {
+    if !world
+        .resource::<Population>()
+        .identity_holds(startowa as u64)
+    {
         eprintln!("BŁĄD: tożsamość księgowa populacji nie zamyka się (§7.2)");
         return Ok(std::process::ExitCode::FAILURE);
     }
@@ -239,7 +251,10 @@ fn stabilizacja(historia: &[(u32, usize, u16)], rok_szoku: u32) {
     let Some(przed) = historia.iter().find(|(r, _, _)| *r + 1 == rok_szoku) else {
         return;
     };
-    let po: Vec<&(u32, usize, u16)> = historia.iter().filter(|(r, _, _)| *r >= rok_szoku).collect();
+    let po: Vec<&(u32, usize, u16)> = historia
+        .iter()
+        .filter(|(r, _, _)| *r >= rok_szoku)
+        .collect();
     let Some(szczyt) = po.iter().map(|(_, _, b)| *b).max() else {
         return;
     };
@@ -254,15 +269,19 @@ fn stabilizacja(historia: &[(u32, usize, u16)], rok_szoku: u32) {
     let (min_pop, max_pop) = po
         .iter()
         .filter(|(r, _, _)| *r >= rok_szoku + 5)
-        .fold((usize::MAX, 0usize), |(a, b), (_, p, _)| (a.min(*p), b.max(*p)));
+        .fold((usize::MAX, 0usize), |(a, b), (_, p, _)| {
+            (a.min(*p), b.max(*p))
+        });
     let amplituda = if max_pop == 0 {
         0.0
     } else {
         (max_pop - min_pop) as f64 * 100.0 / max_pop as f64
     };
 
-    println!("
-eksperyment szokowy (WP8)");
+    println!(
+        "
+eksperyment szokowy (WP8)"
+    );
     println!("  bezrobocie przed szokiem:   {} ‰", przed.2);
     println!("  szczyt po szoku:            {szczyt} ‰");
     println!("  próg zaniku nadwyżki:       {prog} ‰");

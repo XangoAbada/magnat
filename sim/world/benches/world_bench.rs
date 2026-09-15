@@ -63,9 +63,7 @@ fn zaludnianie(c: &mut Criterion) {
     use magnat_agents::{register, society, DemographyTable, NeedTable};
     use magnat_ecs::World;
     use magnat_voxel::MaterialRegistry;
-    use magnat_world::{
-        generate_city, generate_population, CityPlan, PopulationParams, Terrain,
-    };
+    use magnat_world::{generate_city, generate_population, CityPlan, PopulationParams, Terrain};
     use std::sync::Arc;
 
     let pool = JobPool::new(0);
@@ -73,8 +71,13 @@ fn zaludnianie(c: &mut Criterion) {
     let (dane, _) = generate(p, &pool).expect("świat");
     let reg = Arc::new(MaterialRegistry::load_dir(&magnat_world::data_path("materials")).unwrap());
     let terrain = Terrain::new(dane, reg);
-    let miasto = generate_city(&CityPlan::from_world(&p), &terrain, terrain.materials(), &pool)
-        .expect("miasto");
+    let miasto = generate_city(
+        &CityPlan::from_world(&p),
+        &terrain,
+        terrain.materials(),
+        &pool,
+    )
+    .expect("miasto");
 
     let mut g = c.benchmark_group("m3d-1 Etap 8");
     g.sample_size(10);

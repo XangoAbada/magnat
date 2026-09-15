@@ -291,7 +291,11 @@ fn kazdy_slot_planu_ma_niepusty_powod() {
                 r.label
             );
             assert!(!r.label.is_empty());
-            assert!(!r.reason.contains('{'), "nietrafione podstawienie: {}", r.reason);
+            assert!(
+                !r.reason.contains('{'),
+                "nietrafione podstawienie: {}",
+                r.reason
+            );
         }
     }
 }

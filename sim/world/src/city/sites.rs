@@ -354,32 +354,35 @@ impl SiteCatalog {
             }
             let mut recipes = Vec::with_capacity(spec.recipes.len());
             for r in &spec.recipes {
-                recipes.push(cat.recipe_id(r).ok_or_else(|| {
-                    SiteDataError::UnknownRecipe {
-                        archetype: spec.key.clone(),
-                        key: r.clone(),
-                    }
-                })?);
+                recipes.push(
+                    cat.recipe_id(r)
+                        .ok_or_else(|| SiteDataError::UnknownRecipe {
+                            archetype: spec.key.clone(),
+                            key: r.clone(),
+                        })?,
+                );
             }
             let mut consumes = Vec::with_capacity(spec.consumes.len());
             for (g, m) in &spec.consumes {
-                let id = cat
-                    .good_id(g)
-                    .ok_or_else(|| SiteDataError::UnknownGood {
-                        archetype: spec.key.clone(),
-                        key: g.clone(),
-                    })?;
+                let id = cat.good_id(g).ok_or_else(|| SiteDataError::UnknownGood {
+                    archetype: spec.key.clone(),
+                    key: g.clone(),
+                })?;
                 consumes.push((id, *m));
             }
             consumes.sort_by_key(|(g, _)| g.0);
             let grammar = match &spec.grammar {
                 None => None,
-                Some(k) => Some(grammars.id_of(k).ok_or_else(|| {
-                    SiteDataError::UnknownGrammar {
-                        archetype: spec.key.clone(),
-                        key: k.clone(),
-                    }
-                })?),
+                Some(k) => {
+                    Some(
+                        grammars
+                            .id_of(k)
+                            .ok_or_else(|| SiteDataError::UnknownGrammar {
+                                archetype: spec.key.clone(),
+                                key: k.clone(),
+                            })?,
+                    )
+                }
             };
             archetypes.push(Archetype {
                 spec,
@@ -435,7 +438,10 @@ impl SiteCatalog {
         })
     }
 
-    pub fn load_default(cat: &Catalog, grammars: &GrammarSet) -> Result<SiteCatalog, SiteDataError> {
+    pub fn load_default(
+        cat: &Catalog,
+        grammars: &GrammarSet,
+    ) -> Result<SiteCatalog, SiteDataError> {
         SiteCatalog::load(
             &crate::assets::data_path("buildings"),
             &crate::assets::data_path("chains/templates.ron"),
@@ -802,10 +808,7 @@ const POP_CELL_M: f32 = 256.0;
 impl PoleLudnosci {
     fn suma_w_promieniu(&self, p: Vec2, r_m: f32) -> f32 {
         let k = (r_m / self.cell_m).ceil() as i32;
-        let (cx, cy) = (
-            (p.x / self.cell_m) as i32,
-            (p.y / self.cell_m) as i32,
-        );
+        let (cx, cy) = ((p.x / self.cell_m) as i32, (p.y / self.cell_m) as i32);
         let mut s = 0.0;
         for dy in -k..=k {
             for dx in -k..=k {
@@ -875,10 +878,7 @@ fn rozmiesc_normatyw(
         let Some(&(best, _)) = punkty
             .iter()
             .filter(|(i, _)| !kand[*i].zajeta)
-            .max_by(|a, b| {
-                a.1.total_cmp(&b.1)
-                    .then(kand[b.0].idx.cmp(&kand[a.0].idx))
-            })
+            .max_by(|a, b| a.1.total_cmp(&b.1).then(kand[b.0].idx.cmp(&kand[a.0].idx)))
         else {
             break;
         };
@@ -1143,8 +1143,8 @@ fn posadz_produkcje(
         {
             continue;
         }
-        let skala = (dokladna.round() as i64)
-            .clamp(i64::from(SCALE_MIN), i64::from(SCALE_MAX)) as u16;
+        let skala =
+            (dokladna.round() as i64).clamp(i64::from(SCALE_MIN), i64::from(SCALE_MAX)) as u16;
         zostalo.push((*a, n, skala));
     }
     // Najpierw zakłady produkujące to, czego **nie da się sprowadzić** (woda, beton).
@@ -1218,7 +1218,10 @@ fn posadz_produkcje(
     }
 
     // ── 3b. Reszta: gdziekolwiek się mieści, każdy zakład własną firmą ─────────────
-    #[allow(clippy::needless_range_loop, reason = "pętla mutuje `zostalo[slot].1` i jednocześnie czyta `kand`; iterator po `zostalo` zablokowałby drugie pożyczenie")]
+    #[allow(
+        clippy::needless_range_loop,
+        reason = "pętla mutuje `zostalo[slot].1` i jednocześnie czyta `kand`; iterator po `zostalo` zablokowałby drugie pożyczenie"
+    )]
     for slot in 0..zostalo.len() {
         let (aid, _, skala) = zostalo[slot];
         let a = sc.get(aid);

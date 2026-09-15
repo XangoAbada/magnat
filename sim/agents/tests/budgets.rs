@@ -471,6 +471,10 @@ fn bench_gossip_day() {
         na_dobe.as_millis() <= prog,
         "dobowa plotka i relacje: {:.1} ms wobec progu {prog} ms (profil {})",
         na_dobe.as_secs_f64() * 1e3,
-        if cfg!(debug_assertions) { "debug" } else { "release" }
+        if cfg!(debug_assertions) {
+            "debug"
+        } else {
+            "release"
+        }
     );
 }

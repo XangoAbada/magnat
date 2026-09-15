@@ -281,7 +281,7 @@ fn planer_stoi_na_traitach_a_nie_na_implementacjach() {
     // Gdyby `PlanCtx` znał typ implementacji, `uloz` nie przyjęłoby obu.
     use magnat_agents::{
         plan_day, CitizenView, DayCanvas, Employment, HouseholdView, Identity, Needs, Personality,
-        PlanCtx, Residence, Vitals, StraightLineTravel,
+        PlanCtx, Residence, StraightLineTravel, Vitals,
     };
     use magnat_core::{DayOfWeek, HouseholdId, STOCK_CAT_COUNT};
 

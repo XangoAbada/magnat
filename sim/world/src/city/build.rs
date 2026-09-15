@@ -265,7 +265,12 @@ impl BuildingSignature {
     /// Przekroczenie zakresu **nasyca**, nie zawija: budynek 40-kondygnacyjny ma być
     /// nieodróżnialny od 31-kondygnacyjnego, a nie od 8-kondygnacyjnego.
     #[must_use]
-    pub fn new(grammar: GrammarId, floors: u8, wall: magnat_voxel::MaterialId, roof: RoofKind) -> BuildingSignature {
+    pub fn new(
+        grammar: GrammarId,
+        floors: u8,
+        wall: magnat_voxel::MaterialId,
+        roof: RoofKind,
+    ) -> BuildingSignature {
         let g = u32::from(grammar.0).min(63);
         let f = u32::from(floors).min(31);
         let m = u32::from(wall.0).min(1023);
@@ -598,7 +603,6 @@ fn pasuje(g: &BuildingGrammar, c: &PickCtx, relax: Relax) -> bool {
         && (c.front_m >= a.frontage_m.0 && c.front_m <= a.frontage_m.1)
         && (c.depth_m >= a.depth_m.0 && c.depth_m <= a.depth_m.1)
 }
-
 
 /// Wynik doboru gramatyki.
 struct Picked {
@@ -1008,13 +1012,17 @@ fn roznorodnosc(
             out.report.min_district_entropy_mbits = mbits;
             out.report.min_district_entropy_at = d as u16;
             let gr = &gram_dzielnicy[d];
-            let (g, ile) = gr.iter().enumerate().fold((0usize, 0u32), |b, (i, c)| {
-                if *c > b.1 {
-                    (i, *c)
-                } else {
-                    b
-                }
-            });
+            let (g, ile) =
+                gr.iter().enumerate().fold(
+                    (0usize, 0u32),
+                    |b, (i, c)| {
+                        if *c > b.1 {
+                            (i, *c)
+                        } else {
+                            b
+                        }
+                    },
+                );
             out.report.min_district_top = (g as u16, ile, suma);
         }
     }
@@ -1176,7 +1184,11 @@ fn plan_building_inner(
             base.half.y,
             Axis2::Side,
         ),
-        overhang_front_m: if p.frontage.is_none() { 0.0 } else { OVERHANG_M },
+        overhang_front_m: if p.frontage.is_none() {
+            0.0
+        } else {
+            OVERHANG_M
+        },
     };
 
     let derived = derive::derive(
@@ -1455,8 +1467,16 @@ fn czynsz(land_value_per_m2: Money, pole_m2: f32, kind: UnitKind) -> Money {
 fn wyjscie_z_bryly(base: &Scope, kier: Vec2) -> f32 {
     let v = base.v();
     let (du, dv) = (kier.dot(base.u).abs(), kier.dot(v).abs());
-    let tu = if du > 1e-4 { base.half.x / du } else { f32::MAX };
-    let tv = if dv > 1e-4 { base.half.y / dv } else { f32::MAX };
+    let tu = if du > 1e-4 {
+        base.half.x / du
+    } else {
+        f32::MAX
+    };
+    let tv = if dv > 1e-4 {
+        base.half.y / dv
+    } else {
+        f32::MAX
+    };
     tu.min(tv)
 }
 
@@ -1499,37 +1519,37 @@ fn wejscia(input: &BuildInput, parcels: &ParcelSet, p: &Planned) -> SmallVec<[En
         let mut najlepszy: Option<(i64, SegmentId, Vec2, f32)> = None;
         let mut kandydaci: Vec<SegmentId> = Vec::new();
         for promien in [bazowy + 60.0, bazowy + 220.0] {
-        kandydaci.clear();
-        parcels
-            .street_index
-            .query_radius(srodek, promien, &mut kandydaci);
-        kandydaci.sort_unstable();
-        kandydaci.dedup();
-        for s in &kandydaci {
-            let s = *s;
-            let seg = &input.roads.segments[s.0 as usize];
-            if seg.flags.contains(RoadFlags::NO_HEAVY)
-                || seg.class.is_rail()
-                || matches!(seg.class, RoadClass::Pedestrian)
-            {
-                continue;
+            kandydaci.clear();
+            parcels
+                .street_index
+                .query_radius(srodek, promien, &mut kandydaci);
+            kandydaci.sort_unstable();
+            kandydaci.dedup();
+            for s in &kandydaci {
+                let s = *s;
+                let seg = &input.roads.segments[s.0 as usize];
+                if seg.flags.contains(RoadFlags::NO_HEAVY)
+                    || seg.class.is_rail()
+                    || matches!(seg.class, RoadClass::Pedestrian)
+                {
+                    continue;
+                }
+                let (a, b) = (
+                    input.roads.nodes[seg.a.0 as usize].pos,
+                    input.roads.nodes[seg.b.0 as usize].pos,
+                );
+                let (punkt, t) = poly::closest_on_segment(a, b, srodek);
+                // Klucz całkowitoliczbowy: odległość w centymetrach kwadratowych, remis
+                // po numerze segmentu. Bez tego remis rozstrzygałaby kolejność w indeksie.
+                let d = (punkt - srodek).length_squared();
+                let klucz = (f64::from(d) * 100.0) as i64;
+                if najlepszy.is_none_or(|(k, ids, _, _)| (klucz, s) < (k, ids)) {
+                    najlepszy = Some((klucz, s, punkt, t));
+                }
             }
-            let (a, b) = (
-                input.roads.nodes[seg.a.0 as usize].pos,
-                input.roads.nodes[seg.b.0 as usize].pos,
-            );
-            let (punkt, t) = poly::closest_on_segment(a, b, srodek);
-            // Klucz całkowitoliczbowy: odległość w centymetrach kwadratowych, remis
-            // po numerze segmentu. Bez tego remis rozstrzygałaby kolejność w indeksie.
-            let d = (punkt - srodek).length_squared();
-            let klucz = (f64::from(d) * 100.0) as i64;
-            if najlepszy.is_none_or(|(k, ids, _, _)| (klucz, s) < (k, ids)) {
-                najlepszy = Some((klucz, s, punkt, t));
+            if najlepszy.is_some() {
+                break;
             }
-        }
-        if najlepszy.is_some() {
-            break;
-        }
         }
         if let Some((_, s, punkt, t)) = najlepszy {
             let kier = (punkt - srodek).normalize_or_zero();
@@ -1564,7 +1584,6 @@ pub fn recompute_pop_capacity(districts: &mut DistrictSet, parcels: &ParcelSet, 
         d.pop_capacity = (*n as f32 * OSOB_NA_MIESZKANIE) as u32;
     }
 }
-
 
 /// Osób na mieszkanie w epoce startowej. Wejście dla M3, nie prawda o demografii.
 pub const OSOB_NA_MIESZKANIE: f32 = 2.4;
@@ -1730,8 +1749,13 @@ mod tests {
         let dzialka = kwadrat(40.0);
         for ulica in [Vec2::new(20.0, -5.0), Vec2::new(20.0, 45.0)] {
             for kierunek in [Vec2::new(1.0, 0.0), Vec2::new(-1.0, 0.0)] {
-                let s = footprint_for(&dzialka, Some(kierunek), Some(ulica), &massing(2.0, 2.0, 2.0))
-                    .expect("obrys");
+                let s = footprint_for(
+                    &dzialka,
+                    Some(kierunek),
+                    Some(ulica),
+                    &massing(2.0, 2.0, 2.0),
+                )
+                .expect("obrys");
                 let v = s.v();
                 let do_ulicy = ulica - Vec2::new(s.center.x, s.center.y);
                 assert!(
@@ -1801,9 +1825,33 @@ mod tests {
             let c = Vec2::new(base.center.x, base.center.y);
             let v = base.v();
             let margins = Margins {
-                front_m: zapas(&dzialka, c, base.u, v, base.half.x, base.half.y, Axis2::Front),
-                back_m: zapas(&dzialka, c, base.u, v, base.half.x, base.half.y, Axis2::Back),
-                side_m: zapas(&dzialka, c, base.u, v, base.half.x, base.half.y, Axis2::Side),
+                front_m: zapas(
+                    &dzialka,
+                    c,
+                    base.u,
+                    v,
+                    base.half.x,
+                    base.half.y,
+                    Axis2::Front,
+                ),
+                back_m: zapas(
+                    &dzialka,
+                    c,
+                    base.u,
+                    v,
+                    base.half.x,
+                    base.half.y,
+                    Axis2::Back,
+                ),
+                side_m: zapas(
+                    &dzialka,
+                    c,
+                    base.u,
+                    v,
+                    base.half.x,
+                    base.half.y,
+                    Axis2::Side,
+                ),
                 overhang_front_m: OVERHANG_M,
             };
             let out = derive::derive(

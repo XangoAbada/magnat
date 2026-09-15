@@ -277,9 +277,10 @@ pub fn render_day_text(
                     l,
                     "ui.reason.Arrived",
                     &[
-                        ("faktycznie", &zegar(
-                            (i32::from(r.start_min) + r.drift_min).clamp(0, 1439) as u16
-                        )),
+                        (
+                            "faktycznie",
+                            &zegar((i32::from(r.start_min) + r.drift_min).clamp(0, 1439) as u16)
+                        ),
                         ("plan", &zegar(r.start_min)),
                     ],
                 )
@@ -329,7 +330,12 @@ mod tests {
         assert_eq!((b[2].start_min, b[2].end_min), (500, 1440));
     }
 
-    fn slot(start_min: u16, dur_min: u16, kind: ActivityKind, target: u32) -> magnat_agents::PlanSlot {
+    fn slot(
+        start_min: u16,
+        dur_min: u16,
+        kind: ActivityKind,
+        target: u32,
+    ) -> magnat_agents::PlanSlot {
         magnat_agents::PlanSlot {
             start_min,
             dur_min,
@@ -391,7 +397,11 @@ mod tests {
         assert_eq!(po.drift(1), 0, "karta nadal wymyśla spóźnienie");
         let c = Catalog::load().expect("data/locale/");
         let rows = po.rows(&c, Locale::Pl);
-        assert_eq!(rows.len(), 2, "karta pokazuje plan zapisany, nie odtworzony");
+        assert_eq!(
+            rows.len(),
+            2,
+            "karta pokazuje plan zapisany, nie odtworzony"
+        );
         assert!(!rows[1].drifted());
         assert_eq!(rows[1].start_min, 1020);
     }

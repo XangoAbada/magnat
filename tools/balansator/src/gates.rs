@@ -401,7 +401,7 @@ pub fn evaluate(runs: &[RunFile], profile: Profile, min_margin_bp: i32) -> Vec<G
             pass: !per_seed.is_empty() && m < G6_HHI_MAX,
             value: format!("HHI {m}"),
             threshold: "< 6 000 (0,6)",
-        advisory: false,
+            advisory: false,
         });
     }
 

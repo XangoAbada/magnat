@@ -269,7 +269,9 @@ impl Cadence {
 /// i przy 10×: musi być identyczny.
 ///
 /// 50× i tryb makro dokłada M12; wariant dopisuje się **na końcu** (00 §3.1).
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Default, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Default, Serialize, Deserialize,
+)]
 #[repr(u8)]
 pub enum SimSpeed {
     Paused = 0,
@@ -280,12 +282,8 @@ pub enum SimSpeed {
 }
 
 impl SimSpeed {
-    pub const ALL: &'static [SimSpeed] = &[
-        SimSpeed::Paused,
-        SimSpeed::X1,
-        SimSpeed::X3,
-        SimSpeed::X10,
-    ];
+    pub const ALL: &'static [SimSpeed] =
+        &[SimSpeed::Paused, SimSpeed::X1, SimSpeed::X3, SimSpeed::X10];
 
     /// Minut gry na sekundę czasu realnego. 1× = 1 minuta/s, czyli doba w 24 minuty.
     #[inline]
@@ -374,9 +372,7 @@ impl SimClock {
         if na_sekunde == 0 {
             return 0;
         }
-        self.accum = self
-            .accum
-            .saturating_add(dt_ms.saturating_mul(na_sekunde));
+        self.accum = self.accum.saturating_add(dt_ms.saturating_mul(na_sekunde));
         let minut = (self.accum / 1000).min(cap);
         self.accum -= minut.saturating_mul(1000);
         self.tick = Tick(self.tick.0 + u64::from(minut));
@@ -458,7 +454,11 @@ mod tests {
     #[test]
     fn predkosc_zmienia_tempo_a_nie_ziarnistosc() {
         // Doba gry to zawsze 1440 ticków — przy 1× trwa 1440 s realnych, przy 10× 144 s.
-        for (predkosc, sekundy) in [(SimSpeed::X1, 1440u32), (SimSpeed::X3, 480), (SimSpeed::X10, 144)] {
+        for (predkosc, sekundy) in [
+            (SimSpeed::X1, 1440u32),
+            (SimSpeed::X3, 480),
+            (SimSpeed::X10, 144),
+        ] {
             let mut z = SimClock::new(Tick(0));
             z.set_speed(predkosc);
             let mut minut = 0u32;

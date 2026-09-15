@@ -265,7 +265,7 @@ fn kontekst<'a>(
             id: HouseholdId(encja(s.identity.household)),
             stock: &s.stock,
             escorts: brak_eskorty,
-                pickups: brak_eskorty,
+            pickups: brak_eskorty,
         },
         employment: &s.employment,
         known: KnowledgeView::new(&s.wiedza),

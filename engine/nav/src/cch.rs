@@ -1136,7 +1136,11 @@ mod tests {
                 let kopiec = ch.query_dijkstra(s, t, &mut sc);
                 let odniesienie = dijkstra(g, &w, s, t).map(|(c, _)| c);
                 assert_eq!(drzewo, kopiec, "instancja {i}, para ({}, {})", s.0, t.0);
-                assert_eq!(drzewo, odniesienie, "instancja {i}, para ({}, {})", s.0, t.0);
+                assert_eq!(
+                    drzewo, odniesienie,
+                    "instancja {i}, para ({}, {})",
+                    s.0, t.0
+                );
             }
         }
     }

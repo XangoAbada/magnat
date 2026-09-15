@@ -38,9 +38,7 @@ use crate::needs::NeedTable;
 use crate::places::{
     site_of, FulfilOutcome, FulfilRequest, PlaceProvider, TravelOracle, TripRequest,
 };
-use crate::planner::{
-    load_plan, plan_day, replan, store_plan, DayCanvas, HouseholdView, PlanCtx,
-};
+use crate::planner::{load_plan, plan_day, replan, store_plan, DayCanvas, HouseholdView, PlanCtx};
 use crate::store::{Knowledge, KnowledgeSlab, PlanSlab, PlanSlot};
 use crate::{demography, society};
 use magnat_core::{
@@ -147,7 +145,10 @@ impl CitizenSnapshot {
         }
         let employment = *world.get::<Employment>(citizen)?;
         let residence = *world.get::<Residence>(citizen)?;
-        let kref = world.get::<KnowledgeRef>(citizen).copied().unwrap_or_default();
+        let kref = world
+            .get::<KnowledgeRef>(citizen)
+            .copied()
+            .unwrap_or_default();
         let knowledge = world
             .resource::<KnowledgeSlab>()
             .entries(demography::knowledge_ref(&kref))
@@ -256,12 +257,7 @@ fn role_places(
         })
         .collect();
     let ages = world.resource::<demography::DemographyTable>().ages();
-    let role = household::roles(
-        &widoki,
-        i32::from(ages.escort),
-        i32::from(ages.adult),
-        day,
-    );
+    let role = household::roles(&widoki, i32::from(ages.escort), i32::from(ages.adult), day);
 
     let szkoly = |lista: &[u32]| -> Vec<PlaceRef> {
         lista
@@ -384,7 +380,15 @@ impl System for DayLoopSystem {
             }
             match e.event_kind() {
                 Some(EventKind::PlanDay) => {
-                    if zaplanuj(world, kto, doba, seed, &self.table, &zrodla, &mut self.canvas) {
+                    if zaplanuj(
+                        world,
+                        kto,
+                        doba,
+                        seed,
+                        &self.table,
+                        &zrodla,
+                        &mut self.canvas,
+                    ) {
                         stats.plans += 1;
                         if let Some(slot) = slot_planu(world, kto, 0) {
                             wstaw(
@@ -612,7 +616,13 @@ fn zaplanuj(
     let Some(snap) = CitizenSnapshot::of(world, citizen, day) else {
         return false;
     };
-    let ctx = snap.ctx(seed, day, table, zrodla.places.as_ref(), zrodla.travel.as_ref());
+    let ctx = snap.ctx(
+        seed,
+        day,
+        table,
+        zrodla.places.as_ref(),
+        zrodla.travel.as_ref(),
+    );
     plan_day(&ctx, canvas);
     // Uchwyt do areny planow **nadpisuje sie**, a nie alokuje od nowa: `PlanRef::default()`
     // ma `offset = NO_PLAN`, wiec `store_plan` wzialby swiezy blok i porzucil poprzedni.
@@ -651,7 +661,13 @@ fn przeplanuj(
     };
     let plan = world.get::<PlanRef>(citizen).copied().unwrap_or_default();
     canvas.load(load_plan(&plan, world.resource::<PlanSlab>()));
-    let ctx = snap.ctx(seed, day, table, zrodla.places.as_ref(), zrodla.travel.as_ref());
+    let ctx = snap.ctx(
+        seed,
+        day,
+        table,
+        zrodla.places.as_ref(),
+        zrodla.travel.as_ref(),
+    );
     replan(&ctx, from, cause, canvas);
     let slab = world.resource_mut::<PlanSlab>();
     let mut nowy = plan;
@@ -689,11 +705,7 @@ fn zakotwicz(
     };
     let minuta = (teraz % 1440) as u16;
     let sloty = load_plan(&plan, world.resource::<PlanSlab>());
-    let Some((i, s)) = sloty
-        .iter()
-        .enumerate()
-        .find(|(_, s)| s.start_min > minuta)
-    else {
+    let Some((i, s)) = sloty.iter().enumerate().find(|(_, s)| s.start_min > minuta) else {
         return;
     };
     wstaw(
@@ -796,14 +808,15 @@ fn zaspokoj(
     // Budżet i liczebność czyta się z komponentu `Household` — on jest właścicielem
     // salda gospodarstwa (M5d, korekta po M3c) i M5 nie trzyma drugiej kopii.
     // `budget_hint` to całość dostępnych środków; kopertę per potrzeba wstawi M5d/WP8.
-    let (budzet, osob) = gospodarstwo
-        .and_then(|e| world.get::<Household>(e))
-        .map_or((magnat_core::Money::ZERO, 1u8), |h| {
+    let (budzet, osob) = gospodarstwo.and_then(|e| world.get::<Household>(e)).map_or(
+        (magnat_core::Money::ZERO, 1u8),
+        |h| {
             (
                 magnat_core::Money(h.cash.get().saturating_add(h.bank.get()).max(0)),
                 h.size.max(1),
             )
-        });
+        },
+    );
     let wynik = zrodla.places.fulfil(&FulfilRequest {
         citizen: CitizenId(citizen),
         household: HouseholdId(gospodarstwo.unwrap_or(citizen)),
@@ -875,8 +888,11 @@ impl SkillDriftSystem {
     #[must_use]
     pub fn new(world: &World) -> SkillDriftSystem {
         SkillDriftSystem {
-            desc: SystemDesc::new("agents.SkillDrift", Cadence::EveryDay)
-                .with_query::<(Entity, &Employment, &mut Skills), ()>(world),
+            desc: SystemDesc::new("agents.SkillDrift", Cadence::EveryDay).with_query::<(
+                Entity,
+                &Employment,
+                &mut Skills,
+            ), ()>(world),
         }
     }
 }
@@ -1038,7 +1054,10 @@ impl System for TravelMicroSystem {
 /// czynność, każda czynność następną, a obsługa `PlanDay` dopisuje `PlanDay` na dobę
 /// następną. Runner nie planuje niczego — od tego jest [`DayLoopSystem`].
 pub fn bootstrap_day(world: &mut World, day: u64) -> u32 {
-    let mieszkancy: Vec<Entity> = world.resource::<demography::Population>().citizens().to_vec();
+    let mieszkancy: Vec<Entity> = world
+        .resource::<demography::Population>()
+        .citizens()
+        .to_vec();
     let mut kolejka = std::mem::take(world.resource_mut::<EventQueue>());
     for c in &mieszkancy {
         kolejka.schedule(SimEvent::new(

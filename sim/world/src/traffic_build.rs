@@ -17,15 +17,13 @@
 
 use crate::city::CityData;
 use crate::nav_build::{build_nav, NavBuildError};
-use magnat_agents::{
-    household, Household, HouseholdOverflow, Identity, PlaceTable, Population,
-};
+use magnat_agents::{household, Household, HouseholdOverflow, Identity, PlaceTable, Population};
 use magnat_core::{rng, PlaceRef, SimMinute, SiteId, StreamId, Tick, WorldCoord};
 use magnat_ecs::{Entity, World};
 use magnat_nav::NavRouter;
 use magnat_traffic::{
     register_traffic, DriverEntry, FuelTank, ParkingRegistry, Station, TrafficNetwork,
-    TrafficOracle, TrafficServices, TransitNetwork, VdfTable, VehicleClass, VehicleCatalog,
+    TrafficOracle, TrafficServices, TransitNetwork, VdfTable, VehicleCatalog, VehicleClass,
     VehicleClassId, VehicleCondition, VehicleLocation, VehicleOwner,
 };
 use std::sync::Arc;
@@ -130,7 +128,9 @@ pub fn build_oracle(
     // `Y-4`: pojemność ≥ 2 × liczba odrębnych par origin–cel, a klucz niesie kubełek
     // godzinowy, więc par jest ~2 × liczba dojeżdżających. Stąd czterokrotność,
     // zaokrąglona w górę do potęgi dwójki (cache i tak to robi).
-    let pojemnosc = (commuters.max(1) * 4).next_power_of_two().clamp(1_024, 1 << 20);
+    let pojemnosc = (commuters.max(1) * 4)
+        .next_power_of_two()
+        .clamp(1_024, 1 << 20);
     let router = NavRouter::build(
         graphs,
         city.districts.districts.len().max(1) as u16,
@@ -150,9 +150,7 @@ fn stacje(city: &CityData, places: &PlaceTable) -> Vec<Station> {
             continue;
         }
         let place = PlaceRef::Site(SiteId(crate::city::sites::site_id(i as u32).0));
-        let at = places
-            .coord_of(place)
-            .unwrap_or(WorldCoord::ORIGIN);
+        let at = places.coord_of(place).unwrap_or(WorldCoord::ORIGIN);
         out.push(Station {
             place,
             at,
@@ -222,9 +220,17 @@ pub fn seed_fleet(
         // motoryzacja jest niższa.
         let slot = fleet.len() as u32;
         parking.resize_fleet(slot as usize + 1);
-        let pod_domem = places.coord_of(dom).unwrap_or(magnat_core::WorldCoord::ORIGIN);
+        let pod_domem = places
+            .coord_of(dom)
+            .unwrap_or(magnat_core::WorldCoord::ORIGIN);
         if parking
-            .find_and_reserve(pod_domem, HOME_PARKING_RADIUS_M, slot, 10, SimMinute(u64::MAX))
+            .find_and_reserve(
+                pod_domem,
+                HOME_PARKING_RADIUS_M,
+                slot,
+                10,
+                SimMinute(u64::MAX),
+            )
             .is_err()
         {
             // Krawężnika w promieniu nie ma albo jest pełny. Dom wolnostojący ma wtedy
@@ -241,7 +247,13 @@ pub fn seed_fleet(
             }
             parking.add_private(pod_domem, 1);
             if parking
-                .find_and_reserve(pod_domem, HOME_PARKING_RADIUS_M, slot, 10, SimMinute(u64::MAX))
+                .find_and_reserve(
+                    pod_domem,
+                    HOME_PARKING_RADIUS_M,
+                    slot,
+                    10,
+                    SimMinute(u64::MAX),
+                )
                 .is_err()
             {
                 bez_parkingu += 1;
@@ -422,8 +434,11 @@ pub fn seed_transit(
         let Some(trasa) = oracle.route_nodes(od, do_, magnat_core::MinuteOfDay::new(8 * 60)) else {
             continue;
         };
-        let krawedzie: Vec<magnat_nav::EdgeId> =
-            trasa.legs.iter().flat_map(|l| l.edges.iter().copied()).collect();
+        let krawedzie: Vec<magnat_nav::EdgeId> = trasa
+            .legs
+            .iter()
+            .flat_map(|l| l.edges.iter().copied())
+            .collect();
         let linia = oracle.with_road(|road| {
             magnat_traffic::TransitLine::from_route(
                 magnat_traffic::LineId(linie.len() as u16 + 1),

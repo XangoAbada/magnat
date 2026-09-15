@@ -29,7 +29,10 @@ pub struct UiContext {
 
 impl UiContext {
     /// Wczytuje katalog tekstów i ustawia zegar na podany tick.
-    pub fn new(locale: Locale, start: magnat_core::Tick) -> Result<UiContext, crate::loc::LocError> {
+    pub fn new(
+        locale: Locale,
+        start: magnat_core::Tick,
+    ) -> Result<UiContext, crate::loc::LocError> {
         Ok(UiContext {
             catalog: Catalog::load()?,
             locale,

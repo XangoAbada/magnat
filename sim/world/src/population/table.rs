@@ -100,11 +100,20 @@ pub struct PopulationTable {
 pub enum TableError {
     Io(std::io::Error),
     Ron(ron::de::SpannedError),
-    Schema { found: u32 },
+    Schema {
+        found: u32,
+    },
     /// Rozkład, który nie sumuje się do 1000 ‰.
-    NotADistribution { what: String, sum: u32 },
+    NotADistribution {
+        what: String,
+        sum: u32,
+    },
     Missing(String),
-    BadLength { what: String, want: usize, got: usize },
+    BadLength {
+        what: String,
+        want: usize,
+        got: usize,
+    },
 }
 
 impl std::fmt::Display for TableError {
@@ -117,11 +126,17 @@ impl std::fmt::Display for TableError {
                 "population.ron: schema_version {found}, oczekiwano {POPULATION_SCHEMA_VERSION}"
             ),
             TableError::NotADistribution { what, sum } => {
-                write!(f, "population.ron: {what} sumuje się do {sum} ‰ zamiast 1000")
+                write!(
+                    f,
+                    "population.ron: {what} sumuje się do {sum} ‰ zamiast 1000"
+                )
             }
             TableError::Missing(w) => write!(f, "population.ron: brak wpisu {w}"),
             TableError::BadLength { what, want, got } => {
-                write!(f, "population.ron: {what} ma {got} pozycji, oczekiwano {want}")
+                write!(
+                    f,
+                    "population.ron: {what} ma {got} pozycji, oczekiwano {want}"
+                )
             }
         }
     }
@@ -176,11 +191,7 @@ impl PopulationTable {
         }
         suma(&self.fields, "fields")?;
         suma(
-            &self
-                .households
-                .iter()
-                .map(|h| h.weight)
-                .collect::<Vec<_>>(),
+            &self.households.iter().map(|h| h.weight).collect::<Vec<_>>(),
             "households",
         )?;
         if self.households.iter().all(|h| h.adults == 0) {
@@ -212,7 +223,11 @@ impl PopulationTable {
         self.pyramids
             .iter()
             .find(|p| p.epoch == epoch)
-            .or_else(|| self.pyramids.iter().find(|p| p.epoch == self.default_pyramid))
+            .or_else(|| {
+                self.pyramids
+                    .iter()
+                    .find(|p| p.epoch == self.default_pyramid)
+            })
             .map_or(&[], |p| p.bands.as_slice())
     }
 

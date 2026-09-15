@@ -844,8 +844,14 @@ mod tests {
     fn kredyt_tworzy_i_niszczy_pieniadz() {
         let mut b = Books::new();
         let a = world_account(&mut b);
-        b.create_credit(a, Money(50_000), LoanId(1), DecisionReason::Unspecified, Tick(0))
-            .unwrap();
+        b.create_credit(
+            a,
+            Money(50_000),
+            LoanId(1),
+            DecisionReason::Unspecified,
+            Tick(0),
+        )
+        .unwrap();
         assert_eq!(b.supply().credit_created, Money(50_000));
         assert_eq!(b.check_conservation(), Ok(()));
         b.destroy_credit(a, Money(20_000), LoanId(1), Tick(1))

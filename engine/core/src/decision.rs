@@ -29,7 +29,8 @@ use crate::time::MinuteOfDay;
 use crate::types::{GoodId, Q};
 use crate::vocab::{
     CommitmentKind, DeprivationEffect, FixedCost, LifeEventKind, LoanKind, MigrationKind, NeedKind,
-    PlaceRef, PriceDriver, RejectCause, RejectCredit, StockCat, TraitId, TransportMode, UtilityKind,
+    PlaceRef, PriceDriver, RejectCause, RejectCredit, StockCat, TraitId, TransportMode,
+    UtilityKind,
 };
 use serde::{Deserialize, Serialize};
 
@@ -130,7 +131,10 @@ pub enum DecisionReason {
     /// Dla tego środka nie ma trasy między końcami podróży — 3,5 % węzłów sieci M2
     /// to pułapki jednokierunkowe (M4b `Y-1`). Rozstrzygnięcie zapada **przy
     /// planowaniu**: mieszkaniec dostaje inny środek, a nie porażkę przejazdu.
-    NoRouteForMode { mode: TransportMode, fallback: TransportMode } = 201,
+    NoRouteForMode {
+        mode: TransportMode,
+        fallback: TransportMode,
+    } = 201,
     /// Poziom paliwa spadł poniżej progu i tankowanie weszło do planu dnia
     /// (M4b §5.7). `level_permille` to stan baku w promilach pojemności.
     RefuelNeeded { level_permille: u16 } = 202,
@@ -227,10 +231,7 @@ pub enum DecisionReason {
     /// `gap_permille` to nieopłacona część pozycji w tysięcznych — 1000 znaczy
     /// „nie zapłacono nic". To jest ogniwo, bez którego ścieżka „debet → wniosek
     /// → odmowa → zaległość" nie daje się wyjaśnić graczowi do końca.
-    BudgetShortfall {
-        cost: FixedCost,
-        gap_permille: i16,
-    } = 306,
+    BudgetShortfall { cost: FixedCost, gap_permille: i16 } = 306,
     // 307–399 zarezerwowane dla M5.
     // ... kolejne fazy dopisują własne bloki na końcu pliku
 }

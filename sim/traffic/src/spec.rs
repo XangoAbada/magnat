@@ -145,7 +145,9 @@ impl VehicleCatalog {
             return Err(DataError::Empty("vehicles/classes.ron: classes"));
         }
         if f.speed_factor_permille.is_empty() {
-            return Err(DataError::Empty("vehicles/classes.ron: speed_factor_permille"));
+            return Err(DataError::Empty(
+                "vehicles/classes.ron: speed_factor_permille",
+            ));
         }
         let mut price_gr = [0u32; 4];
         for row in &f.fuel_price_gr {
@@ -312,9 +314,7 @@ impl VdfTable {
             min_speed_dkmh: 0,
         }; 8];
         for (i, c) in classes.iter().enumerate() {
-            out[i] = c.ok_or_else(|| {
-                DataError::MissingClass(RoadClass::ALL[i].key())
-            })?;
+            out[i] = c.ok_or_else(|| DataError::MissingClass(RoadClass::ALL[i].key()))?;
         }
         Ok(VdfTable {
             jam_spacing_cm: f.jam_spacing_cm,

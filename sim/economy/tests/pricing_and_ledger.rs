@@ -7,12 +7,10 @@
 mod common;
 
 use magnat_agents::{FulfilOutcome, FulfilRequest, Household};
-use magnat_core::{
-    DecisionReason, Entity, HouseholdId, Money, NeedKind, PlaceRef, Qty, Tick,
-};
+use magnat_core::{DecisionReason, Entity, HouseholdId, Money, NeedKind, PlaceRef, Qty, Tick};
 use magnat_economy::{
-    settle_transactions, Books, CompetitorRef, EconomyData, LedgerAccount, LostSaleTracking, Market,
-    PricePolicy, PurchaseIntent,
+    settle_transactions, Books, CompetitorRef, EconomyData, LedgerAccount, LostSaleTracking,
+    Market, PricePolicy, PurchaseIntent,
 };
 use magnat_ecs::World;
 use magnat_spatial::Vec2;
@@ -239,8 +237,12 @@ fn ta_sama_polityka_u_gracza_i_u_ai_daje_te_sama_cene() {
         }
         b.market.restock_shelves();
         b.market.rebuild_index(&magnat_jobs::JobPool::new(1));
-        b.market
-            .set_policy(b.sites[1], g, PricePolicy::Fixed { price: Money(400) }, false);
+        b.market.set_policy(
+            b.sites[1],
+            g,
+            PricePolicy::Fixed { price: Money(400) },
+            false,
+        );
         b.market.set_policy(b.sites[0], g, polityka, delegated);
         for d in 0..=8u64 {
             doba(&b.market, Tick(d * DOBA));
@@ -299,7 +301,8 @@ fn towar_przeterminowany_schodzi_ze_stanu_i_obciaza_wynik() {
     assert_eq!(b.market.inventory_value(site), Money::ZERO);
     assert_eq!(b.market.shelf_qty(site, g), Some(Qty::ZERO));
     assert_eq!(
-        b.market.ledger_balance(site, LedgerAccount::WriteOffExpense),
+        b.market
+            .ledger_balance(site, LedgerAccount::WriteOffExpense),
         Some(Money(200_000))
     );
     assert_eq!(
@@ -307,7 +310,10 @@ fn towar_przeterminowany_schodzi_ze_stanu_i_obciaza_wynik() {
         Some(Money::ZERO)
     );
     assert_eq!(
-        b.market.balance_sheet(site, Tick(DOBA * 2)).unwrap().imbalance(),
+        b.market
+            .balance_sheet(site, Tick(DOBA * 2))
+            .unwrap()
+            .imbalance(),
         Money::ZERO
     );
 }
@@ -405,7 +411,9 @@ fn po_roku_bilans_zamyka_sie_co_do_grosza() {
 
     // Miesiące się domknęły i suma domknięć jest tym samym wynikiem.
     let z_domkniec: i64 = (0..12)
-        .filter_map(|mies| market.income_statement(site, Tick(mies * MIESIAC), Tick((mies + 1) * MIESIAC)))
+        .filter_map(|mies| {
+            market.income_statement(site, Tick(mies * MIESIAC), Tick((mies + 1) * MIESIAC))
+        })
         .map(|s| s.net_result().get())
         .sum();
     assert_ne!(z_domkniec, 0);

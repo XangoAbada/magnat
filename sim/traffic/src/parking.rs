@@ -266,7 +266,10 @@ impl ParkingRegistry {
     /// Na którym parkingu stoi pojazd; [`NO_LOT`] = na sieci.
     #[must_use]
     pub fn lot_of(&self, vehicle: u32) -> u32 {
-        self.of_vehicle.get(vehicle as usize).copied().unwrap_or(NO_LOT)
+        self.of_vehicle
+            .get(vehicle as usize)
+            .copied()
+            .unwrap_or(NO_LOT)
     }
 
     /// Ile pojazdów stoi na parkingach — lewa strona niezmiennika `parking_no_ghosts`.
@@ -354,8 +357,8 @@ impl ParkingRegistry {
                 return;
             }
             let dojscie = walk_minutes(l.at, dest);
-            let koszt = i64::from(dojscie) * vot_gr_per_min
-                + l.price_gr_per_hour.0 * ASSUMED_STAY_HOURS;
+            let koszt =
+                i64::from(dojscie) * vot_gr_per_min + l.price_gr_per_hour.0 * ASSUMED_STAY_HOURS;
             kandydaci.push((koszt, i));
         });
         if kandydaci.is_empty() {
@@ -482,9 +485,12 @@ fn build_index(lots: &[ParkingLot]) -> Option<CsrGrid<u32>> {
     let spec = GridSpec::covering(Aabb2::new(min, max), LOT_CELL_M);
     Some(CsrGrid::build(
         spec,
-        lots.iter()
-            .enumerate()
-            .map(|(i, l)| (Vec2::new(l.at.x as f32 / 100.0, l.at.y as f32 / 100.0), i as u32)),
+        lots.iter().enumerate().map(|(i, l)| {
+            (
+                Vec2::new(l.at.x as f32 / 100.0, l.at.y as f32 / 100.0),
+                i as u32,
+            )
+        }),
     ))
 }
 
@@ -525,7 +531,11 @@ mod tests {
         let odmowa = r.find_and_reserve(cel, 200, 2, 10, SimMinute(100));
         assert_eq!(odmowa, Err(ParkingDenied::AllFull { searched: 0 }));
         assert_eq!(r.parked(), 2);
-        assert_eq!(r.occupied_total(), 2, "obłożenie rozjechało się z przypisaniem");
+        assert_eq!(
+            r.occupied_total(),
+            2,
+            "obłożenie rozjechało się z przypisaniem"
+        );
     }
 
     #[test]
@@ -533,13 +543,17 @@ mod tests {
         // Dwa parkingi: 400 m i 50 m od celu. Wartość czasu dodatnia, obie darmowe.
         let mut r = rejestr(vec![parking(400, 5), parking(50, 5)], 2);
         let cel = WorldCoord::new(0, 0, 0);
-        let s = r.find_and_reserve(cel, 1_000, 0, 20, SimMinute(100)).expect("miejsce");
+        let s = r
+            .find_and_reserve(cel, 1_000, 0, 20, SimMinute(100))
+            .expect("miejsce");
         assert_eq!(s.lot, 1, "wybrano dalszy parking");
         assert!(s.walk_minutes >= 1);
 
         // Ten sam koszt (oba w tym samym punkcie) → wygrywa mniejszy indeks.
         let mut r2 = rejestr(vec![parking(10, 5), parking(10, 5)], 2);
-        let s2 = r2.find_and_reserve(cel, 1_000, 0, 20, SimMinute(100)).expect("miejsce");
+        let s2 = r2
+            .find_and_reserve(cel, 1_000, 0, 20, SimMinute(100))
+            .expect("miejsce");
         assert_eq!(s2.lot, 0, "remis rozstrzygnięty inaczej niż indeksem");
     }
 
@@ -552,7 +566,10 @@ mod tests {
         let s = r
             .find_and_reserve(WorldCoord::new(0, 0, 0), 1_000, 0, 5, SimMinute(100))
             .expect("miejsce");
-        assert_eq!(s.lot, 1, "kierowca zapłacił 20 zł, żeby oszczędzić cztery minuty");
+        assert_eq!(
+            s.lot, 1,
+            "kierowca zapłacił 20 zł, żeby oszczędzić cztery minuty"
+        );
     }
 
     #[test]
@@ -563,7 +580,11 @@ mod tests {
         assert_eq!(r.parked(), 1);
         assert_eq!(r.occupied_total(), 1);
         assert_eq!(r.lot_of(0), 1);
-        assert_eq!(r.lots()[0].occupied, 0, "pierwsze miejsce nie wróciło do puli");
+        assert_eq!(
+            r.lots()[0].occupied,
+            0,
+            "pierwsze miejsce nie wróciło do puli"
+        );
     }
 
     #[test]

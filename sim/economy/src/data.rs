@@ -34,17 +34,29 @@ pub const ECONOMY_SCHEMA_VERSION: u32 = 1;
 #[derive(Debug)]
 pub enum EconomyDataError {
     Io(std::io::Error),
-    Ron { file: &'static str, msg: String },
+    Ron {
+        file: &'static str,
+        msg: String,
+    },
     Schema {
         file: &'static str,
         found: u32,
         want: u32,
     },
     /// Klucz tekstowy nie odpowiada żadnemu wariantowi słownika w `core`.
-    UnknownKey { file: &'static str, key: String },
-    Duplicate { file: &'static str, key: String },
+    UnknownKey {
+        file: &'static str,
+        key: String,
+    },
+    Duplicate {
+        file: &'static str,
+        key: String,
+    },
     /// Słownik jest kompletny z definicji, a w pliku brakuje wariantu.
-    Missing { file: &'static str, key: &'static str },
+    Missing {
+        file: &'static str,
+        key: &'static str,
+    },
 }
 
 impl std::fmt::Display for EconomyDataError {
@@ -56,7 +68,9 @@ impl std::fmt::Display for EconomyDataError {
                 write!(f, "{file}: schema_version {found}, oczekiwano {want}")
             }
             EconomyDataError::UnknownKey { file, key } => write!(f, "{file}: nieznany klucz {key}"),
-            EconomyDataError::Duplicate { file, key } => write!(f, "{file}: powtórzony klucz {key}"),
+            EconomyDataError::Duplicate { file, key } => {
+                write!(f, "{file}: powtórzony klucz {key}")
+            }
             EconomyDataError::Missing { file, key } => write!(f, "{file}: brakuje wpisu {key}"),
         }
     }
@@ -725,7 +739,10 @@ impl EconomyData {
             if suma != 1000 {
                 return Err(EconomyDataError::Ron {
                     file: "economy/envelopes.ron",
-                    msg: format!("wagi typu {} sumują się do {suma}, oczekiwano 1000", row.kind),
+                    msg: format!(
+                        "wagi typu {} sumują się do {suma}, oczekiwano 1000",
+                        row.kind
+                    ),
                 });
             }
         }

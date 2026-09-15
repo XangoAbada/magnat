@@ -32,9 +32,7 @@
 
 use crate::mezo::{settle_edge, MezoState, VehicleSpecRef, CS_PER_MINUTE};
 use crate::spec::{VehicleCatalog, VehicleClassId};
-use magnat_core::{
-    DayOfWeek, HashState, Mass, Money, SimMinute, StateHasher, WorldCoord,
-};
+use magnat_core::{DayOfWeek, HashState, Mass, Money, SimMinute, StateHasher, WorldCoord};
 use magnat_nav::{EdgeId, NodeId, RoadGraph};
 use magnat_spatial::{Aabb2, CsrGrid, GridSpec, Vec2};
 
@@ -279,7 +277,10 @@ impl TransitLine {
     /// Indeks przystanku na linii dla podanego węzła; `None` = linia go nie obsługuje.
     #[must_use]
     pub fn stop_at(&self, node: NodeId) -> Option<u16> {
-        self.stops.iter().position(|s| s.node == node).map(|i| i as u16)
+        self.stops
+            .iter()
+            .position(|s| s.node == node)
+            .map(|i| i as u16)
     }
 }
 
@@ -468,10 +469,11 @@ impl TransitNetwork {
                     .map(|edges| {
                         let cs: u64 = edges
                             .iter()
-                            .map(|e| u64::from(road.edges[e.0 as usize].free_flow_cs(road.modality)))
+                            .map(|e| {
+                                u64::from(road.edges[e.0 as usize].free_flow_cs(road.modality))
+                            })
                             .sum();
-                        cs.div_ceil(CS_PER_MINUTE).clamp(1, u64::from(u16::MAX))
-                            as u16
+                        cs.div_ceil(CS_PER_MINUTE).clamp(1, u64::from(u16::MAX)) as u16
                     })
                     .collect()
             })
@@ -659,9 +661,7 @@ impl TransitNetwork {
                         alight_stop: pa,
                         access_min: *access,
                         wait_min: wait,
-                        ride_min: jazda_a
-                            .saturating_add(przesiadka)
-                            .saturating_add(jazda_b),
+                        ride_min: jazda_a.saturating_add(przesiadka).saturating_add(jazda_b),
                         egress_min: *egress,
                         transfers: 1,
                         fare: Money(a.fare.0 + b.fare.0),
@@ -843,7 +843,9 @@ impl TransitNetwork {
                     }
                     false
                 });
-                r.occupancy = r.occupancy.saturating_sub(wysiadlo.min(u32::from(u16::MAX)) as u16);
+                r.occupancy = r
+                    .occupancy
+                    .saturating_sub(wysiadlo.min(u32::from(u16::MAX)) as u16);
             }
             self.stats.alightings += u64::from(wysiadlo);
             for w in przesiadki {
@@ -855,7 +857,9 @@ impl TransitNetwork {
             let mut wsiadlo = 0u32;
             if stop < ostatni {
                 let (fare, id) = (self.lines[li].fare, self.lines[li].id);
-                let wolne = self.runs[ri].capacity.saturating_sub(self.runs[ri].occupancy);
+                let wolne = self.runs[ri]
+                    .capacity
+                    .saturating_sub(self.runs[ri].occupancy);
                 let kolejka = &mut self.lines[li].stops[stop as usize].waiting;
                 let mut zostaja: Vec<Waiting> = Vec::new();
                 for w in std::mem::take(kolejka) {
@@ -866,7 +870,8 @@ impl TransitNetwork {
                         continue;
                     }
                     if wsiadlo < u32::from(wolne) {
-                        let czekal = now.saturating_sub(w.since_min).min(u32::from(u16::MAX)) as u16;
+                        let czekal =
+                            now.saturating_sub(w.since_min).min(u32::from(u16::MAX)) as u16;
                         self.stats.wait_minutes += u64::from(czekal);
                         out.push(TransitEvent::Boarded {
                             citizen: w.citizen,
@@ -900,7 +905,8 @@ impl TransitNetwork {
                 self.stats.boardings += u64::from(wsiadlo);
                 self.stats.max_occupancy = self.stats.max_occupancy.max(r.occupancy);
                 self.stats.fare_revenue = Money(
-                    self.stats.fare_revenue.0 + fare.0 * i64::from(wsiadlo.min(u32::from(u16::MAX))),
+                    self.stats.fare_revenue.0
+                        + fare.0 * i64::from(wsiadlo.min(u32::from(u16::MAX))),
                 );
             }
 
@@ -1015,7 +1021,12 @@ impl TransitNetwork {
     /// przestałoby być prawdziwe z konstrukcji. Bryła odgrywa więc czas między
     /// przystankami z pary `(depart_min, arrive_min)` — dokładnie jak pieszy — i nie
     /// bierze udziału w car-followingu (`edge == NO_EDGE`).
-    pub fn feed_micro(&self, micro: &crate::micro::MicroLayer, road: &RoadGraph, cat: &VehicleCatalog) {
+    pub fn feed_micro(
+        &self,
+        micro: &crate::micro::MicroLayer,
+        road: &RoadGraph,
+        cat: &VehicleCatalog,
+    ) {
         for r in &self.runs {
             if r.stop_index == 0 || r.arrive_min <= r.depart_min {
                 continue;
@@ -1247,7 +1258,7 @@ mod tests {
             operator: OperatorRef::City,
             fare: Money(400),
             capacity: 2,
-            };
+        };
         (line, road)
     }
 
@@ -1268,7 +1279,10 @@ mod tests {
         assert!(t.departs_at(5 * 60));
         assert!(t.departs_at(5 * 60 + 30));
         assert!(t.departs_at(6 * 60));
-        assert!(t.departs_at(6 * 60 + 10), "w szczycie odstęp się nie zagęścił");
+        assert!(
+            t.departs_at(6 * 60 + 10),
+            "w szczycie odstęp się nie zagęścił"
+        );
         assert!(!t.departs_at(6 * 60 + 15));
         assert_eq!(t.next_departure(6 * 60 + 1), Some(6 * 60 + 10));
         assert_eq!(t.next_departure(23 * 60 + 30), None);
@@ -1373,7 +1387,9 @@ mod tests {
                 &mut |_| true,
                 &mut out,
             );
-            if let Some(TransitEvent::Alighted { slot, egress_min, .. }) = out
+            if let Some(TransitEvent::Alighted {
+                slot, egress_min, ..
+            }) = out
                 .iter()
                 .find(|e| matches!(e, TransitEvent::Alighted { citizen: 7, .. }))
             {
@@ -1384,8 +1400,15 @@ mod tests {
         let (minuta, slot, egress) = wysiadl.expect("pasażer nigdy nie wysiadł");
         assert_eq!(slot, 3, "slot planu zgubił się w podróży");
         assert_eq!(egress, 4);
-        assert!(minuta > 5 * 60 && minuta < 5 * 60 + 15, "przejazd trwał {}", minuta - 300);
-        assert!(n.stats.fuel_ul > 0, "autobus przejechał kilometr bez paliwa");
+        assert!(
+            minuta > 5 * 60 && minuta < 5 * 60 + 15,
+            "przejazd trwał {}",
+            minuta - 300
+        );
+        assert!(
+            n.stats.fuel_ul > 0,
+            "autobus przejechał kilometr bez paliwa"
+        );
         assert_eq!(n.stats.boardings, 1);
         assert_eq!(n.onboard_total(), 0);
     }

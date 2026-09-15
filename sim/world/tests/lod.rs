@@ -16,10 +16,9 @@
 //! które naprawdę powstały, a nie takimi, które ktoś wpisał do scenariusza.
 
 use magnat_agents::{
-    bootstrap_day, register, register_day, society, AgentSources, DemographyTable,
-    DayLoopSystem, DeprivationEffectsSystem, HouseholdStockSystem, InfinitePlaces, NeedDecaySystem,
-    NeedTable, NoInheritance, ReplanCooldownSystem, SkillDriftSystem, SocietySystem,
-    TravelMicroSystem,
+    bootstrap_day, register, register_day, society, AgentSources, DayLoopSystem, DemographyTable,
+    DeprivationEffectsSystem, HouseholdStockSystem, InfinitePlaces, NeedDecaySystem, NeedTable,
+    NoInheritance, ReplanCooldownSystem, SkillDriftSystem, SocietySystem, TravelMicroSystem,
 };
 use magnat_core::Money;
 use magnat_ecs::{App, ScheduleBuilder, World};
@@ -28,8 +27,8 @@ use magnat_jobs::JobPool;
 use magnat_traffic::{TrafficNetwork, TrafficServices, TrafficSystem, VehicleWearSystem};
 use magnat_voxel::MaterialRegistry;
 use magnat_world::{
-    generate, generate_city, generate_population, CityData, CityPlan, Difficulty,
-    PopulationParams, Terrain, WorldGenParams,
+    generate, generate_city, generate_population, CityData, CityPlan, Difficulty, PopulationParams,
+    Terrain, WorldGenParams,
 };
 use std::sync::Arc;
 
@@ -119,7 +118,10 @@ fn przebieg(seed: u64, kamera: impl Fn(u64, (i32, i32)) -> Option<(i32, i32)>) -
         let mut sx = 0i64;
         let mut sy = 0i64;
         for wpis in e.iter().take(n) {
-            let c = p.places.coord_of(wpis.place).unwrap_or(magnat_core::WorldCoord::ORIGIN);
+            let c = p
+                .places
+                .coord_of(wpis.place)
+                .unwrap_or(magnat_core::WorldCoord::ORIGIN);
             sx += i64::from(c.x);
             sy += i64::from(c.y);
         }
@@ -171,8 +173,14 @@ fn micro_mezo_equivalence() {
          test porównałby wtedy dwa identyczne przebiegi mezo i nie dowiódłby niczego"
     );
     assert_eq!(mezo.paliwo_spalone_ul, mikro.paliwo_spalone_ul, "A1 paliwo");
-    assert_eq!(mezo.paliwo_kupione_ul, mikro.paliwo_kupione_ul, "A1 tankowanie");
-    assert_eq!(mezo.wydane_na_paliwo, mikro.wydane_na_paliwo, "A2 obrót stacji");
+    assert_eq!(
+        mezo.paliwo_kupione_ul, mikro.paliwo_kupione_ul,
+        "A1 tankowanie"
+    );
+    assert_eq!(
+        mezo.wydane_na_paliwo, mikro.wydane_na_paliwo,
+        "A2 obrót stacji"
+    );
     assert_eq!(mezo.bilety, mikro.bilety, "A2 taryfy komunikacji");
     assert_eq!(mezo.przybycia, mikro.przybycia, "A3 liczba przybyć");
     assert_eq!(mezo.minut_podrozy, mikro.minut_podrozy, "A3 minuty podróży");

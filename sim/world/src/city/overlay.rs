@@ -75,12 +75,7 @@ impl OverlaySpec {
             let a = self.stops[k].1;
             let b = self.stops[k + 1].1;
             let mix = |x: u8, y: u8| (f32::from(x) + (f32::from(y) - f32::from(x)) * t) as u8;
-            *v = [
-                mix(a.0, b.0),
-                mix(a.1, b.1),
-                mix(a.2, b.2),
-                mix(a.3, b.3),
-            ];
+            *v = [mix(a.0, b.0), mix(a.1, b.1), mix(a.2, b.2), mix(a.3, b.3)];
         }
         p
     }
@@ -136,8 +131,7 @@ impl OverlayTable {
     pub fn load() -> Result<OverlayTable, OverlayError> {
         let path = crate::assets::data_path("ui/overlays.ron");
         let txt = std::fs::read_to_string(&path).map_err(OverlayError::Io)?;
-        let f: OverlayFile =
-            ron::from_str(&txt).map_err(|e| OverlayError::Ron(e.to_string()))?;
+        let f: OverlayFile = ron::from_str(&txt).map_err(|e| OverlayError::Ron(e.to_string()))?;
         if f.schema_version != OVERLAY_SCHEMA_VERSION {
             return Err(OverlayError::Schema(f.schema_version));
         }
@@ -229,7 +223,10 @@ mod tests {
         let luma = |c: [u8; 4]| {
             0.299 * f32::from(c[0]) + 0.587 * f32::from(c[1]) + 0.114 * f32::from(c[2])
         };
-        let spadki = p.windows(2).filter(|w| luma(w[1]) + 1.0 < luma(w[0])).count();
+        let spadki = p
+            .windows(2)
+            .filter(|w| luma(w[1]) + 1.0 < luma(w[0]))
+            .count();
         assert!(spadki <= 8, "paleta ma {spadki} spadków jasności");
     }
 
@@ -242,12 +239,21 @@ mod tests {
         let luma = |c: [u8; 4]| {
             0.299 * f32::from(c[0]) + 0.587 * f32::from(c[1]) + 0.114 * f32::from(c[2])
         };
-        assert!(t.overlays.len() >= 6, "nakładki ruchu z M4d zniknęły z danych");
+        assert!(
+            t.overlays.len() >= 6,
+            "nakładki ruchu z M4d zniknęły z danych"
+        );
         for s in &t.overlays {
             let k = &s.key;
             let p = s.palette();
-            let spadki = p.windows(2).filter(|w| luma(w[1]) + 1.0 < luma(w[0])).count();
-            assert!(spadki <= 8, "nakładka {k}: paleta ma {spadki} spadków jasności");
+            let spadki = p
+                .windows(2)
+                .filter(|w| luma(w[1]) + 1.0 < luma(w[0]))
+                .count();
+            assert!(
+                spadki <= 8,
+                "nakładka {k}: paleta ma {spadki} spadków jasności"
+            );
             assert!(!s.unit.is_empty(), "nakładka {k} bez jednostki w legendzie");
             assert!(
                 s.loc_key.starts_with("overlay."),
@@ -260,7 +266,16 @@ mod tests {
     fn indeks_rosnie_z_wartoscia_i_nie_wychodzi_poza_zakres() {
         let s = spec();
         let mut poprzedni = 0u8;
-        for v in [0, 5_000, 25_000, 60_000, 150_000, 400_000, 900_000, i64::MAX / 2] {
+        for v in [
+            0,
+            5_000,
+            25_000,
+            60_000,
+            150_000,
+            400_000,
+            900_000,
+            i64::MAX / 2,
+        ] {
             let i = s.index_of(v);
             assert!(i >= poprzedni, "indeks spadł przy {v}");
             poprzedni = i;

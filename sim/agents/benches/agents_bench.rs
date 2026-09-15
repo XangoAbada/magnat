@@ -197,7 +197,15 @@ fn populacja(c: &mut Criterion) {
     g.finish();
 }
 
-criterion_group!(benches, des, potrzeby, populacja, planer, ruch, spoleczenstwo);
+criterion_group!(
+    benches,
+    des,
+    potrzeby,
+    populacja,
+    planer,
+    ruch,
+    spoleczenstwo
+);
 criterion_main!(benches);
 
 // ── M3b: planer dnia i ruch pieszy ──────────────────────────────────────────────
@@ -487,7 +495,6 @@ fn ruch(c: &mut Criterion) {
     });
     g.finish();
 }
-
 
 // ── M3c: demografia, migracja, plotka ───────────────────────────────────────────
 

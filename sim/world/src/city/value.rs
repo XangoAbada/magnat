@@ -232,7 +232,8 @@ pub fn pass_1_parcel(
         let d = ctx.districts.districts.get(p.district.0 as usize);
         mnozniki[m(LandValueFactor::DistrictPrestige)] = d.map_or(1.0, |d| {
             f64::from(d.kind.prestige())
-                * (0.86 + 0.24 * f64::from(d.reputation.get()) / 100.0
+                * (0.86
+                    + 0.24 * f64::from(d.reputation.get()) / 100.0
                     + 0.05 * f64::from(d.income_tier.min(4))
                     - 0.18 * f64::from(d.crime.get()) / 100.0)
         });
@@ -334,8 +335,7 @@ pub fn build_access(
         ACCESS_CELL_M,
     );
     let n = spec.cell_count();
-    let (mut jobs, mut retail, mut services) =
-        (vec![0.0f32; n], vec![0.0f32; n], vec![0.0f32; n]);
+    let (mut jobs, mut retail, mut services) = (vec![0.0f32; n], vec![0.0f32; n], vec![0.0f32; n]);
     let mut pollution = vec![0.0f32; n];
 
     for (i, b) in buildings.buildings.iter().enumerate() {
@@ -492,7 +492,10 @@ pub fn pass_2(ctx: &ValueCtx, parcels: &mut ParcelSet) {
 ///
 /// Rozbicie **nie jest przechowywane** (42 tys. × 40 B) — liczy się je na żądanie.
 #[must_use]
-pub fn land_value_at(city: &super::CityData, p: magnat_core::ParcelId) -> (Money, LandValueBreakdown) {
+pub fn land_value_at(
+    city: &super::CityData,
+    p: magnat_core::ParcelId,
+) -> (Money, LandValueBreakdown) {
     let ctx = ValueCtx {
         fields: &city.fields,
         roads: &city.roads,

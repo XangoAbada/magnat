@@ -175,7 +175,6 @@ fn bench_uzytecznosc(c: &mut Criterion) {
     });
 }
 
-
 /// Dobowy przelot sklepu (M5c §7.3): `reprice` dla 2 tys. sklepów × asortyment,
 /// budżet **< 40 ms raz na dobę**, i obserwacja konkurencji, która go poprzedza.
 ///
@@ -186,9 +185,7 @@ fn bench_uzytecznosc(c: &mut Criterion) {
 fn bench_doba_sklepu(c: &mut Criterion) {
     use magnat_agents::{NeedTable, PlaceEntry, PlaceTable};
     use magnat_core::{PlaceKind, PlaceRef, WorldCoord};
-    use magnat_economy::{
-        AccountKind, AccountOwner, EconomyData, GoodTable, Market, ShopSeed,
-    };
+    use magnat_economy::{AccountKind, AccountOwner, EconomyData, GoodTable, Market, ShopSeed};
     use std::sync::Arc;
 
     const SKLEPOW: u32 = 2_000;
@@ -346,7 +343,9 @@ fn bench_decyzja_zakupowa(c: &mut Criterion) {
         None,
         Money::ZERO,
     );
-    books.endow(rest, Money(1_000_000_000_000), Tick(0)).unwrap();
+    books
+        .endow(rest, Money(1_000_000_000_000), Tick(0))
+        .unwrap();
     let market = Market::new(city_spec(), 7, data, goods, needs, places, rest);
     for (i, s) in sites.iter().enumerate() {
         let firm = FirmId(Entity::new(i as u32, NonZeroU32::MIN));

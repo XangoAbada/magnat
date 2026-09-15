@@ -32,9 +32,7 @@ pub mod selection;
 pub mod time;
 pub mod widgets;
 
-pub use inspect::citizen::{
-    zlotowki, CitizenCard, CitizenModel, CitizenPanel, NeedRow, StatusRow,
-};
+pub use inspect::citizen::{zlotowki, CitizenCard, CitizenModel, CitizenPanel, NeedRow, StatusRow};
 pub use inspect::reason::{describe, zegar};
 pub use inspect::shop::{ShopCard, ShopTab, ShopView};
 pub use inspect::timeline::{
@@ -42,7 +40,8 @@ pub use inspect::timeline::{
     DRIFT_HIGHLIGHT_MIN,
 };
 pub use inspect::trip::{
-    infeasible, option_name, place, CandidateRow, TimeSplit, TripCard, TripView, VehicleCard, VehicleView,
+    infeasible, option_name, place, CandidateRow, TimeSplit, TripCard, TripView, VehicleCard,
+    VehicleView,
 };
 pub use inspect::{InspectorPanel, UiContext};
 pub use loc::{Catalog, LocKey, Locale};

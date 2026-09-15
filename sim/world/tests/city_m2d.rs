@@ -61,10 +61,9 @@ fn miasto_pelne(
 #[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
 fn macierz_pokrycia_gramatyk_nie_ma_luk() {
     let (c, _) = miasto(7, WorldSize::Medium8km, Region::River);
-    let mats = magnat_voxel::MaterialRegistry::load_dir(&magnat_world::assets::data_path(
-        "materials",
-    ))
-    .expect("materiały");
+    let mats =
+        magnat_voxel::MaterialRegistry::load_dir(&magnat_world::assets::data_path("materials"))
+            .expect("materiały");
     let katalog = magnat_world::city::grammar::GrammarSet::load_dir(
         &magnat_world::assets::data_path("grammar"),
         &mats,
@@ -96,9 +95,14 @@ fn macierz_pokrycia_gramatyk_nie_ma_luk() {
         if katalog.covered(p.zone.key(), epoka, styl) {
             continue;
         }
-        let klucz = (p.zone.key().to_string(), epoka.to_string(), styl.to_string());
+        let klucz = (
+            p.zone.key().to_string(),
+            epoka.to_string(),
+            styl.to_string(),
+        );
         match luki.iter_mut().find(|(z, e, s, _)| {
-            (z.as_str(), e.as_str(), s.as_str()) == (klucz.0.as_str(), klucz.1.as_str(), klucz.2.as_str())
+            (z.as_str(), e.as_str(), s.as_str())
+                == (klucz.0.as_str(), klucz.1.as_str(), klucz.2.as_str())
         }) {
             Some((_, _, _, n)) => *n += 1,
             None => luki.push((klucz.0, klucz.1, klucz.2, 1)),
@@ -252,7 +256,10 @@ fn sygnatura_pakuje_cztery_znaczniki_bez_kolizji() {
         BuildingSignature::new(GrammarId(5), 4, MaterialId(10), RoofKind::Gable),
         BuildingSignature::new(GrammarId(5), 4, MaterialId(9), RoofKind::Hip),
     ] {
-        assert_ne!(baza, inny, "zmiana jednego znacznika nie zmieniła sygnatury");
+        assert_ne!(
+            baza, inny,
+            "zmiana jednego znacznika nie zmieniła sygnatury"
+        );
     }
     // Nasycenie, nie zawinięcie: 40 kondygnacji ma być nieodróżnialne od 31, a nie od 8.
     assert_eq!(

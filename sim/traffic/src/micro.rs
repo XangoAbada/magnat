@@ -83,7 +83,8 @@ impl PathArena {
             .windows(2)
             .map(|w| euclid_cm(w[0], w[1]))
             .fold(0u32, u32::saturating_add);
-        self.paths.push((offset, route.len() as u32, dlugosc.max(1)));
+        self.paths
+            .push((offset, route.len() as u32, dlugosc.max(1)));
         (self.paths.len() - 1) as u32
     }
 
@@ -493,7 +494,9 @@ impl VehicleBuffer {
         }
         let laczny = now_cs - self.clock_cs;
         let podkrok_cs = u64::from(p.substep_ms / 10).max(1);
-        let krokow = laczny.div_ceil(podkrok_cs).clamp(1, u64::from(p.max_substeps));
+        let krokow = laczny
+            .div_ceil(podkrok_cs)
+            .clamp(1, u64::from(p.max_substeps));
         let start = self.clock_cs;
         let mut poprzedni = start;
         for k in 1..=krokow {
@@ -670,11 +673,8 @@ impl VehicleBuffer {
         }
         // Przy dwóch zgłoszeniach tego samego pojazdu wygrywa większy zysk, a przy
         // remisie mniejszy numer pasa — klucz pozostaje totalny.
-        zgloszenia.sort_unstable_by(|a, b| {
-            a.0.cmp(&b.0)
-                .then(b.2.total_cmp(&a.2))
-                .then(a.1.cmp(&b.1))
-        });
+        zgloszenia
+            .sort_unstable_by(|a, b| a.0.cmp(&b.0).then(b.2.total_cmp(&a.2)).then(a.1.cmp(&b.1)));
         let mut poprzedni = usize::MAX;
         for (i, cel, _) in zgloszenia {
             if i == poprzedni {
@@ -706,8 +706,8 @@ impl VehicleBuffer {
     fn sasiedzi(&self, i: usize, lane: u8) -> (Option<usize>, Option<usize>) {
         let me = &self.vehs[i];
         let r = self.zakres(me.edge, lane);
-        let pierwszy_przed = self.order[r.clone()]
-            .partition_point(|k| self.vehs[*k as usize].pos_cm < me.pos_cm);
+        let pierwszy_przed =
+            self.order[r.clone()].partition_point(|k| self.vehs[*k as usize].pos_cm < me.pos_cm);
         let przed = self.order[r.clone()]
             .get(pierwszy_przed)
             .map(|k| *k as usize)
@@ -724,8 +724,8 @@ impl VehicleBuffer {
     fn przed_w(&self, i: usize) -> Option<usize> {
         let me = &self.vehs[i];
         let r = self.zakres(me.edge, me.lane);
-        let p = self.order[r.clone()]
-            .partition_point(|k| self.vehs[*k as usize].pos_cm <= me.pos_cm);
+        let p =
+            self.order[r.clone()].partition_point(|k| self.vehs[*k as usize].pos_cm <= me.pos_cm);
         self.order[r].get(p).map(|k| *k as usize)
     }
 
@@ -1221,7 +1221,10 @@ mod tests {
             "pojazd przejechał tylko {} m z 200 w zaksięgowanych 20 s",
             zrzut[0].pos[0]
         );
-        assert!((zrzut[0].heading).abs() < 1e-3, "kurs nie jest wzdłuż osi X");
+        assert!(
+            (zrzut[0].heading).abs() < 1e-3,
+            "kurs nie jest wzdłuż osi X"
+        );
     }
 
     /// Kolejka: pojazd bez prawa wyjazdu staje przed linią, a następny staje za nim.
@@ -1375,13 +1378,8 @@ mod tests {
         ];
         for (c, free) in klasy {
             let z_vdf = vdf.speed_dkmh(c, free, 100, 100);
-            let z_idm = idm_speed_dkmh(
-                1000,
-                vdf.jam_spacing_cm(),
-                CALIBRATION_VEHICLE_CM,
-                free,
-                &p,
-            );
+            let z_idm =
+                idm_speed_dkmh(1000, vdf.jam_spacing_cm(), CALIBRATION_VEHICLE_CM, free, &p);
             let blad = (f64::from(z_idm) - f64::from(z_vdf)).abs() / f64::from(z_vdf.max(1));
             assert!(
                 blad <= 0.25,
@@ -1406,7 +1404,11 @@ mod tests {
             poprzednia = v;
         }
         assert!(equilibrium_speed_cms(100_000.0, v0, &p) > v0 * 0.99);
-        assert_eq!(equilibrium_speed_cms(50.0, v0, &p), 0.0, "luka mniejsza od s0");
+        assert_eq!(
+            equilibrium_speed_cms(50.0, v0, &p),
+            0.0,
+            "luka mniejsza od s0"
+        );
     }
 
     /// Zmiana pasa: wolny poprzednik na pasie 0, wolny pas 1 — MOBIL ma przełożyć.
@@ -1432,6 +1434,10 @@ mod tests {
             m.step(ms);
         }
         let buf = m.vehs.lock().expect("micro");
-        assert_eq!(buf.get(1).lane, 1, "szybszy pojazd nie wyszedł na wolny pas");
+        assert_eq!(
+            buf.get(1).lane,
+            1,
+            "szybszy pojazd nie wyszedł na wolny pas"
+        );
     }
 }

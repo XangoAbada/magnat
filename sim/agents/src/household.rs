@@ -230,7 +230,11 @@ impl HouseholdOverflow {
     /// Wyjmuje pierwszego z przelewu — używane, gdy w komponencie zwalnia się miejsce.
     fn pop(&mut self, household: u32) -> Option<u32> {
         let v = self.by_household.get_mut(&household)?;
-        let m = if v.is_empty() { None } else { Some(v.remove(0)) };
+        let m = if v.is_empty() {
+            None
+        } else {
+            Some(v.remove(0))
+        };
         if v.is_empty() {
             self.by_household.remove(&household);
         }
@@ -431,12 +435,7 @@ pub struct HouseholdRoles {
 /// chodzi sam), `adult_age` — wiek, od którego mieszkaniec może odprowadzać i robić
 /// zakupy. To są dwa różne progi i mylenie ich odprowadza siedemnastolatka do liceum.
 #[must_use]
-pub fn roles(
-    members: &[MemberView],
-    escort_age: i32,
-    adult_age: i32,
-    day: u64,
-) -> HouseholdRoles {
+pub fn roles(members: &[MemberView], escort_age: i32, adult_age: i32, day: u64) -> HouseholdRoles {
     let mut out = HouseholdRoles {
         escort: Household::NO_MEMBER,
         pickup: Household::NO_MEMBER,
@@ -598,7 +597,10 @@ mod tests {
 
         // Zwolnienie miejsca w komponencie zasysa pierwszego z przelewu.
         assert!(remove_member(1, &mut hh, &mut ov, 2));
-        assert!(ov.is_empty(), "przelew został, mimo że miejsce się zwolniło");
+        assert!(
+            ov.is_empty(),
+            "przelew został, mimo że miejsce się zwolniło"
+        );
         assert_eq!(hh.size, 6);
         let skl = members_of(1, &hh, &ov);
         assert!(!skl.contains(&2));
@@ -614,7 +616,10 @@ mod tests {
         remove_member(3, &mut hh, &mut ov, 10);
         assert!(!hh.is_active());
         assert_eq!(hh.size, 0);
-        assert!(!remove_member(3, &mut hh, &mut ov, 10), "podwójne usunięcie");
+        assert!(
+            !remove_member(3, &mut hh, &mut ov, 10),
+            "podwójne usunięcie"
+        );
     }
 
     #[test]
@@ -641,7 +646,12 @@ mod tests {
             HouseholdKind::FamilyWithKids
         );
 
-        let trzy_pokolenia = [czlonek(1, 34), czlonek(2, 36), czlonek(3, 8), czlonek(4, 70)];
+        let trzy_pokolenia = [
+            czlonek(1, 34),
+            czlonek(2, 36),
+            czlonek(3, 8),
+            czlonek(4, 70),
+        ];
         assert_eq!(
             classify(&trzy_pokolenia, dorosly, senior),
             HouseholdKind::MultiGen

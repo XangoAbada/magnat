@@ -100,17 +100,15 @@ impl CitizenCard {
             });
         }
 
-        let (budzet, dochod, typ, rozmiar) = household.map_or(
-            (Money::ZERO, Money::ZERO, String::new(), 0),
-            |h| {
+        let (budzet, dochod, typ, rozmiar) =
+            household.map_or((Money::ZERO, Money::ZERO, String::new(), 0), |h| {
                 (
                     Money(h.cash.get() + h.bank.get() + h.savings.get()),
                     h.income_monthly,
                     reason::household_kind(c, l, magnat_agents::HouseholdKind::from_u8(h.kind)),
                     h.size,
                 )
-            },
-        );
+            });
 
         let status_rows = status.map_or_else(Vec::new, |(b, w)| {
             [
@@ -124,7 +122,11 @@ impl CitizenCard {
             ]
             .iter()
             .map(|(k, v, w)| StatusRow {
-                label: c.fmt_key(l, k, &[("budynek", "?"), ("lokal", "?"), ("dzielnica", "?")]),
+                label: c.fmt_key(
+                    l,
+                    k,
+                    &[("budynek", "?"), ("lokal", "?"), ("dzielnica", "?")],
+                ),
                 value: *v,
                 weight: *w,
             })
@@ -267,7 +269,13 @@ impl CitizenPanel {
 
         let mut canvas = magnat_agents::DayCanvas::new();
         let mut log = magnat_agents::ReasonLog::new();
-        let ctx = snap.ctx(self.seed, self.day, table, z.places.as_ref(), z.travel.as_ref());
+        let ctx = snap.ctx(
+            self.seed,
+            self.day,
+            table,
+            z.places.as_ref(),
+            z.travel.as_ref(),
+        );
         magnat_agents::plan_day_explained(&ctx, &mut canvas, &mut log);
 
         let actual = crate::actual_from_trace(
@@ -281,7 +289,9 @@ impl CitizenPanel {
         let stored = world
             .get::<magnat_agents::PlanRef>(citizen.entity())
             .filter(|p| p.plan_day == (self.day % 65_536) as u16)
-            .map(|p| magnat_agents::load_plan(p, world.resource::<magnat_agents::PlanSlab>()).to_vec())
+            .map(|p| {
+                magnat_agents::load_plan(p, world.resource::<magnat_agents::PlanSlab>()).to_vec()
+            })
             .unwrap_or_default();
         let card = CitizenCard::build(
             c,

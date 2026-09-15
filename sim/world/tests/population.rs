@@ -25,7 +25,7 @@ use magnat_jobs::JobPool;
 use magnat_voxel::MaterialRegistry;
 use magnat_world::{
     generate, generate_city, generate_population, home_place, CityData, CityPlan, Difficulty,
-    Epoch, EconomyProfile, PopulationParams, PopulationReport, Populated, Region, Terrain,
+    EconomyProfile, Epoch, Populated, PopulationParams, PopulationReport, Region, Terrain,
     WorldGenParams, WorldSize,
 };
 use std::sync::Arc;
@@ -50,7 +50,10 @@ fn miasto(seed: u64) -> CityData {
 fn swiat(seed: u64) -> World {
     let mut w = World::new(seed);
     register(&mut w, NeedTable::load_default().expect("data/needs/"));
-    society::register_society(&mut w, DemographyTable::load_default().expect("data/demography/"));
+    society::register_society(
+        &mut w,
+        DemographyTable::load_default().expect("data/demography/"),
+    );
     register_day(&mut w);
     w
 }
@@ -93,9 +96,8 @@ fn etap8_spelnia_dopasowania_statystyczne() {
     );
 
     // `gen_jobs_filled`: |JobSlot| ≈ |aktywni| × (1 + cel), odchylenie ≤ 2 %.
-    let oczekiwane = u64::from(r.active)
-        * u64::from(1000 + u32::from(r.unemployment_target_permille))
-        / 1000;
+    let oczekiwane =
+        u64::from(r.active) * u64::from(1000 + u32::from(r.unemployment_target_permille)) / 1000;
     let odchylenie =
         (i64::from(r.jobs_total) - oczekiwane as i64).abs() as f64 * 100.0 / oczekiwane as f64;
     assert!(
@@ -176,7 +178,10 @@ fn etap8_daje_agentom_wszystko_czego_potrzebuja() {
     // Po M4b sieci pieszej nie ma w `Populated` (`Z-3`) — jest w `engine/nav`,
     // a Etap 8 dostaje ją przez oracle ruchu. Sprawdzamy to, co z tego wynika:
     // miasto ma flotę, stacje i router z pojemnością wyliczoną z liczby dojeżdżających.
-    assert!(p.fleet.vehicles > 0, "miasto bez ani jednego samochodu (M4b/WP5)");
+    assert!(
+        p.fleet.vehicles > 0,
+        "miasto bez ani jednego samochodu (M4b/WP5)"
+    );
     assert!(
         p.fleet.route_cache_capacity >= 1_024,
         "pojemność cache tras nie została wyliczona z populacji (Y-4)"
@@ -187,21 +192,44 @@ fn etap8_daje_agentom_wszystko_czego_potrzebuja() {
     );
 
     let v = world.resource::<Vacancies>();
-    assert_eq!(v.homes_total(), p.report.homes_total, "pojemność mieszkaniowa (E-14)");
-    assert_eq!(v.jobs_total(), p.report.jobs_total, "pojemność rynku pracy (E-14)");
-    assert!(v.free_homes() > 0, "miasto bez pustostanów nie przyjmie nikogo");
+    assert_eq!(
+        v.homes_total(),
+        p.report.homes_total,
+        "pojemność mieszkaniowa (E-14)"
+    );
+    assert_eq!(
+        v.jobs_total(),
+        p.report.jobs_total,
+        "pojemność rynku pracy (E-14)"
+    );
+    assert!(
+        v.free_homes() > 0,
+        "miasto bez pustostanów nie przyjmie nikogo"
+    );
 
     let facts = world.resource::<magnat_agents::CityFacts>();
-    assert!(!facts.job_prestige.is_empty(), "brak prestiżu zawodów (E-14)");
-    assert!(!facts.block_of.is_empty(), "brak przypisania budynek → kwartał (E-14)");
+    assert!(
+        !facts.job_prestige.is_empty(),
+        "brak prestiżu zawodów (E-14)"
+    );
+    assert!(
+        !facts.block_of.is_empty(),
+        "brak przypisania budynek → kwartał (E-14)"
+    );
 
     // Każdy mieszkaniec ma dom jako `PlaceRef` (E-6).
     let ludzie: Vec<_> = world.resource::<Population>().citizens().to_vec();
     for c in ludzie.iter().take(2000) {
         let res = world.get::<Residence>(*c).expect("Residence");
         let dom = home_place(res).expect("dom jako PlaceRef");
-        assert!(p.places.coord_of(dom).is_some(), "dom spoza katalogu miejsc");
-        assert!(world.get::<KnowledgeRef>(*c).is_some(), "brak uchwytu wiedzy");
+        assert!(
+            p.places.coord_of(dom).is_some(),
+            "dom spoza katalogu miejsc"
+        );
+        assert!(
+            world.get::<KnowledgeRef>(*c).is_some(),
+            "brak uchwytu wiedzy"
+        );
     }
 
     // Zasiew wiedzy (E-2) jest warunkiem, żeby cokolwiek się wydarzyło: `candidates`
@@ -284,11 +312,13 @@ fn doba_przez_systemy_ecs_planuje_dowozi_i_zaspokaja() {
         .citizens()
         .iter()
         .filter(|e| {
-            app.world.get::<magnat_agents::PlanRef>(**e).is_some_and(|p| {
-                magnat_agents::load_plan(p, app.world.resource::<magnat_agents::PlanSlab>())
-                    .iter()
-                    .any(|s| s.kind == magnat_core::ActivityKind::Work as u8)
-            })
+            app.world
+                .get::<magnat_agents::PlanRef>(**e)
+                .is_some_and(|p| {
+                    magnat_agents::load_plan(p, app.world.resource::<magnat_agents::PlanSlab>())
+                        .iter()
+                        .any(|s| s.kind == magnat_core::ActivityKind::Work as u8)
+                })
         })
         .count();
     assert!(
@@ -352,7 +382,10 @@ fn mieszkaniec_ma_tozsamosc_wieku_z_piramidy() {
     let mut world = swiat(6);
     let r = zaludnij(&mut world, &city).report;
     let z_piramidy: u32 = r.pyramid.iter().sum();
-    assert_eq!(z_piramidy, r.citizens, "piramida nie sumuje się do populacji");
+    assert_eq!(
+        z_piramidy, r.citizens,
+        "piramida nie sumuje się do populacji"
+    );
 
     // Nikt nie żyje dłużej, niż pozwala tabela demografii (`prop_no_immortals`).
     let ages = world.resource::<DemographyTable>().ages();

@@ -1094,9 +1094,17 @@ mod tests {
         // prosi o coś, czego działka nie ma jak pomieścić.
         let (_, m) = katalog();
         let g = z_wysunieciem(Face::Back, 1.2, false);
-        let out = derive(&g, &m, zakres(12.0, 16.0), params_z_zapasem(Margins::default()));
+        let out = derive(
+            &g,
+            &m,
+            zakres(12.0, 16.0),
+            params_z_zapasem(Margins::default()),
+        );
         assert_eq!(out.protrusions, 0);
-        assert_eq!(out.protrusions_dropped, 1, "odrzucenie nie zostało policzone");
+        assert_eq!(
+            out.protrusions_dropped, 1,
+            "odrzucenie nie zostało policzone"
+        );
     }
 
     #[test]
@@ -1123,7 +1131,10 @@ mod tests {
             params_z_zapasem(zapas),
         );
         assert_eq!(gora.protrusions, 1, "balkon powyżej skrajni ma stanąć");
-        assert_eq!(parter.protrusions, 0, "balkon nad jezdnią na parterze — nie");
+        assert_eq!(
+            parter.protrusions, 0,
+            "balkon nad jezdnią na parterze — nie"
+        );
         assert_eq!(parter.protrusions_dropped, 1);
     }
 
@@ -1152,7 +1163,10 @@ mod tests {
             }),
         );
         assert_eq!(out.protrusions, 1);
-        assert_eq!(out.protrusions_clipped, 0, "zapas policzony od lica zakresu");
+        assert_eq!(
+            out.protrusions_clipped, 0,
+            "zapas policzony od lica zakresu"
+        );
     }
 
     #[test]
@@ -1172,7 +1186,12 @@ mod tests {
                 material: "roof_tile_red".to_string(),
                 dormers: (0, 0),
             });
-            derive(&h, &m, zakres(18.0, 16.0), params_z_zapasem(Margins::default()))
+            derive(
+                &h,
+                &m,
+                zakres(18.0, 16.0),
+                params_z_zapasem(Margins::default()),
+            )
         };
         let z_lukarnami = derive(
             &g,
@@ -1181,10 +1200,7 @@ mod tests {
             params_z_zapasem(Margins::default()),
         );
         let ile = z_lukarnami.parts.len() - bez.parts.len();
-        assert!(
-            (2..=3).contains(&ile),
-            "{ile} lukarn zamiast 2–3 z widełek"
-        );
+        assert!((2..=3).contains(&ile), "{ile} lukarn zamiast 2–3 z widełek");
     }
 
     #[test]
@@ -1213,8 +1229,7 @@ mod tests {
             assert!(
                 !max.truncated,
                 "gramatyka {} przekroczyła budżet przy największej działce ({} węzłów)",
-                gram.id,
-                max.nodes
+                gram.id, max.nodes
             );
             assert!(out.floors >= 1, "gramatyka {} bez kondygnacji", gram.id);
             assert_eq!(

@@ -232,7 +232,10 @@ fn bilans_paliwa_domyka_sie_co_do_mikrolitra() {
     }
 
     assert_eq!(przybylo, POJAZDOW, "nie wszyscy dojechali");
-    assert!(net.stats.refuels > 0, "nikt nie tankował, mimo pustych baków");
+    assert!(
+        net.stats.refuels > 0,
+        "nikt nie tankował, mimo pustych baków"
+    );
     assert_eq!(
         koncowe - poczatkowe,
         net.stats.fuel_bought_ul - net.stats.fuel_burned_ul,
@@ -247,7 +250,10 @@ fn bilans_paliwa_domyka_sie_co_do_mikrolitra() {
     );
     // Bramka 5 (00 §7): każda podróż wychodzi z uzasadnieniem, a tankowanie
     // przesłania wybór środka — bo to o nim mieszkaniec chce przeczytać w karcie.
-    assert_eq!(net.stats.reasons[7], 0, "podróż bez uzasadnienia z bloku M4");
+    assert_eq!(
+        net.stats.reasons[7], 0,
+        "podróż bez uzasadnienia z bloku M4"
+    );
     assert!(
         net.stats.reasons[5] > 0,
         "żadna podróż nie zapisała wyboru stacji, mimo {} tankowań",

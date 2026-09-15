@@ -74,7 +74,13 @@ fn kazdy_kanal_pieniadza_zmienia_hash() {
         match zmiana {
             0 => books.endow(acc, Money(1), Tick(2)).map(|_| ()),
             1 => books
-                .create_credit(acc, Money(1), LoanId(1), DecisionReason::Unspecified, Tick(2))
+                .create_credit(
+                    acc,
+                    Money(1),
+                    LoanId(1),
+                    DecisionReason::Unspecified,
+                    Tick(2),
+                )
                 .map(|_| ()),
             2 => books
                 .inject_external_capital(acc, Money(1), ExternalInvestorId(1), Tick(2))
