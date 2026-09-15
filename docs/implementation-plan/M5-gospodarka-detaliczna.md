@@ -301,7 +301,7 @@ osobnym refaktorem na końcu.
 | `purchase_decision` — cała doba (≈450 tys. decyzji × ≤15 kandydatów) | < 900 ms CPU łącznie, ≤ 3 ms na tick minutowy w szczycie |
 | `settle_transactions` (tick szczytowy, ≈2 tys. intencji) | < 1,5 ms (sekwencyjny — to jest górna granica, patrz ryzyko R3) |
 | `reprice` dla 2 tys. sklepów × 40 towarów | < 40 ms raz na dobę |
-| Pamięć: `Offer` | ≤ 48 B; `ShopLostSales` ≤ 256 wpisów × 16 B na sklep |
+| Pamięć: `Offer` | **≤ 56 B** (skorygowane po M5a, `U-5`); `ShopLostSales` ≤ 256 wpisów × 16 B na sklep |
 
 Zero alokacji w `gather_candidates` i `utility_of_offer` (bufory wielokrotnego użytku) — weryfikowane
 licznikiem alokacji w teście.
@@ -451,9 +451,9 @@ dopasowania zamiast drugiego (M7).
    pracowników ani produkcji.
    *Propozycja M5: bank ma `FirmId` i `Ledger` (jak sklep), ale jego „AI" to funkcja `assess_credit`;
    M7 czyni go pełną firmą z załogą i osobowością.* **Do uzgodnienia z M7.**
-   **Blokuje WP1 w jednej, wąskiej części:** sam bank powstaje dopiero w M5d, ale wariant
-   `AccountOwner::Bank(FirmId)` zamraża się razem z enumem w pierwszym pakiecie. Jeśli bank ma
-   **nie** być firmą, ten wariant wygląda inaczej — i lepiej wiedzieć to przed `Books`, niż po.
+   **Wąska część ZAMKNIĘTA w M5a (`U-13`):** wariant `AccountOwner::Bank(FirmId)` został przyjęty
+   domyślnie i zamrożony razem z enumem w WP1 — bank ma `FirmId`, konto własne i limit debetu
+   jak każda firma. Szeroka część (czym bank jest jako firma) zostaje otwarta do M5d.
 
 8. ~~**Hook VAT: pole `Transaction.tax` czy osobny rejestr podatkowy?**~~ — **ZAMKNIĘTE przez M8.**
    Rozgraniczenie: `Transaction.tax` zostaje **wyłącznie dla VAT-u** (nierozłączny od pojedynczej
@@ -496,10 +496,14 @@ dopasowania zamiast drugiego (M7).
     nie używa (pokryte wyłącznie testem P1b). *Propozycja M5: pozostają `pub`, wołane wyłącznie
     z `sim/firms` w M7.* Jeśli M7 potrzebuje innej ziarnistości niż „inwestor + kwota"
     (np. transzy, harmonogramu wejścia) — trzeba to wiedzieć przed zamrożeniem struktury.
-    **Do potwierdzenia z M7. Blokuje WP1**, i mocniej, niż wynikałoby z brzmienia punktu:
-    `MoneySupplyLedger` powstaje w **pierwszym** pakiecie i jest częścią niezmiennika P1/P1b,
-    czyli tego samego testu własnościowego, który jest kryterium zamknięcia M5a. Zmiana ziarnistości
-    kanału po WP1 znaczy przepisanie niezmiennika, a nie dołożenie pola.
+    **Blokowało WP1**, i mocniej, niż wynikałoby z brzmienia punktu: `MoneySupplyLedger` powstaje
+    w **pierwszym** pakiecie i jest częścią niezmiennika P1/P1b, czyli tego samego testu
+    własnościowego, który jest kryterium zamknięcia M5a.
+    **ZAMKNIĘTE w M5a przez przyjęcie propozycji domyślnej (`U-10`):** ziarnistość to „inwestor
+    + kwota", obie funkcje są `pub`, zwracają `Result<TxId, TxError>` i biorą `Tick`. Transze
+    i harmonogram wejścia, jeśli M7 ich potrzebuje, są **jego** stanem — `Books` widzi z nich
+    pojedyncze wywołania, więc inna ziarnistość po stronie M7 nie rusza niezmiennika. Kanał jest
+    pokryty testem P1b od pierwszego dnia, więc rozjazd wyjdzie u tego, kto go wprowadzi.
 
 15. **Nowe po M4 — `PlaceCandidate` nie niesie kwoty, a człon `g` jej wymaga.**
     `sim/agents::PlaceCandidate` ma dziś `place`, `travel_min: u16`, `score: i32` i `reason` —
@@ -532,9 +536,12 @@ dopasowania zamiast drugiego (M7).
 | WP13 | Balansator i bramki CI | **L** | CLI, scenariusze, 9 bramek, raport, wpięcie w CI, meta-test bramek |
 | WP14 | Testy własnościowe, determinizm, benchmarki | **M** | rozłożone na całą fazę, nie blok na końcu |
 
-`sim/economy::kernel` (D20) **nie jest osobnym WP** — `next_price` powstaje w WP6, `take_cogs`
-i `ledger_post` w WP7, walidacja zapisu w WP1. Napisane od razu w rdzeniu kosztują tyle samo,
-co napisane obok, a P4–P7 stają się tańsze. Moduł `labor` (D19) też nie jest tu wyceniony:
+`sim/economy::kernel` (D20) **nie jest osobnym WP** — `next_price` powstaje w WP6, a `take_cogs`
+i `ledger_post` w WP7. Napisane od razu w rdzeniu kosztują tyle samo, co napisane obok,
+a P4–P7 stają się tańsze. **Korekta po M5a (`U-11`): w WP1 rdzeń nie powstaje.** Plan
+przypisywał tam „walidację zapisu", ale zapisu księgowego w WP1 nie ma — `Ledger` powstaje
+dopiero w WP7, a `Σ lines == 0` dla dwuliniowego przelewu jest tożsamością. Jedyna arytmetyka
+pieniądza w WP1 to podział kwoty, gotowy w `magnat_core::split_proportional` z M0. Moduł `labor` (D19) też nie jest tu wyceniony:
 należy do zakresu M7, M5 dostarcza wyłącznie sygnatury, które i tak buduje dla detalu.
 
 Sumarycznie: 4 × L, 8 × M, 2 × S. Faza jest **największa z dotychczasowych** — to konsekwencja

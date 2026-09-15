@@ -1446,6 +1446,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "magnat-economy"
+version = "0.1.0"
+dependencies = [
+ "criterion",
+ "magnat-core",
+ "magnat-ecs",
+ "magnat-io",
+ "magnat-jobs",
+ "magnat-spatial",
+ "proptest",
+]
+
+[[package]]
 name = "magnat-ecs"
 version = "0.1.0"
 dependencies = [
