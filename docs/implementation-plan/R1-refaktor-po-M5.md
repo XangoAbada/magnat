@@ -133,7 +133,7 @@ i nikt by nie zobaczył, czy w ogóle cokolwiek wykrywa.
 | R-WP2 | `tools/magnat/src/main.rs` | R-WP1 | S | `[x]` |
 | R-WP3 | `engine/render/src/renderer.rs` | R-WP1 | L | `[x]` |
 | R-WP4 | `sim/world/src/population/mod.rs` | R-WP1 | L | `[x]` |
-| R-WP5 | `sim/world/src/city/sites.rs` | R-WP1 | M | `[ ]` |
+| R-WP5 | `sim/world/src/city/sites.rs` | R-WP1 | M | `[x]` |
 | R-WP6 | `sim/traffic/src/oracle.rs`, `trip.rs` | R-WP1 | M | `[ ]` |
 | R-WP7 | `sim/agents/src/demography.rs` | R-WP1 | M | `[ ]` |
 | R-WP8 | `sim/world/src/city/build.rs` | R-WP5 | M | `[ ]` |
@@ -661,15 +661,28 @@ na 590. Propozycja: tak, w tym samym pakiecie co `oracle.rs`, bo te dwa pliki dz
 (`TripHandle`, `PendingTrip`) i dzielenie ich osobno oznacza dwa razy tę samą analizę zależności.
 
 **`D-R7` — test akceptacyjny M3d pada na `master` i nie ma go w CI.** Znalezione przy R-WP4.
-`sim/world/tests/population.rs::doba_przez_systemy_ecs_planuje_dowozi_i_zaspokaja` pada z
-`31971 != 44188` („nie każda podróż się skończyła") — **na czystym `master`, z identycznymi
-liczbami przed podziałem i po nim**, więc nie jest to skutek R1. Jest `#[ignore]`, a `ci.yml`
-uruchamia z `--include-ignored` tylko `--test determinism`, `--test city` i `--test city_m2c`;
-`--test population` nie biegnie nigdzie. Propozycja: **nie naprawiać tego w R1** (to zmiana
-zachowania, §2 „nie wchodzi"), ale dopisać `--test population -- --include-ignored` do joba
-`determinism` w tym samym commicie, w którym problem zostanie zdiagnozowany, i rozstrzygnąć
-przy M6 albo wcześniej, czy pada test, czy pada kod. Do tego czasu pozycja stoi tutaj,
-a nie jako `TODO` w kodzie (`K-18` pkt 4). *Nieblokująca dla żadnego pakietu R1.*
+**Cztery testy akceptacyjne M2d i M3d padają na `master` i żaden z nich nie biegnie w CI.**
+Znalezione przy R-WP4 i R-WP5, potwierdzone niezależnie na czystym `HEAD` (`git stash`):
+
+| Plik | W CI z `--include-ignored`? | Stan | Co pada |
+|---|---|---|---|
+| `tests/determinism.rs` | tak | zielony | — |
+| `tests/city.rs` | tak | zielony | — |
+| `tests/city_m2c.rs` | tak | zielony | — |
+| `tests/city_m2d.rs` | **nie** | **3 z 16** | `rozbicie_wyceny_sumuje_sie_do_wyniku` (`Money(17523)` ≠ `Money(15939)`), `zaden_budynek_nie_wisi_nad_terenem` (parcela 4993, dziura na indeksie 43 przy terenie 55), `park_i_kopalnia_zostaja_bez_zabudowy` („budynek w strefie green") |
+| `tests/population.rs` | **nie** | **1 z 7** | `doba_przez_systemy_ecs_planuje_dowozi_i_zaspokaja` (`31971` ≠ `44188` zakończonych podróży) |
+
+Wszystkie cztery są `#[ignore]`, więc `cargo test --workspace` ich nie widzi, a `ci.yml` woła
+z `--include-ignored` wyłącznie trzy pierwsze pliki. Bramka, którą §7 pkt 2 nazywa „zielony
+`master`", jest więc **spełniona i pusta naraz**: cztery testy akceptacyjne M2d i M3d nie biegły
+nigdzie od nieznanej liczby faz. Identyczność liczb przed podziałem i po nim jest przy okazji
+dodatkowym dowodem, że R1 niczego nie przesunął.
+
+Propozycja: **nie naprawiać tego w R1** — rozstrzygnięcie, czy pada test, czy pada kod, jest
+zmianą zachowania (§2 „nie wchodzi"). Dopisać brakujące pliki do joba `determinism` w `ci.yml`
+**dopiero razem z diagnozą**, bo job czerwony od pierwszego dnia zostanie wyłączony (ryzyko R-5).
+Dwa z trzech przypadków `city_m2d` leżą w plikach, które R-WP8 i R-WP9 i tak otworzą — jeśli
+podział cokolwiek o nich powie, trafi to tutaj. *Nieblokująca dla żadnego pakietu R1.*
 
 ---
 
@@ -716,6 +729,9 @@ Pusta na start. Wiersz wpisuje się w tym samym commicie, w którym próg zosta�
 | 11 | `sim/world/src/population/homes.rs` | `fn dopasuj_mieszkania` — 227 linii (ostrzeżenie od 150) | Lustro stanu, rangi dochód↔wartość, pomiar przedziału median i **pętla poprawkowa 200 tys. prób zamiany** to jeden ciąg: `adres`, `zaloga`, `hist`, `krotszych` i `odchylenie` żyją przez wszystkie cztery etapy i są aktualizowane przyrostowo. Każdy podział wypycha ten stan przez sygnaturę albo przestawia kolejność prób — a ta kolejność **jest częścią hasha** (§3 reguła 1 i ostrzeżenie w §4 R-WP4) | Faza, która zamieni zachłanną wymianę na wyżarzanie. Sufit jest już nazwany komentarzem `ponytail:` nad funkcją; wtedy „pomiar przedziału" i „pętla" rozejdą się same |
 | 12 | `sim/world/src/population/mod.rs` | `fn generate_population` — 211 linii (ostrzeżenie od 150; **było 280, czyli nad progiem błędu**) | To jest lista dziesięciu kroków i ma prawo być długa — jedyne miejsce, z którego widać całą sekwencję Etapu 8. Dalsze skracanie wymaga wyniesienia kroku 11 (flota, 35 linii), a ten sięga `crate::traffic_build` w ośmiu miejscach i nie ma właściciela w `population/` | Faza dotykająca floty: gdy `traffic_build` dostanie własny „krok 11" jako jedną funkcję, `generate_population` schodzi poniżej 180 |
 | 13 | `sim/world/src/population/mod.rs` | metryka `mod.rs` — 365 linii kodu poza deklaracjami (ostrzeżenie od 300; **było 2138**) | Poza `generate_population` (211) zostają wyłącznie typy wejścia i wyjścia Etapu 8 plus cztery drobiazgi mostu. `population/api.rs` byłby plikiem o czterech typach bez zachowania | Zniknie razem z pozycją 12 |
+| 14 | `sim/world/src/city/sites/place.rs` | plik — 949 linii (ostrzeżenie od 800; §4 szacowało 750) | Jeden ciąg pięciu kroków obsady, w którym stan idzie przez cztery zmienne lokalne `populate`: `kandydaci`, `przydzialy`, `grupa`, `rep`. Kroki 1–4 mutują wszystkie cztery, krok 5 czyta wynik. Podział wypchnąłby czwórkę przez sygnaturę i przestawił moment, w którym rośnie `grupa` — a numer grupy firmy wchodzi do `rng(seed, StreamId::FirmSeed, …)`, czyli do nazw firm i **do hasha** | M6 dokłada tu magazyny i zakłady. Wtedy `place/workplaces.rs` (korekta F1: `rebind_workplaces` + `licz_stanowiska`, ~130 linii, nie dotykają ani `Kand`, ani `Przydzial`) wychodzi za darmo, a reszta schodzi do ~810 |
+| 15 | `sim/world/src/city/sites/closure.rs` | `fn supply_closure_check` — 194 linie (ostrzeżenie od 150; **wartość niezmieniona od dawnego pliku**) | Pięć kroków §5.8 dzielących pięć wektorów stanu (`import`, `demanded`, `osiagalne`, `importowalny`, `budzet_importu`) i sześć przebiegów o stałym budżecie. Wyniesienie KROKU 5 przepuściłoby przez sygnaturę cztery wektory i `&mut [SiteSeed]`, a dowieziony import liczy się **od stanu końcowego**, nie narastająco — rozdzielenie kusi do zwrócenia importu z pętli, czyli do błędu, który komentarz w środku opisuje jako już raz naprawiony | M6d przejmuje funkcję w całości i zamienia stały budżet bram na dynamiczny (wpisane do `M6d-*.md` przez `K-18`). Wtedy „naprawa" i „bilans" rozejdą się same, bo przestaną być jednorazowe |
+| 16 | `sim/world/src/city/sites/place.rs` | `fn posadz_produkcje` — 168 linii (ostrzeżenie od 150; **wartość niezmieniona**) | Trzy podkroki (3a klastry wg szablonów, 3b reszta, 3c rozluźnienie strefy) czytające i zmniejszające ten sam wektor `zostalo` oraz ten sam `kand`. Kolejność 3a→3b→3c jest kolejnością zajmowania działek, czyli wprost hashem | Ta sama faza co pozycja 14 |
 
 ---
 
@@ -734,6 +750,8 @@ gdzie indziej, niż zakłada `M6d-zloza-i-koniec-dostawcy-zewnetrznego.md`).
 | D-5 | **Kolumna „dziś" w tabeli progów §6 jest nieaktualna** (mierzona przy pisaniu dokumentu, w trakcie M5c). Pomiar `struct_guard.py --all` na `master` po M5e: 206 plików produkcyjnych, plik 15 ostrzeżeń / 10 błędów (+3 wyjątki), `impl` 7 / 8, funkcja 22 / 12, `mod.rs` 0 / 2 | Nie jest to korekta progów — `D-R1` zostaje bez zmian. Liczby urosły, bo M5d i M5e dopisały ~1 700 linii do `market.rs`, a to jest właśnie zjawisko, które reguła z §6 ma łapać. Kolumna zostaje w dokumencie jako zapis stanu z chwili pisania; stan bieżący daje skrypt |
 | D-8 ★ | **Zdanie z §4 R-WP3 „pola trzeba podnieść do `pub(crate)`" jest nieprawdziwe** przy wariancie katalogowym, czyli tym, który R-WP3 sam zaleca. Pola `Renderer` **nie zostały podniesione** i nie musiały. Podniesienia poszły w drugą stronę: 37 symboli, które wyszły z `renderer`, dostało `pub(super)` — żaden `pub` ani `pub(crate)` | Ten sam mechanizm co `D-4` dla `market.rs`, potwierdzony niezależnie: moduł udostępnia swoje prywatne elementy **wszystkim potomkom**, więc `impl Renderer` w `renderer/frame.rs` czyta `self.chunks` bez żadnej zmiany widoczności. Uogólnienie wiążące dla R-WP4…R-WP12: **podział do katalogu nie wymaga otwierania pól, podział na moduły siostrzane wymaga** — i to jest argument za katalogiem, a nie kwestia gustu |
 | D-9 | **Szew w `pipelines.rs` nie biegnie „po jednym pipelinie z jego layoutem", jak zakłada tabela §4 R-WP3.** W dawnym `new` **wszystkie osiem układów grup wiązań powstaje przed pierwszym potokiem**, a układy potoków jeszcze później; funkcja „potok razem ze swoim layoutem" musiałaby przepleść `create_bind_group_layout` z `create_*_pipeline`. Zamiast tego jest dziesięć funkcji, z których każda jest **ciągłym wycinkiem dawnego ciała `new`**, wołanym w dawnej kolejności. Osobno: `render`, `render_with_ui`, `render_to_image`, `render_to_image_with_ui` idą do `passes.rs`, a nie do `renderer.rs`, bo inaczej `impl Renderer` w `renderer.rs` ma ~556 linii, czyli powyżej progu błędu z §7 pkt 5 | Tabela §4 opisywała szew tematyczny, a plik ma szew **kolejnościowy** — i to kolejność jest tu kontraktem sterownika, nie temat. Zachowany jest duch tabeli (`pipelines.rs` nie dotyka `self`, jest czystą kompozycją `&Device` → obiekty GPU), nie jej litera. Wpisane, bo ta sama pułapka czeka M11, gdy dołoży własne potoki |
+| D-12 | **Podział na katalog przeliterowuje ścieżki `super::` — to jest jedyny koszt zejścia o poziom.** W R-WP5 dotyczyło to czterech linii: po zejściu do `city/sites/` `super` znaczy `sites`, nie `city`, więc `super::blocks::block_adjacency`, `super::parcels::parcel_id`, `super::grammar::zone_z_klucza` i `&super::road::RoadNetwork` musiały zostać zapisane jako `crate::city::…`. Wariant `super::super::` odrzucony jako nieczytelny | Reguła dla pozostałych pakietów: **policz odwołania `super::` przed podziałem** — to jedyna kategoria zmian, która wychodzi poza „przeniesienie bloku", i jedyna, którą porównanie wielozbiorów pokaże jako różnicę. Kompilator sprawdza je wszystkie naraz, więc ryzyko jest zerowe, ale w diffie trzeba je umieć nazwać |
+| D-13 | **Dziewięć symboli `pub` w `sites/` nie ma ani jednego konsumenta poza `sites/`** (`SCALE_BASE`, `SCALE_MIN/MAX`, `RATIO_MIN/MAX`, trzy `*_SCHEMA_VERSION`, `ChainTemplate`, `FirmNames`, `ArchetypeSpec`, `firm_id`, `niemieszkalna` — sprawdzone grepem po całym workspace). Zostały `pub`, bo kryterium akceptacji nr 7 mówi „publiczne API niezmienione" | Zwężenie do `pub(super)` należy do **R-WP10**, razem z prostowaniem importów: to ta sama operacja (ścieżka ma mówić prawdę o tym, gdzie kod leży) i ten sam argument (`D-R3`). Wpisane, żeby R-WP10 wiedział, że ma tu do zrobienia coś ponad usuwanie `pub use` |
 | D-11 | **Trzy odstępstwa od tabeli §4 R-WP4, wszystkie wymuszone przez kryterium „`mod.rs` poniżej 400 linii".** `docelowa_populacja` idzie do `pyramid.rs`, choć tabela jej nie wymienia (czyta pasma piramidy — jest wejściem kroku 1, nie orkiestracją), a dwa ciągłe bloki wychodzą z `generate_population` jako nowe funkcje: `pyramid::zasiedl` (krok 2b, pętla spawnu) i `traits::nadaj_cechy` (kroki 3–4). Oba ciała przeniesione co do znaku; zmieniły się wyłącznie trzy tokeny zamieniające zmienne lokalne w parametry | Bez tych trzech ruchów `mod.rs` miałby ~470 linii własnego kodu, a `generate_population` zostałoby na 280 — czyli **nad progiem błędu 250 z kryterium akceptacji nr 5**, którego stan sprzed pakietu nie spełniał. Tabela §4 rozdzielała kroki między pliki, ale nie przewidziała, że dwa z nich siedzą w ciele orkiestratora, a nie w osobnych funkcjach |
 | D-10 | **Arena miała już swój test.** §4 R-WP3 obiecuje suballokatorowi „test jednostkowy, którego dziś nie ma, bo nie ma jak" — były dwa, w module `#[cfg(test)]` na końcu `renderer.rs`. Przeniosły się razem z kodem. Dopisany jest trzeci, pokrywający to, czego naprawdę brakowało: ponowne użycie dziury po zwolnionym bloku ze środka, brak nakładania się żywych bloków i zachowanie `alloc(0)` | Diagnoza z §1 („cztery najdłuższe pliki mają zero albo prawie zero testów") była trafna co do kierunku i nieprecyzyjna co do tego pliku. Trzeci test pilnuje milczącej umowy: `Arena::alloc(0)` zwraca `Block { offset: 0 }`, czyli przesunięcie kolidujące z pierwszym prawdziwym blokiem — nieszkodliwe dziś, ale nie jest to własność typu, tylko zwyczaj |
 | D-7 | **Rusztowania `pub use` z procedury §3 pkt 2 nie powstają w crate'ach binarnych.** R-WP2 ich nie potrzebował: `magnat` jest binarką, więc wszystkie wywołania są wewnątrz crate'u i ścieżki poprawia się od razu jawnymi `use`, a kompilator weryfikuje je w całości. R-WP10 nie ma po tym pakiecie nic do posprzątania | Powód, dla którego rusztowanie w ogóle istnieje (§3 pkt 5, ryzyko R-6), znika, gdy zbiór wywołań jest zamknięty w jednym crate'cie i mieści się w jednym diffie. To samo będzie dotyczyć każdego pakietu, którego podział nie wychodzi poza crate — wpisane, żeby R-WP10 nie szukał czegoś, czego nie ma |
