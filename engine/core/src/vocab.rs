@@ -203,6 +203,68 @@ vocab_enum! {
 pub const REJECT_CAUSE_COUNT: usize = RejectCause::ALL.len();
 
 vocab_enum! {
+    /// Rodzaj kredytu (M5d §5.10, PRD §6.5).
+    ///
+    /// W `core` z tego samego powodu co `PriceDriver` (`K-30`): jest ładunkiem
+    /// `DecisionReason::Credit{Approved,Rejected}`, a ładunek centralnego enuma nie
+    /// może pochodzić z crate'u, który od `core` zależy.
+    ///
+    /// M5 zna dwa produkty; M7 dokłada inwestycyjny, M10 hipoteczny — **na końcu**,
+    /// bo kolejność wariantów jest kontraktem zapisu gry (`as_index()` indeksuje
+    /// widełki marży kredytowej w `data/economy/bank.ron`).
+    ///
+    /// - `Consumer` — kredyt konsumpcyjny gospodarstwa domowego.
+    /// - `WorkingCapital` — kredyt obrotowy zakładu pod zapasy i koszty stałe.
+    LoanKind {
+        Consumer,
+        WorkingCapital,
+    }
+}
+
+vocab_enum! {
+    /// Dlaczego bank odmówił kredytu (M5d §5.10).
+    ///
+    /// Osobny słownik od `RejectCause`, mimo podobnej roli, bo tamten indeksuje
+    /// histogram **utraconych sprzedaży** i jego kolejność jest kontraktem panelu
+    /// sklepu. Wspólny enum kosztowałby dwa martwe warianty po każdej stronie.
+    ///
+    /// - `NoIncome` — gospodarstwo bez dochodu; nie ma z czego liczyć zdolności.
+    /// - `DstiTooHigh` — obciążenie ratami ponad limit dochodu (`dsti_limit_bp`).
+    /// - `Arrears` — zaległości w historii kredytowej ostatnich 24 miesięcy.
+    /// - `DscrTooLow` — przepływy zakładu nie pokrywają obsługi długu (`dscr_min`).
+    /// - `NoLender` — w mieście nie ma banku, który mógłby udzielić kredytu.
+    RejectCredit {
+        NoIncome,
+        DstiTooHigh,
+        Arrears,
+        DscrTooLow,
+        NoLender,
+    }
+}
+
+vocab_enum! {
+    /// Pozycja kosztów stałych gospodarstwa domowego (M5d §5.9, PRD §5.2).
+    ///
+    /// Ładunek `DecisionReason::BudgetShortfall`, więc mieszka w `core` (`K-30`).
+    /// Kolejność indeksuje `HouseholdBudget.fixed` — jest kontraktem zapisu gry.
+    ///
+    /// - `Housing` — czynsz albo rata mieszkaniowa. W M5 stała z danych; M7/M10 wnoszą
+    ///   czynsz emergentny z rynku nieruchomości.
+    /// - `Utilities` — media. M8 podmienia stałą na rachunek z sieci przesyłowych.
+    /// - `Insurance` — ubezpieczenia. M10 wnosi realny produkt ubezpieczeniowy.
+    /// - `LoanService` — raty kredytów z harmonogramów (`M5d` WP9).
+    FixedCost {
+        Housing,
+        Utilities,
+        Insurance,
+        LoanService,
+    }
+}
+
+/// Liczba pozycji kosztów stałych — rozmiar `HouseholdBudget.fixed` (M5d §5.9).
+pub const FIXED_COST_COUNT: usize = FixedCost::ALL.len();
+
+vocab_enum! {
     /// Klasa drogi w hierarchii ulicznej. **Kolejność jest kontraktem** — indeksuje
     /// tablicę `SPECS` generatora miasta w `sim/world`.
     ///

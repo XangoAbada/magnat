@@ -28,8 +28,8 @@ use crate::ids::SiteId;
 use crate::time::MinuteOfDay;
 use crate::types::{GoodId, Q};
 use crate::vocab::{
-    CommitmentKind, DeprivationEffect, LifeEventKind, MigrationKind, NeedKind, PlaceRef,
-    PriceDriver, RejectCause, StockCat, TraitId, TransportMode, UtilityKind,
+    CommitmentKind, DeprivationEffect, FixedCost, LifeEventKind, LoanKind, MigrationKind, NeedKind,
+    PlaceRef, PriceDriver, RejectCause, RejectCredit, StockCat, TraitId, TransportMode, UtilityKind,
 };
 use serde::{Deserialize, Serialize};
 
@@ -206,7 +206,32 @@ pub enum DecisionReason {
         driver: PriceDriver,
         delta_bp: i16,
     } = 303,
-    // 304–399 zarezerwowane dla M5 (`CreditDecision` w M5d).
+    /// Bank udzielił kredytu (M5d §5.10). `rate_bp` to oprocentowanie roczne
+    /// w punktach bazowych, `load_bp` — obciążenie, którym decyzja stanęła:
+    /// DSTI dla gospodarstwa, DSCR × 100 dla zakładu. Obie liczby są tym, co karta
+    /// inspekcji ma pokazać obok słowa „przyznano".
+    CreditApproved {
+        kind: LoanKind,
+        rate_bp: i16,
+        load_bp: i16,
+    } = 304,
+    /// Bank odmówił kredytu (M5d §5.10). `margin_bp` mówi, **o ile** zabrakło:
+    /// ile punktów bazowych ponad limit wyszło DSTI, ile poniżej progu DSCR.
+    /// Zero dla przyczyn, które nie są liczbą (`NoIncome`, `NoLender`).
+    CreditRejected {
+        kind: LoanKind,
+        cause: RejectCredit,
+        margin_bp: i16,
+    } = 305,
+    /// Gospodarstwu zabrakło na koszt stały i powstała zaległość (M5d §5.9).
+    /// `gap_permille` to nieopłacona część pozycji w tysięcznych — 1000 znaczy
+    /// „nie zapłacono nic". To jest ogniwo, bez którego ścieżka „debet → wniosek
+    /// → odmowa → zaległość" nie daje się wyjaśnić graczowi do końca.
+    BudgetShortfall {
+        cost: FixedCost,
+        gap_permille: i16,
+    } = 306,
+    // 307–399 zarezerwowane dla M5.
     // ... kolejne fazy dopisują własne bloki na końcu pliku
 }
 
@@ -254,6 +279,9 @@ impl DecisionReason {
             DecisionReason::OfferRejected { .. } => 301,
             DecisionReason::PurchaseDeferred { .. } => 302,
             DecisionReason::Repricing { .. } => 303,
+            DecisionReason::CreditApproved { .. } => 304,
+            DecisionReason::CreditRejected { .. } => 305,
+            DecisionReason::BudgetShortfall { .. } => 306,
         }
     }
 }

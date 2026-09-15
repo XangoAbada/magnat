@@ -1,0 +1,71 @@
+// Bank i bank centralny (M5d §5.10, PRD §6.5).
+//
+// Dwie rzeczy w jednym pliku, bo są jedną pętlą: bank centralny ustawia stopę
+// bazową, a stopa bazowa jest pierwszym składnikiem oprocentowania kredytu
+// (`rate_bp = base_rate_bp + risk_premium_bp + product_spread_bp`). Rozdzielenie
+// ich na dwa pliki kazałoby czytać oba, żeby zrozumieć jeden.
+//
+// **W tym pliku nie ma parametru „inflacja".** Inflacja jest wynikiem: kredyt →
+// depozyty → większe koperty → szybciej schodzący zapas → wyższe ceny ofert →
+// wyższe CPI. Bank centralny CPI **czyta**, a nie ustawia — i dlatego jego reakcja
+// jest celowo powolna (`max_step_bp`). Sterowanie zabiłoby emergencję, którą
+// balansator ma mierzyć.
+//
+// Ten plik stroi **balansator** (M5e): `a_bp` i `max_step_bp` decydują o tym, czy
+// pętla kredytowa się stabilizuje, czyli o bramkach G1 i G2.
+(
+    schema_version: 1,
+
+    // ── ocena zdolności kredytowej (§6.5: „historia, zabezpieczenie, przepływy") ──
+    scoring: (
+        // Gospodarstwo: `dsti = (istniejące raty + nowa rata) / dochód netto`.
+        dsti_limit_bp: 4000,
+        // Zakład: `dscr = ebitda_12m / debt_service_12m`. 12 000 bp = 1,2×.
+        dscr_min_bp: 12000,
+        // Sklep młodszy niż tyle miesięcy nie ma czym udokumentować przepływów.
+        min_months_in_business: 3,
+        // Ile miesięcy zaległości w ostatnich 24 blokuje kredyt na głucho.
+        arrears_block_months: 1,
+        // Premia za ryzyko: liniowo od zera zaległości (min) do progu blokady (max),
+        // plus rozrzut z `StreamId::CreditScoringJitter` — dwa identyczne wnioski
+        // u dwóch urzędników nie kończą się identycznie.
+        risk_premium_bp: (min: 100, max: 900),
+        jitter_bp: 150,
+    ),
+
+    // ── produkty ─────────────────────────────────────────────────────────────────
+    products: (
+        // Kredyt konsumpcyjny: dwa lata, najwyżej trzykrotność dochodu miesięcznego.
+        consumer: (
+            spread_bp: 600,
+            term_months: 24,
+            max_multiple_bp: 30000,
+        ),
+        // Kredyt obrotowy: rok, najwyżej trzykrotność miesięcznych kosztów stałych
+        // zakładu. To jest kredyt **pod zapasy i koszty**, nie inwestycyjny (ten M7).
+        working_capital: (
+            spread_bp: 300,
+            term_months: 12,
+            max_multiple_bp: 30000,
+        ),
+    ),
+
+    // ── bank centralny: reguła typu Taylora w arytmetyce całkowitej ───────────────
+    //
+    // `base_bp = clamp(neutral_bp + a_bp · (cpi_yoy_bp − target_bp) / 10 000,
+    //                  floor_bp, ceil_bp)`, ze zmianą ograniczoną do ±`max_step_bp`
+    // na miesiąc. Bank centralny jest **abstrakcją poza miastem** — nie jest firmą,
+    // nie ma konta i nie pożycza nikomu; ustawia jedną liczbę raz na miesiąc.
+    base_rate: (
+        start_bp: 500,
+        neutral_bp: 500,
+        // Cel inflacyjny r/r: 2,5 %.
+        target_bp: 250,
+        // Waga odchylenia: 1,5 (klasyczny Taylor). Powyżej 2,0 reguła zaczyna
+        // oscylować, bo reakcja cen na stopę ma w tym modelu miesiąc opóźnienia.
+        a_bp: 15000,
+        floor_bp: 0,
+        ceil_bp: 3500,
+        max_step_bp: 50,
+    ),
+)

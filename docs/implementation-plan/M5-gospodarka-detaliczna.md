@@ -110,7 +110,7 @@ dopiero po ostatniej podfazie; podfaza zamyka się własnym kryterium ze swojego
 | **M5a — Pieniądz i oferta** | WP1, WP2 | 5.1, 5.2 | Test zachowania pieniądza zielony **zanim** powstanie pierwsza transakcja detaliczna — później nie da się go wprowadzić bez przepisywania. | `M5a-pieniadz-i-oferta.md` |
 | **M5b — Sklep i zakup** `[x]` | WP3, WP4, WP5 | 5.3, 5.4, 5.5, 5.7 | Mieszkaniec wychodzi po chleb, wybiera ofertę i wraca; pieniądz i sztuki zgadzają się po obu stronach. | `M5b-sklep-i-zakup.md` |
 | **M5c — Ceny i księgowość** `[x]` | WP6, WP7, WP11 | 5.6, 5.8 | Sklep AI podnosi cenę przy niedoborze i obniża przy zaleganiu; rachunek wyników i bilans domykają się co do grosza. | `M5c-ceny-i-ksiegowosc.md` |
-| **M5d — Budżety, banki, inflacja** | WP8, WP9, WP10 | 5.9, 5.10 | Inflacja emergentna: koszyk CPI liczony z transakcji świata, stopa bazowa reagująca na niego bez ręcznego sterowania. | `M5d-budzety-banki-inflacja.md` |
+| **M5d — Budżety, banki, inflacja** `[x]` | WP8, WP9, WP10 | 5.9, 5.10 | Inflacja emergentna: koszyk CPI liczony z transakcji świata, stopa bazowa reagująca na niego bez ręcznego sterowania. | `M5d-budzety-banki-inflacja.md` |
 | **M5e — Panel, balansator, domknięcie** | WP12, WP13, WP14 | 5.11, 5.12 | Pełny artefakt fazy z §1 dokumentu fazy: otwórz sklep, ustal ceny, obserwuj klientów; balansator w CI. | `M5e-panel-balansator-domkniecie.md` |
 
 ---
@@ -463,7 +463,12 @@ dopasowania zamiast drugiego (M7).
    M7 czyni go pełną firmą z załogą i osobowością.* **Do uzgodnienia z M7.**
    **Wąska część ZAMKNIĘTA w M5a (`U-13`):** wariant `AccountOwner::Bank(FirmId)` został przyjęty
    domyślnie i zamrożony razem z enumem w WP1 — bank ma `FirmId`, konto własne i limit debetu
-   jak każda firma. Szeroka część (czym bank jest jako firma) zostaje otwarta do M5d.
+   jak każda firma.
+   **Szeroka część ZAMKNIĘTA w M5d (`AA-1`) przez przyjęcie propozycji domyślnej:** bank ma
+   `FirmId` i konto, a jego „AI" to funkcja `assess_credit`. Nie ma pracowników, produkcji
+   ani własnej `Ledger` — w M5 robi dokładnie trzy rzeczy (ocenia wniosek, tworzy depozyt,
+   niszczy go przy spłacie) i wszystkie trzy przechodzą przez jedno konto. M7 czyni go pełną
+   firmą z załogą i osobowością, nie ruszając `AccountOwner::Bank`.
 
 8. ~~**Hook VAT: pole `Transaction.tax` czy osobny rejestr podatkowy?**~~ — **ZAMKNIĘTE przez M8.**
    Rozgraniczenie: `Transaction.tax` zostaje **wyłącznie dla VAT-u** (nierozłączny od pojedynczej
@@ -559,6 +564,16 @@ dopasowania zamiast drugiego (M7).
     (tolerancja 0) i domknięcie księgowości zakładu, a suma świata jest **mierzona
     i wypisywana z rozbiciem**, nie bramkowana.* **Do uzgodnienia z M4 — kanał bez pary
     trzeba znaleźć przed wpięciem stacji, inaczej M5d odziedziczy go razem z kontem.**
+    **Stan po M5d: punkt zostaje otwarty, świadomie.** Obrót stacji (`T-2`) nie należy
+    do żadnego z pakietów M5d — §4 przypisuje tej podfazie WP8–WP10 — a sam punkt żąda
+    uzgodnienia z M4 **przed** wpięciem konta. Wciągnięcie go tutaj znaczyłoby odziedziczenie
+    kanału bez pary razem z kontem, czyli dokładnie to, przed czym ostrzega ostatnie zdanie.
+    Bramka scenariusza zostaje taka, jak ustawiło ją `W-17`. **Reszta urosła i urosła
+    z powodu, który warto zapisać:** po M5d jest to **+163,0 tys. zł przez 40 dób** wobec
+    +63,2 tys. zł przed nią, i nie jest to regres M5d — pieniądz kredytowy zwiększył wydatki
+    na dojazdy, więc kanał bez pary (taryfa taksówkowa) przepuszcza proporcjonalnie więcej.
+    Wniosek dla tego, kto go domknie: **to jest błąd mnożnikowy, nie addytywny**, i będzie
+    rósł z każdą fazą dokładającą pieniądza.
 
 ---
 
@@ -662,3 +677,21 @@ faza nie jest tu przeprojektowywana. Gwiazdka = zmiana zakresu albo kryterium.
 | X-5 ★ | **Domyślny promień obserwacji konkurencji to 1 200 m** (`W-14`), a `MatchCompetitor` może zażądać większego i wtedy płaci za niego ten sklep. §7.3 dostało własną linię budżetu dla `observe_competitors` | Pomiar: 161 ms przy 3 000 m wobec 27,4 ms przy 1 200 m dla 2 tys. sklepów. Ścieżka rośnie z **kwadratu** gęstości sklepów w promieniu, więc jest jedyną dobową ścieżką fazy, która skaluje się gorzej niż liniowo — i dlatego ma osobną bramkę benchmarkową, a nie wspólną z `reprice` |
 | | **`PurchaseIntent` niesie koszt własny sprzedanego towaru** (`W-4`). `fulfil` zdejmował z półki sztuki i odrzucał zwrócony koszt, a `return_goods` oddawał same sztuki | Bez tego `InventoryGoods` rozjeżdżał się z wyceną zapasu przy każdym nieudanym rozliczeniu, czyli P5 pękał w miejscu, którego M5b nie mógł zobaczyć — księgi jeszcze nie było. Kontrakt `LostSaleTracking` i `ShopLostSales` bez zmian |
 | | **Dokument 00 rośnie o `K-30`** (słowniki, które M5 wnosi do `engine/core`: `PriceDriver`) oraz o `shop.ron` w liście katalogów §5 | `UtilityKind` opisuje wymiar oceny **kupującego**, nie człon korekty **sprzedawcy**; wciśnięcie tam `Stock` i `Spoilage` zepsułoby kartę mieszkańca po stronie M3. Ładunek centralnego enuma musi mieszkać w `core` (`K-12`, `K-20`) |
+
+
+## Zmiany wpisane po M5d
+
+Zgodnie z `K-18`. To są rzeczy, o których wiemy **na pewno** po zamknięciu M5d;
+faza nie jest tu przeprojektowywana. Gwiazdka = zmiana zakresu albo kryterium.
+Prefiks `AA-n`, bo pojedyncze litery skończyły się na `Z`, `T`, `U` i `X`.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| AA-1 ★ | **Decyzja otwarta nr 7 zamknięta w szerokiej części zgodnie z propozycją: bank ma `FirmId`, konto i `assess_credit` zamiast AI.** Bez załogi, bez produkcji, bez własnej `Ledger` | W M5 bank robi trzy rzeczy: ocenia wniosek, tworzy depozyt i niszczy go przy spłacie. Plan kont zakładu ma 21 pozycji, z których dla banku niezerowe byłyby dwie — a księga, która nie księguje, jest kosztem bez czytelnika. M7 czyni go pełną firmą, nie ruszając `AccountOwner::Bank(FirmId)` zamrożonego w M5a |
+| AA-2 ★ | **Decyzja otwarta nr 16 (konto stacji paliw) zostaje otwarta, mimo że propozycja przypisywała ją M5d.** Powód i pomiar w samym punkcie | Obrót stacji przychodzi z `T-2`, a `T-2` nie jest żadnym z pakietów WP8–WP10; sam punkt żąda przy tym uzgodnienia z M4 **przed** wpięciem konta. Ważniejsze jest to, co pomiar pokazał przy okazji: reszta urosła z +63,2 tys. zł do **+163,0 tys. zł** przez 40 dób, i urosła **dlatego, że przybyło pieniądza** — kanał bez pary przepuszcza proporcjonalnie więcej. To jest błąd mnożnikowy, nie addytywny, więc każda faza dokładająca pieniądza będzie go powiększać |
+| AA-3 ★ | **`data/economy/` rośnie o trzy pliki**: `envelopes.ron` (koszty stałe gospodarstwa i wagi kopert per typ), `bank.ron` (ocena zdolności, produkty kredytowe, reguła stopy bazowej), `cpi.ron` (koszyk `q_0`). Dokument 00 §5 i **`K-31`** dopisane w tej samej zmianie | Lista katalogów w 00 §5 deklaruje się jako kompletna, a `K-31` jest wykonaniem `K-8` dla trzech słowników, które M5d wnosi do `core` (`LoanKind`, `RejectCredit`, `FixedCost`) — wszystkie są ładunkami `DecisionReason`, więc nie mogą mieszkać w crate'cie zależnym od `core`. **`cpi.ron` jest jedynym plikiem `data/economy/`, którego balansator nie stroi**: `q_0` jest bazą indeksu i jego zmiana przestawia całą historię CPI |
+| AA-4 ★ | **Trzy kontrakty z §6 są dostarczone pod inną sygnaturą, niż zapowiadał plan**: `assess_credit` nie dostaje `&Books` ani `&CreditHistory` (`Y-3`), `cpi(&TransactionStats, …)` zastąpił `CpiTracker` (`Y-4`), a `HouseholdBudget.loans: Vec<LoanId>` to `loan: Option<LoanId>` (`Y-2`). Pozostałe — `plan_budget`, `budget_ref_for_need`, `Envelope`, `Loan`, `LoanKind`, `build_schedule`, `CreditDecision`, `BaseRate` — są takie, jak obiecane | Wszystkie trzy różnice wynikają z tej samej doktryny, którą faza przyjęła przy `kernel` (D20): **rozwiązanie encji i stanu na liczby robi wołający**. `CreditHistory` jako typ nie powstał, bo „zaległości z ostatnich 24 miesięcy" to jeden `u8`; `TransactionStats` nie mógł powstać, bo dziennik jest pierścieniem na dobę, a okno CPI ma trzydzieści. Odbiorcy z §6 (M6, M7, M10) dostają węższe typy, nie inne pojęcia |
+| AA-5 ★ | **Nowe w kontrakcie, czego §6 nie wymieniał**: `settle_household_month` + `HouseholdMonth`/`HouseholdMonthReport` (M7 podmieni źródło dochodu, M8 dopisze PIT do kosztów stałych), `Bank`, `LoanBook`, `CpiTracker`, `CpiBasket`, `IndexBp`, `GoodTable::id_of_key`, `Market::{open_bank, budget_of, loan, loan_count, credit_outstanding, cpi_index_bp, cpi_mom_bp, cpi_yoy_bp, base_rate, budget_log}` | §6 wymieniał typy danych, ale nie **wejście**, którym faza następna ich użyje. Miesięczny krok gospodarstwa jest tym wejściem: M7 wstawia w niego pensję emergentną zamiast `income_monthly`, a M8 dopisuje PIT jako czwarty koszt stały. Bez nazwanego punktu wejścia obie fazy napisałyby własną pętlę po gospodarstwach — i wtedy kolejność „rata → wniosek → koszty stałe" (`Y-6`) przestałaby być kontraktem |
+| AA-6 | **Blok M5 w `DecisionReason` zajmuje 300–306**; 307–399 zostaje wolne. `StreamId::CreditScoringJitter = 185` wszedł do użycia | Wartości są wieczne (`K-12`, `K-4`), więc warto mieć zapisane, gdzie faza skończyła. Trzy nowe powody: `CreditApproved`, `CreditRejected`, `BudgetShortfall` — ostatni jest ogniwem, bez którego ścieżka „debet → wniosek → odmowa → zaległość" urywa się na odmowie |
+| AA-7 | **Balansator (WP13) dostaje metryki gotowe, a nie do wyprowadzenia**: `cpi_index_bp`, `cpi_mom_bp`, `cpi_yoy_bp`, `base_rate`, `loan_count`, `credit_outstanding`, `HouseholdMonthReport` | Bramki G1–G3 mówią wprost o inflacji r/r, m/m i o medianie marży; liczenie ich w balansatorze z surowych transakcji znaczyłoby **drugą implementację CPI**, a ta rozjechałaby się z pierwszą przy pierwszej zmianie koszyka. `mom_bp` i `yoy_bp` zwracają `Option`, więc bramka wie, kiedy nie ma czego mierzyć, zamiast mierzyć zero |
+| AA-8 | **Panel sklepu (WP12) dostaje `Market::budget_log`** — pierścień 256 ostatnich decyzji budżetowych i kredytowych, poza hashem | To jest odpowiedź na „czemu tej rodzinie nie starczyło" — ta sama klasa pytania co „dlaczego Anna nie kupiła u mnie" i ta sama mechanika co `ShopLostSales`: okno podglądu, nie historia. Poza hashem z tego samego powodu co poziom śledzenia (`U-22`): czytanie podglądu nie ma prawa zmieniać świata |

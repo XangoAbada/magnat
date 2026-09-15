@@ -1,0 +1,49 @@
+// Koszyk miejski do CPI (M5d §5.10, PRD §6.5).
+//
+// CPI liczy się metodą Laspeyresa: `Σ p_t·q_0 / Σ p_0·q_0`, gdzie `q_0` stoi
+// **tutaj i się nie zmienia** (na tym polega Laspeyres), a `p_t` jest **średnią
+// ważoną wolumenem transakcji** z ostatnich `window_days` dób — nie średnią ofert.
+// Oferta, której nikt nie kupuje, nie jest ceną (§6.1) i do koszyka nie wchodzi.
+//
+// `q_0` to miesięczne zużycie przeciętnego gospodarstwa (2,5 osoby) w milisztukach,
+// wyprowadzone z koszyka epoki `transition` w `data/chains/needs.ron` przez
+// `dobowe · 30 · 2,5`. Liczby są **zamrożone jako baza indeksu**: zmiana którejkolwiek
+// z nich przestawia całą historię CPI, więc nie stroi się ich razem z resztą
+// gospodarki. Balansator ich nie dotyka.
+//
+// Towar spoza `retail.ron` jest błędem ładowania: koszyk, którego nie da się kupić
+// w żadnym sklepie, dałby indeks liczony z pustego zbioru transakcji.
+(
+    schema_version: 1,
+
+    // Okno uśredniania ceny transakcyjnej. Trzydzieści dób, czyli miesiąc (`K-1`) —
+    // ta sama siatka co okresy księgowe i terminy rat. „30 dni" i „miesiąc" są w M5
+    // jednym pojęciem, nigdy dwoma.
+    window_days: 30,
+
+    items: [
+        // ── Food ───────────────────────────────────────────────────────────────
+        (key: "bread",        qty: 14250),
+        (key: "potato",       qty: 15750),
+        (key: "vegetables",   qty: 18000),
+        (key: "milk",         qty: 21000),
+        (key: "fruit",        qty:  9750),
+        (key: "poultry_meat", qty:  3375),
+        (key: "cheese",       qty:  1650),
+        (key: "meat",         qty:  8625),
+        (key: "sugar",        qty:  2850),
+        // ── Drink ──────────────────────────────────────────────────────────────
+        (key: "juice",        qty:  4125),
+        (key: "beer",         qty: 14250),
+        // ── Hygiene i Cleaning ─────────────────────────────────────────────────
+        (key: "soap",         qty:   525),
+        (key: "toilet_paper", qty:  1350),
+        (key: "cosmetics",    qty:   225),
+        (key: "detergent",    qty:  1050),
+        // ── Medicine ───────────────────────────────────────────────────────────
+        (key: "medicine",     qty:   225),
+        // ── Clothing ───────────────────────────────────────────────────────────
+        (key: "clothing",     qty:  1650),
+        (key: "shoes",        qty:   300),
+    ],
+)

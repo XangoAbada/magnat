@@ -1,12 +1,17 @@
-//! Dane gospodarki detalicznej — `data/economy/` (M5b §5.3, §5.4).
+//! Dane gospodarki detalicznej — `data/economy/` (M5b §5.3, §5.4; M5d §5.9, §5.10).
 //!
-//! Cztery pliki, czterech różnych właścicieli zmiany:
+//! Siedem plików, różni właściciele zmiany:
 //! - `weights.ron` — wagi bazowe funkcji użyteczności per potrzeba; zmienia je projektant,
 //! - `choice.ron` — temperatura, szum, progi, promień; zmienia je **balansator** (M5e),
 //! - `retail.ron` — kategoria, trwałość, czas dostawy i narzut per towar; zmienia je modder,
 //! - `shop.ron` — osobowość cenowa firmy i koszty stałe zakładu (M5c); stroi je
 //!   **balansator**, bo to `min_margin_bp` stąd jest dolnym ogranicznikiem, którego
-//!   pilnuje bramka G3 (brak spirali deflacji).
+//!   pilnuje bramka G3 (brak spirali deflacji),
+//! - `envelopes.ron` — koszty stałe gospodarstwa i wagi kopert (M5d); stroi je balansator,
+//! - `bank.ron` — ocena zdolności, produkty kredytowe i reguła banku centralnego (M5d);
+//!   stroi je balansator, bo `a_bp` i `max_step_bp` decydują o bramkach G1–G2,
+//! - `cpi.ron` — koszyk miejski; **nie stroi go nikt**, bo `q_0` jest bazą indeksu
+//!   i jego zmiana przestawia całą historię CPI.
 //!
 //! Żaden z nich nie powtarza `data/goods/`: cena hurtowa, gęstość i masa sztuki
 //! zostają w katalogu towarów, bo to jedno źródło prawdy o towarze (00 §5).
@@ -17,7 +22,9 @@
 
 use std::path::Path;
 
-use magnat_core::{Money, NeedKind, PlaceKind, Rng, StockCat, NEED_COUNT, STOCK_CAT_COUNT};
+use magnat_core::{
+    LoanKind, Money, NeedKind, PlaceKind, Qty, Rng, StockCat, NEED_COUNT, STOCK_CAT_COUNT,
+};
 use serde::Deserialize;
 
 pub const ECONOMY_SCHEMA_VERSION: u32 = 1;
@@ -333,6 +340,175 @@ struct ShopFile {
     costs: ShopCosts,
 }
 
+// ── budżet gospodarstwa (M5d §5.9) ───────────────────────────────────────────────
+
+/// Typy gospodarstw w kolejności `HouseholdKind`.
+///
+/// Lista stoi tutaj, a nie w `sim/agents`, bo `HouseholdKind` nie ma `ALL` —
+/// nie powstał z `vocab_enum!`, tylko z ręki (M3c §5.6). Dopisanie mu `ALL`
+/// byłoby zmianą w cudzym crate'cie dla jednej pętli walidującej.
+const HOUSEHOLD_KINDS: [magnat_agents::HouseholdKind; 7] = {
+    use magnat_agents::HouseholdKind::*;
+    [
+        Single,
+        Couple,
+        FamilyWithKids,
+        MultiGen,
+        Roommates,
+        Dorm,
+        LoneSenior,
+    ]
+};
+
+/// Liczba typów gospodarstwa — rozmiar tablicy wag kopert.
+pub const HOUSEHOLD_KIND_COUNT: usize = HOUSEHOLD_KINDS.len();
+
+/// Koszty stałe gospodarstwa, miesięcznie. Wszystkie trzy pozycje są w M5 stałymi
+/// z danych i wszystkie trzy mają następcę: czynsz M7/M10, media M8, ubezpieczenie M10.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Deserialize)]
+pub struct HouseholdFixedCosts {
+    pub housing_bp_of_income: i32,
+    pub housing_min_gr: i64,
+    pub utilities_gr_per_person: i64,
+    pub insurance_gr: i64,
+}
+
+/// Parametry budżetowania kopertowego (`data/economy/envelopes.ron`).
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct BudgetParams {
+    pub fixed: HouseholdFixedCosts,
+    pub savings_base_bp: i32,
+    pub savings_thrift_gain_bp: i32,
+    pub status_shift_permille: i32,
+    /// Wagi kopert w promilach, `[typ gospodarstwa][kategoria zapasu]`.
+    /// Suma per typ jest równa 1000 — sprawdza to loader.
+    weights: [[u16; STOCK_CAT_COUNT]; HOUSEHOLD_KIND_COUNT],
+}
+
+impl BudgetParams {
+    /// Wagi kopert dla typu gospodarstwa.
+    #[must_use]
+    pub fn weights(&self, kind: magnat_agents::HouseholdKind) -> &[u16; STOCK_CAT_COUNT] {
+        &self.weights[kind as usize]
+    }
+}
+
+#[derive(Deserialize)]
+struct EnvelopeWeightRow {
+    cat: StockCat,
+    w: u16,
+}
+
+#[derive(Deserialize)]
+struct EnvelopeKindRow {
+    kind: String,
+    weights: Vec<EnvelopeWeightRow>,
+}
+
+#[derive(Deserialize)]
+struct EnvelopesFile {
+    schema_version: u32,
+    fixed: HouseholdFixedCosts,
+    savings_base_bp: i32,
+    savings_thrift_gain_bp: i32,
+    status_shift_permille: i32,
+    kinds: Vec<EnvelopeKindRow>,
+}
+
+// ── bank i bank centralny (M5d §5.10) ────────────────────────────────────────────
+
+/// Ocena zdolności kredytowej: „historia, zabezpieczenie, przepływy" (PRD §6.5).
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Deserialize)]
+pub struct CreditScoring {
+    /// Limit obciążenia dochodu ratami dla gospodarstwa.
+    pub dsti_limit_bp: i32,
+    /// Minimalne pokrycie obsługi długu przepływami zakładu (12 000 bp = 1,2×).
+    pub dscr_min_bp: i32,
+    pub min_months_in_business: u16,
+    pub arrears_block_months: u8,
+    pub risk_premium_bp: Range,
+    pub jitter_bp: i32,
+}
+
+/// Parametry jednego produktu kredytowego.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Deserialize)]
+pub struct LoanProduct {
+    pub spread_bp: i32,
+    pub term_months: u16,
+    /// Górny limit kwoty jako wielokrotność podstawy (dochodu albo kosztów stałych),
+    /// w punktach bazowych: 30 000 = 3×.
+    pub max_multiple_bp: i64,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Deserialize)]
+pub struct LoanProducts {
+    pub consumer: LoanProduct,
+    pub working_capital: LoanProduct,
+}
+
+impl LoanProducts {
+    #[must_use]
+    pub fn get(&self, kind: LoanKind) -> LoanProduct {
+        match kind {
+            LoanKind::Consumer => self.consumer,
+            LoanKind::WorkingCapital => self.working_capital,
+        }
+    }
+}
+
+/// Reguła typu Taylora w arytmetyce całkowitej (M5d §5.10).
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Deserialize)]
+pub struct BaseRateRule {
+    pub start_bp: i32,
+    pub neutral_bp: i32,
+    pub target_bp: i32,
+    pub a_bp: i32,
+    pub floor_bp: i32,
+    pub ceil_bp: i32,
+    pub max_step_bp: i32,
+}
+
+/// Wszystko, co bank i bank centralny czytają z danych.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Deserialize)]
+pub struct BankParams {
+    pub scoring: CreditScoring,
+    pub products: LoanProducts,
+    pub base_rate: BaseRateRule,
+}
+
+#[derive(Deserialize)]
+struct BankFile {
+    schema_version: u32,
+    scoring: CreditScoring,
+    products: LoanProducts,
+    base_rate: BaseRateRule,
+}
+
+// ── koszyk CPI (M5d §5.10) ───────────────────────────────────────────────────────
+
+/// Koszyk miejski: klucz towaru i **zamrożona** ilość miesięczna `q_0`.
+///
+/// Klucze, nie `GoodId`, bo indeksy nadaje katalog M2 przy ładowaniu i w zapisie
+/// gry trzyma się klucz tekstowy (00 §5). Rozwiązanie na indeksy robi `CpiTracker`.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct CpiSpec {
+    pub window_days: u16,
+    pub items: Vec<(String, Qty)>,
+}
+
+#[derive(Deserialize)]
+struct CpiItemRow {
+    key: String,
+    qty: i64,
+}
+
+#[derive(Deserialize)]
+struct CpiFile {
+    schema_version: u32,
+    window_days: u16,
+    items: Vec<CpiItemRow>,
+}
+
 // ── złożone dane fazy ────────────────────────────────────────────────────────────
 
 /// Wszystko, co decyzja zakupowa czyta z `data/economy/`.
@@ -352,6 +528,9 @@ pub struct EconomyData {
     pub retail: RetailTable,
     pub pricing: PricingParams,
     pub costs: ShopCosts,
+    pub budget: BudgetParams,
+    pub bank: BankParams,
+    pub cpi: CpiSpec,
 }
 
 impl EconomyData {
@@ -496,6 +675,109 @@ impl EconomyData {
         // jest kontraktem i modder nie zepsuje przeceny przestawieniem wierszy.
         sf.pricing.spoilage.sort_by_key(|s| s.days_left);
 
+        let ef: EnvelopesFile = read(&dir.join("envelopes.ron"), "economy/envelopes.ron")?;
+        if ef.schema_version != ECONOMY_SCHEMA_VERSION {
+            return Err(EconomyDataError::Schema {
+                file: "economy/envelopes.ron",
+                found: ef.schema_version,
+                want: ECONOMY_SCHEMA_VERSION,
+            });
+        }
+        let mut weights_hh = [[0u16; STOCK_CAT_COUNT]; HOUSEHOLD_KIND_COUNT];
+        let mut seen_kind = [false; HOUSEHOLD_KIND_COUNT];
+        for row in &ef.kinds {
+            let Some(i) = HOUSEHOLD_KINDS.iter().position(|k| k.name() == row.kind) else {
+                return Err(EconomyDataError::UnknownKey {
+                    file: "economy/envelopes.ron",
+                    key: row.kind.clone(),
+                });
+            };
+            if seen_kind[i] {
+                return Err(EconomyDataError::Duplicate {
+                    file: "economy/envelopes.ron",
+                    key: row.kind.clone(),
+                });
+            }
+            seen_kind[i] = true;
+            let mut seen_c = [false; STOCK_CAT_COUNT];
+            for w in &row.weights {
+                let c = w.cat.as_index();
+                if seen_c[c] {
+                    return Err(EconomyDataError::Duplicate {
+                        file: "economy/envelopes.ron",
+                        key: w.cat.name().to_string(),
+                    });
+                }
+                seen_c[c] = true;
+                weights_hh[i][c] = w.w;
+            }
+            if let Some(c) = seen_c.iter().position(|s| !s) {
+                return Err(EconomyDataError::Missing {
+                    file: "economy/envelopes.ron",
+                    key: StockCat::ALL[c].name(),
+                });
+            }
+            // Suma promili musi dać 1000: podział `disposable` idzie przez
+            // `split_proportional` i suma kopert ma być równa kwocie do podziału
+            // co do grosza (00 §2). Wagi niesumujące się do 1000 przesunęłyby
+            // skalę wszystkich kopert naraz i nikt by tego nie zauważył.
+            let suma: u32 = row.weights.iter().map(|w| u32::from(w.w)).sum();
+            if suma != 1000 {
+                return Err(EconomyDataError::Ron {
+                    file: "economy/envelopes.ron",
+                    msg: format!("wagi typu {} sumują się do {suma}, oczekiwano 1000", row.kind),
+                });
+            }
+        }
+        if let Some(i) = seen_kind.iter().position(|s| !s) {
+            return Err(EconomyDataError::Missing {
+                file: "economy/envelopes.ron",
+                key: HOUSEHOLD_KINDS[i].name(),
+            });
+        }
+
+        let bf: BankFile = read(&dir.join("bank.ron"), "economy/bank.ron")?;
+        if bf.schema_version != ECONOMY_SCHEMA_VERSION {
+            return Err(EconomyDataError::Schema {
+                file: "economy/bank.ron",
+                found: bf.schema_version,
+                want: ECONOMY_SCHEMA_VERSION,
+            });
+        }
+
+        let cf2: CpiFile = read(&dir.join("cpi.ron"), "economy/cpi.ron")?;
+        if cf2.schema_version != ECONOMY_SCHEMA_VERSION {
+            return Err(EconomyDataError::Schema {
+                file: "economy/cpi.ron",
+                found: cf2.schema_version,
+                want: ECONOMY_SCHEMA_VERSION,
+            });
+        }
+        let mut items = Vec::with_capacity(cf2.items.len());
+        for it in &cf2.items {
+            // Koszyk, którego nie da się kupić w żadnym sklepie, dałby indeks liczony
+            // ze zbioru pustego — a indeks liczony z niczego wygląda jak stabilna cena.
+            if !rf.goods.iter().any(|g| g.key == it.key) {
+                return Err(EconomyDataError::UnknownKey {
+                    file: "economy/cpi.ron",
+                    key: it.key.clone(),
+                });
+            }
+            if items.iter().any(|(k, _): &(String, Qty)| *k == it.key) {
+                return Err(EconomyDataError::Duplicate {
+                    file: "economy/cpi.ron",
+                    key: it.key.clone(),
+                });
+            }
+            items.push((it.key.clone(), Qty(it.qty)));
+        }
+        if items.is_empty() {
+            return Err(EconomyDataError::Missing {
+                file: "economy/cpi.ron",
+                key: "items",
+            });
+        }
+
         Ok(EconomyData {
             weights,
             thresholds,
@@ -516,6 +798,22 @@ impl EconomyData {
             },
             pricing: sf.pricing,
             costs: sf.costs,
+            budget: BudgetParams {
+                fixed: ef.fixed,
+                savings_base_bp: ef.savings_base_bp,
+                savings_thrift_gain_bp: ef.savings_thrift_gain_bp,
+                status_shift_permille: ef.status_shift_permille,
+                weights: weights_hh,
+            },
+            bank: BankParams {
+                scoring: bf.scoring,
+                products: bf.products,
+                base_rate: bf.base_rate,
+            },
+            cpi: CpiSpec {
+                window_days: cf2.window_days.max(1),
+                items,
+            },
         })
     }
 

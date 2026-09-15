@@ -14,17 +14,23 @@
 //! i pustą listę rezerwacji budżetu, a intencje z minuty `t−1` są już rozliczone.
 
 use magnat_agents::{Household, Population};
-use magnat_core::{Cadence, DecisionReason, Money, SimCalendar, Tick, STOCK_CAT_COUNT};
+use magnat_core::{
+    Cadence, DecisionReason, Money, NeedKind, SimCalendar, Tick, Q, STOCK_CAT_COUNT,
+};
 use magnat_ecs::{System, SystemCtx, SystemDesc, SystemId, World};
 
 use crate::books::{Books, TxKind, TxMemo};
-use crate::market::{Market, PurchaseIntent};
+use crate::budget::HouseholdProfile;
+use crate::market::{HouseholdMonth, HouseholdMonthReport, Market, PurchaseIntent};
 
 /// Rozliczenie, uzupełnianie półek i zaopatrzenie.
 pub struct MarketSystem {
     desc: SystemDesc,
     intents: Vec<PurchaseIntent>,
     households: Vec<(u32, u8, [u8; STOCK_CAT_COUNT])>,
+    /// Bufor miesięcznego rozliczenia gospodarstw — raz na miesiąc, ale dla
+    /// wszystkich naraz, więc alokacja per miesiąc byłaby alokacją na 80 tys. wierszy.
+    months: Vec<HouseholdMonth>,
 }
 
 impl MarketSystem {
@@ -36,6 +42,7 @@ impl MarketSystem {
                 .before(SystemId::from_name("agents.DayLoop")),
             intents: Vec::new(),
             households: Vec::new(),
+            months: Vec::new(),
         }
     }
 }
@@ -66,6 +73,10 @@ impl System for MarketSystem {
         if cal.is_month_boundary() {
             // Dochód gospodarstw (§9 pkt 2 dokumentu fazy).
             pay_incomes(ctx.world_mut(), &market, t);
+            // 3a. Budżet miesiąca: koperty, koszty stałe, rata, wniosek kredytowy
+            //     przy niedoborze (M5d §5.9). **Po** wypłacie, bo plan dzieli to,
+            //     co wpłynęło — odwrotna kolejność planowałaby zeszłomiesięczne saldo.
+            settle_household_month(ctx.world_mut(), &market, t, &mut self.months);
         }
         if cal.is_day_boundary() {
             // 4. Doba sklepu (M5c). Kolejność jest kontraktem, nie wygodą:
@@ -83,6 +94,9 @@ impl System for MarketSystem {
             if let Some(books) = ctx.world_mut().get_resource_mut::<Books>() {
                 market.reorder_and_receive(books, t);
             }
+            // 5a. Doba koszyka CPI — po zaopatrzeniu, bo wtedy wszystkie transakcje
+            //     doby są już zaksięgowane przez `record_sale` (M5d §5.10).
+            market.roll_cpi_day();
         }
         if cal.is_month_boundary() {
             // 6. Koszty stałe, amortyzacja, domknięcie okresu (M5c §5.8).
@@ -91,9 +105,136 @@ impl System for MarketSystem {
             if let Some(books) = ctx.world_mut().get_resource_mut::<Books>() {
                 market.close_month(books, t);
             }
+            // 6a. Domknięcie miesiąca CPI i stopa bazowa banku centralnego.
+            //     Ostatnie, bo czyta indeks policzony z pełnego miesiąca dób.
+            market.close_cpi_month(t);
         }
         // 7. Indeks ofert — przebudowa tylko brudnych warstw.
         market.rebuild_index(ctx.pool);
+    }
+}
+
+/// Miesięczne rozliczenie gospodarstw: plan kopert, koszty stałe, rata kredytu,
+/// wniosek przy niedoborze i zaległość przy odmowie (M5d §5.9, WP8).
+///
+/// Pieniądz gospodarstwa mieszka w komponencie `Household` (`U-17`), więc krok ma
+/// trzy fazy: zebranie sald z komponentów, rozliczenie w `Market` + `Books`, zapis
+/// sald z powrotem. Dwa źródła salda rozjechałyby się przy pierwszej transakcji.
+///
+/// Zaległość uderza w zaspokojenie potrzeby `Housing` członków gospodarstwa — to jest
+/// „spadek zaspokojenia" z kryterium WP8 i zarazem pierwsze tempo, jakie ta potrzeba
+/// w ogóle dostaje (`Z-3` z dokumentu fazy mówi wprost, że wnosi je M5).
+///
+/// Zwraca zbiorczy raport miesiąca.
+pub fn settle_household_month(
+    world: &mut World,
+    market: &Market,
+    t: Tick,
+    buf: &mut Vec<HouseholdMonth>,
+) -> HouseholdMonthReport {
+    buf.clear();
+    let Some(p) = world.get_resource::<Population>() else {
+        return HouseholdMonthReport::default();
+    };
+    // Kolejność z `Population::households()` jest deterministyczna i to ona ustala
+    // kolejność wniosków kredytowych — a ta ma znaczenie, bo bank patrzy na stopę
+    // bazową, nie na kolejkę, ale rozrzut scoringu bierze klucz z indeksu encji.
+    for e in p.households() {
+        let Some(h) = world.get::<Household>(*e) else {
+            continue;
+        };
+        if h.flags & Household::FLAG_ACTIVE == 0 {
+            continue;
+        }
+        buf.push(HouseholdMonth {
+            index: e.index(),
+            profile: profile_of(world, h),
+            income: h.income_monthly,
+            cash: h.cash,
+            bank: h.bank,
+            savings: h.savings,
+            shortfall: Money::ZERO,
+            credit: None,
+            unpaid: None,
+        });
+    }
+    let raport = match world.get_resource_mut::<Books>() {
+        Some(books) => market.household_month(buf, books, t),
+        None => return HouseholdMonthReport::default(),
+    };
+    for row in buf.iter() {
+        let Some(h) = world.get_mut::<Household>(magnat_core::Entity::new(
+            row.index,
+            std::num::NonZeroU32::MIN,
+        )) else {
+            continue;
+        };
+        h.cash = row.cash;
+        h.bank = row.bank;
+        h.savings = row.savings;
+        // Dług gospodarstwa to niespłacony kapitał plus zaległości — jedno pole,
+        // dwie przyczyny, obie prawdziwe. `society::total_money` go nie sumuje
+        // (dług nie jest pieniądzem), więc niezmiennik pieniądza stoi.
+        let b = market.budget_of(row.index);
+        let kapital = b
+            .loan
+            .and_then(|id| market.loan(id))
+            .map_or(Money::ZERO, |l| l.outstanding);
+        h.debt = Money(kapital.get().saturating_add(b.arrears.get()));
+    }
+    apply_shortfall_to_needs(world, buf);
+    raport
+}
+
+/// Profil gospodarstwa: typ ze **składu**, cechy z pierwszego dorosłego.
+///
+/// `ponytail:` sufit nazwany — osobowość gospodarstwa jest osobowością pierwszego
+/// członka na liście, bo „głowa gospodarstwa" jako pojęcie powstaje dopiero w M7
+/// razem z rynkiem pracy. Do tego czasu jedna cecha z jednej osoby jest uczciwsza
+/// niż średnia, której nikt nie umie obronić.
+fn profile_of(world: &World, h: &Household) -> HouseholdProfile {
+    let mut thrift = Q::new(50);
+    let mut ambition = Q::new(50);
+    for m in h.inline_members() {
+        let e = magnat_core::Entity::new(m, std::num::NonZeroU32::MIN);
+        if let Some(p) = world.get::<magnat_agents::Personality>(e) {
+            thrift = p.get(magnat_core::TraitId::Thrift);
+            ambition = p.get(magnat_core::TraitId::Ambition);
+            break;
+        }
+    }
+    HouseholdProfile {
+        kind: h.household_kind(),
+        size: h.size,
+        thrift,
+        ambition,
+    }
+}
+
+/// Zaległość psuje zaspokojenie potrzeby mieszkaniowej członków gospodarstwa.
+///
+/// Skala jest wprost proporcjonalna do nieopłaconej części kosztów stałych i przycięta
+/// do 25 punktów na miesiąc: gospodarstwo, które nie zapłaciło raz, ma problem;
+/// gospodarstwo, które nie płaci od pół roku, dochodzi do zera i wypada przez progi
+/// migracji (M3c) — i to jest właściwy skutek, a nie natychmiastowa katastrofa.
+fn apply_shortfall_to_needs(world: &mut World, rows: &[HouseholdMonth]) {
+    for row in rows {
+        if row.shortfall.get() <= 0 {
+            continue;
+        }
+        let e = magnat_core::Entity::new(row.index, std::num::NonZeroU32::MIN);
+        let Some(h) = world.get::<Household>(e).copied() else {
+            continue;
+        };
+        let odniesienie = row.income.get().max(1);
+        let spadek = (row.shortfall.get() * 100 / odniesienie).clamp(1, 25) as u8;
+        for m in h.inline_members() {
+            let c = magnat_core::Entity::new(m, std::num::NonZeroU32::MIN);
+            if let Some(n) = world.get_mut::<magnat_agents::Needs>(c) {
+                let v = n.get(NeedKind::Housing).get().saturating_sub(spadek);
+                n.set(NeedKind::Housing, Q::new(v));
+            }
+        }
     }
 }
 

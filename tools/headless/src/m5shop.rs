@@ -22,7 +22,7 @@ use magnat_agents::{
     DeprivationEffectsSystem, HouseholdStockSystem, NeedDecaySystem, NeedTable,
     NoInheritance, Population, ReplanCooldownSystem, SkillDriftSystem, SocietySystem,
 };
-use magnat_core::{Money, PlaceKind, Qty, RejectCause, SiteId, StockCat, Tick};
+use magnat_core::{DecisionReason, Money, PlaceKind, Qty, RejectCause, SiteId, StockCat, Tick};
 use magnat_ecs::{App, ScheduleBuilder};
 use magnat_economy::{
     AccountKind, AccountOwner, Books, EconomyData, GoodTable, LedgerAccount, Market, MarketSystem,
@@ -39,6 +39,11 @@ use crate::population::{swiat_agentow, zaludnij, zbuduj_miasto};
 /// Kapitał obrotowy sklepu na starcie. `ponytail:` stała zamiast modelu kapitału —
 /// sufit nazwany: sklep, który ma za mało, po prostu nie zamawia. Kapitał zakładany
 /// przez właściciela wnosi M7 razem z zakładaniem firm.
+/// Kapitał banku miasta. Bank w M5 nie zbiera depozytów jako źródła akcji
+/// kredytowej — kreacja pieniądza idzie przez `Books::create_credit` — ale musi
+/// mieć konto, bo przez nie przechodzi każdy grosz kapitału i odsetek.
+const KAPITAL_BANKU: i64 = 5_000_000_000;
+
 const KAPITAL_SKLEPU: i64 = 40_000_000;
 
 /// Ile metrów kwadratowych lokalu przypada na jedną linię asortymentu.
@@ -272,6 +277,29 @@ pub fn run(a: &M5ShopArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
         rest,
     );
     let sklepow = obsadz_sklepy(&city, &market, &mut books, rest);
+    // Bank miasta (M5d §5.10, decyzja otwarta nr 7): `FirmId`, konto i kapitał,
+    // a jego „AI" to `assess_credit`. Bez tego wywołania każdy wniosek kredytowy
+    // kończy się `RejectCredit::NoLender` — i to jest właściwe zachowanie, bo
+    // miasto bez banku nie daje kredytu.
+    let bank_firm = magnat_core::FirmId(magnat_core::Entity::new(
+        u32::MAX - 1,
+        std::num::NonZeroU32::MIN,
+    ));
+    let konto_banku = books.open_account(
+        AccountOwner::Bank(bank_firm),
+        AccountKind::Current,
+        None,
+        Money::ZERO,
+    );
+    books.transfer(
+        rest,
+        konto_banku,
+        Money(KAPITAL_BANKU),
+        TxMemo::new(TxKind::Endowment, DecisionReason::Unspecified),
+        Tick(0),
+    )?;
+    market.open_bank(bank_firm, konto_banku);
+
     market.stock_initial(&mut books, Tick(0));
     market.rebuild_index(&pool);
     eprintln!(
@@ -306,6 +334,24 @@ pub fn run(a: &M5ShopArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
     let (ilu, pensje) = magnat_economy::pay_incomes(&mut world, &market, Tick(0));
     eprintln!("wypłata startowa: {ilu} gospodarstw, {} zł", pensje.get() / 100);
 
+    // Pierwszy budżet w tej samej chwili co pierwsza wypłata (M5d/WP8). Bez tego
+    // gospodarstwa przez trzydzieści dób nie mają kopert, mianownik członu ceny
+    // stoi na stałej z `choice.ron`, a scenariusz krótszy niż miesiąc nie pokazuje
+    // ani jednej decyzji budżetowej — czyli mierzy M5b, a nie M5d.
+    let budzety = magnat_economy::settle_household_month(
+        &mut world,
+        &market,
+        Tick(0),
+        &mut Vec::new(),
+    );
+    eprintln!(
+        "budżety startowe: {} gospodarstw, koszty stałe {} zł, {} wniosków kredytowych ({} przyznanych)",
+        budzety.planned,
+        budzety.fixed_paid.get() / 100,
+        budzety.credit_applications,
+        budzety.credit_granted
+    );
+
     let zaplanowanych = bootstrap_day(&mut world, 0);
     eprintln!("kolejka zasiana: {zaplanowanych} mieszkańców");
 
@@ -330,6 +376,9 @@ pub fn run(a: &M5ShopArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
 
     let mut app = App::new(world, schedule, a.threads);
     let pieniadz_start = pieniadz_swiata(&app.world);
+    let kredyt_start = app.world
+        .get_resource::<Books>()
+        .map_or(0, |b| b.supply().credit_created.get() - b.supply().credit_repaid.get());
 
     let ticki = u64::from(a.days) * 1440;
     let bieg = std::time::Instant::now();
@@ -381,11 +430,19 @@ pub fn run(a: &M5ShopArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
         books.supply().household_sector_in.get() / 100,
         books.supply().household_sector_out.get() / 100
     );
+    // Od M5d suma świata **ma prawo rosnąć**: kredyt tworzy pieniądz, a spłata go
+    // niszczy (§5.10). Niezmiennikiem jest więc różnica **po odjęciu** kreacji netto,
+    // a nie sama różnica — i to jest jedyna zmiana, jaką WP9 wnosi do tej sekcji.
+    let kredyt_netto =
+        books.supply().credit_created.get() - books.supply().credit_repaid.get() - kredyt_start;
     println!(
-        "suma świata (księgi + ludzie + rejestry ruchu): start {} zł, koniec {} zł, różnica {} gr",
+        "suma świata (księgi + ludzie + rejestry ruchu): start {} zł, koniec {} zł, różnica {} gr\n\
+         \u{20} z tego pieniądz kredytowy netto: {} gr, poza kredytem: {} gr",
         suma(pieniadz_start) / 100,
         suma(pieniadz_koniec) / 100,
-        suma(pieniadz_koniec) - suma(pieniadz_start)
+        suma(pieniadz_koniec) - suma(pieniadz_start),
+        kredyt_netto,
+        suma(pieniadz_koniec) - suma(pieniadz_start) - kredyt_netto
     );
     for (nazwa, i) in [
         ("księgi", 0),
@@ -402,6 +459,40 @@ pub fn run(a: &M5ShopArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
             pieniadz_koniec[i] - pieniadz_start[i]
         );
     }
+
+    println!("── budżety, banki, inflacja (M5d) ────────────────────");
+    println!(
+        "kredytów {}, niespłacony kapitał {} zł, stopa bazowa {},{:02} %",
+        market.loan_count(),
+        market.credit_outstanding().get() / 100,
+        market.base_rate().bp / 100,
+        market.base_rate().bp % 100
+    );
+    println!(
+        "CPI {},{:02} (baza 100,00){}{}",
+        market.cpi_index_bp() / 100,
+        market.cpi_index_bp() % 100,
+        market
+            .cpi_mom_bp()
+            .map_or(String::new(), |v| format!(", m/m {:+},{:02} %", v / 100, (v % 100).abs())),
+        market
+            .cpi_yoy_bp()
+            .map_or(String::new(), |v| format!(", r/r {:+},{:02} %", v / 100, (v % 100).abs()))
+    );
+    // Okno decyzji budżetowych: to jest odpowiedź na „czemu tej rodzinie nie starczyło".
+    let log = market.budget_log();
+    let odmowy = log
+        .iter()
+        .filter(|(_, r)| matches!(r, DecisionReason::CreditRejected { .. }))
+        .count();
+    let niedopłaty = log
+        .iter()
+        .filter(|(_, r)| matches!(r, DecisionReason::BudgetShortfall { .. }))
+        .count();
+    println!(
+        "okno decyzji budżetowych: {} wpisów, w tym {odmowy} odmów kredytu i {niedopłaty} niedopłat",
+        log.len()
+    );
 
     println!("── ceny (M5c) ────────────────────────────────────────");
     println!(
@@ -508,7 +599,7 @@ pub fn run(a: &M5ShopArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
     // miasta 28 tys. mieszkańców to −5,6 tys. zł na 100 mln zł, czyli 0,006 %.
     // Domknięcie należy do M5d (decyzja otwarta nr 16 dokumentu fazy).
     let zgadza_sie = books.check_conservation().is_ok();
-    let reszta = suma(pieniadz_koniec) - suma(pieniadz_start);
+    let reszta = suma(pieniadz_koniec) - suma(pieniadz_start) - kredyt_netto;
     let sprzedano = s.purchases > 0;
     if !zgadza_sie {
         eprintln!("BŁĄD: niezmiennik P1 w księgach nie domyka się");

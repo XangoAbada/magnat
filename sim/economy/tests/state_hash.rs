@@ -134,3 +134,58 @@ fn indeks_ofert_nie_wchodzi_do_hasha() {
         .rebuild_index(&pool);
     assert_eq!(world_state_hash(&a), world_state_hash(&b));
 }
+
+#[test]
+fn budzet_kredyt_i_koszyk_cpi_wchodza_do_hasha() {
+    // M5d. Trzy rzeczy, które od tej podfazy są **stanem**, a nie pomiarem:
+    // budżet gospodarstwa, rejestr kredytów i koszyk CPI razem ze stopą bazową.
+    // Stopa bazowa wpływa na oprocentowanie, oprocentowanie na ratę, rata na saldo —
+    // pomiar, który zmienia świat, wchodzi do hasha (00 §3.6).
+    let base = world_state_hash(&swiat(7));
+
+    // 1. Bank: jego istnienie decyduje o tym, czy w mieście w ogóle jest kredyt.
+    let w = swiat(7);
+    let market = w.get_resource::<magnat_economy::Market>().unwrap().clone();
+    market.open_bank(
+        magnat_core::FirmId(magnat_core::Entity::new(900, std::num::NonZeroU32::MIN)),
+        AccountId(0),
+    );
+    assert_ne!(base, world_state_hash(&w), "otwarcie banku nie ruszyło hasha");
+
+    // 2. Koszyk CPI: transakcja wpisana do okna zmienia indeks, a indeks — stopę.
+    let w = swiat(7);
+    let market = w.get_resource::<magnat_economy::Market>().unwrap().clone();
+    let good = first_good(
+        &magnat_economy::EconomyData::load_default().unwrap(),
+        StockCat::Food,
+    );
+    market.record_sale(&magnat_economy::PurchaseIntent {
+        buyer: magnat_core::CitizenId(magnat_core::Entity::new(1, std::num::NonZeroU32::MIN)),
+        household: magnat_core::HouseholdId(magnat_core::Entity::new(
+            2,
+            std::num::NonZeroU32::MIN,
+        )),
+        site: market.sites()[0],
+        offer: magnat_economy::OfferId::from_bits(1u64 << 32).unwrap(),
+        good,
+        cat: StockCat::Food,
+        qty: Qty(1_000),
+        days: 1,
+        agreed_price: Money(300),
+        cogs: Money(200),
+        arrived: Tick(3),
+        reason: DecisionReason::Unspecified,
+    });
+    assert_ne!(
+        base,
+        world_state_hash(&w),
+        "transakcja w koszyku CPI nie ruszyła hasha"
+    );
+
+    // 3. Okno podglądu decyzji budżetowych **nie** jest stanem — tak samo jak
+    //    pierścień utraconych sprzedaży i dziennik zakładu (`U-22`, `W-7`).
+    let w = swiat(7);
+    let market = w.get_resource::<magnat_economy::Market>().unwrap().clone();
+    let _ = market.budget_log();
+    assert_eq!(base, world_state_hash(&w), "odczyt podglądu zmienił świat");
+}

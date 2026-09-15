@@ -68,6 +68,11 @@ pub struct GoodTable {
     specs: Vec<GoodSpec>,
     /// Indeksy do `specs` per kategoria, w kolejności z `retail.ron` (ranga substytutu).
     by_cat: [Vec<u32>; STOCK_CAT_COUNT],
+    /// Klucz tekstowy → identyfikator. Potrzebny wszędzie tam, gdzie dane wskazują
+    /// towar nazwą, a nie indeksem — w M5 robi to koszyk CPI (`data/economy/cpi.ron`).
+    /// `BTreeMap`, nie `HashMap`: iteracja po tym słowniku musi być deterministyczna
+    /// (00 §3.2), nawet jeśli dziś nikt po nim nie iteruje.
+    by_key: std::collections::BTreeMap<String, GoodId>,
 }
 
 impl GoodTable {
@@ -90,6 +95,7 @@ impl GoodTable {
             }
             let i = u32::try_from(t.specs.len()).expect("katalog detaliczny > 4 mld pozycji");
             t.by_cat[g.cat.as_index()].push(i);
+            t.by_key.insert(g.key.clone(), id);
             t.specs.push(GoodSpec {
                 good: id,
                 cat: g.cat,
@@ -128,6 +134,18 @@ impl GoodTable {
     #[must_use]
     pub fn spec(&self, g: GoodId) -> Option<&GoodSpec> {
         self.specs.iter().find(|s| s.good == g)
+    }
+
+    /// Identyfikator towaru o kluczu z `retail.ron`. `None`, jeśli katalog epoki
+    /// go nie wyprodukował — i to jest prawdziwa odpowiedź, nie błąd.
+    #[must_use]
+    pub fn id_of_key(&self, key: &str) -> Option<GoodId> {
+        self.by_key.get(key).copied()
+    }
+
+    /// Wszystkie pozycje katalogu w kolejności budowania.
+    pub fn iter(&self) -> impl Iterator<Item = &GoodSpec> {
+        self.specs.iter()
     }
 }
 

@@ -47,18 +47,21 @@ use magnat_agents::{
     MAX_CANDIDATES,
 };
 use magnat_core::{
-    Arena, CitizenId, DecisionReason, FirmId, GoodId, HashState, HouseholdId, Money, NeedKind,
-    PlaceKind, PlaceRef, Qty, RejectCause, SimMinute, SiteId, StateHasher, StockCat, Tick,
-    TraitId, WorldCoord, Q, STOCK_CAT_COUNT,
+    Arena, CitizenId, DecisionReason, FirmId, FixedCost, GoodId, HashState, HouseholdId, LoanKind,
+    Money, NeedKind, PlaceKind, PlaceRef, Qty, RejectCause, RejectCredit, SimMinute, SiteId,
+    StateHasher, StockCat, Tick, TraitId, WorldCoord, Q, FIXED_COST_COUNT, STOCK_CAT_COUNT,
 };
 use magnat_jobs::JobPool;
 use magnat_spatial::{GridSpec, Vec2};
 
-use crate::books::{AccountId, Books, SupplierRef, TxKind, TxMemo};
+use crate::books::{AccountId, AccountOwner, Books, LoanId, SupplierRef, TxKind, TxMemo};
+use crate::budget::{budget_ref_for_need, plan_budget, HouseholdBudget, HouseholdProfile};
 use crate::choice::{
-    budget_ref_for, choose_offer, days_bought, dominant_term, purchase_threshold, rating_of,
+    choose_offer, days_bought, dominant_term, purchase_threshold, rating_of,
     offer_noise, utility_of_offer, wanted_qty, weights_for, BuyerState, Candidate,
 };
+use crate::cpi::{CpiTracker, IndexBp};
+use crate::credit::{assess_credit, BaseRate, CreditDecision, LoanApplication, LoanBook};
 use crate::data::{EconomyData, UtilityWeights};
 use crate::offer::{query_offers, CategoryId, Offer, OfferId, OfferIndex, PriceBasis};
 use crate::shop::{
@@ -186,6 +189,61 @@ pub struct ShopSeed {
     pub capacity_m3: i64,
 }
 
+/// Bank w M5: `FirmId`, konto i funkcja `assess_credit` zamiast AI (decyzja
+/// otwarta nr 7, szeroka część — propozycja domyślna przyjęta w M5d).
+///
+/// Nie ma pracowników, produkcji ani osobowości; M7 czyni go pełną firmą.
+/// Ma za to konto jak każda firma, bo przez nie przechodzi **cała** kreacja
+/// i destrukcja pieniądza kredytowego.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Bank {
+    pub firm: FirmId,
+    pub account: AccountId,
+}
+
+/// Gospodarstwo na wejściu i wyjściu miesięcznego rozliczenia (M5d §5.9).
+///
+/// Salda wchodzą i wychodzą **przez tę strukturę**, a nie przez `Books`: pieniądz
+/// gospodarstwa mieszka w komponencie `Household` (`U-17`), więc wołający zdejmuje
+/// go stamtąd przed wywołaniem i wpisuje z powrotem po nim. Kanał sektora gospodarstw
+/// w `MoneySupplyLedger` jest drugą stroną każdej z tych kwot.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct HouseholdMonth {
+    pub index: u32,
+    pub profile: HouseholdProfile,
+    pub income: Money,
+    pub cash: Money,
+    pub bank: Money,
+    pub savings: Money,
+    // ── wyjście ──
+    /// Ile z kosztów stałych zostało nieopłacone w tym miesiącu.
+    pub shortfall: Money,
+    /// Powód decyzji kredytowej, jeśli gospodarstwo składało wniosek.
+    pub credit: Option<DecisionReason>,
+    /// Powód pierwszej niedopłaty, jeśli jakaś była.
+    pub unpaid: Option<DecisionReason>,
+}
+
+/// Zbiorczy wynik miesiąca gospodarstw — to, co wypisuje scenariusz i zbiera balansator.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub struct HouseholdMonthReport {
+    pub planned: u64,
+    pub fixed_paid: Money,
+    pub savings: Money,
+    pub credit_applications: u64,
+    pub credit_granted: u64,
+    pub credit_amount: Money,
+    pub installments_paid: u64,
+    pub interest_paid: Money,
+    pub principal_repaid: Money,
+    pub shortfalls: u64,
+    pub arrears_added: Money,
+}
+
+/// Ile wpisów trzyma okno decyzji budżetowych. Tyle samo co pierścień utraconych
+/// sprzedaży — to jest podgląd dla panelu, nie historia.
+const BUDGET_LOG_RING: usize = 256;
+
 struct MarketInner {
     offers: Arena<Offer>,
     index: OfferIndex,
@@ -200,6 +258,17 @@ struct MarketInner {
     /// M5b nie odbiera M3 niczego, co M3 już umiał (§2 dokumentu fazy).
     fallback: InfinitePlaces,
     households: Vec<HouseholdSnapshot>,
+    /// Budżety gospodarstw, indeks = indeks encji. Stoją tutaj, a nie w zasobie
+    /// świata, bo czyta je `candidates` — a `PlaceProvider` nie dostaje `&World`.
+    budgets: Vec<HouseholdBudget>,
+    loans: LoanBook,
+    /// Jedyny bank w M5. `None`, dopóki scenariusz go nie otworzy — wtedy każdy
+    /// wniosek kończy się `RejectCredit::NoLender`, a nie cichym brakiem ścieżki.
+    bank: Option<Bank>,
+    cpi: CpiTracker,
+    /// Okno ostatnich decyzji budżetowych i kredytowych — podgląd dla panelu (M5e)
+    /// i dla testu „ścieżka w pełni wyjaśnialna". Poza hashem, tak samo jak dziennik.
+    budget_log: Vec<(u32, DecisionReason)>,
     planned: BTreeMap<u32, PlannedPurchase>,
     intents: Vec<PurchaseIntent>,
     /// Kwoty zaklepane w bieżącym ticku, po indeksie encji gospodarstwa. Bez tego
@@ -239,6 +308,10 @@ impl Market {
         places: Arc<PlaceTable>,
         rest_of_world: AccountId,
     ) -> Market {
+        // CPI rozwiązuje koszyk raz, przy budowie rynku — potem katalog już się
+        // nie zmienia, a przeszukiwanie go przy każdej transakcji byłoby kosztem
+        // na gorącej ścieżce (§7.3).
+        let cpi = CpiTracker::new(&data, &goods);
         Market(Arc::new(Mutex::new(MarketInner {
             offers: Arena::new(),
             index: OfferIndex::new(grid),
@@ -250,6 +323,11 @@ impl Market {
             places: places.clone(),
             fallback: InfinitePlaces::new(places, needs),
             households: Vec::new(),
+            budgets: Vec::new(),
+            loans: LoanBook::new(),
+            bank: None,
+            cpi,
+            budget_log: Vec::new(),
             planned: BTreeMap::new(),
             intents: Vec::new(),
             committed: BTreeMap::new(),
@@ -462,6 +540,8 @@ impl Market {
             ledger: Ledger::new(seed.site, seed.firm, t),
             reprice_log: Vec::new(),
             depreciation_monthly: Money::ZERO,
+            loan: None,
+            opened: t,
         };
 
         for i in wybor {
@@ -778,6 +858,9 @@ impl Market {
         if m.households.len() <= max {
             m.households.resize(max + 1, HouseholdSnapshot::default());
         }
+        if m.budgets.len() <= max {
+            m.budgets.resize(max + 1, HouseholdBudget::default());
+        }
         for (i, size, stock) in entries {
             m.households[*i as usize] = HouseholdSnapshot {
                 size: *size,
@@ -839,6 +922,97 @@ impl Market {
         }
     }
 
+    // ── budżety, bank i kredyt (M5d) ─────────────────────────────────────────────
+
+    /// Otwiera bank miasta. W M5 jest jeden; drugie wywołanie go podmienia.
+    pub fn open_bank(&self, firm: FirmId, account: AccountId) {
+        self.lock().bank = Some(Bank { firm, account });
+    }
+
+    #[must_use]
+    pub fn bank(&self) -> Option<Bank> {
+        self.lock().bank
+    }
+
+    /// Budżet gospodarstwa — kopia, bo wołający nie trzyma zamka.
+    #[must_use]
+    pub fn budget_of(&self, household: u32) -> HouseholdBudget {
+        self.lock().budget_of(household)
+    }
+
+    #[must_use]
+    pub fn loan(&self, id: LoanId) -> Option<crate::credit::Loan> {
+        self.lock().loans.get(id).cloned()
+    }
+
+    #[must_use]
+    pub fn loan_count(&self) -> usize {
+        self.lock().loans.len()
+    }
+
+    /// Niespłacony kapitał wszystkich kredytów — tyle pieniądza kredytowego krąży.
+    #[must_use]
+    pub fn credit_outstanding(&self) -> Money {
+        self.lock().loans.outstanding_total()
+    }
+
+    /// Okno ostatnich decyzji budżetowych i kredytowych (podgląd, nie historia).
+    #[must_use]
+    pub fn budget_log(&self) -> Vec<(u32, DecisionReason)> {
+        self.lock().budget_log.clone()
+    }
+
+    #[must_use]
+    pub fn cpi_index_bp(&self) -> IndexBp {
+        self.lock().cpi.index_bp()
+    }
+
+    #[must_use]
+    pub fn cpi_yoy_bp(&self) -> Option<i32> {
+        self.lock().cpi.yoy_bp()
+    }
+
+    #[must_use]
+    pub fn cpi_mom_bp(&self) -> Option<i32> {
+        self.lock().cpi.mom_bp()
+    }
+
+    #[must_use]
+    pub fn base_rate(&self) -> BaseRate {
+        self.lock().cpi.base_rate()
+    }
+
+    /// Zamyka dobę koszyka CPI. Woła to pętla doby, po zaopatrzeniu — wtedy wszystkie
+    /// transakcje doby są już zaksięgowane.
+    pub fn roll_cpi_day(&self) {
+        self.lock().cpi.roll_day();
+    }
+
+    /// Zamyka miesiąc CPI i przestawia stopę bazową banku centralnego.
+    pub fn close_cpi_month(&self, t: Tick) -> BaseRate {
+        let mut m = self.lock();
+        // `BankParams` jest `Copy`, więc kopia zdejmuje kolizję pożyczek (`&m.data`
+        // obok `&mut m.cpi`) bez przebudowy struktury.
+        let params = m.data.bank;
+        m.cpi.close_month(&params, t)
+    }
+
+    /// Miesięczne rozliczenie gospodarstw: plan budżetu, koszty stałe, rata kredytu,
+    /// wniosek kredytowy przy niedoborze i zaległość przy odmowie (§5.9).
+    ///
+    /// Kolejność jest **ścieżką wyjaśnienia** z kryterium WP8: debet → wniosek →
+    /// odmowa → zaległość. Odwrócenie jej dałoby zaległość, której nikt nie próbował
+    /// uniknąć, czyli kartę inspekcji bez pierwszego ogniwa.
+    pub fn household_month(
+        &self,
+        rows: &mut [HouseholdMonth],
+        books: &mut Books,
+        t: Tick,
+    ) -> HouseholdMonthReport {
+        let mut m = self.lock();
+        m.household_month(rows, books, t)
+    }
+
     /// Księguje sprzedaż po stronie sklepu — wołane przez [`settle_transactions`],
     /// kiedy pieniądz naprawdę się przesunął.
     pub fn record_sale(&self, intent: &PurchaseIntent) {
@@ -869,6 +1043,15 @@ impl Market {
         );
         if let Some(pc) = s.controllers.get_mut(&intent.good) {
             pc.sold_today = Qty(pc.sold_today.get().saturating_add(intent.qty.get()));
+        }
+        // Koszyk CPI liczy się z **cen transakcyjnych**, więc wchodzi tutaj, a nie
+        // przy wystawieniu oferty: oferta, której nikt nie kupuje, nie jest ceną (§6.1).
+        m.cpi
+            .record(intent.good, intent.agreed_price, intent.qty);
+        // Koperta śledzi pieniądze, które wyszły — nie te, które ktoś rozważył.
+        let hh = intent.household.entity().index() as usize;
+        if let Some(b) = m.budgets.get_mut(hh) {
+            b.charge(intent.cat, intent.agreed_price);
         }
         m.stats.purchases += 1;
         m.stats.purchased_qty += intent.qty.get();
@@ -1227,6 +1410,11 @@ impl Market {
                     ),
                 );
             }
+            // Kredyt obrotowy **przed** domknięciem okresu: odsetki zaksięgowane po
+            // `close_period` wpadłyby do następnego miesiąca i RZiS przestałby się
+            // zgadzać z przepływami (korekta wpisana do M5d po M5c).
+            suma = Money(suma.get() + m.service_working_capital(i, books, t).get());
+            m.maybe_borrow_working_capital(i, books, t);
             let _ = ledger::close_period(
                 &mut m.shops[i].ledger,
                 miesiac,
@@ -1498,12 +1686,477 @@ impl MarketInner {
         self.data.vot_base_gr_per_min * (100 + i64::from(status.get())) / 100
     }
 
-    fn buyer_state(&self, status: Q, openness: Q, vot: i64, cat: StockCat) -> BuyerState {
+    fn buyer_state(
+        &self,
+        status: Q,
+        openness: Q,
+        vot: i64,
+        cat: StockCat,
+        household: u32,
+    ) -> BuyerState {
         BuyerState {
             status,
             openness,
-            budget_ref: budget_ref_for(cat, &self.data),
+            // Mianownik członu ceny z **koperty gospodarstwa** (M5d/WP8). Gospodarstwo
+            // bez zaplanowanego budżetu wraca do stałej z `choice.ron` — to jest
+            // pierwsze kilka dób świata, zanim wypadnie granica miesiąca.
+            budget_ref: match self.budgets.get(household as usize) {
+                Some(b) => budget_ref_for_need(b, cat, &self.data),
+                // Gospodarstwo spoza migawki: stała z `choice.ron`, bez kopiowania
+                // budżetu na gorącej ścieżce (§7.3 — zero alokacji i zero zbędnych
+                // kopii struktury, która ma ćwierć kilobajta).
+                None => crate::choice::budget_ref_for(cat, &self.data),
+            },
             vot_gr_per_min: vot,
+        }
+    }
+
+    /// Obsługa kredytu obrotowego zakładu: odsetki i kapitał, każde z własnym
+    /// zapisem w księdze. Zwraca kwotę, która wyszła z rachunku.
+    ///
+    /// **Każdy przelew zakładu ma swój zapis w księdze.** `LedgerAccount::BankCurrent`
+    /// jest lustrem salda rachunku w `Books` i test WP7 sprawdza tę równość co do
+    /// grosza — uruchomienie i spłata kredytu ruszają trzy rzeczy naraz (podaż
+    /// pieniądza, saldo rachunku, księgę) i pominięcie trzeciej wychodzi dopiero
+    /// w teście M5c, daleko od przyczyny.
+    fn service_working_capital(&mut self, i: usize, books: &mut Books, t: Tick) -> Money {
+        let Some(bank) = self.bank else {
+            return Money::ZERO;
+        };
+        let Some(id) = self.shops[i].loan else {
+            return Money::ZERO;
+        };
+        let Some(rata) = self.loans.get(id).and_then(crate::credit::Loan::next_installment) else {
+            return Money::ZERO;
+        };
+        let konto = self.shops[i].account;
+        let mut wyszlo = Money::ZERO;
+        if rata.interest.get() > 0 {
+            let memo = TxMemo::new(
+                TxKind::LoanPayment {
+                    loan: id,
+                    principal: Money::ZERO,
+                    interest: rata.interest,
+                },
+                DecisionReason::Unspecified,
+            );
+            if books.transfer(konto, bank.account, rata.interest, memo, t).is_err() {
+                // Sklep bez środków nie płaci — zaległość, nie debet bez pokrycia.
+                if let Some(l) = self.loans.get_mut(id) {
+                    l.arrears_months = l.arrears_months.saturating_add(1);
+                }
+                return Money::ZERO;
+            }
+            let _ = ledger::post(
+                &mut self.shops[i].ledger,
+                JournalEntry::new(
+                    t,
+                    DecisionReason::Unspecified,
+                    &[
+                        (LedgerAccount::InterestExpense, rata.interest),
+                        (LedgerAccount::BankCurrent, Money(-rata.interest.get())),
+                    ],
+                ),
+            );
+            wyszlo = Money(wyszlo.get() + rata.interest.get());
+        }
+        if rata.principal.get() > 0 {
+            if books
+                .destroy_credit(konto, rata.principal, id, t)
+                .is_err()
+            {
+                if let Some(l) = self.loans.get_mut(id) {
+                    l.arrears_months = l.arrears_months.saturating_add(1);
+                }
+                return wyszlo;
+            }
+            let _ = ledger::post(
+                &mut self.shops[i].ledger,
+                JournalEntry::new(
+                    t,
+                    DecisionReason::Unspecified,
+                    &[
+                        (LedgerAccount::LoansShort, rata.principal),
+                        (LedgerAccount::BankCurrent, Money(-rata.principal.get())),
+                    ],
+                ),
+            );
+            if let Some(l) = self.loans.get_mut(id) {
+                l.outstanding = Money(l.outstanding.get() - rata.principal.get());
+                l.paid_months += 1;
+            }
+            wyszlo = Money(wyszlo.get() + rata.principal.get());
+        }
+        if self.loans.get(id).is_some_and(crate::credit::Loan::is_closed) {
+            self.shops[i].loan = None;
+        }
+        wyszlo
+    }
+
+    /// Wniosek o kredyt obrotowy, kiedy na rachunku zostało mniej niż miesiąc kosztów.
+    ///
+    /// Miara jest celowo prosta i jawna: sklep pożycza pod **zapasy i koszty stałe**,
+    /// nie pod inwestycję (ta jest w M7). Ocena idzie przez DSCR liczone z księgi.
+    fn maybe_borrow_working_capital(&mut self, i: usize, books: &mut Books, t: Tick) {
+        let Some(bank) = self.bank else {
+            return;
+        };
+        if self.shops[i].loan.is_some() {
+            return;
+        }
+        let (site, konto, slots) = (
+            self.shops[i].site,
+            self.shops[i].account,
+            self.shops[i].shelf.slots,
+        );
+        let (czynsz, media, place) = self.data.costs.monthly(slots);
+        let miesieczne = Money(czynsz.get() + media.get() + place.get());
+        let saldo = books.balance(konto).unwrap_or(Money::ZERO);
+        if saldo.get() >= miesieczne.get() {
+            return;
+        }
+        let params = self.data.bank;
+        let produkt = params.products.working_capital;
+        let kwota = Money(miesieczne.get().saturating_mul(3));
+        let rata = crate::kernel::annuity_payment(
+            kwota,
+            crate::credit::monthly_rate_bp(self.cpi.base_rate().bp + produkt.spread_bp),
+            produkt.term_months,
+        );
+        let od = Tick(t.get().saturating_sub(12 * crate::credit::TICKS_PER_MONTH));
+        let rzis = ledger::income_statement(&self.shops[i].ledger, od, t);
+        // EBITDA to wynik **przed** amortyzacją i odsetkami — obie pozycje wracają
+        // do wyniku, bo kredyt spłaca się z gotówki, a nie z zysku księgowego.
+        let ebitda = Money(
+            rzis.net_result().get() + rzis.depreciation.get() + rzis.interest.get(),
+        );
+        let miesiecy = u16::try_from(
+            (t.get().saturating_sub(self.shops[i].opened.get())) / crate::credit::TICKS_PER_MONTH,
+        )
+        .unwrap_or(u16::MAX);
+        let app = LoanApplication {
+            kind: LoanKind::WorkingCapital,
+            amount: kwota,
+            income_monthly: Money::ZERO,
+            existing_service: Money::ZERO,
+            ebitda_12m: ebitda,
+            debt_service_12m: Money(rata.get().saturating_mul(12)),
+            months_in_business: miesiecy,
+            arrears_months: 0,
+            key: site.entity().index(),
+        };
+        let decyzja = assess_credit(&app, &params, self.cpi.base_rate(), self.seed, t);
+        let reason = decyzja.reason();
+        self.log_budget(site.entity().index(), reason);
+        let CreditDecision::Approved { limit, rate_bp, .. } = decyzja else {
+            return;
+        };
+        let id = self.loans.open(
+            AccountOwner::Firm(self.shops[i].firm),
+            bank.firm,
+            LoanKind::WorkingCapital,
+            limit,
+            rate_bp,
+            produkt.term_months,
+            Tick(t.get() + crate::credit::TICKS_PER_MONTH),
+        );
+        if books.create_credit(konto, limit, id, t).is_err() {
+            return;
+        }
+        let _ = ledger::post(
+            &mut self.shops[i].ledger,
+            JournalEntry::new(
+                t,
+                reason,
+                &[
+                    (LedgerAccount::BankCurrent, limit),
+                    (LedgerAccount::LoansShort, Money(-limit.get())),
+                ],
+            ),
+        );
+        self.shops[i].loan = Some(id);
+    }
+
+    /// Dopisuje powód do okna podglądu. Pierścień, nie historia — pełna kronika
+    /// decyzji należy do M9.
+    fn log_budget(&mut self, household: u32, reason: DecisionReason) {
+        if self.budget_log.len() >= BUDGET_LOG_RING {
+            self.budget_log.remove(0);
+        }
+        self.budget_log.push((household, reason));
+    }
+
+    /// Zdejmuje kwotę z gospodarstwa: najpierw rachunek, potem gotówka. Zwraca, ile
+    /// udało się zdjąć — reszta jest niedoborem, nie debetem.
+    fn take_from_household(row: &mut HouseholdMonth, amount: Money) -> Money {
+        let z_banku = row.bank.get().min(amount.get()).max(0);
+        row.bank = Money(row.bank.get() - z_banku);
+        let brakuje = amount.get() - z_banku;
+        let z_gotowki = row.cash.get().min(brakuje).max(0);
+        row.cash = Money(row.cash.get() - z_gotowki);
+        Money(z_banku + z_gotowki)
+    }
+
+    /// Rata kredytu gospodarstwa: kapitał niszczy pieniądz, odsetki są przelewem.
+    ///
+    /// Kolejność jest wymuszona przez `Books`: `destroy_credit` działa na kontach,
+    /// więc kapitał musi **najpierw** wejść do ksiąg kanałem sektora gospodarstw,
+    /// a dopiero z konta banku zniknąć. To jedno dodatkowe wywołanie, nie inna
+    /// mechanika (korekta wpisana do M5d po M5b).
+    fn pay_installment(
+        &mut self,
+        row: &mut HouseholdMonth,
+        books: &mut Books,
+        rep: &mut HouseholdMonthReport,
+        t: Tick,
+    ) -> Money {
+        let Some(bank) = self.bank else {
+            return Money::ZERO;
+        };
+        let Some(id) = self.budget_of(row.index).loan else {
+            return Money::ZERO;
+        };
+        let Some(rata) = self.loans.get(id).and_then(crate::credit::Loan::next_installment) else {
+            return Money::ZERO;
+        };
+        let nalezne = Money(rata.principal.get() + rata.interest.get());
+        let zaplacone = MarketInner::take_from_household(row, nalezne);
+        if zaplacone.get() < nalezne.get() {
+            // Niedopłata raty nie dzieli się na kapitał i odsetki — bank widzi
+            // zaległy miesiąc, a nie część raty. Kwota wraca do gospodarstwa.
+            row.bank = Money(row.bank.get() + zaplacone.get());
+            if let Some(l) = self.loans.get_mut(id) {
+                l.arrears_months = l.arrears_months.saturating_add(1);
+            }
+            return Money::ZERO;
+        }
+        let memo = TxMemo::new(
+            TxKind::LoanPayment {
+                loan: id,
+                principal: rata.principal,
+                interest: rata.interest,
+            },
+            DecisionReason::Unspecified,
+        );
+        if books.household_pay(bank.account, nalezne, memo, t).is_err() {
+            row.bank = Money(row.bank.get() + nalezne.get());
+            return Money::ZERO;
+        }
+        // Kapitał znika z obiegu; odsetki zostają na koncie banku jako jego przychód.
+        if rata.principal.get() > 0 {
+            let _ = books.destroy_credit(bank.account, rata.principal, id, t);
+        }
+        if let Some(l) = self.loans.get_mut(id) {
+            l.outstanding = Money(l.outstanding.get() - rata.principal.get());
+            l.paid_months += 1;
+        }
+        rep.installments_paid += 1;
+        rep.interest_paid = Money(rep.interest_paid.get() + rata.interest.get());
+        rep.principal_repaid = Money(rep.principal_repaid.get() + rata.principal.get());
+        if self.loans.get(id).is_some_and(crate::credit::Loan::is_closed) {
+            if let Some(b) = self.budgets.get_mut(row.index as usize) {
+                b.loan = None;
+            }
+        }
+        nalezne
+    }
+
+    /// Wniosek o kredyt konsumpcyjny przy niedoborze na koszty stałe.
+    fn apply_for_credit(
+        &mut self,
+        row: &mut HouseholdMonth,
+        books: &mut Books,
+        rep: &mut HouseholdMonthReport,
+        gap: Money,
+        t: Tick,
+    ) {
+        rep.credit_applications += 1;
+        let Some(bank) = self.bank else {
+            let r = DecisionReason::CreditRejected {
+                kind: LoanKind::Consumer,
+                cause: RejectCredit::NoLender,
+                margin_bp: 0,
+            };
+            row.credit = Some(r);
+            self.log_budget(row.index, r);
+            return;
+        };
+        let b = self.budget_of(row.index);
+        let app = LoanApplication {
+            kind: LoanKind::Consumer,
+            // Prosimy o niedobór tego miesiąca razy trzy — kredyt na jedną ratę nie
+            // rozwiązuje niczego, bo w przyszłym miesiącu brakuje tyle samo.
+            amount: Money(gap.get().saturating_mul(3)),
+            income_monthly: row.income,
+            existing_service: b.fixed[FixedCost::LoanService.as_index()],
+            ebitda_12m: Money::ZERO,
+            debt_service_12m: Money::ZERO,
+            months_in_business: 0,
+            arrears_months: b.arrears_months,
+            key: row.index,
+        };
+        let params = self.data.bank;
+        let decyzja = assess_credit(&app, &params, self.cpi.base_rate(), self.seed, t);
+        let reason = decyzja.reason();
+        row.credit = Some(reason);
+        self.log_budget(row.index, reason);
+        let CreditDecision::Approved { limit, rate_bp, .. } = decyzja else {
+            return;
+        };
+        if limit.get() <= 0 {
+            return;
+        }
+        let id = self.loans.open(
+            AccountOwner::Household(HouseholdId(magnat_core::Entity::new(
+                row.index,
+                std::num::NonZeroU32::MIN,
+            ))),
+            bank.firm,
+            LoanKind::Consumer,
+            limit,
+            rate_bp,
+            params.products.consumer.term_months,
+            Tick(t.get() + crate::credit::TICKS_PER_MONTH),
+        );
+        // Kreacja pieniądza: depozyt powstaje na koncie banku, a stamtąd kanałem
+        // sektora gospodarstw wchodzi do komponentu.
+        if books.create_credit(bank.account, limit, id, t).is_err() {
+            return;
+        }
+        let memo = TxMemo::new(TxKind::LoanDraw { loan: id }, reason);
+        if books
+            .household_receive(bank.account, limit, memo, t)
+            .is_err()
+        {
+            let _ = books.destroy_credit(bank.account, limit, id, t);
+            return;
+        }
+        row.bank = Money(row.bank.get() + limit.get());
+        if let Some(b) = self.budgets.get_mut(row.index as usize) {
+            b.loan = Some(id);
+        }
+        rep.credit_granted += 1;
+        rep.credit_amount = Money(rep.credit_amount.get() + limit.get());
+    }
+
+    fn household_month(
+        &mut self,
+        rows: &mut [HouseholdMonth],
+        books: &mut Books,
+        t: Tick,
+    ) -> HouseholdMonthReport {
+        let mut rep = HouseholdMonthReport::default();
+        let rest = self.rest_of_world;
+        for row in rows.iter_mut() {
+            let i = row.index as usize;
+            if self.budgets.len() <= i {
+                self.budgets.resize(i + 1, HouseholdBudget::default());
+            }
+            let rata = self
+                .budget_of(row.index)
+                .loan
+                .and_then(|id| self.loans.get(id))
+                .map_or(Money::ZERO, crate::credit::Loan::monthly_service);
+
+            let mut b = self.budgets[i];
+            let plan = plan_budget(&mut b, &row.profile, row.income, rata, &self.data, t);
+            self.budgets[i] = b;
+            rep.planned += 1;
+
+            // Rata idzie pierwsza: bank jest wierzycielem uprzywilejowanym, a jej
+            // niezapłacenie ma inny skutek niż niezapłacenie czynszu — zaległość
+            // kredytowa psuje scoring na dwadzieścia cztery miesiące.
+            let _ = self.pay_installment(row, books, &mut rep, t);
+
+            // Niedobór na pozostałe koszty stałe uruchamia wniosek — **zanim**
+            // cokolwiek zostanie niezapłacone. To jest pierwsze ogniwo ścieżki
+            // z kryterium WP8: debet → wniosek → odmowa → zaległość.
+            let pozostale = Money(
+                self.budgets[i].fixed_total().get()
+                    - self.budgets[i].fixed[FixedCost::LoanService.as_index()].get(),
+            );
+            let dostepne = row.cash.get() + row.bank.get();
+            if pozostale.get() > dostepne && self.budget_of(row.index).loan.is_none() {
+                self.apply_for_credit(row, books, &mut rep, Money(pozostale.get() - dostepne), t);
+            }
+
+            // Koszty stałe w kolejności `FixedCost`. Każda niedopłata zostawia
+            // zaległość i powód — bez tego karta inspekcji urywa się na odmowie.
+            for k in 0..FIXED_COST_COUNT {
+                if k == FixedCost::LoanService.as_index() {
+                    continue;
+                }
+                let kwota = self.budgets[i].fixed[k];
+                if kwota.get() <= 0 {
+                    continue;
+                }
+                let zaplacone = MarketInner::take_from_household(row, kwota);
+                if zaplacone.get() > 0 {
+                    let memo = TxMemo::new(
+                        TxKind::Rent {
+                            site: SiteId(magnat_core::Entity::new(
+                                row.index,
+                                std::num::NonZeroU32::MIN,
+                            )),
+                        },
+                        DecisionReason::Unspecified,
+                    );
+                    if books.household_pay(rest, zaplacone, memo, t).is_err() {
+                        row.bank = Money(row.bank.get() + zaplacone.get());
+                        continue;
+                    }
+                    rep.fixed_paid = Money(rep.fixed_paid.get() + zaplacone.get());
+                }
+                let brak = kwota.get() - zaplacone.get();
+                if brak <= 0 {
+                    continue;
+                }
+                let cost = FixedCost::ALL[k];
+                let r = DecisionReason::BudgetShortfall {
+                    cost,
+                    gap_permille: i16::try_from(brak * 1_000 / kwota.get().max(1)).unwrap_or(1_000),
+                };
+                if row.unpaid.is_none() {
+                    row.unpaid = Some(r);
+                }
+                self.log_budget(row.index, r);
+                row.shortfall = Money(row.shortfall.get() + brak);
+                rep.arrears_added = Money(rep.arrears_added.get() + brak);
+            }
+            if row.shortfall.get() > 0 {
+                rep.shortfalls += 1;
+                let b = &mut self.budgets[i];
+                b.arrears = Money(b.arrears.get().saturating_add(row.shortfall.get()));
+                b.arrears_months = b.arrears_months.saturating_add(1);
+            } else {
+                // Miesiąc bez zaległości spłaca historię kredytową o jeden krok.
+                let b = &mut self.budgets[i];
+                b.arrears_months = b.arrears_months.saturating_sub(1);
+            }
+
+            // Oszczędności przenoszą się **wewnątrz** gospodarstwa, więc nie ruszają
+            // ksiąg: `bank` i `savings` są po tej samej stronie kanału sektora.
+            let odlozone = plan.savings.get().min(row.bank.get()).max(0);
+            row.bank = Money(row.bank.get() - odlozone);
+            row.savings = Money(row.savings.get() + odlozone);
+            rep.savings = Money(rep.savings.get() + odlozone);
+        }
+        rep
+    }
+
+    /// Budżet gospodarstwa; domyślny (`planned == false`) dla nieznanego indeksu.
+    fn budget_of(&self, household: u32) -> HouseholdBudget {
+        self.budgets
+            .get(household as usize)
+            .copied()
+            .unwrap_or_default()
+    }
+
+    /// Przekroczenie koperty kategorii — wejście członu `k_envelope` w progu (§5.4).
+    fn overspend_bp(&self, household: u32, cat: StockCat) -> i32 {
+        match self.budgets.get(household as usize) {
+            Some(b) if b.planned => b.envelope(cat).overspend_bp(),
+            _ => 0,
         }
     }
 }
@@ -1627,7 +2280,7 @@ impl PlaceProvider for Market {
         utils.clear();
         for c in cand.iter() {
             let cat = m.supplier.goods().spec(c.good).map_or(cats[0], |s| s.cat);
-            let st = m.buyer_state(status, openness, vot, cat);
+            let st = m.buyer_state(status, openness, vot, cat, who.identity.household);
             let noise = offer_noise(
                 m.seed,
                 who.id.entity().index(),
@@ -1653,6 +2306,7 @@ impl PlaceProvider for Market {
             .goods()
             .spec(wybrany.good)
             .map_or(cats[0], |s| s.cat);
+
         let plan = PlannedPurchase {
             site: wybrany.site,
             need,
@@ -1660,14 +2314,20 @@ impl PlaceProvider for Market {
             status,
             openness,
             vot_gr_per_min: vot,
-            threshold: purchase_threshold(need, who.needs.get(need), 0, &m.data),
+            // Próg z kopertą: wyczerpany budżet kategorii podnosi go przez człon
+            // `k_envelope`, czyli odróżnia „nie stać mnie" od „nie warto" (§5.4).
+            threshold: purchase_threshold(
+                need,
+                who.needs.get(need),
+                m.overspend_bp(who.identity.household, cat),
+                &m.data,
+            ),
             unit_price: m
                 .offers
                 .get(wybrany.offer)
                 .map_or(Money::ZERO, |o| o.unit_price),
             good: wybrany.good,
         };
-        let _ = cat;
         m.planned.insert(who.id.entity().index(), plan);
 
         // Wybrany idzie pierwszy — planer bierze `out.first()` jako decyzję; reszta
@@ -1778,7 +2438,12 @@ impl Market {
                     st,
                     Q::new(50),
                     m.vot_for(st),
-                    purchase_threshold(req.need, Q::new(50), 0, &m.data),
+                    purchase_threshold(
+                        req.need,
+                        Q::new(50),
+                        m.overspend_bp(req.household.entity().index(), cats[0]),
+                        &m.data,
+                    ),
                     None,
                 )
             }
@@ -1831,7 +2496,7 @@ impl Market {
                     m.stats.slippage_rechecks += 1;
                 }
             }
-            let st = m.buyer_state(status, openness, vot, spec.cat);
+            let st = m.buyer_state(status, openness, vot, spec.cat, req.household.entity().index());
             let cand = Candidate {
                 offer: line.offer,
                 site,
@@ -1971,5 +2636,20 @@ impl HashState for Market {
             it.agreed_price.hash_state(h);
             it.cogs.hash_state(h);
         }
+        // M5d. Budżety, kredyty i koszyk CPI **są stanem**, a nie pomiarem: stopa
+        // bazowa wpływa na oprocentowanie, oprocentowanie na ratę, rata na saldo
+        // gospodarstwa. Pomiar, który zmienia świat, wchodzi do hasha.
+        // `budget_log` nie wchodzi — to okno podglądu, jak dziennik zakładu.
+        h.write_u32(m.budgets.len() as u32);
+        for b in &m.budgets {
+            b.hash_state(h);
+        }
+        m.loans.hash_state(h);
+        h.write_u8(u8::from(m.bank.is_some()));
+        if let Some(bank) = m.bank {
+            bank.firm.entity().hash_state(h);
+            h.write_u32(bank.account.0);
+        }
+        m.cpi.hash_state(h);
     }
 }

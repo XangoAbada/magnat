@@ -274,6 +274,69 @@ pub fn ledger_post(
     Ok(())
 }
 
+// ── kredyt (§5.10) ───────────────────────────────────────────────────────────────
+
+/// Skala ułamka w rachunku annuitetowym. `i128` × 10⁹ mieści `(1+i)^360` dla stóp
+/// do kilkudziesięciu procent rocznie z zapasem rzędu dziesięciu rzędów wielkości.
+const ANNUITY_SCALE: i128 = 1_000_000_000;
+
+/// Rata annuitetowa: stała kwota, która przez `months` miesięcy spłaca kapitał
+/// i odsetki naliczane od malejącego salda.
+///
+/// **Całkowitoliczbowo, bez `pow`.** Wzór `A = P·i·(1+i)ⁿ / ((1+i)ⁿ − 1)` liczy się
+/// przez `n` mnożeń w `i128` zamiast przez potęgowanie zmiennoprzecinkowe — nie
+/// dlatego, że `det_math::pow` jest niedostępne (jest, `K-6`), tylko dlatego, że
+/// wynik jest **kwotą pieniężną**, a tam floata nie wolno użyć nawet przejściowo
+/// (00 §2). `n ≤ 600`, więc pętla kosztuje mniej niż jedno wywołanie `pow`.
+///
+/// Stopa jest **miesięczna** w punktach bazowych: kalendarz ma 360 dni i miesiąc
+/// odsetkowy zawsze równy 30 dobom (`K-1`), więc `rate_bp_month = rate_bp_annual/12`
+/// bez wyjątków lutowych i bez konwencji ACT/365.
+///
+/// Stopa zerowa daje `P/n` — gałąź osobna, bo wzór ogólny dzieli wtedy przez zero.
+#[must_use]
+pub fn annuity_payment(principal: Money, rate_bp_month: i32, months: u16) -> Money {
+    let n = months.max(1);
+    if principal.get() <= 0 {
+        return Money::ZERO;
+    }
+    if rate_bp_month <= 0 {
+        return principal.div_round_half_up(i64::from(n));
+    }
+    let i = i128::from(rate_bp_month);
+    let mut f = ANNUITY_SCALE;
+    for _ in 0..n {
+        f = f * (i128::from(BP) + i) / i128::from(BP);
+    }
+    let mianownik = f - ANNUITY_SCALE;
+    if mianownik <= 0 {
+        // Stopa tak mała, że po `n` miesiącach nie ruszyła dziewiątego miejsca
+        // po przecinku — traktujemy jak zerową, zamiast dzielić przez zero.
+        return principal.div_round_half_up(i64::from(n));
+    }
+    let licznik = i128::from(principal.get()) * i * f;
+    let mianownik = mianownik * i128::from(BP);
+    Money(div_round_half_away(licznik, mianownik))
+}
+
+/// Odsetki za jeden miesiąc od salda, połówki od zera (jak reszta pieniądza, 00 §2).
+#[must_use]
+pub fn monthly_interest(outstanding: Money, rate_bp_month: i32) -> Money {
+    if outstanding.get() <= 0 || rate_bp_month <= 0 {
+        return Money::ZERO;
+    }
+    outstanding.mul_ratio(i64::from(rate_bp_month), BP)
+}
+
+/// Dzielenie `i128` z zaokrągleniem połówek od zera — ta sama konwencja co
+/// `Money::div_round_half_up`, tylko w szerszym typie.
+fn div_round_half_away(a: i128, b: i128) -> i64 {
+    let znak = if (a < 0) != (b < 0) { -1i128 } else { 1 };
+    let (a, b) = (a.abs(), b.abs());
+    let q = (a * 2 + b) / (b * 2);
+    i64::try_from(znak * q).unwrap_or(if znak < 0 { i64::MIN } else { i64::MAX })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

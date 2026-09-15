@@ -290,6 +290,12 @@ pub struct Shop {
     pub reprice_log: Vec<magnat_core::DecisionReason>,
     /// Miesięczny odpis amortyzacyjny wyposażenia, liniowy.
     pub depreciation_monthly: Money,
+    // ── M5d ──
+    /// Czynny kredyt obrotowy, jeśli sklep go wziął (§5.10). Jeden naraz: drugi
+    /// kredyt pod ten sam zapas to refinansowanie, a to jest mechanika M7.
+    pub loan: Option<crate::books::LoanId>,
+    /// Tick otwarcia zakładu — staż działalności w ocenie zdolności kredytowej.
+    pub opened: magnat_core::Tick,
 }
 
 impl HashState for StockLine {
@@ -336,6 +342,9 @@ impl HashState for Shop {
         self.observed.hash_state(h);
         self.ledger.hash_state(h);
         self.depreciation_monthly.hash_state(h);
+        // M5d: kredyt obrotowy jest stanem zakładu — rata wchodzi do wyniku miesiąca.
+        h.write_u32(self.loan.map_or(u32::MAX, |l| l.0));
+        h.write_u64(self.opened.get());
     }
 }
 

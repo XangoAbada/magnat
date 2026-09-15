@@ -8,8 +8,9 @@
 use crate::loc::{Catalog, Locale};
 use magnat_agents::SocialClass;
 use magnat_core::{
-    ActivityKind, CommitmentKind, DecisionReason, DeprivationEffect, LifeEventKind, MigrationKind,
-    Money, NeedKind, PriceDriver, RejectCause, StockCat, TraitId, TransportMode, UtilityKind,
+    ActivityKind, CommitmentKind, DecisionReason, DeprivationEffect, FixedCost, LifeEventKind,
+    LoanKind, MigrationKind, Money, NeedKind, PriceDriver, RejectCause, RejectCredit, StockCat,
+    TraitId, TransportMode, UtilityKind,
 };
 
 /// Nazwa potrzeby w języku gracza.
@@ -58,6 +59,24 @@ pub fn reject_cause(c: &Catalog, l: Locale, r: RejectCause) -> String {
 #[must_use]
 pub fn price_driver(c: &Catalog, l: Locale, d: PriceDriver) -> String {
     c.fmt_key(l, &format!("ui.price_driver.{}", d.name()), &[])
+}
+
+/// Nazwa produktu kredytowego (M5d §5.10).
+#[must_use]
+pub fn loan_kind(c: &Catalog, l: Locale, k: LoanKind) -> String {
+    c.fmt_key(l, &format!("ui.loan_kind.{}", k.name()), &[])
+}
+
+/// Nazwa powodu odmowy kredytu (M5d §5.10).
+#[must_use]
+pub fn reject_credit(c: &Catalog, l: Locale, r: RejectCredit) -> String {
+    c.fmt_key(l, &format!("ui.reject_credit.{}", r.name()), &[])
+}
+
+/// Nazwa pozycji kosztów stałych gospodarstwa (M5d §5.9).
+#[must_use]
+pub fn fixed_cost(c: &Catalog, l: Locale, f: FixedCost) -> String {
+    c.fmt_key(l, &format!("ui.fixed_cost.{}", f.name()), &[])
 }
 
 /// Nazwa skutku deprywacji.
@@ -383,6 +402,43 @@ pub fn describe(c: &Catalog, l: Locale, r: DecisionReason) -> String {
                 ("roznica", &procent_bp(i32::from(delta_bp))),
             ],
         ),
+        DecisionReason::CreditApproved {
+            kind,
+            rate_bp,
+            load_bp,
+        } => c.fmt_key(
+            l,
+            "ui.reason.CreditApproved",
+            &[
+                ("produkt", &loan_kind(c, l, kind)),
+                ("oprocentowanie", &procent_bp(i32::from(rate_bp))),
+                ("obciazenie", &procent_bp(i32::from(load_bp))),
+            ],
+        ),
+        DecisionReason::CreditRejected {
+            kind,
+            cause,
+            margin_bp,
+        } => c.fmt_key(
+            l,
+            "ui.reason.CreditRejected",
+            &[
+                ("produkt", &loan_kind(c, l, kind)),
+                ("powod", &reject_credit(c, l, cause)),
+                ("roznica", &procent_bp(i32::from(margin_bp))),
+            ],
+        ),
+        DecisionReason::BudgetShortfall {
+            cost,
+            gap_permille,
+        } => c.fmt_key(
+            l,
+            "ui.reason.BudgetShortfall",
+            &[
+                ("pozycja", &fixed_cost(c, l, cost)),
+                ("brakowalo", &procent_bp(i32::from(gap_permille) * 10)),
+            ],
+        ),
     }
 }
 
@@ -515,6 +571,16 @@ mod tests {
                 planned_min: 18,
                 actual_min: 31,
             },
+            DecisionReason::ModeCompared {
+                chosen: TransportMode::Bus,
+                runner_up: TransportMode::Car,
+                delta_gr: -320,
+            },
+            DecisionReason::NoParkingAtDestination { lots_searched: 4 },
+            DecisionReason::LeftBehind {
+                line: 12,
+                waited_min: 9,
+            },
             DecisionReason::ShopChosen {
                 site: magnat_core::SiteId(magnat_core::Entity::new(
                     7,
@@ -536,6 +602,29 @@ mod tests {
                 cause: RejectCause::BelowThreshold,
                 gap_permille: -140,
             },
+            DecisionReason::Repricing {
+                site: magnat_core::SiteId(magnat_core::Entity::new(
+                    7,
+                    std::num::NonZeroU32::MIN,
+                )),
+                good: magnat_core::GoodId(3),
+                driver: PriceDriver::Stock,
+                delta_bp: -450,
+            },
+            DecisionReason::CreditApproved {
+                kind: LoanKind::Consumer,
+                rate_bp: 1_200,
+                load_bp: 2_800,
+            },
+            DecisionReason::CreditRejected {
+                kind: LoanKind::WorkingCapital,
+                cause: RejectCredit::DscrTooLow,
+                margin_bp: -900,
+            },
+            DecisionReason::BudgetShortfall {
+                cost: FixedCost::Housing,
+                gap_permille: 420,
+            },
         ]
     }
 
@@ -553,8 +642,11 @@ mod tests {
                 );
             }
         }
-        // Bloki M3, M4 i M5b: 29 wariantów (Unspecified + 100..=119 + 200..=204 + 300..=302).
-        assert_eq!(wszystkie().len(), 29);
+        // Lista musi być **kompletna**, inaczej bramka nie jest bramką: po M5c mieściła
+        // 29 wariantów i nie obejmowała ani `Repricing` (303), ani trzech powodów M4c/M4d
+        // (205–207), które miały już ramiona w `describe`. Stan po M5d: Unspecified
+        // + 100..=119 + 200..=207 + 300..=306 = 36.
+        assert_eq!(wszystkie().len(), 36);
     }
 
     #[test]
@@ -581,6 +673,18 @@ mod tests {
             }
             for u in UtilityKind::ALL {
                 assert!(!utility_term(&c, l, *u).is_empty());
+            }
+            for d in PriceDriver::ALL {
+                assert!(!price_driver(&c, l, *d).is_empty());
+            }
+            for k in LoanKind::ALL {
+                assert!(!loan_kind(&c, l, *k).is_empty());
+            }
+            for r in RejectCredit::ALL {
+                assert!(!reject_credit(&c, l, *r).is_empty());
+            }
+            for f in FixedCost::ALL {
+                assert!(!fixed_cost(&c, l, *f).is_empty());
             }
             for r in RejectCause::ALL {
                 assert!(!reject_cause(&c, l, *r).is_empty());

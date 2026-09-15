@@ -1,0 +1,91 @@
+// Budżet gospodarstwa domowego: koszty stałe i wagi kopert (M5d §5.9, PRD §5.2).
+//
+// Budżetowanie jest **kopertowe**: miesięcznie odkładamy koszty stałe i oszczędności,
+// a to, co zostaje, dzieli się na koperty per kategoria zapasu (`StockCat`). Koperta
+// jest dwóch rzeczy naraz: limitem wydatku (wyczerpana podnosi próg odłożenia zakupu
+// przez `k_envelope` z `choice.ron`) i **mianownikiem członu ceny** w funkcji
+// użyteczności — bez niej `f(cena/budżet)` nie ma definicji.
+//
+// Mianownik liczy się jako `koperta / liczba zakupów w miesiącu`, a liczba zakupów
+// bierze się z **kodu, nie stąd**: to `towary w kategorii × 30 / purchase_days`.
+// Tabeli na to nie ma z rozmysłu — asortyment kategorii jest w `retail.ron`, a rytm
+// wyjść po zakupy w `choice.ron`; trzecia kopia rozjechałaby się z pierwszą zmianą.
+//
+// Ten plik stroi **balansator** (M5e) razem z `choice.ron` i `shop.ron`: udział
+// kosztów stałych decyduje o tym, ile w ogóle zostaje na konsumpcję, czyli o popycie,
+// czyli o bramkach G1–G3.
+//
+// Kwoty w groszach (00 §2), udziały w promilach.
+(
+    schema_version: 1,
+
+    // ── koszty stałe ─────────────────────────────────────────────────────────────
+    //
+    // Wszystkie trzy pozycje są w M5 **stałymi z danych** i wszystkie trzy mają
+    // nazwanego następcę: czynsz emergentny to M7/M10 (rynek nieruchomości), media
+    // to M8 (sieci przesyłowe), ubezpieczenie to M10. `LoanService` nie stoi tutaj,
+    // bo wynika z harmonogramu kredytu (WP9), a nie z tabeli.
+    fixed: (
+        // Czynsz jako udział dochodu, z podłogą: gospodarstwo bez dochodu i tak
+        // gdzieś mieszka, a zero w tej pozycji kasowałoby całą ścieżkę zaległości.
+        housing_bp_of_income: 2800,
+        housing_min_gr: 45000,
+        // Media rosną z liczbą osób, nie z dochodu.
+        utilities_gr_per_person: 9000,
+        insurance_gr: 6000,
+    ),
+
+    // ── oszczędności ─────────────────────────────────────────────────────────────
+    //
+    // `savings_target_bp = base + thrift · gain / 100` — to jest cała modulacja
+    // osobowością po stronie oszczędzania (cecha `Thrift`, PRD §5.2).
+    savings_base_bp: 200,
+    savings_thrift_gain_bp: 800,
+
+    // Cecha `Ambition` przesuwa wagę z kategorii codziennych na statusowe
+    // (`Clothing`, `Other`) — konsumpcja statusowa z PRD §5.4. Maksimum przy
+    // ambicji 100; przy 0 wagi zostają takie, jak w tabeli niżej.
+    status_shift_permille: 60,
+
+    // ── wagi kopert per typ gospodarstwa ─────────────────────────────────────────
+    //
+    // Typ **wylicza się ze składu** (`household::classify`), nie jest deklaracją:
+    // rodzina po wyprowadzce dzieci przestaje być rodziną z dziećmi w tej samej
+    // minucie, w której ostatnie z nich wychodzi, i wagi zmieniają się same.
+    //
+    // Każdy z siedmiu typów i każda z ośmiu kategorii **musi** tu być — brak wpisu
+    // jest błędem ładowania, nie cichym zerem. Suma promili per typ musi dać 1000.
+    kinds: [
+        (kind: "Single", weights: [
+            (cat: Food, w: 330), (cat: Drink, w:  90), (cat: Hygiene,  w: 70), (cat: Cleaning, w: 40),
+            (cat: Clothing, w: 130), (cat: Medicine, w: 40), (cat: Fuel, w: 150), (cat: Other, w: 150),
+        ]),
+        (kind: "Couple", weights: [
+            (cat: Food, w: 350), (cat: Drink, w:  90), (cat: Hygiene,  w: 70), (cat: Cleaning, w: 45),
+            (cat: Clothing, w: 125), (cat: Medicine, w: 45), (cat: Fuel, w: 150), (cat: Other, w: 125),
+        ]),
+        // Rodzina z dziećmi: jedzenie zjada trzynaście punktów Innych i Napojów.
+        (kind: "FamilyWithKids", weights: [
+            (cat: Food, w: 430), (cat: Drink, w:  70), (cat: Hygiene,  w: 75), (cat: Cleaning, w: 55),
+            (cat: Clothing, w: 130), (cat: Medicine, w: 45), (cat: Fuel, w: 125), (cat: Other, w:  70),
+        ]),
+        // Wielopokoleniowe: to samo co rodzina plus podwojone leki.
+        (kind: "MultiGen", weights: [
+            (cat: Food, w: 420), (cat: Drink, w:  60), (cat: Hygiene,  w: 75), (cat: Cleaning, w: 55),
+            (cat: Clothing, w: 105), (cat: Medicine, w: 90), (cat: Fuel, w: 125), (cat: Other, w:  70),
+        ]),
+        (kind: "Roommates", weights: [
+            (cat: Food, w: 340), (cat: Drink, w: 130), (cat: Hygiene,  w: 70), (cat: Cleaning, w: 40),
+            (cat: Clothing, w: 130), (cat: Medicine, w: 35), (cat: Fuel, w: 135), (cat: Other, w: 120),
+        ]),
+        (kind: "Dorm", weights: [
+            (cat: Food, w: 330), (cat: Drink, w: 150), (cat: Hygiene,  w: 70), (cat: Cleaning, w: 40),
+            (cat: Clothing, w: 130), (cat: Medicine, w: 30), (cat: Fuel, w: 100), (cat: Other, w: 150),
+        ]),
+        // Samotny senior: najwyższy udział leków w całej tabeli i najniższy odzieży.
+        (kind: "LoneSenior", weights: [
+            (cat: Food, w: 400), (cat: Drink, w:  50), (cat: Hygiene,  w: 80), (cat: Cleaning, w: 50),
+            (cat: Clothing, w:  80), (cat: Medicine, w: 160), (cat: Fuel, w: 140), (cat: Other, w: 40),
+        ]),
+    ],
+)

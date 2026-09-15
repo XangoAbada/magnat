@@ -30,7 +30,10 @@
 #![forbid(unsafe_code)]
 
 pub mod books;
+pub mod budget;
 pub mod choice;
+pub mod cpi;
+pub mod credit;
 pub mod data;
 pub mod kernel;
 pub mod ledger;
@@ -47,16 +50,29 @@ pub use books::{
     MoneySupplyLedger, ProgramId, SupplierRef, Transaction, TxError, TxId, TxJournal, TxKind,
     TxMemo,
 };
+pub use budget::{
+    budget_ref_for_need, expected_purchases, plan_budget, BudgetPlan, Envelope, HouseholdBudget,
+    HouseholdProfile,
+};
+pub use cpi::{CpiBasket, CpiTracker, IndexBp, INDEX_BASE};
+pub use credit::{
+    assess_credit, build_schedule, monthly_rate_bp, update_base_rate,
+    BaseRate, CreditDecision, Installment, Loan, LoanApplication, LoanBook,
+};
 pub use choice::{
     budget_ref_for, choose_offer, cost_term, days_bought, dominant_term, purchase_threshold,
     offer_noise, rating_of, status_fit, utility_of_offer, wanted_qty, weights_for, BuyerState,
     Candidate, Choice,
 };
-pub use data::{EconomyData, EconomyDataError, PricingParams, Range, RetailGood, RetailTable,
-    ShopCosts, SpoilageStep, ThresholdSpec, UtilityWeights, ECONOMY_SCHEMA_VERSION};
+pub use data::{
+    BankParams, BaseRateRule, BudgetParams, CpiSpec, CreditScoring, EconomyData, EconomyDataError,
+    HouseholdFixedCosts, LoanProduct, LoanProducts, PricingParams, Range, RetailGood, RetailTable,
+    ShopCosts, SpoilageStep, ThresholdSpec, UtilityWeights, ECONOMY_SCHEMA_VERSION,
+    HOUSEHOLD_KIND_COUNT,
+};
 pub use kernel::{
-    clamp_to_margin, ledger_post, next_price, next_price_full, take_cogs, LedgerError,
-    PriceBreakdown, PriceInput, StockValue, BP,
+    annuity_payment, clamp_to_margin, ledger_post, monthly_interest, next_price, next_price_full,
+    take_cogs, LedgerError, PriceBreakdown, PriceInput, StockValue, BP,
 };
 pub use ledger::{
     balance_sheet, cash_flow, close_period, income_statement, post, BalanceSheet, CashFlow,
@@ -67,7 +83,9 @@ pub use pricing::{
     ObservedElasticity, PriceController, PriceExperiment, PricePolicy, PricingCtx,
 };
 pub use tax::{NoTax, TaxEngine};
-pub use market::{Market, MarketStats, PurchaseIntent, ShopSeed};
+pub use market::{
+    Bank, HouseholdMonth, HouseholdMonthReport, Market, MarketStats, PurchaseIntent, ShopSeed,
+};
 pub use offer::{
     price_stats, query_offers, CategoryId, Offer, OfferId, OfferIndex, PriceBasis, PriceStats,
 };
@@ -80,5 +98,6 @@ pub use supply::{
     SupplyError, Wholesale, PRICE_UNIT,
 };
 pub use systems::{
-    pay_incomes, register_books, register_economy, settle_transactions, MarketSystem,
+    pay_incomes, register_books, register_economy, settle_household_month, settle_transactions,
+    MarketSystem,
 };
