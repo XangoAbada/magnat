@@ -47,9 +47,10 @@ use magnat_agents::{
     MAX_CANDIDATES,
 };
 use magnat_core::{
-    Arena, CitizenId, DecisionReason, FirmId, FixedCost, GoodId, HashState, HouseholdId, LoanKind,
-    Money, NeedKind, PlaceKind, PlaceRef, Qty, RejectCause, RejectCredit, SimMinute, SiteId,
-    StateHasher, StockCat, Tick, TraitId, WorldCoord, Q, FIXED_COST_COUNT, STOCK_CAT_COUNT,
+    Arena, CitizenId, DecisionReason, DistrictId, FirmId, FixedCost, GoodId, HashState,
+    HouseholdId, LoanKind, Money, NeedKind, PlaceKind, PlaceRef, Qty, RejectCause, RejectCredit,
+    SimMinute, SiteId, StateHasher, StockCat, Tick, TraitId, WorldCoord, FIXED_COST_COUNT, Q,
+    STOCK_CAT_COUNT,
 };
 use magnat_jobs::JobPool;
 use magnat_spatial::{GridSpec, Vec2};
@@ -57,24 +58,28 @@ use magnat_spatial::{GridSpec, Vec2};
 use crate::books::{AccountId, AccountOwner, Books, LoanId, SupplierRef, TxKind, TxMemo};
 use crate::budget::{budget_ref_for_need, plan_budget, HouseholdBudget, HouseholdProfile};
 use crate::choice::{
-    choose_offer, days_bought, dominant_term, purchase_threshold, rating_of,
-    offer_noise, utility_of_offer, wanted_qty, weights_for, BuyerState, Candidate,
+    choose_offer, days_bought, dominant_term, offer_noise, purchase_threshold, rating_of,
+    utility_of_offer, wanted_qty, weights_for, BuyerState, Candidate,
 };
 use crate::cpi::{CpiTracker, IndexBp};
 use crate::credit::{assess_credit, BaseRate, CreditDecision, LoanApplication, LoanBook};
 use crate::data::{EconomyData, UtilityWeights};
-use crate::offer::{query_offers, CategoryId, Offer, OfferId, OfferIndex, PriceBasis};
-use crate::shop::{
-    AssortmentPolicy, LostSale, LostSaleHistogram, LostSaleTracking, ReorderPolicy, Shelf,
-    ShelfLine, Shop, ShopInventory, ShopLostSales,
-};
-use crate::supply::{line_total, ExternalSupplier, GoodTable, Wholesale, PRICE_UNIT};
 use crate::kernel::BP;
 use crate::ledger::{self, JournalEntry, Ledger, LedgerAccount};
+use crate::offer::{query_offers, CategoryId, Offer, OfferId, OfferIndex, PriceBasis};
+use crate::panel::{
+    BalanceSample, CompetitorRow, CustomerStats, FinanceSummary, LostSalesView, PriceDist,
+    ShelfRow, ShopPanelSnapshot,
+};
 use crate::pricing::{
     preview_price, reprice, CompetitorEntry, CompetitorRef, CompetitorSnapshot, FirmPricing,
     PriceController, PricePolicy, PricingCtx,
 };
+use crate::shop::{
+    AssortmentPolicy, LostSale, LostSaleHistogram, LostSaleTracking, ReorderPolicy, Shelf,
+    ShelfLine, Shop, ShopCustomers, ShopInventory, ShopLostSales,
+};
+use crate::supply::{line_total, ExternalSupplier, GoodTable, Wholesale, PRICE_UNIT};
 use crate::tax::{NoTax, TaxEngine};
 
 /// Ile jednostek towaru mieści jedno miejsce na półce, ile razy tyle leży na zapleczu
@@ -114,6 +119,12 @@ pub struct PurchaseIntent {
     pub cogs: Money,
     pub arrived: Tick,
     pub reason: DecisionReason,
+    /// Dzielnica zamieszkania kupującego — „skąd" w karcie Klienci (§5.12).
+    /// Niesione intencją, bo rozliczenie ma świat, ale nie ma już decyzji,
+    /// a decyzja ma `CitizenView` i nie ma świata.
+    pub district: u16,
+    /// Status kupującego — „kto" w karcie Klienci, po przeliczeniu na klasę.
+    pub status: Q,
 }
 
 /// Decyzja zapamiętana przy planowaniu dnia i odczytana przy wizycie.
@@ -133,6 +144,9 @@ struct PlannedPurchase {
     /// Cena jednostkowa widziana w chwili decyzji — podstawa poślizgu (§5.5).
     unit_price: Money,
     good: GoodId,
+    /// Dzielnica zamieszkania — jedyna rzecz z `CitizenView`, której `fulfil`
+    /// nie ma skąd wziąć, a karta Klienci jej potrzebuje.
+    district: u16,
 }
 
 /// Liczniki rynku — wejście metryk balansatora (M5e) i raportu scenariusza.
@@ -187,6 +201,10 @@ pub struct ShopSeed {
     /// Ile linii mieści półka — z powierzchni lokalu (§7.3).
     pub shelf_slots: u16,
     pub capacity_m3: i64,
+    /// Dzielnica, w której stoi zakład. Rynek jej nie używa do niczego poza
+    /// metrykami: bramka G6 balansatora mierzy koncentrację **per dzielnica**,
+    /// a pozycja w metrach nie mówi, gdzie kończy się jedna, a zaczyna druga.
+    pub district: u16,
 }
 
 /// Bank w M5: `FirmId`, konto i funkcja `assess_credit` zamiast AI (decyzja
@@ -389,6 +407,14 @@ impl Market {
         match m.offers.get_mut(offer) {
             Some(o) => {
                 o.set_price(price);
+                // Sterownik idzie za ofertą, choć polityka i tak nadpisze cenę przy
+                // najbliższej przecenie. Powód jest taki, że **dwa źródła ceny nie
+                // mają prawa się rozjechać nawet na jedną dobę**: panel czyta jedno,
+                // decyzja zakupowa drugie, a gracz zobaczyłby wtedy inną cenę niż
+                // ta, którą płaci jego klient.
+                if let Some(pc) = m.shops[i as usize].controllers.get_mut(&good) {
+                    pc.current = price;
+                }
                 true
             }
             None => false,
@@ -419,9 +445,44 @@ impl Market {
             return Money::ZERO;
         };
         let s = &m.shops[i as usize];
-        let back: i64 = s.inventory.backroom.values().map(|l| l.cost_total.get()).sum();
+        let back: i64 = s
+            .inventory
+            .backroom
+            .values()
+            .map(|l| l.cost_total.get())
+            .sum();
         let shelf: i64 = s.shelf.lines.iter().map(|l| l.cost_total.get()).sum();
         Money(back + shelf)
+    }
+
+    /// Uchwyt oferty stojącej na półce. Testy i narzędzia potrzebują go, żeby
+    /// zbudować `PurchaseIntent` bez przechodzenia przez pełną wizytę.
+    #[must_use]
+    pub fn offer_of(&self, site: SiteId, good: GoodId) -> Option<OfferId> {
+        let m = self.lock();
+        let i = m.by_site.get(&site).copied()?;
+        m.shops[i as usize].shelf.line(good).map(|l| l.offer)
+    }
+
+    /// Szok ceny hurtowej: mnożnik w punktach bazowych (10 000 = bez zmian).
+    /// Wejście scenariusza `supply-shock` balansatora (§7.4, bramka G4).
+    pub fn set_supply_shock(&self, good: GoodId, factor_bp: i32) {
+        self.lock().supplier.set_shock(good, factor_bp);
+    }
+
+    /// `GoodId` po kluczu tekstowym z `data/economy/retail.ron` — scenariusz szoku
+    /// wskazuje towar nazwą, bo identyfikator zależy od katalogu miasta.
+    #[must_use]
+    pub fn good_of_key(&self, key: &str) -> Option<GoodId> {
+        self.lock().supplier.goods().id_of_key(key)
+    }
+
+    /// Pozycja zakładu w metrach — klient potrzebuje jej, żeby zamienić kliknięcie
+    /// w teren na sklep, bo bufor identyfikatorów renderera niesie tylko pieszych.
+    #[must_use]
+    pub fn shop_pos(&self, site: SiteId) -> Option<Vec2> {
+        let m = self.lock();
+        m.by_site.get(&site).map(|i| m.shops[*i as usize].pos)
     }
 
     #[must_use]
@@ -453,6 +514,11 @@ impl Market {
             // prowadzą **wszystkie** zakłady, okno zapisów tylko śledzone. Poziom
             // nie wchodzi do hasha, więc kliknięcie „śledź" nie zmienia świata.
             s.ledger.set_journal(level != LostSaleTracking::None);
+            // Wyłączenie śledzenia kasuje rozkłady klientów: po ponownym włączeniu
+            // gracz ma zobaczyć **swój** zasięg, a nie osad sprzed przejęcia sklepu.
+            if level == LostSaleTracking::None {
+                s.customers = ShopCustomers::default();
+            }
         }
     }
 
@@ -468,7 +534,9 @@ impl Market {
     #[must_use]
     pub fn lost_histogram(&self, site: SiteId) -> Option<LostSaleHistogram> {
         let m = self.lock();
-        m.by_site.get(&site).map(|i| m.shops[*i as usize].lost.today)
+        m.by_site
+            .get(&site)
+            .map(|i| m.shops[*i as usize].lost.today)
     }
 
     /// Stawia sklep i obsadza go asortymentem swoich kategorii.
@@ -516,6 +584,7 @@ impl Market {
             firm: seed.firm,
             account,
             pos: seed.pos,
+            district: seed.district,
             kind: seed.kind,
             hours: default_hours(seed.kind),
             inventory: ShopInventory {
@@ -532,6 +601,7 @@ impl Market {
             },
             tracking: LostSaleTracking::None,
             lost: ShopLostSales::default(),
+            customers: ShopCustomers::default(),
             sold_qty: 0,
             revenue: Money::ZERO,
             pricing: osobowosc,
@@ -663,11 +733,18 @@ impl Market {
             let mut m = self.lock();
             let rest = m.rest_of_world;
             for i in 0..m.shops.len() {
+                // **Zapas startowy to wyłożenie półki, nie pełne zaplecze.**
+                // Cel polityki jest wielokrotnością wyłożenia, a przy towarze
+                // o trzydniowym terminie ta wielokrotność to trzy doby zapasu,
+                // których w dniu zerowym **nikt jeszcze nie kupuje** — więc
+                // schodziły w całości na odpis, zanim popyt zdążył się ustalić.
+                // Zamawianie ponad wyłożenie zaczyna się od pierwszej doby,
+                // kiedy `docelowy_zapas` ma już czym mierzyć popyt.
                 let plan: Vec<(GoodId, Qty)> = m.shops[i]
                     .inventory
                     .reorder
                     .iter()
-                    .map(|(g, p)| (*g, p.target))
+                    .map(|(g, p)| (*g, Qty(p.target.get().min(SHELF_UNITS_PER_FACING))))
                     .collect();
                 let (site, account) = (m.shops[i].site, m.shops[i].account);
                 for (good, target) in plan {
@@ -675,7 +752,12 @@ impl Market {
                         continue;
                     };
                     if books
-                        .transfer(account, rest, q.total(), wholesale_memo(good, q.qty), t)
+                        .transfer(account, rest, q.total(), wholesale_memo(
+                            good,
+                            q.qty,
+                            m.supplier.goods().spec(good).map_or(StockCat::Other, |s| s.cat),
+                            0,
+                        ), t)
                         .is_err()
                     {
                         continue;
@@ -755,6 +837,12 @@ impl Market {
                 let Some(sl) = m.shops[i].shelf.line_mut(good) else {
                     continue;
                 };
+                // Ta sama reguła co w `StockLine::receive`: półka wyczerpana nie
+                // ma czego przeterminować, więc nie przenosi swojej daty na towar
+                // dołożony po opróżnieniu.
+                if sl.qty.get() <= 0 {
+                    sl.expires = None;
+                }
                 sl.qty = Qty(sl.qty.get() + take.get());
                 sl.cost_total = sl
                     .cost_total
@@ -814,7 +902,8 @@ impl Market {
                         .backroom
                         .get(g)
                         .map_or(0, |l| l.qty.get());
-                    (have < p.point.get()).then(|| (*g, Qty(p.target.get() - have)))
+                    let cel = docelowy_zapas(&m.shops[i], *g, p, m.supplier.goods(), t);
+                    (have < p.point.get().min(cel)).then(|| (*g, Qty(cel - have)))
                 })
                 .collect();
             let (site, firm, account) = (m.shops[i].site, m.shops[i].firm, m.shops[i].account);
@@ -825,7 +914,12 @@ impl Market {
                 // Sklep bez środków nie zamawia — i to jest cała „upadłość" w M5b.
                 // Prawdziwe postępowanie prowadzi M7 (`K-10`).
                 if books
-                    .transfer(account, rest, q.total(), wholesale_memo(good, q.qty), t)
+                    .transfer(account, rest, q.total(), wholesale_memo(
+                            good,
+                            q.qty,
+                            m.supplier.goods().spec(good).map_or(StockCat::Other, |s| s.cat),
+                            0,
+                        ), t)
                     .is_err()
                 {
                     continue;
@@ -1044,10 +1138,27 @@ impl Market {
         if let Some(pc) = s.controllers.get_mut(&intent.good) {
             pc.sold_today = Qty(pc.sold_today.get().saturating_add(intent.qty.get()));
         }
+        // Karta „Klienci" (§5.12). Jak histogram utraconych sprzedaży: zakład
+        // nieoznaczony nie płaci za ten mechanizm nic poza odczytem bitu.
+        if s.tracking != LostSaleTracking::None {
+            let dominant = match intent.reason {
+                DecisionReason::ShopChosen { dominant, .. } => dominant,
+                // Wizyta bez decyzji z planu dnia (mieszkaniec trafił inną ścieżką):
+                // przeważyła wygoda, bo nic innego nie było porównywane.
+                _ => magnat_core::UtilityKind::Convenience,
+            };
+            let doba = u32::try_from(intent.arrived.get() / magnat_core::time::MINUTES_PER_DAY)
+                .unwrap_or(u32::MAX);
+            s.customers.record(
+                doba,
+                intent.district,
+                magnat_agents::SocialClass::of(intent.status),
+                dominant,
+            );
+        }
         // Koszyk CPI liczy się z **cen transakcyjnych**, więc wchodzi tutaj, a nie
         // przy wystawieniu oferty: oferta, której nikt nie kupuje, nie jest ceną (§6.1).
-        m.cpi
-            .record(intent.good, intent.agreed_price, intent.qty);
+        m.cpi.record(intent.good, intent.agreed_price, intent.qty);
         // Koperta śledzi pieniądze, które wyszły — nie te, które ktoś rozważył.
         let hh = intent.household.entity().index() as usize;
         if let Some(b) = m.budgets.get_mut(hh) {
@@ -1168,7 +1279,9 @@ impl Market {
             let mut nazwani: Vec<(GoodId, SiteId)> = Vec::new();
             for (g, pc) in &m.shops[i].controllers {
                 if let PricePolicy::MatchCompetitor {
-                    radius_m, reference, ..
+                    radius_m,
+                    reference,
+                    ..
                 } = pc.policy
                 {
                     promien = promien.max(radius_m);
@@ -1359,7 +1472,8 @@ impl Market {
         let miesiac = u32::try_from(t.get() / magnat_core::time::MINUTES_PER_MONTH).unwrap_or(0);
         let mut suma = Money::ZERO;
         for i in 0..m.shops.len() {
-            let (site, konto, slots) = (m.shops[i].site, m.shops[i].account, m.shops[i].shelf.slots);
+            let (site, konto, slots) =
+                (m.shops[i].site, m.shops[i].account, m.shops[i].shelf.slots);
             let (czynsz, media, place) = koszty.monthly(slots);
             let pozycje: [(Money, TxKind, LedgerAccount); 3] = [
                 (czynsz, TxKind::Rent { site }, LedgerAccount::RentExpense),
@@ -1581,6 +1695,312 @@ impl Market {
         let i = m.by_site.get(&site).copied()?;
         Some(m.shops[i as usize].ledger.balance(account))
     }
+
+    /// Zbiorczy odczyt stanu rynku dla balansatora (§7.4) — jeden zamek na dobę.
+    ///
+    /// Liczy tu, a nie w balansatorze, z tego samego powodu, dla którego CPI liczy
+    /// `Market`, a nie narzędzie (`AA-7`): druga implementacja rozkładu cen
+    /// rozjechałaby się z pierwszą przy pierwszej zmianie i bramka mierzyłaby
+    /// własny błąd zamiast rynku.
+    #[must_use]
+    pub fn balance_sample(&self) -> BalanceSample {
+        let m = self.lock();
+
+        // ── ceny per towar ────────────────────────────────────────────────────
+        // Zbieranie idzie po `by_site` (BTreeMap), więc kolejność jest stanem,
+        // a nie przypadkiem; sortowanie i tak następuje, ale determinizm wejścia
+        // jest tańszy od dowodzenia, że sortowanie stabilne wystarczy.
+        let mut per_good: BTreeMap<u16, Vec<i64>> = BTreeMap::new();
+        let mut pustych = 0u64;
+        let mut wszystkich = 0u64;
+        let mut zywe = [false; STOCK_CAT_COUNT];
+        for i in m.by_site.values() {
+            let s = &m.shops[*i as usize];
+            for l in &s.shelf.lines {
+                let Some(o) = m.offers.get(l.offer) else {
+                    continue;
+                };
+                wszystkich += 1;
+                if o.available.get() <= 0 {
+                    pustych += 1;
+                } else if let Some(spec) = m.supplier.goods().spec(l.good) {
+                    zywe[spec.cat.as_index()] = true;
+                }
+                per_good.entry(l.good.0).or_default().push(o.unit_price.get());
+            }
+        }
+        let prices = per_good
+            .into_iter()
+            .map(|(g, mut v)| {
+                v.sort_unstable();
+                let ranga = |p: usize| v[(v.len() * p / 100).min(v.len() - 1)];
+                PriceDist {
+                    good: GoodId(g),
+                    min: Money(v[0]),
+                    p10: Money(ranga(10)),
+                    p50: Money(ranga(50)),
+                    p90: Money(ranga(90)),
+                    max: Money(v[v.len() - 1]),
+                    offers: v.len() as u32,
+                }
+            })
+            .collect();
+
+        // ── marża i wypłacalność zakładów ─────────────────────────────────────
+        let mut marze: Vec<i32> = Vec::with_capacity(m.shops.len());
+        let mut insolvent = 0u32;
+        for i in m.by_site.values() {
+            let s = &m.shops[*i as usize];
+            if s.ledger.balance(LedgerAccount::BankCurrent).get() < 0 {
+                insolvent += 1;
+            }
+            let mut suma = 0i64;
+            let mut ile = 0i64;
+            for l in &s.shelf.lines {
+                let Some(pc) = s.controllers.get(&l.good) else {
+                    continue;
+                };
+                let zaplecze = s.inventory.backroom.get(&l.good).copied().unwrap_or_default();
+                let ilosc = zaplecze.qty.get() + l.qty.get();
+                let koszt = zaplecze.cost_total.get() + l.cost_total.get();
+                let unit_cost = if ilosc > 0 && koszt > 0 {
+                    Money(koszt).mul_ratio(PRICE_UNIT, ilosc)
+                } else {
+                    m.supplier
+                        .goods()
+                        .spec(l.good)
+                        .map_or(Money::ZERO, |g| g.wholesale_base)
+                };
+                if unit_cost.get() > 0 {
+                    suma += i64::from(ShelfRow::margin_of(pc.current, unit_cost));
+                    ile += 1;
+                }
+            }
+            if ile > 0 {
+                marze.push(i32::try_from(suma / ile).unwrap_or(i32::MAX));
+            }
+        }
+        marze.sort_unstable();
+        let margin_median_bp = marze.get(marze.len() / 2).copied().unwrap_or(0);
+
+        // ── koncentracja per (kategoria, dzielnica) ───────────────────────────
+        // Udział liczy się **obrotem**, nie liczbą sklepów: dwa sklepy, z których
+        // jeden sprzedaje wszystko, to monopol, a nie duopol.
+        let mut udzialy: BTreeMap<(u8, u16), Vec<i64>> = BTreeMap::new();
+        for i in m.by_site.values() {
+            let s = &m.shops[*i as usize];
+            let mut per_cat: BTreeMap<u8, i64> = BTreeMap::new();
+            for l in &s.shelf.lines {
+                let Some(spec) = m.supplier.goods().spec(l.good) else {
+                    continue;
+                };
+                // Obrót tygodniowy jako miara udziału: stan półki mówi o dostawie,
+                // nie o tym, kto sprzedaje.
+                let obrot = s
+                    .controllers
+                    .get(&l.good)
+                    .map_or(0, |pc| pc.turnover_7d().get());
+                *per_cat.entry(spec.cat.as_index() as u8).or_insert(0) += obrot;
+            }
+            for (cat, v) in per_cat {
+                if v > 0 {
+                    udzialy.entry((cat, s.district)).or_default().push(v);
+                }
+            }
+        }
+        let mut hhi: Vec<i32> = udzialy
+            .into_values()
+            .filter(|v| v.len() >= 2)
+            .map(|v| {
+                let suma: i64 = v.iter().sum();
+                // `HHI × 10 000` na `i128`, żeby kwadrat udziału nie przepełnił `i64`.
+                let s2 = i128::from(suma) * i128::from(suma);
+                let sum_sq: i128 = v.iter().map(|x| i128::from(*x) * i128::from(*x)).sum();
+                i32::try_from(sum_sq * 10_000 / s2.max(1)).unwrap_or(10_000)
+            })
+            .collect();
+        hhi.sort_unstable();
+
+        BalanceSample {
+            prices,
+            margin_median_bp,
+            insolvent,
+            shops: m.shops.len() as u32,
+            stockout_permille: pustych
+                .saturating_mul(1_000)
+                .checked_div(wszystkich)
+                .and_then(|v| i32::try_from(v).ok())
+                .unwrap_or(0),
+            hhi_median: hhi.get(hhi.len() / 2).copied().unwrap_or(0),
+            hhi_pairs: hhi.len() as u32,
+            live_categories: zywe.iter().filter(|z| **z).count() as u32,
+        }
+    }
+
+    // ── migawka panelu (M5e §5.12) ───────────────────────────────────────────────
+
+    /// Wszystko, co pokazuje panel sklepu, w jednym odczycie pod jednym zamkiem.
+    ///
+    /// **Jedno wywołanie, nie dwadzieścia.** Panel składany z `price_at`,
+    /// `shelf_qty`, `policy_of`… brałby zamek raz na wiersz i mógłby złapać dwa
+    /// różne stany świata w jednej tabeli — cena z minuty `t` obok zapasu z `t+1`.
+    /// Migawka jest z definicji spójna, bo powstaje pod jednym zamkiem.
+    ///
+    /// `from`/`to` wyznaczają okres rachunku wyników; zwykle początek miesiąca
+    /// i chwila bieżąca.
+    #[must_use]
+    pub fn shop_panel(&self, site: SiteId, from: Tick, to: Tick) -> Option<ShopPanelSnapshot> {
+        let m = self.lock();
+        let i = m.by_site.get(&site).copied()?;
+        let s = &m.shops[i as usize];
+        let doba = u32::try_from(to.get() / magnat_core::time::MINUTES_PER_DAY).unwrap_or(0);
+
+        let mut shelves = Vec::with_capacity(s.shelf.lines.len());
+        for linia in &s.shelf.lines {
+            let good = linia.good;
+            let zaplecze = s.inventory.backroom.get(&good).copied().unwrap_or_default();
+            // Koszt własny liczy się dokładnie tak samo jak w `reprice_all`: średnia
+            // ważona zapasu, a przy pustym magazynie cena hurtowa. Inny wzór tutaj
+            // znaczyłby marżę w panelu inną niż marża, na której stoi przecena.
+            let ilosc = zaplecze.qty.get() + linia.qty.get();
+            let koszt = zaplecze.cost_total.get() + linia.cost_total.get();
+            let unit_cost = if ilosc > 0 && koszt > 0 {
+                Money(koszt).mul_ratio(PRICE_UNIT, ilosc)
+            } else {
+                m.supplier
+                    .goods()
+                    .spec(good)
+                    .map_or(Money::ZERO, |g| g.wholesale_base)
+            };
+            // Cena **z oferty**, nie ze sterownika: oferta jest jedynym nośnikiem
+            // ceny (PRD §6.1) i to ją płaci kupujący (`K-7`). Sterownik niesie
+            // politykę i obrót — rzeczy, których oferta nie zna.
+            let price = m
+                .offers
+                .get(linia.offer)
+                .map_or(Money::ZERO, |o| o.unit_price);
+            let (policy, delegated, turnover) = match s.controllers.get(&good) {
+                Some(pc) => (pc.policy, pc.delegated, pc.turnover_7d()),
+                None => (PricePolicy::Fixed { price }, false, Qty::ZERO),
+            };
+            shelves.push(ShelfRow {
+                good,
+                price,
+                unit_cost,
+                margin_bp: ShelfRow::margin_of(price, unit_cost),
+                on_shelf: linia.qty,
+                backroom: zaplecze.qty,
+                days_of_cover: ShelfRow::cover_of(Qty(ilosc), turnover),
+                turnover_7d: turnover,
+                expires_at: linia.expires,
+                policy,
+                delegated,
+            });
+        }
+
+        // Konkurencja: obraz jest prowadzony **per towar** (tak go używa przecena),
+        // a panel pokazuje go **per sklep** — tu jest ta jedna transpozycja.
+        let mut konkurenci: BTreeMap<SiteId, (Vec<(GoodId, Money)>, Tick)> = BTreeMap::new();
+        for e in s.observed.entries() {
+            let wpis = konkurenci
+                .entry(e.cheapest_site)
+                .or_insert_with(|| (Vec::new(), e.seen_at));
+            wpis.0.push((e.good, e.cheapest));
+            wpis.1 = wpis.1.min(e.seen_at);
+        }
+        let competition = konkurenci
+            .into_iter()
+            .map(|(cs, (prices, seen))| {
+                let dist = m
+                    .by_site
+                    .get(&cs)
+                    .map_or(0, |j| (m.shops[*j as usize].pos - s.pos).length() as u32);
+                CompetitorRow {
+                    site: cs,
+                    distance_m: dist,
+                    prices,
+                    observed_age_days: u8::try_from(
+                        to.get().saturating_sub(seen.get()) / magnat_core::time::MINUTES_PER_DAY,
+                    )
+                    .unwrap_or(u8::MAX),
+                }
+            })
+            .collect();
+
+        let customers = CustomerStats {
+            by_district: s
+                .customers
+                .by_district
+                .iter()
+                .map(|(d, n)| (DistrictId(*d), *n))
+                .collect(),
+            by_class: magnat_agents::SocialClass::ALL
+                .iter()
+                .map(|c| (*c, s.customers.by_class[c.as_index()]))
+                .filter(|(_, n)| *n > 0)
+                .collect(),
+            by_driver: magnat_core::UtilityKind::ALL
+                .iter()
+                .map(|u| (*u, s.customers.by_driver[u.as_index()]))
+                .filter(|(_, n)| *n > 0)
+                .collect(),
+            // Pierścień jest indeksowany dobą modulo 7; panel dostaje go obróconego
+            // tak, żeby ostatnia pozycja była dobą migawki (patrz `CustomerStats`).
+            daily: std::array::from_fn(|i| {
+                s.customers.daily[(doba as usize + 1 + i) % 7]
+            }),
+            total: s.customers.total,
+        };
+
+        let back: i64 = s
+            .inventory
+            .backroom
+            .values()
+            .map(|l| l.cost_total.get())
+            .sum();
+        let shelf: i64 = s.shelf.lines.iter().map(|l| l.cost_total.get()).sum();
+
+        Some(ShopPanelSnapshot {
+            site,
+            firm: s.firm,
+            kind: s.kind,
+            at: to,
+            tracking: s.tracking,
+            shelves,
+            customers,
+            lost_sales: LostSalesView {
+                histogram: s.lost.window(doba),
+                recent: s.lost.iter().copied().collect(),
+            },
+            competition,
+            finance: FinanceSummary {
+                statement: ledger::income_statement(&s.ledger, from, to),
+                balance: ledger::balance_sheet(&s.ledger, to),
+                cash: ledger::cash_flow(&s.ledger, from, to),
+                inventory_value: Money(back + shelf),
+                loan: s.loan,
+            },
+            reprices: s.reprice_log.clone(),
+            good_keys: {
+                let mut k: Vec<(GoodId, String)> = s
+                    .shelf
+                    .lines
+                    .iter()
+                    .map(|l| l.good)
+                    .chain(s.observed.entries().iter().map(|e| e.good))
+                    .map(|g| {
+                        (
+                            g,
+                            m.supplier.goods().key_of(g).unwrap_or_default().to_string(),
+                        )
+                    })
+                    .collect();
+                k.sort_by_key(|(g, _)| g.0);
+                k.dedup_by_key(|(g, _)| g.0);
+                k
+            },
+        })
+    }
 }
 
 /// Zapłata dostawcy z góry: pieniądz wyszedł, towar jeszcze nie przyjechał.
@@ -1589,6 +2009,75 @@ impl Market {
 /// zobowiązanie. M6 wnosi terminy płatności i saldo staje się tym, czym nazwa
 /// obiecuje; do tego czasu jedno konto niesie obie strony, bo obie są rozrachunkiem
 /// z tym samym dostawcą.
+/// Docelowy zapas zaplecza: **z popytu, nie z metrażu półki**.
+///
+/// To jest naprawa najmocniejszego pojedynczego sygnału, jaki znalazł balansator
+/// przy zamknięciu M5e: odpisy towaru przeterminowanego sięgały **piętnastokrotności
+/// obrotu**. Mechanizm był taki: `ReorderPolicy.target` stała na wielokrotności
+/// wyłożenia półki (`SHELF_UNITS_PER_FACING`), czyli na **metrażu lokalu**, a nie na
+/// tym, ile sklep sprzedaje. Osiedlowy sklep o dużej powierzchni i małym ruchu
+/// zamawiał więc dziesiątki dób sprzedaży chleba o trzydniowym terminie i odpisywał
+/// prawie wszystko. Sufit z terminu ważności (M5c) tego nie łapał, bo ograniczał
+/// **wielokrotność wyłożenia**, a nie **liczbę dób sprzedaży**.
+///
+/// Wejściem jest okno obrotu tygodniowego z `PriceController` — to samo, które panel
+/// pokazuje jako `turnover_7d`, i dokładnie ta rzecz, której M5 nie miała do M5e.
+///
+/// **Zerowy obrót znaczy dwie różne rzeczy i to jest sedno poprawki.** W sklepie
+/// świeżo otwartym znaczy „jeszcze nie wiem" — i wtedy obowiązuje polityka statyczna,
+/// bo zapas startowy musi skądś być. W sklepie działającym od tygodnia znaczy
+/// **„nikt tego u mnie nie kupuje"** — i wtedy zamówienie jest zerowe. Pierwsza
+/// wersja tej funkcji traktowała oba przypadki tak samo i nie zmieniła niczego:
+/// sklep trzyma 18 towarów, a mieszkańcy kupują kilka, więc większość par
+/// (zakład, towar) ma obrót zerowy **na stałe** i to one odpowiadały za odpisy.
+/// Półka zostaje wyłożona i widoczna (`available == 0` to „znam, nie ma" — §5.3),
+/// więc pierwszy klient, który jednak kupi, wznawia zamawianie sam.
+///
+/// Pokrycie: `lead_time + 2` doby, przycięte terminem ważności. Dwie doby zapasu
+/// ponad czas dostawy to bufor na wahania ruchu, nie model — model zapasu z kosztem
+/// braku i kosztem kapitału należy do M6 razem z realnym dostawcą.
+fn docelowy_zapas(
+    shop: &Shop,
+    good: GoodId,
+    p: &ReorderPolicy,
+    goods: &GoodTable,
+    t: Tick,
+) -> i64 {
+    let tygodniowo = shop
+        .controllers
+        .get(&good)
+        .map_or(0, |pc| pc.turnover_7d().get());
+    if tygodniowo <= 0 {
+        let wiek_dob =
+            t.get().saturating_sub(shop.opened.get()) / magnat_core::time::MINUTES_PER_DAY;
+        // Młody sklep zamawia **jedno wyłożenie**, nie pełne zaplecze: półka ma być
+        // widoczna i mieć co sprzedać, a nie nieść tygodniowy zapas towaru, o którym
+        // nikt jeszcze nie wie, czy w ogóle schodzi.
+        return if wiek_dob < 7 {
+            p.target.get().min(SHELF_UNITS_PER_FACING)
+        } else {
+            0
+        };
+    }
+    // Sklep, który **sprzedaje**, zamawia dalej wg polityki statycznej.
+    //
+    // To jest granica poprawki i warto wiedzieć, dlaczego biegnie właśnie tutaj:
+    // wersja wiążąca cel zamówienia z obrotem także dla sklepów sprzedających
+    // **odwróciła mechanizm inflacji emergentnej z WP10**. Większy popyt podnosił
+    // wtedy cel zamówienia, zapas wracał do celu, `adj_stock` w `reprice` schodził
+    // na minus i czterokrotna akcja kredytowa **obniżała** CPI zamiast go podnieść
+    // (zmierzone: 9 793 → 8 239 wobec bazy 10 000, test
+    // `wieksza_akcja_kredytowa_przy_stalej_podazy_dobr_podnosi_cpi`). Presja zapasu
+    // jest w M5 jedynym kanałem, którym pieniądz dochodzi do cen — dostawca
+    // zewnętrzny ma nieskończoną podaż po stałej cenie — więc tłumienie jej tutaj
+    // wywraca bramki G1–G3 razem z kryterium WP10.
+    //
+    // Prawdziwy sterownik zapasu z kosztem braku i kosztem kapitału należy do M6
+    // razem z realnym dostawcą; wtedy będzie też **czym** podnieść cenę hurtową.
+    let _ = (tygodniowo, goods);
+    p.target.get()
+}
+
 fn post_purchase(l: &mut Ledger, kwota: Money, t: Tick) {
     if kwota.get() <= 0 {
         return;
@@ -1633,14 +2122,21 @@ fn price_of(m: &MarketInner, site: SiteId, good: GoodId) -> Option<Money> {
     m.offers.get(line.offer).map(|o| o.unit_price)
 }
 
-fn wholesale_memo(good: GoodId, qty: Qty) -> TxMemo {
+/// Zamówienie u dostawcy **jest decyzją firmy**, więc niesie powód (PRD §14.1).
+///
+/// Powód jest ten sam, którym M3 tłumaczy wyjście gospodarstwa po zakupy
+/// (`StockBelowThreshold`), i to nie jest oszczędność na wariancie: reguła jest
+/// dosłownie ta sama po obu stronach lady — zapas spadł poniżej progu, więc
+/// uzupełniamy. `days_left` liczy się z pokrycia, czyli z tego samego, co panel
+/// pokazuje jako „dni pokrycia".
+fn wholesale_memo(good: GoodId, qty: Qty, cat: StockCat, days_left: u8) -> TxMemo {
     TxMemo::new(
         TxKind::WholesalePurchase {
             good,
             qty,
             supplier: SupplierRef::External,
         },
-        DecisionReason::Unspecified,
+        DecisionReason::StockBelowThreshold { cat, days_left },
     )
 }
 
@@ -1726,7 +2222,11 @@ impl MarketInner {
         let Some(id) = self.shops[i].loan else {
             return Money::ZERO;
         };
-        let Some(rata) = self.loans.get(id).and_then(crate::credit::Loan::next_installment) else {
+        let Some(rata) = self
+            .loans
+            .get(id)
+            .and_then(crate::credit::Loan::next_installment)
+        else {
             return Money::ZERO;
         };
         let konto = self.shops[i].account;
@@ -1740,7 +2240,10 @@ impl MarketInner {
                 },
                 DecisionReason::Unspecified,
             );
-            if books.transfer(konto, bank.account, rata.interest, memo, t).is_err() {
+            if books
+                .transfer(konto, bank.account, rata.interest, memo, t)
+                .is_err()
+            {
                 // Sklep bez środków nie płaci — zaległość, nie debet bez pokrycia.
                 if let Some(l) = self.loans.get_mut(id) {
                     l.arrears_months = l.arrears_months.saturating_add(1);
@@ -1761,10 +2264,7 @@ impl MarketInner {
             wyszlo = Money(wyszlo.get() + rata.interest.get());
         }
         if rata.principal.get() > 0 {
-            if books
-                .destroy_credit(konto, rata.principal, id, t)
-                .is_err()
-            {
+            if books.destroy_credit(konto, rata.principal, id, t).is_err() {
                 if let Some(l) = self.loans.get_mut(id) {
                     l.arrears_months = l.arrears_months.saturating_add(1);
                 }
@@ -1787,7 +2287,11 @@ impl MarketInner {
             }
             wyszlo = Money(wyszlo.get() + rata.principal.get());
         }
-        if self.loans.get(id).is_some_and(crate::credit::Loan::is_closed) {
+        if self
+            .loans
+            .get(id)
+            .is_some_and(crate::credit::Loan::is_closed)
+        {
             self.shops[i].loan = None;
         }
         wyszlo
@@ -1827,9 +2331,7 @@ impl MarketInner {
         let rzis = ledger::income_statement(&self.shops[i].ledger, od, t);
         // EBITDA to wynik **przed** amortyzacją i odsetkami — obie pozycje wracają
         // do wyniku, bo kredyt spłaca się z gotówki, a nie z zysku księgowego.
-        let ebitda = Money(
-            rzis.net_result().get() + rzis.depreciation.get() + rzis.interest.get(),
-        );
+        let ebitda = Money(rzis.net_result().get() + rzis.depreciation.get() + rzis.interest.get());
         let miesiecy = u16::try_from(
             (t.get().saturating_sub(self.shops[i].opened.get())) / crate::credit::TICKS_PER_MONTH,
         )
@@ -1860,7 +2362,7 @@ impl MarketInner {
             produkt.term_months,
             Tick(t.get() + crate::credit::TICKS_PER_MONTH),
         );
-        if books.create_credit(konto, limit, id, t).is_err() {
+        if books.create_credit(konto, limit, id, reason, t).is_err() {
             return;
         }
         let _ = ledger::post(
@@ -1916,7 +2418,11 @@ impl MarketInner {
         let Some(id) = self.budget_of(row.index).loan else {
             return Money::ZERO;
         };
-        let Some(rata) = self.loans.get(id).and_then(crate::credit::Loan::next_installment) else {
+        let Some(rata) = self
+            .loans
+            .get(id)
+            .and_then(crate::credit::Loan::next_installment)
+        else {
             return Money::ZERO;
         };
         let nalezne = Money(rata.principal.get() + rata.interest.get());
@@ -1953,7 +2459,11 @@ impl MarketInner {
         rep.installments_paid += 1;
         rep.interest_paid = Money(rep.interest_paid.get() + rata.interest.get());
         rep.principal_repaid = Money(rep.principal_repaid.get() + rata.principal.get());
-        if self.loans.get(id).is_some_and(crate::credit::Loan::is_closed) {
+        if self
+            .loans
+            .get(id)
+            .is_some_and(crate::credit::Loan::is_closed)
+        {
             if let Some(b) = self.budgets.get_mut(row.index as usize) {
                 b.loan = None;
             }
@@ -2020,7 +2530,7 @@ impl MarketInner {
         );
         // Kreacja pieniądza: depozyt powstaje na koncie banku, a stamtąd kanałem
         // sektora gospodarstw wchodzi do komponentu.
-        if books.create_credit(bank.account, limit, id, t).is_err() {
+        if books.create_credit(bank.account, limit, id, reason, t).is_err() {
             return;
         }
         let memo = TxMemo::new(TxKind::LoanDraw { loan: id }, reason);
@@ -2327,8 +2837,57 @@ impl PlaceProvider for Market {
                 .get(wybrany.offer)
                 .map_or(Money::ZERO, |o| o.unit_price),
             good: wybrany.good,
+            district: who.residence.district,
         };
         m.planned.insert(who.id.entity().index(), plan);
+
+        // ── utracona sprzedaż u tych, którzy przegrali wybór (WP12) ──────────────
+        //
+        // **To jest właściwa połowa pytania „dlaczego Anna nie kupiła u mnie".**
+        // Do tej pory pierścień zapisywał wyłącznie wizyty, które doszły do sklepu
+        // i tam się nie udały — a mieszkaniec, który porównał moją cenę z ceną
+        // konkurenta i poszedł do niego, **nigdy do mnie nie wchodzi** i nie
+        // zostawiał po sobie śladu. Scena z §1 dokumentu fazy („cena o 12 % wyższa
+        // niż w *Dobry Koszyk*, 700 m dalej") jest dokładnie tym przypadkiem, więc
+        // bez tego zapisu kryterium WP12 spełniałoby się tożsamościowo na zbiorze,
+        // który je omija. Stąd też bierze się wartość pola `went_to`, które do dziś
+        // było zawsze `None`.
+        //
+        // Koszt: jeden odczyt bitu `tracking` na kandydata (≤ 15 na decyzję),
+        // czyli tyle samo, co kosztuje pierścień w `fulfil`.
+        let dzien = u32::try_from(m.tick.get() / magnat_core::time::MINUTES_PER_DAY).unwrap_or(0);
+        for (i, c) in cand.iter().enumerate() {
+            if i == wybor || c.site == wybrany.site {
+                continue;
+            }
+            let Some(j) = m.by_site.get(&c.site).copied() else {
+                continue;
+            };
+            let poziom = m.shops[j as usize].tracking;
+            if poziom == LostSaleTracking::None {
+                continue;
+            }
+            // Powód: czym przegrał wobec zwycięzcy. Kolejność sprawdzania jest
+            // kolejnością tego, co gracz może z tym zrobić — cena najpierw, bo
+            // ją ustawia sam; jakość i odległość są własnością zakładu.
+            let cause = if c.price_total.get() > wybrany.price_total.get() {
+                RejectCause::PriceTooHigh
+            } else if c.travel_min > wybrany.travel_min {
+                RejectCause::TooFar
+            } else if c.quality.get() < wybrany.quality.get() {
+                RejectCause::QualityBelowStatus
+            } else {
+                RejectCause::BelowThreshold
+            };
+            let sale = LostSale {
+                citizen: who.id,
+                good: c.good,
+                when: m.tick,
+                cause,
+                went_to: Some(wybrany.site),
+            };
+            m.shops[j as usize].lost.record(poziom, dzien, sale);
+        }
 
         // Wybrany idzie pierwszy — planer bierze `out.first()` jako decyzję; reszta
         // malejąco po użyteczności, żeby miał czym zastąpić zamknięty sklep.
@@ -2420,7 +2979,11 @@ impl Market {
 
         // Decyzja z planu dnia. Jej brak (mieszkaniec trafił tu inną ścieżką) nie jest
         // błędem — wtedy kupujący jest „przeciętny": wagi z osobowości neutralnej.
-        let plan = m.planned.get(&who_key(req)).copied().filter(|p| p.site == site);
+        let plan = m
+            .planned
+            .get(&who_key(req))
+            .copied()
+            .filter(|p| p.site == site);
         let (w, status, openness, vot, prog, cena_z_decyzji) = match plan {
             Some(p) => (
                 p.weights,
@@ -2490,13 +3053,21 @@ impl Market {
             // Poślizg ceny (§5.5): jeśli cena ruszyła się między decyzją a wizytą
             // o więcej niż `price_slippage_bp`, próg ocenia się **ponownie** — i to
             // jest ta jedna ponowna ocena, bez rekurencji.
-            if let Some(stara) = cena_z_decyzji.filter(|c| c.get() > 0 && spec.good == plan.map_or(GoodId(u16::MAX), |p| p.good)) {
+            if let Some(stara) = cena_z_decyzji
+                .filter(|c| c.get() > 0 && spec.good == plan.map_or(GoodId(u16::MAX), |p| p.good))
+            {
                 let delta = (offer.unit_price.get() - stara.get()).abs() * 10_000 / stara.get();
                 if delta > slippage {
                     m.stats.slippage_rechecks += 1;
                 }
             }
-            let st = m.buyer_state(status, openness, vot, spec.cat, req.household.entity().index());
+            let st = m.buyer_state(
+                status,
+                openness,
+                vot,
+                spec.cat,
+                req.household.entity().index(),
+            );
             let cand = Candidate {
                 offer: line.offer,
                 site,
@@ -2552,6 +3123,8 @@ impl Market {
                 cogs: koszt_wlasny,
                 arrived: tick,
                 reason,
+                district: plan.map_or(0, |p| p.district),
+                status,
             });
             let suma = zaklepane.get().saturating_add(total.get());
             m.committed.insert(hh, Money(suma));

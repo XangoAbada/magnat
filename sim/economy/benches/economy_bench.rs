@@ -245,6 +245,7 @@ fn bench_doba_sklepu(c: &mut Criterion) {
                 kind: PlaceKind::Grocery,
                 shelf_slots: 18,
                 capacity_m3: 400,
+                district: 0,
             },
             acc,
             Tick(0),
@@ -268,6 +269,155 @@ fn bench_doba_sklepu(c: &mut Criterion) {
             black_box(market.observe_competitors(Tick(doba2 * 1_440)))
         });
     });
+
+    // ── M5e ──────────────────────────────────────────────────────────────────
+    //
+    // Dwie **nowe dobowe ścieżki**, obie mierzone osobno i obie z tego samego
+    // powodu, dla którego `observe_competitors` dostał własną linię budżetu
+    // (`X-5`): rosną z czego innego niż `reprice`. Migawka panelu rośnie
+    // z liczby linii **jednego** sklepu, a próbka balansatora z liczby
+    // **wszystkich** sklepów — i to ona jest tą, która wejdzie pod bramkę
+    // czasu profilu `ci` (8 seedów × 365 dób < 10 min).
+    market.set_tracking(sites[0], magnat_economy::LostSaleTracking::Full);
+    c.bench_function("m5e shop_panel migawka jednego sklepu", |b| {
+        b.iter(|| black_box(market.shop_panel(sites[0], Tick(0), Tick(doba2 * 1_440))));
+    });
+
+    c.bench_function("m5e balance_sample 2000 sklepów", |b| {
+        b.iter(|| black_box(market.balance_sample()));
+    });
+}
+
+/// Decyzja zakupowa **bez** podróży, które ona generuje (`U-24`).
+///
+/// Budżet §7.3 mówi o `purchase_decision`, a scenariusz `m5shop` pokazał wzrost
+/// czasu doby z 0,6 s do ~10 s po uruchomieniu zakupów. Różnica nie jest w tej
+/// funkcji — `utility_of_offer` mierzy kilkanaście nanosekund wobec budżetu 120 ns
+/// — tylko w routerze M4: każdy zakup to dwa wywołania `begin_trip`. Bramka
+/// benchmarkowa fazy **musi** to rozdzielać, inaczej czerwieni się na koszcie
+/// cudzego modułu i nikt nie wie, co naprawiać.
+///
+/// Ten benchmark woła `candidates` na rynku z **atrapą podróży**: `PlaceProvider`
+/// nie dostaje `TravelOracle` (`U-23`), więc mierzy się tu dokładnie tyle, ile
+/// kosztuje wybór oferty — zebranie kandydatów, użyteczność, softmax i zapis planu.
+fn bench_decyzja_zakupowa(c: &mut Criterion) {
+    use magnat_agents::{
+        ArrayVec, Identity, Knowledge, KnowledgeKind, KnowledgeView, NeedTable, Needs, Personality,
+        PlaceCandidate, PlaceEntry, PlaceProvider, PlaceTable, Residence, Vitals, MAX_CANDIDATES,
+    };
+    use magnat_core::{CitizenId, NeedKind, PlaceKind, PlaceRef, WorldCoord, Q};
+    use magnat_economy::{AccountKind, AccountOwner, EconomyData, GoodTable, Market, ShopSeed};
+    use std::sync::Arc;
+
+    // Tyle sklepów, ile mieści się w promieniu zapytania z `choice.ron` w mieście
+    // 150 tys. — dalsze i tak odpadają przed wyceną.
+    const SKLEPOW: u32 = 40;
+
+    let data = EconomyData::load_default().expect("data/economy/");
+    let klucze: Vec<String> = data.retail.goods.iter().map(|g| g.key.clone()).collect();
+    let goods = GoodTable::build(&data.retail, |k| {
+        let i = klucze.iter().position(|x| x == k)?;
+        Some((GoodId(i as u16), Money(200), Qty(250)))
+    });
+    let needs = Arc::new(NeedTable::load_default().expect("data/needs/"));
+    let dom = PlaceRef::Building(magnat_core::BuildingId(Entity::new(9_999, NonZeroU32::MIN)));
+    let sites: Vec<SiteId> = (0..SKLEPOW)
+        .map(|i| SiteId(Entity::new(i, NonZeroU32::MIN)))
+        .collect();
+    let mut wpisy = vec![PlaceEntry {
+        place: dom,
+        kind: PlaceKind::Home,
+        at: WorldCoord::new(0, 0, 0),
+    }];
+    wpisy.extend(sites.iter().map(|s| {
+        let p = pos_of(*s);
+        PlaceEntry {
+            place: PlaceRef::Site(*s),
+            kind: PlaceKind::Grocery,
+            at: WorldCoord::new((p.x * 100.0) as i32, (p.y * 100.0) as i32, 0),
+        }
+    }));
+    let places = Arc::new(PlaceTable::build(wpisy));
+
+    let mut books = Books::new();
+    let rest = books.open_account(
+        AccountOwner::RestOfWorld,
+        AccountKind::Current,
+        None,
+        Money::ZERO,
+    );
+    books.endow(rest, Money(1_000_000_000_000), Tick(0)).unwrap();
+    let market = Market::new(city_spec(), 7, data, goods, needs, places, rest);
+    for (i, s) in sites.iter().enumerate() {
+        let firm = FirmId(Entity::new(i as u32, NonZeroU32::MIN));
+        let acc = books.open_account(
+            AccountOwner::Firm(firm),
+            AccountKind::Current,
+            None,
+            Money::ZERO,
+        );
+        assert!(market.open_shop(
+            ShopSeed {
+                site: *s,
+                firm,
+                pos: pos_of(*s),
+                kind: PlaceKind::Grocery,
+                shelf_slots: 18,
+                capacity_m3: 400,
+                district: (i % 8) as u16,
+            },
+            acc,
+            Tick(0),
+        ));
+    }
+    market.stock_initial(&mut books, Tick(0));
+    market.rebuild_index(&JobPool::new(0));
+
+    let wiedza: Vec<Knowledge> = std::iter::once(dom)
+        .chain(sites.iter().map(|s| PlaceRef::Site(*s)))
+        .filter_map(|p| {
+            Some(Knowledge {
+                target: magnat_agents::knowledge_key(p)?,
+                day: 0,
+                score: 60,
+                kind: KnowledgeKind::Visited as u8,
+            })
+        })
+        .collect();
+    let identity = Identity::default();
+    let vitals = Vitals {
+        status: 50,
+        ..Vitals::default()
+    };
+    let mut potrzeby = Needs::default();
+    potrzeby.set(NeedKind::Hunger, Q::new(20));
+    let osobowosc = Personality([50; 8]);
+    let mieszkanie = Residence::default();
+
+    let mut i = 0u32;
+    c.bench_function("m5e decyzja zakupowa bez podróży", |b| {
+        b.iter(|| {
+            i += 1;
+            let mut out: ArrayVec<PlaceCandidate, MAX_CANDIDATES> = ArrayVec::new();
+            market.candidates(
+                NeedKind::Hunger,
+                dom,
+                60,
+                &KnowledgeView::new(&wiedza),
+                &magnat_agents::CitizenView {
+                    id: CitizenId(Entity::new(i, NonZeroU32::MIN)),
+                    identity: &identity,
+                    vitals: &vitals,
+                    needs: &potrzeby,
+                    personality: &osobowosc,
+                    residence: &mieszkanie,
+                    today: 0,
+                },
+                &mut out,
+            );
+            black_box(out.len())
+        });
+    });
 }
 
 criterion_group!(
@@ -276,6 +426,7 @@ criterion_group!(
     bench_rebuild,
     bench_transfer,
     bench_uzytecznosc,
-    bench_doba_sklepu
+    bench_doba_sklepu,
+    bench_decyzja_zakupowa
 );
 criterion_main!(benches);

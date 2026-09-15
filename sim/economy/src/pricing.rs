@@ -241,6 +241,11 @@ pub struct PriceController {
     pub sold_today: Qty,
     /// Sprzedaż poprzedniej doby — odniesienie eksperymentu.
     pub sold_yesterday: Qty,
+    /// Sprzedaż siedmiu ostatnich dób w milisztukach, pierścień indeksowany dobą
+    /// modulo 7. Panel sklepu pyta o **obrót tygodniowy** (§5.12), a eksperyment
+    /// cenowy potrzebuje wyłącznie doby bieżącej i poprzedniej — to jest cała
+    /// różnica i cały powód, dla którego to pole istnieje osobno.
+    pub week: [i32; 7],
     /// `None` = firma jeszcze nigdy nie eksperymentowała. Odróżnione od `Tick(0)`,
     /// bo inaczej żaden sklep nie ruszyłby eksperymentu przez pierwsze 30 dni świata
     /// — a to jest dokładnie okres, w którym balansator mierzy rozbieg.
@@ -259,8 +264,18 @@ impl PriceController {
             delegated: true,
             sold_today: Qty::ZERO,
             sold_yesterday: Qty::ZERO,
+            week: [0; 7],
             last_experiment: None,
         }
+    }
+}
+
+impl PriceController {
+    /// Obrót siedmiu ostatnich dób. Suma pierścienia, bo każda doba ma własny slot
+    /// i najstarsza jest nadpisywana przez dzisiejszą.
+    #[must_use]
+    pub fn turnover_7d(&self) -> Qty {
+        Qty(self.week.iter().map(|v| i64::from(*v)).sum())
     }
 }
 
@@ -292,6 +307,12 @@ pub struct PricingCtx<'a> {
 pub fn reprice(pc: &mut PriceController, ctx: &PricingCtx<'_>, t: Tick) -> Option<DecisionReason> {
     // 1. Rytm dobowy sprzedaży — wejście eksperymentu.
     pc.sold_yesterday = pc.sold_today;
+    // Domknięta doba wchodzi do pierścienia tygodnia: slot jest indeksowany numerem
+    // doby modulo 7, więc ósma doba nadpisuje pierwszą i okno zawsze ma tydzień.
+    // Panel czyta z tego `turnover_7d` (§5.12) — eksperyment cenowy nadal patrzy
+    // wyłącznie na dobę bieżącą i poprzednią.
+    let doba = (t.get() / magnat_core::time::MINUTES_PER_DAY) as usize;
+    pc.week[doba % 7] = i32::try_from(pc.sold_today.get()).unwrap_or(i32::MAX);
     pc.sold_today = Qty::ZERO;
 
     // 2. Eksperyment: domknięcie zakończonego, start nowego.
@@ -344,6 +365,7 @@ pub fn preview_price(policy: PricePolicy, pc: &PriceController, ctx: &PricingCtx
         delegated: pc.delegated,
         sold_today: pc.sold_today,
         sold_yesterday: pc.sold_yesterday,
+        week: pc.week,
         last_experiment: pc.last_experiment,
     };
     let adj_spoil = ctx.days_to_expiry.map_or(0, |d| {
@@ -371,7 +393,8 @@ fn compose(
             // rynku, nie wyborem właściciela. Gracz, który chce sprzedawać ze stratą,
             // robi to obniżając marżę minimalną, a nie omijając regułę.
             let netto = ctx.tax.net_from_gross(ctx.good, price);
-            let (p, pod, nad) = clamp_to_margin(netto, ctx.unit_cost, f.min_margin_bp, f.max_margin_bp);
+            let (p, pod, nad) =
+                clamp_to_margin(netto, ctx.unit_cost, f.min_margin_bp, f.max_margin_bp);
             (p, driver_of_clamp(pod, nad, PriceDriver::Policy))
         }
         PricePolicy::Markup { target_margin_bp } => {
@@ -490,7 +513,10 @@ fn reference_price(ctx: &PricingCtx<'_>, r: CompetitorRef) -> Option<Money> {
 /// ograniczony do ±500 bp.
 fn step_experiment(pc: &mut PriceController, ctx: &PricingCtx<'_>, t: Tick) -> i32 {
     if let Some(mut ex) = pc.experiment {
-        ex.window_units = Qty(ex.window_units.get().saturating_add(pc.sold_yesterday.get()));
+        ex.window_units = Qty(ex
+            .window_units
+            .get()
+            .saturating_add(pc.sold_yesterday.get()));
         ex.days_elapsed = ex.days_elapsed.saturating_add(1);
         if ex.days_elapsed < ex.len_days {
             pc.experiment = Some(ex);
@@ -504,8 +530,9 @@ fn step_experiment(pc: &mut PriceController, ctx: &PricingCtx<'_>, t: Tick) -> i
         if q0 > 0 && q1 > 0 {
             let dln_q = det_math::ln(q1 as f64 / q0 as f64);
             if (dln_q * 1_000.0).abs() >= f64::from(ctx.params.experiment_noise_permille) {
-                let dln_p =
-                    det_math::ln1p(f64::from(i32::from(ex.direction) * ex.magnitude_bp) / BP as f64);
+                let dln_p = det_math::ln1p(
+                    f64::from(i32::from(ex.direction) * ex.magnitude_bp) / BP as f64,
+                );
                 if dln_p.abs() > 1e-9 {
                     let e = dln_q / dln_p;
                     pc.elasticity = Some(ObservedElasticity {
@@ -632,6 +659,12 @@ impl HashState for PriceController {
         h.write_u8(u8::from(self.delegated));
         self.sold_today.hash_state(h);
         self.sold_yesterday.hash_state(h);
+        // Pierścień tygodnia **wchodzi** do hasha, choć czyta go tylko panel: jest
+        // wyprowadzony z transakcji, więc rozjazd w nim znaczy rozjazd sprzedaży —
+        // i lepiej, żeby wyszedł na hashu niż na wykresie trzy fazy później.
+        for v in self.week {
+            h.write_i64(i64::from(v));
+        }
         match self.last_experiment {
             Some(l) => {
                 h.write_u8(1);

@@ -61,6 +61,14 @@ jest gotowy (`World::register_arena_hash::<T>(ArenaKind)` w `engine/ecs`, `Arena
 w `engine/core`). Do dziś **żadna faza nie zarejestrowała ani jednej areny**, więc M5 jest
 pierwszym konsumentem tej ścieżki i pierwszym, który się dowie, czy działa.
 
+**Rozstrzygnięte w M5b przez `K-29` i tak zostaje.** `register_arena_hash::<T>(kind)` czyta
+`Arena<T>` **stojącą jako osobny zasób świata**, a arena ofert musi mieszkać wewnątrz
+`Market`, bo `PlaceProvider` nie dostaje `&World`. Wchodzi więc do hasha przez
+`impl HashState for Market` — w kolejności indeksów, ze slotami i generacjami, czyli
+co do treści dokładnie tak, jak żąda `K-16`. Zmienia się wyłącznie sekcja: „zasoby wg
+nazwy typu" zamiast „areny wg `ArenaKind`". `ArenaKind::Offers` zostaje zarezerwowane
+i niezmienne, a M6 (partie) decyduje o swojej drodze sam.
+
 ---
 
 ---
@@ -97,29 +105,55 @@ nie wybór, nie zapis księgowy. Test: ten sam scenariusz w mikro i mezo → ide
 
 ### 5.12 Panel sklepu w UI (§14.3)
 
+Kształt dostarczony (`sim/economy/src/panel.rs`) — różnice wobec pierwotnego szkicu
+są wypisane pod blokiem, bo każda ma powód, którego szkic nie mógł znać.
+
 ```rust
 pub struct ShopPanelSnapshot {
+    pub site: SiteId, pub firm: FirmId, pub kind: PlaceKind,
+    pub at: Tick,                         // chwila migawki — panel pokazuje, jak stara jest
+    pub tracking: LostSaleTracking,
     pub shelves: Vec<ShelfRow>,
     pub customers: CustomerStats,
     pub lost_sales: LostSalesView,
     pub competition: Vec<CompetitorRow>,
-    pub finance: FinanceSummary,          // RZiS bieżącego miesiąca + przepływy + stan zapasów
+    pub finance: FinanceSummary,          // RZiS bieżącego miesiąca + bilans + przepływy + zapas
+    pub reprices: Vec<DecisionReason>,    // „dlaczego wczoraj potaniało"
+    pub good_keys: Vec<(GoodId, String)>, // nazwy towarów jadą z migawką
 }
 
 pub struct ShelfRow { pub good: GoodId, pub price: Money, pub unit_cost: Money, pub margin_bp: i32,
                       pub on_shelf: Qty, pub backroom: Qty, pub days_of_cover: u16,
-                      pub turnover_7d: Qty, pub expires_in: Option<SimMinute>, pub policy: PricePolicy }
+                      pub turnover_7d: Qty, pub expires_at: Option<SimMinute>,
+                      pub policy: PricePolicy, pub delegated: bool }
 
 pub struct CustomerStats { pub by_district: Vec<(DistrictId, u32)>,   // „skąd"
                            pub by_class: Vec<(SocialClass, u32)>,     // „kto"
-                           pub by_driver: Vec<(UtilityTerm, u32)> }   // „dlaczego" — dominujący człon U
+                           pub by_driver: Vec<(UtilityKind, u32)>,    // „dlaczego" — dominujący człon U
+                           pub daily: [u32; 7],                       // spadek liczby klientów po podwyżce
+                           pub total: u32 }
 
-pub struct LostSalesView { pub histogram: LostSaleHistogram,   // zawsze dla zakładów gracza
+pub struct LostSalesView { pub histogram: LostSaleHistogram,   // suma **siedmiu dób**, nie doby
                            pub recent: Vec<LostSale> }         // 256 wpisów, tylko Full
 
 pub struct CompetitorRow { pub site: SiteId, pub distance_m: u32,
                            pub prices: Vec<(GoodId, Money)>, pub observed_age_days: u8 }
 ```
+
+Cztery różnice wobec szkicu, wszystkie wymuszone przez kryterium, a nie przez wygodę:
+
+1. **`expires_at`, nie `expires_in`.** Migawka niesie chwilę bezwzględną; „za ile" liczy
+   interfejs z `at`. Różnica przestaje być kosmetyczna w chwili, gdy panel zostaje
+   otwarty przez godzinę: pole „za ile" starzałoby się w kieszeni panelu.
+2. **`customers.daily`.** Kryterium z §1 fazy brzmi „po 3 dniach widzi spadek liczby
+   klientów", a rozkłady po dzielnicy i klasie są kumulatywne i **spadku nie pokażą**.
+   Siedem liczb, `daily[6]` to doba migawki; obrót pierścienia robi migawka, żeby
+   interfejs nie musiał znać jego kotwicy.
+3. **`lost_sales.histogram` liczy tydzień, nie dobę.** Tak brzmi kryterium WP12, a
+   `ShopLostSales.today` prowadził wyłącznie dobę bieżącą.
+4. **`good_keys` w migawce.** Bez nich interfejs musiałby trzymać `GoodTable` obok
+   i przestałby być odcięty od gospodarki — a pierwsza rozbieżność katalogów wyszłaby
+   jako pusta nazwa na ekranie.
 
 `observed_age_days` jest pokazywane wprost — gracz ma widzieć, że patrzy na dane sprzed N dni,
 tak samo jak AI. Nakładka mapy cieplnej „zasięg sklepu" (§14.2) rysowana z `customers.by_district`.
@@ -157,3 +191,22 @@ Zgodnie z `K-18`. Wpisane jest **tylko to, co wiadomo na pewno** po zamknięciu 
 | ★ | **Metryki M5d do zbierania per dzień są gotowe i nazwane**: indeks CPI, inflacja m/m i r/r, stopa bazowa, liczba kredytów, niespłacony kapitał oraz `HouseholdMonthReport` (zaplanowane budżety, zapłacone koszty stałe, oszczędności, wnioski i przyznania kredytu, niedopłaty, dopisane zaległości) | §7.4 dokumentu fazy wymienia „podaż pieniądza, sumę kredytów, stopę bazową" wśród metryk balansatora, ale nie mówił, skąd je wziąć. Teraz mówi: `HouseholdMonthReport` wraca z `settle_household_month` raz na miesiąc gry, a reszta jest odczytem z `Market` |
 | | **WP12 dostaje `Market::budget_log`** — pierścień 256 ostatnich decyzji budżetowych i kredytowych `(indeks gospodarstwa, DecisionReason)`, poza hashem stanu | To jest odpowiedź na „czemu tej rodzinie nie starczyło" i ta sama mechanika co `ShopLostSales`: okno podglądu, nie historia. Trzy nowe powody (`CreditApproved`, `CreditRejected`, `BudgetShortfall`) mają już teksty w `pl.ron` i `en.ron` oraz ramiona w `engine/ui::describe`, więc panel ma co renderować bez dokładania ani jednego klucza |
 | | **Scenariusz `m5shop` wypisuje sekcję „budżety, banki, inflacja"** i liczy niezmiennik świata **po odjęciu kreacji kredytowej netto** (`AA-2`, `Y-8`) | WP14 buduje na tym złoty plik hashy fazy. Warto wiedzieć, że różnica sumy świata nie jest już zerem z definicji: kredyt tworzy pieniądz, a rejestry ruchu M4 dalej nie mają kont (decyzja otwarta nr 16) |
+
+---
+
+## Korekty wpisane w trakcie M5e
+
+Tabela korekt podfazy. Gwiazdka = zmiana zakresu albo kryterium.
+
+| # | Korekta | Dlaczego |
+|---|---|---|
+| AD-1 ★ | **Kryterium WP12 spełniało się tożsamościowo i to była największa pomyłka tej podfazy.** „Odpowiedź dla ≥ 95 % mieszkańców, którzy w ostatnich 7 dniach byli kandydatami i nie kupili" mierzyło zbiór, w którym licznik **był** mianownikiem: pierścień `ShopLostSales` zapisywał wyłącznie wizyty, które doszły do sklepu i tam się nie udały, a mieszkaniec, który porównał ceny i poszedł do konkurenta, nie zostawiał śladu. Naprawione w `candidates`: każdy kandydat **przegrany** w sklepie śledzonym dostaje wpis z powodem i z `went_to` | Scena z §1 dokumentu fazy („cena o 12 % wyższa niż w *Dobry Koszyk*, 700 m dalej") jest **dokładnie tym przypadkiem**, więc kryterium omijało to, co obiecuje artefakt. Przy okazji pole `LostSale.went_to` przestało być zawsze `None` — istniało od M5b i nikt go nie wypełniał. Test `kazdy_kto_rozwazyl_sklep_i_nie_kupil_ma_powod` liczy teraz oba zbiory osobno: 400 wyborów, mianownik z przebiegu, próg 950 ‰ |
+| AD-2 ★ | **Odpisy towaru przeterminowanego wynosiły 15,8-krotność obrotu.** Balansator zgłosił to pierwszym przebiegiem. Trzy przyczyny, wszystkie naprawione: (a) zapas startowy brał **pełny** cel polityki zamiast jednego wyłożenia, (b) sklep dojrzały zamawiał towar, którego u niego nikt nie kupuje, (c) pusta linia zapasu dziedziczyła termin ważności towaru, którego już nie ma, więc świeża dostawa szła na odpis w dniu przyjęcia. Po naprawie: **1,8-krotność**, a marża brutto śledzonego sklepu przeszła z −181 zł na +13 530 zł | Korekta ★ po M5c przewidziała objaw („`ReorderPolicy` zamawia na 8 dni sprzedaży towar o 3-dniowym terminie") i przewidziała go **za słabo** — prawdziwy mnożnik był o rząd wielkości większy. To jest zarazem odpowiedź na pytanie, po co balansator w ogóle powstaje: żadna z tych trzech rzeczy nie łamała ani jednego testu jednostkowego i żadna nie była widoczna w przebiegu ośmiodobowym |
+| AD-3 ★ | **Wiązanie celu zamówienia z popytem odwraca mechanizm inflacji emergentnej z WP10 — i dlatego nie zostało wprowadzone dla sklepów sprzedających.** Zmierzone: czterokrotna akcja kredytowa dawała CPI 8 239 zamiast 9 793 wobec bazy 10 000, czyli **obniżała** ceny | Presja zapasu jest w M5 **jedynym** kanałem, którym pieniądz dochodzi do cen: dostawca zewnętrzny ma nieskończoną podaż po stałej cenie, więc sklep, który zawsze domawia do celu, nigdy nie podnosi ceny. Sterownik zapasu z kosztem braku należy do M6 razem z realnym dostawcą — wtedy będzie też **czym** podnieść cenę hurtową. Granica poprawki biegnie więc po „sklep, który nie sprzedaje, nie zamawia", i tylko po niej |
+| AD-4 ★ | **Bramka G9 mierzyła transakcje, a PRD §14.1 mówi o decyzjach.** 21 821 wpisów „bez powodu" na 295 385 to były czynsz, media, płace, rata kredytu, wypłata dochodu i kapitał założycielski — **zobowiązania wykonane, nie wybrane**. Bramka liczy teraz wyłącznie rodzaje transakcji, przy których ktoś wybierał, a lista jest wyczerpującym `match` bez gałęzi `_` | Dwie naprawy po stronie `sim/economy`, bo dwie ścieżki **były** decyzjami i nie miały powodu: zamówienie u dostawcy (`StockBelowThreshold` — ta sama reguła co po stronie gospodarstwa) i uruchomienie kredytu (`Books::create_credit` dostało parametr `reason`). Po obu: **0 na 282 099**. Milcząca gałąź `_ => false` zrobiłaby z G9 bramkę, która przestaje mierzyć przy pierwszej nowej ścieżce pieniądza |
+| AD-5 ★ | **`stockout_rate` z PRD §20.1 to odsetek odmów „brak towaru", nie odsetek pustych półek.** G5 czerwieniło się na 298 ‰ przy progu 150 ‰, licząc oferty z pustą półką | Różnica przestała być akademicka razem z `AD-2`: od tej podfazy dojrzały sklep **świadomie** nie zamawia towaru, którego nikt u niego nie kupuje, a jego oferta zostaje widoczna z zerowym stanem („znam, nie ma" — §5.3). Bramka liczona po półkach czerwieniłaby się na **decyzji asortymentowej**, czyli na zdrowym zachowaniu rynku. Metryka po półkach zostaje w raporcie jako `stockout_permille`, bo mówi coś prawdziwego — tylko nie to, o co pyta G5 |
+| AD-6 ★ | **Profil `ci` nie mieści się w 10 minutach przy 8 ziarnach × 365 dób i CI bierze 4 × 120.** Zmierzone: doba miasta 3 tys. mieszkańców to ~1,6 s, czyli 365 dób to ~9,7 min **na ziarno**. Pełną macierz puszcza bieg nocny | Źródło kosztu jest nazwane w `U-24` i nie leży w gospodarce: `utility_of_offer` mierzy 15 ns, cała decyzja zakupowa 0,59 µs, a każdy zakup to **dwa wywołania routera M4**. Lepiej mieć bramkę, która biegnie przy każdym pull requeście, niż zgodną z §7.4 liczbę, którą ktoś wyłączy po trzecim przekroczeniu limitu |
+| AD-7 | **Panel sklepu otwiera się raycastem w teren, nie buforem identyfikatorów.** Kryterium WP12 mówiło „przez istniejący bufor identyfikatorów z M3d" — bufor istnieje, ale niesie **wyłącznie pieszych** (korekta H-15 do M3d) | Przypadek (2) z `K-18`: API, którego kryterium używa w opisie, nie robi tego, co kryterium zakłada. Sufit jest nazwany w kodzie klienta: dwa sklepy bliżej siebie niż 25 m są nierozróżnialne kliknięciem. Zgłoszone do M11 jako zadanie dla warstwy rysującej, bo bufor identyfikatorów należy do niej |
+| AD-8 | **`m5shop --days` domyślnie 6, nie 2.** Przy dwóch dobach gospodarstwo nie schodzi z zapasu startowego (`purchase_days = 4`), więc scenariusz kończył się **własną** bramką „przez 2 dób nikt nic nie kupił" przy domyślnym wywołaniu | Ta sama klasa błędu co kryterium spełnione tożsamościowo, tylko odwrotna: domyślne wywołanie mierzyło pustą pętlę i zgłaszało to jako porażkę. Bramka CI determinizmu M5 bierze sześć dób z tego samego powodu |
+| AD-9 | **`Market::set_price` ustawia teraz także sterownik ceny.** Wcześniej zmieniał wyłącznie ofertę, więc panel (czytający sterownik) pokazywał inną cenę niż ta, którą płacił klient | Złapane przez test `migawka_panelu_pokazuje_to_samo_co_rynek`, i to jest cały powód, dla którego ten test porównuje migawkę z akcesorami rynku zamiast sprawdzać, że pola są niepuste. Migawka bierze cenę **z oferty** (`K-7`: oferta jest jedynym nośnikiem ceny), a sterownik niesie politykę i obrót |
+| AD-10 | **CI nie uruchamiało się na `push`**: wyzwalacz stał na gałęzi `main`, a gałąź główna nazywa się `master` (CLAUDE.md). Bramki działały wyłącznie na pull requestach, których w tym projekcie nie ma | Znalezione przy dokładaniu jobu balansatora. Poprawka jednoliniowa, ale konsekwencja była taka, że **żaden** commit od M0 nie przeszedł przez CI inaczej niż lokalnie |

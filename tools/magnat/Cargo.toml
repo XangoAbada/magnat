@@ -18,6 +18,13 @@ magnat-ecs = { workspace = true }
 magnat-agents = { workspace = true }
 magnat-ui = { workspace = true }
 magnat-traffic = { workspace = true }
+# Gospodarka w oknie (M5e/WP12, `AB-1`): klient buduje `Books` i `Market`, dokłada
+# `MarketSystem` do harmonogramu i podmienia `Sources.places` na rynek (`Z-1`).
+magnat-economy = { workspace = true }
+# Most „zakłady Etapu 7 → rynek detaliczny" — jedna kopia tej wiedzy dla klienta,
+# scenariusza `m5shop` i balansatora. Nazwa crate'u mówi „headless", bo tam ten most
+# powstał; co z tego wyniknie dla struktury, rozstrzyga refaktor R1.
+magnat-headless = { workspace = true }
 egui = { workspace = true }
 egui-winit = { workspace = true }
 magnat-sim-snapshot = { workspace = true }

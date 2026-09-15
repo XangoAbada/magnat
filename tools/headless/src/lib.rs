@@ -1,0 +1,21 @@
+//! `magnat-headless` jako **biblioteka** — rusztowanie scenariuszy wołane spoza
+//! własnej binarki.
+//!
+//! Wystawienie targetu bibliotecznego jest wykonaniem **decyzji otwartej nr 10**
+//! dokumentu fazy M5: balansator (`tools/balansator`, WP13) ma uruchamiać przebiegi
+//! jako funkcje, a nie parsować polski raport z wyjścia procesu. Przy okazji
+//! rozwiązuje to `AB-1`: klient graficzny stawia **tę samą** gospodarkę co scenariusz
+//! `m5shop`, zamiast przepisywać ją u siebie.
+//!
+//! Wystawione jest dokładnie to, co ma więcej niż jednego konsumenta:
+//! - [`population`] — budowa miasta M2 i Etap 8 (`zbuduj_miasto`, `swiat_agentow`,
+//!   `zaludnij`),
+//! - [`retail`] — most „zakłady Etapu 7 → rynek detaliczny" (`AB-1`).
+//!
+//! Scenariusze (`m3day`, `m5shop`, `nav`, …) zostają modułami **binarki**: mają CLI,
+//! raport i kod wyjścia, czyli wszystko to, czego biblioteka nie powinna nieść.
+
+#![forbid(unsafe_code)]
+
+pub mod population;
+pub mod retail;

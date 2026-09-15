@@ -14,6 +14,7 @@
 //! błędem (CLAUDE.md). Jedyne literały tutaj to separatory i formaty liczbowe.
 
 use crate::inspect::citizen::{CitizenCard, CitizenModel};
+use crate::inspect::shop::{ShopCard, ShopTab};
 use crate::loc::{Catalog, Locale};
 use crate::time::TimeControlsWidget;
 use magnat_core::SimSpeed;
@@ -239,6 +240,26 @@ pub fn citizen_card(ui: &mut egui::Ui, m: &CitizenModel, c: &Catalog, l: Locale)
     day_timeline(ui, m, c, l);
 }
 
+/// Panel sklepu: rząd zakładek, nagłówek, treść wybranej zakładki (M5e §5.12).
+///
+/// Zakładki są przyciskami dokładnie tak jak prędkości w [`time_bar`] — osobnej
+/// abstrakcji zakładek w tym crate nie ma i nie jest potrzebna. Treść idzie z karty
+/// w monospace: to ten sam tekst, który porównuje złoty test, więc test broni tego,
+/// co widzi gracz, a nie drugiej ścieżki obok (korekta E-8).
+pub fn shop_card(ui: &mut egui::Ui, card: &ShopCard, tab: &mut ShopTab, c: &Catalog, l: Locale) {
+    ui.horizontal(|ui| {
+        for t in ShopTab::ALL {
+            if ui.selectable_label(*tab == t, t.label(c, l)).clicked() {
+                *tab = t;
+            }
+        }
+    });
+    ui.separator();
+    ui.label(egui::RichText::new(card.render_header(c, l)).monospace());
+    ui.separator();
+    ui.label(egui::RichText::new(card.render_tab(c, l, *tab)).monospace());
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -293,6 +314,62 @@ mod tests {
                 );
             }
             assert!(!razem.contains('{'), "{l:?}: niepodstawiony parametr: {razem}");
+        }
+    }
+
+    #[test]
+    fn panel_sklepu_rysuje_zakladki_i_wybrana_tresc() {
+        let c = Catalog::load().expect("data/locale/");
+        // Karta z pustej migawki: widget ma się zbudować także wtedy, gdy sklep
+        // dopiero powstał — pusta zakładka to nie jest przypadek brzegowy, tylko
+        // pierwsza minuta każdego zakładu.
+        let s = magnat_economy::ShopPanelSnapshot {
+            site: magnat_core::SiteId(magnat_core::Entity::new(1, std::num::NonZeroU32::MIN)),
+            firm: magnat_core::FirmId(magnat_core::Entity::new(1, std::num::NonZeroU32::MIN)),
+            kind: magnat_core::PlaceKind::Grocery,
+            at: Tick(0),
+            tracking: magnat_economy::LostSaleTracking::Histogram,
+            shelves: Vec::new(),
+            customers: magnat_economy::CustomerStats::default(),
+            lost_sales: magnat_economy::LostSalesView::default(),
+            competition: Vec::new(),
+            finance: magnat_economy::FinanceSummary {
+                statement: magnat_economy::IncomeStatement::default(),
+                balance: magnat_economy::BalanceSheet::default(),
+                cash: magnat_economy::CashFlow::default(),
+                inventory_value: magnat_core::Money::ZERO,
+                loan: None,
+            },
+            reprices: Vec::new(),
+            good_keys: Vec::new(),
+        };
+        for l in Locale::ALL {
+            let card = crate::ShopCard::build(
+                &c,
+                l,
+                &crate::ShopView {
+                    snapshot: &s,
+                    kind: s.kind,
+                    period_from: Tick(0),
+                },
+            );
+            let mut tab = ShopTab::Customers;
+            let teksty = narysuj(|ui| shop_card(ui, &card, &mut tab, &c, l));
+            let razem = teksty.join(" ");
+            for t in ShopTab::ALL {
+                assert!(
+                    razem.contains(&t.label(&c, l)),
+                    "{l:?}: brak zakładki {t:?} w {razem}"
+                );
+            }
+            assert!(
+                razem.contains(&card.render_tab(&c, l, ShopTab::Customers)),
+                "{l:?}: widget rysuje inną zakładkę niż wybrana"
+            );
+            assert!(
+                !razem.contains('{'),
+                "{l:?}: niepodstawiony parametr: {razem}"
+            );
         }
     }
 }

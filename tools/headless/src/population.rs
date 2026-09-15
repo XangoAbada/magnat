@@ -14,8 +14,8 @@ use magnat_ecs::World;
 use magnat_jobs::JobPool;
 use magnat_voxel::MaterialRegistry;
 use magnat_world::{
-    generate, generate_city, generate_population, CityData, CityPlan, Difficulty, PopulationParams,
-    PopulationReport, Populated, Terrain, WorldGenParams,
+    generate, generate_city, generate_population, CityData, CityPlan, Difficulty, Populated,
+    PopulationParams, PopulationReport, Terrain, WorldGenParams,
 };
 use std::process::ExitCode;
 use std::sync::Arc;
@@ -140,8 +140,9 @@ fn ocena(r: &PopulationReport) -> Vec<String> {
 
     // `gen_jobs_filled`: |JobSlot| ≈ |aktywni| × (1 + cel), odchylenie ≤ 2 %.
     if r.active > 0 {
-        let oczekiwane =
-            u64::from(r.active) * u64::from(1000 + u32::from(r.unemployment_target_permille)) / 1000;
+        let oczekiwane = u64::from(r.active)
+            * u64::from(1000 + u32::from(r.unemployment_target_permille))
+            / 1000;
         let odchylenie =
             (i64::from(r.jobs_total) - oczekiwane as i64).abs() as f64 * 100.0 / oczekiwane as f64;
         if odchylenie > 2.0 {
@@ -191,10 +192,7 @@ fn ocena(r: &PopulationReport) -> Vec<String> {
 
     // `gen_skill_fit`: ≥ 70 % zatrudnionych ma dopasowanie ≥ 40.
     if r.skill_fit_permille < 700 {
-        zle.push(format!(
-            "gen_skill_fit: {} ‰ < 700 ‰",
-            r.skill_fit_permille
-        ));
+        zle.push(format!("gen_skill_fit: {} ‰ < 700 ‰", r.skill_fit_permille));
     }
     zle
 }

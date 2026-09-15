@@ -27,9 +27,9 @@ use magnat_jobs::JobPool;
 use std::process::ExitCode;
 use std::sync::Arc;
 
-use crate::population::{swiat_agentow, zaludnij, zbuduj_miasto};
 use magnat_agents::Trace;
 use magnat_core::{SimSpeed, Tick};
+use magnat_headless::population::{swiat_agentow, zaludnij, zbuduj_miasto};
 use magnat_traffic::{FuelLedger, TrafficNetwork, TrafficSystem, VehicleWearSystem, UL_PER_ML};
 use magnat_ui::{
     CitizenPanel, InspectorPanel, ListPicker, Selection, TimeControlsWidget, UiContext,
@@ -191,10 +191,7 @@ pub fn run(a: &M3DayArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
             sy += i64::from(c.y);
         }
         let srodek = ((sx / n as i64 / 100) as i32, (sy / n as i64 / 100) as i32);
-        zaludnione
-            .traffic
-            .micro()
-            .set_window(Some(srodek), a.micro);
+        zaludnione.traffic.micro().set_window(Some(srodek), a.micro);
         eprintln!(
             "LOD Mikro: okno {} m wokół ({}, {})",
             a.micro, srodek.0, srodek.1
@@ -301,19 +298,13 @@ pub fn run(a: &M3DayArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
     }
 
     if let Some(p) = &a.out {
-        let tekst: String = hashe
-            .iter()
-            .map(|(t, h)| format!("{t} {h}\n"))
-            .collect();
+        let tekst: String = hashe.iter().map(|(t, h)| format!("{t} {h}\n")).collect();
         std::fs::write(p, tekst)?;
         eprintln!("zapisano {} hashy do {}", hashe.len(), p.display());
     }
     if let Some(p) = &a.expect {
         let wzorzec = std::fs::read_to_string(p)?;
-        let nasz: String = hashe
-            .iter()
-            .map(|(t, h)| format!("{t} {h}\n"))
-            .collect();
+        let nasz: String = hashe.iter().map(|(t, h)| format!("{t} {h}\n")).collect();
         if wzorzec != nasz {
             let pierwsza = wzorzec
                 .lines()
@@ -337,9 +328,7 @@ pub fn run(a: &M3DayArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
         return Ok(ExitCode::FAILURE);
     }
     if !ruch_ok {
-        eprintln!(
-            "BŁĄD: podróż bez uzasadnienia — bramka 5 z §7.4 i kryterium zamknięcia M4c"
-        );
+        eprintln!("BŁĄD: podróż bez uzasadnienia — bramka 5 z §7.4 i kryterium zamknięcia M4c");
         return Ok(ExitCode::FAILURE);
     }
     if !parking_ok {
@@ -367,12 +356,14 @@ pub fn run(a: &M3DayArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
 /// referencyjnych **dla epoki**" i liczb nie podaje — podaje je tabela, a tabela
 /// jest daną, nie kodem. Zwraca `false`, gdy którykolwiek udział z niej wypadł.
 fn wybor_srodka(world: &magnat_ecs::World) -> bool {
-    use magnat_traffic::{TravelOption, TrafficServices};
+    use magnat_traffic::{TrafficServices, TravelOption};
     let services = world.resource::<TrafficServices>();
     let n = services.oracle.mode_counts();
     let suma: u64 = n.iter().sum();
-    println!("
-wybór środka transportu (WP6)");
+    println!(
+        "
+wybór środka transportu (WP6)"
+    );
     if suma == 0 {
         println!("  brak podróży — nie ma czego mierzyć");
         return true;
@@ -401,7 +392,10 @@ wybór środka transportu (WP6)");
     // Widełki obowiązują dla scenariusza odniesienia z §7.3. Mniejsze miasto ma
     // krótsze podróże i inny rozkład — i to jest poprawne, więc bramka tam milczy
     // zamiast kłamać.
-    let ludzi = world.resource::<magnat_agents::Population>().citizens().len() as u32;
+    let ludzi = world
+        .resource::<magnat_agents::Population>()
+        .citizens()
+        .len() as u32;
     let bramka = ludzi >= params.reference_population;
     let mut ok = true;
     for (i, u) in udzialy.iter().enumerate() {
@@ -441,13 +435,18 @@ wybór środka transportu (WP6)");
 fn parkingi(world: &magnat_ecs::World) -> bool {
     use magnat_traffic::{TrafficNetwork, TrafficServices};
     let services = world.resource::<TrafficServices>();
-    let na_sieci = world.resource::<TrafficNetwork>().mezo.vehicles_on_network();
+    let na_sieci = world
+        .resource::<TrafficNetwork>()
+        .mezo
+        .vehicles_on_network();
     services.oracle.with_parking(|p| {
         let zajete = p.occupied_total();
         let stoi = p.parked();
         let wolne = p.free_total();
-        println!("
-parkingi (WP7)");
+        println!(
+            "
+parkingi (WP7)"
+        );
         println!(
             "  {} parkingów, {} miejsc, zajętych {} ({},{} %)",
             p.lots().len(),
@@ -531,8 +530,10 @@ fn ruch(world: &magnat_ecs::World) -> bool {
     let net = world.resource::<TrafficNetwork>();
     let paliwo = world.resource::<FuelLedger>();
     let s = net.stats;
-    println!("
-ruch (warstwa mezo)");
+    println!(
+        "
+ruch (warstwa mezo)"
+    );
     println!(
         "  przejazdy: {} wysłane, {} zakończone, {} nieudane, {} w toku",
         s.dispatched,
@@ -670,23 +671,24 @@ fn nakladka(
     let bok = u32::from(magnat_world::city::overlay::OVERLAY_CELL_M);
     let dim = (city.plan.map_size_m().max(1) as u32 / bok).max(1);
 
-    let oracle = world.resource::<magnat_traffic::TrafficServices>().oracle.clone();
-    let raster = world
-        .resource::<TrafficOverlay>()
-        .with_front(|snap| {
-            oracle.with_road(|road| {
-                if pole.is_edge_field() {
-                    let wartosci: Vec<u16> = (0..road.edge_count())
-                        .map(|i| snap.edge_value(pole, i).clamp(0, i64::from(u16::MAX)) as u16)
-                        .collect();
-                    // Pas ma rząd wielkości jednej komórki, więc krawędź stempluje się
-                    // z promieniem 1: cieńsza linia gubi się przy skali całego miasta.
-                    rasterize_edges(road, &wartosci, dim, bok, 1)
-                } else {
-                    rasterize_points(&snap.lots, dim, bok, 1)
-                }
-            })
-        });
+    let oracle = world
+        .resource::<magnat_traffic::TrafficServices>()
+        .oracle
+        .clone();
+    let raster = world.resource::<TrafficOverlay>().with_front(|snap| {
+        oracle.with_road(|road| {
+            if pole.is_edge_field() {
+                let wartosci: Vec<u16> = (0..road.edge_count())
+                    .map(|i| snap.edge_value(pole, i).clamp(0, i64::from(u16::MAX)) as u16)
+                    .collect();
+                // Pas ma rząd wielkości jednej komórki, więc krawędź stempluje się
+                // z promieniem 1: cieńsza linia gubi się przy skali całego miasta.
+                rasterize_edges(road, &wartosci, dim, bok, 1)
+            } else {
+                rasterize_points(&snap.lots, dim, bok, 1)
+            }
+        })
+    });
 
     let mut px = vec![18u8; (dim as usize) * (dim as usize) * 3];
     let mut niepustych = 0u32;
@@ -751,8 +753,11 @@ fn karta(
     let mut ui = UiContext::new(locale.parse()?, Tick(day * 1440))?;
     ui.selection = Selection::Citizen(citizen);
     let mut panel = CitizenPanel { day, seed };
-    println!("
-── {} ──", panel.title(&ui));
+    println!(
+        "
+── {} ──",
+        panel.title(&ui)
+    );
     print!("{}", panel.build(&ui, world));
 
     // Karta inspekcji podróży (WP11) — pierwszy ekran, na którym mieszkaniec pojawia
@@ -781,7 +786,13 @@ fn karta(
     let (origin, dest, decision, ledger, plan_min) = match z_logu {
         Some(r) if r.decision.is_some() => {
             let d = r.decision.clone().expect("sprawdzone wyżej");
-            (r.origin.unwrap_or(r.dest), r.dest, d, r.ledger, r.planned_minutes)
+            (
+                r.origin.unwrap_or(r.dest),
+                r.dest,
+                d,
+                r.ledger,
+                r.planned_minutes,
+            )
         }
         _ => match oracle.last_decision(indeks) {
             Some((from, to, d)) => {

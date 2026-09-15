@@ -481,14 +481,18 @@ impl Books {
     /// własnościowym P1 — a to jest test, który ma sprawdzać **wszystkie** kanały
     /// podaży, nie te wygodne. Niezmiennik P1 trzyma się bez tej bariery, bo emisja
     /// i wpis do `MoneySupplyLedger` dzieją się w jednym wyrażeniu.
+    /// `reason` niesie **decyzję kredytową banku** (`CreditApproved`): uruchomienie
+    /// kredytu jest wyborem, a nie wykonaniem harmonogramu, więc powód jest tu
+    /// obowiązkowy (PRD §14.1). Bramka G9 balansatora liczy właśnie tę ścieżkę.
     pub fn create_credit(
         &mut self,
         to: AccountId,
         amount: Money,
         loan: LoanId,
+        reason: DecisionReason,
         t: Tick,
     ) -> Result<TxId, TxError> {
-        let memo = TxMemo::new(TxKind::LoanDraw { loan }, DecisionReason::Unspecified);
+        let memo = TxMemo::new(TxKind::LoanDraw { loan }, reason);
         self.emit(to, amount, memo, t, |s, m| {
             s.credit_created = s.credit_created.checked_add(m).ok_or(TxError::Overflow)?;
             Ok(())
@@ -840,7 +844,7 @@ mod tests {
     fn kredyt_tworzy_i_niszczy_pieniadz() {
         let mut b = Books::new();
         let a = world_account(&mut b);
-        b.create_credit(a, Money(50_000), LoanId(1), Tick(0))
+        b.create_credit(a, Money(50_000), LoanId(1), DecisionReason::Unspecified, Tick(0))
             .unwrap();
         assert_eq!(b.supply().credit_created, Money(50_000));
         assert_eq!(b.check_conservation(), Ok(()));

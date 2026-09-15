@@ -6,6 +6,17 @@ rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
 
+[lib]
+name = "magnat_headless"
+path = "src/lib.rs"
+# Testy jednostkowe nie są benchmarkami — patrz komentarz w `engine/ecs/Cargo.toml`.
+bench = false
+
+[[bin]]
+name = "magnat-headless"
+path = "src/main.rs"
+bench = false
+
 [features]
 default = []
 # Test negatywny T-D8: celowo wstrzyknięty niedeterminizm w jednym systemie.

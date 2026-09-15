@@ -32,10 +32,13 @@ use magnat_agents::{
     TravelMicroSystem,
 };
 use magnat_core::{SimSpeed, Tick};
+use magnat_economy::{LostSaleTracking, Market, MarketSystem, ShopPanelSnapshot};
 use magnat_ecs::{App, ScheduleBuilder, World};
-use magnat_traffic::{TrafficSystem, VehicleWearSystem};
+use magnat_jobs::JobPool;
 use magnat_sim_snapshot::PedestrianRecord;
+use magnat_traffic::{TrafficSystem, VehicleWearSystem};
 use magnat_ui::{CitizenPanel, Locale, Selection, UiContext};
+use magnat_ui::{ShopTab, ShopView};
 use magnat_world::{generate_population, CityData, PopulationParams};
 use std::sync::Arc;
 use winit::window::Window;
@@ -70,6 +73,17 @@ pub struct Citizens {
     /// da się otworzyć, zanim gracz w kogokolwiek kliknie.
     pokaz_karte: bool,
     ludzi: usize,
+    /// Rynek, jeśli gospodarka jest włączona. `Market` jest `Clone` i wewnętrznie
+    /// współdzielony, więc klient trzyma go **obok** świata i czyta bez `&World`.
+    market: Option<Market>,
+    /// Migawka otwartego sklepu. **Podwójne buforowanie w wersji, która tu wystarcza**:
+    /// panel czyta zawsze poprzednią migawkę, a nowa powstaje raz na godzinę gry.
+    /// Nie ma tu wyścigu do rozwiązania — symulacja i render chodzą w jednym wątku
+    /// pętli klatki — jest za to koszt: składanie migawki bierze zamek rynku, więc
+    /// robienie tego co klatkę kosztowałoby tyle, ile panel jest wart.
+    sklep: Option<ShopPanelSnapshot>,
+    zakladka: ShopTab,
+    pokaz_sklep: bool,
 }
 
 impl Citizens {
@@ -81,6 +95,7 @@ impl Citizens {
         window: &Window,
         locale: Locale,
         threads: usize,
+        economy: bool,
     ) -> Result<Citizens, Box<dyn std::error::Error>> {
         let mut world = World::new(seed);
         register(&mut world, NeedTable::load_default()?);
@@ -101,17 +116,57 @@ impl Citizens {
             eprintln!("{l}");
         }
 
-        let tabela = Arc::new(NeedTable::load_default()?);
         let oracle = zaludnione.travel_oracle();
         oracle.set_micro_window(None, 0);
-        *world.resource_mut::<AgentSources>() = AgentSources::new(
-            Box::new(InfinitePlaces::new(zaludnione.places.clone(), tabela)),
-            oracle,
-        );
+
+        // ── gospodarka w oknie (M5e/WP12, `AB-1`) ────────────────────────────────
+        //
+        // Do M5d klient wstawiał tu atrapę `InfinitePlaces` z M3, więc **cała faza M5
+        // była niewidoczna w oknie z miastem**: mieszkańcy „chodzili po zakupy" do
+        // miejsca, które zawsze miało wszystko i nic nie kosztowało. Most
+        // `retail::setup` stawia dokładnie tę samą gospodarkę co scenariusz `m5shop`
+        // i podmienia `Sources.places` na rynek (`Z-1`).
+        //
+        // `--no-economy` wraca do zachowania M3 i jest **udokumentowaną drogą
+        // wyjścia** z kosztu klatki przy `X10` (`AB-2`): zakup to dwa wywołania
+        // routera M4, więc doba z gospodarką kosztuje wielokrotnie więcej niż bez.
+        let market = if economy {
+            let r = magnat_headless::retail::setup(
+                &mut world,
+                city,
+                zaludnione.places.clone(),
+                oracle,
+                seed,
+                &JobPool::new(threads),
+            )?;
+            eprintln!(
+                "gospodarka: {} sklepów, {} ofert, wypłata startowa {} zł dla {} gospodarstw",
+                r.shops,
+                r.market.offer_count(),
+                r.incomes.1.get() / 100,
+                r.incomes.0
+            );
+            Some(r.market)
+        } else {
+            let tabela = Arc::new(NeedTable::load_default()?);
+            *world.resource_mut::<AgentSources>() = AgentSources::new(
+                Box::new(InfinitePlaces::new(zaludnione.places.clone(), tabela)),
+                oracle,
+            );
+            eprintln!("gospodarka wyłączona (--no-economy): miejsca z atrapy M3");
+            None
+        };
+
         let zasiane = bootstrap_day(&mut world, 0);
         eprintln!("kolejka zasiana: {zasiane} mieszkańców");
 
         let mut builder = ScheduleBuilder::new();
+        // `MarketSystem` **przed** pętlą doby — kolejność jest kontraktem
+        // `sim/economy` (ustawia rynkowi tick i rozlicza intencje z minuty `t−1`),
+        // a nie preferencją klienta.
+        if market.is_some() {
+            builder.add(MarketSystem::new(&world));
+        }
         builder
             .add(DayLoopSystem::new(&world))
             .add(ReplanCooldownSystem::new(&world))
@@ -145,6 +200,10 @@ impl Citizens {
         Ok(Citizens {
             ui: UiContext::new(locale, Tick(0))?,
             panel: CitizenPanel { day: 0, seed },
+            market,
+            sklep: None,
+            zakladka: ShopTab::default(),
+            pokaz_sklep: false,
             app,
             egui_ctx,
             egui_state,
@@ -237,9 +296,64 @@ impl Citizens {
         let t = self.ui.time.clock().tick();
         self.dzien = t.0 / 1440;
         self.panel.day = self.dzien;
+        self.odswiez_sklep(t, false);
         t
     }
 
+    /// Składa migawkę otwartego sklepu, jeśli minęła godzina gry albo panel właśnie
+    /// się otworzył (`wymus`). Kadencja `EveryHour` z §5.11: wszystko, co panel
+    /// pokazuje, i tak zmienia się co najwyżej raz na dobę poza stanem półki.
+    fn odswiez_sklep(&mut self, t: Tick, wymus: bool) {
+        if !self.pokaz_sklep {
+            return;
+        }
+        let (Some(m), Some(stary)) = (self.market.as_ref(), self.sklep.as_ref()) else {
+            return;
+        };
+        if !wymus && t.get() / 60 == stary.at.get() / 60 {
+            return;
+        }
+        let site = stary.site;
+        // Okres rachunku wyników to **bieżący miesiąc gry**, nie cała historia:
+        // RZiS od początku świata pokazywałby sumę, a nie to, jak sklep radzi
+        // sobie teraz — czyli nie odpowiadałby na pytanie, które gracz zadaje.
+        let od = Tick(t.get() - t.get() % magnat_core::time::MINUTES_PER_MONTH);
+        if let Some(s) = m.shop_panel(site, od, t) {
+            self.sklep = Some(s);
+        }
+    }
+
+    /// Otwiera panel sklepu stojącego najbliżej punktu trafienia.
+    ///
+    /// Bufor identyfikatorów z M3d niesie **wyłącznie pieszych** (korekta H-15 do M3:
+    /// `engine/render` nie rysuje budynków do bufora ID), więc sklep wybiera się
+    /// z promienia wokół punktu trafienia w teren — tą samą drogą, którą klient
+    /// pokazuje kartę parceli. Kiedy `engine/render` dostanie budynki w buforze ID,
+    /// to wywołanie zamieni się na odczyt `SiteId` i nic poza nim się nie zmieni.
+    pub fn select_shop(&mut self, x: f32, y: f32, promien_m: f32) -> bool {
+        let Some(m) = self.market.as_ref() else {
+            return false;
+        };
+        let cel = magnat_spatial::Vec2::new(x, y);
+        let najblizszy = m
+            .sites()
+            .into_iter()
+            .filter_map(|s| m.shop_pos(s).map(|p| (s, (p - cel).length())))
+            .filter(|(_, d)| *d <= promien_m)
+            .min_by(|a, b| a.1.total_cmp(&b.1));
+        let Some((site, _)) = najblizszy else {
+            return false;
+        };
+        // Otwarcie panelu **oznacza** zakład: to jest ta flaga, którą ustawia `game/`,
+        // a `sim/economy` tylko czyta (`U-22`). Poziom nie wchodzi do hasha, więc
+        // kliknięcie „pokaż" nie zmienia świata.
+        m.set_tracking(site, LostSaleTracking::Full);
+        let t = self.ui.time.clock().tick();
+        let od = Tick(t.get() - t.get() % magnat_core::time::MINUTES_PER_MONTH);
+        self.sklep = m.shop_panel(site, od, t);
+        self.pokaz_sklep = self.sklep.is_some();
+        self.pokaz_sklep
+    }
     /// Ustawia okno warstwy Mikro na kadr i przepisuje pieszych dla renderera.
     pub fn pedestrians(&mut self, eye: glam::DVec3) -> &[PedestrianRecord] {
         let Some(z) = self.app.world.resource::<AgentSources>().get() else {
@@ -312,9 +426,8 @@ impl Citizens {
     }
 
     pub fn select(&mut self, entity_index: u32) -> bool {
-        let lista = magnat_ui::ListPicker::new(
-            self.app.world.resource::<Population>().citizens().to_vec(),
-        );
+        let lista =
+            magnat_ui::ListPicker::new(self.app.world.resource::<Population>().citizens().to_vec());
         match lista.by_entity_index(entity_index) {
             Selection::Citizen(c) => {
                 // Dwa bufory śledzenia, bo dwie różne rzeczy: `Trace` zbiera zdarzenia
@@ -350,6 +463,23 @@ impl Citizens {
             .flatten();
         let mut wybor = None;
         let mut zamknij = false;
+        let mut zamknij_sklep = false;
+        let mut zakladka = self.zakladka;
+        // Karta powstaje **przed** domknięciem, tak samo jak karta mieszkańca:
+        // domknięcie nie może pożyczyć `self`, bo `egui_ctx` jest w środku.
+        let karta_sklepu = self.sklep.as_ref().map(|s| {
+            magnat_ui::ShopCard::build(
+                catalog,
+                locale,
+                &ShopView {
+                    snapshot: s,
+                    kind: s.kind,
+                    period_from: Tick(
+                        s.at.get() - s.at.get() % magnat_core::time::MINUTES_PER_MONTH,
+                    ),
+                },
+            )
+        });
 
         let out = self.egui_ctx.clone().run_ui(wejscie, |ui| {
             egui::Area::new(egui::Id::new("magnat.time"))
@@ -373,9 +503,26 @@ impl Citizens {
                     });
                 zamknij = !otwarte;
             }
+            if let Some(k) = karta_sklepu.as_ref() {
+                let mut otwarte = true;
+                egui::Window::new(catalog.fmt_key(locale, "ui.shop.title", &[]))
+                    .open(&mut otwarte)
+                    .default_pos(egui::pos2(500.0, 70.0))
+                    .default_size(egui::vec2(560.0, 760.0))
+                    .vscroll(true)
+                    .show(ui.ctx(), |ui| {
+                        magnat_ui::widgets::shop_card(ui, k, &mut zakladka, catalog, locale);
+                    });
+                zamknij_sklep = !otwarte;
+            }
         });
+        self.zakladka = zakladka;
         if zamknij {
             self.pokaz_karte = false;
+        }
+        if zamknij_sklep {
+            self.pokaz_sklep = false;
+            self.sklep = None;
         }
         self.egui_state
             .handle_platform_output(window, out.platform_output.clone());

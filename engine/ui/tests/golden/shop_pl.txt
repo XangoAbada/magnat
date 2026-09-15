@@ -1,0 +1,49 @@
+Sklep spożywczy nr 12 (firma 3)
+  dane z: Rok 0, 11 lutego, sobota, 17:30
+  śledzenie: pełne, ze zdarzeniami
+  Rachunek wyników od: Rok 0, 1 lutego, środa
+  przychód 12845.00 zł · koszt własny 9312.00 zł · marża brutto 3533.00 zł
+  odpisy 187.00 zł · wynik 465.00 zł
+  suma bilansowa 21628.00 zł · domknięcie 0.00 zł
+  przepływy: operacyjny 923.00 zł · inwestycyjny -400.00 zł · finansowy -128.00 zł · netto 395.00 zł
+  wartość zapasu: 4128.00 zł
+  kredyt obrotowy nr 4
+Półki:
+  chleb: 4.29 zł (koszt 3.31 zł, marża +29,6%) · półka 18 szt., zaplecze 24 szt. · pokrycie 2 dni · obrót 7 dób 112 szt.
+    polityka: dynamiczna: cel +26,0%, dolny próg +8,0%, górny próg +60,0% — delegowane · termin ważności za 2 dni
+  mleko: 3.49 zł (koszt 2.72 zł, marża +28,3%) · półka 31 szt., zaplecze 60 szt. · pokrycie 7 dni · obrót 7 dób 84 szt.
+    polityka: cena ręczna 3.49 zł — ręcznie · termin ważności za 5 dni
+  ser: 18.90 zł (koszt 14.10 zł, marża +34,0%) · półka 4 szt., zaplecze 6 szt. · pokrycie — · obrót 7 dób 0 szt.
+    polityka: dopasowanie do konkurencji -2,0% w promieniu 3000 m (najtańszy) — delegowane
+  Ostatnie przeceny:
+    zmienił cenę o +16,7% — przeważył polityka właściciela
+Klienci:
+  klienci w 7 dobach (od najstarszej): 41 · 44 · 43 · 39 · 28 · 24 · 22 · razem 241
+  Skąd przyszli:
+    dzielnica 2: 150
+    dzielnica 5: 91
+  Kto kupował:
+    klasa robotnicza: 120
+    niższa klasa średnia: 88
+    klasa wyższa: 33
+  Co przeważyło:
+    cena: 140
+    odległość: 70
+    przyzwyczajenie: 31
+  Utracone sprzedaże (7 dób):
+    nie zna tego sklepu: 0
+    brak towaru na półce: 6
+    za daleko: 2
+    cena za wysoka: 34
+    jakość nie na jego półkę: 0
+    wyczerpany budżet: 0
+    w zasięgu nie ma żadnej oferty: 0
+    nie warto było: 0
+  Ostatnie zdarzenia:
+    mleko — cena za wysoka · kupił w zakładzie 77
+    mleko — cena za wysoka · kupił w zakładzie 77
+    chleb — brak towaru na półce
+Konkurencja:
+  zakład 77 · 700 m · obraz sprzed 2 dni
+    chleb: 4.49 zł (+4,6% wobec naszej)
+    mleko: 3.07 zł (-12,0% wobec naszej)

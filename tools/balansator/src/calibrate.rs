@@ -90,7 +90,10 @@ pub fn run(a: &CalibrateArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
         }
         nowe.push((c, i_jam));
         println!("{:>12} VDF {wiersz_vdf}", c.key());
-        println!("{:>12} IDM {wiersz_idm}   rozjazd przy zapełnieniu {blad:.0} %", "");
+        println!(
+            "{:>12} IDM {wiersz_idm}   rozjazd przy zapełnieniu {blad:.0} %",
+            ""
+        );
     }
 
     println!();

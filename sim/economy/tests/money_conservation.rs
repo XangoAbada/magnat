@@ -92,7 +92,7 @@ fn p1_milion_operacji_zachowuje_sume_co_do_grosza() {
             0..=959 => b.transfer(from, to, amount, memo(), t),
             960..=974 => {
                 loan += 1;
-                b.create_credit(to, amount, LoanId(loan), t)
+                b.create_credit(to, amount, LoanId(loan), DecisionReason::Unspecified, t)
             }
             975..=989 => b.destroy_credit(from, amount, LoanId(loan.max(1)), t),
             990..=994 => b.inject_external_capital(to, amount, ExternalInvestorId(1), t),
@@ -141,7 +141,7 @@ fn nieudana_operacja_nie_zostawia_sladu() {
         Err(TxError::NonPositive)
     );
     assert_eq!(
-        b.create_credit(AccountId::OUTSIDE, Money(5), LoanId(1), Tick(0)),
+        b.create_credit(AccountId::OUTSIDE, Money(5), LoanId(1), DecisionReason::Unspecified, Tick(0)),
         Err(TxError::Unknown)
     );
     assert_eq!(
@@ -201,7 +201,7 @@ proptest! {
             let t = Tick(i as u64);
             let _ = match *op {
                 Op::Transfer(a, c, m) => b.transfer(ids[a], ids[c], Money(m), memo(), t),
-                Op::Credit(a, m) => b.create_credit(ids[a], Money(m), LoanId(1), t),
+                Op::Credit(a, m) => b.create_credit(ids[a], Money(m), LoanId(1), DecisionReason::Unspecified, t),
                 Op::Repay(a, m) => b.destroy_credit(ids[a], Money(m), LoanId(1), t),
                 Op::Inject(a, m) => b.inject_external_capital(ids[a], Money(m), ExternalInvestorId(3), t),
                 Op::Repatriate(a, m) => b.repatriate_external_capital(ids[a], Money(m), ExternalInvestorId(3), t),

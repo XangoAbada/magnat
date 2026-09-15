@@ -55,6 +55,10 @@ vocab_enum! {
     }
 }
 
+/// Liczba wymiarów oceny — rozmiar histogramu „dlaczego u mnie kupili" w panelu
+/// sklepu (M5e §5.12). Kolejność wariantów jest kontraktem tej tablicy.
+pub const UTILITY_KIND_COUNT: usize = UtilityKind::ALL.len();
+
 vocab_enum! {
     /// Środek transportu. Konsument: M3 (plan dnia), M4 (ruch), M5 (koszt dojazdu
     /// po zakupy), M8 (polityka miejska).

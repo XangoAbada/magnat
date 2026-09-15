@@ -5,3 +5,9 @@
 # Podglądy generatora — przyrząd diagnostyczny, odtwarzalny jedną komendą.
 podglad_*.png
 preview*.png
+
+# Wyniki przebiegów balansatora (M5e/WP13) — artefakt pomiaru, nie repozytorium.
+# Ciąg hashy i metryki zmieniają się przy każdym dopisaniu stanu do świata, więc
+# plik w gicie byłby zobowiązaniem do nieruszania niczego, a nie bramką.
+/runs/
+/runs-*/

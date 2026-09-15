@@ -14,40 +14,21 @@
 //! 3. **determinizm** — hash stanu świata co `hash-every` ticków.
 
 use std::process::ExitCode;
-use std::sync::Arc;
 
 use clap::Args;
 use magnat_agents::{
-    bootstrap_day, register_day, society, AgentSources, DayLoopSystem, DayStats,
-    DeprivationEffectsSystem, HouseholdStockSystem, NeedDecaySystem, NeedTable,
-    NoInheritance, Population, ReplanCooldownSystem, SkillDriftSystem, SocietySystem,
+    bootstrap_day, register_day, society, DayLoopSystem, DayStats, DeprivationEffectsSystem,
+    HouseholdStockSystem, NeedDecaySystem, NoInheritance, Population, ReplanCooldownSystem,
+    SkillDriftSystem, SocietySystem,
 };
-use magnat_core::{DecisionReason, Money, PlaceKind, Qty, RejectCause, SiteId, StockCat, Tick};
+use magnat_core::{DecisionReason, Money, RejectCause, StockCat, Tick};
+use magnat_economy::{Books, LedgerAccount, MarketSystem};
 use magnat_ecs::{App, ScheduleBuilder};
-use magnat_economy::{
-    AccountKind, AccountOwner, Books, EconomyData, GoodTable, LedgerAccount, Market, MarketSystem,
-    ShopSeed, TxKind, TxMemo,
-};
+use magnat_headless::population::{swiat_agentow, zaludnij, zbuduj_miasto};
+use magnat_headless::retail;
 use magnat_io::world_state_hash;
 use magnat_jobs::JobPool;
-use magnat_spatial::{Aabb2, GridSpec, Vec2};
 use magnat_traffic::{FareLedger, FuelLedger, TrafficSystem};
-use magnat_world::{population::SITE_KEY_BASE, CityData};
-
-use crate::population::{swiat_agentow, zaludnij, zbuduj_miasto};
-
-/// Kapitał obrotowy sklepu na starcie. `ponytail:` stała zamiast modelu kapitału —
-/// sufit nazwany: sklep, który ma za mało, po prostu nie zamawia. Kapitał zakładany
-/// przez właściciela wnosi M7 razem z zakładaniem firm.
-/// Kapitał banku miasta. Bank w M5 nie zbiera depozytów jako źródła akcji
-/// kredytowej — kreacja pieniądza idzie przez `Books::create_credit` — ale musi
-/// mieć konto, bo przez nie przechodzi każdy grosz kapitału i odsetek.
-const KAPITAL_BANKU: i64 = 5_000_000_000;
-
-const KAPITAL_SKLEPU: i64 = 40_000_000;
-
-/// Ile metrów kwadratowych lokalu przypada na jedną linię asortymentu.
-const M2_NA_LINIE: u32 = 18;
 
 #[derive(Args, Debug)]
 pub struct M5ShopArgs {
@@ -71,7 +52,13 @@ pub struct M5ShopArgs {
     pub threads: usize,
 
     /// Ile dób gry przebiec.
-    #[arg(long, default_value_t = 2)]
+    ///
+    /// Sześć, nie dwie: gospodarstwo startuje z pełnym zapasem, a `purchase_days`
+    /// z `choice.ron` wynosi cztery, więc przez pierwsze cztery doby **nikt nie
+    /// wychodzi po zakupy** i bramka scenariusza „nikt nic nie kupił" zapalała się
+    /// przy domyślnym wywołaniu. Domyślna wartość ma pokazywać to, co scenariusz
+    /// obiecuje, a nie pustą pętlę.
+    #[arg(long, default_value_t = 6)]
     pub days: u16,
 
     /// Docelowa liczba mieszkańców; 0 = z pojemności miasta.
@@ -81,111 +68,20 @@ pub struct M5ShopArgs {
     /// Co ile ticków liczyć hash stanu; 0 = nie liczyć.
     #[arg(long, default_value_t = 1440)]
     pub hash_every: u64,
-}
 
-/// Klucz epoki, po którym `data/chains/needs.ron` indeksuje koszyk.
-fn koszyk_epoki(epoch: &str) -> &'static str {
-    match epoch {
-        "1950" | "1970" => "postwar",
-        "2010" | "2020" => "contemporary",
-        _ => "transition",
-    }
-}
+    /// Zapis ciągu hashy: „<tick> <hash>" po jednym w linii.
+    ///
+    /// Razem z `--expect` jest to bramka determinizmu fazy M5 (§7.2): CI puszcza
+    /// ten sam seed dwa razy z różną liczbą wątków i porównuje ciągi. **Złotego
+    /// pliku w repozytorium nie ma i nie będzie** — wartość hasha zmienia się przy
+    /// każdym dopisaniu stanu do świata, więc plik zatwierdzony w gicie byłby
+    /// zobowiązaniem do nieruszania niczego, a nie bramką.
+    #[arg(long)]
+    pub out: Option<std::path::PathBuf>,
 
-/// Złączenie `data/goods/` (cena hurtowa), `data/economy/retail.ron` (kategoria,
-/// trwałość, narzut) i koszyka epoki (zużycie na osobę na dobę).
-///
-/// Robi je **wołający**, bo `GoodId` nadaje katalog M2 i tylko on zna kolejność
-/// kluczy tekstowych; `sim/economy` nie zna schematu `data/goods/` i nie musi.
-fn katalog_detaliczny(city: &CityData, data: &EconomyData) -> GoodTable {
-    GoodTable::build(&data.retail, |key| {
-        let id = city.catalog.good_id(key)?;
-        let base = city.catalog.good(id).external_base_price?;
-        let dobowe = city
-            .catalog
-            .basket
-            .iter()
-            .find(|(g, _)| *g == id)
-            .map(|(_, g)| *g)?;
-        Some((id, base, Qty(dobowe)))
-    })
-}
-
-/// Siatka indeksu ofert pokrywająca miasto.
-fn siatka(city: &CityData) -> GridSpec {
-    let mut min = Vec2::new(f32::MAX, f32::MAX);
-    let mut max = Vec2::new(f32::MIN, f32::MIN);
-    for b in &city.buildings.buildings {
-        min = Vec2::new(min.x.min(b.aabb.min.x), min.y.min(b.aabb.min.y));
-        max = Vec2::new(max.x.max(b.aabb.max.x), max.y.max(b.aabb.max.y));
-    }
-    if min.x > max.x {
-        min = Vec2::ZERO;
-        max = Vec2::new(1_000.0, 1_000.0);
-    }
-    GridSpec::covering(Aabb2::new(min, max), 200)
-}
-
-/// Stawia sklepy tam, gdzie Etap 7 postawił zakłady handlowe.
-fn obsadz_sklepy(city: &CityData, market: &Market, books: &mut Books, rest: magnat_economy::AccountId) -> usize {
-    let mut ile = 0;
-    for (i, s) in city.sites.sites.iter().enumerate() {
-        let Some(kind) = city.site_catalog.get(s.archetype).spec.place_kind else {
-            continue;
-        };
-        if !matches!(kind, PlaceKind::Grocery | PlaceKind::Pharmacy | PlaceKind::Clothing) {
-            continue;
-        }
-        let b = &city.buildings.buildings[s.building.0.index() as usize];
-        let pos = Vec2::new(
-            (b.aabb.min.x + b.aabb.max.x) / 2.0,
-            (b.aabb.min.y + b.aabb.max.y) / 2.0,
-        );
-        let powierzchnia: u32 = city.buildings.units[s.units.start as usize..s.units.end as usize]
-            .iter()
-            .map(|u| u32::from(u.area_m2))
-            .sum();
-        let firm = s.firm;
-        let konto = books.open_account(
-            AccountOwner::Firm(firm),
-            AccountKind::Current,
-            None,
-            Money::ZERO,
-        );
-        // Kapitał obrotowy jest **przelewem** z reszty świata, nie emisją: pieniądz
-        // sklepu musi mieć skąd pochodzić, inaczej niezmiennik P1 przestaje cokolwiek
-        // znaczyć już w pierwszym ticku.
-        if books
-            .transfer(
-                rest,
-                konto,
-                Money(KAPITAL_SKLEPU),
-                TxMemo::new(TxKind::Endowment, magnat_core::DecisionReason::Unspecified),
-                Tick(0),
-            )
-            .is_err()
-        {
-            continue;
-        }
-        let seed = ShopSeed {
-            site: SiteId(magnat_core::Entity::new(
-                SITE_KEY_BASE + i as u32,
-                std::num::NonZeroU32::MIN,
-            )),
-            firm,
-            pos,
-            kind,
-            shelf_slots: (powierzchnia / M2_NA_LINIE).clamp(2, 40) as u16,
-            capacity_m3: i64::from(powierzchnia) * 3,
-        };
-        if market.open_shop(seed, konto, Tick(0)) {
-            // Kapitał obrotowy musi trafić także do księgi zakładu (M5c §5.8),
-            // inaczej `BankCurrent` od pierwszej minuty nie zgadza się z rachunkiem.
-            market.record_capital(seed.site, Money(KAPITAL_SKLEPU), Tick(0));
-            ile += 1;
-        }
-    }
-    ile
+    /// Porównanie z zapisanym ciągiem; różnica → kod wyjścia 1 i wskazanie ticku.
+    #[arg(long)]
+    pub expect: Option<std::path::PathBuf>,
 }
 
 /// Suma pieniądza w świecie: księgi, komponenty i rejestry, które jeszcze nie mają konta.
@@ -252,58 +148,21 @@ pub fn run(a: &M5ShopArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
     );
 
     // ── gospodarka ───────────────────────────────────────────────────────────────
-    let data = EconomyData::load_default()?;
-    let _ = koszyk_epoki(&a.epoch);
-    let goods = katalog_detaliczny(&city, &data);
-    eprintln!("katalog detaliczny: {} towarów", goods.len());
-    let tabela = Arc::new(NeedTable::load_default()?);
-
-    let mut books = Books::new();
-    let rest = books.open_account(
-        AccountOwner::RestOfWorld,
-        AccountKind::Current,
-        None,
-        Money::ZERO,
-    );
-    books.endow(rest, Money(10_000_000_000), Tick(0))?;
-
-    let market = Market::new(
-        siatka(&city),
-        a.seed,
-        data,
-        goods,
-        tabela,
+    // Most `retail::setup` stawia rynek i podmienia `Sources.places` (`Z-1`).
+    // Ten sam kod stawia gospodarkę w kliencie graficznym i w balansatorze —
+    // scenariusz nie ma **własnej** gospodarki, bo wtedy mierzyłby inną niż gra.
+    let r = retail::setup(
+        &mut world,
+        &city,
         zaludnione.places.clone(),
-        rest,
-    );
-    let sklepow = obsadz_sklepy(&city, &market, &mut books, rest);
-    // Bank miasta (M5d §5.10, decyzja otwarta nr 7): `FirmId`, konto i kapitał,
-    // a jego „AI" to `assess_credit`. Bez tego wywołania każdy wniosek kredytowy
-    // kończy się `RejectCredit::NoLender` — i to jest właściwe zachowanie, bo
-    // miasto bez banku nie daje kredytu.
-    let bank_firm = magnat_core::FirmId(magnat_core::Entity::new(
-        u32::MAX - 1,
-        std::num::NonZeroU32::MIN,
-    ));
-    let konto_banku = books.open_account(
-        AccountOwner::Bank(bank_firm),
-        AccountKind::Current,
-        None,
-        Money::ZERO,
-    );
-    books.transfer(
-        rest,
-        konto_banku,
-        Money(KAPITAL_BANKU),
-        TxMemo::new(TxKind::Endowment, DecisionReason::Unspecified),
-        Tick(0),
+        zaludnione.travel_oracle(),
+        a.seed,
+        &pool,
     )?;
-    market.open_bank(bank_firm, konto_banku);
-
-    market.stock_initial(&mut books, Tick(0));
-    market.rebuild_index(&pool);
+    let market = r.market.clone();
     eprintln!(
-        "rynek: {sklepow} sklepów, {} ofert, zapas startowy za {} zł",
+        "rynek: {} sklepów, {} ofert, zapas startowy za {} zł",
+        r.shops,
         market.offer_count(),
         market
             .sites()
@@ -312,44 +171,21 @@ pub fn run(a: &M5ShopArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
             .sum::<i64>()
             / 100
     );
-    if sklepow == 0 {
+    if r.shops == 0 {
         eprintln!("BRAK SKLEPÓW — scenariusz nie ma czego pokazać");
         return Ok(ExitCode::FAILURE);
     }
-
-    world.insert_resource(books);
-    world.insert_resource(market.clone());
-    world.register_resource_hash::<Books>();
-    world.register_resource_hash::<Market>();
-
-    // **To jest cała podmiana z `Z-1`**: rynek zamiast atrapy miejsc.
-    *world.resource_mut::<AgentSources>() = AgentSources::new(
-        Box::new(market.clone()),
-        zaludnione.travel_oracle(),
-    );
-
-    // Pierwsza wypłata przed startem doby: gospodarstwa z generacji mają saldo zero,
-    // a pensja wpada dopiero na granicy miesiąca. Bez tego dzień 1 jest dniem,
-    // w którym nikogo nie stać na chleb.
-    let (ilu, pensje) = magnat_economy::pay_incomes(&mut world, &market, Tick(0));
-    eprintln!("wypłata startowa: {ilu} gospodarstw, {} zł", pensje.get() / 100);
-
-    // Pierwszy budżet w tej samej chwili co pierwsza wypłata (M5d/WP8). Bez tego
-    // gospodarstwa przez trzydzieści dób nie mają kopert, mianownik członu ceny
-    // stoi na stałej z `choice.ron`, a scenariusz krótszy niż miesiąc nie pokazuje
-    // ani jednej decyzji budżetowej — czyli mierzy M5b, a nie M5d.
-    let budzety = magnat_economy::settle_household_month(
-        &mut world,
-        &market,
-        Tick(0),
-        &mut Vec::new(),
+    eprintln!(
+        "wypłata startowa: {} gospodarstw, {} zł",
+        r.incomes.0,
+        r.incomes.1.get() / 100
     );
     eprintln!(
         "budżety startowe: {} gospodarstw, koszty stałe {} zł, {} wniosków kredytowych ({} przyznanych)",
-        budzety.planned,
-        budzety.fixed_paid.get() / 100,
-        budzety.credit_applications,
-        budzety.credit_granted
+        r.budgets.planned,
+        r.budgets.fixed_paid.get() / 100,
+        r.budgets.credit_applications,
+        r.budgets.credit_granted
     );
 
     let zaplanowanych = bootstrap_day(&mut world, 0);
@@ -376,9 +212,9 @@ pub fn run(a: &M5ShopArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
 
     let mut app = App::new(world, schedule, a.threads);
     let pieniadz_start = pieniadz_swiata(&app.world);
-    let kredyt_start = app.world
-        .get_resource::<Books>()
-        .map_or(0, |b| b.supply().credit_created.get() - b.supply().credit_repaid.get());
+    let kredyt_start = app.world.get_resource::<Books>().map_or(0, |b| {
+        b.supply().credit_created.get() - b.supply().credit_repaid.get()
+    });
 
     let ticki = u64::from(a.days) * 1440;
     let bieg = std::time::Instant::now();
@@ -472,12 +308,16 @@ pub fn run(a: &M5ShopArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
         "CPI {},{:02} (baza 100,00){}{}",
         market.cpi_index_bp() / 100,
         market.cpi_index_bp() % 100,
-        market
-            .cpi_mom_bp()
-            .map_or(String::new(), |v| format!(", m/m {:+},{:02} %", v / 100, (v % 100).abs())),
-        market
-            .cpi_yoy_bp()
-            .map_or(String::new(), |v| format!(", r/r {:+},{:02} %", v / 100, (v % 100).abs()))
+        market.cpi_mom_bp().map_or(String::new(), |v| format!(
+            ", m/m {:+},{:02} %",
+            v / 100,
+            (v % 100).abs()
+        )),
+        market.cpi_yoy_bp().map_or(String::new(), |v| format!(
+            ", r/r {:+},{:02} %",
+            v / 100,
+            (v % 100).abs()
+        ))
     );
     // Okno decyzji budżetowych: to jest odpowiedź na „czemu tej rodzinie nie starczyło".
     let log = market.budget_log();
@@ -512,7 +352,10 @@ pub fn run(a: &M5ShopArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
     let mut bilans_ok = true;
     if let Some(site) = market.sites().first().copied() {
         market.set_tracking(site, magnat_economy::LostSaleTracking::Full);
-        println!("── sklep {} ─────────────────────────────────────────", site.entity().index());
+        println!(
+            "── sklep {} ─────────────────────────────────────────",
+            site.entity().index()
+        );
         println!(
             "wartość zapasu {} zł, konto {} zł, czujność na konkurencję {} dni",
             market.inventory_value(site).get() / 100,
@@ -576,7 +419,10 @@ pub fn run(a: &M5ShopArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
             let ks = market
                 .ledger_balance(site, LedgerAccount::BankCurrent)
                 .unwrap_or(Money::ZERO);
-            println!("konto w księdze vs rachunek: różnica {} gr", ks.get() - rachunek.get());
+            println!(
+                "konto w księdze vs rachunek: różnica {} gr",
+                ks.get() - rachunek.get()
+            );
             bilans_ok &= ks == rachunek;
         }
         for r in market.reprice_log(site).iter().take(5) {
@@ -586,6 +432,30 @@ pub fn run(a: &M5ShopArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
 
     for (t, h) in &hashe {
         println!("hash {t:>7}: {h}");
+    }
+
+    let mut hashe_ok = true;
+    if let Some(p) = &a.out {
+        let tekst: String = hashe.iter().map(|(t, h)| format!("{t} {h}\n")).collect();
+        std::fs::write(p, tekst)?;
+        eprintln!("zapisano {} hashy do {}", hashe.len(), p.display());
+    }
+    if let Some(p) = &a.expect {
+        let wzorzec = std::fs::read_to_string(p)?;
+        let nasz: String = hashe.iter().map(|(t, h)| format!("{t} {h}\n")).collect();
+        if wzorzec == nasz {
+            eprintln!("ciąg {} hashy zgodny z wzorcem", hashe.len());
+        } else {
+            let pierwsza = wzorzec
+                .lines()
+                .zip(nasz.lines())
+                .find(|(a, b)| a != b)
+                .map_or("(inna długość ciągu)".to_string(), |(a, b)| {
+                    format!("oczekiwano `{a}`, jest `{b}`")
+                });
+            eprintln!("BŁĄD: ciąg hashy się rozjechał — {pierwsza}");
+            hashe_ok = false;
+        }
     }
 
     // Bramką jest to, czego M5 jest właścicielem: niezmiennik P1 w księgach
@@ -616,7 +486,7 @@ pub fn run(a: &M5ShopArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
         eprintln!("BŁĄD: księgowość sklepu nie domyka się co do grosza");
     }
     let _ = StockCat::Food;
-    Ok(if zgadza_sie && sprzedano && bilans_ok {
+    Ok(if zgadza_sie && sprzedano && bilans_ok && hashe_ok {
         ExitCode::SUCCESS
     } else {
         ExitCode::FAILURE

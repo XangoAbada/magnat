@@ -48,6 +48,24 @@ pub enum SocialClass {
 }
 
 impl SocialClass {
+    /// Wszystkie klasy od najniższej. Kolejność jest kontraktem: indeksuje tablicę
+    /// „kto u mnie kupuje" w panelu sklepu (M5e §5.12), tak samo jak `RejectCause`
+    /// indeksuje histogram utraconych sprzedaży.
+    pub const ALL: [SocialClass; 6] = [
+        SocialClass::Lower,
+        SocialClass::Working,
+        SocialClass::LowerMiddle,
+        SocialClass::UpperMiddle,
+        SocialClass::Upper,
+        SocialClass::Elite,
+    ];
+
+    /// Indeks w [`SocialClass::ALL`].
+    #[must_use]
+    pub const fn as_index(self) -> usize {
+        self as usize
+    }
+
     /// Granice z §5.8: 0–15, 16–33, 34–52, 53–72, 73–89, 90–100.
     #[must_use]
     pub const fn of(status: Q) -> SocialClass {
@@ -73,6 +91,9 @@ impl SocialClass {
         }
     }
 }
+
+/// Liczba klas społecznych — rozmiar tablicy „kto u mnie kupuje" (M5e §5.12).
+pub const SOCIAL_CLASS_COUNT: usize = SocialClass::ALL.len();
 
 /// To, czego funkcja statusu potrzebuje o mieście, a `sim/agents` nie ma skąd wziąć.
 ///
@@ -348,7 +369,9 @@ pub fn step_month(world: &mut World, day: u64) -> StatusReport {
             skill_in_role: world
                 .get::<Skills>(*e)
                 .map_or(Q::MIN, |s| s.level_in(emp.role)),
-            district: world.get::<Household>(*e).map_or(id.birth_district, |h| h.district),
+            district: world
+                .get::<Household>(*e)
+                .map_or(id.birth_district, |h| h.district),
             parents_status: status_rodzicow(world, *e),
             age_years: id.age_years(day as i32),
         };
@@ -548,7 +571,11 @@ fn kontakty(
     let mut nowe: ArrayVec<(u32, u8, u8, u8), 16> = ArrayVec::new();
     if let Some(s) = site {
         let grupa = world.resource::<SocialIndex>().coworkers(s);
-        for kto in bliscy(grupa, e.index(), params.close_contacts).as_slice().iter().copied() {
+        for kto in bliscy(grupa, e.index(), params.close_contacts)
+            .as_slice()
+            .iter()
+            .copied()
+        {
             nowe.push((
                 kto,
                 RelationKind::Colleague as u8,
@@ -560,7 +587,11 @@ fn kontakty(
     if let Some(b) = building {
         let kwartal = world.resource::<CityFacts>().block(b);
         let grupa = world.resource::<SocialIndex>().neighbours(kwartal);
-        for kto in bliscy(grupa, e.index(), params.close_contacts).as_slice().iter().copied() {
+        for kto in bliscy(grupa, e.index(), params.close_contacts)
+            .as_slice()
+            .iter()
+            .copied()
+        {
             nowe.push((
                 kto,
                 RelationKind::Neighbour as u8,
@@ -883,15 +914,13 @@ pub fn learn_place(
 /// Czy mieszkaniec zna to miejsce.
 #[must_use]
 pub fn knows_place(world: &World, citizen: Entity, target: u32) -> bool {
-    world
-        .get::<KnowledgeRef>(citizen)
-        .is_some_and(|kref| {
-            world
-                .resource::<KnowledgeSlab>()
-                .entries(demography::knowledge_ref(kref))
-                .iter()
-                .any(|k| k.target == target)
-        })
+    world.get::<KnowledgeRef>(citizen).is_some_and(|kref| {
+        world
+            .resource::<KnowledgeSlab>()
+            .entries(demography::knowledge_ref(kref))
+            .iter()
+            .any(|k| k.target == target)
+    })
 }
 
 /// Ilu mieszkańców zna to miejsce i ilu jest w ogóle (§5.7).

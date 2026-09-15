@@ -371,3 +371,13 @@ faza nie jest tu przeprojektowywana. Gwiazdka = zmiana zakresu albo kryterium.
 | T-4 | **Pasażer nie ma własnego rekordu w zrzucie** — jedzie w bryle kursu. Gracz nie zobaczy, ile osób siedzi w autobusie, dopóki M11 nie doda wnętrz | Sufit nazwany komentarzem `ponytail:` w `sim/traffic::micro`. Ścieżka wyjścia: pole obłożenia w `VehicleRecord` albo osobna tablica pasażerów, obie po stronie `sim/snapshot` |
 | T-5 | **Nakładki ruchu są danymi, nie shaderem**: pięć wpisów w `data/ui/overlays.ron` (`traffic_flow`, `congestion`, `isochrone`, `parking_occupancy`, `transit_load`) plus podwójnie buforowany `TrafficOverlay` w `sim/traffic` | Klient i podgląd `headless m3day --overlay` czytają **tę samą** tabelę i tę samą funkcję rastrującą, więc nakładkę da się sprawdzić w CI bez GPU. M11 dokłada styl i legendę na ekranie, a nie drugi zestaw progów. Reguła palety obowiązuje każdą nową nakładkę i pilnuje jej test `kazda_nakladka_ma_palete_monotoniczna_w_jasnosci` |
 | T-6 | **Zrzut 3 tys. pojazdów kosztuje 4,3 µs, 5 tys. pieszych 5,0 µs** (`m4d-2 zrzut` w `benches/baseline.json`) | Budżet §7.3 M4 dawał na to 0,8 ms/klatkę; zapas jest trzyrzędowy, więc M11 może w tym rekordzie **rosnąć**. Wąskim gardłem jest rysowanie, nie kopia |
+
+---
+
+## Zmiany wpisane po M5e
+
+Zgodnie z `K-18`. Jedna rzecz, ale twarda.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| ★ | **Bufor identyfikatorów w `engine/render` niesie wyłącznie pieszych i to zaczyna blokować fazy.** M5e otwiera panel sklepu **raycastem w teren** i szuka zakładu w promieniu 25 m od punktu trafienia (`Citizens::select_shop`), bo `Renderer::pick()` nie ma czym zwrócić budynku ani zakładu. M9 potrzebuje tego samego dla każdego klikalnego obiektu paneli biznesowych | Dwa sklepy bliżej siebie niż 25 m są dziś nierozróżnialne kliknięciem — wygrywa bliższy, i to jest sufit nazwany w kodzie klienta. To nie jest problem M5 ani M9: **bufor identyfikatorów należy do warstwy rysującej**, czyli do M11 (właściciel `engine/render` po M1). Zapisane teraz, bo to jest ta klasa braku, którą inaczej odkrywa się jako „dlaczego kliknięcie w wieżowiec otwiera sklep spożywczy z parteru sąsiedniego budynku" — w tygodniu domknięcia cudzej fazy. Zakres: `BuildingId` i `SiteId` w buforze obok `CitizenId`, plus wariant w `magnat_ui::Selection` |

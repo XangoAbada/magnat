@@ -155,6 +155,7 @@ pub fn bench(seed: u64, pos: &[Vec2]) -> Bench {
                 kind: PlaceKind::Grocery,
                 shelf_slots: 4,
                 capacity_m3: 200,
+                district: i as u16,
             },
             acc,
             Tick(0),

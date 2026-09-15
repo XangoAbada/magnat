@@ -111,7 +111,7 @@ dopiero po ostatniej podfazie; podfaza zamyka się własnym kryterium ze swojego
 | **M5b — Sklep i zakup** `[x]` | WP3, WP4, WP5 | 5.3, 5.4, 5.5, 5.7 | Mieszkaniec wychodzi po chleb, wybiera ofertę i wraca; pieniądz i sztuki zgadzają się po obu stronach. | `M5b-sklep-i-zakup.md` |
 | **M5c — Ceny i księgowość** `[x]` | WP6, WP7, WP11 | 5.6, 5.8 | Sklep AI podnosi cenę przy niedoborze i obniża przy zaleganiu; rachunek wyników i bilans domykają się co do grosza. | `M5c-ceny-i-ksiegowosc.md` |
 | **M5d — Budżety, banki, inflacja** `[x]` | WP8, WP9, WP10 | 5.9, 5.10 | Inflacja emergentna: koszyk CPI liczony z transakcji świata, stopa bazowa reagująca na niego bez ręcznego sterowania. | `M5d-budzety-banki-inflacja.md` |
-| **M5e — Panel, balansator, domknięcie** | WP12, WP13, WP14 | 5.11, 5.12 | Pełny artefakt fazy z §1 dokumentu fazy: otwórz sklep, ustal ceny, obserwuj klientów; balansator w CI. | `M5e-panel-balansator-domkniecie.md` |
+| **M5e — Panel, balansator, domknięcie** `[x]` | WP12, WP13, WP14 | 5.11, 5.12 | Pełny artefakt fazy z §1 dokumentu fazy: otwórz sklep, ustal ceny, obserwuj klientów; balansator w CI. | `M5e-panel-balansator-domkniecie.md` |
 
 ---
 
@@ -301,7 +301,10 @@ osobnym refaktorem na końcu.
 | `purchase_decision` — cała doba (≈450 tys. decyzji × ≤15 kandydatów) | < 900 ms CPU łącznie, ≤ 3 ms na tick minutowy w szczycie |
 | `settle_transactions` (tick szczytowy, ≈2 tys. intencji) | < 1,5 ms (sekwencyjny — to jest górna granica, patrz ryzyko R3) |
 | `reprice` dla 2 tys. sklepów × 40 towarów | < 40 ms raz na dobę (**zmierzone 1,11 ms** przy 18 towarach katalogu M5) |
-| `observe_competitors` — pełne odświeżenie obrazu konkurencji 2 tys. sklepów | < 40 ms (ścieżka dopisana po M5c; **zmierzone 27,4 ms** przy promieniu 1 200 m) |
+| `observe_competitors` — pełne odświeżenie obrazu konkurencji 2 tys. sklepów | < 40 ms (ścieżka dopisana po M5c; **zmierzone 30,1 ms** przy promieniu 1 200 m) |
+| `candidates` — **cała decyzja zakupowa bez podróży**, 40 sklepów w promieniu (`U-24`) | **zmierzone 0,59 µs**; to jest liczba, którą §7.3 miał rozdzielić od kosztu routera M4 — sama decyzja mieści się w budżecie z ogromnym zapasem, a 10 s doby w scenariuszu idzie z dwóch `begin_trip` na zakup |
+| `Market::shop_panel` — migawka panelu jednego sklepu (M5e §5.12) | **zmierzone 1,73 µs**; panel jest darmowy w skali klatki, kadencja `EveryHour` jest zapasem, nie koniecznością |
+| `Market::balance_sample` — dobowa próbka balansatora, 2 tys. sklepów | **zmierzone 0,78 ms**; przy 365 dobach to 0,29 s na przebieg, czyli poniżej szumu wobec budżetu profilu `ci` |
 | Pamięć: `Offer` | **≤ 56 B** (skorygowane po M5a, `U-5`); `ShopLostSales` ≤ 256 wpisów × 16 B na sklep |
 
 Zero alokacji w `gather_candidates` i `utility_of_offer` (bufory wielokrotnego użytku) — weryfikowane
@@ -326,16 +329,25 @@ podaż pieniądza, suma kredytów, stopa bazowa, rozkład zaspokojenia potrzeb.
 | **G1 Stabilność cen** | §20.1 „inflacja roczna −5…+15% w 95% seedów" | w ≥ 95% seedów inflacja r/r ∈ ⟨−5%, +15%⟩ w każdym miesiącu od 12. miesiąca (rozbieg wyłączony) |
 | **G2 Brak hiperinflacji** | §20.1, §16.5 | żaden seed: brak miesiąca z inflacją m/m > 10%; brak `CPI_t / CPI_{t−90d} > 1,5` |
 | **G3 Brak spirali deflacji** | §16.5 | żaden seed: brak 6 kolejnych miesięcy ze spadkiem CPI; mediana marży sklepów nie schodzi poniżej `min_margin_bp` w > 5% dni |
-| **G4 Reaktywność szoku podaży** | §20.1 „widoczny w 2–7 dni, wygaszony w 2–8 tygodni" | scenariusz `supply-shock` (cena hurtowa wskazanego towaru +80% w dniu 180): mediana ceny detalicznej pokrywa ≥ 50% szoku w przedziale **2–7 dni** (`t_response`) i stabilizuje się w ±10% nowego poziomu w przedziale **14–56 dni** (`t_settle`). Zbyt szybko = też fail (rynek bez tarcia, sprzeczne z opóźnieniem obserwacji 1–7 dni) |
+| **G4 Reaktywność szoku podaży** | §20.1 „widoczny w 2–7 dni, wygaszony w 2–8 tygodni" | scenariusz `supply-shock` (cena hurtowa wskazanego towaru +80% w dniu 180): mediana ceny detalicznej pokrywa ≥ 50% szoku w przedziale **2–7 dni** (`t_response`) i stabilizuje się w ±10% nowego poziomu w przedziale **14–56 dni** (`t_settle`). Zbyt szybko = też fail (rynek bez tarcia, sprzeczne z opóźnieniem obserwacji 1–7 dni). **Bramka doradcza do czasu M6** — zmierzone w M5e: odpowiedź 2 doby (zielone), stabilizacja 5 dób wobec 14–56, bo tarcie wnosi rynek B2B, nie detal (decyzja otwarta nr 17) |
 | **G5 Rynek nie wymiera** | §16.5 | ≥ 1 aktywna oferta w każdej kategorii w 100% dni; mediana `deferral_rate` < 25%; `stockout_rate` < 15% |
 | **G6 Brak monopolizacji z kalibracji** | §6.4 (softmax, nie argmax) | HHI per kategoria per dzielnica < 0,6 w medianie seedów — chroni przed zjechaniem temperatury softmaxu do zera |
 | **G7 Zachowanie pieniądza** | dok. 00 §6 | każdy przebieg kończy P1 zielono, 0 groszy |
 | **G8 Determinizm** | dok. 00 §3 | dwa przebiegi seeda 0 → identyczny ciąg hashy |
 | **G9 Wyjaśnialność** | §20.1 „100% decyzji" | 0 decyzji bez `DecisionReason` w próbce 10⁵ |
 
-Profile: **ci** (PR) = 8 seedów × 365 dni, bramki G1–G3, G5, G7–G9, budżet czasu < 10 min.
-**nightly** = 32 seedy × 730 dni, wszystkie bramki + scenariusze szokowe + raport Markdown z wykresami
-(analiza w Pythonie, zgodnie z §20.4 — Python zostaje w narzędziach).
+Profile: **ci** (PR) = bramki G1–G3, G5, G7–G9, budżet czasu < 10 min.
+**nightly** = wszystkie bramki + cztery scenariusze + raport Markdown.
+
+**Korekta po M5e (`AD-6`):** macierz profilu `ci` to **4 seedy × 120 dni**, nie 8 × 365.
+Zmierzone na tym repozytorium: doba miasta 3 tys. mieszkańców to ~1,6 s, czyli rok gry
+to ~9,7 min **na jeden seed** — osiem seedów nie zmieści się w dziesięciu minutach
+niezależnie od równoległości. Źródło kosztu nazywa `U-24` i **nie leży w gospodarce**:
+`utility_of_offer` mierzy 15 ns, cała decyzja zakupowa 0,59 µs, a każdy zakup to dwa
+wywołania routera M4. Pełną macierz (8 × 365 × cztery scenariusze) puszcza bieg nocny.
+Raport Markdown generuje **Rust, nie Python**: bez wykresów, tabelami — §20.4 dopuszcza
+Pythona w narzędziach, ale dopóki raport jest tabelą, druga technologia w łańcuchu CI
+kosztuje więcej, niż daje.
 
 Test bramki (meta-test, uruchamiany raz): celowe usunięcie dolnego ogranicznika ceny w `reprice`
 musi zaczerwienić G3. Bramka, która nigdy nie świeci na czerwono, nie jest bramką.
@@ -484,7 +496,20 @@ dopasowania zamiast drugiego (M7).
    zakupu butów to nie to samo), przy normalizacji wag `Σ|w| = 1` zapewniającej wspólną skalę U.*
    Rozstrzygnięcie zależy od kalibracji balansatorem — do domknięcia w WP13.
 
-10. **Balansator używa `tools/headless` jako biblioteki czy uruchamia proces?**
+10. **ZAMKNIĘTE w M5e (`K-32`) zgodnie z propozycją domyślną: biblioteka.**
+    `tools/headless` dostał target biblioteczny z dwoma modułami publicznymi
+    (`population`, `retail`); scenariusze zostały modułami binarki, bo CLI i kod
+    wyjścia nie należą do biblioteki. `--jobs N` w balansatorze steruje **liczbą
+    seedów liczonych równolegle**, a nie liczbą procesów — izolacja awarii nie
+    była warta drugiego mechanizmu, skoro przebieg, który panikuje, i tak
+    czerwieni bramkę. Zmiana dotyczy crate'u należącego do M0, więc ma własny
+    wpis `K-32` w dokumencie nadrzędnym, a nie rozstrzygnięcie lokalne w fazie.
+    Skutek uboczny, którego punkt nie przewidywał i który okazał się ważniejszy
+    od samego wyboru: **most „zakłady Etapu 7 → rynek" przestał być kopiowany**.
+    Przed M5e stał wyłącznie w ciele scenariusza `m5shop`, a klient graficzny
+    i balansator musiałyby go przepisać — teraz wszyscy trzej wołają
+    `magnat_headless::retail::setup`. Poprzednie brzmienie:
+    **Balansator używa `tools/headless` jako biblioteki czy uruchamia proces?**
     Biblioteka: szybciej, jeden proces na seed w puli wątków. Proces: izolacja awarii, łatwiejsza
     równoległość na poziomie CI.
     *Propozycja M5: biblioteka + `--jobs N` procesów na poziomie CLI (najlepsze z obu).*
@@ -575,6 +600,26 @@ dopasowania zamiast drugiego (M7).
     Wniosek dla tego, kto go domknie: **to jest błąd mnożnikowy, nie addytywny**, i będzie
     rósł z każdą fazą dokładającą pieniądza.
 
+
+17. **Nowe, otwarte po M5e — dolna granica `t_settle` w bramce G4 mierzy tarcie,
+    którego M5 nie modeluje.**
+    Zmierzone na scenariuszu `supply-shock` (120 dób, +80 % ceny hurtowej chleba,
+    miasto 3 tys. mieszkańców): **odpowiedź w 2 dobach** — w widełkach 2–7 —
+    i **stabilizacja w 5** wobec widełek 14–56. Mechanizm jest zrozumiały i nie
+    jest błędem: dostawca zewnętrzny to zaślepka o nieskończonej podaży, bez
+    kontraktów, bez terminów płatności i bez zapasu w drodze, a sklep, któremu
+    wzrósł koszt własny, przecenia **od razu** — opóźnienie 1–7 dób z §6.3 dotyczy
+    **obserwacji konkurencji**, a nie własnego rachunku. Uzasadnienie dolnej
+    granicy w §7.4 („zbyt szybko = też fail, rynek bez tarcia") jest więc trafne
+    co do zasady i nietrafne co do kanału: tarcie ma wejść razem z rynkiem B2B.
+    *Propozycja M5: G4 zostaje z niezmienionymi progami, ale jest **doradcza**
+    (mierzy i raportuje, nie wywraca przebiegu) do czasu, aż M6 wniesie kontrakty
+    i zapas w drodze; wtedy staje się bramką wiążącą bez zmiany ani jednej liczby.*
+    Przyjęte domyślnie w M5e — `GateOutcome::advisory`, werdykt `DORADCZE`
+    w tabeli i w raporcie nocnym, żeby doba, w której M6 to zmieni, była widoczna.
+    **Do potwierdzenia z M6**: alternatywą jest przesunięcie dolnej granicy
+    `t_settle` w dół dla M5 i podniesienie jej w M6 — odrzucone, bo próg, który
+    wędruje za implementacją, przestaje być kryterium akceptacyjnym.
 ---
 
 ## 10. Szacunek wielkości

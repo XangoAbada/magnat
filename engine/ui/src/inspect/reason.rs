@@ -445,7 +445,11 @@ pub fn describe(c: &Catalog, l: Locale, r: DecisionReason) -> String {
 /// Punkty bazowe jako procent z jednym miejscem po przecinku, ze znakiem.
 /// Format jest ten sam w obu językach — separator dziesiętny lokalizuje M12
 /// razem z resztą formatów liczbowych.
-fn procent_bp(bp: i32) -> String {
+///
+/// Publiczne od M5e: marża półki i różnica wobec ceny konkurenta w panelu sklepu
+/// są tą samą wielkością co `delta_bp` w powodach decyzji i mają wyglądać tak samo.
+#[must_use]
+pub fn procent_bp(bp: i32) -> String {
     let znak = if bp < 0 { "-" } else { "+" };
     let a = bp.abs();
     format!("{znak}{},{}%", a / 100, (a % 100) / 10)

@@ -24,8 +24,15 @@
 //!   [`balance_sheet`], [`cash_flow`]) i hak podatkowy [`TaxEngine`] (`K-7`),
 //! - [`kernel`] — rdzeń liczbowy (D20), który M10 zawoła tym samym kodem co mezo.
 //!
-//! Czego tu **nie ma** i gdzie to jest: budżety gospodarstw, banki i inflacja — M5d;
-//! panel i balansator — M5e. Rynek B2B i partie towaru należą do M6, podatki do M8.
+//! Co dokłada **M5d**:
+//! - §5.9 — budżety gospodarstw ([`HouseholdBudget`], [`plan_budget`]),
+//! - §5.10 — banki, kredyt, CPI i stopa bazowa ([`Loan`], [`assess_credit`], [`CpiTracker`]).
+//!
+//! Co dokłada **M5e**:
+//! - §5.12 — [`ShopPanelSnapshot`]: jedyne wejście interfejsu do gospodarki.
+//!
+//! Czego tu **nie ma** i gdzie to jest: rynek B2B i partie towaru należą do M6,
+//! podatki do M8, pełne panele gracza do M9.
 
 #![forbid(unsafe_code)]
 
@@ -39,6 +46,7 @@ pub mod kernel;
 pub mod ledger;
 pub mod market;
 pub mod offer;
+pub mod panel;
 pub mod pricing;
 pub mod shop;
 pub mod supply;
@@ -54,15 +62,15 @@ pub use budget::{
     budget_ref_for_need, expected_purchases, plan_budget, BudgetPlan, Envelope, HouseholdBudget,
     HouseholdProfile,
 };
+pub use choice::{
+    budget_ref_for, choose_offer, cost_term, days_bought, dominant_term, offer_noise,
+    purchase_threshold, rating_of, status_fit, utility_of_offer, wanted_qty, weights_for,
+    BuyerState, Candidate, Choice,
+};
 pub use cpi::{CpiBasket, CpiTracker, IndexBp, INDEX_BASE};
 pub use credit::{
-    assess_credit, build_schedule, monthly_rate_bp, update_base_rate,
-    BaseRate, CreditDecision, Installment, Loan, LoanApplication, LoanBook,
-};
-pub use choice::{
-    budget_ref_for, choose_offer, cost_term, days_bought, dominant_term, purchase_threshold,
-    offer_noise, rating_of, status_fit, utility_of_offer, wanted_qty, weights_for, BuyerState,
-    Candidate, Choice,
+    assess_credit, build_schedule, monthly_rate_bp, update_base_rate, BaseRate, CreditDecision,
+    Installment, Loan, LoanApplication, LoanBook,
 };
 pub use data::{
     BankParams, BaseRateRule, BudgetParams, CpiSpec, CreditScoring, EconomyData, EconomyDataError,
@@ -78,20 +86,23 @@ pub use ledger::{
     balance_sheet, cash_flow, close_period, income_statement, post, BalanceSheet, CashFlow,
     IncomeStatement, JournalEntry, Ledger, LedgerAccount, PeriodClose, LEDGER_ACCOUNT_COUNT,
 };
-pub use pricing::{
-    preview_price, reprice, CompetitorEntry, CompetitorRef, CompetitorSnapshot, FirmPricing,
-    ObservedElasticity, PriceController, PriceExperiment, PricePolicy, PricingCtx,
-};
-pub use tax::{NoTax, TaxEngine};
 pub use market::{
     Bank, HouseholdMonth, HouseholdMonthReport, Market, MarketStats, PurchaseIntent, ShopSeed,
 };
 pub use offer::{
     price_stats, query_offers, CategoryId, Offer, OfferId, OfferIndex, PriceBasis, PriceStats,
 };
+pub use panel::{
+    BalanceSample, CompetitorRow, CustomerStats, FinanceSummary, LostSalesView, PriceDist,
+    ShelfRow, ShopPanelSnapshot,
+};
+pub use pricing::{
+    preview_price, reprice, CompetitorEntry, CompetitorRef, CompetitorSnapshot, FirmPricing,
+    ObservedElasticity, PriceController, PriceExperiment, PricePolicy, PricingCtx,
+};
 pub use shop::{
     take_units, AssortmentPolicy, LostSale, LostSaleHistogram, LostSaleTracking, ReorderPolicy,
-    Shelf, ShelfLine, Shop, ShopInventory, ShopLostSales, StockLine, LOST_SALE_RING,
+    Shelf, ShelfLine, Shop, ShopCustomers, ShopInventory, ShopLostSales, StockLine, LOST_SALE_RING,
 };
 pub use supply::{
     line_total, Delivery, ExternalSupplier, GoodSpec, GoodTable, OrderId, PurchaseQuote,
@@ -101,3 +112,4 @@ pub use systems::{
     pay_incomes, register_books, register_economy, settle_household_month, settle_transactions,
     MarketSystem,
 };
+pub use tax::{NoTax, TaxEngine};

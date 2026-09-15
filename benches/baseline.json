@@ -66,6 +66,11 @@
   "m5a books__transfer": 8.597853695733368,
   "m5a query_offers 5k ofert, promień 3 km": 705.1060314539067,
   "m5a rebuild warstwy 5k ofert": 182049.48113207548,
+  "m5b utility_of_offer": 15.469,
+  "m5b wycena 15 kandydatów": 218.3,
   "m5c observe_competitors 2000 sklepów": 27059600.0,
-  "m5c reprice 2000 sklepów": 1083286.1191440139
+  "m5c reprice 2000 sklepów": 1083286.1191440139,
+  "m5e balance_sample 2000 sklepów": 784280.0,
+  "m5e decyzja zakupowa bez podróży": 589.89,
+  "m5e shop_panel migawka jednego sklepu": 1734.2
 }

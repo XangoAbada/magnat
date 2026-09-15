@@ -16,6 +16,7 @@ members = [
     "sim/snapshot",
     "sim/traffic",
     "sim/world",
+    "tools/balansator",
     "tools/headless",
     "tools/magnat",
 ]
@@ -44,6 +45,10 @@ magnat-sim-snapshot = { path = "sim/snapshot" }
 magnat-traffic = { path = "sim/traffic" }
 magnat-voxel = { path = "engine/voxel" }
 magnat-world = { path = "sim/world" }
+# Klient i balansator stawiają **tę samą** gospodarkę co scenariusz `m5shop`
+# (`AB-1`), a most „zakłady Etapu 7 → rynek" mieszka w bibliotece headlessa
+# (decyzja otwarta nr 10 fazy M5). Zależność idzie wyłącznie od narzędzi do niej.
+magnat-headless = { path = "tools/headless" }
 
 serde = { version = "1.0.229", features = ["derive"] }
 xxhash-rust = { version = "0.8.18", features = ["xxh3", "const_xxh3"] }

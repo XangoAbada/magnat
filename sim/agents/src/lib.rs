@@ -42,9 +42,9 @@ pub mod arrayvec;
 pub mod components;
 pub mod demography;
 pub mod des;
+pub mod household;
 pub mod migration;
 pub mod names;
-pub mod household;
 pub mod needs;
 pub mod places;
 pub mod planner;
@@ -54,60 +54,62 @@ pub mod store;
 pub mod systems;
 
 pub use arrayvec::ArrayVec;
-pub use names::{catalog as name_catalog, NameCatalog, NameError, NAMES_SCHEMA_VERSION};
 pub use components::{
     register, register_components, register_resources, AgentState, EduField, EduLevel, Employment,
     Identity, Lifecycle, Lod, Needs, Personality, PlanRef, Residence, ShiftKind, SkillSlot, Skills,
     Vitals, Wealth, HOT_COMPONENT_BYTES,
 };
 pub use components::{KnowledgeRef, RelationsRef};
-pub use household::{
-    add_member, classify, members_of, remove_member, roles, Household, HouseholdKind,
-    HouseholdOverflow, HouseholdRoles, MemberView, HH_INLINE_MEMBERS, HH_MAX_MEMBERS, MAX_ESCORTED,
+pub use demography::{
+    citizen_by_index, compatibility, household_by_index, knowledge_ref, powiaz, przeklasyfikuj,
+    relations_ref, Ages, DayReport, DemographyError, DemographyTable, InheritanceHook, LifeQueue,
+    LifeTask, LifeTaskKind, MonthReport, NoInheritance, Population, StatusWeights, DAYS_PER_YEAR,
+    DEMOGRAPHY_SHARDS,
 };
 pub use des::{
     order_key, EventKind, EventQueue, HhEventKind, ReplanCause, SimEvent, REPLAN_BUDGET_PER_TICK,
     REPLAN_COOLDOWN_MIN, WHEEL_MINUTES,
 };
+pub use household::{
+    add_member, classify, members_of, remove_member, roles, Household, HouseholdKind,
+    HouseholdOverflow, HouseholdRoles, MemberView, HH_INLINE_MEMBERS, HH_MAX_MEMBERS, MAX_ESCORTED,
+};
+pub use migration::{
+    attractiveness, seed_population, shock_retire_jobs, spawn_household, spawn_household_aged,
+    zaloz_gospodarstwo, HomeSlot, JobSlot, MigrationReport, Unsettled, UnsettledState, Vacancies,
+};
+pub use names::{catalog as name_catalog, NameCatalog, NameError, NAMES_SCHEMA_VERSION};
 pub use needs::{
     decay_between, deprivation_of, DeprivationEffectsSystem, NeedDecaySystem, NeedEffect, NeedSpec,
     NeedTable, NeedTableError, DECAY_SHARDS,
 };
 pub use places::{
-    choose_place, default_hours, knowledge_key, CitizenView, EmptyPlaces, FlakyPlaces,
-    FulfilOutcome, FulfilRequest, InfinitePlaces, KnowledgeView, OpenHours, PanickingPlaces,
-    home_of, place_from_key, site_of, walk_minutes, PlaceCandidate, PlaceEntry, PlaceProvider,
+    choose_place, default_hours, home_of, knowledge_key, place_from_key, site_of, walk_minutes,
+    CitizenView, EmptyPlaces, FlakyPlaces, FulfilOutcome, FulfilRequest, InfinitePlaces,
+    KnowledgeView, OpenHours, PanickingPlaces, PlaceCandidate, PlaceEntry, PlaceProvider,
     PlaceTable, StraightLineTravel, TravelEstimate, TravelOracle, TripHandle, TripRequest,
-    BASE_SPEED_M_PER_MIN,
-    MAX_CANDIDATES, MAX_ON_ROUTE, SITE_KEY_BASE,
+    BASE_SPEED_M_PER_MIN, MAX_CANDIDATES, MAX_ON_ROUTE, SITE_KEY_BASE,
 };
 pub use planner::{
     load_plan, plan_day, plan_day_explained, render_day_debug, replan, replan_explained_into,
     request_replan, store_plan, tick_replan_cooldown, DayCanvas, HouseholdView, PlanCtx, PlanStats,
     ReasonEntry, ReasonLog, MAX_SLOTS,
 };
-pub use store::{
-    Knowledge, KnowledgeKind, KnowledgeSlab, PlanSlab, PlanSlot, Relation, RelationKind,
-    RelationSlab, Slab, SlabRef, SLAB_CLASSES, SLAB_MAX,
-};
-pub use demography::{
-    citizen_by_index, compatibility, household_by_index, knowledge_ref, powiaz, relations_ref,
-    Ages, DayReport, DemographyError, DemographyTable, InheritanceHook, LifeQueue, LifeTask, LifeTaskKind,
-    MonthReport, NoInheritance, Population, StatusWeights, przeklasyfikuj, DAYS_PER_YEAR, DEMOGRAPHY_SHARDS,
-};
-pub use migration::{
-    attractiveness, seed_population, shock_retire_jobs, spawn_household, spawn_household_aged, zaloz_gospodarstwo, HomeSlot, JobSlot, MigrationReport,
-    Unsettled, UnsettledState, Vacancies,
-};
 pub use social::{
     awareness_of, knows_place, learn_place, status_of, CityFacts, SocialClass, SocialIndex,
-    SocialReport, StatusBreakdown, StatusDistribution, StatusInput, StatusReport, SOCIAL_SHARDS,
+    SocialReport, StatusBreakdown, StatusDistribution, StatusInput, StatusReport,
+    SOCIAL_CLASS_COUNT, SOCIAL_SHARDS,
 };
 pub use society::{
     households, is_month_start, population, register_society, total_money, SocietyReport,
 };
+pub use store::{
+    Knowledge, KnowledgeKind, KnowledgeSlab, PlanSlab, PlanSlot, Relation, RelationKind,
+    RelationSlab, Slab, SlabRef, SLAB_CLASSES, SLAB_MAX,
+};
 pub use systems::{
-    bootstrap_day, micro_count, register_day, set_lod, AgentSources, CitizenSnapshot, DayLoopSystem,
-    DayStats, HouseholdStockSystem, ReplanCooldownSystem, SkillDriftSystem, SocietySystem, Sources,
-    Trace, TraceEntry, TravelMicroSystem, MAX_TASK_TRAVEL_MIN, MAX_WATCHED, TRACE_LEN, WEEK_SHARDS,
+    bootstrap_day, micro_count, register_day, set_lod, AgentSources, CitizenSnapshot,
+    DayLoopSystem, DayStats, HouseholdStockSystem, ReplanCooldownSystem, SkillDriftSystem,
+    SocietySystem, Sources, Trace, TraceEntry, TravelMicroSystem, MAX_TASK_TRAVEL_MIN, MAX_WATCHED,
+    TRACE_LEN, WEEK_SHARDS,
 };

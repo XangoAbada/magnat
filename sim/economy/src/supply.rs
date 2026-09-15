@@ -143,6 +143,21 @@ impl GoodTable {
         self.by_key.get(key).copied()
     }
 
+    /// Klucz tekstowy towaru — droga powrotna, której potrzebuje panel sklepu:
+    /// `GoodId` nie jest nazwą, a gracz ma zobaczyć „chleb", nie „17".
+    ///
+    /// Przeszukanie liniowe po `BTreeMap` jest tu właściwe: katalog M5 ma 18 pozycji,
+    /// a panel woła to raz na wiersz półki, nie w gorącej ścieżce. Gdyby katalog M6
+    /// urósł do czterystu i ktoś zawołał to w pętli po ofertach, właściwą odpowiedzią
+    /// jest odwrotny indeks w `GoodTable`, a nie cache po stronie wołającego.
+    #[must_use]
+    pub fn key_of(&self, good: GoodId) -> Option<&str> {
+        self.by_key
+            .iter()
+            .find(|(_, id)| **id == good)
+            .map(|(k, _)| k.as_str())
+    }
+
     /// Wszystkie pozycje katalogu w kolejności budowania.
     pub fn iter(&self) -> impl Iterator<Item = &GoodSpec> {
         self.specs.iter()
@@ -197,8 +212,13 @@ pub struct Delivery {
 /// Kontrakt zaopatrzenia sklepu. W M5: jedna implementacja ([`ExternalSupplier`]).
 /// W M6: zastąpiona przez rynek B2B (spot + kontrakty) — **sygnatura bez zmian**.
 pub trait Wholesale {
-    fn quote(&self, good: GoodId, qty: Qty, at: magnat_core::SiteId, t: Tick)
-        -> Option<PurchaseQuote>;
+    fn quote(
+        &self,
+        good: GoodId,
+        qty: Qty,
+        at: magnat_core::SiteId,
+        t: Tick,
+    ) -> Option<PurchaseQuote>;
 
     /// `site` ponad plan §5.7: dostawa musi wiedzieć, do którego zakładu jedzie,
     /// a `FirmId` tego nie mówi — firma może mieć wiele sklepów już w M5.
@@ -223,6 +243,13 @@ pub trait Wholesale {
 pub struct ExternalSupplier {
     seed: u64,
     goods: GoodTable,
+    /// Mnożnik ceny hurtowej w punktach bazowych, per towar; `0` = brak szoku.
+    ///
+    /// Wejście scenariusza `supply-shock` balansatora (§7.4, bramka G4). Szok jest
+    /// **stanem dostawcy**, a nie parametrem zapytania, bo dokładnie tak zachowuje
+    /// się prawdziwy: cena skacze wszystkim naraz i zostaje. M6 zastąpi to ceną
+    /// wynikającą z rynku B2B i mnożnik zniknie razem z zaślepką.
+    shock_bp: Vec<(GoodId, i32)>,
     /// Zamówienia w drodze, w kolejności złożenia — `OrderId` rośnie, więc wynik
     /// `poll_deliveries` nie zależy od tego, ile ticków minęło między pollami.
     pending: Vec<(Tick, Delivery)>,
@@ -235,8 +262,21 @@ impl ExternalSupplier {
         ExternalSupplier {
             seed,
             goods,
+            shock_bp: Vec::new(),
             pending: Vec::new(),
             next_order: 0,
+        }
+    }
+
+    /// Ustawia mnożnik ceny hurtowej towaru (10 000 = bez zmian, 18 000 = +80 %).
+    ///
+    /// Lista jest krótka i posortowana po `GoodId` — szok dotyczy jednego, może
+    /// dwóch towarów, więc `Vec` z wyszukaniem liniowym jest tańszy od mapy
+    /// i deterministyczny bez dodatkowych zastrzeżeń (00 §3.2).
+    pub fn set_shock(&mut self, good: GoodId, factor_bp: i32) {
+        match self.shock_bp.binary_search_by_key(&good.0, |(g, _)| g.0) {
+            Ok(i) => self.shock_bp[i].1 = factor_bp,
+            Err(i) => self.shock_bp.insert(i, (good, factor_bp)),
         }
     }
 
@@ -265,7 +305,11 @@ impl ExternalSupplier {
         // ±3 % w punktach bazowych; rozkład jednostajny wystarcza, bo to jest szum
         // rynku, a nie model rynku — model jest w M6.
         let drift_bp = i64::from(r.gen_range_u32(601)) - 300;
-        Some(spec.wholesale_base.mul_ratio(10_000 + drift_bp, 10_000))
+        let baza = spec.wholesale_base.mul_ratio(10_000 + drift_bp, 10_000);
+        match self.shock_bp.binary_search_by_key(&good.0, |(g, _)| g.0) {
+            Ok(i) => Some(baza.mul_ratio(i64::from(self.shock_bp[i].1), 10_000)),
+            Err(_) => Some(baza),
+        }
     }
 }
 

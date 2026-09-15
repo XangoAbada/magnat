@@ -8,13 +8,11 @@
 #![forbid(unsafe_code)]
 
 mod agents;
-mod calibrate;
 mod century;
 mod day;
 mod m3day;
 mod m5shop;
 mod nav;
-mod population;
 mod testworld;
 mod worldgen;
 
@@ -22,6 +20,7 @@ use clap::{Parser, Subcommand};
 use magnat_core::Tick;
 use magnat_devtools::{Console, Inspector, MetricSink};
 use magnat_ecs::{App, World};
+use magnat_headless::population;
 use magnat_io::{load_world, save_world, world_state_hash, StateHash};
 use std::io::{BufRead, Write};
 use std::path::PathBuf;
@@ -116,8 +115,6 @@ enum Command {
     Nav(nav::NavArgs),
     /// Wynik podfazy M5b: sklepy z magazynem, zakupy i rozliczenie pieniądza.
     M5shop(m5shop::M5ShopArgs),
-    /// Kalibracja diagramu podstawowego do parametrów IDM — offline (M4d/WP9).
-    CalibrateVdf(calibrate::CalibrateArgs),
 }
 
 fn uruchom() -> Result<std::process::ExitCode, Box<dyn std::error::Error>> {
@@ -134,7 +131,6 @@ fn uruchom() -> Result<std::process::ExitCode, Box<dyn std::error::Error>> {
         Some(Command::M3day(a)) => return m3day::run(a),
         Some(Command::Nav(a)) => return nav::run(a),
         Some(Command::M5shop(a)) => return m5shop::run(a),
-        Some(Command::CalibrateVdf(a)) => return calibrate::run(a),
         None => {}
     }
 

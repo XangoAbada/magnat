@@ -8,9 +8,10 @@
 
 use std::collections::BTreeMap;
 
+use magnat_agents::{SocialClass, SOCIAL_CLASS_COUNT};
 use magnat_core::{
     FirmId, GoodId, HashState, Money, Qty, RejectCause, SimMinute, SiteId, StateHasher, Tick,
-    REJECT_CAUSE_COUNT,
+    UtilityKind, REJECT_CAUSE_COUNT, UTILITY_KIND_COUNT,
 };
 
 use crate::ledger::Ledger;
@@ -32,6 +33,15 @@ impl StockLine {
     /// Dokłada dostawę: ilości się sumują, koszty się sumują, data ważności
     /// bierze **wcześniejszą** z dwóch.
     pub fn receive(&mut self, qty: Qty, cost: Money, expires: Option<SimMinute>) {
+        // **Linia pusta nie ma czego przeterminować.** Data z poprzedniej dostawy
+        // odeszła razem z ostatnią sztuką, a reguła „wcześniejsza z dwóch" bez
+        // tego zerowania przepisywała ją na towar, którego wtedy jeszcze nie było:
+        // świeża dostawa dziedziczyła termin sprzed tygodnia i szła na odpis
+        // w dniu przyjęcia. Zmierzone przy zamknięciu M5e — to jest większa połowa
+        // odpisów, które balansator zgłosił jako pierwszy objaw złej kalibracji.
+        if self.qty.get() <= 0 {
+            self.expires = None;
+        }
         self.qty = Qty(self.qty.get().saturating_add(qty.get()));
         self.cost_total = self
             .cost_total
@@ -182,6 +192,20 @@ pub enum LostSaleTracking {
     Full,
 }
 
+impl LostSaleTracking {
+    /// Nazwa wariantu — klucz tekstu w `data/locale/`. Taka sama konwencja co
+    /// w słownikach `vocab_enum!` z `core`, żeby interfejs nie musiał trzymać
+    /// własnego `match` na coś, co nie jest wyborem projektowym, tylko poziomem.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            LostSaleTracking::None => "None",
+            LostSaleTracking::Histogram => "Histogram",
+            LostSaleTracking::Full => "Full",
+        }
+    }
+}
+
 /// Jedna utracona sprzedaż — 24 B, pierścień 256 wpisów na sklep.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct LostSale {
@@ -205,6 +229,10 @@ pub struct LostSaleHistogram {
 #[derive(Clone, Default)]
 pub struct ShopLostSales {
     pub today: LostSaleHistogram,
+    /// Siedem domkniętych dób, slot indeksowany numerem doby modulo 7. Kryterium
+    /// WP12 pyta o **ostatnie 7 dni**, a nie o dzisiaj: „dlaczego Anna nie kupiła
+    /// u mnie" musi mieć odpowiedź także wtedy, gdy Anna była wczoraj.
+    week: [LostSaleHistogram; 7],
     ring: Vec<LostSale>,
     head: usize,
 }
@@ -217,6 +245,8 @@ impl ShopLostSales {
             return;
         }
         if self.today.day != day {
+            // Domknięta doba idzie do okna tygodnia, zanim zostanie wyzerowana.
+            self.week[(self.today.day % 7) as usize] = self.today;
             self.today = LostSaleHistogram {
                 day,
                 by_cause: [0; REJECT_CAUSE_COUNT],
@@ -232,6 +262,27 @@ impl ShopLostSales {
             self.ring[self.head] = sale;
             self.head = (self.head + 1) % LOST_SALE_RING;
         }
+    }
+
+    /// Histogram siedmiu ostatnich dób łącznie z bieżącą — to jest okno, o które
+    /// pyta kryterium WP12. Sloty starsze niż tydzień odpadają po polu `day`,
+    /// więc sklep, który nie tracił sprzedaży od miesiąca, pokazuje zera,
+    /// a nie zeszłomiesięczny osad.
+    #[must_use]
+    pub fn window(&self, day: u32) -> LostSaleHistogram {
+        let mut out = LostSaleHistogram {
+            day,
+            by_cause: [0; REJECT_CAUSE_COUNT],
+        };
+        for h in std::iter::once(&self.today).chain(self.week.iter()) {
+            if h.day > day || day - h.day >= 7 {
+                continue;
+            }
+            for (o, v) in out.by_cause.iter_mut().zip(h.by_cause) {
+                *o += v;
+            }
+        }
+        out
     }
 
     /// Od najstarszej do najnowszej.
@@ -252,6 +303,55 @@ impl ShopLostSales {
     }
 }
 
+/// Kto kupił w tym zakładzie: skąd, z jakiej klasy i co przeważyło w jego wyborze
+/// (§5.12, trzy pytania karty „Klienci").
+///
+/// Zbierane **wyłącznie dla zakładów śledzonych** i **poza hashem stanu** — z tego
+/// samego powodu co pierścień utraconych sprzedaży (`U-22`): kliknięcie „śledź"
+/// nie ma prawa zmieniać świata.
+///
+/// `ponytail:` rozkłady są kumulatywne od włączenia śledzenia, a nie w oknie
+/// siedmiu dób — okno prowadzi wyłącznie `daily`, czyli ta jedna liczba, na której
+/// widać skutek podwyżki („po 3 dniach spadek liczby klientów" z §1 dokumentu fazy).
+/// Sufit: rozkład dzielnic po pół roku śledzenia pokazuje średnią, nie bieżący
+/// zasięg. Wyjście: ten sam pierścień siedmiodobowy co w `ShopLostSales`, kiedy
+/// nakładka „zasięg sklepu" zacznie kłamać.
+#[derive(Clone, Default)]
+pub struct ShopCustomers {
+    /// Dzielnica zamieszkania kupującego → liczba zakupów.
+    pub by_district: BTreeMap<u16, u32>,
+    /// Klasa społeczna kupującego, indeks z `SocialClass::as_index()`.
+    pub by_class: [u32; SOCIAL_CLASS_COUNT],
+    /// Człon użyteczności, który przeważył w wyborze tego sklepu.
+    pub by_driver: [u32; UTILITY_KIND_COUNT],
+    /// Liczba zakupów w każdej z siedmiu ostatnich dób, slot indeksowany dobą modulo 7.
+    pub daily: [u32; 7],
+    /// Doba ostatniego zapisu — po niej zeruje się slot, do którego wchodzi nowa doba.
+    day: u32,
+    /// Łączna liczba zakupów od włączenia śledzenia.
+    pub total: u32,
+}
+
+impl ShopCustomers {
+    /// Zapis jednego zakupu. Wołane tylko dla zakładów śledzonych.
+    pub fn record(&mut self, day: u32, district: u16, class: SocialClass, driver: UtilityKind) {
+        if self.day != day {
+            // Doby pominięte (sklep bez klientów) też muszą się wyzerować, inaczej
+            // tydzień temu zostałby w oknie jako „dzisiaj".
+            let ile = day.saturating_sub(self.day).min(7);
+            for i in 1..=ile {
+                self.daily[((self.day + i) % 7) as usize] = 0;
+            }
+            self.day = day;
+        }
+        *self.by_district.entry(district).or_insert(0) += 1;
+        self.by_class[class.as_index()] += 1;
+        self.by_driver[driver.as_index()] += 1;
+        self.daily[(day % 7) as usize] += 1;
+        self.total += 1;
+    }
+}
+
 // ── sklep ────────────────────────────────────────────────────────────────────────
 
 /// Zakład handlowy: budynek, magazyn, półka, oferta.
@@ -262,6 +362,8 @@ pub struct Shop {
     pub account: crate::books::AccountId,
     /// Pozycja w metrach — z budynku, w którym stoi zakład.
     pub pos: magnat_spatial::Vec2,
+    /// Dzielnica zakładu — wyłącznie do metryk koncentracji (bramka G6).
+    pub district: u16,
     pub kind: magnat_core::PlaceKind,
     pub hours: magnat_agents::OpenHours,
     pub inventory: ShopInventory,
@@ -269,6 +371,9 @@ pub struct Shop {
     pub assortment: AssortmentPolicy,
     pub tracking: LostSaleTracking,
     pub lost: ShopLostSales,
+    /// Kto u mnie kupuje (§5.12). Jak `lost`: wyłącznie dla zakładów śledzonych
+    /// i poza hashem stanu.
+    pub customers: ShopCustomers,
     /// Licznik sprzedanych sztuk od początku świata — wejście do metryk balansatora.
     pub sold_qty: i64,
     /// Szybki podgląd obrotu dla scenariusza. **Liczbą w panelu jest `Revenue`

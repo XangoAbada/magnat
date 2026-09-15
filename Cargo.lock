@@ -1397,7 +1397,9 @@ dependencies = [
  "magnat-agents",
  "magnat-core",
  "magnat-devtools",
+ "magnat-economy",
  "magnat-ecs",
+ "magnat-headless",
  "magnat-jobs",
  "magnat-render",
  "magnat-sim-snapshot",
@@ -1419,6 +1421,23 @@ dependencies = [
  "magnat-io",
  "magnat-sim-snapshot",
  "magnat-spatial",
+ "ron",
+ "serde",
+]
+
+[[package]]
+name = "magnat-balansator"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "magnat-agents",
+ "magnat-core",
+ "magnat-economy",
+ "magnat-ecs",
+ "magnat-headless",
+ "magnat-io",
+ "magnat-jobs",
+ "magnat-traffic",
  "ron",
  "serde",
 ]
@@ -1584,6 +1603,7 @@ dependencies = [
  "egui",
  "magnat-agents",
  "magnat-core",
+ "magnat-economy",
  "magnat-ecs",
  "magnat-nav",
  "magnat-traffic",

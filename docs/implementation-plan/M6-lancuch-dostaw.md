@@ -590,3 +590,18 @@ Uwaga: dokumenty faz M0–M5 i M7–M12 powstawały równolegle z tym, więc pon
 | WP15 | Agregacja partii, budżet pamięci, tryb awaryjny | **M** |
 
 Rozkład: 1 × XL, 3 × L, 10 × M, 1 × S. Największe skupisko ryzyka to WP4 (model fizyczny zakładu) i WP2 (partia) — te dwa warto zamknąć i obłożyć testami, zanim ruszy cokolwiek powyżej. WP14 rośnie równolegle od WP2 i jest bramką zamykającą fazę.
+
+---
+
+## Zmiany wpisane po M5e
+
+Zgodnie z `K-18`. Wpisane jest **tylko to, co wiadomo na pewno** po zamknięciu fazy M5;
+M6 nie jest przy okazji przeprojektowywana. Gwiazdka = zmiana zakresu albo kryterium.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| AC-1 ★ | **`ExternalSupplier` ma od M5e stan, którego plan nie zakładał: mnożnik szoku ceny hurtowej** (`ExternalSupplier::set_shock(good, factor_bp)`, dostępny przez `Market::set_supply_shock`). WP11 („koniec nieskończonych sklepów") podmienia dostawcę na rynek B2B i **musi zachować ten punkt wejścia**, inaczej scenariusz `supply-shock` balansatora przestaje mieć czym szokować | Bramka **G4** (reaktywność szoku podaży: widoczny w 2–7 dni, wygaszony w 14–56) jest jedną z dziewięciu bramek CI i jest **jedyną**, która potrzebuje zdarzenia zewnętrznego. Po podmianie dostawcy szok przestaje być mnożnikiem na cenniku, a staje się zdarzeniem na rynku B2B — ale **nazwa wejścia ma zostać**, żeby balansator nie musiał wiedzieć, która faza akurat stoi pod spodem |
+| AC-2 ★ | **Most „zakłady Etapu 7 → rynek" mieszka w `magnat_headless::retail`**, nie w scenariuszu, i ma trzech konsumentów: `headless m5shop`, klient graficzny i balansator. M6, stawiając zakłady produkcyjne, dokłada się **do niego**, a nie obok | Trzy kopie tej wiedzy rozjeżdżają się przy pierwszej zmianie, a rozjazd widać dopiero jako inny wynik bramki — czyli w miejscu, w którym najtrudniej go powiązać z przyczyną. Nazwa crate'u jest długiem przypisanym do R1 (patrz tabela po M5e w `R1-refaktor-po-M5.md`); M6 ma używać tego, co zastanie, i nie zakładać drugiego mostu |
+| AC-3 | **Decyzja otwarta nr 5 fazy M5 (migracja wyceny WAC → FIFO) zostaje otwarta i jest teraz konkretniejsza.** Wycena średnią ważoną siedzi w **jednej** funkcji rdzenia: `magnat_economy::kernel::take_cogs`, z gałęzią „zmiatania reszty" chroniącą niezmiennik P5. Propozycja M5 pozostaje: wariant (a) — przełącznik od daty wejścia M6, linie historyczne dojeżdżają na średniej | Punkt był opisany jako „do uzgodnienia z M6" i nadal nim jest, ale adres jest już znany co do funkcji, a nie co do modułu. Ważniejsze: **`take_cogs` jest wołane także przez `Market::balance_sample`** (mediana marży dla bramki G3), więc zmiana wyceny przestawi bramkę razem z raportami — i to jest efekt do przewidzenia, a nie do odkrycia |
+| AC-4 | **Katalog detaliczny M5 ma 18 towarów i `GoodTable::key_of` jako drogę powrotną `GoodId → klucz`.** Przeszukanie jest **liniowe** i to jest świadomy sufit nazwany w kodzie | M6 podnosi katalog do rzędu 400 pozycji. Przy tej wielkości `key_of` wołane w pętli po ofertach przestaje być darmowe, a wołającym jest panel sklepu (M5e) i wszystko, co po nim przyjdzie. Właściwą odpowiedzią jest odwrotny indeks w `GoodTable`, **nie** cache po stronie wołającego — ten rozjeżdża się przy przeładowaniu danych |
+| AC-5 | **`Offer` ma od M5 pole `price_rev`, a zmiana ceny nie brudzi indeksu przestrzennego.** M6, dokładając `NetB2B`, dokłada wariant `PriceBasis`, a nie drugi indeks | Zapisane, bo to jest ta klasa optymalizacji, którą łatwo cofnąć przez nieuwagę: indeks trzyma uchwyty, a cena czyta się z areny na żywo. Drugi indeks „dla hurtu" kosztowałby przebudowę przy każdej przecenie |

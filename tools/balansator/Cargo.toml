@@ -1,0 +1,33 @@
+[package]
+name = "magnat-balansator"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "magnat_balansator"
+path = "src/lib.rs"
+bench = false
+
+[[bin]]
+name = "balansator"
+path = "src/main.rs"
+bench = false
+
+[dependencies]
+magnat-core = { workspace = true }
+magnat-ecs = { workspace = true }
+magnat-jobs = { workspace = true }
+magnat-io = { workspace = true }
+magnat-agents = { workspace = true }
+magnat-economy = { workspace = true }
+magnat-traffic = { workspace = true }
+magnat-headless = { workspace = true }
+clap = { workspace = true }
+ron = { workspace = true }
+serde = { workspace = true }
+
+[lints]
+workspace = true

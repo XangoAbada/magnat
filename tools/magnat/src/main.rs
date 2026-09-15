@@ -129,6 +129,17 @@ struct Args {
     #[arg(long, default_value_t = false)]
     no_citizens: bool,
 
+    /// Wyłącza gospodarkę detaliczną (M5) i wraca do zachowania M3: miejsca dostarcza
+    /// atrapa `InfinitePlaces`, w której wszystko jest i nic nie kosztuje.
+    ///
+    /// To jest **udokumentowana droga wyjścia** z kosztu klatki, nie wygoda (`AB-2`):
+    /// każdy zakup to dwa wywołania routera M4, więc doba z gospodarką kosztuje
+    /// wielokrotnie więcej niż bez niej. Przy `X10` na dużym mieście to jest różnica
+    /// między płynną kamerą a pokazem slajdów — i lepiej, żeby dało się ją wyłączyć
+    /// jednym przełącznikiem, niż żeby ktoś diagnozował „wolny render".
+    #[arg(long, default_value_t = false)]
+    no_economy: bool,
+
     /// Sprawdza bufor ID bez rąk: ustawia kursor na piksel `x,y`, przewija kilka klatek
     /// i wypisuje, w kogo trafiono (kryterium WP11: „kliknięcie w pieszego daje
     /// `CitizenId`"). Bez tego jedynym sposobem sprawdzenia selekcji jest mysz.
@@ -295,6 +306,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         fps: 0.0,
         citizens: None,
         bez_ludzi: args.no_city || args.no_citizens,
+        bez_gospodarki: args.no_economy,
         jezyk: match args.locale.as_str() {
             "en" => magnat_ui::Locale::En,
             _ => magnat_ui::Locale::Pl,
@@ -302,7 +314,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         watki: args.threads,
         kursor: match args.pick.as_deref() {
             Some(t) => {
-                let (a, b) = t.split_once(',').ok_or("--pick oczekuje `x,y` w pikselach")?;
+                let (a, b) = t
+                    .split_once(',')
+                    .ok_or("--pick oczekuje `x,y` w pikselach")?;
                 Some((a.trim().parse()?, b.trim().parse()?))
             }
             None => None,
@@ -413,6 +427,13 @@ const WZROST_OCZU_M: f32 = 1.7;
 const KROK_LOTU_M: f64 = 12.0;
 /// Do tylu pikseli przeciągnięcia puszczenie prawego przycisku jest jeszcze kliknięciem.
 const PROG_KLIKNIECIA_PX: f64 = 4.0;
+/// Promień, w którym kliknięcie w teren trafia w sklep (M5e/WP12).
+///
+/// `ponytail:` promień zamiast bufora identyfikatorów budynków. Sufit nazwany:
+/// dwa sklepy bliżej siebie niż 25 m są nierozróżnialne kliknięciem, wygrywa
+/// bliższy. Ścieżka wyjścia: `engine/render` dokłada `SiteId` do bufora ID i to
+/// wywołanie zamienia się w odczyt, bez zmian po stronie panelu.
+const PROMIEN_SKLEPU_M: f32 = 25.0;
 
 /// Klatki rozgrzewkowe przed pomiarem.
 const BENCH_ROZGRZEWKA: u32 = 60;
@@ -492,6 +513,8 @@ struct App {
     /// a `egui` potrzebuje okna.
     citizens: Option<citizens::Citizens>,
     bez_ludzi: bool,
+    /// `--no-economy`: świat bez rynku, czyli zachowanie sprzed M5 (`AB-2`).
+    bez_gospodarki: bool,
     jezyk: magnat_ui::Locale,
     watki: usize,
     /// Ostatnia znana pozycja kursora w pikselach — bufor ID kopiuje piksel spod niej.
@@ -591,6 +614,7 @@ impl ApplicationHandler for App {
                 window.as_ref(),
                 self.jezyk,
                 self.watki,
+                !self.bez_gospodarki,
             ) {
                 Ok(mut c) => {
                     eprintln!(
@@ -913,12 +937,24 @@ impl App {
 
         match inspect::trafienie(&self.terrain, self.camera.eye(), kierunek, 4000.0) {
             Some((x, y)) => {
+                // Sklep ma pierwszeństwo przed kartą terenu: jeśli gracz trafił
+                // w zabudowę handlową, chce panelu, a nie kolumny geologicznej.
+                // Bufor identyfikatorów renderera niesie dziś **wyłącznie pieszych**
+                // (korekta H-15 do M3d), więc zakład wybiera się z promienia wokół
+                // punktu trafienia — promień jest rzędu długości pierzei, nie kadru.
+                if let Some(c) = self.citizens.as_mut() {
+                    if c.select_shop(x as f32, y as f32, PROMIEN_SKLEPU_M) {
+                        return;
+                    }
+                }
                 eprint!("{}", inspect::karta(&self.terrain, x, y));
                 // Karta parceli **tą samą funkcją** co `headless preview --inspect`:
                 // kryterium WP16 mówi, że klient ma pokazać to samo co wersja headless,
                 // a dwie kopie tej listy rozjechałyby się przy pierwszym nowym polu.
                 if let Some(c) = &self.city {
-                    for l in magnat_world::parcel_card(c, magnat_spatial::Vec2::new(x as f32, y as f32)) {
+                    for l in
+                        magnat_world::parcel_card(c, magnat_spatial::Vec2::new(x as f32, y as f32))
+                    {
                         eprintln!("{l}");
                     }
                 }
@@ -1019,11 +1055,13 @@ impl App {
                     self.params.region.latitude_ddeg(),
                     1600,
                     900,
-                    klatka_ui.as_ref().map(|(jobs, wy)| magnat_render::ui::UiFrame {
-                        jobs,
-                        textures_delta: &wy.textures_delta,
-                        pixels_per_point: wy.pixels_per_point,
-                    }),
+                    klatka_ui
+                        .as_ref()
+                        .map(|(jobs, wy)| magnat_render::ui::UiFrame {
+                            jobs,
+                            textures_delta: &wy.textures_delta,
+                            pixels_per_point: wy.pixels_per_point,
+                        }),
                 );
                 let s = renderer.stats();
                 eprintln!(

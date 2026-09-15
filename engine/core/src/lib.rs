@@ -52,11 +52,11 @@ pub use types::{
     DistrictId, Energy, GoodId, JobRoleId, Mass, Money, Mood, Qty, RecipeId, SimInstant, SimMinute,
     Tick, Volume, Q,
 };
-pub use weather::{weather_at, Weather};
 pub use vocab::{
     ActivityKind, Biome, CommitmentKind, DeprivationEffect, FixedCost, LifeEventKind, LoanKind,
     MigrationKind, NeedKind, PlaceKind, PlaceRef, PriceDriver, RejectCause, RejectCredit,
-    ResourceKind, RoadClass, StockCat, TraitId, TransportMode,
-    UtilityKind, UtilityService, WorldCoord, FIXED_COST_COUNT, NEED_COUNT, REJECT_CAUSE_COUNT,
-    STOCK_CAT_COUNT,
+    ResourceKind, RoadClass, StockCat, TraitId, TransportMode, UtilityKind, UtilityService,
+    WorldCoord, FIXED_COST_COUNT, NEED_COUNT, REJECT_CAUSE_COUNT, STOCK_CAT_COUNT,
+    UTILITY_KIND_COUNT,
 };
+pub use weather::{weather_at, Weather};

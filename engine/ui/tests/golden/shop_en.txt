@@ -1,0 +1,49 @@
+Grocery shop no. 12 (firm 3)
+  data from: Year 0, February 11, Saturday, 17:30
+  tracking: full, with events
+  Income statement since: Year 0, February 1, Wednesday
+  revenue 12845.00 PLN · cost of goods 9312.00 PLN · gross margin 3533.00 PLN
+  write-offs 187.00 PLN · result 465.00 PLN
+  balance total 21628.00 PLN · imbalance 0.00 PLN
+  cash flow: operating 923.00 PLN · investing -400.00 PLN · financing -128.00 PLN · net 395.00 PLN
+  inventory value: 4128.00 PLN
+  working capital loan no. 4
+Shelves:
+  bread: 4.29 PLN (cost 3.31 PLN, margin +29,6%) · shelf 18 pcs, backroom 24 pcs · cover 2 days · 7-day turnover 112 pcs
+    policy: dynamic: target +26,0%, floor +8,0%, ceiling +60,0% — delegated · expires in 2 days
+  milk: 3.49 PLN (cost 2.72 PLN, margin +28,3%) · shelf 31 pcs, backroom 60 pcs · cover 7 days · 7-day turnover 84 pcs
+    policy: manual price 3.49 PLN — manual · expires in 5 days
+  cheese: 18.90 PLN (cost 14.10 PLN, margin +34,0%) · shelf 4 pcs, backroom 6 pcs · cover — · 7-day turnover 0 pcs
+    policy: match competition -2,0% within 3000 m (cheapest) — delegated
+  Recent repricings:
+    changed the price by +16,7% — owner policy tipped it
+Customers:
+  customers over 7 days (oldest first): 41 · 44 · 43 · 39 · 28 · 24 · 22 · total 241
+  Where they came from:
+    district 2: 150
+    district 5: 91
+  Who was buying:
+    working class: 120
+    lower middle class: 88
+    upper class: 33
+  What tipped the scale:
+    price: 140
+    distance: 70
+    habit: 31
+  Lost sales (7 days):
+    does not know this shop: 0
+    nothing left on the shelf: 6
+    too far: 2
+    price too high: 34
+    quality below their standing: 0
+    budget exhausted: 0
+    no offer within reach: 0
+    not worth it: 0
+  Recent events:
+    milk — price too high · bought at site 77
+    milk — price too high · bought at site 77
+    bread — nothing left on the shelf
+Competition:
+  site 77 · 700 m · image 2 days old
+    bread: 4.49 PLN (+4,6% vs ours)
+    milk: 3.07 PLN (-12,0% vs ours)

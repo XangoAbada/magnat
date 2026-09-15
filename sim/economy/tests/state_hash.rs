@@ -74,12 +74,14 @@ fn kazdy_kanal_pieniadza_zmienia_hash() {
         match zmiana {
             0 => books.endow(acc, Money(1), Tick(2)).map(|_| ()),
             1 => books
-                .create_credit(acc, Money(1), LoanId(1), Tick(2))
+                .create_credit(acc, Money(1), LoanId(1), DecisionReason::Unspecified, Tick(2))
                 .map(|_| ()),
             2 => books
                 .inject_external_capital(acc, Money(1), ExternalInvestorId(1), Tick(2))
                 .map(|_| ()),
-            _ => books.household_pay(acc, Money(1), memo, Tick(2)).map(|_| ()),
+            _ => books
+                .household_pay(acc, Money(1), memo, Tick(2))
+                .map(|_| ()),
         }
         .unwrap();
         assert_ne!(base, world_state_hash(&w), "{nazwa} nie ruszyła hasha");
@@ -112,10 +114,7 @@ fn sledzenie_utraconych_sprzedazy_nie_wchodzi_do_hasha() {
     // broni zasada „pomiar nie jest stanem" (M4 §5.4).
     let a = swiat(7);
     let b = swiat(7);
-    let site = b
-        .get_resource::<magnat_economy::Market>()
-        .unwrap()
-        .sites()[0];
+    let site = b.get_resource::<magnat_economy::Market>().unwrap().sites()[0];
     b.get_resource::<magnat_economy::Market>()
         .unwrap()
         .set_tracking(site, LostSaleTracking::Full);
@@ -150,7 +149,11 @@ fn budzet_kredyt_i_koszyk_cpi_wchodza_do_hasha() {
         magnat_core::FirmId(magnat_core::Entity::new(900, std::num::NonZeroU32::MIN)),
         AccountId(0),
     );
-    assert_ne!(base, world_state_hash(&w), "otwarcie banku nie ruszyło hasha");
+    assert_ne!(
+        base,
+        world_state_hash(&w),
+        "otwarcie banku nie ruszyło hasha"
+    );
 
     // 2. Koszyk CPI: transakcja wpisana do okna zmienia indeks, a indeks — stopę.
     let w = swiat(7);
@@ -161,10 +164,7 @@ fn budzet_kredyt_i_koszyk_cpi_wchodza_do_hasha() {
     );
     market.record_sale(&magnat_economy::PurchaseIntent {
         buyer: magnat_core::CitizenId(magnat_core::Entity::new(1, std::num::NonZeroU32::MIN)),
-        household: magnat_core::HouseholdId(magnat_core::Entity::new(
-            2,
-            std::num::NonZeroU32::MIN,
-        )),
+        household: magnat_core::HouseholdId(magnat_core::Entity::new(2, std::num::NonZeroU32::MIN)),
         site: market.sites()[0],
         offer: magnat_economy::OfferId::from_bits(1u64 << 32).unwrap(),
         good,
@@ -175,6 +175,8 @@ fn budzet_kredyt_i_koszyk_cpi_wchodza_do_hasha() {
         cogs: Money(200),
         arrived: Tick(3),
         reason: DecisionReason::Unspecified,
+        district: 0,
+        status: magnat_core::Q::new(50),
     });
     assert_ne!(
         base,

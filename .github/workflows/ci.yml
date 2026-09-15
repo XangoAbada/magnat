@@ -7,7 +7,11 @@ name: check
 
 on:
   push:
-    branches: [main]
+    # Gałąź główna nazywa się `master` (CLAUDE.md, „Reguła: jedna gałąź").
+    # Do M5e stało tu `main`, więc push na gałąź, na której powstaje **cała** praca,
+    # nie uruchamiał CI ani razu — bramki działały wyłącznie na pull requestach,
+    # których w tym projekcie nie ma.
+    branches: [master]
   pull_request:
   schedule:
     # Przebieg nocny: to w nim biegnie ARM przez QEMU (D-10). Rozjazd wykryty nocą
@@ -132,10 +136,25 @@ jobs:
           cargo run --release -q -p magnat-headless -- m3day --size 4km --days 2             --citizens 4000 --hash-every 240 --threads 16 --expect m4_mezo.hashes
           cargo run --release -q -p magnat-headless -- m3day --size 4km --days 2             --citizens 4000 --hash-every 240 --speed 10 --expect m4_mezo.hashes
           cargo run --release -q -p magnat-headless -- m3day --size 4km --days 2             --citizens 4000 --hash-every 240 --micro 2000 --threads 4 --expect m4_mezo.hashes
+      - name: M5 — gospodarka nie zależy od liczby wątków (M5e/WP14, §7.2)
+        # Sześć dób, nie dwie: gospodarstwo startuje z pełnym zapasem, a próg
+        # zakupowy to cztery doby, więc krótszy przebieg nie uruchamia ani jednej
+        # transakcji i porównywałby hashe świata, w którym gospodarka nic nie robi.
+        #
+        # Złotego pliku w repozytorium nie ma świadomie: wartość hasha zmienia się
+        # przy każdym dopisaniu stanu do świata, więc plik w gicie byłby
+        # zobowiązaniem do nieruszania niczego, a nie bramką. Porównujemy dwa
+        # przebiegi tego samego drzewa.
+        shell: bash
+        run: |
+          cargo run --release -q -p magnat-headless -- m5shop --size 4km --days 6 \
+            --citizens 3000 --hash-every 1440 --threads 1 --out m5_t1.hashes
+          cargo run --release -q -p magnat-headless -- m5shop --size 4km --days 6 \
+            --citizens 3000 --hash-every 1440 --threads 8 --expect m5_t1.hashes
       - name: M4 — dowód spójności mikro ↔ mezo (A1–A5, M4d/WP9)
         run: cargo test --release -p magnat-world --test lod -- --include-ignored
       - name: M4 — diagram IDM zgadza się z tabelą VDF (miernik dryfu R2)
-        run: cargo run --release -q -p magnat-headless -- calibrate-vdf
+        run: cargo run --release -q -p magnat-balansator -- calibrate-vdf
       - name: T-D8 — test negatywny (chaos musi zawieść)
         shell: bash
         run: |
@@ -160,6 +179,49 @@ jobs:
           cargo bench -p magnat-core -p magnat-ecs -p magnat-io                       -p magnat-voxel -p magnat-world -p magnat-nav -p magnat-spatial                       -p magnat-traffic -p magnat-economy --benches                       -- --warm-up-time 1 --measurement-time 3
       - name: porównanie z linią bazową (10 % ostrzeżenie, 25 % błąd — D-8)
         run: python3 scripts/bench_guard.py benches/baseline.json
+
+  balansator:
+    name: bramki balansatora (G1–G9, M5e/WP13)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: build
+        run: cargo build --release -p magnat-balansator
+      # Dwa profile, bo bramki mają dwa różne budżety czasu (§7.4). Profil `ci`
+      # bierze G1–G3, G5 i G7–G9 na scenariuszu odniesienia; profil nocny dokłada
+      # G4 (reaktywność szoku) i G6 (koncentracja), bo obie potrzebują scenariusza
+      # szokowego i przebiegu dłuższego niż okno wygaszania 14–56 dób.
+      #
+      # **Liczby odbiegają od §7.4 i to jest jawna korekta, nie niedopatrzenie.**
+      # Plan mówił 8 ziaren × 365 dób w budżecie 10 minut; zmierzone na tym
+      # repozytorium: doba miasta 3 tys. mieszkańców to ~1,6 s, czyli 365 dób to
+      # ~9,7 min **na jedno ziarno**. Źródło kosztu jest nazwane w `U-24` i nie
+      # leży w gospodarce: każdy zakup to dwa wywołania routera M4. Do czasu, aż
+      # ktoś to skróci, bramka pull requesta bierze krótszy przebieg, a pełną
+      # macierz puszcza bieg nocny — lepiej mieć bramkę, która biegnie, niż
+      # zgodną z planem, którą ktoś wyłączy po trzecim przekroczeniu limitu.
+      - name: profil ci — scenariusz odniesienia
+        if: github.event_name != 'schedule'
+        run: |
+          cargo run --release -q -p magnat-balansator -- run \
+            --seeds 4 --days 120 --scenario base --out runs/ --jobs 4
+          cargo run --release -q -p magnat-balansator -- gate runs/ --profile ci
+      - name: profil nocny — pełna macierz i scenariusze szokowe
+        if: github.event_name == 'schedule'
+        run: |
+          for s in base supply-shock player-price-war income-shock; do
+            cargo run --release -q -p magnat-balansator -- run \
+              --seeds 8 --days 365 --scenario "$s" --out runs/ --jobs 8
+          done
+          cargo run --release -q -p magnat-balansator -- gate runs/ \
+            --profile nightly --report raport-balansatora.md
+      - uses: actions/upload-artifact@v4
+        if: github.event_name == 'schedule'
+        with:
+          name: raport-balansatora
+          path: raport-balansatora.md
 
   budzety:
     name: raport budżetów M1 (pamięć, czas generacji)
