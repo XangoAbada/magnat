@@ -7,10 +7,10 @@ zostają w dokumencie fazy — tu jest wyłącznie to, co robisz w tej porcji.
 
 | | |
 |---|---|
-| **Wejście** | M5b–M5d, M3 (`engine/ui`). WP14 rośnie równolegle od M5a — tutaj jest tylko domykany. |
+| **Wejście** | M5b–M5d, M3 (`engine/ui`, `tools/magnat`). WP14 rośnie równolegle od M5a — tutaj jest tylko domykany. |
 | **Pakiety robocze** | WP12, WP13, WP14 |
 | **Projekt techniczny** | §5.11, §5.12 |
-| **Wynik do pokazania** | Pełny artefakt fazy z §1 dokumentu fazy: otwórz sklep, ustal ceny, obserwuj klientów; balansator w CI. |
+| **Wynik do pokazania** | Pełny artefakt fazy z §1 dokumentu fazy: **w oknie z miastem** mieszkańcy wchodzą do konkretnych sklepów, kliknięcie w sklep otwiera panel, ceny da się ustawić i zobaczyć skutek; balansator w CI. |
 | **Kryterium zamknięcia** | Kryteria WP12–WP14 oraz bramki 1–7 fazy M5 w `00-postep.md`. |
 | **Poprzednia / następna** | `M5d-budzety-banki-inflacja.md` · — (ostatnia w fazie) |
 
@@ -22,15 +22,30 @@ Panel sklepu w UI, balansator z bramkami CI oraz komplet testów własnościowyc
 
 | WP | Nazwa | Zależy od | Rozmiar |
 |---|---|---|---|
-| WP12 | Panel sklepu w UI | WP3–WP7, M3 (`engine/ui`) | M |
+| WP12 | Panel sklepu w UI **i gospodarka w kliencie** | WP3–WP7, M3 (`engine/ui`, `tools/magnat`) | L |
 | WP13 | Balansator i bramki CI | WP1–WP10 | L |
 | WP14 | Testy własnościowe, determinizm, benchmarki | równolegle od WP1 | M |
 
-### WP12 — Panel sklepu w UI
-Trzy zakładki: Półki / Klienci / Konkurencja. Dane wyłącznie przez `ShopPanelSnapshot` (podwójnie
-buforowany, bez dostępu UI do ECS symulacji).
-Kryterium: pytanie „dlaczego Anna nie kupiła u mnie?" ma odpowiedź w panelu dla ≥95% mieszkańców,
-którzy w ostatnich 7 dniach byli kandydatami i nie kupili.
+### WP12 — Panel sklepu w UI i gospodarka w kliencie
+Pakiet ma **dwie połowy** i to jest korekta wpisana po M5d (`AB-1`): sam panel nie pokaże niczego,
+dopóki klient graficzny nie uruchamia gospodarki.
+
+**(a) Gospodarka w `tools/magnat`.** Klient robi to, co dziś robi wyłącznie scenariusz `m5shop`:
+buduje `EconomyData`, `GoodTable`, `Books` z kontem `RestOfWorld`, `Market`, obsadza sklepy
+z zakładów Etapu 7, otwiera bank, rejestruje `Books` i `Market` w haszu stanu, dokłada
+`MarketSystem` do harmonogramu i **podmienia `Sources.places` z `InfinitePlaces` na `Market`**
+(`Z-1`, `tools/magnat/src/citizens.rs`). Nowe przełączniki w duchu istniejących: `--no-economy`
+wraca do zachowania M3.
+
+**(b) Panel.** Trzy zakładki: Półki / Klienci / Konkurencja. Dane wyłącznie przez
+`ShopPanelSnapshot` (podwójnie buforowany, bez dostępu UI do ECS symulacji), otwierany
+kliknięciem w sklep przez istniejący bufor identyfikatorów z M3d.
+
+Kryterium: `magnat --seed …` pokazuje mieszkańców wchodzących do **konkretnych** sklepów
+(licznik transakcji rośnie, półki schodzą), kliknięcie w sklep otwiera panel, a pytanie
+„dlaczego Anna nie kupiła u mnie?" ma w nim odpowiedź dla ≥95% mieszkańców, którzy w ostatnich
+7 dniach byli kandydatami i nie kupili. Osobno, bo to jest ryzyko, a nie ozdoba: przy `X10`
+klatka nie schodzi poniżej budżetu z §7.3 albo `--no-economy` jest udokumentowaną drogą wyjścia.
 
 ### WP13 — Balansator i bramki CI
 Sekcja 7.4. Kryterium: bramki działają w CI na PR (macierz zredukowana) i nocnie (pełna);
@@ -136,6 +151,8 @@ Zgodnie z `K-18`. Wpisane jest **tylko to, co wiadomo na pewno** po zamknięciu 
 
 | # | Zmiana | Dlaczego |
 |---|---|---|
+| AB-1 ★ | **WP12 rośnie o drugą połowę: podpięcie gospodarki do `tools/magnat`, i rośnie z `M` do `L`.** Klient wstawia dziś do `AgentSources` atrapę `InfinitePlaces` z M3 (`citizens.rs:107`), a `tools/magnat/Cargo.toml` nie ma `magnat-economy` wśród zależności — więc cała faza M5 jest niewidoczna w oknie z miastem | **§1 dokumentu fazy obiecuje sesję w GUI** („gracz otwiera sklep osiedlowy przy ulicy X, podnosi cenę mleka o 15 %, po 3 dniach widzi w panelu spadek liczby klientów"), a **żaden pakiet nie był właścicielem drogi, którą gospodarka trafia do klienta**: `AgentSources` nie pojawia się w dokumentach M5e, M6, M7, M8 ani M9, a `ShopPanelSnapshot` nie pojawia się w M9 ani M11. To jest przypadek (5) z `K-18` — ten sam, który M9a złapał u siebie przy `GameState::MainMenu`. Panel bez tej połowy byłby widgetem z testem w CI i bez ani jednego użytkownika |
+| AB-2 | **Podpięcie wyciągnie na wierzch koszt, który dziś płaci tylko headless.** `m5shop` liczy dobę miasta 28,5 tys. w ~15 s przy 8 wątkach; przy `X1` doba ma 1440 s realnych, więc mieści się z zapasem, ale przy `X10` już nie | `U-24` mówi wprost, skąd to idzie: **nie z decyzji zakupowej** (`utility_of_offer` 14,7 ns wobec budżetu 120 ns), tylko z routera M4 — każdy zakup to dwa wywołania `begin_trip`. Lepiej, żeby wyszło w M5e z balansatorem i benchmarkami pod ręką, niż w M9 pod panelami. Bramka benchmarkowa WP14 ma to rozdzielać (`U-24`), więc liczba będzie znana, zanim ktoś zobaczy spadek FPS |
 | ★ | **WP13 nie liczy CPI ani inflacji sam — czyta je z rynku.** `Market::{cpi_index_bp, cpi_mom_bp, cpi_yoy_bp, base_rate, loan_count, credit_outstanding}` istnieją od M5d, a `cpi_mom_bp`/`cpi_yoy_bp` zwracają `Option<i32>` | Bramki G1–G3 mówią wprost o inflacji r/r i m/m. Policzenie ich w balansatorze z surowych transakcji znaczyłoby **drugą implementację CPI**, a ta rozjeżdża się z pierwszą przy pierwszej zmianie koszyka — to jest ten sam argument, którym D20 wywalczył `kernel`. `Option` ma przy tym znaczenie dla samej bramki: „nie ma jeszcze roku historii" to co innego niż „inflacja zero", a G1 mierzy od 12. miesiąca właśnie dlatego |
 | ★ | **Metryki M5d do zbierania per dzień są gotowe i nazwane**: indeks CPI, inflacja m/m i r/r, stopa bazowa, liczba kredytów, niespłacony kapitał oraz `HouseholdMonthReport` (zaplanowane budżety, zapłacone koszty stałe, oszczędności, wnioski i przyznania kredytu, niedopłaty, dopisane zaległości) | §7.4 dokumentu fazy wymienia „podaż pieniądza, sumę kredytów, stopę bazową" wśród metryk balansatora, ale nie mówił, skąd je wziąć. Teraz mówi: `HouseholdMonthReport` wraca z `settle_household_month` raz na miesiąc gry, a reszta jest odczytem z `Market` |
 | | **WP12 dostaje `Market::budget_log`** — pierścień 256 ostatnich decyzji budżetowych i kredytowych `(indeks gospodarstwa, DecisionReason)`, poza hashem stanu | To jest odpowiedź na „czemu tej rodzinie nie starczyło" i ta sama mechanika co `ShopLostSales`: okno podglądu, nie historia. Trzy nowe powody (`CreditApproved`, `CreditRejected`, `BudgetShortfall`) mają już teksty w `pl.ron` i `en.ron` oraz ramiona w `engine/ui::describe`, więc panel ma co renderować bez dokładania ani jednego klucza |

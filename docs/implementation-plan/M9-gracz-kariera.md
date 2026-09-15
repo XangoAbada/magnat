@@ -409,3 +409,14 @@ z poziomu gry, a nie z wiersza poleceń — plus stan kodu po M3d.
 | Z-3 ★ | **`PlayerCommand::StartGame` niesie `WorldGenParams`, nie `seed: u64`** (`M9a` §5.5) | Replay z samym ziarnem odtwarzałby inne miasto, bo rozmiar, region, epoka, profil i trudność zmieniają świat tak samo jak ziarno. To kontrakt determinizmu z §7, nie szczegół |
 | Z-4 | **Nowy kontrakt „konsumuję": obserwator postępu i anulowanie w `sim/world::generate`** oraz nagłówek zapisu czytelny bez wczytania świata (§6) | Ekran ładowania i lista slotów bez tego albo kłamią (animowany pasek), albo wczytują dziesięć światów, żeby pokazać dziesięć wierszy |
 | Z-5 | **Język wizualny wydzielony do `docs/ui-design.md`**, tokeny do `data/ui/theme.ron`; PRD §16.4 dostał korektę o `egui` (decyzja M3 9.2), która znosi ograniczenie „egui tylko w devtools" z §16.1 | Ryzyko z §8 („`engine/ui` to największa masa kodu bez planu zapasowego") zostało częściowo rozbrojone jeszcze w M3 — dokument fazy nadal mówił inaczej niż kod, który już stoi na `egui`. Przy okazji: tymczasowe panele „za flagą `dev-panels`" z §8 przestają być potrzebne jako furtka, bo `egui` jest teraz drogą główną, a nie awaryjną |
+
+---
+
+## Zmiany wpisane po M5d
+
+Zgodnie z `K-18`.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| Y-1 | **Gospodarka w kliencie jest zastana, nie budowana.** `tools/magnat` uruchamia `Books`, `Market` i `MarketSystem` oraz ma `Sources.places` podmienione na rynek od **M5e/WP12** (`AB-1`); M9 dokłada gracza, panele i edytor reguł **na działającej gospodarce** | Do M5d klient wstawiał do `AgentSources` atrapę `InfinitePlaces` z M3, a droga, którą gospodarka trafia do okna, nie miała właściciela w żadnym dokumencie — łącznie z tym. Zapisane tutaj, żeby M9c nie zaczął od budowania czegoś, co już stoi: kryterium „dlaczego Anna nie kupiła u mnie" w `M9c` dotyczy **karty inspekcji mieszkańca**, a panel sklepu i jego `ShopPanelSnapshot` przychodzą gotowe z M5e |
+| Y-2 | **Koszt gospodarki w klatce będzie znany przed startem fazy.** Bramka benchmarkowa M5e/WP14 rozdziela decyzję zakupową od podróży, które ona generuje (`U-24`), a `M5e` ma kryterium na klatkę przy `X10` z `--no-economy` jako udokumentowaną drogą wyjścia (`AB-2`) | M9 planuje panele i automatyzację polityk przy założeniu, że świat się kręci. Gdyby koszt zakupów w klatce wyszedł dopiero tutaj, wyszedłby **pod panelami** — czyli w miejscu, w którym najtrudniej odróżnić „panel jest wolny" od „symulacja jest wolna" |
