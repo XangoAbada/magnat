@@ -113,6 +113,64 @@ impl HashState for FuelLedger {
     }
 }
 
+/// Zakończona podróż zapamiętana dla karty inspekcji (WP11).
+///
+/// **Bufor inspekcji, nie stan świata** — tak samo jak `Trace` w M3 (decyzja 9.16)
+/// i z tego samego powodu: gdyby wchodził do hasha, wskazanie mieszkańca myszą
+/// zmieniałoby hash świata i `camera_does_not_change_world` (A5) by to złapało.
+///
+/// Zapisują się wyłącznie podróże **śledzonych** mieszkańców — i tylko one mają
+/// wypełnione `TripLedger.entries`, bo rejestr krawędź po krawędzi zbiera się właśnie
+/// dla nich (`ActiveTrip.traced`).
+#[derive(Clone, Debug)]
+pub struct TripRecord {
+    pub traveller: u32,
+    /// Skąd wyruszył. Pochodzi z bufora decyzji oracle'a, bo ledger notuje krawędzie,
+    /// a nie adresy; `None` w tamtym buforze znaczy „podróż zaczęła się przed
+    /// włączeniem śledzenia" i wtedy start jest nieznany.
+    pub origin: Option<PlaceRef>,
+    pub dest: PlaceRef,
+    pub planned_minutes: u16,
+    pub ledger: crate::trip::TripLedger,
+    /// Pełne porównanie środków transportu, jeśli oracle je zapamiętał.
+    pub decision: Option<crate::mode::ModeDecision>,
+}
+
+/// Pierścień ostatnich podróży śledzonych mieszkańców.
+#[derive(Default, Debug)]
+pub struct TripLog {
+    records: Vec<TripRecord>,
+}
+
+impl TripLog {
+    /// Ilu podróży wstecz sięga karta. Ośmiu śledzonych × cztery podróże na dobę —
+    /// tyle, ile mieści się w jednym ekranie, i ani rekordu więcej.
+    pub const CAP: usize = 32;
+
+    #[must_use]
+    pub fn new() -> TripLog {
+        TripLog::default()
+    }
+
+    pub fn push(&mut self, r: TripRecord) {
+        if self.records.len() >= TripLog::CAP {
+            self.records.remove(0);
+        }
+        self.records.push(r);
+    }
+
+    #[must_use]
+    pub fn records(&self) -> &[TripRecord] {
+        &self.records
+    }
+
+    /// Ostatnia podróż danego mieszkańca — to jest to, co pokazuje karta.
+    #[must_use]
+    pub fn last_of(&self, citizen: u32) -> Option<&TripRecord> {
+        self.records.iter().rev().find(|r| r.traveller == citizen)
+    }
+}
+
 /// Rejestruje komponenty, zasoby i haki hasha fazy M4.
 ///
 /// Komponent niezarejestrowany nie wchodzi do hasha stanu (00 §3.6) i rozjazd
@@ -126,6 +184,12 @@ pub fn register_traffic(world: &mut World, services: TrafficServices, network: T
     world.insert_resource(services);
     world.insert_resource(network);
     world.insert_resource(FuelLedger::default());
+    // Nakładki są **pomiarem, nie stanem** — tak samo jak `TrafficStats`. Gdyby weszły
+    // do hasha, przełączenie nakładki przez gracza zmieniałoby hash świata, czyli
+    // dokładnie to, przed czym broni §5.4. Dlatego zasób bez `register_resource_hash`.
+    world.insert_resource(crate::overlay::TrafficOverlay::new());
+    // Dziennik podróży, tak samo jak nakładki, jest pomiarem — bez haka hasha.
+    world.insert_resource(TripLog::new());
     world.insert_resource(FareLedger::default());
     world.register_resource_hash::<TrafficNetwork>();
     world.register_resource_hash::<FuelLedger>();
@@ -217,6 +281,28 @@ impl System for TrafficSystem {
                 }
                 TrafficEvent::Refuelled { .. } => {}
             }
+            if let TrafficEvent::Arrived {
+                traveller,
+                dest,
+                planned_minutes,
+                ledger,
+                ..
+            } = &ev
+            {
+                if oracle.is_watched(*traveller) {
+                    let ostatnia = oracle.last_decision(*traveller);
+                    let origin = ostatnia.as_ref().map(|(f, _, _)| *f);
+                    let decision = ostatnia.map(|(_, _, d)| d);
+                    world.resource_mut::<TripLog>().push(TripRecord {
+                        traveller: *traveller,
+                        origin,
+                        dest: *dest,
+                        planned_minutes: *planned_minutes,
+                        ledger: ledger.clone(),
+                        decision,
+                    });
+                }
+            }
             zastosuj(world, &fleet, ev, satysfakcja);
         }
 
@@ -246,7 +332,64 @@ impl System for TrafficSystem {
             zastosuj_transit(world, ev, satysfakcja);
         }
 
-        // 5. Taryfy taksówkowe: oracle je zebrał przy wyruszeniu, tu trafiają do
+        // 5. Nakładki danych (WP11): bufor tylny przepisuje się tutaj, a renderer czyta
+        //    przedni — dzięki temu klatka nigdy nie czeka na krok minutowy i odwrotnie.
+        {
+            let godzina = ((now / 60) % 24) as u8;
+            let origin = world.resource::<crate::overlay::TrafficOverlay>().origin();
+            // Izochrona odczytuje się **przed** wejściem w `with_road`, a nie w środku:
+            // obie metody biorą ten sam `Mutex` routera, a `std::sync::Mutex` nie jest
+            // wznawialny — zagnieżdżenie zakleszcza wątek na amen (ostrzeżenie przy
+            // `with_road` z M4b). Dzielnic jest kilkadziesiąt, więc tabela jest tańsza
+            // niż jedno zapytanie CCH.
+            let izochrona: Vec<u16> = oracle.with_matrix(|m| {
+                (0..m.n_districts())
+                    .map(|d| {
+                        m.lookup(
+                            magnat_core::DistrictId(origin),
+                            magnat_core::DistrictId(d),
+                            godzina,
+                            magnat_core::TransportMode::Car,
+                        )
+                        .unwrap_or(0)
+                    })
+                    .collect()
+            });
+            oracle.with_road(|road| {
+                let mezo = &world.resource::<TrafficNetwork>().mezo;
+                oracle.with_parking(|parking| {
+                    oracle.with_transit(|transit| {
+                        world.resource::<crate::overlay::TrafficOverlay>().rebuild(
+                            &crate::overlay::OverlayInputs {
+                                minute: now,
+                                road,
+                                mezo,
+                                parking,
+                                transit,
+                                origin_district: origin,
+                            },
+                            |d| izochrona.get(usize::from(d)).copied().unwrap_or(0),
+                        );
+                    });
+                });
+            });
+        }
+
+        // 6. Zasilenie warstwy Mikro (WP8). Idzie **na końcu minuty**, po tym jak mezo
+        //    policzyło wszystko — warstwa dostaje stan, a nie wpływa na niego. Przy
+        //    zamkniętym kadrze `begin_vehicle_feed` zwraca `false` i headless nie płaci
+        //    nic poza jednym sprawdzeniem atomika.
+        if oracle.micro().begin_vehicle_feed() {
+            oracle.with_road(|road| {
+                world
+                    .resource::<TrafficNetwork>()
+                    .feed_micro(oracle.micro(), road, &catalog);
+                oracle.with_transit(|t| t.feed_micro(oracle.micro(), road, &catalog));
+            });
+            oracle.micro().end_vehicle_feed();
+        }
+
+        // 7. Taryfy taksówkowe: oracle je zebrał przy wyruszeniu, tu trafiają do
         //    rejestru, żeby bilans pieniądza miał drugą stronę (`M-6`).
         let taryfy = oracle.taxi_fares();
         let l = world.resource_mut::<FareLedger>();

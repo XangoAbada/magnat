@@ -115,6 +115,27 @@ jobs:
           cargo test --release -p magnat-world --test city -- --include-ignored
           # M2c: kryteria WP7, WP5b, WP8, WP9.
           cargo test --release -p magnat-world --test city_m2c -- --include-ignored
+      - name: M4 — kamera, wątki i prędkość nie zmieniają świata (M4d/WP12)
+        # Trzy kryteria naraz, bo wszystkie sprowadzają się do jednego pytania: czy coś
+        # spoza symulacji przecieka do jej wyniku. `--micro` otwiera okno LOD Mikro, więc
+        # ten krok jest `camera_does_not_change_world` (A5) na **pełnym scenariuszu**,
+        # a nie tylko na teście jednostkowym — mikro liczy wtedy IDM dla tysięcy pojazdów
+        # i nadal nie ma prawa zmienić ani grosza.
+        #
+        # Dwie doby, nie sto: kryterium WP12 mówi o stu, ale sto dób metropolii to
+        # kilkadziesiąt minut na przebieg i cztery przebiegi — to jest bieg nocny,
+        # nie bramka pull requesta. Dwie doby łapią wszystko, co zależy od kolejności
+        # wątków, bo ta rozjeżdża się w pierwszych minutach albo wcale.
+        shell: bash
+        run: |
+          cargo run --release -q -p magnat-headless -- m3day --size 4km --days 2             --citizens 4000 --hash-every 240 --threads 1 --out m4_mezo.hashes
+          cargo run --release -q -p magnat-headless -- m3day --size 4km --days 2             --citizens 4000 --hash-every 240 --threads 16 --expect m4_mezo.hashes
+          cargo run --release -q -p magnat-headless -- m3day --size 4km --days 2             --citizens 4000 --hash-every 240 --speed 10 --expect m4_mezo.hashes
+          cargo run --release -q -p magnat-headless -- m3day --size 4km --days 2             --citizens 4000 --hash-every 240 --micro 2000 --threads 4 --expect m4_mezo.hashes
+      - name: M4 — dowód spójności mikro ↔ mezo (A1–A5, M4d/WP9)
+        run: cargo test --release -p magnat-world --test lod -- --include-ignored
+      - name: M4 — diagram IDM zgadza się z tabelą VDF (miernik dryfu R2)
+        run: cargo run --release -q -p magnat-headless -- calibrate-vdf
       - name: T-D8 — test negatywny (chaos musi zawieść)
         shell: bash
         run: |
@@ -136,7 +157,7 @@ jobs:
         # cel z `bench = true` jako benchmark, więc `--workspace` próbuje uruchomić także
         # biblioteki i binarki, które nie znają flag criteriona.
         run: |
-          cargo bench -p magnat-core -p magnat-ecs -p magnat-io                       -p magnat-voxel -p magnat-world --benches                       -- --warm-up-time 1 --measurement-time 3
+          cargo bench -p magnat-core -p magnat-ecs -p magnat-io                       -p magnat-voxel -p magnat-world -p magnat-nav -p magnat-spatial                       -p magnat-traffic --benches                       -- --warm-up-time 1 --measurement-time 3
       - name: porównanie z linią bazową (10 % ostrzeżenie, 25 % błąd — D-8)
         run: python3 scripts/bench_guard.py benches/baseline.json
 

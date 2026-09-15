@@ -845,7 +845,18 @@ impl App {
         let Some(renderer) = self.renderer.as_mut() else {
             return;
         };
-        match overlay::zbuduj(&self.terrain, self.city.as_deref(), self.nakladka) {
+        // Nakładki ruchu mają własne źródło — zrzut symulacji, nie dane generatora.
+        // Bez zaludnionego świata po prostu nie ma czego rysować i nakładka gaśnie;
+        // to jest uczciwsze niż pokazanie pustej mapy, która wygląda jak brak korków.
+        let ruch = self.nakladka.pole_ruchu().and_then(|f| {
+            let rozmiar = self.city.as_deref()?.plan.map_size_m().max(1) as u32;
+            self.citizens.as_ref()?.pole_ruchu(f, rozmiar)
+        });
+        let pole = match ruch {
+            Some(p) => Some(p),
+            None => overlay::zbuduj(&self.terrain, self.city.as_deref(), self.nakladka),
+        };
+        match pole {
             Some(p) => {
                 renderer.set_overlay(Some(magnat_render::TerrainOverlay {
                     cell_m: p.cell_m,

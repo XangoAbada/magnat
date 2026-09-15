@@ -1,0 +1,28 @@
+// Imiona — pula regionalna, generacja proceduralna.
+//
+// **To nie jest lokalizacja UI** (CLAUDE.md): imiona i nazwiska generowane per region
+// nie są tłumaczone. Pliku nie dubluje się w wersji angielskiej.
+//
+// Kolejność wpisów jest KONTRAKTEM: indeks w tej tablicy siedzi w komponencie
+// `Identity` mieszkańca, czyli w zapisie gry. Dopisywać wolno wyłącznie na końcu listy.
+(
+    schema_version: 1,
+    male: [
+        "Michael", "Thomas", "Andreas", "Wolfgang", "Klaus", "Jürgen", "Günter", "Stefan", "Christian", "Peter",
+        "Manfred", "Uwe", "Werner", "Hans", "Frank", "Matthias", "Martin", "Dieter", "Bernd", "Helmut",
+        "Rainer", "Alexander", "Jörg", "Sebastian", "Markus", "Rolf", "Karl", "Heinz", "Joachim", "Rudolf",
+        "Norbert", "Gerhard", "Ralf", "Horst", "Harald", "Herbert", "Torsten", "Volker", "Lukas", "Felix",
+        "Jonas", "Leon", "Maximilian", "Paul", "Elias", "Noah", "Benjamin", "Julian", "David", "Tobias",
+        "Florian", "Simon", "Jan", "Niklas", "Fabian", "Philipp", "Dominik", "Moritz", "Erik", "Marcel",
+        "Kevin", "Patrick", "Oliver", "Björn", "Sven", "Detlef", "Siegfried", "Reinhard", "Ludwig", "Friedrich",
+    ],
+    female: [
+        "Anna", "Maria", "Ursula", "Monika", "Petra", "Elisabeth", "Sabine", "Renate", "Karin", "Helga",
+        "Brigitte", "Gabriele", "Ingrid", "Andrea", "Claudia", "Susanne", "Barbara", "Christa", "Birgit", "Erika",
+        "Gisela", "Heike", "Martina", "Angelika", "Marion", "Katrin", "Christine", "Nicole", "Stefanie", "Silke",
+        "Manuela", "Bettina", "Kerstin", "Jutta", "Beate", "Cornelia", "Ute", "Anja", "Doris", "Gerda",
+        "Hannelore", "Ilse", "Inge", "Waltraud", "Hildegard", "Sophie", "Marie", "Mia", "Emilia", "Hannah",
+        "Lena", "Lea", "Leonie", "Johanna", "Laura", "Charlotte", "Clara", "Amelie", "Julia", "Sarah",
+        "Lisa", "Jana", "Nina", "Franziska", "Verena", "Antonia", "Theresa", "Melanie", "Ramona", "Yvonne",
+    ],
+)

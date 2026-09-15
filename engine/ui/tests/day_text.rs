@@ -11,10 +11,16 @@
 //! w obu językach. Wspólny byłby jeden plik złoty dla dwóch różnych rzeczy.
 //!
 //! Po M4b dublerem podróży jest `StraightLineTravel` — `WalkOracle` z siatką ulic
-//! zniknął z `sim/agents` razem z przeniesieniem tras do `sim/traffic`, a `engine/ui`
-//! od `sim/traffic` nie zależy i zależeć nie ma. Wzorce złote zostały przez to
-//! wygenerowane na nowo: plan Anny z odległościami w linii prostej robi zakupy
-//! wieczorem (`ChosenNearest`) zamiast po drodze z pracy (`ChosenOnRoute`).
+//! zniknął z `sim/agents` razem z przeniesieniem tras do `sim/traffic`. Wzorce złote
+//! zostały przez to wygenerowane na nowo: plan Anny z odległościami w linii prostej
+//! robi zakupy wieczorem (`ChosenNearest`) zamiast po drodze z pracy (`ChosenOnRoute`).
+//!
+//! **Korekta po M4d (`S-15`):** stała tu wcześniej notatka, że „`engine/ui` od
+//! `sim/traffic` nie zależy i zależeć nie ma". Zależy od WP11 i ma zależeć: karta
+//! podróży czyta `ModeDecision`, `TripLedger` i `LedgerEntry`, a te trzy typy M4 §6
+//! wypisuje jako kontrakt z adresatem „karta inspekcji". **Ten** test dublera nie
+//! porzuca — nie dlatego, że nie może, tylko dlatego, że broni planera dnia, a nie
+//! podróży: prawdziwy oracle wciągnąłby do niego router, flotę i stacje paliw.
 
 use magnat_agents::{
     plan_day_explained, DayCanvas, Employment, HouseholdView, Identity, InfinitePlaces, Knowledge,
@@ -207,6 +213,7 @@ fn zloty_wydruk_dnia_po_polsku() {
         canvas: &canvas,
         log: &log,
         actual: &[],
+        stored: &[],
     };
     let wydruk = render_day_text(&c, Locale::Pl, &naglowek(&c, Locale::Pl), &timeline);
 
@@ -237,6 +244,7 @@ fn zloty_wydruk_dnia_po_angielsku() {
         canvas: &canvas,
         log: &log,
         actual: &[],
+        stored: &[],
     };
     let wydruk = render_day_text(&c, Locale::En, &naglowek(&c, Locale::En), &timeline);
 
@@ -270,6 +278,7 @@ fn kazdy_slot_planu_ma_niepusty_powod() {
             canvas: &canvas,
             log: &log,
             actual: &[],
+            stored: &[],
         };
         let rows: Vec<TimelineRow> = timeline.rows(&c, l);
         assert!(!rows.is_empty(), "pusty plan");
@@ -318,6 +327,7 @@ fn realizacja_rysuje_sie_obok_planu_i_rozjazd_widac() {
         canvas: &canvas,
         log: &log,
         actual: &realizacja,
+        stored: &[],
     };
     let rows = timeline.rows(&c, Locale::Pl);
     assert_eq!(rows[0].drift_min, 0);

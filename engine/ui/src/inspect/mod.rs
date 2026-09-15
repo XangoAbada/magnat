@@ -8,6 +8,7 @@
 pub mod citizen;
 pub mod reason;
 pub mod timeline;
+pub mod trip;
 
 use crate::loc::{Catalog, Locale};
 use crate::selection::Selection;

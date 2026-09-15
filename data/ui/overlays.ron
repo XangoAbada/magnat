@@ -33,5 +33,103 @@
                 (600_000, (255, 245, 220, 230)),
             ],
         ),
+        // ── nakładki ruchu (M4d/WP11, PRD §14.2) ─────────────────────────────────
+        //
+        // Cztery pierwsze wymienia §14.2 wprost; piąta (obciążenie linii) jest tam pod
+        // hasłem „komunikacja". Wszystkie rysują się po **krawędziach sieci**, poza
+        // parkingami, które są punktami — stąd `rasterize_edges` i `rasterize_points`
+        // w `sim/traffic::overlay`, a nie jedna funkcja z gałęzią.
+        //
+        // Palety idą **od ciemnego do jasnego wraz z rosnącą wartością**, tak samo jak
+        // wartość gruntu i z tego samego powodu: przy deuteranopii i na wydruku czyta
+        // się wyłącznie jasność. Konsekwencja dla nakładek, w których „więcej" znaczy
+        // „lepiej" (płynność, izochrona), jest zamierzona: jasno = dobrze, ciemno = źle,
+        // w każdej z pięciu. Odwrócenie tego dla jednej z nich kosztowałoby gracza
+        // sekundę zastanowienia przy każdym przełączeniu F3.
+        (
+            key: "traffic_flow",
+            loc_key: "overlay.traffic_flow",
+            unit: "poj./h",
+            // Pas klasy „local" ma przepustowość 1 000 poj./h, arteria 1 800 — progi
+            // sięgają 3 000, bo krawędź wielopasmowa sumuje pasy.
+            stops: [
+                (0,     (18, 16, 45, 0)),
+                (60,    (45, 30, 85, 170)),
+                (180,   (85, 40, 105, 185)),
+                (400,   (135, 55, 100, 195)),
+                (800,   (185, 85, 75, 205)),
+                (1_400, (225, 130, 60, 215)),
+                (2_200, (245, 185, 85, 222)),
+                (3_000, (255, 245, 215, 230)),
+            ],
+        ),
+        (
+            key: "congestion",
+            loc_key: "overlay.congestion",
+            unit: "‰ prędkości swobodnej",
+            // 1000 = jedzie się swobodnie. Zero jest tu stanem najgorszym, więc paleta
+            // zaczyna się od najciemniejszego — i dlatego ta nakładka **nie jest**
+            // odwrotnością natężenia: pusta autostrada ma zero pojazdów i tysiąc promili.
+            stops: [
+                (0,     (40, 5, 25, 220)),
+                (250,   (95, 15, 40, 215)),
+                (450,   (150, 40, 45, 210)),
+                (600,   (200, 85, 50, 205)),
+                (750,   (235, 140, 60, 195)),
+                (880,   (248, 195, 105, 170)),
+                (960,   (252, 232, 180, 110)),
+                (1_000, (255, 250, 235, 0)),
+            ],
+        ),
+        (
+            key: "isochrone",
+            loc_key: "overlay.isochrone",
+            unit: "min",
+            // Minuty dojazdu **do** dzielnicy odniesienia. Wartość rośnie, gdy jest
+            // gorzej, a paleta jaśnieje z wartością — więc tu jasne znaczy „daleko".
+            // To jedyne miejsce, w którym kierunek czytania jest odwrotny niż w reszcie,
+            // i jest to cena trzymania jednej reguły jasności dla wszystkich nakładek
+            // gry; legenda podaje jednostkę, więc nie ma jak pomylić minut z promilami.
+            stops: [
+                (0,  (25, 20, 60, 160)),
+                (5,  (55, 30, 95, 175)),
+                (10, (100, 40, 105, 190)),
+                (20, (150, 55, 95, 200)),
+                (30, (200, 90, 70, 208)),
+                (45, (235, 140, 60, 215)),
+                (60, (250, 195, 95, 222)),
+                (90, (255, 248, 225, 230)),
+            ],
+        ),
+        (
+            key: "parking_occupancy",
+            loc_key: "overlay.parking_occupancy",
+            unit: "‰ zajętych miejsc",
+            stops: [
+                (0,     (22, 18, 52, 150)),
+                (250,   (60, 30, 90, 175)),
+                (500,   (115, 45, 100, 190)),
+                (700,   (170, 65, 85, 200)),
+                (850,   (215, 105, 60, 210)),
+                (950,   (243, 165, 70, 220)),
+                (1_000, (255, 240, 200, 235)),
+            ],
+        ),
+        (
+            key: "transit_load",
+            loc_key: "overlay.transit_load",
+            unit: "‰ pojemności",
+            // Tysiąc znaczy „kurs pełny", czyli że na następnym przystanku ktoś zostanie
+            // na peronie (`LeftBehind`). Dlatego próg 1000 jest najjaśniejszy: to jest
+            // odcinek, na który gracz ma patrzeć, a nie ten z ładnym obłożeniem 60 %.
+            stops: [
+                (0,     (20, 22, 55, 140)),
+                (300,   (50, 45, 100, 170)),
+                (550,   (95, 70, 120, 188)),
+                (750,   (150, 95, 110, 200)),
+                (900,   (205, 130, 85, 212)),
+                (1_000, (255, 235, 195, 232)),
+            ],
+        ),
     ],
 )

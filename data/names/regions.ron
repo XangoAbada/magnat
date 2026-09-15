@@ -1,0 +1,27 @@
+// Regiony pochodzenia imion i nazwisk (M4d §5.10, WP13).
+//
+// **To nie jest lokalizacja UI** (CLAUDE.md): imiona i nazwiska generowane per region
+// nie są tłumaczone. Mieszkaniec nazwiskiem Schmidt nazywa się tak samo w polskiej
+// i w angielskiej wersji językowej — tak samo jak ulica i dzielnica.
+//
+// Każdy wpis to `(kod, waga w promilach)`. Kod jest sufiksem pary plików
+// `first_names_<kod>.ron` i `surnames_<kod>.ron`. Waga rozstrzyga, z którego regionu
+// pochodzi nowe gospodarstwo — miasto jest w większości rodzime, z mniejszością napływową.
+//
+// **Kolejność wpisów jest kontraktem**: indeksy imienia i nazwiska w komponencie
+// `Identity` są indeksami w puli sklejonej z regionów w tej kolejności, czyli siedzą
+// w zapisie gry. Region dopisuje się na końcu listy; przestawienie kolejności albo
+// usunięcie regionu przenumerowuje wszystkich mieszkańców świata.
+//
+// Sumy wag nie trzeba pilnować — losowanie dzieli przez sumę faktyczną.
+(
+    schema_version: 1,
+    regions: [
+        ("pl", 900),
+        ("de",  25),
+        ("cz",  25),
+        ("en",  20),
+        ("fr",  15),
+        ("es",  15),
+    ],
+)

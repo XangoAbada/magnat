@@ -22,6 +22,11 @@ ron = { workspace = true }
 [dev-dependencies]
 # Trasa z `engine/nav` niesie odcinki w `SmallVec`; testy budują ją ręcznie.
 smallvec = { workspace = true }
+criterion = { workspace = true }
 
 [lints]
 workspace = true
+
+[[bench]]
+name = "traffic_bench"
+harness = false

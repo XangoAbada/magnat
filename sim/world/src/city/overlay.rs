@@ -233,6 +233,29 @@ mod tests {
         assert!(spadki <= 8, "paleta ma {spadki} spadków jasności");
     }
 
+    /// Reguła jasności obowiązuje **każdą** nakładkę, nie tylko tę pierwszą.
+    /// Nakładka dopisana przez kolejną fazę z paletą turbo albo tęczową czytałaby się
+    /// źle na wydruku i przy deuteranopii, a zauważyłby to dopiero gracz.
+    #[test]
+    fn kazda_nakladka_ma_palete_monotoniczna_w_jasnosci() {
+        let t = OverlayTable::load().expect("data/ui/overlays.ron");
+        let luma = |c: [u8; 4]| {
+            0.299 * f32::from(c[0]) + 0.587 * f32::from(c[1]) + 0.114 * f32::from(c[2])
+        };
+        assert!(t.overlays.len() >= 6, "nakładki ruchu z M4d zniknęły z danych");
+        for s in &t.overlays {
+            let k = &s.key;
+            let p = s.palette();
+            let spadki = p.windows(2).filter(|w| luma(w[1]) + 1.0 < luma(w[0])).count();
+            assert!(spadki <= 8, "nakładka {k}: paleta ma {spadki} spadków jasności");
+            assert!(!s.unit.is_empty(), "nakładka {k} bez jednostki w legendzie");
+            assert!(
+                s.loc_key.starts_with("overlay."),
+                "nakładka {k}: klucz lokalizacji poza przestrzenią `overlay.`"
+            );
+        }
+    }
+
     #[test]
     fn indeks_rosnie_z_wartoscia_i_nie_wychodzi_poza_zakres() {
         let s = spec();

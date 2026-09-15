@@ -24,6 +24,7 @@
 pub mod mezo;
 pub mod micro;
 pub mod mode;
+pub mod overlay;
 pub mod parking;
 pub mod oracle;
 pub mod spec;
@@ -36,7 +37,15 @@ pub use mezo::{
     settle_edge, settle_node, EdgeQueue, LedgerEntry, LinkState, MezoState, NodeState,
     VehicleSpecRef, CS_PER_MINUTE, UL_PER_ML,
 };
-pub use micro::{MicroLayer, Pedestrian, PedestrianBuffer};
+pub use micro::{
+    equilibrium_speed_cms, idm_speed_dkmh, IdmParams, MicroLayer, MicroVehicle, Pedestrian,
+    PedestrianBuffer, VehicleBuffer, VehicleFeed, CALIBRATION_VEHICLE_CM, IDM_SCHEMA_VERSION,
+    MICRO_UNIT_CAP, NO_EDGE,
+};
+pub use overlay::{
+    rasterize_edges, rasterize_points, OverlayInputs, TrafficField, TrafficOverlay,
+    TrafficOverlaySnapshot,
+};
 pub use mode::{
     evaluate_modes, Candidate, DiscomfortBreakdown, GeneralizedCost, Infeasible, ModeChoiceParams,
     ModeContext, ModeDecision, OptionOffer, ShareRange, TravelOption, MODE_CHOICE_SCHEMA_VERSION,
@@ -54,6 +63,7 @@ pub use spec::{
     VDF_SCHEMA_VERSION, VEHICLES_SCHEMA_VERSION,
 };
 pub use systems::{
+    TripLog, TripRecord,
     register_traffic, FareLedger, FuelLedger, TrafficServices, TrafficSystem, VehicleWearSystem,
 };
 pub use transit::{

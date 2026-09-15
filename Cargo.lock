@@ -1548,6 +1548,7 @@ dependencies = [
 name = "magnat-traffic"
 version = "0.1.0"
 dependencies = [
+ "criterion",
  "magnat-agents",
  "magnat-core",
  "magnat-ecs",
@@ -1567,6 +1568,8 @@ dependencies = [
  "magnat-agents",
  "magnat-core",
  "magnat-ecs",
+ "magnat-nav",
+ "magnat-traffic",
  "ron",
  "serde",
 ]

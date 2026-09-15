@@ -237,6 +237,9 @@ pub struct CitizenModel {
     pub canvas: magnat_agents::DayCanvas,
     pub log: magnat_agents::ReasonLog,
     pub actual: Vec<crate::ActualBlock>,
+    /// Plan **zapisany** w slabie — ten, w który indeksuje bufor śledzenia (`N-9`).
+    /// Pusty, gdy mieszkaniec nie ma aktualnego planu na tę dobę.
+    pub stored: Vec<magnat_agents::PlanSlot>,
 }
 
 impl CitizenModel {
@@ -246,6 +249,7 @@ impl CitizenModel {
             canvas: &self.canvas,
             log: &self.log,
             actual: &self.actual,
+            stored: &self.stored,
         }
     }
 }
@@ -271,6 +275,14 @@ impl CitizenPanel {
                 .resource::<magnat_agents::Trace>()
                 .entries(citizen.entity().index()),
         );
+        // Plan zapisany, a nie odtworzony, jest tym, którego numery slotów niesie
+        // bufor śledzenia (`N-9`). Uchwyt starszy niż ta doba opisuje wczorajszy
+        // plan i nie ma prawa udawać dzisiejszego.
+        let stored = world
+            .get::<magnat_agents::PlanRef>(citizen.entity())
+            .filter(|p| p.plan_day == (self.day % 65_536) as u16)
+            .map(|p| magnat_agents::load_plan(p, world.resource::<magnat_agents::PlanSlab>()).to_vec())
+            .unwrap_or_default();
         let card = CitizenCard::build(
             c,
             l,
@@ -285,6 +297,7 @@ impl CitizenPanel {
             canvas,
             log,
             actual,
+            stored,
         })
     }
 }
@@ -303,8 +316,8 @@ impl crate::InspectorPanel for CitizenPanel {
 }
 
 /// Nagłówek karty. Imiona pochodzą z `data/names/` i **nie są** lokalizacją UI
-/// (CLAUDE.md), więc dopóki puli nazw nie ma po tej stronie, mieszkaniec jest
-/// numerem — a nie „Mieszkańcem" przetłumaczonym na dwa języki.
+/// (CLAUDE.md) — ta sama nazwa pada w obu wersjach językowych, bo mieszkaniec
+/// nazwiskiem Schmidt nazywa się tak samo po polsku i po angielsku.
 fn naglowek(c: &Catalog, l: Locale, snap: &CitizenSnapshot, day: u64) -> CitizenHeader {
     use magnat_agents::Employment;
     let zawod = if snap.employment.flags & Employment::FLAG_PUPIL != 0 {
@@ -330,12 +343,7 @@ fn naglowek(c: &Catalog, l: Locale, snap: &CitizenSnapshot, day: u64) -> Citizen
         )
     };
     CitizenHeader {
-        name: format!(
-            "#{} ({}/{})",
-            snap.citizen.index(),
-            snap.identity.first_name,
-            snap.identity.last_name
-        ),
+        name: crate::full_name(&snap.identity),
         age_years: snap.identity.age_years(day as i32).max(0) as u32,
         occupation: zawod,
         address: adres,

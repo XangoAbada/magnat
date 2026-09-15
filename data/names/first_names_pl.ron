@@ -1,0 +1,36 @@
+// Imiona — pula regionalna, generacja proceduralna.
+//
+// **To nie jest lokalizacja UI** (CLAUDE.md): imiona i nazwiska generowane per region
+// nie są tłumaczone. Pliku nie dubluje się w wersji angielskiej.
+//
+// Kolejność wpisów jest KONTRAKTEM: indeks w tej tablicy siedzi w komponencie
+// `Identity` mieszkańca, czyli w zapisie gry. Dopisywać wolno wyłącznie na końcu listy.
+(
+    schema_version: 1,
+    male: [
+        "Adam", "Adrian", "Albert", "Aleksander", "Andrzej", "Antoni", "Arkadiusz", "Artur", "Bartosz", "Bartłomiej",
+        "Błażej", "Bogdan", "Bogusław", "Bronisław", "Cezary", "Czesław", "Damian", "Daniel", "Dariusz", "Dawid",
+        "Dominik", "Edward", "Emil", "Eugeniusz", "Filip", "Franciszek", "Fryderyk", "Gabriel", "Grzegorz", "Gustaw",
+        "Henryk", "Hubert", "Igor", "Ignacy", "Ireneusz", "Jacek", "Jakub", "Jan", "Janusz", "Jarosław",
+        "Jerzy", "Józef", "Julian", "Juliusz", "Kacper", "Kamil", "Karol", "Kazimierz", "Konrad", "Krystian",
+        "Krzysztof", "Leszek", "Lech", "Ludwik", "Łukasz", "Maciej", "Marcel", "Marcin", "Marek", "Marian",
+        "Mariusz", "Mateusz", "Michał", "Mieczysław", "Mikołaj", "Miłosz", "Mirosław", "Norbert", "Oskar", "Patryk",
+        "Paweł", "Piotr", "Przemysław", "Rafał", "Radosław", "Remigiusz", "Robert", "Roman", "Ryszard", "Sebastian",
+        "Seweryn", "Sławomir", "Stanisław", "Stefan", "Sylwester", "Szymon", "Tadeusz", "Tomasz", "Waldemar", "Wiesław",
+        "Wiktor", "Wincenty", "Witold", "Władysław", "Włodzimierz", "Wojciech", "Zbigniew", "Zdzisław", "Zenon", "Zygmunt",
+        "Alan", "Aleks", "Borys", "Cyprian", "Eryk", "Ksawery", "Leon", "Nikodem", "Olaf", "Tymoteusz",
+    ],
+    female: [
+        "Agata", "Agnieszka", "Aleksandra", "Alicja", "Amelia", "Anastazja", "Aneta", "Anna", "Antonina", "Barbara",
+        "Beata", "Bernadeta", "Bogumiła", "Bożena", "Cecylia", "Danuta", "Daria", "Diana", "Dominika", "Dorota",
+        "Edyta", "Elżbieta", "Emilia", "Ewa", "Ewelina", "Felicja", "Gabriela", "Genowefa", "Grażyna", "Halina",
+        "Hanna", "Helena", "Honorata", "Iga", "Ilona", "Irena", "Iwona", "Izabela", "Jadwiga", "Janina",
+        "Joanna", "Jolanta", "Julia", "Justyna", "Kamila", "Karolina", "Katarzyna", "Kinga", "Klaudia", "Kornelia",
+        "Krystyna", "Laura", "Lena", "Liliana", "Lidia", "Łucja", "Magdalena", "Maja", "Małgorzata", "Marcelina",
+        "Maria", "Marianna", "Marlena", "Marta", "Martyna", "Marzena", "Melania", "Michalina", "Milena", "Monika",
+        "Natalia", "Nadia", "Nikola", "Oliwia", "Olga", "Paulina", "Patrycja", "Renata", "Roksana", "Róża",
+        "Sabina", "Sandra", "Sara", "Sylwia", "Stefania", "Stanisława", "Teresa", "Urszula", "Wanda", "Weronika",
+        "Wiesława", "Wiktoria", "Wioletta", "Zofia", "Zuzanna", "Żaneta", "Adrianna", "Blanka", "Celina", "Eliza",
+        "Emanuela", "Faustyna", "Gertruda", "Irmina", "Jagoda", "Kalina", "Ksenia", "Leokadia", "Ludmiła", "Malwina",
+    ],
+)

@@ -27,6 +27,7 @@
 
 pub mod inspect;
 pub mod loc;
+pub mod names;
 pub mod selection;
 pub mod time;
 pub mod widgets;
@@ -39,7 +40,11 @@ pub use inspect::timeline::{
     actual_from_trace, render_day_text, ActualBlock, CitizenHeader, DayTimeline, TimelineRow,
     DRIFT_HIGHLIGHT_MIN,
 };
+pub use inspect::trip::{
+    infeasible, option_name, place, CandidateRow, TimeSplit, TripCard, TripView, VehicleCard, VehicleView,
+};
 pub use inspect::{InspectorPanel, UiContext};
 pub use loc::{Catalog, LocKey, Locale};
+pub use names::full_name;
 pub use selection::{ListPicker, NoPicker, PickResult, Picker, Selection};
 pub use time::{TimeControlsWidget, CATCH_UP_CAP};

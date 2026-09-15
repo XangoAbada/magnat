@@ -1036,10 +1036,19 @@ fn uroda(world: &mut World, matka: Entity, day: u64) -> bool {
     };
     let cechy: [u8; 8] = std::array::from_fn(|_| r.gen_q().get());
 
+    // Imię z puli **regionu rodziny**, odczytanego z dziedziczonego nazwiska (§5.10):
+    // dziecko Schmidtów nie nazywa się Agnieszka, a `Identity` nie rośnie o pole regionu.
+    let nazwy = crate::names::catalog();
+    let imie = nazwy.pick_first(
+        nazwy.region_of_surname(m_id.last_name),
+        plec == Identity::FLAG_MALE,
+        &mut r,
+    );
+
     let dziecko = world
         .spawn()
         .with(Identity {
-            first_name: r.gen_range_u32(256) as u16,
+            first_name: imie,
             last_name: m_id.last_name,
             birth_day: day as i32,
             birth_district: hh.district,

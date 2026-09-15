@@ -1,0 +1,21 @@
+Anna Kowalska: bud. 1 → zakład 2
+  wyjazd 07:20, przyjazd 07:54 — 34 minuty (plan: 28 minut)
+  spóźnienie 6 minut
+  wybrany środek: samochód; autobus kosztowałby o 13.06 zł więcej
+  przejazd trwał 34 minuty, plan zakładał 28 minut
+Rozważone opcje:
+  × pieszo                 za daleko — 108 minut w jedną stronę
+    rower                  41.53 zł = 41 minut × 50 gr/min + 0.00 zł + 21.03 zł
+  · komunikacja miejska    34.99 zł = 46 minut × 50 gr/min + 2.40 zł + 9.59 zł
+  → auto własne            21.93 zł = 28 minut × 50 gr/min + 7.42 zł + 0.51 zł
+  × auto rodzinne          autem jedzie ktoś inny (mieszkaniec 81)
+  × taksówka               za drogo dla tego gospodarstwa — 31.80 zł
+Czas przejazdu: jazda 28 minut · skrzyżowania 1 minuta · kolejki 6 minut
+Trasa: 4 odcinki, 9214 m, 6 zatrzymań
+Paliwo: 0.36 l · Koszt podróży: 7.42 zł
+Pojazd: auto małe (benzyna)
+  właściciel: gospodarstwo 100
+  kierowca: Anna Kowalska
+  stan techniczny: zużycie 23/100, przebieg 84000 km, do przeglądu 1500 km
+  zbiornik: 27.45 l z 45.00 l (610‰)
+  zaparkowany: zakład 2

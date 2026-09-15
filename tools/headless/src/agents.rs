@@ -60,14 +60,19 @@ fn zaludnij(seed: u64, n: u32) -> World {
         let wiek_dni = 360 * i64::from(r.gen_range_u32(85)) + i64::from(r.gen_range_u32(360));
         let cechy: [u8; 8] = std::array::from_fn(|_| r.gen_q().get());
         let pracuje = (360 * 18..360 * 65).contains(&wiek_dni);
+        // Świat syntetyczny też losuje z puli, a nie ze stałej: karta inspekcji jest tu
+        // ta sama co w mieście, więc indeks bez wpisu wyszedłby dokładnie tak samo (WP13).
+        let nazwy = magnat_agents::name_catalog();
+        let region = nazwy.pick_region(&mut r);
+        let mezczyzna = r.gen_bool_permille(500);
         let _ = w
             .spawn()
             .with(Identity {
-                first_name: r.gen_range_u32(200) as u16,
-                last_name: r.gen_range_u32(500) as u16,
+                first_name: nazwy.pick_first(region, mezczyzna, &mut r),
+                last_name: nazwy.pick_surname(region, &mut r),
                 birth_day: -(wiek_dni as i32),
                 birth_district: (i % 12) as u16,
-                flags: Identity::FLAG_ALIVE | u8::from(r.gen_bool_permille(500)),
+                flags: Identity::FLAG_ALIVE | u8::from(mezczyzna),
                 _pad: 0,
                 household: i / 3,
             })

@@ -57,6 +57,33 @@ pub struct PedestrianRecord {
     pub entity: u32,
 }
 
+/// Jeden pojazd w LOD Mikro (M4d/WP8) — ten sam kanał i ta sama zasada co pieszy.
+///
+/// Rekord powstaje po stronie `sim/traffic`, a renderer dostaje go slice'em, nie
+/// w `RenderSnapshot` (`R-2`): docelowy kształt należy do M11, więc **rozszerza się
+/// ten rekord**, a nie zakłada drugiego kanału sim → render — inaczej `sim/snapshot`
+/// przestaje być jedynym, którego pilnuje graf zależności.
+///
+/// `heading` jest tu, a nie liczony w rendererze, bo kierunek wynika z osi krawędzi,
+/// którą zna wyłącznie warstwa ruchu. `class` to `VehicleClassId` — model bryły dobierze
+/// M11, tu jest tylko indeks katalogu.
+#[derive(Clone, Copy, PartialEq, Debug, Default)]
+#[repr(C)]
+pub struct VehicleRecord {
+    /// Pozycja w metrach, Z pionowo — jak u pieszego.
+    pub pos: [f32; 3],
+    /// Kurs w radianach, 0 = oś +X.
+    pub heading: f32,
+    /// Indeks encji pojazdu. Kurs komunikacji, który nie ma encji pojazdu, niesie
+    /// tu indeks swojego taboru — bufor ID i tak wskazuje wtedy na linię, nie na osobę.
+    pub entity: u32,
+    /// `VehicleClassId` z `data/vehicles/classes.ron`.
+    pub class: u8,
+    /// Pas liczony od prawej krawędzi jezdni.
+    pub lane: u8,
+    pub _pad: [u8; 2],
+}
+
 /// Tablica o stałej pojemności — odpowiednik `SoaSlice` z planu M1 §6.1.
 ///
 /// Osobny typ zamiast `[T; N]` z licznikiem obok, bo licznik trzymany osobno rozjeżdża się

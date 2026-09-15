@@ -120,6 +120,16 @@ pub struct LedgerEntry {
     /// Opłata: bilet, parking, myto. Dla zwykłej krawędzi 0 — paliwo płaci się
     /// na stacji, nie na drodze.
     pub money: Money,
+    /// Opóźnienie na węźle **wjazdowym** tej krawędzi: sygnalizacja, pierwszeństwo,
+    /// kolejka ruchu skrętnego. Wypełnia je `advance`, bo dopiero ono zna manewr.
+    pub node_delay_cs: u32,
+    /// Czas spędzony w kolejce oczekujących na **wjazd** na tę krawędź (spillback).
+    ///
+    /// Te dwa pola istnieją, bo bez nich karta inspekcji liczy czas kolejki jako resztę
+    /// z odejmowania i wrzuca do niej opóźnienie sygnalizacji — a to są dwie różne
+    /// naprawy (`N-6`). Agregat w `TrafficStats` ma ten rozbiór od M4b; tutaj jest ten
+    /// sam rozbiór **na jedną podróż**, czyli w rozdzielczości, w której patrzy gracz.
+    pub blocked_cs: u32,
 }
 
 /// Pojazd tak, jak widzi go wzór kosztu: klasa z katalogu plus katalog dla mnożników.
@@ -172,6 +182,10 @@ pub fn settle_edge(
         stops: stops_at_entry_node,
         fuel_ul,
         money: Money::ZERO,
+        // Wypełnia je warstwa wyżej: `settle_edge` widzi jedną krawędź, a opóźnienie
+        // węzła i czekanie na wjazd są własnością **przejścia** między krawędziami.
+        node_delay_cs: 0,
+        blocked_cs: 0,
     }
 }
 

@@ -1,0 +1,28 @@
+// Imiona — pula regionalna, generacja proceduralna.
+//
+// **To nie jest lokalizacja UI** (CLAUDE.md): imiona i nazwiska generowane per region
+// nie są tłumaczone. Pliku nie dubluje się w wersji angielskiej.
+//
+// Kolejność wpisów jest KONTRAKTEM: indeks w tej tablicy siedzi w komponencie
+// `Identity` mieszkańca, czyli w zapisie gry. Dopisywać wolno wyłącznie na końcu listy.
+(
+    schema_version: 1,
+    male: [
+        "Jean", "Pierre", "Michel", "André", "Philippe", "Alain", "Bernard", "Jacques", "Daniel", "Claude",
+        "Christian", "Patrick", "Nicolas", "Laurent", "Éric", "Pascal", "Thierry", "Frédéric", "Olivier", "Stéphane",
+        "François", "Gérard", "Christophe", "Didier", "Sébastien", "Vincent", "Julien", "Antoine", "Guillaume", "Alexandre",
+        "Maxime", "Thomas", "Lucas", "Hugo", "Louis", "Gabriel", "Raphaël", "Arthur", "Théo", "Enzo",
+        "Nathan", "Clément", "Baptiste", "Romain", "Quentin", "Florian", "Benoît", "Damien", "Cédric", "Fabien",
+        "Gilles", "Hervé", "Joël", "Marc", "Mathieu", "Rémi", "Serge", "Yves", "Xavier", "Denis",
+        "Aurélien", "Bruno", "Cyril", "Émile", "Fernand", "Henri", "Jérôme", "Ludovic", "Marcel", "Régis",
+    ],
+    female: [
+        "Marie", "Nathalie", "Isabelle", "Sylvie", "Catherine", "Françoise", "Martine", "Christine", "Monique", "Valérie",
+        "Sandrine", "Stéphanie", "Céline", "Véronique", "Nicole", "Chantal", "Patricia", "Brigitte", "Danielle", "Michèle",
+        "Anne", "Julie", "Aurélie", "Laurence", "Corinne", "Sophie", "Caroline", "Émilie", "Camille", "Léa",
+        "Manon", "Chloé", "Inès", "Jade", "Louise", "Alice", "Lina", "Emma", "Zoé", "Lola",
+        "Élodie", "Delphine", "Karine", "Virginie", "Laetitia", "Audrey", "Amandine", "Charlotte", "Claire", "Élise",
+        "Fanny", "Gaëlle", "Hélène", "Jeanne", "Justine", "Lucie", "Madeleine", "Margaux", "Noémie", "Océane",
+        "Pauline", "Sarah", "Solène", "Thérèse", "Yvonne", "Agnès", "Béatrice", "Colette", "Denise", "Ghislaine",
+    ],
+)

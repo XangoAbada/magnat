@@ -27,11 +27,19 @@ pub enum Nakladka {
     /// M2e, WP16 — jedyna nakładka **danych miejskich**, a nie terenu. Paleta i progi
     /// z `data/ui/overlays.ron`, żeby podgląd headless i klient pokazywały to samo.
     WartoscGruntu,
+    /// M4d, WP11 — nakładki **ruchu**. W odróżnieniu od wszystkich powyżej nie liczą
+    /// się z danych generatora, tylko z **bieżącej minuty symulacji**, więc budują się
+    /// z podwójnie buforowanego zrzutu (`TrafficOverlay`), a nie z `Terrain`.
+    Natezenie,
+    Korki,
+    Izochrona,
+    Parkingi,
+    ObciazenieLinii,
 }
 
 impl Nakladka {
     /// Kolejność przełączania klawiszem `F3`.
-    const KOLEJNOSC: [Nakladka; 11] = [
+    const KOLEJNOSC: [Nakladka; 16] = [
         Nakladka::Brak,
         Nakladka::Wysokosc,
         Nakladka::Splyw,
@@ -43,6 +51,11 @@ impl Nakladka {
         Nakladka::Geologia,
         Nakladka::Zloza,
         Nakladka::WartoscGruntu,
+        Nakladka::Natezenie,
+        Nakladka::Korki,
+        Nakladka::Izochrona,
+        Nakladka::Parkingi,
+        Nakladka::ObciazenieLinii,
     ];
 
     #[must_use]
@@ -67,6 +80,11 @@ impl Nakladka {
             "geology" => Nakladka::Geologia,
             "deposits" => Nakladka::Zloza,
             "land-value" => Nakladka::WartoscGruntu,
+            "traffic-flow" => Nakladka::Natezenie,
+            "congestion" => Nakladka::Korki,
+            "isochrone" => Nakladka::Izochrona,
+            "parking" => Nakladka::Parkingi,
+            "transit-load" => Nakladka::ObciazenieLinii,
             _ => return None,
         })
     }
@@ -88,7 +106,30 @@ impl Nakladka {
             // w M3 — plik `data/ui/overlays.ron` niesie już `loc_key`, pod który podłączy
             // się tamta faza (CLAUDE.md, „Język i lokalizacja").
             Nakladka::WartoscGruntu => "wartość gruntu",
+            Nakladka::Natezenie => "natężenie ruchu",
+            Nakladka::Korki => "korki",
+            Nakladka::Izochrona => "czas dojazdu",
+            Nakladka::Parkingi => "obłożenie parkingów",
+            Nakladka::ObciazenieLinii => "obciążenie linii",
         }
+    }
+
+    /// Pole ruchu, które ta nakładka rysuje — `None` dla nakładek terenu i miasta.
+    ///
+    /// Nakładki ruchu przechodzą osobną ścieżką, bo ich źródłem jest **symulacja
+    /// w tej minucie**, a nie dane generatora: `zbuduj` dostaje `Terrain` i `CityData`,
+    /// a te o korku nie wiedzą nic.
+    #[must_use]
+    pub fn pole_ruchu(self) -> Option<magnat_traffic::TrafficField> {
+        use magnat_traffic::TrafficField as F;
+        Some(match self {
+            Nakladka::Natezenie => F::Flow,
+            Nakladka::Korki => F::Congestion,
+            Nakladka::Izochrona => F::Isochrone,
+            Nakladka::Parkingi => F::Parking,
+            Nakladka::ObciazenieLinii => F::TransitLoad,
+            _ => return None,
+        })
     }
 
     /// Czy nakładka jest **kategoryczna** (paleta to zbiór barw, nie gradient).
@@ -119,6 +160,11 @@ pub fn zbuduj(terrain: &Terrain, city: Option<&CityData>, co: Nakladka) -> Optio
     }
     if co == Nakladka::WartoscGruntu {
         return wartosc_gruntu(city?);
+    }
+    // Ruch ma własne źródło (zrzut symulacji), więc tutaj kończy się cicho: wołający
+    // buduje go przez `Citizens::pole_ruchu`, bo tylko on trzyma świat.
+    if co.pole_ruchu().is_some() {
+        return None;
     }
     let dane = terrain.data();
     let dim = dane.height.dim();
@@ -177,7 +223,16 @@ pub fn zbuduj(terrain: &Terrain, city: Option<&CityData>, co: Nakladka) -> Optio
                     );
                     warstwa_pod_powierzchnia(terrain, x, y)
                 }
-                Nakladka::Zloza | Nakladka::WartoscGruntu => 0,
+                // Nakładki miejskie i ruchu mają własne ścieżki i nie dochodzą tutaj;
+                // wyliczamy je mimo to, bo `K-12` żąda wyczerpującego `match` — brak
+                // ramienia ma łamać kompilację, a nie rysować pustą mapę.
+                Nakladka::Zloza
+                | Nakladka::WartoscGruntu
+                | Nakladka::Natezenie
+                | Nakladka::Korki
+                | Nakladka::Izochrona
+                | Nakladka::Parkingi
+                | Nakladka::ObciazenieLinii => 0,
             };
         }
     }

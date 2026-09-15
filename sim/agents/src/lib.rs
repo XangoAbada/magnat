@@ -43,6 +43,7 @@ pub mod components;
 pub mod demography;
 pub mod des;
 pub mod migration;
+pub mod names;
 pub mod household;
 pub mod needs;
 pub mod places;
@@ -53,6 +54,7 @@ pub mod store;
 pub mod systems;
 
 pub use arrayvec::ArrayVec;
+pub use names::{catalog as name_catalog, NameCatalog, NameError, NAMES_SCHEMA_VERSION};
 pub use components::{
     register, register_components, register_resources, AgentState, EduField, EduLevel, Employment,
     Identity, Lifecycle, Lod, Needs, Personality, PlanRef, Residence, ShiftKind, SkillSlot, Skills,

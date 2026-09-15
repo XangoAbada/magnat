@@ -256,15 +256,79 @@ impl Citizens {
     ///
     /// Encja jest sprawdzana przez listę populacji, a nie brana na wiarę: bufor ID niesie
     /// odczyt sprzed klatki, a mieszkaniec mógł w tym czasie umrzeć albo się wyprowadzić.
+    /// Raster nakładki ruchu z **bieżącej minuty symulacji** (WP11).
+    ///
+    /// Czyta **przedni** bufor zrzutu, którego krok minutowy w tej chwili nie dotyka —
+    /// dlatego przełączenie nakładki nie czeka na symulację i mieści się w klatce.
+    /// Wartości surowe mapuje na indeksy palety `data/ui/overlays.ron`, czyli tej samej
+    /// tabeli, którą czyta podgląd `headless m3day --overlay`.
+    #[must_use]
+    pub fn pole_ruchu(
+        &self,
+        pole: magnat_traffic::TrafficField,
+        map_size_m: u32,
+    ) -> Option<crate::overlay::Pole> {
+        let tab = magnat_world::OverlayTable::load().ok()?;
+        let spec = tab.get(pole.key()).ok()?;
+        let bok = u32::from(magnat_world::city::overlay::OVERLAY_CELL_M);
+        let dim = (map_size_m / bok).max(1);
+        let oracle = self
+            .app
+            .world
+            .resource::<magnat_traffic::TrafficServices>()
+            .oracle
+            .clone();
+        let surowe = self
+            .app
+            .world
+            .resource::<magnat_traffic::TrafficOverlay>()
+            .with_front(|snap| {
+                oracle.with_road(|road| {
+                    if pole.is_edge_field() {
+                        let v: Vec<u16> = (0..road.edge_count())
+                            .map(|i| snap.edge_value(pole, i).clamp(0, i64::from(u16::MAX)) as u16)
+                            .collect();
+                        magnat_traffic::rasterize_edges(road, &v, dim, bok, 1)
+                    } else {
+                        magnat_traffic::rasterize_points(&snap.lots, dim, bok, 1)
+                    }
+                })
+            });
+        Some(crate::overlay::Pole {
+            dim,
+            cell_m: bok as f32,
+            values: surowe
+                .iter()
+                .map(|v| {
+                    if *v == 0 {
+                        0
+                    } else {
+                        spec.index_of(i64::from(*v)).max(1)
+                    }
+                })
+                .collect(),
+            palette: spec.palette(),
+        })
+    }
+
     pub fn select(&mut self, entity_index: u32) -> bool {
         let lista = magnat_ui::ListPicker::new(
             self.app.world.resource::<Population>().citizens().to_vec(),
         );
         match lista.by_entity_index(entity_index) {
             Selection::Citizen(c) => {
-                // Bufor śledzenia zbiera **realizację** obserwowanego mieszkańca — bez
-                // tego karta pokazuje sam plan (decyzja 9.16, najwyżej ośmiu naraz).
+                // Dwa bufory śledzenia, bo dwie różne rzeczy: `Trace` zbiera zdarzenia
+                // DES (co mieszkaniec robił), `TrafficOracle::watch` włącza rejestr
+                // krawędź po krawędzi i zapamiętywanie porównania środków transportu
+                // (jak jechał i dlaczego tak). Bez tego drugiego `TripLedger.entries`
+                // jest puste dla **każdego** mieszkańca, a karta podróży nie ma z czego
+                // policzyć rozbioru czasu (`N-6`).
                 self.app.world.resource_mut::<Trace>().watch(entity_index);
+                self.app
+                    .world
+                    .resource::<magnat_traffic::TrafficServices>()
+                    .oracle
+                    .watch(entity_index);
                 self.ui.selection = Selection::Citizen(c);
                 self.pokaz_karte = true;
                 true

@@ -714,6 +714,13 @@ pub fn spawn_household_aged(
     adult_age_spread: u8,
 ) -> Entity {
     let ages = world.resource::<DemographyTable>().ages();
+    // Region i nazwisko losuje się **raz na gospodarstwo**, nie raz na dorosłego:
+    // inaczej mąż jest Nowakiem, żona Kowalską, a dzieci dziedziczą po matce, więc
+    // ojciec nazywa się w karcie inaczej niż reszta domu. Nazwisko małżonki po ślubie
+    // to osobna sprawa i należy do fazy, która ślub modeluje.
+    let nazwy = crate::names::catalog();
+    let region = nazwy.pick_region(r);
+    let nazwisko = nazwy.pick_surname(region, r);
 
     let hh_e = world
         .spawn()
@@ -742,13 +749,13 @@ pub fn spawn_household_aged(
         } else {
             r.gen_bool_permille(500)
         };
-        let c = spawn_citizen(world, day, r, hh_idx, &home, wiek, mezczyzna);
+        let c = spawn_citizen(world, day, r, hh_idx, &home, wiek, mezczyzna, nazwisko);
         czlonkowie.push(c);
     }
     for _ in 0..children {
         let wiek = r.gen_range_u32(u32::from(ages.adult)) as i32;
         let mezczyzna = r.gen_bool_permille(500);
-        let c = spawn_citizen(world, day, r, hh_idx, &home, wiek, mezczyzna);
+        let c = spawn_citizen(world, day, r, hh_idx, &home, wiek, mezczyzna, nazwisko);
         czlonkowie.push(c);
     }
 
@@ -871,6 +878,7 @@ pub fn seed_population(world: &mut World, day: u64, households: usize) -> u32 {
 
 /// Jeden mieszkaniec z kompletem trzynastu komponentów. Uczeń dostaje flagę, ale
 /// **nie dostaje szkoły** — placówki zna Etap 8, a nie ta funkcja.
+#[allow(clippy::too_many_arguments)]
 fn spawn_citizen(
     world: &mut World,
     day: u64,
@@ -879,6 +887,7 @@ fn spawn_citizen(
     home: &HomeSlot,
     age_years: i32,
     male: bool,
+    surname: u16,
 ) -> Entity {
     let ages = world.resource::<DemographyTable>().ages();
     let uczen = age_years >= i32::from(ages.school_start) && age_years < i32::from(ages.school_end);
@@ -886,8 +895,12 @@ fn spawn_citizen(
     let e = world
         .spawn()
         .with(Identity {
-            first_name: r.gen_range_u32(256) as u16,
-            last_name: r.gen_range_u32(512) as u16,
+            first_name: crate::names::catalog().pick_first(
+                crate::names::catalog().region_of_surname(surname),
+                male,
+                r,
+            ),
+            last_name: surname,
             birth_day: day as i32 - age_years * DAYS_PER_YEAR as i32,
             birth_district: Identity::DISTRICT_IMMIGRANT,
             flags: Identity::FLAG_ALIVE | if male { Identity::FLAG_MALE } else { 0 },

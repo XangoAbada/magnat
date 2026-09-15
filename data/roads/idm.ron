@@ -1,0 +1,78 @@
+// Parametry warstwy Mikro: car-following (IDM) i zmiana pasa (MOBIL) — M4d §5.4, WP8.
+//
+// **To są parametry animacji, nie ekonomii.** Warstwa Mikro nie ma prawa zapisu do
+// stanu symulacji (00 §4): czas przejazdu, paliwo i pieniądz powstają w `settle_edge`
+// z tabeli `vdf.ron`, a nie tutaj. Zmiana czegokolwiek w tym pliku **nie zmienia ani
+// grosza** w żadnym saldzie — zmienia to, jak ruch wygląda w kadrze.
+//
+// Sprzężenie idzie w drugą stronę i tylko offline: `balansator calibrate-vdf` (WP9)
+// przepuszcza mikro z tymi parametrami po jednorodnym pierścieniu, mierzy diagram
+// podstawowy `q(k)` i **z niego** przelicza `min_speed_dkmh` w `vdf.ron`. Dlatego to
+// jest jedyny kanał mikro → symulacja: offline, powtarzalny i widoczny w diffie.
+//
+// Jednostki są całkowite mimo że rachunek IDM jest zmiennoprzecinkowy — plik czyta
+// człowiek, a float w danych zaciera intencję („czy 1.2 to sekundy czy dziesiąte").
+(
+    schema_version: 1,
+
+    // ── IDM (Treiber) ───────────────────────────────────────────────────────────
+    //
+    // **Kierunek kalibracji jest odwrotny do tego, co zapowiadał plan (§5.4).** Plan
+    // mówił: „VDF jest wyprowadzony z parametrów IDM". W praktyce jest na odwrót, bo
+    // VDF ma niezależne oparcie w pomiarze, a IDM nie ma żadnego: `min_speed_dkmh`
+    // wzięło się w M4b z obserwacji, że jeden pas zjeżdża z kolejki ~30 pojazdów na
+    // minutę (`L-16`), a parametry IDM to liczby wpisane z podręcznika. Dlatego to one
+    // dopasowują się do VDF — inaczej animacja opowiadałaby inną historię niż rachunek
+    // (ryzyko R2), a rozstrzygałaby ta strona, która nie ma pomiaru.
+    //
+    // Wprost: przy odstępie korkowym 750 cm i pojeździe 450 cm zostaje 300 cm luki,
+    // a `s0 + v·T = 300` przy `v = 3,6 m/s` (13 km/h, czyli `min_speed_dkmh` klasy
+    // „local") daje `s0 = 120 cm`, `T = 0,5 s`. Podręcznikowe 200 cm i 1,2 s dawały
+    // w tym samym punkcie 3 km/h — czterokrotnie wolniej, niż kolejka schodzi w mezo.
+    // Resztę rozrzutu (klasy szybkie mają w VDF wyższą prędkość zjazdu) bierze na siebie
+    // test `diagram_idm_zgadza_sie_z_vdf`; per-klasowe parametry IDM dołoży faza,
+    // która ich naprawdę potrzebuje.
+    //
+    // Odstęp przy zatrzymaniu, do zderzaka poprzednika.
+    s0_cm: 120,
+    // Bezpieczny odstęp czasowy w dziesiątych sekundy: 5 = 0,5 s.
+    headway_ds: 5,
+    // Przyspieszenie komfortowe i hamowanie komfortowe w cm/s².
+    accel_cms2: 130,
+    decel_cms2: 200,
+    // Wykładnik członu prędkości. **Musi być 4**: kod liczy go jako kwadrat kwadratu,
+    // bo `f64::powf` jest zakazane w kodzie symulacji (`K-6`), a `sqrt` nie.
+    delta: 4,
+
+    // ── MOBIL (zmiana pasa) ─────────────────────────────────────────────────────
+    // Uprzejmość: ile cudzej straty kierowca bierze na swój rachunek (promile).
+    politeness_permille: 250,
+    // Próg zysku, poniżej którego nie warto zmieniać pasa (cm/s²).
+    threshold_cms2: 20,
+    // Hamowanie, którego nie wolno wymusić na nadjeżdżającym z tyłu (cm/s²).
+    safe_decel_cms2: 400,
+
+    // ── Serwo domykające do czasu zaksięgowanego (§5.4) ─────────────────────────
+    // Korekta pożądanej prędkości jest przycinana do tych widełek. Jej wielkość jest
+    // **metryką jakości kalibracji, nie poprawności** — czas przybycia i tak wynika
+    // z `settle_edge`, a nie z tego, gdzie mikro zdążyło postawić bryłę.
+    servo_min_permille: 850,
+    servo_max_permille: 1150,
+
+    // ── Budżet kroku ────────────────────────────────────────────────────────────
+    // Podkrok całkowania w milisekundach czasu gry i twardy limit podkroków na jedno
+    // wywołanie `micro_step`. Warstwa jest krokowana **raz na minutę świata** (`R-1`,
+    // WP14), a IDM nie jest czystą funkcją czasu, więc całkowanie musi się odbyć
+    // wewnątrz wywołania.
+    //
+    // Pół sekundy × 120 pokrywa minutę świata w całości i mieści się w budżecie §7.3
+    // z zapasem rzędu wielkości: 3 tys. jednostek × 120 podkroków to ~0,5 ms/podkrok,
+    // czyli ~60 ms na minutę świata wobec 2 400 ms, które daje tam wiersz „micro_step".
+    // Sześćset podkroków po 100 ms było kosztem, którego WP14 właśnie się pozbyło,
+    // a IDM przy pół sekundy jest stabilne — przy pełnej sekundzie już oscyluje.
+    // Powyżej limitu krok jest **rozciągany**, nie gubiony: pozycja domyka się do czasu
+    // zaksięgowanego niezależnie od tego, ile podkroków wypadło. Płynność sterowana
+    // klatką renderu należy do M11b, nie tutaj.
+    substep_ms: 500,
+    max_substeps: 120,
+)

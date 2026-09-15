@@ -371,14 +371,22 @@ W tej sesji nie był dostępny mechanizm odpytania agentów planujących pozosta
 | **D9** | Przyjęta. Cena paliwa jest w `data/vehicles/classes.ron` per `FuelKind`, a ruch czyta ją przez `VehicleCatalog::price_gr` — nie z pliku wprost. Podmiana na ofertę `sim/economy` w M5 nie rusza kodu ruchu | M4b `L-18` |
 | **D10** | Przyjęta. Sygnalizacja stałoczasowa, cykl 90 s, zielone 40 s na wlot; opóźnienie z członu równomiernego Webstera. Hook `SignalPlanId → plan` jest w `NodeControl::Signal` od M4a i czeka na M8 | M4b `L-18` |
 | **D4** | Przyjęta jak w propozycji. `WeatherStub` powstaje jako `core::weather_at(seed, day) -> Weather` (`K-26`): trójkąt roczny temperatury plus opad o sezonowym prawdopodobieństwie, całkowitoliczbowo i bez funkcji przestępnych. M8 podmienia ciało, `sim/traffic` nie zmienia ani jednej linii | M4c `P-15` |
+| **D7** | Przyjęta jak w propozycji. **Kryterium LOD Mikro to wyłącznie kadr kamery** — `MicroLayer` ma promień okna i stan domyślny „wyłączona", a kryterium obciążenia nie powstało ani jako produkcyjne, ani jako devtoolsowe. Uzasadnienie okazało się mocniejsze, niż zapowiadał opis decyzji: mikro nie tylko „nie daje nic poza kosztem" poza kadrem, ale **nie ma jak dać czegokolwiek** — nie zapisuje do stanu symulacji, a jego bufor nie wchodzi do hasha. Włączanie go „na drogach o wysokim obciążeniu" rysowałoby więc pojazdy, których nikt nie ogląda, i nie zmieniało niczego w wyniku | M4d `S-8`, `micro_writes_nothing` |
 | **D5** | Przyjęta z uzupełnieniem. Taxi jest opcją transportową z ceną z `data/roads/mode_choice.ron`, bez encji firmy i bez floty; kurs **nie wjeżdża na sieć**, a taryfa idzie do `FareLedger.taxi_revenue`, żeby bilans pieniądza się domykał. Uzupełnienie wymuszone pomiarem: potrzebny jest **próg budżetowy** (`Infeasible::BeyondBudget`), bo bez niego taksówka zbiera 15 % podróży metropolii — sama cena jej nie hamuje | M4c `P-5` |
 
 Otwarte i przeniesione dalej z dotychczasowymi adresatami: **D2** (tryb 50×, M12),
-**D7** (kryterium LOD Mikro, właściciel PRD), **D8** (`RoadNetworkChanged`, M2/M8 —
-patrz `J-16`), **D11** (liczba profili routingu, M8), **D12** (nazwy ulic, właściciel
-produktu). **D4** i **D5** zostały rozstrzygnięte w M4c i zostają na liście adresatów
-wyłącznie jako zobowiązanie podmiany: M8 zastępuje ciało `weather_at`, M7 — taksówkę
-operatorem z flotą.
+**D8** (`RoadNetworkChanged`, M2/M8 — patrz `J-16`), **D11** (liczba profili routingu, M8),
+**D12** (nazwy ulic, właściciel produktu). **D4** i **D5** zostały rozstrzygnięte w M4c,
+**D7** w M4d; wszystkie trzy zostają na liście adresatów wyłącznie jako zobowiązanie
+podmiany albo akceptacji: M8 zastępuje ciało `weather_at`, M7 — taksówkę operatorem
+z flotą, a właściciel PRD przyjmuje do wiadomości odstępstwo od litery §9.2.
+
+**D12 dostała w M4d nowy kontekst, ale nie została rozstrzygnięta.** Pula nazw własnych
+mieszkańców powstała (WP13) i jest **multiregionalna**, więc argument „gdyby nazwy ulic
+miały powstać, to jest najtańszy moment" jest teraz mocniejszy niż był: generator,
+formater i wzorzec pliku per region istnieją, a `data/names/streets_<kod>.ron` byłoby
+trzynastym plikiem w tym samym kształcie. Propozycja M4 pozostaje bez zmian — **nie w M4**,
+bo nazwy ulicy nadal nie ma gdzie pokazać (tabliczka w M11c, adres w karcie M9c).
 
 ---
 

@@ -144,6 +144,12 @@ pub struct TrafficOracle {
     pending: Mutex<Vec<PendingTrip>>,
     next_trip: AtomicU32,
     watched: Mutex<Vec<u32>>,
+    /// Ostatni wybór środka transportu śledzonego mieszkańca — **bufor inspekcji**,
+    /// nie stan świata (tak samo jak `Trace` w M3, decyzja 9.16). Karta podróży
+    /// potrzebuje pełnej listy kandydatów z kosztami, a `ModeDecision` gubi się zaraz
+    /// po wyruszeniu: do ledgera trafia z niej tylko uzasadnienie. Poza hashem, bo
+    /// inaczej wskazanie mieszkańca myszą zmieniałoby hash świata.
+    decisions: Mutex<Vec<(u32, PlaceRef, PlaceRef, ModeDecision)>>,
     /// Który pojazd jest w tej chwili w podróży. To **nie jest** kopia stanu
     /// z ECS, tylko własność oracle: to on tworzy podróże, więc on jeden wie,
     /// że pojazd już wyruszył i nie stoi pod domem.
@@ -232,6 +238,7 @@ impl TrafficOracle {
             pending: Mutex::new(Vec::new()),
             next_trip: AtomicU32::new(1),
             watched: Mutex::new(Vec::new()),
+            decisions: Mutex::new(Vec::new()),
             busy: Mutex::new(vec![false; flota]),
             by_household,
             micro: MicroLayer::new(),
@@ -402,6 +409,12 @@ impl TrafficOracle {
     pub fn with_road<R>(&self, f: impl FnOnce(&magnat_nav::RoadGraph) -> R) -> R {
         let g = self.router.lock().expect("router");
         f(g.router.graphs().layer(magnat_nav::Modality::Road))
+    }
+
+    /// Macierz czasów przejazdu pod zamkiem routera — wejście nakładki izochron
+    /// (WP11) i **ta sama** tabela, którą czyta rynek pracy i zasięg sklepu.
+    pub fn with_matrix<R>(&self, f: impl FnOnce(&magnat_nav::TravelTimeMatrix) -> R) -> R {
+        f(self.router.lock().expect("router").router.matrix())
     }
 
     #[must_use]
@@ -915,8 +928,35 @@ impl TrafficOracle {
         })
     }
 
-    fn is_watched(&self, citizen: u32) -> bool {
+    #[must_use]
+    pub fn is_watched(&self, citizen: u32) -> bool {
         self.watched.lock().expect("watched").contains(&citizen)
+    }
+
+    /// Ostatni wybór środka transportu śledzonego mieszkańca, jeśli jakiś był.
+    ///
+    /// Razem z decyzją wraca **miejsce startu**: ledger go nie niesie (rejestruje
+    /// krawędzie, nie adresy), a karta ma napisać „z domu do zakładu", a nie „donikąd".
+    #[must_use]
+    pub fn last_decision(&self, citizen: u32) -> Option<(PlaceRef, PlaceRef, ModeDecision)> {
+        self.decisions
+            .lock()
+            .expect("decisions")
+            .iter()
+            .rev()
+            .find(|(c, _, _, _)| *c == citizen)
+            .map(|(_, from, to, d)| (*from, *to, d.clone()))
+    }
+
+    fn zapamietaj_decyzje(&self, citizen: u32, from: PlaceRef, to: PlaceRef, d: &ModeDecision) {
+        let mut v = self.decisions.lock().expect("decisions");
+        v.retain(|(c, _, _, _)| *c != citizen);
+        v.push((citizen, from, to, d.clone()));
+        // Śledzonych jest najwyżej ośmiu (decyzja 9.16), więc bufor nie ma jak urosnąć;
+        // limit jest tu po to, żeby nie urósł, gdyby ktoś podniósł tamten.
+        if v.len() > 16 {
+            v.remove(0);
+        }
     }
 }
 
@@ -957,6 +997,9 @@ impl TrafficOracle {
         let (minutes, reason) = (decision.minutes, decision.reason);
         let id = self.next_trip.fetch_add(1, Ordering::Relaxed);
         let citizen = trip.traveller.entity().index();
+        if self.is_watched(citizen) {
+            self.zapamietaj_decyzje(citizen, trip.from, trip.to, &decision);
+        }
 
         // Komunikacja: pasażer wchodzi do kolejki przystanku, a `Arrive` wstawi
         // warstwa komunikacji w chwili, gdy wysiądzie (`TransitEvent::Alighted`).

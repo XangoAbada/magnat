@@ -57,5 +57,10 @@
   "m4a-2 cache/insert": 12.853876652425521,
   "m4a-2 cch/kustomizacja 3 profile": 108847730.0,
   "m4a-2 cch/query heavy_day (co 7. ulica z limitem 10 t)": 37829.0,
-  "m4a-2 cch/query passenger (188k wezlow sieci drogowej)": 43056.0
+  "m4a-2 cch/query passenger (188k wezlow sieci drogowej)": 43056.0,
+  "m4d-1 micro/krok_minuty_3000_poj_1_pasy": 10690283.333333332,
+  "m4d-1 micro/krok_minuty_3000_poj_3_pasy": 48136300.0,
+  "m4d-2 zrzut/piesi_5k": 4977.288319025607,
+  "m4d-2 zrzut/pojazdy_3k": 4287.03416841971,
+  "m4d-3 zasilenie/3000_pojazdow": 124945.61583577713
 }

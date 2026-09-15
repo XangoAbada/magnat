@@ -299,7 +299,7 @@ pub fn describe(c: &Catalog, l: Locale, r: DecisionReason) -> String {
             &[
                 ("srodek", &transport_mode(c, l, chosen)),
                 ("drugi", &transport_mode(c, l, runner_up)),
-                ("roznica", &pieniadze(i64::from(delta_gr))),
+                ("roznica", &crate::zlotowki(Money(i64::from(delta_gr)))),
             ],
         ),
         DecisionReason::NoParkingAtDestination { lots_searched } => c.fmt_key(
@@ -316,14 +316,6 @@ pub fn describe(c: &Catalog, l: Locale, r: DecisionReason) -> String {
             ],
         ),
     }
-}
-
-/// Kwota w groszach jako złotówki — dwie cyfry po przecinku, bez floata.
-#[must_use]
-fn pieniadze(gr: i64) -> String {
-    let znak = if gr < 0 { "-" } else { "" };
-    let a = gr.unsigned_abs();
-    format!("{znak}{},{:02}", a / 100, a % 100)
 }
 
 fn commitment(c: &Catalog, l: Locale, k: CommitmentKind) -> String {

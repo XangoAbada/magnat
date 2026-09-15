@@ -1,0 +1,28 @@
+// Imiona — pula regionalna, generacja proceduralna.
+//
+// **To nie jest lokalizacja UI** (CLAUDE.md): imiona i nazwiska generowane per region
+// nie są tłumaczone. Pliku nie dubluje się w wersji angielskiej.
+//
+// Kolejność wpisów jest KONTRAKTEM: indeks w tej tablicy siedzi w komponencie
+// `Identity` mieszkańca, czyli w zapisie gry. Dopisywać wolno wyłącznie na końcu listy.
+(
+    schema_version: 1,
+    male: [
+        "Jiří", "Jan", "Petr", "Josef", "Pavel", "Martin", "Jaroslav", "Tomáš", "Miroslav", "Zdeněk",
+        "František", "Václav", "Michal", "Milan", "Karel", "Lukáš", "David", "Ladislav", "Vladimír", "Jakub",
+        "Radek", "Roman", "Ondřej", "Marek", "Antonín", "Stanislav", "Daniel", "Aleš", "Filip", "Vojtěch",
+        "Rudolf", "Adam", "Matěj", "Šimon", "Dominik", "Patrik", "Richard", "Robert", "Jindřich", "Bohumil",
+        "Miloslav", "Vlastimil", "Oldřich", "Eduard", "Emil", "Ivan", "Libor", "Luboš", "Lubomír", "Miloš",
+        "Otakar", "Radim", "Rostislav", "Svatopluk", "Štěpán", "Tadeáš", "Vít", "Vítězslav", "Zbyněk", "Alois",
+        "Bedřich", "Blahoslav", "Čeněk", "Dalibor", "Drahomír", "Hynek", "Ivo", "Kamil", "Kryštof", "Květoslav",
+    ],
+    female: [
+        "Marie", "Jana", "Eva", "Hana", "Anna", "Lenka", "Kateřina", "Věra", "Lucie", "Alena",
+        "Petra", "Veronika", "Jaroslava", "Martina", "Jitka", "Michaela", "Helena", "Zdeňka", "Ludmila", "Tereza",
+        "Ivana", "Monika", "Eliška", "Barbora", "Adéla", "Kristýna", "Klára", "Natálie", "Karolína", "Nikola",
+        "Simona", "Šárka", "Dagmar", "Blanka", "Božena", "Dana", "Denisa", "Gabriela", "Irena", "Iveta",
+        "Jarmila", "Jiřina", "Zuzana", "Libuše", "Magdaléna", "Markéta", "Milada", "Miloslava", "Miluše", "Olga",
+        "Pavla", "Radka", "Renata", "Růžena", "Soňa", "Stanislava", "Štěpánka", "Svatava", "Vendula", "Vlasta",
+        "Zlata", "Žofie", "Andrea", "Aneta", "Daniela", "Ema", "Julie", "Kamila", "Sabina", "Viktorie",
+    ],
+)

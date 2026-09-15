@@ -505,3 +505,18 @@ Zgodnie z `K-18`. To są rzeczy, o których M5 wie **na pewno** po zamknięciu M
 | Z-3 ★ | **`Safety`, `Housing` i `Status` mają dziś tempo spadku 0** (korekta H-3); `Status` i `Housing` czekają na M5/M9 | Potrzeba, która spada, a której nic nie podnosi, dochodzi do zera u wszystkich i wypycha z miasta każdego po kolei przez progi migracji. Tempo wnosi faza, która wnosi mechanizm — dla statusu jest nim konsumpcja statusowa z §6.4 |
 | Z-4 | **Kalibracja potrzeb jest zadaniem balansatora, nie M3.** Zmierzone po 30 dobach gry (81 tys. mieszkańców): głód 16/100, sen 15/100, higiena 26/100, wypoczynek 36/100, kontakty 33/100 — mierzone o północy | Tabela §5.5 nie była nigdy puszczana przez wielodobowy przebieg razem z planerem. Liczby są punktem wyjścia dla `tools/balansator`, a nie wynikiem do przyjęcia: scenariusz `headless m3day` wypisuje je po każdym przebiegu |
 | Z-5 | **`Household.stock` zużywa się o jeden dzień na dobę** (`HouseholdStockSystem`, `Cadence::EveryDay`) i to on wyzwala zakupy przez próg w fazie 3 planera | M5 zastępuje ten system realną konsumpcją towarów z partiami. Próg wyzwalający zakupy zostaje ten sam — tak jak zapowiada M3 §6.2 |
+
+---
+
+## Zmiany wpisane po M4
+
+Zgodnie z `K-18`. To są rzeczy, o których wiemy **na pewno** po zamknięciu M4;
+faza nie jest tu przeprojektowywana. Gwiazdka = zmiana zakresu albo kryterium.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| T-1 ★ | **`tools/balansator` ma na starcie jednego mieszkańca: `calibrate-vdf`.** Zadanie istnieje dziś jako `headless calibrate-vdf` (M4d §5.4) i M5, tworząc crate, **przenosi je**, a nie pisze od nowa | M4 §5.4 przypisywał kalibrator balansatorowi, ale właścicielem crate'u jest M5 (dok. 00 §1) i M4 nie miał prawa go założyć. Zadanie jest gotowe, zmierzone i ma bramkę w CI; przeniesienie to zmiana adresu, nie treści. **Zachowaj domyślne „nie zapisuj"**: przepisanie `min_speed_dkmh` zmienia czasy przejazdu całego miasta, czyli pieniądze — i to jest dokładnie ta klasa decyzji, dla której balansator w ogóle powstaje |
+| T-2 | **Cena paliwa jest gotowa do podmiany w jednym miejscu** (`D9` rozstrzygnięte w M4b): ruch czyta ją przez `VehicleCatalog::price_gr`, nie z pliku wprost. M5 podmienia ciało na ofertę w `sim/economy` i **nie rusza ani jednej linii `sim/traffic`** | Zdarzenie `FuelPurchased { station, volume, unit_price }` i rejestr `FuelLedger` już istnieją i domykają bilans pieniądza; M5 dostaje więc obrót stacji jako wejście, a nie jako rzecz do zbudowania |
+| T-3 | **Koszt dojazdu do budżetu gospodarstwa bierze się z `TripLedger.total_money`, a amortyzacja z przebiegu** (`D3`) | `wear_gr_per_100km` wchodzi **wyłącznie** do kosztu uogólnionego decyzji; realne obciążenie budżetu nalicza M5 z `VehicleCondition.odometer_cm`. Policzenie amortyzacji drugi raz z ledgera byłoby podwójnym kosztem — i jest to najłatwiejsza pomyłka w tym styku |
+| T-4 | **Karta inspekcji podróży istnieje i pokazuje rozbicie kosztu uogólnionego wszystkich kandydatów w groszach** (`magnat_ui::TripCard`) | M5 pyta „dlaczego nie kupił u mnie" i ma na to gotowy ekran: `NoParkingAtDestination { lots_searched }` i `ModeCompared { chosen, runner_up, delta_gr }` są renderowane przez `engine/ui::describe` i widoczne w karcie. Dokładać trzeba **powód zakupowy**, a nie mechanizm wyjaśniania |
+| T-5 | **`sim/agents` ładuje `data/names/` i wystawia `name_catalog()`**, a `magnat_ui::full_name(&Identity)` formatuje nazwę | Panel sklepu i karta klienta w M5 mają pokazywać osobę, nie numer. Formatera nie trzeba pisać — trzeba go zawołać. Nazwy **nie są lokalizacją UI** i nie mają `LocKey` |

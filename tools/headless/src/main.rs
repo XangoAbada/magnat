@@ -8,6 +8,7 @@
 #![forbid(unsafe_code)]
 
 mod agents;
+mod calibrate;
 mod century;
 mod day;
 mod m3day;
@@ -112,6 +113,8 @@ enum Command {
     M3day(m3day::M3DayArgs),
     /// Graf nawigacyjny i router: inspektor krawędzi, budżety zapytań (M4a).
     Nav(nav::NavArgs),
+    /// Kalibracja diagramu podstawowego do parametrów IDM — offline (M4d/WP9).
+    CalibrateVdf(calibrate::CalibrateArgs),
 }
 
 fn uruchom() -> Result<std::process::ExitCode, Box<dyn std::error::Error>> {
@@ -127,6 +130,7 @@ fn uruchom() -> Result<std::process::ExitCode, Box<dyn std::error::Error>> {
         Some(Command::Population(a)) => return population::run(a),
         Some(Command::M3day(a)) => return m3day::run(a),
         Some(Command::Nav(a)) => return nav::run(a),
+        Some(Command::CalibrateVdf(a)) => return calibrate::run(a),
         None => {}
     }
 

@@ -294,6 +294,9 @@ pub struct TransitRun {
     pub stop_index: u16,
     /// Minuta, w której kurs dotrze do `stop_index`.
     pub arrive_min: u32,
+    /// Minuta, w której kurs ruszył do `stop_index`. Warstwa Mikro interpoluje między
+    /// tą parą i **niczego nie wyznacza** — bryła kursu odgrywa czas tak samo jak pieszy.
+    pub depart_min: u32,
     pub occupancy: u16,
     pub capacity: u16,
     /// Narastające wobec rozkładu, dodatnie = spóźnienie.
@@ -779,6 +782,7 @@ impl TransitNetwork {
                 vehicle,
                 driver,
                 stop_index: 0,
+                depart_min: now,
                 arrive_min: now,
                 occupancy: 0,
                 capacity: pojemnosc,
@@ -919,6 +923,7 @@ impl TransitNetwork {
             let r = &mut self.runs[ri];
             r.fuel_ul += paliwo_ul;
             r.stop_index = stop + 1;
+            r.depart_min = now;
             let minut = (u64::from(dwell_s) * 100 + czas_cs)
                 .div_ceil(CS_PER_MINUTE)
                 .max(1);
@@ -1002,6 +1007,55 @@ impl TransitNetwork {
     }
 
     /// Czas, paliwo i koszt odcinka między przystankami `stop` i `stop + 1`.
+    /// Zasila warstwę Mikro bryłami kursów (WP8, odpowiedź na `R-8`).
+    ///
+    /// **Kurs wchodzi do kadru, ale nie do kolejki krawędzi.** Tak było od M4c
+    /// (`P-11`) i tak zostaje: gdyby autobus zajmował slot `EdgeQueue`, obłożenie
+    /// krawędzi zależałoby od tego, którą warstwę akurat liczymy, a `micro_mezo_equivalence`
+    /// przestałoby być prawdziwe z konstrukcji. Bryła odgrywa więc czas między
+    /// przystankami z pary `(depart_min, arrive_min)` — dokładnie jak pieszy — i nie
+    /// bierze udziału w car-followingu (`edge == NO_EDGE`).
+    pub fn feed_micro(&self, micro: &crate::micro::MicroLayer, road: &RoadGraph, cat: &VehicleCatalog) {
+        for r in &self.runs {
+            if r.stop_index == 0 || r.arrive_min <= r.depart_min {
+                continue;
+            }
+            let Some(li) = self.lines.iter().position(|l| l.id == r.line) else {
+                continue;
+            };
+            let line = &self.lines[li];
+            let Some(hop) = line.hops.get(usize::from(r.stop_index) - 1) else {
+                continue;
+            };
+            if hop.is_empty() {
+                continue;
+            }
+            let wezel = |n: magnat_nav::NodeId| {
+                let p = road.nodes[n.0 as usize];
+                WorldCoord::new(p.pos_cm.x, p.pos_cm.y, p.z_cm)
+            };
+            let mut trasa = Vec::with_capacity(hop.len() + 1);
+            trasa.push(wezel(road.edge(hop[0]).from));
+            for e in hop {
+                trasa.push(wezel(road.edge(*e).to));
+            }
+            micro.feed_vehicle(
+                crate::micro::VehicleFeed {
+                    vehicle: r.vehicle,
+                    edge: crate::micro::NO_EDGE,
+                    class: line.class.0 as u8,
+                    lanes: 1,
+                    len_cm: cat.spec(line.class).length_cm,
+                    v_free_cms: 1.0,
+                    entry_cs: u64::from(r.depart_min) * CS_PER_MINUTE,
+                    exit_cs: u64::from(r.arrive_min) * CS_PER_MINUTE,
+                    car_following: false,
+                },
+                &trasa,
+            );
+        }
+    }
+
     fn hop_cost(
         &self,
         li: usize,
@@ -1093,7 +1147,11 @@ impl HashState for TransitNetwork {
             h.write_u32(r.driver);
             h.write_u16(r.stop_index);
             h.write_u32(r.arrive_min);
+            h.write_u32(r.depart_min);
             h.write_u16(r.occupancy);
+            // §5.9 punkt 7 wymienia `delay_minutes` wprost: spóźnienie narastające jest
+            // stanem kursu, a nie jego pomiarem — jutro decyduje o punktualności.
+            h.write_u16(r.delay_minutes as u16);
             h.write_u64(r.fuel_ul as u64);
             for w in &r.onboard {
                 h.write_u32(w.citizen);

@@ -1,0 +1,28 @@
+// Imiona — pula regionalna, generacja proceduralna.
+//
+// **To nie jest lokalizacja UI** (CLAUDE.md): imiona i nazwiska generowane per region
+// nie są tłumaczone. Pliku nie dubluje się w wersji angielskiej.
+//
+// Kolejność wpisów jest KONTRAKTEM: indeks w tej tablicy siedzi w komponencie
+// `Identity` mieszkańca, czyli w zapisie gry. Dopisywać wolno wyłącznie na końcu listy.
+(
+    schema_version: 1,
+    male: [
+        "Antonio", "José", "Manuel", "Francisco", "David", "Juan", "Javier", "Daniel", "Carlos", "Miguel",
+        "Rafael", "Pedro", "Ángel", "Alejandro", "Fernando", "Sergio", "Pablo", "Jorge", "Alberto", "Luis",
+        "Álvaro", "Adrián", "Diego", "Óscar", "Raúl", "Enrique", "Jesús", "Iván", "Marcos", "Rubén",
+        "Víctor", "Andrés", "Joaquín", "Ramón", "Gonzalo", "Ignacio", "Julián", "Eduardo", "Emilio", "Felipe",
+        "Gabriel", "Gregorio", "Guillermo", "Héctor", "Hugo", "Ismael", "Jaime", "Julio", "Lorenzo", "Lucas",
+        "Mario", "Martín", "Mateo", "Nicolás", "Norberto", "Octavio", "Pascual", "Patricio", "Ricardo", "Roberto",
+        "Rodrigo", "Salvador", "Samuel", "Santiago", "Sebastián", "Tomás", "Vicente", "Agustín", "Aitor", "Benito",
+    ],
+    female: [
+        "María", "Carmen", "Ana", "Isabel", "Laura", "Cristina", "Marta", "Lucía", "Elena", "Sara",
+        "Paula", "Raquel", "Pilar", "Rosa", "Teresa", "Patricia", "Silvia", "Beatriz", "Nuria", "Julia",
+        "Alba", "Andrea", "Irene", "Natalia", "Claudia", "Sandra", "Sofía", "Alicia", "Eva", "Mónica",
+        "Rocío", "Inés", "Nerea", "Celia", "Daniela", "Adriana", "Ángela", "Antonia", "Belén", "Blanca",
+        "Concepción", "Consuelo", "Dolores", "Encarnación", "Esperanza", "Esther", "Gloria", "Inmaculada", "Josefa", "Juana",
+        "Lourdes", "Manuela", "Margarita", "Mercedes", "Milagros", "Montserrat", "Noelia", "Olga", "Purificación", "Remedios",
+        "Rosario", "Soledad", "Susana", "Verónica", "Victoria", "Virginia", "Yolanda", "Amparo", "Begoña", "Caridad",
+    ],
+)

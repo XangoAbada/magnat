@@ -368,3 +368,18 @@ Dwa XL dominują i są nimi z różnych powodów. **WP10** jest XL, bo to praca 
 **WP9 zostaje L.** Sam suwak prędkości to godzina pracy; L bierze się stąd, że M4 zmierzył ruch mezo na 11 ms/tick wobec 2,08 ms całego budżetu, więc WP9 nie jest przełącznikiem, tylko wymuszaniem budżetu w czterech cudzych crate'ach naraz. Ryzyko urośnięcia do XL **odpadło** wraz z D11: makro ruchu pisze M10 (pętla) i M4 (`travel_time`), M12 dostarcza budżet, pomiar i `SpeedGovernor`. Faza ma dwa XL, nie trzy.
 
 **WP6** (M) to ~300 linii kodu; cała reszta tego pakietu to dyscyplina korpusu testowego. **WP13** (M) jest M, a nie S, bo polska pluralizacja i odmiana przez przypadki to realna praca, a nie podmiana stringów.
+
+---
+
+## Zmiany wpisane po M4
+
+Zgodnie z `K-18`. To są rzeczy, o których wiemy **na pewno** po zamknięciu M4;
+faza nie jest tu przeprojektowywana. Gwiazdka = zmiana zakresu albo kryterium.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| T-1 ★ | **Kolejność regionów w `data/names/regions.ron` i kolejność wpisów w plikach pul są kontraktem zapisu gry** (`K-28`). Modding pul nazw **nie może** przestawiać ani usuwać wpisów, tylko dopisywać na końcu | `Identity.first_name`/`last_name` to indeksy w tablicy sklejonej z regionów w tej kolejności; przestawienie przenumerowuje wszystkich mieszkańców zapisanego świata. Walidator modów z WP12 ma to sprawdzać tak samo, jak sprawdza kolejność klas pojazdów |
+| T-2 ★ | **Warstwa Mikro jest wyłączona przy zamkniętym oknie i kosztuje wtedy jedno sprawdzenie atomika na pojazd** — tryb 50× nie musi jej gasić osobno | §7.3 M4 zakłada, że w 50× mikro jest wyłączone „w całości". Jest — z konstrukcji, bo warstwa ma promień 0 jako stan domyślny i headless nigdy go nie otwiera. Zostaje realny problem z `D2`: sam **mezo** nie mieści się w metryce §20.2 i to on wymaga LOD makro |
+| T-3 | **Rozbiór czasu przejazdu jest dostępny per podróż** (`LedgerEntry.node_delay_cs`, `blocked_cs`), a nie tylko globalnie | LOD makro ruchu musi odtworzyć **wszystkie trzy** składniki, nie tylko sumę: przy mieście, w którym kolejki bywają trzy razy droższe od jazdy (`L-15`), agregat zbudowany z samego czasu całkowitego rozjedzie się z mezo przy pierwszej zmianie sieci |
+| T-4 | **Test spójności LOD istnieje jako `sim/world/tests/lod.rs`** i porównuje dwa przebiegi tego samego świata: ciąg hashy, sumę gotówki, paliwo i taryfy, z tolerancją 0 | Tryb 50× ma **osobny, jawnie słabszy kontrakt** (`D2`), ale jego test ma wyglądać tak samo: dwa przebiegi, ta sama lista wielkości, inny próg. Nie pisz drugiego harnessu — rozszerz ten o trzeci przebieg i tolerancję z dok. 00 §4 |
+| T-5 | **Bramka wydajnościowa `m3day` biegnie już w CI** (dwie doby, cztery przebiegi: wątki, prędkość, okno Mikro) | Sto dób z kryterium WP12 M4 zostaje biegiem nocnym, a nie bramką pull requesta — cztery przebiegi po sto dób to kilkadziesiąt minut. M12 jest właścicielem testu długich sesji i to on ma zdecydować, czy sto dób wchodzi do CI, czy do osobnego harmonogramu |

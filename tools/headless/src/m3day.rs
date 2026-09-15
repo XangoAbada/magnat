@@ -76,7 +76,12 @@ pub struct M3DayArgs {
     #[arg(long)]
     pub expect: Option<std::path::PathBuf>,
 
-    /// Ilu mieszkańców trzymać w LOD Mikro (pozycja co 100 ms).
+    /// Promień okna LOD Mikro w metrach wokół środka miasta; 0 = warstwa wyłączona.
+    ///
+    /// Headless nie ma kadru, więc domyślnie nie płaci za warstwę **nic** (`Z-6`).
+    /// Otwarcie okna jest tu po to, żeby dowieść §5.4 na pełnym scenariuszu, a nie
+    /// tylko na teście jednostkowym: ten sam seed z oknem i bez okna ma dać identyczny
+    /// ciąg hashy (`camera_does_not_change_world`).
     #[arg(long, default_value_t = 0)]
     pub micro: u32,
 
@@ -92,6 +97,19 @@ pub struct M3DayArgs {
     /// **ten sam** hash stanu — to jest kryterium WP11 i wymóg PRD §14.5.
     #[arg(long, default_value_t = 1)]
     pub speed: u32,
+
+    /// Nakładka ruchu do zrzucenia na PNG po przebiegu: `traffic_flow`, `congestion`,
+    /// `isochrone`, `parking_occupancy` albo `transit_load` (M4d/WP11).
+    ///
+    /// Podgląd headless jest **dowodem, że nakładka nie jest efektem shadera, tylko
+    /// danych**: paleta, progi i jednostka pochodzą z `data/ui/overlays.ron`, a klient
+    /// graficzny czyta dokładnie ten sam plik.
+    #[arg(long)]
+    pub overlay: Option<String>,
+
+    /// Gdzie zapisać zrzut nakładki.
+    #[arg(long, default_value = "podglad_ruch.png")]
+    pub overlay_out: std::path::PathBuf,
 }
 
 fn parse_seed(s: &str) -> Result<u64, Box<dyn std::error::Error>> {
@@ -157,6 +175,31 @@ pub fn run(a: &M3DayArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
     if a.micro > 0 {
         builder.add(TravelMicroSystem::new(&world));
     }
+    if a.micro > 0 {
+        // Środek kadru bierze się z miasta, nie ze środka mapy: miasto nie musi leżeć
+        // pośrodku, a okno postawione obok niego dałoby pusty kadr i „dowód", który
+        // niczego nie dowodzi.
+        let wpisy = zaludnione.places.entries();
+        let n = wpisy.len().clamp(1, 512);
+        let (mut sx, mut sy) = (0i64, 0i64);
+        for w in wpisy.iter().take(n) {
+            let c = zaludnione
+                .places
+                .coord_of(w.place)
+                .unwrap_or(magnat_core::WorldCoord::ORIGIN);
+            sx += i64::from(c.x);
+            sy += i64::from(c.y);
+        }
+        let srodek = ((sx / n as i64 / 100) as i32, (sy / n as i64 / 100) as i32);
+        zaludnione
+            .traffic
+            .micro()
+            .set_window(Some(srodek), a.micro);
+        eprintln!(
+            "LOD Mikro: okno {} m wokół ({}, {})",
+            a.micro, srodek.0, srodek.1
+        );
+    }
     let schedule = builder.build()?;
     eprintln!(
         "harmonogram: {} systemów w {} etapach, odcisk {:#018x}",
@@ -173,7 +216,17 @@ pub fn run(a: &M3DayArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
         let picker = ListPicker::new(app.world.resource::<Population>().citizens().to_vec());
         match picker.by_index(n) {
             Selection::Citizen(c) => {
+                // Dwa bufory śledzenia, bo dwie różne rzeczy: `Trace` zbiera zdarzenia
+                // DES (co mieszkaniec robił), `TrafficOracle::watch` włącza rejestr
+                // krawędź po krawędzi i zapamiętywanie porównania środków transportu
+                // (jak jechał i dlaczego tak). Bez tego drugiego `TripLedger.entries`
+                // jest puste dla **każdego** mieszkańca, a karta podróży nie ma z czego
+                // policzyć rozbioru czasu (`N-6`).
                 app.world.resource_mut::<Trace>().watch(c.entity().index());
+                app.world
+                    .resource::<magnat_traffic::TrafficServices>()
+                    .oracle
+                    .watch(c.entity().index());
                 Some(c)
             }
             _ => None,
@@ -240,6 +293,9 @@ pub fn run(a: &M3DayArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
     let transit_ok = komunikacja(&app.world);
     profil_doby(&app.world);
     potrzeby(&app.world);
+    if let Some(klucz) = &a.overlay {
+        nakladka(&app.world, &city, klucz, &a.overlay_out)?;
+    }
     if let Some(c) = wybrany {
         karta(&app.world, c, wykonane / 1440, seed, &a.locale)?;
     }
@@ -579,6 +635,109 @@ ruch (warstwa mezo)");
     s.reasons[7] == 0 && net.conserved()
 }
 
+/// Zrzut nakładki ruchu do PNG (WP11) — **bez GPU**.
+///
+/// Klient graficzny i ten podgląd czytają tę samą tabelę `data/ui/overlays.ron`
+/// (`K-19`) i tę samą funkcję rastrującą z `sim/traffic`, więc jeśli barwa tutaj się
+/// zgadza, to zgadza się i tam. Odwrotnie byłoby bez wartości: nakładka narysowana
+/// wyłącznie shaderem nie daje się sprawdzić w CI, a headless-first jest wymogiem (00 §6).
+fn nakladka(
+    world: &magnat_ecs::World,
+    city: &magnat_world::CityData,
+    klucz: &str,
+    out: &std::path::Path,
+) -> Result<(), Box<dyn std::error::Error>> {
+    use magnat_traffic::{rasterize_edges, rasterize_points, TrafficField, TrafficOverlay};
+
+    let pole = TrafficField::ALL
+        .iter()
+        .copied()
+        .find(|f| f.key() == klucz)
+        .ok_or_else(|| {
+            format!(
+                "nieznana nakładka {klucz}; dostępne: {}",
+                TrafficField::ALL
+                    .iter()
+                    .map(|f| f.key())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+        })?;
+
+    let tab = magnat_world::OverlayTable::load()?;
+    let spec = tab.get(klucz)?;
+    let paleta = spec.palette();
+    let bok = u32::from(magnat_world::city::overlay::OVERLAY_CELL_M);
+    let dim = (city.plan.map_size_m().max(1) as u32 / bok).max(1);
+
+    let oracle = world.resource::<magnat_traffic::TrafficServices>().oracle.clone();
+    let raster = world
+        .resource::<TrafficOverlay>()
+        .with_front(|snap| {
+            oracle.with_road(|road| {
+                if pole.is_edge_field() {
+                    let wartosci: Vec<u16> = (0..road.edge_count())
+                        .map(|i| snap.edge_value(pole, i).clamp(0, i64::from(u16::MAX)) as u16)
+                        .collect();
+                    // Pas ma rząd wielkości jednej komórki, więc krawędź stempluje się
+                    // z promieniem 1: cieńsza linia gubi się przy skali całego miasta.
+                    rasterize_edges(road, &wartosci, dim, bok, 1)
+                } else {
+                    rasterize_points(&snap.lots, dim, bok, 1)
+                }
+            })
+        });
+
+    let mut px = vec![18u8; (dim as usize) * (dim as usize) * 3];
+    let mut niepustych = 0u32;
+    for y in 0..dim as usize {
+        for x in 0..dim as usize {
+            let v = raster[y * dim as usize + x];
+            if v == 0 {
+                continue;
+            }
+            niepustych += 1;
+            let c = paleta[spec.index_of(i64::from(v)) as usize];
+            // Oś Y obrazu rośnie w dół, oś świata w górę.
+            let o = ((dim as usize - 1 - y) * dim as usize + x) * 3;
+            px[o..o + 3].copy_from_slice(&c[..3]);
+        }
+    }
+    magnat_devtools::write_rgb(out, dim, dim, &px)?;
+    println!(
+        "
+nakładka {klucz} -> {} ({dim}x{dim}, {niepustych} komórek, minuta {})",
+        out.display(),
+        world.resource::<TrafficOverlay>().minute()
+    );
+    println!(
+        "  legenda ({}): {}",
+        spec.unit,
+        spec.legend()
+            .iter()
+            .map(|(_, v)| v.to_string())
+            .collect::<Vec<_>>()
+            .join(" · ")
+    );
+    Ok(())
+}
+
+/// Rejestr podróży, która nie weszła na sieć drogową (marsz, rower, komunikacja).
+///
+/// Zerowe paliwo i zerowy koszt są tu **prawdą**, a nie brakiem danych: pieszy nie pali
+/// benzyny, a `settle_edge` nigdy go nie dotknęło. Czas bierze się z decyzji, bo to ona
+/// jest dla takiej podróży jedynym źródłem prawdy — i to jest ta sama zasada, co
+/// w warstwie Mikro: kto nie wyznacza czasu, ten go odgrywa.
+fn pusty_rejestr(minutes: u16, reason: magnat_core::DecisionReason) -> magnat_traffic::TripLedger {
+    magnat_traffic::TripLedger {
+        arrive: magnat_core::SimMinute(u64::from(minutes)),
+        // Powód przebiegu jest ten sam co powód wyboru — karta pokaże go raz, bo drugi
+        // wiersz wypisuje wyłącznie wtedy, gdy wnosi coś ponad pierwszy.
+        reason,
+        ..magnat_traffic::TripLedger::default()
+    }
+}
+
 /// Karta inspekcji mieszkańca w formie tekstowej — ten sam model, który w kliencie
 /// karmi widget (M3d §5.11). Plan odtwarza się z ziarna przez `plan_day_explained`,
 /// realizacja pochodzi z bufora śledzenia.
@@ -595,6 +754,57 @@ fn karta(
     println!("
 ── {} ──", panel.title(&ui));
     print!("{}", panel.build(&ui, world));
+
+    // Karta inspekcji podróży (WP11) — pierwszy ekran, na którym mieszkaniec pojawia
+    // się graczowi **w zdaniu**, a nie jako wiersz tabeli. Bez niej bramka 5 z §7.4
+    // („każda decyzja transportowa ma uzasadnienie widoczne w karcie") byłaby
+    // deklaracją: uzasadnienia są liczone, ale nikt ich nie pokazuje.
+    let indeks = citizen.entity().index();
+    let Some(id) = world
+        .get::<magnat_agents::components::Identity>(citizen.entity())
+        .copied()
+    else {
+        return Ok(());
+    };
+    // Rejestr krawędź po krawędzi ma tylko podróż, która **weszła na sieć** — czyli
+    // samochodowa. Kto poszedł pieszo albo pojechał autobusem, ma wyłącznie decyzję,
+    // i to jest dokładnie ta połowa karty, która odpowiada na „dlaczego tak".
+    // Pusty rejestr jest tu prawdą, a nie brakiem: przejazd sieci się nie odbył.
+    let oracle = world
+        .resource::<magnat_traffic::TrafficServices>()
+        .oracle
+        .clone();
+    let z_logu = world
+        .resource::<magnat_traffic::TripLog>()
+        .last_of(indeks)
+        .cloned();
+    let (origin, dest, decision, ledger, plan_min) = match z_logu {
+        Some(r) if r.decision.is_some() => {
+            let d = r.decision.clone().expect("sprawdzone wyżej");
+            (r.origin.unwrap_or(r.dest), r.dest, d, r.ledger, r.planned_minutes)
+        }
+        _ => match oracle.last_decision(indeks) {
+            Some((from, to, d)) => {
+                let (minuty, powod) = (d.minutes, d.reason);
+                (from, to, d, pusty_rejestr(minuty, powod), minuty)
+            }
+            None => return Ok(()),
+        },
+    };
+    let karta = magnat_ui::TripCard::build(
+        &ui.catalog,
+        ui.locale,
+        &magnat_ui::TripView {
+            traveller: &id,
+            origin,
+            dest,
+            planned_minutes: plan_min,
+            decision: &decision,
+            ledger: &ledger,
+        },
+    );
+    println!();
+    print!("{}", karta.render_text(&ui.catalog, ui.locale));
     Ok(())
 }
 

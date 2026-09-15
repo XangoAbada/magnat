@@ -15,6 +15,7 @@ use crate::mezo::{settle_edge, settle_node, turn_priority, LedgerEntry, MezoStat
 use crate::spec::{VdfTable, VehicleCatalog, VehicleClassId};
 use magnat_core::{
     DecisionReason, HashState, Mass, Money, PlaceRef, SimMinute, StateHasher, TransportMode,
+    WorldCoord,
 };
 use magnat_nav::{EdgeId, RoadGraph, Route};
 use std::cmp::Reverse;
@@ -178,6 +179,11 @@ struct ActiveTrip {
     station_reason: Option<DecisionReason>,
     /// Nastepna podroz w kolejce oczekujacych na te sama krawedz; `NO_WAIT` = ostatnia.
     wait_next: u32,
+    /// Opóźnienie węzła i czekanie na wjazd, policzone **przed** wjazdem na krawędź
+    /// i doliczone do jej wiersza w rejestrze, gdy ten powstanie (`N-6`). Bez tego
+    /// karta inspekcji musiałaby liczyć czas kolejki jako resztę z odejmowania.
+    pending_node_cs: u32,
+    pending_blocked_cs: u32,
     entries: Vec<LedgerEntry>,
     traced: bool,
 }
@@ -358,6 +364,53 @@ impl TrafficNetwork {
             .map(|(i, r)| (EdgeId(i as u32), *r))
     }
 
+    /// Zasila warstwę Mikro pojazdami będącymi w tej chwili na krawędziach (WP8).
+    ///
+    /// To jest **jedyny** kanał mezo → mikro i idzie w jedną stronę: warstwa dostaje
+    /// krawędź, na której pojazd stoi, oraz parę `(entry_cs, exit_cs)` policzoną przez
+    /// `settle_edge`. Kopii czasu przybycia nie ma nigdzie — mikro czyta tę wartość
+    /// i domyka do niej serwo (`N-1`), bo druga kopia byłaby drugim źródłem prawdy
+    /// o tym, kiedy pojazd dojedzie, czyli dokładnie tym, przed czym broni §5.4.
+    ///
+    /// Bramka okna i sufit rysowania siedzą po stronie `MicroLayer`, więc przy
+    /// zamkniętym kadrze (headless) ta pętla kosztuje jedno sprawdzenie na pojazd.
+    pub fn feed_micro(&self, micro: &crate::micro::MicroLayer, road: &RoadGraph, cat: &VehicleCatalog) {
+        for t in self.trips.iter().flatten() {
+            let Some(e) = t.edges.get(t.pos as usize).copied() else {
+                continue;
+            };
+            let edge = road.edge(e);
+            let a = road.nodes[edge.from.0 as usize];
+            let b = road.nodes[edge.to.0 as usize];
+            let spec = cat.spec(t.class);
+            let trasa = [
+                WorldCoord::new(a.pos_cm.x, a.pos_cm.y, a.z_cm),
+                WorldCoord::new(b.pos_cm.x, b.pos_cm.y, b.z_cm),
+            ];
+            // Prędkość swobodna bryły: limit krawędzi przycięty prędkością maksymalną
+            // klasy. Decykilometr na godzinę to 100 000 cm / 3 600 s / 10 = 2,778 cm/s.
+            let dkmh = u32::from(
+                edge.free_speed_dkmh(magnat_nav::Modality::Road)
+                    .min(spec.top_speed_dkmh)
+                    .max(1),
+            );
+            micro.feed_vehicle(
+                crate::micro::VehicleFeed {
+                    vehicle: t.vehicle,
+                    edge: e.0,
+                    class: t.class.0 as u8,
+                    lanes: edge.lanes,
+                    len_cm: spec.length_cm,
+                    v_free_cms: dkmh as f32 * 100.0 / 36.0,
+                    entry_cs: t.entry_cs,
+                    exit_cs: t.exit_cs,
+                    car_following: true,
+                },
+                &trasa,
+            );
+        }
+    }
+
     /// Niezmiennik zachowania: pojazdów na sieci == wjazdy − wyjazdy.
     #[must_use]
     pub fn conserved(&self) -> bool {
@@ -476,6 +529,8 @@ impl TrafficNetwork {
             reason: p.reason,
             station_reason: None,
             wait_next: crate::mezo::NO_WAIT,
+            pending_node_cs: 0,
+            pending_blocked_cs: 0,
             entries: Vec::new(),
             traced: p.traced,
         };
@@ -521,6 +576,8 @@ impl TrafficNetwork {
         };
         let mut entry = settle_edge(e, link, &veh, t.load, t.entry_cs, stops, cold_start);
         entry.edge = edge;
+        entry.node_delay_cs = std::mem::take(&mut t.pending_node_cs);
+        entry.blocked_cs = std::mem::take(&mut t.pending_blocked_cs);
         t.exit_cs = t.entry_cs
             + u64::from(entry.travel_cs)
             + u64::from(stops) * u64::from(crate::mezo::HEADWAY_CS);
@@ -631,7 +688,8 @@ impl TrafficNetwork {
         }
         let node_state = self.mezo.nodes[node.0 as usize];
         let (entry_cs, stops) = settle_node(control, priority, &node_state, t.exit_cs);
-        self.stats.node_delay_cs_total += entry_cs.saturating_sub(t.exit_cs);
+        let opoznienie_wezla = entry_cs.saturating_sub(t.exit_cs);
+        self.stats.node_delay_cs_total += opoznienie_wezla;
         // Zawracanie to pełne zatrzymanie plus manewr — jedno dodatkowe zatrzymanie
         // ponad to, co policzył model węzła.
         let stops = stops.saturating_add(u8::from(zawracanie));
@@ -648,6 +706,11 @@ impl TrafficNetwork {
             t.pos += 1;
             t.entry_cs = entry_cs;
             t.blocked_since = u32::MAX;
+            // Opóźnienie węzła należy do wiersza krawędzi, na którą pojazd właśnie
+            // wjeżdża — powstanie ono dopiero w `settle_current` niżej (`N-6`).
+            t.pending_node_cs = t
+                .pending_node_cs
+                .saturating_add(opoznienie_wezla.min(u64::from(u32::MAX)) as u32);
             t.refuel_after != u32::MAX && t.pos == t.refuel_after + 1
         };
         if refuel {
@@ -764,6 +827,9 @@ impl TrafficNetwork {
             let przed = t.exit_cs;
             t.exit_cs = at_cs.max(t.exit_cs) + u64::from(crate::mezo::HEADWAY_CS);
             czekal = t.exit_cs - przed;
+            t.pending_blocked_cs = t
+                .pending_blocked_cs
+                .saturating_add(czekal.min(u64::from(u32::MAX)) as u32);
             let n = t.wait_next;
             t.wait_next = crate::mezo::NO_WAIT;
             (n, t.vehicle, t.exit_cs)
@@ -889,6 +955,10 @@ impl HashState for TrafficNetwork {
             h.write_u64(t.money.0 as u64);
             h.write_u32(t.stops);
             h.write_u32(t.wait_next);
+            // Obie zaległości przeżywają granicę ticku (kolejka oczekujących budzi się
+            // w minucie następnej), więc są stanem, a nie scratchem jednego kroku.
+            h.write_u32(t.pending_node_cs);
+            h.write_u32(t.pending_blocked_cs);
         }
     }
 }
