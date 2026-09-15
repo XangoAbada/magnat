@@ -1450,12 +1450,15 @@ name = "magnat-economy"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "magnat-agents",
  "magnat-core",
  "magnat-ecs",
  "magnat-io",
  "magnat-jobs",
  "magnat-spatial",
  "proptest",
+ "ron",
+ "serde",
 ]
 
 [[package]]
@@ -1478,6 +1481,7 @@ dependencies = [
  "magnat-agents",
  "magnat-core",
  "magnat-devtools",
+ "magnat-economy",
  "magnat-ecs",
  "magnat-io",
  "magnat-jobs",

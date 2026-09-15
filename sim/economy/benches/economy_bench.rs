@@ -120,5 +120,66 @@ fn bench_transfer(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, bench_query, bench_rebuild, bench_transfer);
+/// Ścieżki gorące M5b (§7.3): sama funkcja użyteczności i cała decyzja zakupowa.
+///
+/// Budżety z dokumentu fazy: `utility_of_offer` < 120 ns na kandydata,
+/// `purchase_decision` ≤ 3 ms na tick minutowy w szczycie. Pomiar jest tutaj,
+/// a nie w scenariuszu, bo w scenariuszu koszt zakupów miesza się z kosztem
+/// **podróży**, które te zakupy generują — a te należą do routera M4.
+fn bench_uzytecznosc(c: &mut Criterion) {
+    use magnat_economy::{
+        offer_noise, utility_of_offer, weights_for, BuyerState, Candidate, EconomyData, OfferId,
+    };
+    let data = EconomyData::load_default().expect("data/economy/");
+    let p = magnat_agents::Personality([50; 8]);
+    let w = weights_for(&p, Q::new(50), magnat_core::NeedKind::Hunger, &data);
+    let st = BuyerState {
+        status: Q::new(50),
+        openness: Q::new(50),
+        budget_ref: Money(1_500),
+        vot_gr_per_min: 12,
+    };
+    let kandydaci: Vec<Candidate> = (0..15u32)
+        .map(|i| Candidate {
+            offer: OfferId::from_bits((1u64 << 32) | u64::from(i)).unwrap(),
+            site: SiteId(Entity::new(i, NonZeroU32::MIN)),
+            good: GoodId(1),
+            qty: Qty(1_000),
+            price_total: Money(200 + i64::from(i) * 7),
+            travel_min: (4 + i % 11) as u16,
+            travel_money: Money::ZERO,
+            quality: Q::new(50 + (i % 40) as u8),
+            rating: Some(60),
+            visited: i % 3 == 0,
+        })
+        .collect();
+
+    c.bench_function("m5b utility_of_offer", |b| {
+        let mut i = 0usize;
+        b.iter(|| {
+            i = (i + 1) % kandydaci.len();
+            let n = offer_noise(7, 42, kandydaci[i].offer, Tick(100), 0.02);
+            black_box(utility_of_offer(&kandydaci[i], &w, &st, n))
+        });
+    });
+
+    c.bench_function("m5b wycena 15 kandydatów", |b| {
+        b.iter(|| {
+            let mut s = 0.0f64;
+            for k in &kandydaci {
+                let n = offer_noise(7, 42, k.offer, Tick(100), 0.02);
+                s += utility_of_offer(k, &w, &st, n);
+            }
+            black_box(s)
+        });
+    });
+}
+
+criterion_group!(
+    benches,
+    bench_query,
+    bench_rebuild,
+    bench_transfer,
+    bench_uzytecznosc
+);
 criterion_main!(benches);

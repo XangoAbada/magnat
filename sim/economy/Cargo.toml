@@ -15,6 +15,12 @@ magnat-core = { workspace = true }
 magnat-ecs = { workspace = true }
 magnat-jobs = { workspace = true }
 magnat-spatial = { workspace = true }
+# M5b wpina się w symulację przez `sim::agents::Sources.places` (`Z-1`), więc musi
+# implementować `PlaceProvider` — zależność idzie w tę stronę i tylko w tę:
+# `sim/agents` nie widzi gospodarki i widzieć jej nie może (cykl z `K-8`).
+magnat-agents = { workspace = true }
+serde = { workspace = true }
+ron = { workspace = true }
 
 [dev-dependencies]
 # Hash stanu świata mieszka w `engine/io` — testem bramki 2 jest porównanie hashy,

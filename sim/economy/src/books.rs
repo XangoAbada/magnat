@@ -104,6 +104,23 @@ pub struct MoneySupplyLedger {
     /// w strukturze, w niezmienniku i w teście P1b, żeby M7 dopisał tylko wywołanie.
     pub external_capital_in: Money,
     pub external_capital_out: Money,
+    /// Kanał sektora gospodarstw domowych (M5b).
+    ///
+    /// Saldo gospodarstwa **nie jest kontem w `Books`** i nie będzie: mieszka
+    /// w komponencie `Household` (`cash`, `bank`, `savings`, `debt`), którego
+    /// właścicielem jest M3 i który M3 sam sumuje w `society::total_money`. Dwa
+    /// źródła salda rozjechałyby się przy pierwszej transakcji, a testu po żadnej
+    /// ze stron by na to nie było.
+    ///
+    /// Z punktu widzenia `Books` gospodarstwa są więc **na zewnątrz**, dokładnie
+    /// tak jak inwestor z kanału M7: `household_sector_in` to pieniądz, który wszedł
+    /// do ksiąg z komponentów (zapłata w sklepie), `household_sector_out` — który
+    /// z ksiąg do komponentów wyszedł (pensja, wypłata). Niezmiennik P1 zostaje
+    /// zielony co do grosza, a niezmiennik całego świata —
+    /// `society::total_money + Books::total_balance()` — sprawdza test end-to-end,
+    /// bo tylko on widzi obie księgi naraz.
+    pub household_sector_in: Money,
+    pub household_sector_out: Money,
 }
 
 impl MoneySupplyLedger {
@@ -117,9 +134,11 @@ impl MoneySupplyLedger {
             .endowment
             .checked_add(self.credit_created)
             .and_then(|m| m.checked_add(self.external_capital_in))
+            .and_then(|m| m.checked_add(self.household_sector_in))
             .expect("MoneySupplyLedger: przepełnienie sumy emisji");
         plus.checked_sub(self.credit_repaid)
             .and_then(|m| m.checked_sub(self.external_capital_out))
+            .and_then(|m| m.checked_sub(self.household_sector_out))
             .expect("MoneySupplyLedger: przepełnienie sumy destrukcji")
     }
 }
@@ -548,6 +567,46 @@ impl Books {
         })
     }
 
+    /// Zapłata gospodarstwa domowego: pieniądz wchodzi do ksiąg z komponentu
+    /// `Household` (M5b §5.5). Wołający **musi** w tej samej operacji zdjąć kwotę
+    /// z komponentu — inaczej pieniądza przybywa w świecie.
+    ///
+    /// Jedno wywołanie, jedna strona: druga strona jest poza `Books`, więc zapis ma
+    /// `AccountId::OUTSIDE` po stronie Wn, tak samo jak emisja i kanał M7.
+    pub fn household_pay(
+        &mut self,
+        to: AccountId,
+        amount: Money,
+        memo: TxMemo,
+        t: Tick,
+    ) -> Result<TxId, TxError> {
+        self.emit(to, amount, memo, t, |s, m| {
+            s.household_sector_in = s
+                .household_sector_in
+                .checked_add(m)
+                .ok_or(TxError::Overflow)?;
+            Ok(())
+        })
+    }
+
+    /// Wypłata do gospodarstwa domowego — druga strona kanału sektora GD.
+    /// Symetryczny wymóg: wołający dopisuje kwotę do komponentu.
+    pub fn household_receive(
+        &mut self,
+        from: AccountId,
+        amount: Money,
+        memo: TxMemo,
+        t: Tick,
+    ) -> Result<TxId, TxError> {
+        self.absorb(from, amount, memo, t, |s, m| {
+            s.household_sector_out = s
+                .household_sector_out
+                .checked_add(m)
+                .ok_or(TxError::Overflow)?;
+            Ok(())
+        })
+    }
+
     // ── mechanika wspólna ────────────────────────────────────────────────────────
 
     /// Pieniądz wchodzi do systemu: konto rośnie, pozycja podaży rośnie o tyle samo.
@@ -688,6 +747,8 @@ impl HashState for Books {
         self.supply.credit_repaid.hash_state(h);
         self.supply.external_capital_in.hash_state(h);
         self.supply.external_capital_out.hash_state(h);
+        self.supply.household_sector_in.hash_state(h);
+        self.supply.household_sector_out.hash_state(h);
         h.write_u64(self.next_tx);
     }
 }

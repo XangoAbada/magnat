@@ -792,16 +792,26 @@ fn zaspokoj(
     let identity = *world.get::<Identity>(citizen)?;
     let miejsce = crate::places::place_from_key(slot.target)
         .or_else(|| crate::places::home_of(world.get::<Residence>(citizen)?))?;
+    let gospodarstwo = demography::household_by_index(world, identity.household);
+    // Budżet i liczebność czyta się z komponentu `Household` — on jest właścicielem
+    // salda gospodarstwa (M5d, korekta po M3c) i M5 nie trzyma drugiej kopii.
+    // `budget_hint` to całość dostępnych środków; kopertę per potrzeba wstawi M5d/WP8.
+    let (budzet, osob) = gospodarstwo
+        .and_then(|e| world.get::<Household>(e))
+        .map_or((magnat_core::Money::ZERO, 1u8), |h| {
+            (
+                magnat_core::Money(h.cash.get().saturating_add(h.bank.get()).max(0)),
+                h.size.max(1),
+            )
+        });
     let wynik = zrodla.places.fulfil(&FulfilRequest {
         citizen: CitizenId(citizen),
-        household: HouseholdId(
-            demography::household_by_index(world, identity.household).unwrap_or(citizen),
-        ),
+        household: HouseholdId(gospodarstwo.unwrap_or(citizen)),
         need,
         place: miejsce,
         at: magnat_core::SimMinute(u64::from(teraz)),
-        // M3: bez limitu. M5 wstawia tu realny budżet gospodarstwa (decyzja 9.8).
-        budget_hint: magnat_core::Money::ZERO,
+        budget_hint: budzet,
+        household_size: osob,
     });
     if let FulfilOutcome::Done { satisfaction, .. } = wynik {
         let oddane = crate::needs::decay_between(

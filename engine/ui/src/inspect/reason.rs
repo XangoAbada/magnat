@@ -9,7 +9,7 @@ use crate::loc::{Catalog, Locale};
 use magnat_agents::SocialClass;
 use magnat_core::{
     ActivityKind, CommitmentKind, DecisionReason, DeprivationEffect, LifeEventKind, MigrationKind,
-    Money, NeedKind, StockCat, TraitId, TransportMode,
+    Money, NeedKind, RejectCause, StockCat, TraitId, TransportMode, UtilityKind,
 };
 
 /// Nazwa potrzeby w języku gracza.
@@ -40,6 +40,18 @@ pub fn trait_name(c: &Catalog, l: Locale, t: TraitId) -> String {
 #[must_use]
 pub fn transport_mode(c: &Catalog, l: Locale, m: TransportMode) -> String {
     c.fmt_key(l, &format!("ui.mode.{}", m.name()), &[])
+}
+
+/// Nazwa członu funkcji użyteczności zakupu (PRD §6.4).
+#[must_use]
+pub fn utility_term(c: &Catalog, l: Locale, u: UtilityKind) -> String {
+    c.fmt_key(l, &format!("ui.utility.{}", u.name()), &[])
+}
+
+/// Nazwa powodu odrzucenia oferty (M5b §5.4).
+#[must_use]
+pub fn reject_cause(c: &Catalog, l: Locale, r: RejectCause) -> String {
+    c.fmt_key(l, &format!("ui.reject.{}", r.name()), &[])
 }
 
 /// Nazwa skutku deprywacji.
@@ -315,7 +327,53 @@ pub fn describe(c: &Catalog, l: Locale, r: DecisionReason) -> String {
                 ("czekal", &minutes(c, l, waited_min)),
             ],
         ),
+        DecisionReason::ShopChosen {
+            site: _,
+            dominant,
+            delta_bp,
+        } => c.fmt_key(
+            l,
+            "ui.reason.ShopChosen",
+            &[
+                ("czlon", &utility_term(c, l, dominant)),
+                ("roznica", &procent_bp(i32::from(delta_bp))),
+            ],
+        ),
+        DecisionReason::OfferRejected {
+            site: _,
+            cause,
+            detail,
+        } => c.fmt_key(
+            l,
+            "ui.reason.OfferRejected",
+            &[
+                ("powod", &reject_cause(c, l, cause)),
+                ("szczegol", &detail.to_string()),
+            ],
+        ),
+        DecisionReason::PurchaseDeferred {
+            need: n,
+            cause,
+            gap_permille,
+        } => c.fmt_key(
+            l,
+            "ui.reason.PurchaseDeferred",
+            &[
+                ("co", &need(c, l, n)),
+                ("powod", &reject_cause(c, l, cause)),
+                ("brakowalo", &format!("{},{:03}", gap_permille / 1000, (gap_permille % 1000).abs())),
+            ],
+        ),
     }
+}
+
+/// Punkty bazowe jako procent z jednym miejscem po przecinku, ze znakiem.
+/// Format jest ten sam w obu językach — separator dziesiętny lokalizuje M12
+/// razem z resztą formatów liczbowych.
+fn procent_bp(bp: i32) -> String {
+    let znak = if bp < 0 { "-" } else { "+" };
+    let a = bp.abs();
+    format!("{znak}{},{}%", a / 100, (a % 100) / 10)
 }
 
 fn commitment(c: &Catalog, l: Locale, k: CommitmentKind) -> String {
@@ -438,6 +496,27 @@ mod tests {
                 planned_min: 18,
                 actual_min: 31,
             },
+            DecisionReason::ShopChosen {
+                site: magnat_core::SiteId(magnat_core::Entity::new(
+                    7,
+                    std::num::NonZeroU32::MIN,
+                )),
+                dominant: UtilityKind::Price,
+                delta_bp: -1_200,
+            },
+            DecisionReason::OfferRejected {
+                site: magnat_core::SiteId(magnat_core::Entity::new(
+                    7,
+                    std::num::NonZeroU32::MIN,
+                )),
+                cause: RejectCause::OutOfStock,
+                detail: 0,
+            },
+            DecisionReason::PurchaseDeferred {
+                need: NeedKind::Hunger,
+                cause: RejectCause::BelowThreshold,
+                gap_permille: -140,
+            },
         ]
     }
 
@@ -455,8 +534,8 @@ mod tests {
                 );
             }
         }
-        // Bloki M3 i M4 są kompletne: 26 wariantów (Unspecified + 100..=119 + 200..=204).
-        assert_eq!(wszystkie().len(), 26);
+        // Bloki M3, M4 i M5b: 29 wariantów (Unspecified + 100..=119 + 200..=204 + 300..=302).
+        assert_eq!(wszystkie().len(), 29);
     }
 
     #[test]
@@ -480,6 +559,12 @@ mod tests {
             }
             for m in TransportMode::ALL {
                 assert!(!transport_mode(&c, l, *m).is_empty());
+            }
+            for u in UtilityKind::ALL {
+                assert!(!utility_term(&c, l, *u).is_empty());
+            }
+            for r in RejectCause::ALL {
+                assert!(!reject_cause(&c, l, *r).is_empty());
             }
         }
     }

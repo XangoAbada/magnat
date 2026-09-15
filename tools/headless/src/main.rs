@@ -12,6 +12,7 @@ mod calibrate;
 mod century;
 mod day;
 mod m3day;
+mod m5shop;
 mod nav;
 mod population;
 mod testworld;
@@ -113,6 +114,8 @@ enum Command {
     M3day(m3day::M3DayArgs),
     /// Graf nawigacyjny i router: inspektor krawędzi, budżety zapytań (M4a).
     Nav(nav::NavArgs),
+    /// Wynik podfazy M5b: sklepy z magazynem, zakupy i rozliczenie pieniądza.
+    M5shop(m5shop::M5ShopArgs),
     /// Kalibracja diagramu podstawowego do parametrów IDM — offline (M4d/WP9).
     CalibrateVdf(calibrate::CalibrateArgs),
 }
@@ -130,6 +133,7 @@ fn uruchom() -> Result<std::process::ExitCode, Box<dyn std::error::Error>> {
         Some(Command::Population(a)) => return population::run(a),
         Some(Command::M3day(a)) => return m3day::run(a),
         Some(Command::Nav(a)) => return nav::run(a),
+        Some(Command::M5shop(a)) => return m5shop::run(a),
         Some(Command::CalibrateVdf(a)) => return calibrate::run(a),
         None => {}
     }

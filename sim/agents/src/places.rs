@@ -384,6 +384,11 @@ pub struct FulfilRequest {
     pub at: SimMinute,
     /// M3: `Money(0)` = bez limitu. M5: realny budżet GD.
     pub budget_hint: Money,
+    /// Ilu ludzi żywi ten zakup. M3 wypełnia jedynką, bo nie kupuje niczego;
+    /// M5b liczy z tego ilość towaru — koszyk potrzeb epoki jest podany
+    /// **na mieszkańca na dobę**, więc bez liczebności nie da się go przeliczyć
+    /// na sztuki.
+    pub household_size: u8,
 }
 
 /// Wynik wizyty.
@@ -445,12 +450,19 @@ pub struct TripHandle {
 pub trait PlaceProvider: Send + Sync {
     /// Kandydaci zaspokajający potrzebę, wyłącznie **znani** mieszkańcowi (§5.7),
     /// w porządku deterministycznym, malejąco po `score`.
+    ///
+    /// `who` wnosi M5b: funkcja użyteczności zakupu (PRD §6.4) wyprowadza wagi
+    /// z osobowości i statusu, a `PlaceCandidate.score` ma być tą użytecznością
+    /// razy 1000 — co zapowiada dokumentacja pola od M3a. Bez kupującego w sygnaturze
+    /// nie dałoby się jej policzyć tam, gdzie zapada wybór sklepu, czyli w planerze.
+    /// `InfinitePlaces` z M3 argumentu nie używa i nie musi.
     fn candidates(
         &self,
         need: NeedKind,
         from: PlaceRef,
         max_travel_min: u16,
         known: &KnowledgeView<'_>,
+        who: &CitizenView<'_>,
         out: &mut ArrayVec<PlaceCandidate, MAX_CANDIDATES>,
     );
 
@@ -616,9 +628,10 @@ pub fn choose_place(
     from: PlaceRef,
     max_travel_min: u16,
     known: &KnowledgeView<'_>,
+    who: &CitizenView<'_>,
     out: &mut ArrayVec<PlaceCandidate, MAX_CANDIDATES>,
 ) -> Result<PlaceCandidate, DecisionReason> {
-    places.candidates(need, from, max_travel_min, known, out);
+    places.candidates(need, from, max_travel_min, known, who, out);
     match out.first() {
         Some(best) => Ok(*best),
         None => Err(DecisionReason::PlaceUnknown {
@@ -663,6 +676,7 @@ impl PlaceProvider for InfinitePlaces {
         from: PlaceRef,
         max_travel_min: u16,
         known: &KnowledgeView<'_>,
+        _who: &CitizenView<'_>,
         out: &mut ArrayVec<PlaceCandidate, MAX_CANDIDATES>,
     ) {
         out.clear();
@@ -774,10 +788,11 @@ impl PlaceProvider for FlakyPlaces {
         from: PlaceRef,
         max_travel_min: u16,
         known: &KnowledgeView<'_>,
+        who: &CitizenView<'_>,
         out: &mut ArrayVec<PlaceCandidate, MAX_CANDIDATES>,
     ) {
         self.inner
-            .candidates(need, from, max_travel_min, known, out);
+            .candidates(need, from, max_travel_min, known, who, out);
     }
 
     fn opening_hours(&self, place: PlaceRef) -> OpenHours {
@@ -808,6 +823,7 @@ impl PlaceProvider for PanickingPlaces {
         _from: PlaceRef,
         _max_travel_min: u16,
         _known: &KnowledgeView<'_>,
+        _who: &CitizenView<'_>,
         _out: &mut ArrayVec<PlaceCandidate, MAX_CANDIDATES>,
     ) {
         panic!("PanickingPlaces::candidates");
@@ -832,6 +848,7 @@ impl PlaceProvider for EmptyPlaces {
         _from: PlaceRef,
         _max_travel_min: u16,
         _known: &KnowledgeView<'_>,
+        _who: &CitizenView<'_>,
         out: &mut ArrayVec<PlaceCandidate, MAX_CANDIDATES>,
     ) {
         out.clear();

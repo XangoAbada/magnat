@@ -22,6 +22,7 @@ magnat-ui = { workspace = true }
 magnat-traffic = { workspace = true }
 magnat-nav = { workspace = true }
 magnat-world = { workspace = true }
+magnat-economy = { workspace = true }
 magnat-voxel = { workspace = true }
 magnat-spatial = { workspace = true }
 clap = { workspace = true }

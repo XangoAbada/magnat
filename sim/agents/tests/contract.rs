@@ -73,7 +73,23 @@ fn zadanie_po_drodze(
     znane: &KnowledgeView<'_>,
 ) -> Result<PlaceCandidate, DecisionReason> {
     let mut kandydaci: ArrayVec<PlaceCandidate, MAX_CANDIDATES> = ArrayVec::new();
-    choose_place(places, need, skad, 60, znane, &mut kandydaci)
+    let (identity, vitals, needs_c, personality, residence) = (
+        magnat_agents::Identity::default(),
+        magnat_agents::Vitals::default(),
+        magnat_agents::Needs::default(),
+        magnat_agents::Personality([50; 8]),
+        magnat_agents::Residence::default(),
+    );
+    let kto = magnat_agents::CitizenView {
+        id: CitizenId(encja(1)),
+        identity: &identity,
+        vitals: &vitals,
+        needs: &needs_c,
+        personality: &personality,
+        residence: &residence,
+        today: 0,
+    };
+    choose_place(places, need, skad, 60, znane, &kto, &mut kandydaci)
 }
 
 #[test]
@@ -163,6 +179,7 @@ fn sciezka_odmowy_dziala_zanim_m5_bedzie_mial_czym_odmawiac() {
         place: budynek(2),
         at: SimMinute(480),
         budget_hint: Money::ZERO,
+        household_size: 1,
     };
 
     let wyniki: Vec<bool> = (0..6)

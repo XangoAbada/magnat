@@ -3,49 +3,64 @@
 //! Crate stoi na jednym zdaniu z PRD §6.1: **nie istnieje globalna cena rynkowa**.
 //! Cenę niesie wyłącznie oferta konkretnego sklepu, a wszystko, co wygląda na „cenę
 //! mleka w mieście", jest agregatem po ofertach ([`price_stats`]). Drugie zdanie jest
-//! z §6.5: pieniądz nie powstaje i nie znika poza dwoma jawnymi kanałami (emisja
-//! początkowa i kredyt), a każdą jego zmianę widać w [`Books`].
+//! z §6.5: pieniądz nie powstaje i nie znika poza jawnymi kanałami, a każdą jego
+//! zmianę widać w [`Books`].
 //!
 //! Co zawiera **M5a**:
 //! - §5.1 — [`Books`], konta, podwójny zapis, ewidencja podaży pieniądza,
 //! - §5.2 — [`Offer`] w arenie (`K-16`) i [`OfferIndex`] z zapytaniem promieniowym.
 //!
-//! Czego tu **nie ma** i gdzie to jest: sklep, półka i zapas — M5b; polityki cenowe
-//! i księgowość — M5c; budżety gospodarstw, banki i inflacja — M5d; panel i balansator
-//! — M5e. Rynek B2B i partie towaru należą do M6, podatki do M8.
+//! Co dokłada **M5b**:
+//! - §5.3 — sklep: zaplecze, półka, asortyment ([`Shop`], [`Shelf`], [`StockLine`]),
+//! - §5.4 — funkcja użyteczności zakupu i wybór oferty ([`utility_of_offer`],
+//!   [`choose_offer`], [`purchase_threshold`]) oraz zapis utraconych sprzedaży,
+//! - §5.5 — rozliczanie transakcji ([`MarketSystem`], [`PurchaseIntent`]),
+//! - §5.7 — punkt wymiany z M6: [`Wholesale`] i [`ExternalSupplier`].
 //!
-//! Podmoduł `kernel` (D20 — rdzeń liczbowy wołany tak samo przez mezo i makro) powstaje
-//! razem ze swoimi funkcjami: `next_price` w M5c/WP6, `take_cogs` i `ledger_post`
-//! w M5c/WP7. W M5a nie ma go z czego złożyć — zapisu księgowego jeszcze nie ma,
-//! a arytmetyka podziału kwoty jest gotowa w `magnat_core::split_proportional`.
+//! Czego tu **nie ma** i gdzie to jest: polityki cenowe i księgowość — M5c; budżety
+//! gospodarstw, banki i inflacja — M5d; panel i balansator — M5e. Rynek B2B i partie
+//! towaru należą do M6, podatki do M8.
+//!
+//! Podmoduł `kernel` (D20 — rdzeń liczbowy wołany tak samo przez mezo i makro)
+//! powstaje razem ze swoimi funkcjami: `next_price` w M5c/WP6, `take_cogs`
+//! i `ledger_post` w M5c/WP7. W M5b jedyna reguła, która tam trafi, jest już
+//! wydzielona w jednym miejscu ([`shop::take_units`]) i czeka na przeprowadzkę.
 
 #![forbid(unsafe_code)]
 
 pub mod books;
+pub mod choice;
+pub mod data;
+pub mod market;
 pub mod offer;
+pub mod shop;
+pub mod supply;
+pub mod systems;
 
 pub use books::{
     Account, AccountId, AccountKind, AccountOwner, Books, ChargeKind, ExternalInvestorId, LoanId,
     MoneySupplyLedger, ProgramId, SupplierRef, Transaction, TxError, TxId, TxJournal, TxKind,
     TxMemo,
 };
+pub use choice::{
+    budget_ref_for, choose_offer, cost_term, days_bought, dominant_term, purchase_threshold,
+    offer_noise, rating_of, status_fit, utility_of_offer, wanted_qty, weights_for, BuyerState,
+    Candidate, Choice,
+};
+pub use data::{EconomyData, EconomyDataError, RetailGood, RetailTable, ThresholdSpec,
+    UtilityWeights, ECONOMY_SCHEMA_VERSION};
+pub use market::{Market, MarketStats, PurchaseIntent, ShopSeed};
 pub use offer::{
     price_stats, query_offers, CategoryId, Offer, OfferId, OfferIndex, PriceBasis, PriceStats,
 };
-
-use magnat_core::{Arena, ArenaKind};
-use magnat_ecs::World;
-use magnat_spatial::GridSpec;
-
-/// Wstawia stan gospodarki do świata i wpina go do hasha (00 §3.6).
-///
-/// Hashowane są [`Books`] i arena ofert. [`OfferIndex`] **nie** — jest pochodną areny
-/// i pozycji zakładów, więc hashowanie go dokładałoby do stanu świata coś, co da się
-/// z tego stanu odtworzyć; ta sama zasada, którą M4 zastosował do `TrafficOverlay`.
-pub fn register_economy(world: &mut World, grid: GridSpec) {
-    world.insert_resource(Books::new());
-    world.insert_resource(Arena::<Offer>::new());
-    world.insert_resource(OfferIndex::new(grid));
-    world.register_resource_hash::<Books>();
-    world.register_arena_hash::<Offer>(ArenaKind::Offers);
-}
+pub use shop::{
+    take_units, AssortmentPolicy, LostSale, LostSaleHistogram, LostSaleTracking, ReorderPolicy,
+    Shelf, ShelfLine, Shop, ShopInventory, ShopLostSales, StockLine, LOST_SALE_RING,
+};
+pub use supply::{
+    line_total, Delivery, ExternalSupplier, GoodSpec, GoodTable, OrderId, PurchaseQuote,
+    SupplyError, Wholesale, PRICE_UNIT,
+};
+pub use systems::{
+    pay_incomes, register_books, register_economy, settle_transactions, MarketSystem,
+};

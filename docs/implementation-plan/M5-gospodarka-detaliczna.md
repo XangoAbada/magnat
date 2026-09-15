@@ -108,7 +108,7 @@ dopiero po ostatniej podfazie; podfaza zamyka się własnym kryterium ze swojego
 | Podfaza | WP | §5 | Wynik do pokazania | Dokument |
 |---|---|---|---|---|
 | **M5a — Pieniądz i oferta** | WP1, WP2 | 5.1, 5.2 | Test zachowania pieniądza zielony **zanim** powstanie pierwsza transakcja detaliczna — później nie da się go wprowadzić bez przepisywania. | `M5a-pieniadz-i-oferta.md` |
-| **M5b — Sklep i zakup** | WP3, WP4, WP5 | 5.3, 5.4, 5.5, 5.7 | Mieszkaniec wychodzi po chleb, wybiera ofertę i wraca; pieniądz i sztuki zgadzają się po obu stronach. | `M5b-sklep-i-zakup.md` |
+| **M5b — Sklep i zakup** `[x]` | WP3, WP4, WP5 | 5.3, 5.4, 5.5, 5.7 | Mieszkaniec wychodzi po chleb, wybiera ofertę i wraca; pieniądz i sztuki zgadzają się po obu stronach. | `M5b-sklep-i-zakup.md` |
 | **M5c — Ceny i księgowość** | WP6, WP7, WP11 | 5.6, 5.8 | Sklep AI podnosi cenę przy niedoborze i obniża przy zaleganiu; rachunek wyników i bilans domykają się co do grosza. | `M5c-ceny-i-ksiegowosc.md` |
 | **M5d — Budżety, banki, inflacja** | WP8, WP9, WP10 | 5.9, 5.10 | Inflacja emergentna: koszyk CPI liczony z transakcji świata, stopa bazowa reagująca na niego bez ręcznego sterowania. | `M5d-budzety-banki-inflacja.md` |
 | **M5e — Panel, balansator, domknięcie** | WP12, WP13, WP14 | 5.11, 5.12 | Pełny artefakt fazy z §1 dokumentu fazy: otwórz sklep, ustal ceny, obserwuj klientów; balansator w CI. | `M5e-panel-balansator-domkniecie.md` |
@@ -407,7 +407,13 @@ dopasowania zamiast drugiego (M7).
    i zapis traktują arenę jak sekcję ECS. Mechanizm jest gotowy: `engine/core/src/arena.rs`
    (`Arena<T>`, `ArenaHandle<T>`, `Arena::hash_state`), właściciel M0. M5 dostarcza instancję.
 
-2. **Skąd bierze się dochód GD w M5?**
+2. ~~**Skąd bierze się dochód GD w M5?**~~ — **ZAMKNIĘTE w M5b (`U-16`)** przez przyjęcie
+   propozycji: `pay_incomes` wypłaca `Household.income_monthly` z konta `RestOfWorld`
+   na granicy miesiąca, kwota pochodzi z generacji populacji M3, struktura wypłaty
+   należy do M5, a M7 podmieni źródło. Punkt nie doczekał uzgodnienia, bo okazał się
+   blokerem **wyniku podfazy**: gospodarstwa z Etapu 8 mają saldo zero, więc pierwszy
+   przebieg scenariusza dał 170 tys. odmów „brak środków" i zero transakcji.
+   Poprzednie brzmienie:
    M5 potrzebuje dochodu, żeby budżet miał sens; pensje emergentne to M7.
    *Propozycja M5: `HouseholdBudget.income_monthly` wypłacane z konta `RestOfWorld`, kwota
    z profilu zawodowego mieszkańca (M3). Kto jest właścicielem tej logiki — M3 czy M5? Propozycja: M5,
@@ -430,9 +436,12 @@ dopasowania zamiast drugiego (M7).
    odcina kandydatów przed wyceną, albo `estimate` dostaje tańszy wariant „tylko czas i pieniądz
    dla środka z nawyku".*
 
-4. **Kto jest właścicielem `KnownPlaces` (znajomość sklepów, §5.7)?**
-   *Propozycja M5: M3 (to pamięć agenta, obok `ExperienceMemory`); M5 tylko czyta i zgłasza
-   zdarzenie „odwiedzono sklep". M10 dopisze plotkę.* **Do uzgodnienia z M3 i M10.**
+4. ~~**Kto jest właścicielem `KnownPlaces` (znajomość sklepów, §5.7)?**~~ — **ZAMKNIĘTE
+   w M5b (`U-20`)** zgodnie z propozycją: własność zostaje przy M3, M5 tylko czyta.
+   Typ nazywa się inaczej, niż zakładał plan (`KnowledgeRef` + `KnowledgeSlab` +
+   `KnowledgeView`, nie `KnownPlaces`), ale filtr kandydatów działa przez niego bez
+   dopisywania ani jednego pola; zdarzenie „odwiedzono sklep" wnosi gotowe
+   `social::learn_place`, a plotkę dokłada M10.
 
 5. **Migracja wyceny zapasów WAC (M5) → FIFO per partia (M6).**
    Warianty: (a) przełącznik od daty wejścia M6, historyczne linie wyceniane WAC do wyczerpania;
@@ -461,7 +470,10 @@ dopasowania zamiast drugiego (M7).
    w dzienniku jako `TxKind::TaxPayment`. **Migracji dziennika w M8 nie będzie.**
    M8 buduje `CityTaxEngine` jako jedyną prawdziwą implementację mojego haka `TaxEngine`.
 
-9. **Próg odłożenia zakupu: jeden globalny czy per potrzeba?**
+9. ~~**Próg odłożenia zakupu: jeden globalny czy per potrzeba?**~~ — **ZAMKNIĘTE w M5b
+   (`U-21`)** zgodnie z propozycją: `thr0` per `NeedKind` w `data/economy/choice.ron`,
+   przy normalizacji `Σ|w| = 1` dającej wspólną skalę. Liczby zostają do strojenia
+   balansatorem (WP13); zamrożona jest struktura, nie kalibracja. Poprzednie brzmienie:
    *Propozycja M5: `thr0` per `NeedId` z `data/economy/` (bo odłożenie zakupu chleba i odłożenie
    zakupu butów to nie to samo), przy normalizacji wag `Σ|w| = 1` zapewniającej wspólną skalę U.*
    Rozstrzygnięcie zależy od kalibracji balansatorem — do domknięcia w WP13.
@@ -484,7 +496,10 @@ dopasowania zamiast drugiego (M7).
 
 12. ~~**Nazwa typu `PriceePolicy`**~~ — **ZAMKNIĘTE.** Potwierdzone: `PricePolicy`.
 
-13. **Nowe, otwarte — źródło `LostSaleTracking` dla zakładów gracza.**
+13. **ZAMKNIĘTE w M5b (`U-22`)** zgodnie z propozycją: flagę ustawia `game/`
+    (`Market::set_tracking`), `sim/economy` ją tylko czyta, a poziom śledzenia
+    **nie wchodzi do hasha stanu** — inaczej kliknięcie „śledź" zmieniałoby świat.
+    Poprzednie brzmienie: **źródło `LostSaleTracking` dla zakładów gracza.**
     Przyjąłem propozycję M9 (histogram zawsze dla zakładów gracza + pierścień 256 dla oznaczonych,
     zero kosztu dla AI, ≈ 2,5 MB przy 200 sklepach). Otwarte zostaje **kto ustawia flagę**:
     `sim/economy` czytając własność zakładu, czy `game/` przy przejęciu sklepu przez gracza.
@@ -505,7 +520,13 @@ dopasowania zamiast drugiego (M7).
     pojedyncze wywołania, więc inna ziarnistość po stronie M7 nie rusza niezmiennika. Kanał jest
     pokryty testem P1b od pierwszego dnia, więc rozjazd wyjdzie u tego, kto go wprowadzi.
 
-15. **Nowe po M4 — `PlaceCandidate` nie niesie kwoty, a człon `g` jej wymaga.**
+15. **ROZSTRZYGNIĘTE w M5b (`U-23`) — odwrotnie niż brzmiała propozycja: pola nie
+    dopisujemy.** `candidates` nie dostaje `TravelOracle`, więc nie ma kto wypełnić
+    kwoty; wołanie wyceny 3–15 razy na decyzję to dokładnie koszt, przed którym
+    ostrzegają R6 i R7. Człon `g` liczy w M5b koszt czasu (`travel_min · vot`),
+    a pieniężna część dojazdu jest zerem z sufitem nazwanym w kodzie przy
+    `Candidate.travel_money`. Poprzednie brzmienie: **`PlaceCandidate` nie niesie
+    kwoty, a człon `g` jej wymaga.**
     `sim/agents::PlaceCandidate` ma dziś `place`, `travel_min: u16`, `score: i32` i `reason` —
     **brak pola `Money`**. Komentarz przy `score` zapowiada wyłącznie podmianę znaczenia na
     „użyteczność §6.4 × 1000", więc kwota nie ma dziś gdzie usiąść. Bez niej M5 musi wołać wycenę
@@ -580,3 +601,23 @@ faza nie jest tu przeprojektowywana. Gwiazdka = zmiana zakresu albo kryterium.
 | T-7 ★ | **Kontrakt kosztu przejazdu jest dostarczony; ryzyko R6 zmieniło naturę, a nie zniknęło.** `TravelOracle::estimate` zwraca `TravelEstimate { minutes, cost: Money, mode, reason }`, a wywołanie jest bezskutkowe (`plan(commit = false)`: parking sprawdzany, nie rezerwowany) | §9 pkt 3 nazywał to „najtwardszą zależnością zewnętrzną fazy" i prosił M4 o nową sygnaturę. Nowej sygnatury nie będzie, bo istniejąca robi dokładnie to, o co prosi człon `g`. **Otwarte zostaje co innego i jest to sprawa budżetu, nie kontraktu**: `estimate` wycenia sześć opcji z routingiem i woła się już ponad milion razy na dobę metropolii **bez** udziału M5, a decyzja zakupowa chce 3–15 kandydatów na decyzję. Mitygacją jest wstępny ranking całkowitoliczbowy **przed** wyceną — ta sama, którą R7 ma od początku |
 | T-8 ★ | **Blokery WP1 są dwa i oba są zapisane jako „do potwierdzenia później": punkt 14 i wariant `AccountOwner::Bank(FirmId)` z punktu 7** | `MoneySupplyLedger` z kanałem kapitału zewnętrznego powstaje w **pierwszym** pakiecie i jest częścią niezmiennika P1/P1b — czyli tego samego testu, który jest kryterium zamknięcia M5a. Zmiana ziarnistości kanału po WP1 to przepisanie niezmiennika, nie dołożenie pola. Bank jest z M5d, ale jego wariant w `AccountOwner` zamraża się razem z enumem |
 | T-9 | **Dwie luki w cudzych crate'ach, obie sprawdzone w kodzie**: `sim/agents::PlaceCandidate` nie ma pola `Money` (nowy punkt 15), a `tools/headless` nie ma targetu bibliotecznego, którego wymaga wariant „balansator jako biblioteka" z punktu 10 | Żadna nie blokuje M5a, obie blokują coś później: pierwsza WP4, druga WP13. Zapisane teraz, bo to jest ta klasa rzeczy, którą inaczej odkrywa się w tygodniu domknięcia fazy — a wtedy zmiana w cudzym crate'cie jest już nie poprawką, tylko przeszkodą |
+
+---
+
+## Zmiany wpisane po M5b
+
+Zgodnie z `K-18`. To są rzeczy, o których wiemy **na pewno** po zamknięciu M5b;
+faza nie jest tu przeprojektowywana. Gwiazdka = zmiana zakresu albo kryterium.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| U-16 ★ | **Decyzja otwarta nr 2 zamknięta zgodnie z propozycją M5: dochód gospodarstwa wypłaca M5.** `sim/economy::pay_incomes` przelewa `Household.income_monthly` z konta `RestOfWorld` na granicy miesiąca; kwota pochodzi z generacji populacji (M3), struktura wypłaty należy do M5, źródło kwoty podmienia M7 | Punkt był opisany jako „do uzgodnienia z M3 i M7", ale okazał się blokerem **wyniku podfazy**, nie kwestią własności: gospodarstwa z Etapu 8 mają saldo zero, więc pierwszy przebieg scenariusza dał 170 tys. odmów „brak środków" i ani jednej transakcji. Uzgadniać nie było czego — bez wypłaty nie ma gospodarki detalicznej |
+| U-17 ★ | **Saldo gospodarstwa domowego NIE jest kontem w `Books`.** Zostaje w komponencie `Household` (własność M3), a `Books` widzi je przez kanał `MoneySupplyLedger.household_sector_in/out`. Niezmiennik P1 obowiązuje bez zmian po stronie ksiąg; niezmiennik całego świata brzmi `society::total_money + Books::total_balance() == const` i jest sprawdzany testem end-to-end | Dwa źródła salda rozjeżdżają się przy pierwszej transakcji — to jest dokładnie ostrzeżenie z korekty ★ w `M5d`. Kanał sektora gospodarstw jest tym samym wzorcem co kanał kapitału zewnętrznego M7: strona spoza ksiąg z własną pozycją w ewidencji podaży. Konsekwencja dla M5d/WP8: `HouseholdBudget.account`/`cash` z §5.9 **nie powstaną jako `AccountId`** — koperty stoją na polach komponentu |
+| U-18 ★ | **`sim/economy` zależy od `sim/agents`** (implementuje `PlaceProvider`), a stan rynku mieszka w `Market(Arc<Mutex<…>>)`, nie w osobnych zasobach świata | Punktem podmiany jest `Sources.places` (`Z-1`), a ten trait nie dostaje `&World`. Kierunek zależności jest jednostronny i taki zostaje: `sim/agents` nie widzi gospodarki i widzieć jej nie może (cykl z `K-8`) |
+| U-19 ★ | **Kontrakt M3 rozszerzony w dwóch miejscach**: `PlaceProvider::candidates` dostaje `who: &CitizenView<'_>`, a `FulfilRequest` — `household_size: u8` i realny `budget_hint` | Obie zmiany są wykonaniem zapowiedzi, które M3 sam zapisał w komentarzach („M5: użyteczność §6.4 × 1000", „M5 wstawia tu realny budżet"), tylko bez kanału, którym dane miały dojść. Szczegóły i powody w tabeli korekt `M5b` (`V-1`, `V-2`) |
+| U-20 | **Decyzja otwarta nr 4 zamknięta zgodnie z propozycją: `KnownPlaces` należy do M3**, a M5 tylko czyta. Realizacja: `KnowledgeView` w `candidates`, filtr `known.knows(PlaceRef::Site(...))` | Typ nazywa się inaczej, niż zakładał plan (`KnowledgeRef` + `KnowledgeSlab` + `KnowledgeView`, a nie `KnownPlaces`), ale własność jest ta sama i M5 nie dopisał tam ani jednego pola. Zdarzenie „odwiedzono sklep" wnosi `social::learn_place`, które już istnieje; M10 dokłada plotkę |
+| U-21 | **Decyzja otwarta nr 9 zamknięta zgodnie z propozycją: próg odłożenia zakupu jest per potrzeba**, `thr0` z `data/economy/choice.ron`, przy normalizacji wag `Σ|w| = 1` dającej wspólną skalę | Kalibracja balansatorem (WP13) dostaje tabelę do strojenia, a nie jedną liczbę — i to ona zdecyduje o wartościach. Struktura jest zamrożona, liczby nie są |
+| U-22 | **Decyzja otwarta nr 13 zamknięta zgodnie z propozycją: flagę `LostSaleTracking` ustawia `game/`**, `sim/economy` tylko czyta (`Market::set_tracking`). Poziom **nie wchodzi do hasha stanu** | „Kto jest graczem" nie jest pojęciem ekonomicznym. Gdyby poziom śledzenia wchodził do hasha, kliknięcie „śledź" zmieniałoby świat — to ta sama zasada, którą M4 zastosował do nakładek ruchu („pomiar nie jest stanem") |
+| U-23 ★ | **Decyzja otwarta nr 15 rozstrzygnięta inaczej, niż brzmiała propozycja: `PlaceCandidate` NIE dostaje pola `Money`.** Człon `g` liczy w M5b wyłącznie koszt czasu (`travel_min · vot`), a pieniężna część dojazdu jest zerem z nazwanym sufitem | Propozycja zakładała, że `PlaceProvider` zna koszt przejazdu — nie zna: `candidates` nie dostaje `TravelOracle`, a wołanie go 3–15 razy na decyzję to dokładnie koszt, przed którym ostrzegają R6 i R7 (`estimate` wycenia sześć opcji z routingiem i woła się już ponad milion razy na dobę **bez** udziału M5). Dopisanie pola do cudzej struktury jest tanie; wypełnienie go nie jest. Ścieżka wyjścia zostaje zapisana w kodzie przy `Candidate.travel_money` i wraca, kiedy pomiar pokaże, że czas sam nie wystarcza |
+| U-24 | **Budżet §7.3 dla `purchase_decision` mierzy się osobno od podróży, które ta decyzja generuje** | Scenariusz `m5shop` pokazał wzrost czasu doby z 0,6 s do ~10 s po uruchomieniu zakupów, a `utility_of_offer` mierzy 14,7 ns wobec budżetu 120 ns. Różnica jest w routerze M4: każdy zakup to dwa wywołania `begin_trip`. Bramka benchmarkowa fazy (WP14) musi to rozdzielać, inaczej zaczerwieni się na koszcie cudzego modułu |
+| U-25 | **Katalog `data/economy/` powstał** i jest dopisany do listy w dokumencie 00 §5: `weights.ron` (wagi użyteczności per potrzeba), `choice.ron` (temperatura, szum, progi, promień, budżety odniesienia), `retail.ron` (kategoria, trwałość, dostawa, narzut per towar, asortyment per rodzaj sklepu) | Lista katalogów w §5 deklaruje się jako kompletna, więc brak wpisu byłby jej błędem, nie luką — ta sama sytuacja co `data/ui/` przy M2 (`K-19`) |

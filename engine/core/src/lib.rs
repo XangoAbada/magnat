@@ -45,7 +45,7 @@ pub use ids::{
     BuildingId, CitizenId, ContractId, FirmId, HouseholdId, ParcelId, SiteId, VehicleId,
 };
 pub use money::split_proportional;
-pub use rng::{rng, Rng, StreamId, NO_ENTITY};
+pub use rng::{mix64, rng, Rng, StreamId, NO_ENTITY};
 pub use schema::ComponentSchemaId;
 pub use time::{Cadence, DayOfWeek, MinuteOfDay, SimCalendar, SimClock, SimSpeed};
 pub use types::{
@@ -55,6 +55,6 @@ pub use types::{
 pub use weather::{weather_at, Weather};
 pub use vocab::{
     ActivityKind, Biome, CommitmentKind, DeprivationEffect, LifeEventKind, MigrationKind, NeedKind,
-    PlaceKind, PlaceRef, ResourceKind, RoadClass, StockCat, TraitId, TransportMode, UtilityKind,
-    UtilityService, WorldCoord, NEED_COUNT, STOCK_CAT_COUNT,
+    PlaceKind, PlaceRef, RejectCause, ResourceKind, RoadClass, StockCat, TraitId, TransportMode,
+    UtilityKind, UtilityService, WorldCoord, NEED_COUNT, REJECT_CAUSE_COUNT, STOCK_CAT_COUNT,
 };

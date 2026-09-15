@@ -199,3 +199,19 @@ przestaje się zamykać po kilku tysiącach transakcji. To nie jest optymalizacj
 Zdarzenia księgowe w M5: sprzedaż (Revenue/Cogs), zakup u dostawcy (InventoryGoods/TradePayable→Cash),
 odpis towaru przeterminowanego (WriteOffExpense), czynsz, media, amortyzacja wyposażenia (liniowa,
 miesięczna), odsetki i raty kredytu, wypłaty (M5: stała kwota, hook M7).
+
+---
+
+## Zmiany wpisane po M5b
+
+Zgodnie z `K-18`. Wpisane jest **tylko to, co wiadomo na pewno** po zamknięciu M5b —
+podfaza nie jest tu przeprojektowywana.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| ★ | **`reprice` zmienia `Offer` przez `Market::set_price`, a nie przez zasób `Arena<Offer>`.** Arena ofert mieszka wewnątrz `Market` (`K-29`, korekta `V-3` w M5b), więc polityka cenowa musi wejść tam, gdzie siedzi stan: albo metodą na `Market`, albo systemem wołającym `Market` — nie zapytaniem ECS po ofertach | `PlaceProvider` nie dostaje `&World`, więc wszystko, czego dotyka decyzja zakupowa, jest osiągalne wyłącznie z uchwytu rynku. Zmiana ceny **nie brudzi indeksu** (indeks trzyma uchwyty, cena czyta się z areny na żywo) — to zostaje z M5a bez zmian |
+| ★ | **Obserwacja konkurencji ma gotowy licznik: `Offer.price_rev`.** Porównanie z zapamiętaną rewizją zastępuje kopię cennika konkurenta | Pole powstało w M5a właśnie na to i nie ma jeszcze wołającego. Kryterium WP6 („reakcja nie wcześniej niż po 1 i nie później niż po 7 dniach") mierzy się wtedy na dacie zapamiętania rewizji, a nie na różnicy cen |
+| ★ | **Poślizg ceny (§5.5) dostaje w M5c swojego pierwszego konsumenta.** W M5b mechanizm jest kompletny, ale bezczynny: `PlannedPurchase` zapamiętuje cenę z chwili decyzji, `price_slippage_bp` stoi w `data/economy/choice.ron`, a `MarketStats.slippage_rechecks` liczy zera, bo ceny się nie ruszają | Pierwszy `reprice` uruchamia całą tę ścieżkę naraz. Warto sprawdzić licznik po włączeniu polityk cenowych — jeśli zostanie zerem, znaczy to, że ceny zmieniają się wyłącznie w nocy i nikt nigdy nie zastaje innej ceny, niż widział przy planowaniu |
+| ★ | **`take_cogs` w `kernel` przejmuje gotową funkcję `shop::take_units`, a nie pisze jej od nowa.** Gałąź zmiatania reszty (R5) jest już zaimplementowana i ma własny test (`zdjecie_calej_linii_zmiata_reszte_groszy`) | D20 wymaga „zera zmian zachowania" tam, gdzie coś realnie się przenosi — a tu się przenosi. Złoty plik ciągu hashy przed przenosinami i po nich obowiązuje |
+| | **Wycena zapasu jest już rozdzielona na dwa miejsca: zaplecze i półkę.** `Market::inventory_value(site)` sumuje oba i to jest lewa strona niezmiennika P5 | `InventoryGoods` z bilansu musi się równać sumie **obu**, nie samego zaplecza. Towar wyłożony na półkę nie przestaje być majątkiem sklepu, a łatwo o to potknięcie, bo `Offer.available` patrzy tylko na półkę |
+| | **Konto sklepu istnieje od M5b** (`AccountOwner::Firm`, otwierane przy stawianiu sklepu) i jest już obciążane zakupami u dostawcy zewnętrznego | `Ledger` z WP7 stoi więc obok istniejącego rachunku, a nie zamiast niego: dziennik księgowy jest widokiem na te same przepływy, nie drugim saldem |

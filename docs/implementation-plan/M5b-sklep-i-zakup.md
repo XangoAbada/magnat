@@ -20,11 +20,11 @@ Sklep jako magazyn + półka + asortyment z zewnętrznym dostawcą jako jawnym p
 
 ## Pakiety robocze
 
-| WP | Nazwa | Zależy od | Rozmiar |
-|---|---|---|---|
-| WP3 | Sklep: magazyn, półka, asortyment, zewnętrzny dostawca | WP1, WP2 | L |
-| WP4 | Funkcja użyteczności i wybór oferty | M3, M4, WP2 | L |
-| WP5 | Rozliczanie transakcji | WP1, WP3, WP4 | M |
+| WP | Nazwa | Zależy od | Rozmiar | Status |
+|---|---|---|---|---|
+| WP3 | Sklep: magazyn, półka, asortyment, zewnętrzny dostawca | WP1, WP2 | L | `[x]` |
+| WP4 | Funkcja użyteczności i wybór oferty | M3, M4, WP2 | L | `[x]` |
+| WP5 | Rozliczanie transakcji | WP1, WP3, WP4 | M | `[x]` |
 
 ### WP3 — Sklep: magazyn, półka, asortyment, zewnętrzny dostawca
 Zaplecze (`ShopInventory`) i półka (`Shelf`) to **dwa różne stany**; oferta odzwierciedla wyłącznie
@@ -34,16 +34,37 @@ Kryterium: test własnościowy „brak ujemnych stanów" i „sklep nie sprzedaj
 zielony; scenariusz zerwania dostaw → półka pustoszeje w tempie sprzedaży, oferta znika z kandydatów,
 ale **sklep pozostaje widoczny w inspekcji z powodem „brak towaru"**.
 
+**Zamknięte.** `sim/economy/src/shop.rs` i `market.rs`: zaplecze (`ShopInventory`) i półka (`Shelf`)
+jako dwa stany, `Offer.available` odzwierciedla wyłącznie półkę i nie znika przy zerze.
+`ExternalSupplier` z dryfem ceny `(towar, doba)` wycenia, przyjmuje zamówienie i dowozi po
+`lead_time_days`; pieniądz idzie przelewem na `RestOfWorld`, więc zaopatrzenie nie rusza podaży
+pieniądza. Testy: `polka_i_zaplecze_to_dwa_stany`,
+`zamowienie_u_dostawcy_kosztuje_i_dociera_po_czasie`,
+`zerwanie_dostaw_pustoszy_polke_ale_sklep_zostaje_widoczny`,
+`stan_polki_i_oferty_nigdy_nie_schodzi_ponizej_zera`.
+
 ### WP4 — Funkcja użyteczności i wybór oferty
 Pełna treść w sekcji 5.4. Kryterium: dwa przebiegi tego samego seeda dają identyczny ciąg wyborów;
 test wrażliwości — podniesienie ceny w jednym sklepie o 10% przesuwa udział rynkowy monotonicznie
 w dół dla każdej z 20 losowych populacji; 100% decyzji ma zapisany `DecisionReason`.
+
+**Zamknięte.** Wszystkie trzy kryteria zielone — i **środkowe kosztowało dwie korekty projektu**
+(`V-7`, `V-8`), bo pierwsza wersja przechodziła je w 15 przypadkach na 20. Wagi wyprowadzone
+z osobowości i statusu, normalizacja `Σ|w| = 1`, `f(x) = −det_math::ln1p(x)` dla ceny i odległości,
+wybór przez `det_math::softmax_pick`. `utility_of_offer` mierzy **14,7 ns** wobec budżetu 120 ns
+z §7.3, komplet 15 kandydatów 203 ns.
 
 ### WP5 — Rozliczanie transakcji
 Rozdzielenie na fazę decyzji (równoległą, bez mutacji) i fazę rozliczenia (sekwencyjną,
 deterministyczną). Rozwiązuje wyścig o ostatnią sztukę bez blokad.
 Kryterium: 10 tys. agentów kierujących się do sklepu z 10 sztukami na półce → dokładnie 10 transakcji,
 9990 zdarzeń `Stockout` z przeplanowaniem, suma pieniądza bez zmian.
+
+**Zamknięte** (`wyscig_o_ostatnia_sztuke_konczy_sie_dokladnie_dziesiecioma_transakcjami`):
+10 transakcji, 9 990 odmów `OutOfStock`, stan półki ani razu poniżej zera. Rozstrzygnięcie zapada
+**konstrukcyjnie w `fulfil`**, a nie przez sortowanie intencji — patrz `V-4`. Sumę pieniądza pilnuje
+`pieniadz_i_sztuki_zgadzaja_sie_po_obu_stronach`: księgi plus komponenty gospodarstw niezmienne
+co do grosza, a kanał sektora gospodarstw niesie dokładnie tyle, ile wynosi obrót sklepów.
 
 ---
 
@@ -384,3 +405,29 @@ Trzy jawne konsekwencje, które M6 musi znać:
 2. Zapas jest wyceniany **średnią ważoną** (`StockLine.cost_total / qty`), bo nie ma partii.
    M6 wprowadza `BatchId` i FIFO — to **zmienia COGS**; migracja opisana w sekcji 9 pkt 5.
 3. Dostawa zewnętrzna nie zajmuje pojazdu ani rampy (§7.3) — tylko czas. M6 to urealnia.
+
+---
+
+## Korekty planu wpisane po implementacji M5b
+
+Zgodnie z `K-18`. Gwiazdka = zmiana zakresu albo kryterium.
+
+| # | Korekta | Dlaczego |
+|---|---|---|
+| V-1 ★ | **`PlaceProvider::candidates` dostaje `who: &CitizenView<'_>`** (zmiana traitu M3) | §5.4 każe wyprowadzać wagi „z osobowości i statusu", a `PlaceCandidate.score` ma być „użytecznością §6.4 × 1000" — tak mówi dokumentacja tego pola od M3a. Tyle że wybór sklepu zapada w planerze, a trait nie przekazywał tam kupującego: bez `who` funkcji użyteczności **nie da się policzyć w jedynym miejscu, w którym jest potrzebna**. `PlanCtx` ma `citizen` tuż obok wywołania, więc zmiana kosztuje jedną linię u wołającego i podkreślenie w czterech atrapach |
+| V-2 ★ | **`FulfilRequest` dostaje `household_size: u8`, a `budget_hint` realną kwotę** z `Household.cash + bank` | Koszyk potrzeb epoki jest podany **na mieszkańca na dobę**, więc bez liczebności nie da się go przeliczyć na sztuki; budżet był w strukturze od M3 z komentarzem „M5 wstawia tu realny budżet" i to wstawienie właśnie nastąpiło. Obie wartości czyta `zaspokoj` z komponentu, czyli z jedynego źródła salda gospodarstwa |
+| V-3 ★ | **Arena ofert i `OfferIndex` przenoszą się z zasobów świata do `Market`** (`Arc<Mutex<…>>`); `register_economy` bierze gotowy rynek, a hash idzie przez `register_resource_hash::<Market>` zamiast `register_arena_hash::<Offer>` | To nie jest preferencja, tylko wymuszenie przez punkt podmiany `Z-1`: `PlaceProvider::candidates` i `fulfil` **nie dostają `&World`**, bo zasób `AgentSources` jest na czas minuty wyjmowany z ECS. Wszystko, czego dotyka decyzja zakupowa, musi być osiągalne z providera. Wzorzec jest ten sam, którym M4 wstawił `TrafficOracle` (`OracleHandle(Arc<…>)`). Wymóg `K-16` („arena w hashu, w kolejności indeksów") jest spełniony co do treści — zmienia się sekcja hasha, nie zawartość; dopisane do dokumentu 00 jako `K-29` |
+| V-4 ★ | **Granice faz z §5.5 biegną inaczej: decyzja w `candidates`, wykonanie i próg w `fulfil`, pieniądz w `settle_transactions`** | Plan dzielił pracę na „fazę decyzji równoległą" i „fazę rozliczenia sekwencyjną", żeby rozstrzygnąć wyścig o ostatnią sztukę bez blokad. Wyścigu **nie ma**: `fulfil` woła się z `DayLoopSystem`, który jest systemem **wyłącznym** (`K-21`), więc faza decyzji jest już sekwencyjna i deterministyczna, a półka może zejść w tej samej chwili, w której zapada decyzja. Osobną fazą zostaje pieniądz — i to z twardego powodu, nie z ostrożności: saldo gospodarstwa mieszka w komponencie `Household`, a `fulfil` nie widzi świata. Próg odłożenia zakupu ląduje w `fulfil`, bo tam odmowa wraca przez `ReplanCause::PlaceRefused`, czyli przez gotową ścieżkę „wróć do zadania później" z PRD §6.4 |
+| V-5 ★ | **`MoneySupplyLedger` dostaje kanał `household_sector_in/out`** i parę `Books::household_pay` / `household_receive` | Saldo gospodarstwa jest własnością M3 (komponent `Household`, sumowany przez `society::total_money`), a `Books` jest własnością M5 — dwa źródła salda rozjechałyby się przy pierwszej transakcji. Gospodarstwa są więc dla ksiąg **na zewnątrz**, dokładnie jak inwestor z kanału M7, a niezmiennik całego świata (`society::total_money + Books::total_balance()`) sprawdza test end-to-end, bo tylko on widzi obie księgi naraz. Decyzja właściciela produktu: wariant „kanał sektora GD" |
+| V-6 ★ | **Dochód gospodarstw wchodzi do M5b**: `pay_incomes` wypłaca `Household.income_monthly` z konta `RestOfWorld` na granicy miesiąca (zamknięcie decyzji otwartej nr 2 zgodnie z propozycją M5) | Pierwszy przebieg `m5shop` dał **170 360 odmów `BudgetExhausted` i zero transakcji**: gospodarstwa z generacji M3 mają saldo zero, bo nikt ich nigdy nie wypłacał. Bez tego kroku wynik podfazy jest nieobserwowalny — nie da się pokazać, że mieszkaniec wychodzi po chleb, jeśli nikogo nie stać na chleb. M5d/WP8 dokłada **podział** tej kwoty na koperty, M7 podmienia **źródło** na pensję emergentną; kanał zostaje ten sam |
+| V-7 ★ | **Kolejność kandydatów wchodzących do softmaxu jest tożsamościowa `(SiteId, GoodId)`, a nie kosztowa** — po obcięciu do `k_max` tablica wraca do porządku tożsamości | Kryterium WP4 („podwyżka o 10 % przesuwa udział w dół dla **każdej** z 20 populacji") przechodziło 15/20 i nie był to szum. `softmax_pick` idzie po sumie skumulowanej w kolejności wejścia; przy porządku „od najtańszego" podwyżka ceny przestawiała całą tablicę, więc ten sam los trafiał w innego kandydata i udział rynkowy przestawał reagować na cenę monotonicznie. Porządek tożsamościowy jest stały wobec cen, a determinizm sumowania (`K-6`) trzyma się tak samo dobrze |
+| V-8 ★ | **Szum wiąże się z parą (kupujący, oferta), a nie z pozycją w rankingu**; `core::rng::mix64` zostaje upubliczniony | To jest dokładnie to, czego żądał plan §5.4 („szum STAŁY dla trójki kupujący–oferta–decyzja, klucz `mix64(…)`") i czego pierwsza wersja nie zrobiła, bo `core` nie wystawiał mieszalnika. Skutek był mierzalny w tym samym kryterium co `V-7`. Zamiast drugiego mieszalnika w `sim/economy` udostępniamy ten sam, który rozprasza ziarna — jeden mieszalnik w grze, tak jak jeden generator |
+| V-9 ★ | **Kalibracja startowa przestawiona: temperatura 0,35 → 0,06, `noise_sigma` 0,08 → 0,02, `budget_ref` liczony na jedno wyjście po zakupy, nie na miesiąc** | Skala użyteczności jest **związana z normalizacją**: przy `Σ|w| = 1` różnice między dwoma sklepami tej samej dzielnicy są rzędu 0,01–0,05. Temperatura 0,35 czyniła z softmaxu rzut monetą (`exp(0,01/0,35) ≈ 1,03`), a szum 0,08 był dwudziestokrotnie większy od wpływu ceny — rynek był losowaniem z ceną jako ozdobą. Mianownik miesięczny dawał człon ceny bliski zeru z tego samego powodu. To są liczby startowe dla balansatora (M5e), nie wynik kalibracji |
+| V-10 | **Funkcja użyteczności liczy w `f64`, nie `f32` jak w §5.4** | `core::det_math` nie ma wariantów `f32`, a `clippy.toml` zakazuje `f32::ln`/`exp` wprost słowami „symulacja nie używa f32". Pieniądza to nie dotyka: wchodzi do funkcji wyłącznie jako **stosunek** kwoty do budżetu odniesienia |
+| V-11 | **`RejectCause` mieszka w `core::vocab` i jest bezładunkowy**; liczba (minuty, punkty bazowe) siedzi w polu `detail` powodu | Jest ładunkiem centralnego enuma, więc `K-20` każe mu być w `core`. Bezładunkowy, bo `vocab_enum!` daje `ALL`/`as_index`, a to one robią z niego indeks `LostSaleHistogram.by_cause` — wariant z liczbą w środku nie byłby indeksem |
+| V-12 | **Warianty `DecisionReason` M5 (300–302) nie wchodzą do `PlanSlot.reason`**; plan dnia niesie dalej powody M3 | `PlanSlot` pakuje tag w bajt (M3a §5.1), a blok M5 zaczyna się od 300. To nie jest kolizja do obejścia, tylko granica znaczeń: powody M5 opisują **zakup** (powstają przy wizycie, mieszkają w dzienniku transakcji i w pierścieniu utraconych sprzedaży), a plan dnia tłumaczy **wyjście z domu**. Komentarz przy bloku w `decision.rs` mówi to wprost, a test `skrot_powodu_miesci_sie_w_bajcie` ma poprawiony zakres |
+| V-13 | **`Wholesale::place_order` dostaje `site: SiteId`** ponad sygnaturę z §5.7 | Dostawa musi wiedzieć, do którego zakładu jedzie, a `FirmId` tego nie mówi — firma może mieć wiele sklepów już w M5 |
+| V-14 | **Poślizg ceny (§5.5) ma licznik, ale nie ma jeszcze czego mierzyć** | Ceny nie ruszają się do M5c/WP6, więc między decyzją a wizytą nie ma co się przesunąć. `price_slippage_bp` zostaje w danych, `PlannedPurchase.unit_price` zapamiętuje cenę z chwili decyzji, a `MarketStats.slippage_rechecks` czeka na `reprice` |
+| V-15 | **Zmiatanie reszty (R5) jest jedną funkcją `shop::take_units` dla zaplecza i dla półki** | To jedna reguła domenowa, więc ma mieć jedną implementację (DRY dotyczy wiedzy). M5c/WP7 przenosi ją do `kernel` jako `take_cogs` razem z księgowaniem — i wtedy obowiązuje wymóg „zero zmian zachowania" z D20 |
+| V-16 | **`Household.stock` zostaje w dniach**; zakup podnosi liczbę dni, nie zastępuje ich sztukami | `Z-5` zapowiadał zastąpienie realną konsumpcją „z partiami", a partie to M6. M5b wnosi realny **towar i pieniądz** po stronie sklepu, a po stronie gospodarstwa nadal liczy dni — inaczej trzeba by zbudować magazyn gospodarstwa domowego, którego żaden pakiet tej fazy nie jest właścicielem |
+| V-17 | **Zmierzone.** `utility_of_offer` 14,7 ns (budżet 120 ns), komplet 15 kandydatów 203 ns. Scenariusz `m5shop`: miasto 4 km, 28,5 tys. mieszkańców, 60 sklepów, 741 ofert, 8 dób w 31,5 s; **226 tys. transakcji, 1,18 mln zł obrotu, różnica sumy pieniądza 0 gr**. Hashe identyczne przy 1 i 4 wątkach | Wzrost czasu doby po uruchomieniu zakupów (0,6 s → ~10 s) **nie pochodzi z decyzji zakupowej**, tylko z podróży, które ta decyzja generuje: każdy zakup to dwa wywołania routera M4. Rozdzielenie pomiaru jest tu treścią, a nie formalnością — bez niego wyglądałoby to na trzydziestokrotne przekroczenie budżetu §7.3 przez `purchase_decision` |

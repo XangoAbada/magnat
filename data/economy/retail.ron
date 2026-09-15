@@ -1,0 +1,60 @@
+// Parametry detaliczne towaru (M5b §5.3, §5.7).
+//
+// Ten plik **nie powtarza** ceny hurtowej ani gęstości — te są w `data/goods/`
+// i tam zostają (jedno źródło prawdy o towarze). Tutaj jest wyłącznie to, czego
+// handel detaliczny potrzebuje ponad katalog: do której kategorii zapasu
+// gospodarstwa towar należy, jak długo leży na półce, ile trwa dostawa i jaki
+// narzut bierze sklep.
+//
+// **Kolejność wpisów w obrębie kategorii jest rangą substytutu** (§5.4 krok 1):
+// pierwszy chleb, potem ziemniak, potem mięso. Decyzja zakupowa schodzi po tej
+// liście, kiedy pierwszy wybór nie przeszedł progu.
+//
+// `markup_bp` = narzut nad ceną hurtową w punktach bazowych (3000 = +30 %).
+// `None` → `default_markup_bp`. **To jest cena startowa, nie polityka cenowa**:
+// od M5c cenę ustala `reprice`, a ta kolumna zostaje tylko jako punkt wyjścia.
+(
+    schema_version: 1,
+    default_markup_bp: 3200,
+
+    // Jaki sklep czym handluje. `PlaceKind` przychodzi z archetypu zakładu
+    // (`place_kind` w `data/buildings/commerce.ron`), więc asortyment wynika
+    // z tego, co postawił generator M2, a nie z osobnej listy sklepów.
+    shop_kinds: [
+        (kind: Grocery,  cats: [Food, Drink, Hygiene, Cleaning]),
+        (kind: Pharmacy, cats: [Medicine, Hygiene]),
+        (kind: Clothing, cats: [Clothing]),
+    ],
+
+    goods: [
+        // ── Food: chleb i ziemniak przed mięsem — to jest ranga substytutu ────────
+        (key: "bread",        cat: Food,     quality: 52, shelf_life_days: 3,   lead_time_days: 1, markup_bp: Some(2600)),
+        (key: "potato",       cat: Food,     quality: 48, shelf_life_days: 60,  lead_time_days: 2, markup_bp: Some(3000)),
+        (key: "vegetables",   cat: Food,     quality: 55, shelf_life_days: 10,  lead_time_days: 1, markup_bp: Some(3400)),
+        (key: "milk",         cat: Food,     quality: 56, shelf_life_days: 7,   lead_time_days: 1, markup_bp: Some(2800)),
+        (key: "fruit",        cat: Food,     quality: 58, shelf_life_days: 8,   lead_time_days: 1, markup_bp: Some(3600)),
+        (key: "poultry_meat", cat: Food,     quality: 60, shelf_life_days: 4,   lead_time_days: 1, markup_bp: None),
+        (key: "cheese",       cat: Food,     quality: 66, shelf_life_days: 30,  lead_time_days: 2, markup_bp: None),
+        (key: "meat",         cat: Food,     quality: 70, shelf_life_days: 5,   lead_time_days: 1, markup_bp: Some(3800)),
+        (key: "sugar",        cat: Food,     quality: 45, shelf_life_days: 720, lead_time_days: 3, markup_bp: Some(2400)),
+
+        // ── Drink ────────────────────────────────────────────────────────────────
+        (key: "juice",        cat: Drink,    quality: 55, shelf_life_days: 90,  lead_time_days: 2, markup_bp: Some(3400)),
+        (key: "beer",         cat: Drink,    quality: 58, shelf_life_days: 180, lead_time_days: 2, markup_bp: Some(4000)),
+
+        // ── Hygiene ──────────────────────────────────────────────────────────────
+        (key: "soap",         cat: Hygiene,  quality: 50, shelf_life_days: 720, lead_time_days: 3, markup_bp: Some(3600)),
+        (key: "toilet_paper", cat: Hygiene,  quality: 48, shelf_life_days: 720, lead_time_days: 3, markup_bp: Some(3000)),
+        (key: "cosmetics",    cat: Hygiene,  quality: 72, shelf_life_days: 540, lead_time_days: 5, markup_bp: Some(6000)),
+
+        // ── Cleaning ─────────────────────────────────────────────────────────────
+        (key: "detergent",    cat: Cleaning, quality: 52, shelf_life_days: 720, lead_time_days: 3, markup_bp: Some(3400)),
+
+        // ── Medicine ─────────────────────────────────────────────────────────────
+        (key: "medicine",     cat: Medicine, quality: 78, shelf_life_days: 540, lead_time_days: 2, markup_bp: Some(2200)),
+
+        // ── Clothing ─────────────────────────────────────────────────────────────
+        (key: "clothing",     cat: Clothing, quality: 58, shelf_life_days: 0,   lead_time_days: 7, markup_bp: Some(8000)),
+        (key: "shoes",        cat: Clothing, quality: 62, shelf_life_days: 0,   lead_time_days: 9, markup_bp: Some(9000)),
+    ],
+)

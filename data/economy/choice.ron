@@ -1,0 +1,92 @@
+// Parametry decyzji zakupowej (M5b §5.4, PRD §6.4).
+//
+// To jest plik, który **stroi balansator** (M5e) — nie kod. Temperatura softmaxu,
+// szum i progi odłożenia zakupu decydują o tym, czy rynek się koncentruje
+// (bramka G6 na HHI) i jak często mieszkaniec rezygnuje (`deferral_rate`, G5).
+//
+// Wartości ułamkowe są `f64`, bo funkcja użyteczności nie jest pieniądzem (00 §2):
+// pieniądz wchodzi do niej wyłącznie przez `budget_ref_gr`, i to w groszach.
+//
+// `thr0` jest ujemne, bo `f(x) = −ln(1+x)` jest ujemna dla każdego dodatniego
+// stosunku ceny do budżetu. Próg bliski zeru znaczy „kupi tylko okazję".
+(
+    schema_version: 1,
+
+    // Softmax zamiast argmax (PRD §6.4). T → 0 degeneruje rynek do monopolu,
+    // T → ∞ do rzutu monetą.
+    //
+    // **Skala jest związana z normalizacją wag.** `Σ|w| = 1` i wszystkie człony
+    // mieszczą się mniej więcej w ⟨−0,5; 0,5⟩, więc różnice użyteczności między
+    // dwoma sklepami tej samej dzielnicy są rzędu 0,01–0,05. Temperatura 0,35
+    // (pierwsza próba) czyniła z softmaxu rzut monetą: podwyżka ceny o 25 % nie
+    // ruszała udziału rynkowego, bo `exp(0,01/0,35) ≈ 1,03`. Przy 0,06 ta sama
+    // podwyżka przesuwa udział o kilkanaście punktów procentowych — i to jest
+    // odpowiedź na kryterium WP4 („udział przesuwa się monotonicznie w dół").
+    temperature: 0.06,
+    // Szum: `sigma · u`, `u ~ U(−1, 1)`, stały dla trójki (kupujący, oferta, decyzja).
+    // Musi być **mniejszy** od typowej różnicy użyteczności, inaczej cena przestaje
+    // cokolwiek znaczyć, a rynek staje się losowaniem. Ta sama arytmetyka co wyżej.
+    noise_sigma: 0.02,
+
+    // §17.5: 3–15 kandydatów, nigdy O(n·m).
+    k_min: 3,
+    k_max: 15,
+    // Promień zapytania o oferty; przy mniej niż `k_min` trafieniach rozszerzany raz
+    // (do dwukrotności). **To on decyduje o koszcie gorącej ścieżki**: §17.5 żąda
+    // 3–15 kandydatów, a nie przeglądu wszystkich ofert miasta. Przy 2500 m na mapie
+    // 4 km zapytanie zwracało praktycznie cały asortyment miasta i decyzja zakupowa
+    // kosztowała dziesiątki mikrosekund zamiast pojedynczych.
+    radius_m: 1200,
+
+    // Cena, która zmieniła się między decyzją a rozliczeniem o więcej niż tyle,
+    // wymusza ponowną ocenę progu (§5.5).
+    price_slippage_bp: 500,
+
+    // Wartość czasu w groszach na minutę dla statusu 0; status 100 daje dwukrotność.
+    // `ponytail:` sufit nazwany — docelowo `vot` wyprowadza się z dochodu netto
+    // gospodarstwa (§5.4), a ten powstaje razem z budżetem w M5d/WP8. Do tego czasu
+    // status jest jedynym dostępnym przybliżeniem zamożności kupującego.
+    vot_base_gr_per_min: 9,
+
+    // Ile dni zapasu kupuje jedno wyjście po zakupy.
+    purchase_days: 4,
+    // Dopóki gospodarstwo ma tyle dni zapasu, potrzebę wolno zaspokoić w domu;
+    // poniżej — kandydatem jest wyłącznie sklep z ofertą.
+    home_stock_min_days: 1,
+
+    // Mianownik członu ceny: `f(cena / budget_ref)`. Per kategoria zapasu, w groszach.
+    // `ponytail:` stała z danych zamiast koperty budżetowej — koperty wnosi M5d/WP8
+    // i wtedy `budget_ref_for_need` podmienia to wywołanie, nie tę tabelę.
+    // Wartości są **na jedno wyjście po zakupy**, nie na miesiąc: plan §5.4 definiuje
+    // `budget_ref` jako kopertę podzieloną przez oczekiwaną liczbę zakupów w miesiącu.
+    // Rząd wielkości jest ważny, bo `f(cena / budget_ref)` przy mianowniku dwudziestu
+    // koszyków daje człon ceny bliski zeru — i cena przestaje ważyć cokolwiek.
+    budget_ref_gr: [
+        (cat: Food,     gr: 1500),
+        (cat: Drink,    gr:  800),
+        (cat: Hygiene,  gr:  900),
+        (cat: Cleaning, gr:  900),
+        (cat: Clothing, gr: 9000),
+        (cat: Medicine, gr: 2500),
+        (cat: Fuel,     gr: 8000),
+        (cat: Other,    gr: 4000),
+    ],
+
+    // Próg odłożenia zakupu per potrzeba (§6.4, decyzja otwarta nr 9 — propozycja
+    // „per potrzeba" przyjęta). Wszystkie dwanaście musi tu być: brak wpisu to błąd
+    // ładowania, nie ciche zero.
+    thresholds: [
+        (key: "Hunger",      thr0: -1.10, k_urgency: 0.45, k_envelope: 0.30),
+        (key: "Sleep",       thr0: -1.00, k_urgency: 0.00, k_envelope: 0.00),
+        (key: "Hygiene",     thr0: -0.95, k_urgency: 0.35, k_envelope: 0.30),
+        (key: "Health",      thr0: -1.30, k_urgency: 0.60, k_envelope: 0.10),
+        (key: "Safety",      thr0: -1.00, k_urgency: 0.00, k_envelope: 0.00),
+        (key: "Housing",     thr0: -1.00, k_urgency: 0.00, k_envelope: 0.00),
+        (key: "Mobility",    thr0: -1.00, k_urgency: 0.00, k_envelope: 0.00),
+        (key: "Clothing",    thr0: -0.80, k_urgency: 0.25, k_envelope: 0.40),
+        (key: "Leisure",     thr0: -0.85, k_urgency: 0.20, k_envelope: 0.35),
+        (key: "Social",      thr0: -1.00, k_urgency: 0.00, k_envelope: 0.00),
+        (key: "Status",      thr0: -0.60, k_urgency: 0.10, k_envelope: 0.45),
+        (key: "Development", thr0: -0.85, k_urgency: 0.15, k_envelope: 0.30),
+    ],
+)

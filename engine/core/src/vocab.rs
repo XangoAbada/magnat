@@ -144,6 +144,44 @@ vocab_enum! {
 pub const STOCK_CAT_COUNT: usize = StockCat::ALL.len();
 
 vocab_enum! {
+    /// Dlaczego oferta odpadła albo zakup się nie odbył (M5b §5.4, PRD §14.1).
+    ///
+    /// W `core`, bo jest **ładunkiem centralnego enuma** `DecisionReason` — ta sama
+    /// reguła, która wypchnęła tu `StockCat` i `CommitmentKind` (`K-20`): ładunek nie
+    /// może pochodzić z crate'u, który od `core` zależy.
+    ///
+    /// Warianty są **bezładunkowe z rozmysłu**, choć plan M5 §5.4 pisał je z liczbami
+    /// (`TooFar { extra_min }`, `PriceHigherBy { bp }`). Liczba mieszka teraz w polu
+    /// `detail` powodu, bo `vocab_enum!` daje `ALL`/`as_index`/`from_index`, a to one
+    /// robią z tego enuma indeks histogramu utraconych sprzedaży — wariant z ładunkiem
+    /// nie byłby indeksem.
+    ///
+    /// Kolejność jest kontraktem: indeksuje `LostSaleHistogram.by_cause`.
+    ///
+    /// - `NotKnown` — mieszkaniec nie zna sklepu (§5.7); nie wchodzi do kandydatów.
+    /// - `OutOfStock` — półka pusta; oferta zostaje widoczna, żeby było co pokazać.
+    /// - `TooFar` — dojazd poza zasięgiem zadania (`detail` = minuty ponad limit).
+    /// - `PriceTooHigh` — cena ponad to, co kupujący zaakceptował (`detail` = bp).
+    /// - `QualityBelowStatus` — jakość nie pasuje do statusu (§5.4).
+    /// - `BudgetExhausted` — brak środków w gospodarstwie.
+    /// - `NoOffers` — w promieniu nie było ani jednej oferty kategorii.
+    /// - `BelowThreshold` — najlepsza użyteczność poniżej progu; zakup odłożony.
+    RejectCause {
+        NotKnown,
+        OutOfStock,
+        TooFar,
+        PriceTooHigh,
+        QualityBelowStatus,
+        BudgetExhausted,
+        NoOffers,
+        BelowThreshold,
+    }
+}
+
+/// Liczba powodów odrzucenia — rozmiar histogramu utraconych sprzedaży (M5b §5.4).
+pub const REJECT_CAUSE_COUNT: usize = RejectCause::ALL.len();
+
+vocab_enum! {
     /// Klasa drogi w hierarchii ulicznej. **Kolejność jest kontraktem** — indeksuje
     /// tablicę `SPECS` generatora miasta w `sim/world`.
     ///

@@ -117,6 +117,24 @@ pub enum StreamId {
     /// wygenerowanych przed M8; podmiana ciała `weather_at` numeru nie ruszy.
     WeatherStub = 166,
     // 167–179 zarezerwowane dla M4; rezerwa dalsza 1160–1179 (K-4).
+
+    // ── M5: 180..=199 — gospodarka detaliczna ───────────────────────────────────
+    /// Szum funkcji użyteczności zakupu, stały dla trójki (kupujący, oferta, tick)
+    /// (M5b §5.4). Bez niego dwie identyczne oferty dawałyby zawsze ten sam wybór
+    /// i rynek degenerowałby się do monopolu przy pierwszym remisie.
+    PurchaseNoise = 180,
+    /// Losowanie oferty z rozkładu softmax (M5b §5.4) — **nie** argmax, bo argmax
+    /// produkuje monopole (PRD §6.4, bramka G6 na HHI).
+    PurchaseChoice = 181,
+    /// Eksperyment cenowy sklepu AI (M5c §5.6).
+    PriceExperiment = 182,
+    /// Opóźnienie obserwacji konkurenta, 1–7 dni (M5c §5.6).
+    CompetitorDelay = 183,
+    /// Dryf ceny dostawcy zewnętrznego, kluczem jest doba (M5b §5.7).
+    ExternalPriceDrift = 184,
+    /// Rozrzut scoringu kredytowego (M5d §5.10).
+    CreditScoringJitter = 185,
+    // 186–199 zarezerwowane dla M5 (m.in. rynek pracy od M7); rezerwa dalsza 1180–1199.
 }
 
 /// Encja zastępcza dla losowania bez encji (zdarzenie globalne, generator świata).
@@ -132,8 +150,16 @@ pub struct Rng {
 
 /// Mieszalnik SplitMix64 — rozprasza słabe ziarna (np. `world_seed = 1`), zanim trafią
 /// do xoshiro. Bez tego kolejne encje z sąsiednimi indeksami dają skorelowane sekwencje.
+///
+/// **Publiczny od M5b.** Losowanie związane z *parą* (kupujący, oferta) nie da się
+/// wyrazić przez `rng(seed, stream, entity, tick)`, bo ta funkcja przyjmuje jedną
+/// encję — a szum funkcji użyteczności musi być stały dla pary i **niezależny
+/// od kolejności, w jakiej kandydaci zostali policzeni** (M5b §5.4). Zamiast
+/// drugiego mieszalnika w `sim/economy` udostępniamy ten sam, który już rozprasza
+/// ziarna: jeden mieszalnik w grze, tak samo jak jeden generator.
 #[inline]
-const fn splitmix64(mut z: u64) -> u64 {
+#[must_use]
+pub const fn mix64(mut z: u64) -> u64 {
     z = z.wrapping_add(0x9E37_79B9_7F4A_7C15);
     z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
     z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
@@ -144,14 +170,14 @@ const fn splitmix64(mut z: u64) -> u64 {
 #[must_use]
 pub fn rng(world_seed: u64, stream: StreamId, entity_index: u32, tick: Tick) -> Rng {
     let mut acc = world_seed;
-    acc = splitmix64(acc ^ (stream as u64).wrapping_mul(0x2545_F491_4F6C_DD1D));
-    acc = splitmix64(acc ^ u64::from(entity_index));
-    acc = splitmix64(acc ^ tick.0);
+    acc = mix64(acc ^ (stream as u64).wrapping_mul(0x2545_F491_4F6C_DD1D));
+    acc = mix64(acc ^ u64::from(entity_index));
+    acc = mix64(acc ^ tick.0);
 
     let mut s = [0u64; 4];
     for slot in &mut s {
         acc = acc.wrapping_add(0x9E37_79B9_7F4A_7C15);
-        *slot = splitmix64(acc);
+        *slot = mix64(acc);
     }
     // Stan zerowy jest jedynym punktem stałym xoshiro. Praktycznie nieosiągalny,
     // ale „praktycznie" nie jest gwarancją, a koszt zabezpieczenia to jedna gałąź.
@@ -255,9 +281,9 @@ mod tests {
     }
 
     #[test]
-    fn wektor_referencyjny_splitmix64() {
-        assert_eq!(splitmix64(0), 0xE220_A839_7B1D_CDAF);
-        assert_eq!(splitmix64(1), 0x910A_2DEC_8902_5CC1);
+    fn wektor_referencyjny_mix64() {
+        assert_eq!(mix64(0), 0xE220_A839_7B1D_CDAF);
+        assert_eq!(mix64(1), 0x910A_2DEC_8902_5CC1);
     }
 
     #[test]
@@ -336,5 +362,10 @@ mod tests {
         assert_eq!(StreamId::Parcels as u16, 128);
         assert_eq!(StreamId::DayPlan as u16, 140);
         assert_eq!(StreamId::Relations as u16, 146);
+        assert_eq!(StreamId::ModeChoice as u16, 160);
+        assert_eq!(StreamId::WeatherStub as u16, 166);
+        assert_eq!(StreamId::PurchaseNoise as u16, 180);
+        assert_eq!(StreamId::PurchaseChoice as u16, 181);
+        assert_eq!(StreamId::CreditScoringJitter as u16, 185);
     }
 }

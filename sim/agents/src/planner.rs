@@ -1343,6 +1343,7 @@ fn rozwaz(
         okno.kotwica,
         ctx.max_task_travel_min,
         &ctx.known,
+        &ctx.citizen,
         kandydaci,
     )
     .is_err()

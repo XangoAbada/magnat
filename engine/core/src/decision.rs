@@ -24,11 +24,12 @@
 //!    z lokalizacją. Test pilnuje `size_of::<DecisionReason>() <= 24`.
 //! 6. Wariant, którego nie da się pokazać graczowi jednym zdaniem, jest źle zaprojektowany.
 
+use crate::ids::SiteId;
 use crate::time::MinuteOfDay;
 use crate::types::Q;
 use crate::vocab::{
-    CommitmentKind, DeprivationEffect, LifeEventKind, MigrationKind, NeedKind, PlaceRef, StockCat,
-    TraitId, TransportMode,
+    CommitmentKind, DeprivationEffect, LifeEventKind, MigrationKind, NeedKind, PlaceRef,
+    RejectCause, StockCat, TraitId, TransportMode, UtilityKind,
 };
 use serde::{Deserialize, Serialize};
 
@@ -164,7 +165,39 @@ pub enum DecisionReason {
     /// (M4c §5.6). `waited_min` to czas spędzony na przystanku do tej chwili.
     LeftBehind { line: u16, waited_min: u16 } = 207,
     // ── M5 — gospodarka detaliczna: 300..=399 ────────────────────────────────────
-    // ShopChosen { shop: FirmId, dominant: UtilityKind, margin_permille: i16 } = 300,
+    //
+    // UWAGA (M5b): dyskryminanty tego bloku **nie mieszczą się w bajcie**, więc nie
+    // wolno ich pakować do `PlanSlot.reason` (M3a §5.1). To nie jest przeoczenie —
+    // powody M5 opisują **zakup**, a nie slot planu dnia: powstają w chwili wizyty
+    // i mieszkają w dzienniku transakcji, w pierścieniu utraconych sprzedaży i w karcie
+    // inspekcji. Plan dnia nadal niesie powody M3 (`StockBelowThreshold`,
+    // `ChosenNearest`, `ChosenOnRoute`), bo to one tłumaczą, **czemu w ogóle wyjście**.
+    /// Mieszkaniec wybrał tę ofertę spośród kandydatów (M5b §5.4, PRD §6.4).
+    /// `dominant` mówi, który człon funkcji użyteczności przeważył, a `delta_bp`
+    /// o ile procent (w punktach bazowych) wybrana cena różni się od drugiej w kolejce.
+    /// Ujemna `delta_bp` = wybrana była tańsza. To jest odpowiedź na „dlaczego tam".
+    ShopChosen {
+        site: SiteId,
+        dominant: UtilityKind,
+        delta_bp: i16,
+    } = 300,
+    /// Oferta odpadła (M5b §5.4). `detail` czyta się zależnie od `cause`: minuty
+    /// nadmiarowego dojazdu dla `TooFar`, punkty bazowe różnicy ceny dla `PriceTooHigh`,
+    /// zero dla pozostałych. To jest sztandarowy przykład karty inspekcji z PRD §14.1:
+    /// *„dlaczego Anna nie kupiła u mnie"*.
+    OfferRejected {
+        site: SiteId,
+        cause: RejectCause,
+        detail: i16,
+    } = 301,
+    /// Zakup odłożony: najlepsza użyteczność nie przekroczyła progu (M5b §5.4).
+    /// `gap_permille` to `(U_best − U_threshold) × 1000`, czyli jak bardzo zabrakło.
+    PurchaseDeferred {
+        need: NeedKind,
+        cause: RejectCause,
+        gap_permille: i16,
+    } = 302,
+    // 303–399 zarezerwowane dla M5 (`Repricing` w M5c, `CreditDecision` w M5d).
     // ... kolejne fazy dopisują własne bloki na końcu pliku
 }
 
@@ -208,6 +241,9 @@ impl DecisionReason {
             DecisionReason::ModeCompared { .. } => 205,
             DecisionReason::NoParkingAtDestination { .. } => 206,
             DecisionReason::LeftBehind { .. } => 207,
+            DecisionReason::ShopChosen { .. } => 300,
+            DecisionReason::OfferRejected { .. } => 301,
+            DecisionReason::PurchaseDeferred { .. } => 302,
         }
     }
 }
@@ -350,8 +386,10 @@ mod tests {
     #[test]
     fn skrot_powodu_miesci_sie_w_bajcie() {
         // `PlanSlot.reason` (M3a §5.1) pakuje powód jako `tag(u8) | param(u8) << 8`.
-        // Dopóki dyskryminanty M3–M5 mieszczą się w bajcie, pakowanie jest bezstratne;
-        // faza z blokiem ≥ 256 (M9 i dalej) musi ten zapis zmienić, a nie obciąć.
+        // Pakowanie jest bezstratne dla bloków M0–M4, i **tylko dla nich** — blok M5
+        // zaczyna się od 300, więc do slotu nie wchodzi (patrz komentarz przy `ShopChosen`).
+        // Powody M5 opisują zakup, nie slot planu, więc nic z tego nie tracimy; faza,
+        // która będzie chciała włożyć do slotu powód ≥ 256, musi zmienić zapis, nie obciąć.
         assert!(
             DecisionReason::NeedSatisfied {
                 need: NeedKind::Hunger,
