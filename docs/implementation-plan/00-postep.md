@@ -260,7 +260,7 @@ Nie jest fazą: nie ma bramek 1–7, nie wnosi zdolności do gry, nie dostarcza 
 Ma własne kryteria akceptacji w §7 swojego dokumentu. Twarde: żaden hash nie zmienia się o bit.
 
 - [x] **R-WP1** Reguła i skrypt kontroli strukturalnej (`scripts/struct_guard.py`, sekcja w `CLAUDE.md`)
-- [x] **R-WP2** `tools/magnat/src/main.rs` · [ ] **R-WP3** `engine/render/src/renderer.rs`
+- [x] **R-WP2** `tools/magnat/src/main.rs` · [x] **R-WP3** `engine/render/src/renderer.rs`
 - [ ] **R-WP4** `sim/world/src/population/mod.rs` · [ ] **R-WP5** `sim/world/src/city/sites.rs`
 - [ ] **R-WP6** `sim/traffic/src/oracle.rs`, `trip.rs` · [ ] **R-WP7** `sim/agents/src/demography.rs`
 - [ ] **R-WP8** `sim/world/src/city/build.rs` · [ ] **R-WP9** `sim/world/src/city/mod.rs`
