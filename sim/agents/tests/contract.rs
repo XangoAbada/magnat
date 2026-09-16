@@ -251,24 +251,39 @@ fn kontrakt_nie_wspomina_o_gospodarce_ani_o_grafie() {
     // `InfinitePlaces` na tej samej prędkości marszu co `StraightLineTravel`.
     const TRASA: [&str; 2] = ["StreetGraph", "crate::walk"];
 
-    for (plik, zakazane) in [
+    // Planer jest katalogiem (R-WP11), więc skanuje się go w całości — plik dopisany
+    // do `planner/` w przyszłej fazie ma wejść pod tę samą regułę bez dopisywania
+    // go tutaj.
+    for (sciezka, zakazane) in [
         ("src/places.rs", &GOSPODARKA[..]),
-        ("src/planner.rs", &GOSPODARKA[..]),
-        ("src/planner.rs", &TRASA[..]),
+        ("src/planner", &GOSPODARKA[..]),
+        ("src/planner", &TRASA[..]),
     ] {
-        let sciezka = format!("{}/{plik}", env!("CARGO_MANIFEST_DIR"));
-        let src = std::fs::read_to_string(&sciezka).expect("plik źródłowy");
-        for (nr, linia) in src.lines().enumerate() {
-            let kod = linia.trim_start();
-            if kod.starts_with("//") {
-                continue; // komentarz może o nich mówić — i mówi, właśnie po to
-            }
-            for z in zakazane {
-                assert!(
-                    !kod.contains(z),
-                    "{plik}:{}: typ `{z}` w kontrakcie — to jest ryzyko R1",
-                    nr + 1
-                );
+        let sciezka = std::path::PathBuf::from(format!("{}/{sciezka}", env!("CARGO_MANIFEST_DIR")));
+        let mut pliki = if sciezka.is_dir() {
+            std::fs::read_dir(&sciezka)
+                .expect("katalog źródłowy")
+                .map(|e| e.expect("wpis katalogu").path())
+                .collect()
+        } else {
+            vec![sciezka]
+        };
+        pliki.sort();
+        for plik in pliki {
+            let src = std::fs::read_to_string(&plik).expect("plik źródłowy");
+            for (nr, linia) in src.lines().enumerate() {
+                let kod = linia.trim_start();
+                if kod.starts_with("//") {
+                    continue; // komentarz może o nich mówić — i mówi, właśnie po to
+                }
+                for z in zakazane {
+                    assert!(
+                        !kod.contains(z),
+                        "{}:{}: typ `{z}` w kontrakcie — to jest ryzyko R1",
+                        plik.display(),
+                        nr + 1
+                    );
+                }
             }
         }
     }
