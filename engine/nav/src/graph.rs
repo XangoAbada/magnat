@@ -686,6 +686,26 @@ pub struct NavGraphs {
 }
 
 impl NavGraphs {
+    /// Długość trasy w centymetrach — suma krawędzi wszystkich odcinków.
+    ///
+    /// `Route` nie niesie dystansu, bo router minimalizuje **czas** i dystans nie jest
+    /// mu do niczego potrzebny. Potrzebny jest za to temu, kto płaci za tonokilometry
+    /// (M6d), więc liczy się go tutaj, przy grafie, a nie kopiuje do trasy — kopia
+    /// rosłaby w każdej trasie w cache'u, a używa jej jeden konsument na tysiąc.
+    #[must_use]
+    pub fn route_length_cm(&self, r: &crate::router::Route) -> u64 {
+        r.legs
+            .iter()
+            .map(|l| {
+                let layer = &self.layers[l.modality.as_index()];
+                l.edges
+                    .iter()
+                    .map(|&e| u64::from(layer.edge(e).length_cm))
+                    .sum::<u64>()
+            })
+            .sum()
+    }
+
     #[must_use]
     pub fn new(layers: [RoadGraph; 4], transfers: Vec<TransferLink>) -> NavGraphs {
         let transfer_index = std::array::from_fn(|m| {

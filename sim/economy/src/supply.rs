@@ -9,9 +9,9 @@
 //! **zwykłym kontem w `Books`**, a nie ujściem — dzięki temu zakup u dostawcy
 //! zewnętrznego nie rusza niezmiennika P1 i nie wymaga osobnej ewidencji ujść.
 
-use magnat_core::{
-    rng, FirmId, GoodId, Money, Qty, SimMinute, StockCat, StreamId, Tick, Q, STOCK_CAT_COUNT,
-};
+#[cfg(feature = "infinite_supply")]
+use magnat_core::{rng, StreamId};
+use magnat_core::{FirmId, GoodId, Money, Qty, SimMinute, StockCat, Tick, Q, STOCK_CAT_COUNT};
 
 use crate::data::RetailTable;
 
@@ -231,15 +231,30 @@ pub trait Wholesale {
     ) -> Result<OrderId, SupplyError>;
 
     fn poll_deliveries(&mut self, t: Tick, out: &mut Vec<Delivery>);
+
+    /// Mnożnik ceny hurtowej towaru (10 000 = bez zmian, 18 000 = +80 %).
+    ///
+    /// W traicie, a nie na typie konkretnym, i to jest wykonanie `AC-1`: scenariusz
+    /// `supply-shock` balansatora (bramka **G4**) musi mieć czym szokować **niezależnie
+    /// od tego, która faza stoi pod spodem**. Do M6c metoda wisiała na
+    /// [`ExternalSupplier`] i podmiana dostawcy zabrałaby bramce jedyne zdarzenie
+    /// zewnętrzne, jakie ma.
+    fn set_shock(&mut self, good: GoodId, factor_bp: i32);
 }
 
 /// Dostawca zewnętrzny: cena hurtowa z danych, dryf deterministyczny, dostawa po czasie.
+///
+/// **Za feature'em `infinite_supply`, domyślnie wyłączonym** (M6 §6.3 krok 2, `AK-2`).
+/// Tworzy masę z niczego i był do M6c jedynym sankcjonowanym wyjątkiem od zasady
+/// zachowania masy; od WP11 zostaje wyłącznie do izolowanych testów warstwy detalicznej
+/// i do scenariuszy balansatora badających samą półkę.
 ///
 /// Trzy jawne konsekwencje, które M6 musi znać (§5.7):
 /// 1. `RestOfWorld` jest kontem, nie ujściem — pieniądz nie wypada z systemu.
 /// 2. Zapas wycenia się **średnią ważoną** (`StockLine.cost_total / qty`), bo nie
 ///    ma partii; M6 wprowadza `BatchId` i FIFO, co **zmienia COGS**.
 /// 3. Dostawa nie zajmuje pojazdu ani rampy — tylko czas. M6 to urealnia.
+#[cfg(feature = "infinite_supply")]
 pub struct ExternalSupplier {
     seed: u64,
     goods: GoodTable,
@@ -256,6 +271,7 @@ pub struct ExternalSupplier {
     next_order: u32,
 }
 
+#[cfg(feature = "infinite_supply")]
 impl ExternalSupplier {
     #[must_use]
     pub fn new(seed: u64, goods: GoodTable) -> ExternalSupplier {
@@ -313,6 +329,7 @@ impl ExternalSupplier {
     }
 }
 
+#[cfg(feature = "infinite_supply")]
 impl Wholesale for ExternalSupplier {
     fn quote(
         &self,
@@ -371,6 +388,10 @@ impl Wholesale for ExternalSupplier {
             },
         ));
         Ok(id)
+    }
+
+    fn set_shock(&mut self, good: GoodId, factor_bp: i32) {
+        ExternalSupplier::set_shock(self, good, factor_bp);
     }
 
     fn poll_deliveries(&mut self, t: Tick, out: &mut Vec<Delivery>) {

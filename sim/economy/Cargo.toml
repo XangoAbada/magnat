@@ -19,6 +19,10 @@ magnat-spatial = { workspace = true }
 # implementować `PlaceProvider` — zależność idzie w tę stronę i tylko w tę:
 # `sim/agents` nie widzi gospodarki i widzieć jej nie może (cykl z `K-8`).
 magnat-agents = { workspace = true }
+# Od WP11 (M6d) półka sklepu bierze towar z magazynu M6, a nie z powietrza — zależność
+# przestała być testowa. Kierunek jest jednokierunkowy i taki zostaje: `sim/supply`
+# jest crate'em liściastym i o gospodarce detalicznej nie wie nic.
+magnat-supply = { workspace = true }
 serde = { workspace = true }
 ron = { workspace = true }
 
@@ -26,12 +30,15 @@ ron = { workspace = true }
 # Hash stanu świata mieszka w `engine/io` — testem bramki 2 jest porównanie hashy,
 # a nie inspekcja własnych struktur.
 magnat-io = { workspace = true }
-# Tylko do testów: `GoodTable::build` **pomija** klucze, których nie umie rozwiązać,
-# więc rozjazd nazw między `data/economy/` a katalogiem M6 znikałby po cichu (`AF-3`).
-# Zależność produkcyjna przyjdzie z WP11, kiedy półka zacznie brać towar z magazynu.
-magnat-supply = { workspace = true }
 criterion = { workspace = true }
 proptest = { workspace = true }
+
+[features]
+# Dostawca zewnętrzny tworzący masę z niczego (M5). Do M6d był **jedyną** drogą,
+# którą towar trafiał na półkę; od WP11 jest wyłączony domyślnie i zostaje wyłącznie
+# do izolowanych testów warstwy detalicznej oraz do scenariuszy balansatora badających
+# samą półkę (M6 §6.3 krok 2). Włączenie go łamie `prop_mass_conservation` i ma łamać.
+infinite_supply = []
 
 [lints]
 workspace = true

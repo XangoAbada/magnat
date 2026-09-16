@@ -12,7 +12,7 @@ use magnat_core::{data_path, Money, RoadClass};
 use serde::Deserialize;
 use std::path::Path;
 
-pub const VEHICLES_SCHEMA_VERSION: u32 = 1;
+pub const VEHICLES_SCHEMA_VERSION: u32 = 2;
 pub const VDF_SCHEMA_VERSION: u32 = 1;
 
 /// Rodzaj energii napędowej.
@@ -93,6 +93,25 @@ pub struct VehicleClassSpec {
     /// więc liczenie jej tu drugi raz byłoby podwójnym kosztem.
     pub wear_gr_per_100km: i64,
     pub top_speed_dkmh: u16,
+    /// Ładowność w gramach. `0` dla klas osobowych — auto nie wozi towaru.
+    /// Dopisane w M6d (`AG-1`): do M6c katalog nie miał **ani jednego** pola
+    /// o ładunku, więc wymagania zlecenia transportowego nie miały z czym się
+    /// porównać i każdy pojazd udawał, że uwiezie wszystko.
+    pub payload_g: i64,
+    /// Objętość przestrzeni ładunkowej w mililitrach. Skrzynki z chipsami wypełniają
+    /// ją przy śmiesznej masie, więc sama ładowność nie wystarcza.
+    pub cargo_ml: i64,
+    pub body: magnat_core::BodyType,
+    /// Stawka przewozowa w groszach za kilometr — **za pojazd**, nie za tonę.
+    ///
+    /// To jest liczba z łańcuchów referencyjnych (§7.1: 4,20 zł/km wywrotka,
+    /// 2,10 zł/km furgonetka; §7.2: 6,80 zł/km cysterna), a nie stawka tonokilometrowa,
+    /// do której M6b ją tymczasowo sprowadził. Różnica nie jest kosmetyczna: przy
+    /// stawce za tonokilometr konsolidacja dostaw **nic nie oszczędza**, bo koszt jest
+    /// liniowy w masie niezależnie od tego, iloma kursami się ją wiezie. Centrum
+    /// dystrybucyjne opłaca się właśnie dlatego, że kilometr kosztuje tyle samo
+    /// z ładunkiem i bez. `0` dla klas osobowych.
+    pub haul_gr_per_km: i64,
 }
 
 #[derive(Deserialize)]

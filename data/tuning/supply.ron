@@ -8,7 +8,7 @@
 // Jednostki: pieniądz w **groszach** (00 §2), masa w gramach, objętość w mililitrach,
 // czas w minutach. Żadnych złotówek i żadnych floatów — także tutaj.
 (
-    schema_version: 2,
+    schema_version: 3,
 
     // Odniesienie skali emisji dla `SiteRenderRec.emission` (M6 §6.4.3). Stała, a nie
     // „najbrudniejszy zakład epoki": ruchomy mianownik znaczyłby, że ten sam komin dymi
@@ -87,5 +87,12 @@
         export_spread_pct: 82,
         window_minutes: 43_200,          // 30 dób × 1 440 min
         lead_jitter_bp: 1_500,           // ±15 % czasu dostawy
+    ),
+
+    // Wydobycie (§5.10). Jedna liczba, bo reszta jest mnożnikiem nad nią: głębokość,
+    // koncentracja i wyczerpanie złoża. Wartość dobrana tak, żeby szyb naftowy z §7.2
+    // (koncentracja 82 %, głębokość 1 800 m, złoże nietknięte) wyszedł na 1 620 zł/t.
+    mining: (
+        base_gr_per_tonne: 69_915,
     ),
 )

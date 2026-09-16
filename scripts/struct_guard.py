@@ -93,7 +93,6 @@ REJESTR = {
     # 319 przed M6b, 355 po bloku M6b (400–402), 397 po M6c (403–405).
     ("engine/ui/src/inspect/reason.rs", "fn", 397): 37,
     ("sim/economy/src/data.rs", "fn", 268): 38,
-    ("sim/economy/src/market/fulfil.rs", "fn", 258): 26,
 }
 
 POCZATEK_ITEMU = re.compile(

@@ -17,8 +17,8 @@
 //!    z M0 **nigdy** nie kompaktuje, więc warunek jest spełniony konstrukcyjnie.
 
 use magnat_core::{
-    ArenaHandle, FirmId, GoodId, HashState, LossKind, Mass, Money, RecipeId, SimMinute, SiteId,
-    StateHasher, Volume, Q,
+    ArenaHandle, DepositId, FirmId, GoodId, HashState, LossKind, Mass, Money, RecipeId,
+    SimMinute, SiteId, StateHasher, Volume, Q,
 };
 
 /// Uchwyt partii. `{ index: u32, generation: NonZeroU32 }`, 8 bajtów.
@@ -34,10 +34,6 @@ pub type CoalesceKey = (u16, u8, u16, u32, u32);
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct BrandId(pub u16);
 
-/// Złoże, z którego pochodzi surowiec pierwotny. Właścicielem jest M6d; tutaj jest,
-/// bo `BatchOrigin` propaguje je przez cały łańcuch i to jest jedyne, co M6a o złożu wie.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
-pub struct DepositId(pub u16);
 
 /// Linia produkcyjna (M6b). Tutaj wyłącznie jako miejsce, w którym partia może stać.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
@@ -240,7 +236,7 @@ impl HashState for Batch {
         h.write_u32(self.origin.site.map_or(u32::MAX, |s| s.entity().index()));
         h.write_u16(self.origin.recipe.map_or(u16::MAX, |r| r.0));
         h.write_u8(self.origin.depth);
-        h.write_u16(self.origin.deposit.map_or(u16::MAX, |d| d.0));
+        h.write_u32(self.origin.deposit.map_or(u32::MAX, |d| d.0));
         match self.location {
             BatchLocation::Slot(s) => {
                 h.write_u8(0);

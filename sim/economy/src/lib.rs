@@ -11,7 +11,8 @@
 //! - §5.2 — [`Offer`] w arenie (`K-16`) i [`OfferIndex`] z zapytaniem promieniowym.
 //!
 //! Co dokłada **M5b**:
-//! - §5.3 — sklep: zaplecze, półka, asortyment ([`Shop`], [`Shelf`], [`StockLine`]),
+//! - §5.3 — sklep: zaplecze, półka, asortyment ([`Shop`], [`Shelf`]; od WP11 towar
+//!   leży w magazynie M6, a nie w liniach zapasu),
 //! - §5.4 — funkcja użyteczności zakupu i wybór oferty ([`utility_of_offer`],
 //!   [`choose_offer`], [`purchase_threshold`]) oraz zapis utraconych sprzedaży,
 //! - §5.5 — rozliczanie transakcji ([`MarketSystem`], [`PurchaseIntent`]),
@@ -38,6 +39,7 @@
 
 pub mod books;
 pub mod budget;
+pub mod chain_supply;
 pub mod choice;
 pub mod cpi;
 pub mod credit;
@@ -101,11 +103,11 @@ pub use pricing::{
     ObservedElasticity, PriceController, PriceExperiment, PricePolicy, PricingCtx,
 };
 pub use shop::{
-    take_units, AssortmentPolicy, LostSale, LostSaleHistogram, LostSaleTracking, ReorderPolicy,
-    Shelf, ShelfLine, Shop, ShopCustomers, ShopInventory, ShopLostSales, StockLine, LOST_SALE_RING,
+    AssortmentPolicy, LostSale, LostSaleHistogram, LostSaleTracking, ReorderPolicy, Shelf,
+    ShelfLine, Shop, ShopCustomers, ShopInventory, ShopLostSales, LOST_SALE_RING,
 };
 pub use supply::{
-    line_total, Delivery, ExternalSupplier, GoodSpec, GoodTable, OrderId, PurchaseQuote,
+    line_total, Delivery, GoodSpec, GoodTable, OrderId, PurchaseQuote,
     SupplyError, Wholesale, PRICE_UNIT,
 };
 pub use systems::{

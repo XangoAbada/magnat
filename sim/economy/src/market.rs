@@ -79,7 +79,9 @@ use crate::shop::{
     AssortmentPolicy, LostSale, LostSaleHistogram, LostSaleTracking, ReorderPolicy, Shelf,
     ShelfLine, Shop, ShopCustomers, ShopInventory, ShopLostSales,
 };
-use crate::supply::{line_total, ExternalSupplier, GoodTable, Wholesale, PRICE_UNIT};
+use crate::chain_supply::default_supplier;
+use crate::supply::{line_total, GoodTable, Wholesale, PRICE_UNIT};
+use magnat_supply::ChainHandle;
 use crate::tax::{NoTax, TaxEngine};
 
 /// Ile jednostek towaru mieści jedno miejsce na półce, ile razy tyle leży na zapleczu
@@ -122,6 +124,11 @@ pub struct PurchaseIntent {
     /// Bez tego pola koszt przepadałby przy zwrocie i `InventoryGoods` rozjeżdżałby
     /// się z zapasem (P5) przy każdym nieudanym przelewie.
     pub cogs: Money,
+    /// Co dokładnie zeszło z półki. Niesione intencją, bo nieudane rozliczenie musi
+    /// oddać **tę samą partię** — jakość, markę, datę i pochodzenie — a nie sztuki
+    /// bez właściwości (WP11). Poza hashem tak samo jak reszta intencji poza
+    /// pięcioma polami, które rozliczenie naprawdę zmienia.
+    pub taken: Option<magnat_supply::BatchSlice>,
     pub arrived: Tick,
     pub reason: DecisionReason,
     /// Dzielnica zamieszkania kupującego — „skąd" w karcie Klienci (§5.12).
@@ -273,7 +280,18 @@ struct MarketInner {
     /// Sklepy w kolejności zakładania; `by_site` daje dostęp po `SiteId`.
     shops: Vec<Shop>,
     by_site: BTreeMap<SiteId, u32>,
-    supplier: ExternalSupplier,
+    /// Kto dostarcza towar na zaplecze. Od WP11 **`dyn`**, a nie typ konkretny:
+    /// bez tego nie ma jak podmienić dostawcy zewnętrznego na rynek B2B, a kryterium
+    /// pakietu mówi wprost o przełączniku (`AK-2`). Domyślną implementacją jest
+    /// [`crate::chain_supply::ChainSupply`]; `ExternalSupplier` zostaje za feature
+    /// `infinite_supply`.
+    supplier: Box<dyn Wholesale + Send>,
+    /// Katalog detaliczny. Wyjęty z dostawcy, bo czyta go osiemnaście miejsc rynku,
+    /// a nie jest własnością dostawcy — jest własnością danych.
+    goods: GoodTable,
+    /// Łańcuch dostaw M6: magazyn, zakłady, transport, rynek B2B. Uchwyt, nie kopia —
+    /// ten sam łańcuch widzi produkcja i ten sam widzi półka.
+    chain: ChainHandle,
     data: EconomyData,
     needs: Arc<NeedTable>,
     places: Arc<PlaceTable>,
@@ -327,6 +345,7 @@ impl Market {
         seed: u64,
         data: EconomyData,
         goods: GoodTable,
+        chain: ChainHandle,
         needs: Arc<NeedTable>,
         places: Arc<PlaceTable>,
         rest_of_world: AccountId,
@@ -335,12 +354,15 @@ impl Market {
         // nie zmienia, a przeszukiwanie go przy każdej transakcji byłoby kosztem
         // na gorącej ścieżce (§7.3).
         let cpi = CpiTracker::new(&data, &goods);
+        let supplier = default_supplier(seed, &goods, &chain);
         Market(Arc::new(Mutex::new(MarketInner {
             offers: Arena::new(),
             index: OfferIndex::new(grid),
             shops: Vec::new(),
             by_site: BTreeMap::new(),
-            supplier: ExternalSupplier::new(seed, goods),
+            supplier,
+            goods,
+            chain,
             data,
             needs: needs.clone(),
             places: places.clone(),
@@ -408,6 +430,12 @@ impl Market {
         }
     }
 
+    /// Ziarno świata — potrzebne łańcuchowi dostaw do losowań awarii i szumu wyceny.
+    #[must_use]
+    pub fn seed(&self) -> u64 {
+        self.lock().seed
+    }
+
     pub fn set_tick(&self, t: Tick) {
         self.lock().tick = t;
     }
@@ -419,6 +447,85 @@ impl Market {
 }
 
 impl MarketInner {
+    // ── półka jako slot magazynu (WP11) ────────────────────────────────────────
+    //
+    // Trzy najkrótsze funkcje w tym pliku i trzy, które zdejmują z rynku detalicznego
+    // cały dawny stan zapasu. Ilość, koszt i data ważności mieszkają od WP11
+    // w magazynie M6; tutaj zostaje przeliczenie masy na sztuki, bo `Qty` jest
+    // jednostką detalu, a `Mass` jednostką łańcucha.
+
+    /// Ile sztuk tego towaru leży na półce sklepu `i`.
+    pub(crate) fn shelf_units(&self, i: usize, good: GoodId) -> Qty {
+        let slot = self.shops[i].shelf_slot;
+        let ch = self.chain.lock();
+        self.chain
+            .cat
+            .good(good)
+            .units_of_mass(ch.store.shelf_state(slot, good).mass)
+    }
+
+    /// Ile sztuk tego towaru leży na zapleczu sklepu `i`.
+    pub(crate) fn backroom_units(&self, i: usize, good: GoodId) -> Qty {
+        let slot = self.shops[i].backroom;
+        let ch = self.chain.lock();
+        self.chain
+            .cat
+            .good(good)
+            .units_of_mass(ch.store.available(slot, good, magnat_core::Q::MIN))
+    }
+
+    /// Stan półki: masa, jakość, marka, data i koszt nabycia.
+    pub(crate) fn shelf_state(&self, i: usize, good: GoodId) -> magnat_supply::ShelfState {
+        let slot = self.shops[i].shelf_slot;
+        let ch = self.chain.lock();
+        ch.store.shelf_state(slot, good)
+    }
+
+    /// Koszt jednostkowy zapasu sklepu: **zaplecze i półka razem**, za `PRICE_UNIT`.
+    ///
+    /// Jeden wzór dla przeceny (`reprice_all`), dla panelu i dla metryki marży
+    /// balansatora — inny wzór w którymkolwiek z tych trzech miejsc znaczyłby marżę
+    /// w panelu inną niż marża, na której stoi przecena. Przy pustym zapasie wchodzi
+    /// cena hurtowa z katalogu, bo od czegoś marża liczyć się musi.
+    pub(crate) fn unit_cost(&self, i: usize, good: GoodId) -> Money {
+        let (backroom, shelf_slot) = (self.shops[i].backroom, self.shops[i].shelf_slot);
+        let (masa, koszt) = {
+            let ch = self.chain.lock();
+            let b = ch.store.shelf_state(backroom, good);
+            let p = ch.store.shelf_state(shelf_slot, good);
+            (
+                b.mass.0 + p.mass.0,
+                b.cost_total.get() + p.cost_total.get(),
+            )
+        };
+        let ilosc = self
+            .chain
+            .cat
+            .good(good)
+            .units_of_mass(magnat_core::Mass(masa))
+            .get();
+        if ilosc > 0 && koszt > 0 {
+            Money(koszt).mul_ratio(PRICE_UNIT, ilosc)
+        } else {
+            self.goods
+                .spec(good)
+                .map_or(Money::ZERO, |g| g.wholesale_base)
+        }
+    }
+
+    /// Zdejmuje z półki podaną liczbę sztuk. `None`, gdy tyle nie leży.
+    pub(crate) fn shelf_pick(
+        &mut self,
+        i: usize,
+        good: GoodId,
+        qty: Qty,
+    ) -> Option<magnat_supply::BatchSlice> {
+        let slot = self.shops[i].shelf_slot;
+        let masa = self.chain.cat.good(good).mass_of_units(qty);
+        let mut ch = self.chain.lock();
+        ch.store.shelf_pick(slot, good, masa)
+    }
+
     fn snapshot(&self, household: u32) -> HouseholdSnapshot {
         self.households
             .get(household as usize)

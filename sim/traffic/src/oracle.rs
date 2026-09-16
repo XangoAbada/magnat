@@ -540,6 +540,27 @@ impl TrafficOracle {
         self.router.lock().expect("router").router.route(&q)
     }
 
+    /// Trasa towarowa. Zapytanie przychodzi **złożone**, bo profil ciężki i masa
+    /// całkowita muszą iść razem — patrz `RouteQuery::freight`. `None` znaczy „tą
+    /// ciężarówką tam nie dojedziesz" (tonaż mostu, zakaz ruchu ciężkiego) i jest
+    /// rozstrzygane **przy planowaniu**, czego wymaga kontrakt z M6 (§6.2).
+    #[must_use]
+    pub fn route_freight(&self, q: &RouteQuery) -> Option<Arc<magnat_nav::Route>> {
+        self.router.lock().expect("router").router.route(q)
+    }
+
+    /// Długość trasy w centymetrach. `Route` dystansu nie niesie, bo router minimalizuje
+    /// czas; potrzebuje go dopiero ten, kto płaci za kilometry (M6d).
+    #[must_use]
+    pub fn route_length_cm(&self, r: &magnat_nav::Route) -> u64 {
+        self.router
+            .lock()
+            .expect("router")
+            .router
+            .graphs()
+            .route_length_cm(r)
+    }
+
     /// Trasa samochodowa między węzłami — używa jej system, gdy wstawia postój
     /// na stacji w środek podróży.
     #[must_use]

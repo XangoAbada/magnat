@@ -174,6 +174,18 @@ impl Catalog {
         self.good(g).mass_of_qty(qty)
     }
 
+    /// Masa odpowiadająca ilości handlowej — patrz [`Good::mass_of_units`].
+    #[must_use]
+    pub fn mass_of_units(&self, g: GoodId, qty: Qty) -> Mass {
+        self.good(g).mass_of_units(qty)
+    }
+
+    /// Ilość handlowa odpowiadająca masie — patrz [`Good::units_of_mass`].
+    #[must_use]
+    pub fn units_of_mass(&self, g: GoodId, mass: Mass) -> Qty {
+        self.good(g).units_of_mass(mass)
+    }
+
     /// Objętość danej masy towaru.
     #[must_use]
     pub fn volume_of(&self, g: GoodId, mass: Mass) -> Volume {

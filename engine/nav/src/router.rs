@@ -147,6 +147,34 @@ impl RouteQuery {
         }
     }
 
+    /// Zapytanie towarowe: profil ciężki, masa całkowita z ładunkiem.
+    ///
+    /// Osobny konstruktor, a nie literał struktury, z tego samego powodu co
+    /// [`RouteQuery::passenger`]: profil i masa muszą iść **razem**. Profil ciężki
+    /// bez masy przepuściłby most o za małym tonażu, a masa bez profilu pojechałaby
+    /// wagami ruchu osobowego, czyli przez strefę zakazu ruchu ciężkiego.
+    #[must_use]
+    pub fn freight(
+        origin: NodeId,
+        dest: NodeId,
+        gross_mass: Mass,
+        depart_hour_bucket: u8,
+        night: bool,
+    ) -> RouteQuery {
+        RouteQuery {
+            origin,
+            dest,
+            mode: TransportMode::Freight,
+            depart_hour_bucket,
+            profile: if night {
+                RouteProfile::HeavyNight
+            } else {
+                RouteProfile::HeavyDay
+            },
+            gross_mass,
+        }
+    }
+
     #[must_use]
     fn cache_key(&self) -> RouteKey {
         RouteKey {
@@ -154,6 +182,9 @@ impl RouteQuery {
             dest: self.dest,
             mode: self.mode,
             hour_bucket: self.depart_hour_bucket,
+            profile: self.profile,
+            // W górę: kubełek ma **obejmować** masę zapytania, a nie ją przycinać.
+            gross_t: ((self.gross_mass.0.max(0) + 999_999) / 1_000_000).min(65_535) as u16,
         }
     }
 }

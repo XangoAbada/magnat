@@ -130,6 +130,7 @@ impl Piekarnia {
             cat: &self.cat,
             tuning: &self.tuning,
             world_seed: 3,
+            deposits: &magnat_supply::NoDeposits,
         };
         magnat_supply::advance_production(
             &ctx,

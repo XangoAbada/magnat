@@ -14,10 +14,10 @@ use magnat_core::{IVec2, IVec3, Mass, ResourceKind, Q};
 use magnat_voxel::{MaterialId, VoxelMaterial};
 use serde::{Deserialize, Serialize};
 
-#[derive(
-    Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Default, Serialize, Deserialize,
-)]
-pub struct DepositId(pub u32);
+/// Złoże — identyfikator mieszka od M6d w `engine/core` (`K-39`), bo niesie go
+/// przez cały łańcuch `BatchOrigin::deposit` po stronie M6. Tu zostaje re-eksport,
+/// więc nazwy z dokumentu M1 nie drgnęły.
+pub use magnat_core::DepositId;
 
 /// Kształt formacji złożowej. Cztery warianty, bo tyle wystarcza do odróżnienia sposobów
 /// wydobycia, które M6 będzie musiał modelować: gniazdo, pokład, pułapka, warstwa wodonośna.
@@ -241,6 +241,54 @@ impl Deposit {
         h.write_u16(self.depth_bottom_m as u16);
         h.write_u8(u8::from(self.discovered));
         h.write_u8(self.quality.get());
+    }
+}
+
+/// Bilans złóż widziany przez łańcuch dostaw (M6d §5.10, `K-13`).
+///
+/// Wtyczka do portu [`magnat_supply::Deposits`] — wzorzec `Z-1`: definicja i atrapa
+/// stoją w crate'cie, który pyta (`sim/supply`), implementacja w tym, który umie
+/// odpowiedzieć. Dzięki temu M6 nie widzi ani `Deposit`, ani `DepositShape`, ani
+/// jednego voxela, a jedyną prawdą o pozostałej masie zostaje `Deposit::extracted`.
+///
+/// `RefCell`, bo port bierze `&self`: wydobycie dzieje się w środku
+/// `advance_production`, gdzie magazyn i zakład są już pożyczone mutowalnie.
+/// Pożyczka jest krótka (jedno `extract`) i nie przeżywa wywołania, więc panika
+/// z `borrow_mut` jest tu niemożliwa inaczej niż przez reentrancję, której w pętli
+/// produkcji nie ma.
+pub struct DepositLedger<'a> {
+    deposits: std::cell::RefCell<&'a mut [Deposit]>,
+}
+
+impl<'a> DepositLedger<'a> {
+    #[must_use]
+    pub fn new(deposits: &'a mut [Deposit]) -> DepositLedger<'a> {
+        DepositLedger {
+            deposits: std::cell::RefCell::new(deposits),
+        }
+    }
+}
+
+impl magnat_supply::Deposits for DepositLedger<'_> {
+    fn remaining(&self, id: DepositId) -> Mass {
+        self.deposits
+            .borrow()
+            .get(id.0 as usize)
+            .map_or(Mass::ZERO, Deposit::remaining)
+    }
+
+    fn initial(&self, id: DepositId) -> Mass {
+        self.deposits
+            .borrow()
+            .get(id.0 as usize)
+            .map_or(Mass::ZERO, |d| d.reserves)
+    }
+
+    fn extract(&self, id: DepositId, want: Mass) -> Mass {
+        self.deposits
+            .borrow_mut()
+            .get_mut(id.0 as usize)
+            .map_or(Mass::ZERO, |d| d.extract(want))
     }
 }
 

@@ -30,7 +30,7 @@ impl Market {
                 wszystkich += 1;
                 if o.available.get() <= 0 {
                     pustych += 1;
-                } else if let Some(spec) = m.supplier.goods().spec(l.good) {
+                } else if let Some(spec) = m.goods.spec(l.good) {
                     zywe[spec.cat.as_index()] = true;
                 }
                 per_good
@@ -70,22 +70,7 @@ impl Market {
                 let Some(pc) = s.controllers.get(&l.good) else {
                     continue;
                 };
-                let zaplecze = s
-                    .inventory
-                    .backroom
-                    .get(&l.good)
-                    .copied()
-                    .unwrap_or_default();
-                let ilosc = zaplecze.qty.get() + l.qty.get();
-                let koszt = zaplecze.cost_total.get() + l.cost_total.get();
-                let unit_cost = if ilosc > 0 && koszt > 0 {
-                    Money(koszt).mul_ratio(PRICE_UNIT, ilosc)
-                } else {
-                    m.supplier
-                        .goods()
-                        .spec(l.good)
-                        .map_or(Money::ZERO, |g| g.wholesale_base)
-                };
+                let unit_cost = m.unit_cost(*i as usize, l.good);
                 if unit_cost.get() > 0 {
                     suma += i64::from(ShelfRow::margin_of(pc.current, unit_cost));
                     ile += 1;
@@ -106,7 +91,7 @@ impl Market {
             let s = &m.shops[*i as usize];
             let mut per_cat: BTreeMap<u8, i64> = BTreeMap::new();
             for l in &s.shelf.lines {
-                let Some(spec) = m.supplier.goods().spec(l.good) else {
+                let Some(spec) = m.goods.spec(l.good) else {
                     continue;
                 };
                 // Obrót tygodniowy jako miara udziału: stan półki mówi o dostawie,
@@ -173,20 +158,10 @@ impl Market {
         let mut shelves = Vec::with_capacity(s.shelf.lines.len());
         for linia in &s.shelf.lines {
             let good = linia.good;
-            let zaplecze = s.inventory.backroom.get(&good).copied().unwrap_or_default();
             // Koszt własny liczy się dokładnie tak samo jak w `reprice_all`: średnia
             // ważona zapasu, a przy pustym magazynie cena hurtowa. Inny wzór tutaj
             // znaczyłby marżę w panelu inną niż marża, na której stoi przecena.
-            let ilosc = zaplecze.qty.get() + linia.qty.get();
-            let koszt = zaplecze.cost_total.get() + linia.cost_total.get();
-            let unit_cost = if ilosc > 0 && koszt > 0 {
-                Money(koszt).mul_ratio(PRICE_UNIT, ilosc)
-            } else {
-                m.supplier
-                    .goods()
-                    .spec(good)
-                    .map_or(Money::ZERO, |g| g.wholesale_base)
-            };
+            let unit_cost = m.unit_cost(i as usize, good);
             // Cena **z oferty**, nie ze sterownika: oferta jest jedynym nośnikiem
             // ceny (PRD §6.1) i to ją płaci kupujący (`K-7`). Sterownik niesie
             // politykę i obrót — rzeczy, których oferta nie zna.
@@ -203,11 +178,15 @@ impl Market {
                 price,
                 unit_cost,
                 margin_bp: ShelfRow::margin_of(price, unit_cost),
-                on_shelf: linia.qty,
-                backroom: zaplecze.qty,
-                days_of_cover: ShelfRow::cover_of(Qty(ilosc), turnover),
+                on_shelf: m.shelf_units(i as usize, good),
+                backroom: m.backroom_units(i as usize, good),
+                days_of_cover: ShelfRow::cover_of(
+                    Qty(m.shelf_units(i as usize, good).get()
+                        + m.backroom_units(i as usize, good).get()),
+                    turnover,
+                ),
                 turnover_7d: turnover,
-                expires_at: linia.expires,
+                expires_at: m.shelf_state(i as usize, good).expires_at,
                 policy,
                 delegated,
             });
@@ -265,13 +244,13 @@ impl Market {
             total: s.customers.total,
         };
 
-        let back: i64 = s
-            .inventory
-            .backroom
-            .values()
-            .map(|l| l.cost_total.get())
-            .sum();
-        let shelf: i64 = s.shelf.lines.iter().map(|l| l.cost_total.get()).sum();
+        let (back, shelf) = {
+            let ch = m.chain.lock();
+            (
+                ch.store.slot_value(s.backroom).get(),
+                ch.store.slot_value(s.shelf_slot).get(),
+            )
+        };
 
         Some(ShopPanelSnapshot {
             site,
@@ -304,7 +283,7 @@ impl Market {
                     .map(|g| {
                         (
                             g,
-                            m.supplier.goods().key_of(g).unwrap_or_default().to_string(),
+                            m.goods.key_of(g).unwrap_or_default().to_string(),
                         )
                     })
                     .collect();

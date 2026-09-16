@@ -34,6 +34,9 @@ magnat-traffic = { workspace = true }
 magnat-nav = { workspace = true }
 magnat-world = { workspace = true }
 magnat-economy = { workspace = true }
+# Most stawia łańcuch dostaw razem z rynkiem: od WP11 (M6d) półka bierze towar
+# z magazynu M6, więc scenariusz, klient i balansator muszą go dostać zbudowanego.
+magnat-supply = { workspace = true }
 magnat-voxel = { workspace = true }
 magnat-spatial = { workspace = true }
 clap = { workspace = true }

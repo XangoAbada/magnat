@@ -25,7 +25,7 @@ impl Market {
         loop {
             let mut dodano = false;
             for c in &cats {
-                if let Some(i) = m.supplier.goods().in_cat(*c).get(rzad) {
+                if let Some(i) = m.goods.in_cat(*c).get(rzad) {
                     wybor.push(*i);
                     dodano = true;
                 }
@@ -43,6 +43,42 @@ impl Market {
         // Osobowość cenowa jest własnością **firmy**, nie zakładu, i losuje się raz
         // (§5.6). Dwa sklepy tej samej firmy dostaną te same czułości — i tak ma być.
         let osobowosc = FirmPricing::draw(m.seed, seed.firm.entity().index(), &m.data.pricing);
+
+        // Sklep jest od WP11 **zakladem z magazynem** (§6.3 krok 1): zaplecze, polka,
+        // rampa i reguly zapasu. Bez `PlantSite` rynek B2B nie mialby dokad dowiezc —
+        // `B2b::serve` szuka slotu wejsciowego zakladu, a nie mapy sklepow.
+        let (backroom, shelf_slot) = {
+            let chain = m.chain.clone();
+            let mut ch = chain.lock();
+            let poj_m3 = seed.capacity_m3.max(1);
+            let backroom = ch.store.add_slot(
+                seed.site,
+                magnat_supply::WarehouseRole::Backroom,
+                magnat_supply::StorageClass::Ambient,
+                magnat_core::Mass(poj_m3.saturating_mul(400_000)),
+                magnat_core::Volume(poj_m3.saturating_mul(1_000_000)),
+                HAZARD_SKLEPU,
+            );
+            // Polka miesci ulamek zaplecza — to jest ekspozycja, nie magazyn.
+            let shelf_slot = ch.store.add_slot(
+                seed.site,
+                magnat_supply::WarehouseRole::Shelf,
+                magnat_supply::StorageClass::Ambient,
+                magnat_core::Mass(poj_m3.saturating_mul(80_000)),
+                magnat_core::Volume(poj_m3.saturating_mul(200_000)),
+                HAZARD_SKLEPU,
+            );
+            let mut zaklad = magnat_supply::PlantSite::new(
+                seed.site,
+                seed.firm,
+                magnat_supply::Dock::new(1, 10, 2, magnat_core::OpenHours::ALWAYS),
+            );
+            zaklad.inputs.push(backroom);
+            zaklad.outputs.push(shelf_slot);
+            ch.plant.insert(zaklad);
+            (backroom, shelf_slot)
+        };
+
         let mut shop = Shop {
             site: seed.site,
             firm: seed.firm,
@@ -55,6 +91,8 @@ impl Market {
                 capacity_m3: seed.capacity_m3,
                 ..ShopInventory::default()
             },
+            backroom,
+            shelf_slot,
             shelf: Shelf {
                 slots,
                 lines: Vec::new(),
@@ -79,7 +117,7 @@ impl Market {
         };
 
         for i in wybor {
-            let spec = *m.supplier.goods().at(i);
+            let spec = *m.goods.at(i);
             let offer = m.offers.insert(Offer {
                 seller: seed.firm,
                 site: seed.site,
@@ -94,11 +132,8 @@ impl Market {
             });
             shop.shelf.insert(ShelfLine {
                 good: spec.good,
-                qty: Qty::ZERO,
-                cost_total: Money::ZERO,
                 facings: 1,
                 offer,
-                expires: None,
             });
             // Każdy towar dostaje własny sterownik ceny. AI zaczyna od polityki
             // dynamicznej — to ona składa cztery korekty z §5.6; gracz podmienia
@@ -134,6 +169,14 @@ impl Market {
             );
             m.index.mark_dirty(CategoryId::Stock(spec.cat));
         }
+        // **Sklep nie dostaje `InventoryRule`** i to jest decyzja, nie przeoczenie.
+        // Łańcuch umie sam przeglądać zapasy (`Chain::step_hour`), ale sklep ma już
+        // własną politykę zamówień — `docelowy_zapas`, wiążącą cel z obrotem
+        // tygodniowym i z terminem ważności, kalibrowaną balansatorem w M5e. Dwie
+        // polityki nad jednym magazynem nie są nadmiarem, tylko **sprzecznością**:
+        // obie zamawiają, żadna nie widzi zamówień drugiej i zaplecze rośnie do sumy
+        // obu celów. Reguły łańcucha zostają dla zakładów produkcyjnych, gdzie polityki
+        // detalicznej nie ma (`AL-5`).
         // Wyposażenie lokalu: wkład właściciela, więc druga strona to `Equity`,
         // a nie przelew. Amortyzacja liniowa schodzi z niego co miesiąc (§5.8).
         let (wartosc, odpis) = m.data.costs.equipment(slots);
@@ -196,54 +239,67 @@ impl Market {
         {
             let mut m = self.lock();
             let rest = m.rest_of_world;
+            let chain = m.chain.clone();
+            let cat = chain.cat.clone();
             for i in 0..m.shops.len() {
-                // **Zapas startowy to wyłożenie półki, nie pełne zaplecze.**
-                // Cel polityki jest wielokrotnością wyłożenia, a przy towarze
-                // o trzydniowym terminie ta wielokrotność to trzy doby zapasu,
-                // których w dniu zerowym **nikt jeszcze nie kupuje** — więc
-                // schodziły w całości na odpis, zanim popyt zdążył się ustalić.
-                // Zamawianie ponad wyłożenie zaczyna się od pierwszej doby,
-                // kiedy `docelowy_zapas` ma już czym mierzyć popyt.
+                // **Zapas startowy to wylozenie polki, nie pelne zaplecze.** Cel polityki
+                // jest wielokrotnoscia wylozenia, a przy towarze o trzydniowym terminie
+                // ta wielokrotnosc to trzy doby zapasu, ktorych w dniu zerowym **nikt
+                // jeszcze nie kupuje** — wiec schodzily w calosci na odpis.
                 let plan: Vec<(GoodId, Qty)> = m.shops[i]
                     .inventory
                     .reorder
                     .iter()
                     .map(|(g, p)| (*g, Qty(p.target.get().min(SHELF_UNITS_PER_FACING))))
                     .collect();
-                let (site, account) = (m.shops[i].site, m.shops[i].account);
+                let (site, account, backroom, firm) = (
+                    m.shops[i].site,
+                    m.shops[i].account,
+                    m.shops[i].backroom,
+                    m.shops[i].firm,
+                );
                 for (good, target) in plan {
+                    // Zapas startowy jest **kupiony**, a nie wyczarowany: przelew idzie
+                    // z konta sklepu na `RestOfWorld`. To jedyne miejsce, w ktorym towar
+                    // detaliczny wchodzi do magazynu bez dostawcy, i jest nim dokladnie
+                    // ten sam wyjatek, ktory dopuszcza zapas startowy swiata: bez niego
+                    // pierwszy klient trafilby na pustke, bo pierwszy mlyn zaczyna miec
+                    // dopiero w minucie zero.
                     let Some(q) = m.supplier.quote(good, target, site, t) else {
                         continue;
                     };
+                    let kat = m.goods.spec(good).map_or(StockCat::Other, |s| s.cat);
                     if books
                         .transfer(
                             account,
                             rest,
                             q.total(),
-                            wholesale_memo(
-                                good,
-                                q.qty,
-                                m.supplier
-                                    .goods()
-                                    .spec(good)
-                                    .map_or(StockCat::Other, |s| s.cat),
-                                0,
-                            ),
+                            wholesale_memo(good, q.qty, kat, 0),
                             t,
                         )
                         .is_err()
                     {
                         continue;
                     }
-                    let expires = q
-                        .shelf_life
-                        .map(|s| SimMinute(t.get().saturating_add(s.get())));
-                    m.shops[i]
-                        .inventory
-                        .backroom
-                        .entry(good)
-                        .or_default()
-                        .receive(q.qty, q.total(), expires);
+                    let draft = magnat_supply::BatchDraft {
+                        good,
+                        mass: cat.good(good).mass_of_units(q.qty),
+                        quality: q.quality,
+                        brand: None,
+                        producer: firm,
+                        produced_at: SimMinute(t.get()),
+                        cost: q.total(),
+                        origin: magnat_supply::BatchOrigin::imported(),
+                        flags: Default::default(),
+                    };
+                    if chain
+                        .lock()
+                        .store
+                        .put(&cat, backroom, draft, magnat_supply::MassIn::Initial)
+                        .is_err()
+                    {
+                        continue;
+                    }
                     post_purchase(&mut m.shops[i].ledger, q.total(), t);
                     post_receipt(&mut m.shops[i].ledger, q.total(), t);
                 }
@@ -272,13 +328,45 @@ impl Market {
         let Some(i) = m.by_site.get(&site).copied() else {
             return false;
         };
-        m.shops[i as usize]
-            .inventory
-            .backroom
-            .entry(good)
-            .or_default()
-            .receive(qty, paid, expires);
+        let backroom = m.shops[i as usize].backroom;
+        let firm = m.shops[i as usize].firm;
+        let chain = m.chain.clone();
+        let cat = chain.cat.clone();
+        // Data przydatności jest od WP11 **własnością partii** i liczy się jako
+        // `produced_at + shelf_life` z katalogu. Wołający, który podaje termin wprost,
+        // dostaje więc partię **odpowiednio starą** — to jest to samo zdanie wyrażone
+        // drugą stroną równania i jedyny sposób, żeby obie drogi dawały ten sam wynik.
+        let produced_at = match (expires, cat.good(good).shelf_life_minutes) {
+            (Some(e), Some(zycie)) => SimMinute(e.get().saturating_sub(u64::from(zycie))),
+            _ => SimMinute(t.get()),
+        };
+        let draft = magnat_supply::BatchDraft {
+            good,
+            mass: cat.good(good).mass_of_units(qty),
+            quality: magnat_core::Q::new(60),
+            brand: None,
+            producer: firm,
+            produced_at,
+            cost: paid,
+            origin: magnat_supply::BatchOrigin::imported(),
+            flags: Default::default(),
+        };
+        if chain
+            .lock()
+            .store
+            .put(&cat, backroom, draft, magnat_supply::MassIn::Initial)
+            .is_err()
+        {
+            return false;
+        }
         post_receipt(&mut m.shops[i as usize].ledger, paid, t);
         true
     }
 }
+
+/// Maska klas niebezpieczenstwa, na ktore sklep ma zgode.
+///
+/// Zero: sklep osiedlowy nie trzyma benzyny ani chemii przemyslowej, a slot bez maski
+/// **odmawia przyjecia** takiej partii (`Store::put`). Stacja paliw dostanie wlasna
+/// maske razem z wlasnym archetypem — to jest decyzja M7, nie M6.
+const HAZARD_SKLEPU: u8 = 0;

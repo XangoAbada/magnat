@@ -8,17 +8,32 @@
 use magnat_core::{LossKind, Mass, Money, SimMinute, Volume, Q};
 
 use super::{klucz_fefo, SlotId, Store};
+
+/// Jeden odpis terminu: co, gdzie i za ile zeszło z bilansu.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Spoiled {
+    pub slot: SlotId,
+    pub good: magnat_core::GoodId,
+    pub mass: Mass,
+    pub cost: Money,
+}
 use crate::batch::{BatchId, BatchOrigin, CoalesceKey};
 
 impl Store {
     /// Usuwa partie przeterminowane i księguje ich masę jako [`LossKind::Expired`].
-    /// Zwraca liczbę usuniętych partii.
+    /// Zwraca **listę odpisów**: slot, towar, masa i koszt własny.
+    ///
+    /// Lista, a nie sama liczba, bo odpis dotyka pieniądza i ktoś musi go zaksięgować
+    /// w rachunku wyniku właściciela slotu — a `sim/supply` księgi nie widzi i widzieć
+    /// nie może. To jest ten sam wzorzec, którym rynek B2B oddaje `Settlement`,
+    /// a zakład fakturę za media: **fakty wychodzą listą, księguje ten, kto ma księgę**
+    /// (`AI-1`). Do M6c zwracana była liczba partii i nie dawało się z niej nic policzyć.
     ///
     /// Wołane **przed** sprzedażą — kolejność `SpoilageSystem` przed `RetailSystem`
     /// jest kontraktem międzyfazowym (M6 `D12`), a nie przypadkiem: to na niej stoi
     /// `prop_no_expired_on_shelf`.
-    pub fn spoil(&mut self, now: SimMinute) -> usize {
-        let mut usuniete = 0;
+    pub fn spoil(&mut self, now: SimMinute) -> Vec<Spoiled> {
+        let mut usuniete = Vec::new();
         for i in 0..self.slots.len() {
             let przeterminowane: Vec<BatchId> = self.slots[i]
                 .batches
@@ -35,7 +50,12 @@ impl Store {
                 self.slots[i].used_volume = Volume(self.slots[i].used_volume.0 - b.volume.0);
                 self.mass[b.good.0 as usize].losses[LossKind::Expired.as_index()] += b.mass.0;
                 self.write_offs = Money(self.write_offs.0 + b.cost_total.0);
-                usuniete += 1;
+                usuniete.push(Spoiled {
+                    slot: SlotId(i as u32),
+                    good: b.good,
+                    mass: b.mass,
+                    cost: b.cost_total,
+                });
             }
         }
         usuniete
@@ -151,8 +171,8 @@ mod tests {
         let (cat, mut s, slot) = magazyn();
         s.put(&cat, slot, draft(CHLEB, 5000, 700, 0), MassIn::Produced)
             .expect("wstawienie");
-        assert_eq!(s.spoil(SimMinute(1439)), 0, "przed datą nic nie znika");
-        assert_eq!(s.spoil(SimMinute(1440)), 1, "w dacie partia schodzi");
+        assert!(s.spoil(SimMinute(1439)).is_empty(), "przed datą nic nie znika");
+        assert_eq!(s.spoil(SimMinute(1440)).len(), 1, "w dacie partia schodzi");
         assert_eq!(s.total_stock(CHLEB), Mass::ZERO);
         assert_eq!(s.losses(CHLEB, LossKind::Expired), Mass(5000));
         s.check_mass(CHLEB).expect("bilans masy");

@@ -177,6 +177,7 @@ fn obrot_tygodniowy_zbiera_siedem_dob_i_zapomina_osma() {
             days: 1,
             agreed_price: Money(260),
             cogs: Money(200),
+            taken: None,
             arrived: t,
             reason: magnat_core::DecisionReason::ShopChosen {
                 site,

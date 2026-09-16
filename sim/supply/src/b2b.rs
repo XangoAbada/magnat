@@ -68,6 +68,11 @@ pub enum SellerRef {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Settlement {
     pub buyer: FirmId,
+    /// Zakład, do którego towar jedzie. Firma może mieć wiele zakładów, a księga
+    /// i rachunek bieżący są **per zakład** (M5 §5.8), więc sam `FirmId` nie mówi,
+    /// z którego konta zapłacić. Dopisane w WP11, kiedy rozliczenie dostało pierwszego
+    /// czytelnika po stronie księgi.
+    pub deliver_to: SiteId,
     pub seller: SellerRef,
     pub good: GoodId,
     pub mass: Mass,
@@ -140,6 +145,9 @@ pub struct B2b {
     pending: Vec<PendingImport>,
     sellers: SellerIndex,
     spot: Vec<SpotWindow>,
+    /// Mnożnik ceny świata zewnętrznego per towar, w punktach bazowych.
+    /// Wejście bramki **G4** — patrz [`B2b::set_supply_shock`].
+    shock_bp: Vec<i32>,
     tariffs: TariffTable,
     next_rfq: u32,
     next_quote: u32,
@@ -157,12 +165,39 @@ impl B2b {
             pending: Vec::new(),
             sellers: SellerIndex::new(goods),
             spot: vec![SpotWindow::default(); goods],
+            shock_bp: vec![10_000; goods],
             tariffs,
             next_rfq: 1,
             next_quote: 1,
             next_contract: 1,
             world_seed,
         }
+    }
+
+    /// Mnożnik ceny świata zewnętrznego dla towaru, w punktach bazowych
+    /// (10 000 = bez zmian, 18 000 = +80 %).
+    ///
+    /// **To jest jedyne zdarzenie zewnętrzne, jakie gospodarka ma**, i jedyne wejście
+    /// bramki **G4** balansatora („reaktywność szoku podaży: widoczny w 2–7 dni,
+    /// wygaszony w 14–56"). Do M6c wisiało na `ExternalSupplier` i podmiana dostawcy
+    /// zabrałaby bramce czym szokować (`AC-1`) — dlatego przenosi się tam, gdzie od
+    /// WP11 naprawdę ustala się cena hurtowa: na węzeł graniczny. Szok jest **stanem**,
+    /// a nie parametrem zapytania, bo dokładnie tak zachowuje się prawdziwy: cena
+    /// skacze wszystkim naraz i zostaje, dopóki ktoś jej nie cofnie.
+    pub fn set_supply_shock(&mut self, good: GoodId, factor_bp: i32) {
+        if (good.0 as usize) < self.shock_bp.len() {
+            self.shock_bp[good.0 as usize] = factor_bp;
+        }
+    }
+
+    /// Mnożnik szoku dla towaru; `10_000` znaczy „bez zmian".
+    #[must_use]
+    pub fn supply_shock(&self, good: GoodId) -> i32 {
+        self.shock_bp
+            .get(good.0 as usize)
+            .copied()
+            .filter(|f| *f > 0)
+            .unwrap_or(10_000)
     }
 
     #[must_use]
@@ -319,6 +354,9 @@ fn kupujacy(plant: &Plant, site: SiteId) -> Option<(FirmId, SlotId)> {
 
 impl HashState for B2b {
     fn hash_state(&self, h: &mut StateHasher) {
+        for f in &self.shock_bp {
+            h.write_i64(i64::from(*f));
+        }
         h.write_u32(self.next_rfq);
         h.write_u32(self.next_quote);
         h.write_u32(self.next_contract);

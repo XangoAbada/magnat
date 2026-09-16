@@ -29,35 +29,32 @@ use crate::catalog::{Catalog, StorageClass};
 use crate::tuning::TransportTuning;
 use crate::Store;
 
+pub mod consolidate;
+pub use consolidate::{consolidate, ConsolidationLimits, MilkRun};
+
 /// Rurociąg — środek transportu bez pojazdu, kierowcy i rampy.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct PipelineId(pub u32);
 
-/// Nadwozie. Zamknięta lista: dołożenie wariantu zmienia zapis gry, bo `BodyType`
-/// siedzi w wymaganiach zlecenia, a zlecenia przeżywają zapis.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-#[repr(u8)]
-pub enum BodyType {
-    Box = 0,
-    Reefer = 1,
-    Tanker = 2,
-    Tipper = 3,
-    Container = 4,
-    Flatbed = 5,
-}
+/// Nadwozie — słownik mieszka od M6d w `engine/core` (`K-40`), bo deklaruje je także
+/// katalog pojazdów M4 (`data/vehicles/classes.ron`). Tu zostaje re-eksport, więc nazwy
+/// z §5.6 nie drgnęły.
+pub use magnat_core::BodyType;
 
-impl BodyType {
-    /// Nadwozie wymagane przez klasę przechowywania. Chłodnia w drodze nie jest
-    /// preferencją — towar `Chilled` przewieziony skrzynią psuje się ośmiokrotnie
-    /// szybciej (`R9`), więc to jest wymaganie, a nie sugestia.
-    #[must_use]
-    pub const fn for_storage(c: StorageClass) -> BodyType {
-        match c {
-            StorageClass::Chilled | StorageClass::Frozen => BodyType::Reefer,
-            StorageClass::Tank => BodyType::Tanker,
-            StorageClass::Silo => BodyType::Tipper,
-            _ => BodyType::Box,
-        }
+/// Nadwozie wymagane przez klasę przechowywania. Chłodnia w drodze nie jest
+/// preferencją — towar `Chilled` przewieziony skrzynią psuje się ośmiokrotnie
+/// szybciej (`R9`), więc to jest wymaganie, a nie sugestia.
+///
+/// Funkcja wolna, a nie metoda: `BodyType` należy teraz do `core`, a `StorageClass`
+/// do `sim/supply`, więc `impl` po tej stronie łamałby regułę sieroty. Ten sam zabieg
+/// co przy `RoadClass` i `spec()` w M4 (`K-23`).
+#[must_use]
+pub const fn body_for_storage(c: StorageClass) -> BodyType {
+    match c {
+        StorageClass::Chilled | StorageClass::Frozen => BodyType::Reefer,
+        StorageClass::Tank => BodyType::Tanker,
+        StorageClass::Silo => BodyType::Tipper,
+        _ => BodyType::Box,
     }
 }
 
@@ -80,7 +77,7 @@ impl VehicleRequirements {
     pub fn for_good(cat: &Catalog, good: GoodId, mass: Mass) -> VehicleRequirements {
         let g = cat.good(good);
         VehicleRequirements {
-            body: BodyType::for_storage(g.storage),
+            body: body_for_storage(g.storage),
             min_payload: mass,
             min_volume: g.volume_of(mass),
             adr: g.hazard.needs_permit(),
@@ -228,6 +225,13 @@ pub struct FreightQuote {
     pub minutes: u32,
     pub cost: Money,
     pub distance_m: u32,
+    /// Część kosztu płacona **raz za pojazd**, nie za kilometr: podstawienie, dokumenty,
+    /// czas kierowcy przy załadunku.
+    ///
+    /// Wyodrębniona, bo bez tego konsolidacja dostaw nie ma czego oszczędzić —
+    /// milk-run po dziesięciu sklepach płaciłby dziesięć razy za podstawienie tej samej
+    /// ciężarówki, czyli dokładnie tyle, ile dziesięć osobnych kursów (`AL-2`).
+    pub call_out: Money,
 }
 
 /// Gniazdo dla routera M4 — **punkt podmiany**, nie abstrakcja na zapas.
@@ -283,6 +287,9 @@ impl FreightOracle for FlatRateFreight {
             minutes: self.km * self.tuning.minutes_per_km + self.tuning.load_fixed_minutes,
             cost: self.tuning.haul_cost(mass, self.km),
             distance_m: self.km * 1_000,
+            // Atrapa nie różnicuje podstawienia od kilometrów — ma jedną stawkę
+            // tonokilometrową i nic w niej nie jest stałe.
+            call_out: Money::ZERO,
         })
     }
 }
@@ -408,6 +415,57 @@ impl Transport {
         o.price = q.cost;
         o.state = TransportOrderState::EnRoute { eta };
         Ok(eta)
+    }
+
+    /// Wysyła w drogę całą trasę objazdową: jeden pojazd, kilka punktów rozładunku.
+    ///
+    /// Różnica wobec [`Transport::dispatch`] jest w cenie i w czasie, nie w ładowaniu:
+    /// koszt trasy dzieli się między zlecenia **proporcjonalnie do masy** (00 §2 —
+    /// podział sumuje się do oryginału co do grosza), a `eta` każdego przystanku jest
+    /// czasem narastającym, bo ostatni sklep czeka dłużej niż pierwszy. To jest cała
+    /// cena, którą się płaci za tańszą dostawę, i ma być widoczna.
+    pub fn dispatch_run(
+        &mut self,
+        store: &mut Store,
+        run: &MilkRun,
+        carrier: Carrier,
+        now: SimMinute,
+    ) -> Result<(), TransportError> {
+        let wagi: Vec<u64> = run
+            .stops
+            .iter()
+            .map(|id| {
+                self.orders
+                    .get(&id.0)
+                    .map_or(0, |o| o.mass.0.max(0) as u64)
+            })
+            .collect();
+        if wagi.is_empty() {
+            return Err(TransportError::UnknownOrder);
+        }
+        let udzialy = magnat_core::money::split_proportional(run.cost, &wagi);
+        let na_przystanek = run.minutes / (run.stops.len() as u32).max(1);
+
+        for (i, id) in run.stops.iter().enumerate() {
+            let o = self
+                .orders
+                .get_mut(&id.0)
+                .ok_or(TransportError::UnknownOrder)?;
+            if o.state.is_final() {
+                return Err(TransportError::AlreadyFinal);
+            }
+            let Some(cargo) = store.load(o.from_slot, o.good, o.mass, Q::MIN, *id) else {
+                o.state = TransportOrderState::Failed(FailReason::Refused);
+                return Err(TransportError::NotEnoughStock);
+            };
+            o.cargo = cargo;
+            o.carrier = carrier;
+            o.price = udzialy[i];
+            o.state = TransportOrderState::EnRoute {
+                eta: SimMinute(now.0 + u64::from(na_przystanek * (i as u32 + 1))),
+            };
+        }
+        Ok(())
     }
 
     /// Rozładunek u odbiorcy. Zwraca masę, która **nie** zmieściła się w magazynie —

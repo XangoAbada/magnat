@@ -213,6 +213,8 @@ fn route_cache(c: &mut Criterion) {
             dest: NodeId(i ^ 0x5A5A),
             mode: TransportMode::Car,
             hour_bucket: (i % 24) as u8,
+            profile: RouteProfile::Passenger,
+            gross_t: 0,
         })
         .collect();
     let mut cache: RouteCache<u32> = RouteCache::new(1 << 13);

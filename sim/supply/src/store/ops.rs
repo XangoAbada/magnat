@@ -15,6 +15,16 @@ use super::{
 use crate::batch::{Batch, BatchFlags, BatchId, BatchLocation};
 use crate::catalog::Catalog;
 
+/// Producent nieznany — wydanie z rezerwacji, która nie objęła ani jednej partii.
+/// `NO_ENTITY` mówi to wprost, zamiast wskazywać encję o indeksie zero, która istnieje.
+const BEZ_PRODUCENTA: magnat_core::FirmId = magnat_core::FirmId(magnat_core::Entity::new(
+    magnat_core::NO_ENTITY,
+    match std::num::NonZeroU32::new(1) {
+        Some(g) => g,
+        None => unreachable!(),
+    },
+));
+
 impl Store {
     pub fn put(
         &mut self,
@@ -222,6 +232,7 @@ impl Store {
         let mut koszt = 0i64;
         let mut jakosc_wazona = 0i128;
         let mut brand = None;
+        let mut producer: Option<magnat_core::FirmId> = None;
         let mut expires_at: Option<SimMinute> = None;
         let mut origin: Option<crate::batch::BatchOrigin> = None;
         let mut puste: Vec<BatchId> = Vec::new();
@@ -247,6 +258,9 @@ impl Store {
             jakosc_wazona += i128::from(b.quality.get()) * i128::from(ile.0);
             if brand.is_none() {
                 brand = b.brand;
+            }
+            if producer.is_none() {
+                producer = Some(b.producer);
             }
             expires_at = match (expires_at, b.expires_at) {
                 (None, e) => e,
@@ -303,6 +317,9 @@ impl Store {
             0
         };
         Ok(BatchSlice {
+            // Wydanie z pustej rezerwacji nie ma producenta; `NO_ENTITY` mówi to
+            // wprost, zamiast wskazywać encję o indeksie zero, która istnieje.
+            producer: producer.unwrap_or(BEZ_PRODUCENTA),
             good: r.good,
             mass: Mass(masa),
             quality: Q::new(jakosc),

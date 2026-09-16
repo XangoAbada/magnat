@@ -12,7 +12,7 @@
 use magnat_core::{Energy, Mass, Money, UtilityService, Volume};
 use serde::Deserialize;
 
-pub const TUNING_SCHEMA_VERSION: u32 = 2;
+pub const TUNING_SCHEMA_VERSION: u32 = 3;
 
 #[derive(Clone, Copy, Debug, Deserialize)]
 pub struct ShortageTuning {
@@ -102,6 +102,15 @@ pub struct B2bTuning {
     pub quality_penalty_gr_per_tonne_point: i64,
 }
 
+/// Wydobycie (M6d §5.10).
+#[derive(Clone, Copy, Debug, Deserialize)]
+pub struct MiningTuning {
+    /// Koszt odniesienia tony urobku ze złoża nietkniętego o koncentracji 100 %
+    /// i głębokości zerowej. Wszystko, co złoże odróżnia — głębokość, koncentracja,
+    /// wyczerpanie — jest mnożnikiem nad tą liczbą (`MiningSite::cost_per_tonne`).
+    pub base_gr_per_tonne: i64,
+}
+
 /// Import, eksport i węzły graniczne (M6c §5.9).
 #[derive(Clone, Copy, Debug, Deserialize)]
 pub struct TradeTuning {
@@ -128,6 +137,7 @@ pub struct Tuning {
     pub transport: TransportTuning,
     pub b2b: B2bTuning,
     pub trade: TradeTuning,
+    pub mining: MiningTuning,
 }
 
 #[derive(Debug)]

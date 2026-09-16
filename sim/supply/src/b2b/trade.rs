@@ -375,7 +375,10 @@ impl B2b {
                 continue;
             }
             let Some(tg) = n.good(good) else { continue };
-            let cena = tg.import_price();
+            // Szok podaży mnoży cenę świata zewnętrznego — i tylko ją. Elastyczność
+            // wolumenowa i cło liczą się **od** niej, bo tak samo zachowuje się
+            // prawdziwy: drożeje towar, a nie stawka celna.
+            let cena = tg.import_price().mul_ratio(i64::from(self.supply_shock(good)), 10_000);
             let netto = Money((i128::from(cena.0) * i128::from(mass.0) / 1_000_000) as i64);
             let lead = n.lead_minutes(&t.trade, self.world_seed, now);
             let q = ImportQuote {
@@ -467,7 +470,14 @@ impl B2b {
                 brand: None,
                 producer: p.buyer,
                 produced_at: now,
-                cost: p.paid,
+                // **Koszt nabycia obejmuje cło** — i to nie jest sprzeczne z `K-7`.
+                // `K-7` mówi, że cło nie modyfikuje **ceny w ofercie**: sprzedawca
+                // podaje netto, a obciążenie jest rozpisane osobno i to zostaje bez
+                // zmian. Ale kupujący, który zapłacił netto **i** cło, ma towar
+                // o takiej wartości i tyle wchodzi mu na stan; rozdzielenie tych dwóch
+                // liczb po stronie zapasu rozjeżdżałoby `InventoryGoods` z wyceną
+                // magazynu o sumę ceł (zmierzone w `po_roku_bilans_zamyka_sie_co_do_grosza`).
+                cost: Money(p.paid.0 + p.duty.0),
                 origin: crate::batch::BatchOrigin::imported(),
                 flags: crate::batch::BatchFlags::default(),
             };
@@ -506,6 +516,7 @@ impl B2b {
             );
             wynik.push(Settlement {
                 buyer: p.buyer,
+                deliver_to: p.deliver_to,
                 seller: SellerRef::External(p.node),
                 good: p.good,
                 mass: p.mass,
@@ -619,6 +630,7 @@ impl B2b {
         n.used_today = Mass(n.used_today.0 + mass.0);
         Some(Settlement {
             buyer: FirmId(site_wezla.entity()),
+            deliver_to: site_wezla,
             seller: SellerRef::Firm(seller),
             good,
             mass,

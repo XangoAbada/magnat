@@ -14,6 +14,7 @@
 use magnat_core::TransportMode;
 
 use crate::graph::NodeId;
+use crate::router::RouteProfile;
 
 /// Klucz trasy. Bez minuty wyjazdu — patrz nagłówek modułu.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
@@ -24,6 +25,15 @@ pub struct RouteKey {
     /// Godzina wyjazdu, `0..24`. Klucz spoza zakresu trafi po prostu do innego
     /// kubełka — cache nie waliduje danych, bo nie jest ich właścicielem.
     pub hour_bucket: u8,
+    /// Profil trasy. **Musi** być w kluczu: ten sam odcinek ma inne wagi dla ruchu
+    /// osobowego, dziennego ciężkiego i nocnego ciężkiego (zakaz ruchu ciężkiego,
+    /// tonaż mostu), więc bez profilu cache oddawałby trasę policzoną dla kogoś innego.
+    pub profile: RouteProfile,
+    /// Masa całkowita zaokrąglona **w górę** do pełnych ton. Trasa dobra dla dwunastu
+    /// ton nie musi unosić dwudziestu sześciu, a `mass_ok` sprawdza się dopiero przy
+    /// liczeniu — trafienie w cache omijało to sprawdzenie w całości. Kubełek tonowy,
+    /// bo ładowności są z katalogu i jest ich kilka, a nie continuum.
+    pub gross_t: u16,
 }
 
 /// Licznik skuteczności cache'u. Idzie do inspektora i do dziennika wydajności.
@@ -215,6 +225,8 @@ mod tests {
             dest: NodeId(d),
             mode: TransportMode::Car,
             hour_bucket: 7,
+            profile: RouteProfile::Passenger,
+            gross_t: 0,
         }
     }
 
@@ -327,6 +339,8 @@ mod tests {
                         dest: NodeId(p + 100_000),
                         mode: TransportMode::Car,
                         hour_bucket: 7,
+                        profile: RouteProfile::Passenger,
+                        gross_t: 0,
                     };
                     if c.get(&k).is_none() {
                         c.insert(k, p);

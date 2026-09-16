@@ -57,15 +57,16 @@ impl Market {
     #[must_use]
     pub fn shelf_qty(&self, site: SiteId, good: GoodId) -> Option<Qty> {
         let m = self.lock();
-        let s = &m.shops[*m.by_site.get(&site)? as usize];
-        s.shelf.line(good).map(|l| l.qty)
+        let i = *m.by_site.get(&site)? as usize;
+        m.shops[i].shelf.line(good)?;
+        Some(m.shelf_units(i, good))
     }
 
     #[must_use]
     pub fn backroom_qty(&self, site: SiteId, good: GoodId) -> Option<Qty> {
         let m = self.lock();
-        let s = &m.shops[*m.by_site.get(&site)? as usize];
-        s.inventory.backroom.get(&good).map(|l| l.qty)
+        let i = *m.by_site.get(&site)? as usize;
+        Some(m.backroom_units(i, good))
     }
 
     /// Wartość zapasu sklepu: zaplecze **i** półka. To jest lewa strona niezmiennika
@@ -77,15 +78,9 @@ impl Market {
         let Some(i) = m.by_site.get(&site).copied() else {
             return Money::ZERO;
         };
-        let s = &m.shops[i as usize];
-        let back: i64 = s
-            .inventory
-            .backroom
-            .values()
-            .map(|l| l.cost_total.get())
-            .sum();
-        let shelf: i64 = s.shelf.lines.iter().map(|l| l.cost_total.get()).sum();
-        Money(back + shelf)
+        let (backroom, shelf_slot) = (m.shops[i as usize].backroom, m.shops[i as usize].shelf_slot);
+        let ch = m.chain.lock();
+        Money(ch.store.slot_value(backroom).get() + ch.store.slot_value(shelf_slot).get())
     }
 
     /// Uchwyt oferty stojącej na półce. Testy i narzędzia potrzebują go, żeby
@@ -95,6 +90,17 @@ impl Market {
         let m = self.lock();
         let i = m.by_site.get(&site).copied()?;
         m.shops[i as usize].shelf.line(good).map(|l| l.offer)
+    }
+
+    /// Uchwyt do łańcucha dostaw M6.
+    ///
+    /// Potrzebny wszędzie tam, gdzie wołający prowadzi kadencję sam — w scenariuszach
+    /// i w testach, które nie idą przez `MarketSystem`. Docelowo kadencję łańcucha
+    /// prowadzą systemy ECS z §5.11 (M6e) i wtedy ten getter zostaje odczytem
+    /// dla panelu, a nie drogą sterowania.
+    #[must_use]
+    pub fn chain(&self) -> magnat_supply::ChainHandle {
+        self.lock().chain.clone()
     }
 
     /// Szok ceny hurtowej: mnożnik w punktach bazowych (10 000 = bez zmian).
@@ -107,7 +113,7 @@ impl Market {
     /// wskazuje towar nazwą, bo identyfikator zależy od katalogu miasta.
     #[must_use]
     pub fn good_of_key(&self, key: &str) -> Option<GoodId> {
-        self.lock().supplier.goods().id_of_key(key)
+        self.lock().goods.id_of_key(key)
     }
 
     /// Pozycja zakładu w metrach — klient potrzebuje jej, żeby zamienić kliknięcie

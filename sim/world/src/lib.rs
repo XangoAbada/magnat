@@ -70,7 +70,7 @@ pub use data::{
     HeightDm, LakeCells, RiverCell, RiverNetwork, RiverSegment, WaterBits, WaterClass, WorldData,
     SEA_LEVEL_DM,
 };
-pub use deposit::{Deposit, DepositId, DepositShape};
+pub use deposit::{Deposit, DepositId, DepositLedger, DepositShape};
 pub use geology::{ColumnStack, GeologyModel, TerrainLayer};
 pub use grid::Grid2;
 pub use io::{load_mgw, save_mgw, WorldIoError, MGW_VERSION};

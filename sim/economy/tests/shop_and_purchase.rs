@@ -84,33 +84,52 @@ fn polka_i_zaplecze_to_dwa_stany() {
 
 #[test]
 fn zamowienie_u_dostawcy_kosztuje_i_dociera_po_czasie() {
+    // **Kontrakt zmienił się w WP11 i test mówi teraz o tym, co naprawdę się dzieje.**
+    // Do M6c sklep płacił przy zamówieniu, a towar materializował się po
+    // `lead_time_days`. Od WP11 zamówienie otwiera zapytanie ofertowe, które może nie
+    // znaleźć dostawcy — więc pieniądz wychodzi dopiero wtedy, gdy ciężarówka stanie
+    // na rampie. Sklep, który zapłacił za towar, którego nikt nie przywiózł, miałby
+    // dziurę w kasie bez zdarzenia, które by ją tłumaczyło.
     let mut b = bench(2, &[Vec2::new(300.0, 0.0)]);
     let (site, g) = (b.sites[0], towar());
     let konto = b.market.account_of(site).unwrap();
     let saldo0 = b.books.balance(konto).unwrap();
     let podaz0 = b.books.supply().total();
+    let mut w = magnat_ecs::World::new(1);
+    w.insert_resource(std::mem::replace(&mut b.books, Books::new()));
 
-    b.market.reorder_and_receive(&mut b.books, Tick(0));
+    b.market.reorder_and_receive(
+        w.get_resource_mut::<Books>().unwrap(),
+        Tick(0),
+    );
+    // Zamówienie samo w sobie nie kosztuje: na tym etapie istnieje wyłącznie
+    // zapytanie ofertowe.
+    assert_eq!(b.market.backroom_qty(site, g), Some(Qty::ZERO));
+
+    // Doba łańcucha: import z węzła granicznego jedzie ciężarówką na rampę sklepu.
+    let doba = magnat_core::time::MINUTES_PER_DAY;
+    for d in 0..8u64 {
+        let t = Tick(d * doba);
+        common::doba_lancucha(&b.market, &mut w, t);
+        b.market
+            .reorder_and_receive(w.get_resource_mut::<Books>().unwrap(), t);
+    }
+
+    let books = w.get_resource::<Books>().unwrap();
     assert!(
-        b.books.balance(konto).unwrap() < saldo0,
-        "zamówienie musi kosztować"
+        books.balance(konto).unwrap() < saldo0,
+        "dostawa musi kosztować"
     );
     assert_eq!(
-        b.books.supply().total(),
+        books.supply().total(),
         podaz0,
         "zakup u dostawcy zewnętrznego nie tworzy ani nie niszczy pieniądza"
     );
-    assert_eq!(b.books.check_conservation(), Ok(()));
-    // Dostawa jedzie `lead_time_days`, więc w tej samej minucie jej nie ma.
-    assert_eq!(b.market.backroom_qty(site, g), None);
-
-    let doba = magnat_core::time::MINUTES_PER_DAY;
-    b.market.reorder_and_receive(&mut b.books, Tick(doba * 2));
+    assert_eq!(books.check_conservation(), Ok(()));
     assert!(
         b.market.backroom_qty(site, g).unwrap().get() > 0,
-        "po czasie dostawy towar ma być na zapleczu"
+        "po ośmiu dobach towar ma stać na zapleczu"
     );
-    assert_eq!(b.books.check_conservation(), Ok(()));
 }
 
 #[test]

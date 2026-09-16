@@ -32,6 +32,9 @@ use crate::catalog::{Catalog, StorageClass};
 mod aging;
 mod invariants;
 mod ops;
+mod retail;
+pub use aging::Spoiled;
+pub use retail::ShelfState;
 #[cfg(test)]
 mod tests_support;
 mod transit;
@@ -48,6 +51,18 @@ pub enum WarehouseRole {
     Backroom,
     /// Półka. **Wyłączona** z `stock_fill` zakładu (M6 §6.4.3) — ma własny widok.
     Shelf,
+    /// Centrum dystrybucyjne: towar, który tu stoi, nie jest ani wsadem, ani wyrobem —
+    /// jest w drodze i czeka na przeładunek (WP12).
+    ///
+    /// Dopisane **na końcu** enuma z rozmysłu (`AG-3`): kolejność wariantów jest
+    /// kontraktem zapisu gry, bo `role` siedzi w slocie magazynowym, a slot wchodzi
+    /// do hasha stanu. Wstawienie `Distribution` w środku przenumerowałoby każdy
+    /// magazyn w każdym zapisanym świecie.
+    ///
+    /// `Tank` z §5.5 nie powstaje i to jest właściwe: zbiornik jest **klasą
+    /// przechowywania** ([`crate::StorageClass::Tank`], istnieje), a nie rolą magazynu —
+    /// rola odpowiada na pytanie „po co ten magazyn stoi", a nie „co w nim trzymamy".
+    Distribution,
 }
 
 /// Skąd masa weszła do świata. Bez tej kategorii bilans masy nie da się domknąć,
@@ -133,8 +148,12 @@ pub struct Reservation {
 }
 
 /// Wynik wydania: masa, jakość ważona masą, koszt własny i marka najstarszej partii.
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct BatchSlice {
+    /// Kto to wytworzył — pierwsza partia wydania. Niesione, bo transakcja detaliczna
+    /// pokazuje producenta w karcie, a zwrot nieudanej sprzedaży musi oddać partię
+    /// z tym samym producentem, a nie z zaślepką.
+    pub producer: magnat_core::FirmId,
     pub good: GoodId,
     pub mass: Mass,
     pub quality: Q,
@@ -381,4 +400,25 @@ fn wstaw_fefo(lista: &mut Vec<BatchId>, arena: &Arena<Batch>, nowa: BatchId) {
     let k = klucz_fefo(arena, nowa);
     let poz = lista.partition_point(|b| klucz_fefo(arena, *b) < k);
     lista.insert(poz, nowa);
+}
+
+impl Store {
+    /// Wartość zapasu w slocie — suma kosztów nabycia partii.
+    ///
+    /// Lewa strona niezmiennika P5 po stronie detalu (M5c): zapas w bilansie ma mieć
+    /// pokrycie w tym, co za niego zapłacono. Do WP11 liczyło się ją z linii zapasu;
+    /// teraz linii nie ma, a partie są.
+    #[must_use]
+    pub fn slot_value(&self, slot: SlotId) -> Money {
+        let Some(sl) = self.slots.get(slot.0 as usize) else {
+            return Money::ZERO;
+        };
+        Money(
+            sl.batches
+                .iter()
+                .filter_map(|b| self.batches.get(*b))
+                .map(|b| b.cost_total.0)
+                .sum(),
+        )
+    }
 }

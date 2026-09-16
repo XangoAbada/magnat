@@ -318,6 +318,9 @@ fn przebieg(seed: u64, dni: u64, skok: Option<u64>, mnoznik: i64) -> i32 {
         if let Some(books) = w.get_resource_mut::<Books>() {
             market.reorder_and_receive(books, t);
         }
+        // Doba łańcucha dostaw: od WP11 zapas sklepu jest fizyczny i nie odnawia się
+        // sam — zapytanie ofertowe trzeba rozstrzygnąć, a towar przewieźć.
+        common::doba_lancucha(&market, &mut w, t);
         market.roll_cpi_day();
         market.restock_shelves();
         if d > 0 && d % 30 == 0 {

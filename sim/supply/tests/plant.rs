@@ -129,6 +129,7 @@ impl Mlyn {
             cat: &self.cat,
             tuning: &self.tuning,
             world_seed: 7,
+            deposits: &magnat_supply::NoDeposits,
         }
     }
 
@@ -137,6 +138,7 @@ impl Mlyn {
             cat: &self.cat,
             tuning: &self.tuning,
             world_seed: 7,
+            deposits: &magnat_supply::NoDeposits,
         };
         advance_production(
             &ctx,

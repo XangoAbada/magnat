@@ -225,7 +225,8 @@ fn bench_doba_sklepu(c: &mut Criterion) {
     books
         .endow(rest, Money(1_000_000_000_000), Tick(0))
         .unwrap();
-    let market = Market::new(city_spec(), 7, data, goods, needs, places, rest);
+    let market = Market::new(city_spec(), 7, data, goods, lancuch_testowy(),
+        needs, places, rest);
     for (i, s) in sites.iter().enumerate() {
         let firm = FirmId(Entity::new(i as u32, NonZeroU32::MIN));
         let acc = books.open_account(
@@ -346,7 +347,8 @@ fn bench_decyzja_zakupowa(c: &mut Criterion) {
     books
         .endow(rest, Money(1_000_000_000_000), Tick(0))
         .unwrap();
-    let market = Market::new(city_spec(), 7, data, goods, needs, places, rest);
+    let market = Market::new(city_spec(), 7, data, goods, lancuch_testowy(),
+        needs, places, rest);
     for (i, s) in sites.iter().enumerate() {
         let firm = FirmId(Entity::new(i as u32, NonZeroU32::MIN));
         let acc = books.open_account(
@@ -429,3 +431,38 @@ criterion_group!(
     bench_decyzja_zakupowa
 );
 criterion_main!(benches);
+
+/// Łańcuch dostaw dla przebiegów testowych: katalog z `data/`, stawka ryczałtowa
+/// i jedna brama towarowa o dużej przepustowości.
+///
+/// Brama jest tu po to, żeby sklep miał **skąd** wziąć towar: od WP11 zapas leży
+/// w magazynie M6, a magazyn zapełnia dostawa. Przepustowość jest szeroka z rozmysłu —
+/// test warstwy detalicznej nie ma się wywracać na kolejce na granicy; od badania
+/// kolejki jest `import_not_free` po stronie `sim/supply`.
+fn lancuch_testowy() -> magnat_supply::ChainHandle {
+    let cat = std::sync::Arc::new(
+        magnat_supply::load_default("contemporary").expect("katalog z data/"),
+    );
+    let tuning = std::sync::Arc::new(
+        magnat_supply::Tuning::load_default().expect("data/tuning/supply.ron"),
+    );
+    let oracle: std::sync::Arc<dyn magnat_supply::FreightOracle> =
+        std::sync::Arc::new(magnat_supply::FlatRateFreight {
+            km: 5,
+            tuning: tuning.transport,
+            blocked: Vec::new(),
+        });
+    magnat_supply::ChainHandle::with_import_gate(
+        cat,
+        tuning,
+        oracle,
+        magnat_supply::TariffTable::load_default().expect("data/trade/tariffs.ron"),
+        7,
+        magnat_core::SiteId(magnat_core::Entity::new(
+            u32::MAX - 2,
+            std::num::NonZeroU32::MIN,
+        )),
+        magnat_core::Mass(1_000_000_000_000),
+        60,
+    )
+}

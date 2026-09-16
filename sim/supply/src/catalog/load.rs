@@ -444,10 +444,20 @@ fn zloz_recepture(
         }
     }
 
+    // Nominalny wsad: jawny z danych, inaczej suma wejść. Receptura **bez wejść**
+    // (wydobycie: kopalnia, szyb, ujęcie wody) brałaby z tego zero i nie dałaby się
+    // uruchomić w ogóle — jej „wsadem" jest to, co wychodzi ze złoża, więc skalę
+    // wyznaczają wyjścia. Bez tego cała gałąź `Extraction` katalogu stała bezczynnie
+    // od M6b, a masy z niczego nie tworzyła tylko dlatego, że nie ruszała.
     let batch_mass = if spec.batch_mass_g > 0 {
         Mass(spec.batch_mass_g)
     } else {
-        Mass(inputs.iter().map(|i| i.mass.0).sum())
+        let we: i64 = inputs.iter().map(|i| i.mass.0).sum();
+        if we > 0 {
+            Mass(we)
+        } else {
+            Mass(outputs.iter().map(|o| o.mass.0).sum())
+        }
     };
 
     Ok(Recipe {

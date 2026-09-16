@@ -588,6 +588,7 @@ impl B2b {
         self.spot[good.0 as usize].record(q.price, masa);
         Some(Settlement {
             buyer: FirmId(do_zakladu.entity()),
+            deliver_to: do_zakladu,
             seller: SellerRef::Firm(q.seller),
             good,
             mass: masa,

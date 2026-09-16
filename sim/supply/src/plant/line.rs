@@ -49,7 +49,7 @@ impl HashState for Charge {
         h.write_u32(self.origin.site.map_or(u32::MAX, |s| s.entity().index()));
         h.write_u16(self.origin.recipe.map_or(u16::MAX, |r| r.0));
         h.write_u8(self.origin.depth);
-        h.write_u16(self.origin.deposit.map_or(u16::MAX, |d| d.0));
+        h.write_u32(self.origin.deposit.map_or(u32::MAX, |d| d.0));
     }
 }
 

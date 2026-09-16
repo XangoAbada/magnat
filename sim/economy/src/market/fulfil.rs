@@ -34,18 +34,25 @@ impl Market {
         let Some(i) = m.by_site.get(&intent.site).copied() else {
             return;
         };
-        if let Some(sl) = m.shops[i as usize].shelf.line_mut(intent.good) {
-            sl.qty = Qty(sl.qty.get().saturating_add(intent.qty.get()));
-            // Koszt nabycia wraca razem ze sztukami. Gdyby wracały same sztuki,
-            // `InventoryGoods` rozjeżdżałby się z zapasem przy każdym nieudanym
-            // przelewie — a niezmiennik P5 nie ma wyjątku na „prawie się udało"
-            // tak samo, jak nie ma go niezmiennik masy.
-            sl.cost_total = sl
-                .cost_total
-                .checked_add(intent.cogs)
-                .expect("półka: przepełnienie kosztu przy zwrocie");
-            let (offer, qty) = (sl.offer, sl.qty);
-            if let Some(o) = m.offers.get_mut(offer) {
+        let Some(kawalek) = intent.taken else {
+            return;
+        };
+        // Partia wraca **w całości i taka sama**: z jakością, marką, datą i kosztem.
+        // Gdyby wracały same sztuki, `InventoryGoods` rozjeżdżałby się z zapasem (P5),
+        // a bilans masy — z bilansem magazynu; ani jeden, ani drugi nie ma wyjątku
+        // na „prawie się udało".
+        let (slot, good) = (m.shops[i as usize].shelf_slot, intent.good);
+        let chain = m.chain.clone();
+        let wrocilo = {
+            let mut ch = chain.lock();
+            ch.store.return_taken(&chain.cat, slot, &kawalek)
+        };
+        if !wrocilo {
+            return;
+        }
+        let qty = m.shelf_units(i as usize, good);
+        if let Some(sl) = m.shops[i as usize].shelf.line(good).copied() {
+            if let Some(o) = m.offers.get_mut(sl.offer) {
                 o.available = qty;
             }
         }
@@ -175,50 +182,22 @@ impl PlaceProvider for Market {
         let mut buf = std::mem::take(&mut m.offer_buf);
 
         // Promień rozszerzany **raz**, jeśli kandydatów jest mniej niż `k_min` (§5.4).
-        for proba in 0..2u32 {
-            cand.clear();
-            let r = radius * (proba + 1);
-            for c in cats {
-                query_offers(&m.index, CategoryId::Stock(*c), origin, r, &mut buf);
-                for id in &buf {
-                    let Some(o) = m.offers.get(*id) else { continue };
-                    if o.available.get() <= 0 || !known.knows(PlaceRef::Site(o.site)) {
-                        continue;
-                    }
-                    let Some(i) = m.by_site.get(&o.site).copied() else {
-                        continue;
-                    };
-                    let Some(spec) = m.supplier.goods().spec(o.good) else {
-                        continue;
-                    };
-                    let want = wanted_qty(spec.daily_per_person, snap.size, dni);
-                    if o.available.get() < want.get() {
-                        continue;
-                    }
-                    let travel_min =
-                        walk_minutes(origin_c, shop_coord(m.shops[i as usize].pos), 100);
-                    if travel_min > max_travel_min {
-                        continue;
-                    }
-                    let (rating, visited) = rating_of(known.entry(PlaceRef::Site(o.site)));
-                    cand.push(Candidate {
-                        offer: *id,
-                        site: o.site,
-                        good: o.good,
-                        qty: want,
-                        price_total: line_total(o.unit_price, want),
-                        travel_min,
-                        travel_money: Money::ZERO,
-                        quality: o.quality,
-                        rating,
-                        visited,
-                    });
-                }
-            }
-            if cand.len() >= k_min {
-                break;
-            }
-        }
+        zbierz_kandydatow(
+            &m,
+            KandydaciCtx {
+                cats,
+                origin,
+                origin_c,
+                radius,
+                k_min,
+                dni,
+                max_travel_min,
+                rozmiar: snap.size,
+            },
+            known,
+            &mut cand,
+            &mut buf,
+        );
         buf.clear();
         m.offer_buf = buf;
 
@@ -256,7 +235,7 @@ impl PlaceProvider for Market {
         let mut utils = std::mem::take(&mut m.util_buf);
         utils.clear();
         for c in cand.iter() {
-            let cat = m.supplier.goods().spec(c.good).map_or(cats[0], |s| s.cat);
+            let cat = m.goods.spec(c.good).map_or(cats[0], |s| s.cat);
             let st = m.buyer_state(status, openness, vot, cat, who.identity.household);
             let noise = offer_noise(
                 m.seed,
@@ -278,11 +257,7 @@ impl PlaceProvider for Market {
 
         // Zapamiętanie decyzji: `fulfil` nie zna kupującego, a próg i wagi są jego.
         let wybrany = cand[wybor];
-        let cat = m
-            .supplier
-            .goods()
-            .spec(wybrany.good)
-            .map_or(cats[0], |s| s.cat);
+        let cat = m.goods.spec(wybrany.good).map_or(cats[0], |s| s.cat);
 
         let plan = PlannedPurchase {
             site: wybrany.site,
@@ -487,7 +462,7 @@ impl Market {
         let mut kolejnosc = [0u32; MAX_LINES];
         let mut n_kolejnosc = 0usize;
         for c in cats {
-            for gi in m.supplier.goods().in_cat(*c) {
+            for gi in m.goods.in_cat(*c) {
                 if n_kolejnosc == MAX_LINES {
                     break;
                 }
@@ -500,18 +475,21 @@ impl Market {
         let mut brakowalo = 0i16;
 
         for gi in &kolejnosc[..n_kolejnosc] {
-            let spec = *m.supplier.goods().at(*gi);
+            let spec = *m.goods.at(*gi);
             let Some(line) = m.shops[i as usize].shelf.line(spec.good).copied() else {
                 continue;
             };
-            if line.qty.get() <= 0 {
+            // Ilość na półce czyta się z **magazynu** (WP11), nie z linii: linia jest
+            // ekspozycją, a towar leży w slocie o roli `Shelf`.
+            let na_polce = m.shelf_units(i as usize, spec.good);
+            if na_polce.get() <= 0 {
                 continue;
             }
             let Some(offer) = m.offers.get(line.offer).copied() else {
                 continue;
             };
             let want = wanted_qty(spec.daily_per_person, osob, dni);
-            let take = Qty(want.get().min(line.qty.get()));
+            let take = Qty(want.get().min(na_polce.get()));
             let total = line_total(offer.unit_price, take);
             if total > budzet {
                 powod = RejectCause::BudgetExhausted;
@@ -556,10 +534,15 @@ impl Market {
 
             // Wszystko przeszło: półka schodzi **teraz**, pieniądz w rozliczeniu.
             let dominujacy = dominant_term(&cand, &w, &st);
-            let koszt_wlasny = m.shops[i as usize]
-                .shelf
-                .line_mut(spec.good)
-                .map_or(Money::ZERO, |sl| sl.take(take));
+            // Sprzedaż zdejmuje partię z półki w porządku FEFO i **stąd** bierze się
+            // koszt własny — z partii, a nie ze średniej ważonej całej linii. To jest
+            // krok 5 migracji z §6.3 i to on sprawia, że marża wreszcie liczy się
+            // od czegoś, co naprawdę zapłacono.
+            let Some(kawalek) = m.shelf_pick(i as usize, spec.good, take) else {
+                powod = RejectCause::OutOfStock;
+                continue;
+            };
+            let koszt_wlasny = kawalek.cost_total;
             if let Some(o) = m.offers.get_mut(line.offer) {
                 o.available = Qty((o.available.get() - take.get()).max(0));
             }
@@ -588,6 +571,7 @@ impl Market {
                 days: dni_kupione,
                 agreed_price: total,
                 cogs: koszt_wlasny,
+                taken: Some(kawalek),
                 arrived: tick,
                 reason,
                 district: plan.map_or(0, |p| p.district),
@@ -643,4 +627,79 @@ impl Market {
 
 fn who_key(req: &FulfilRequest) -> u32 {
     req.citizen.entity().index()
+}
+
+
+/// Co zapytanie o kandydatów wie o kupującym i o jego zasięgu.
+///
+/// Struktura zamiast ośmiu argumentów: `candidates` przekroczyło twardy próg długości
+/// funkcji z `CLAUDE.md` po dołożeniu odczytu półki z magazynu (WP11), a zbieranie
+/// kandydatów jest w nim jedynym kawałkiem z własnym, domkniętym zadaniem — reszta
+/// to ranking i wybór. Podział jest mechaniczny: przeniesienie symboli bez zmiany
+/// zachowania.
+struct KandydaciCtx<'a> {
+    cats: &'a [StockCat],
+    origin: Vec2,
+    origin_c: WorldCoord,
+    radius: u32,
+    k_min: usize,
+    dni: u8,
+    max_travel_min: u16,
+    rozmiar: u8,
+}
+
+/// Zbiera oferty w zasięgu, odsiewa te, których kupujący nie zna albo które nie mają
+/// dość towaru, i zamienia je w kandydatów. Promień rozszerza się **raz**, jeśli
+/// kandydatów jest mniej niż `k_min` (§5.4).
+fn zbierz_kandydatow(
+    m: &MarketInner,
+    ctx: KandydaciCtx<'_>,
+    known: &KnowledgeView<'_>,
+    cand: &mut Vec<Candidate>,
+    buf: &mut Vec<OfferId>,
+) {
+    for proba in 0..2u32 {
+        cand.clear();
+        let r = ctx.radius * (proba + 1);
+        for c in ctx.cats {
+            query_offers(&m.index, CategoryId::Stock(*c), ctx.origin, r, buf);
+            for id in buf.iter() {
+                let Some(o) = m.offers.get(*id) else { continue };
+                if o.available.get() <= 0 || !known.knows(PlaceRef::Site(o.site)) {
+                    continue;
+                }
+                let Some(i) = m.by_site.get(&o.site).copied() else {
+                    continue;
+                };
+                let Some(spec) = m.goods.spec(o.good) else {
+                    continue;
+                };
+                let want = wanted_qty(spec.daily_per_person, ctx.rozmiar, ctx.dni);
+                if o.available.get() < want.get() {
+                    continue;
+                }
+                let travel_min =
+                    walk_minutes(ctx.origin_c, shop_coord(m.shops[i as usize].pos), 100);
+                if travel_min > ctx.max_travel_min {
+                    continue;
+                }
+                let (rating, visited) = rating_of(known.entry(PlaceRef::Site(o.site)));
+                cand.push(Candidate {
+                    offer: *id,
+                    site: o.site,
+                    good: o.good,
+                    qty: want,
+                    price_total: line_total(o.unit_price, want),
+                    travel_min,
+                    travel_money: Money::ZERO,
+                    quality: o.quality,
+                    rating,
+                    visited,
+                });
+            }
+        }
+        if cand.len() >= ctx.k_min {
+            break;
+        }
+    }
 }

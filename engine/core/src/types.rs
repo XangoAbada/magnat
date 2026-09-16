@@ -104,6 +104,19 @@ scalar_newtype! {
 }
 
 scalar_newtype! {
+    /// Złoże surowca pierwotnego — indeks w tablicy złóż świata (M1).
+    ///
+    /// Mieszka w `core`, bo ma **dwóch** konsumentów znanych z nazwy i numeru fazy
+    /// (`K-8`): M1 generuje złoża i prowadzi ich bilans masy (`Deposit::extract`),
+    /// a M6 przenosi identyfikator przez cały łańcuch w `BatchOrigin::deposit`, żeby
+    /// panel „od pola do półki" mógł dojść do konkretnej żyły. Do M6d istniały **dwa**
+    /// typy o tej nazwie — `sim/world::DepositId(u32)` i `sim/supply::DepositId(u16)` —
+    /// bez konwersji między nimi, czyli ślad partii i tak nie prowadził do złoża,
+    /// tylko do liczby, która przypadkiem wyglądała podobnie.
+    DepositId(u32)
+}
+
+scalar_newtype! {
     /// Klasa taryfowa towaru w obrocie zagranicznym — indeks do `data/trade/tariffs.ron`.
     ///
     /// Mieszka w `core`, bo ma **dwóch** konsumentów znanych z nazwy i numeru fazy

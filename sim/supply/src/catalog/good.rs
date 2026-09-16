@@ -282,6 +282,34 @@ impl Good {
         }
         Mass((i128::from(qty.0) * i128::from(self.unit_mass.0) / 1000) as i64)
     }
+
+    /// Masa odpowiadająca ilości **handlowej** — tej, którą liczy detal (M5).
+    ///
+    /// To jest przelicznik, którego szukał `AD-4` pod nazwą `Good::pack`, i okazuje
+    /// się, że nie potrzebuje ani jednego nowego pola: `GoodUnit` już mówi, czym jest
+    /// jednostka natywna towaru, a `unit_mass` — ile waży sztuka. Dla postaci sypkich
+    /// i ciekłych ilość **jest** masą w gramach (`Qty(800)` = 800 g chleba), dla
+    /// sztukowych jest w milisztukach i przelicza się przez masę sztuki. Pole „pack"
+    /// dokładałoby trzecią liczbę do dwóch, które już się zgadzają (`AL-4`).
+    #[must_use]
+    pub fn mass_of_units(&self, qty: magnat_core::Qty) -> Mass {
+        if self.form.is_bulk() {
+            Mass(qty.0)
+        } else {
+            self.mass_of_qty(qty)
+        }
+    }
+
+    /// Droga powrotna: ile jednostek handlowych niesie ta masa. Zaokrąglenie **w dół**,
+    /// bo pół bochenka nie stoi na półce.
+    #[must_use]
+    pub fn units_of_mass(&self, mass: Mass) -> magnat_core::Qty {
+        if self.form.is_bulk() {
+            return magnat_core::Qty(mass.0.max(0));
+        }
+        let um = self.unit_mass.0.max(1);
+        magnat_core::Qty((i128::from(mass.0.max(0)) * 1000 / i128::from(um)) as i64)
+    }
 }
 
 fn sufit_dzielenia(a: i128, b: i128) -> i64 {

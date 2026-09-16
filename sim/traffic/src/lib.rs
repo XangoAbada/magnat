@@ -21,6 +21,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod freight;
 pub mod mezo;
 pub mod micro;
 pub mod mode;

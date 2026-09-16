@@ -86,6 +86,11 @@ pub struct PlantSite {
     /// mapie `(SiteId, GoodId)`, bo `advance_production` pyta o obniżenie produkcji
     /// w każdej minucie i osobna mapa byłaby drugim wyszukiwaniem po tym samym kluczu.
     pub shortage: Vec<crate::shortage::ShortageState>,
+    /// Złoże, na którym zakład stoi (M6d §5.10). `None` dla wszystkiego, co przetwarza
+    /// — czyli dla większości miasta. Receptura `Extraction` w zakładzie bez tego pola
+    /// nie ma skąd wziąć masy i stoi na `Starved`; to jest właściwa odpowiedź, a nie
+    /// błąd danych, bo wypełniacz strefy przemysłowej naprawdę nie ma czego kopać.
+    pub mining: Option<crate::mining::MiningSite>,
     reasons: Vec<(SimMinute, DecisionReason)>,
 }
 
@@ -105,6 +110,7 @@ impl PlantSite {
             emissions: EmissionTotals::default(),
             losses: [0; magnat_core::LOSS_KIND_COUNT],
             shortage: Vec::new(),
+            mining: None,
             reasons: Vec::new(),
         }
     }
@@ -234,6 +240,14 @@ impl HashState for PlantSite {
         h.write_u32(self.shortage.len() as u32);
         for s in &self.shortage {
             s.hash_state(h);
+        }
+        match self.mining {
+            Some(m) => {
+                h.write_u32(m.deposit.0);
+                h.write_u8(m.concentration_pct);
+                h.write_u16(m.depth_m);
+            }
+            None => h.write_u32(u32::MAX),
         }
         h.write_u32(self.reasons.len() as u32);
         for (at, r) in &self.reasons {

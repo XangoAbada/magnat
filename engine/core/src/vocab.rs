@@ -389,6 +389,21 @@ vocab_enum! {
 }
 
 vocab_enum! {
+    /// Nadwozie pojazdu dostawczego.
+    ///
+    /// Mieszka w `core` (`K-8`), bo ma **dwóch** konsumentów znanych z nazwy i numeru
+    /// fazy: M4 deklaruje je przy klasie pojazdu w `data/vehicles/classes.ron`, a M6
+    /// stawia jako **wymaganie** zlecenia transportowego — chłodnia w drodze nie jest
+    /// preferencją, tylko warunkiem, bez którego towar psuje się ośmiokrotnie szybciej.
+    /// Duplikat enuma po jednej ze stron rozjechałby się przy pierwszej zmianie,
+    /// a kolejność wariantów jest kontraktem zapisu gry: siedzi w wymaganiach zlecenia,
+    /// a zlecenia przeżywają zapis.
+    BodyType {
+        Box, Reefer, Tanker, Tipper, Container, Flatbed,
+    }
+}
+
+vocab_enum! {
     /// Rodzaj mediów. M5 używa go w `TxKind::Utility`, zanim M8 zbuduje sieci przesyłowe —
     /// i to jest dokładnie powód, dla którego enum stoi tutaj, a nie w `sim/city`.
     UtilityService {

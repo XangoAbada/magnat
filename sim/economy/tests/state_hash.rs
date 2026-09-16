@@ -179,6 +179,7 @@ fn budzet_kredyt_i_koszyk_cpi_wchodza_do_hasha() {
         days: 1,
         agreed_price: Money(300),
         cogs: Money(200),
+        taken: None,
         arrived: Tick(3),
         reason: DecisionReason::Unspecified,
         district: 0,

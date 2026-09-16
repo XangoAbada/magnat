@@ -48,42 +48,47 @@ pub fn spec() -> GridSpec {
     )
 }
 
-/// Katalog detaliczny: `GoodId` po pozycji w `retail.ron`, cena hurtowa stała.
+/// Katalog detaliczny: `GoodId` **z prawdziwego katalogu M6**, cena hurtowa stała.
+///
+/// Do WP11 identyfikatory nadawała tu pozycja w `retail.ron` — było to wygodne i nic
+/// nie kosztowało, bo zapas był liczbą w linii sklepu. Od WP11 zapas jest partią
+/// w magazynie, a magazyn czyta `data/goods/`: trwałość, gęstość, klasę przechowywania
+/// i postać. Własne identyfikatory znaczyłyby, że chleb w teście ma właściwości
+/// przypadkowego innego towaru — i pierwszym objawem byłby brak daty przydatności,
+/// czyli test psucia, który niczego nie psuje.
 #[must_use]
 pub fn goods(data: &EconomyData) -> GoodTable {
-    let keys: Vec<String> = data.retail.goods.iter().map(|g| g.key.clone()).collect();
+    let cat = magnat_supply::load_default("contemporary").expect("katalog z data/");
     GoodTable::build(&data.retail, |key| {
-        let i = keys.iter().position(|k| k == key)?;
-        Some((
-            GoodId(i as u16),
-            Money(WHOLESALE_BASE),
-            Qty(DAILY_PER_PERSON),
-        ))
+        let id = cat.good_id(key)?;
+        Some((id, Money(WHOLESALE_BASE), Qty(DAILY_PER_PERSON)))
     })
 }
 
-/// Towar po kluczu tekstowym z `retail.ron`.
+/// Towar po kluczu tekstowym z `retail.ron`. Identyfikator z **katalogu M6**,
+/// tak samo jak w [`goods`] — inaczej test mówiłby o dwóch różnych towarach naraz.
 #[must_use]
 pub fn good_by_key(data: &EconomyData, key: &str) -> GoodId {
-    let i = data
-        .retail
-        .goods
-        .iter()
-        .position(|g| g.key == key)
-        .expect("towar spoza data/economy/retail.ron");
-    GoodId(i as u16)
+    assert!(
+        data.retail.goods.iter().any(|g| g.key == key),
+        "towar spoza data/economy/retail.ron"
+    );
+    magnat_supply::load_default("contemporary")
+        .expect("katalog z data/")
+        .good_id(key)
+        .expect("towar spoza data/goods/")
 }
 
 /// Pierwszy towar kategorii — ten, po który decyzja zakupowa sięga najpierw.
 #[must_use]
 pub fn first_good(data: &EconomyData, cat: StockCat) -> GoodId {
-    let i = data
+    let g = data
         .retail
         .goods
         .iter()
-        .position(|g| g.cat == cat)
+        .find(|g| g.cat == cat)
         .expect("kategoria bez towaru w data/economy/retail.ron");
-    GoodId(i as u16)
+    good_by_key(data, &g.key)
 }
 
 pub struct Bench {
@@ -129,7 +134,8 @@ pub fn bench(seed: u64, pos: &[Vec2]) -> Bench {
     );
     books.endow(rest, Money(1_000_000_000), Tick(0)).unwrap();
 
-    let market = Market::new(spec(), seed, data, katalog, needs.clone(), places, rest);
+    let market = Market::new(spec(), seed, data, katalog, lancuch_testowy(),
+        needs.clone(), places, rest);
     for (i, p) in pos.iter().enumerate() {
         let firm = FirmId(ent(200 + i as u32));
         let acc = books.open_account(
@@ -338,4 +344,86 @@ pub fn knows(places: &[PlaceRef]) -> Vec<Knowledge> {
 #[must_use]
 pub fn view(k: &[Knowledge]) -> KnowledgeView<'_> {
     KnowledgeView::new(k)
+}
+
+/// Łańcuch dostaw dla przebiegów testowych: katalog z `data/`, stawka ryczałtowa
+/// i jedna brama towarowa o dużej przepustowości.
+///
+/// Brama jest tu po to, żeby sklep miał **skąd** wziąć towar: od WP11 zapas leży
+/// w magazynie M6, a magazyn zapełnia dostawa. Przepustowość jest szeroka z rozmysłu —
+/// test warstwy detalicznej nie ma się wywracać na kolejce na granicy; od badania
+/// kolejki jest `import_not_free` po stronie `sim/supply`.
+pub fn lancuch_testowy() -> magnat_supply::ChainHandle {
+    let cat = std::sync::Arc::new(
+        magnat_supply::load_default("contemporary").expect("katalog z data/"),
+    );
+    let tuning = std::sync::Arc::new(
+        magnat_supply::Tuning::load_default().expect("data/tuning/supply.ron"),
+    );
+    let oracle: std::sync::Arc<dyn magnat_supply::FreightOracle> =
+        std::sync::Arc::new(magnat_supply::FlatRateFreight {
+            km: 5,
+            tuning: tuning.transport,
+            blocked: Vec::new(),
+        });
+    magnat_supply::ChainHandle::with_import_gate(
+        cat,
+        tuning,
+        oracle,
+        magnat_supply::TariffTable::load_default().expect("data/trade/tariffs.ron"),
+        7,
+        magnat_core::SiteId(magnat_core::Entity::new(
+            u32::MAX - 2,
+            std::num::NonZeroU32::MIN,
+        )),
+        magnat_core::Mass(1_000_000_000_000),
+        60,
+    )
+}
+
+/// Doba łańcucha dostaw w skrócie: produkcja, przewozy, rynek B2B i psucie.
+///
+/// Testy warstwy detalicznej prowadzą kadencję **same** (nie idą przez `MarketSystem`),
+/// a od WP11 zapas sklepu nie odnawia się z powietrza: zapytanie ofertowe trzeba
+/// rozstrzygnąć, a towar przewieźć. Skrót jest świadomy — dwa przebiegi godziny zamiast
+/// dwudziestu czterech, bo okno ofertowe trwa godzinę i tyle wystarczy, żeby dostawa
+/// ruszyła. Pełna kadencja minutowa jest w `MarketSystem` i to ona liczy się w hashu.
+///
+/// Przegląd zapasów sklepu wypada o **4:00** (`InventoryRule::Periodic`), więc pierwszy
+/// przebieg musi trafić w tę minutę — inaczej nikt nie zamawia i test mierzy pustą półkę.
+pub fn doba_lancucha(market: &Market, w: &mut World, t: Tick) {
+    let chain = market.chain();
+    let dzien = t.get() / 1_440;
+    let (zepsute, rozliczenia) = {
+        let mut ch = chain.lock();
+        let mut zepsute = Vec::new();
+        let mut rozliczenia = Vec::new();
+        for minuta in [dzien * 1_440 + 240, dzien * 1_440 + 420] {
+            let teraz = magnat_core::SimMinute(minuta);
+            zepsute.append(&mut ch.step_minute(
+                &chain.cat,
+                &chain.tuning,
+                chain.oracle.as_ref(),
+                chain.deposits.as_ref(),
+                7,
+                teraz,
+            ));
+            rozliczenia.append(&mut ch.step_hour(
+                &chain.cat,
+                &chain.tuning,
+                chain.oracle.as_ref(),
+                teraz,
+            ));
+        }
+        ch.step_day(&chain.cat, &chain.tuning);
+        (zepsute, rozliczenia)
+    };
+    if !zepsute.is_empty() {
+        market.absorb_spoilage(&zepsute, t);
+    }
+    if !rozliczenia.is_empty() {
+        if let Some(books) = w.get_resource_mut::<Books>() {
+            market.absorb_settlements(&rozliczenia, books, t);
+        }
+    }
 }

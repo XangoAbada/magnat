@@ -539,6 +539,7 @@ impl B2b {
                         c.record_fulfilled(masa, 0);
                         wynik.push(Settlement {
                             buyer: c.buyer,
+                            deliver_to: c.deliver_to,
                             seller: SellerRef::Firm(c.seller),
                             good: d.good,
                             mass: masa,

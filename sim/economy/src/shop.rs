@@ -10,81 +10,12 @@ use std::collections::BTreeMap;
 
 use magnat_agents::{SocialClass, SOCIAL_CLASS_COUNT};
 use magnat_core::{
-    FirmId, GoodId, HashState, Money, Qty, RejectCause, SimMinute, SiteId, StateHasher, Tick,
+    FirmId, GoodId, HashState, Money, Qty, RejectCause, SiteId, StateHasher, Tick,
     UtilityKind, REJECT_CAUSE_COUNT, UTILITY_KIND_COUNT,
 };
 
 use crate::ledger::Ledger;
 use crate::pricing::{CompetitorSnapshot, FirmPricing, PriceController};
-
-/// Linia zapasu. `expires` to **jedna data na linię** — M5 nie ma partii, więc
-/// dostawa dokłada się do istniejącej linii i przesuwa datę na wcześniejszą z dwóch
-/// (ostrożniej, nie „średnio"). M6 zastępuje to `BatchId` i wyceną FIFO.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
-pub struct StockLine {
-    /// NIGDY < 0 — niezmiennik P3, testowany.
-    pub qty: Qty,
-    /// Łączny koszt nabycia tej linii → wycena średnią ważoną.
-    pub cost_total: Money,
-    pub expires: Option<SimMinute>,
-}
-
-impl StockLine {
-    /// Dokłada dostawę: ilości się sumują, koszty się sumują, data ważności
-    /// bierze **wcześniejszą** z dwóch.
-    pub fn receive(&mut self, qty: Qty, cost: Money, expires: Option<SimMinute>) {
-        // **Linia pusta nie ma czego przeterminować.** Data z poprzedniej dostawy
-        // odeszła razem z ostatnią sztuką, a reguła „wcześniejsza z dwóch" bez
-        // tego zerowania przepisywała ją na towar, którego wtedy jeszcze nie było:
-        // świeża dostawa dziedziczyła termin sprzed tygodnia i szła na odpis
-        // w dniu przyjęcia. Zmierzone przy zamknięciu M5e — to jest większa połowa
-        // odpisów, które balansator zgłosił jako pierwszy objaw złej kalibracji.
-        if self.qty.get() <= 0 {
-            self.expires = None;
-        }
-        self.qty = Qty(self.qty.get().saturating_add(qty.get()));
-        self.cost_total = self
-            .cost_total
-            .checked_add(cost)
-            .expect("StockLine: przepełnienie kosztu linii zapasu");
-        self.expires = match (self.expires, expires) {
-            (Some(a), Some(b)) => Some(SimMinute(a.get().min(b.get()))),
-            (a, b) => a.or(b),
-        };
-    }
-
-    /// Zdejmuje `take` sztuk i oddaje przypadający na nie koszt.
-    pub fn take(&mut self, take: Qty) -> Money {
-        take_units(&mut self.qty, &mut self.cost_total, take)
-    }
-}
-
-/// Zdejmuje ilość z pary (ilość, koszt) i oddaje koszt przypadający na zdjęte.
-///
-/// Gałąź **zmiatania reszty** (ryzyko R5 z dokumentu fazy): kiedy ilość schodzi
-/// do zera, wychodzi **cały** pozostały koszt, a nie wynik proporcji. Bez tego
-/// po tysiącach transakcji zostaje osad groszy, którego nikt nie zobaczy, dopóki
-/// bilans nie przestanie się zamykać.
-///
-/// Jedna funkcja dla zaplecza i dla półki, bo to jest jedna reguła domenowa
-/// (DRY dotyczy wiedzy): wycena średnią ważoną schodzi tak samo po obu stronach.
-///
-/// **Ciało przeniosło się w M5c do [`crate::kernel::take_cogs`]** (D20 — makro M10
-/// ma wołać ten sam kod co mezo). Tutaj została wyłącznie wygodna nakładka na parę
-/// pól w miejscu, bo tak wygląda linia zapasu; zachowanie jest identyczne co do
-/// grosza i pilnuje tego złoty plik ciągu hashy.
-pub fn take_units(qty: &mut Qty, cost_total: &mut Money, take: Qty) -> Money {
-    let (cost, reszta) = crate::kernel::take_cogs(
-        crate::kernel::StockValue {
-            qty: *qty,
-            cost_total: *cost_total,
-        },
-        take,
-    );
-    *qty = reszta.qty;
-    *cost_total = reszta.cost_total;
-    cost
-}
 
 /// Polityka zapasu: poniżej `point` zamawiamy do `target`.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -109,28 +40,23 @@ pub enum AssortmentPolicy {
     Auto { max_lines: u16, min_margin_bp: i32 },
 }
 
-/// Linia na półce. `offer` jest uchwytem do areny ofert — cena czyta się z areny
-/// na żywo, więc przecena nie rusza ani półki, ani indeksu.
+/// Linia na półce — **ekspozycja, nie zapas** (WP11).
+///
+/// Do M6c linia niosła ilość, koszt nabycia i datę ważności, bo nie było gdzie indziej
+/// ich trzymać. Od WP11 towar leży w slocie magazynowym o roli
+/// [`WarehouseRole::Shelf`](magnat_supply::WarehouseRole::Shelf) i to on odpowiada na
+/// pytanie „ile i za ile" — razem z jakością, marką i pochodzeniem, których linia
+/// nigdy nie znała. Zostaje to, czego magazyn nie wie: **ile miejsca zajmuje na półce**
+/// i **pod jaką ofertą stoi**.
+///
+/// `offer` jest uchwytem do areny ofert — cena czyta się z areny na żywo, więc przecena
+/// nie rusza ani półki, ani indeksu.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct ShelfLine {
     pub good: GoodId,
-    pub qty: Qty,
-    /// Koszt nabycia towaru leżącego na półce — druga połowa wyceny zapasu.
-    pub cost_total: Money,
-    /// Ile miejsc na półce; limit ekspozycji, czyli sufit `qty`.
+    /// Ile miejsc na półce; limit ekspozycji, czyli sufit wyłożenia.
     pub facings: u16,
     pub offer: crate::offer::OfferId,
-    /// Data ważności towaru **wyłożonego** — przychodzi z zaplecza przy uzupełnianiu
-    /// półki (M5c). Bez niej odpis przeterminowanego (§5.8) i przecena psującego się
-    /// (§5.6) widziałyby wyłącznie zaplecze, a psuje się to, co leży na wierzchu.
-    pub expires: Option<SimMinute>,
-}
-
-impl ShelfLine {
-    /// Zdejmuje towar z półki razem z przypadającym na niego kosztem nabycia.
-    pub fn take(&mut self, take: Qty) -> Money {
-        take_units(&mut self.qty, &mut self.cost_total, take)
-    }
 }
 
 /// Półka sklepu. `lines` jest **posortowane po `GoodId`** — to ona ustala kolejność
@@ -173,9 +99,13 @@ impl Shelf {
 }
 
 /// Zaplecze sklepu (§7.3: pojemność wynika z budynku).
+///
+/// Od WP11 **towaru tu nie ma** — jest w slocie
+/// [`WarehouseRole::Backroom`](magnat_supply::WarehouseRole::Backroom) magazynu M6.
+/// Zostaje pojemność (bo to parametr budynku) i polityka zamawiania (bo to decyzja
+/// sklepu, którą M6 wyłącznie wykonuje).
 #[derive(Clone, Default)]
 pub struct ShopInventory {
-    pub backroom: BTreeMap<GoodId, StockLine>,
     pub capacity_m3: i64,
     pub reorder: BTreeMap<GoodId, ReorderPolicy>,
 }
@@ -368,6 +298,11 @@ pub struct Shop {
     pub hours: magnat_agents::OpenHours,
     pub inventory: ShopInventory,
     pub shelf: Shelf,
+    /// Slot zaplecza w magazynie M6 — tu ląduje dostawa i stąd idzie wyłożenie.
+    pub backroom: magnat_supply::SlotId,
+    /// Slot półki. To z niego zdejmuje sprzedaż i to on wchodzi do
+    /// `prop_no_expired_on_shelf`.
+    pub shelf_slot: magnat_supply::SlotId,
     pub assortment: AssortmentPolicy,
     pub tracking: LostSaleTracking,
     pub lost: ShopLostSales,
@@ -403,36 +338,20 @@ pub struct Shop {
     pub opened: magnat_core::Tick,
 }
 
-impl HashState for StockLine {
-    fn hash_state(&self, h: &mut StateHasher) {
-        self.qty.hash_state(h);
-        self.cost_total.hash_state(h);
-        match self.expires {
-            Some(m) => {
-                h.write_u8(1);
-                m.hash_state(h);
-            }
-            None => h.write_u8(0),
-        }
-    }
-}
-
 impl HashState for Shop {
     fn hash_state(&self, h: &mut StateHasher) {
         self.site.entity().hash_state(h);
         self.firm.entity().hash_state(h);
-        // Zaplecze: `BTreeMap` iteruje po kluczu, więc kolejność jest stanem,
-        // a nie przypadkiem (00 §3.2).
-        h.write_u32(self.inventory.backroom.len() as u32);
-        for (g, l) in &self.inventory.backroom {
-            g.hash_state(h);
-            l.hash_state(h);
-        }
+        // Zapas **nie wchodzi tutaj**: od WP11 leży w magazynie M6 i haszuje go zasób
+        // `Chain` (kolejność indeksów slotów i partii, `K-16`). Haszowanie go drugi raz
+        // po tej stronie liczyłoby ten sam gram dwa razy i przy pierwszej rozbieżności
+        // nie dałoby się powiedzieć, która z dwóch kopii kłamie. Zostaje ekspozycja:
+        // który towar stoi na półce, w ilu miejscach i pod jaką ofertą.
+        h.write_u32(self.backroom.0);
+        h.write_u32(self.shelf_slot.0);
         h.write_u32(self.shelf.lines.len() as u32);
         for l in &self.shelf.lines {
             l.good.hash_state(h);
-            l.qty.hash_state(h);
-            l.cost_total.hash_state(h);
             h.write_u16(l.facings);
         }
         h.write_i64(self.sold_qty);
@@ -457,35 +376,12 @@ impl HashState for Shop {
 mod tests {
     use super::*;
 
-    #[test]
-    fn zdjecie_calej_linii_zmiata_reszte_groszy() {
-        // R5: 1000 sztuk za 333 gr. Zdejmowanie po jednej sztuce zaokrągla w dół
-        // 999 razy; ostatnie zdjęcie musi wynieść z linii cały osad, inaczej
-        // `cost_total` zostaje dodatni przy zerowej ilości i bilans przestaje się
-        // zamykać (P5).
-        let mut l = StockLine {
-            qty: Qty(1_000),
-            cost_total: Money(333),
-            expires: None,
-        };
-        let mut suma = 0i64;
-        for _ in 0..1_000 {
-            suma += l.take(Qty(1)).get();
-        }
-        assert_eq!(l.qty, Qty::ZERO);
-        assert_eq!(l.cost_total, Money::ZERO);
-        assert_eq!(suma, 333, "koszt nie może się zgubić ani rozmnożyć");
-    }
-
-    #[test]
-    fn dostawa_bierze_wczesniejsza_date_waznosci() {
-        let mut l = StockLine::default();
-        l.receive(Qty(10), Money(100), Some(SimMinute(5_000)));
-        l.receive(Qty(10), Money(120), Some(SimMinute(3_000)));
-        assert_eq!(l.qty, Qty(20));
-        assert_eq!(l.cost_total, Money(220));
-        assert_eq!(l.expires, Some(SimMinute(3_000)));
-    }
+    // Testy linii zapasu (`zdjecie_calej_linii_zmiata_reszte_groszy`,
+    // `dostawa_bierze_wczesniejsza_date_waznosci`) odeszły razem z `StockLine`
+    // w WP11: zapas sklepu jest od tej chwili partią w magazynie M6, a obie
+    // własności, których pilnowały, mają tam własne testy — zmiatanie reszty
+    // groszy w `tysiac_podzialow_nie_gubi_grama_ani_grosza`, a datę przydatności
+    // w `Store::spoil`, gdzie jest **własnością partii**, a nie linii.
 
     #[test]
     fn polka_trzyma_porzadek_po_good_id_i_pilnuje_slotow() {
@@ -495,11 +391,8 @@ mod tests {
         };
         let l = |g: u16| ShelfLine {
             good: GoodId(g),
-            qty: Qty::ZERO,
-            cost_total: Money::ZERO,
             facings: 1,
             offer: crate::offer::OfferId::from_bits(1 << 32).unwrap(),
-            expires: None,
         };
         assert!(s.insert(l(7)));
         assert!(s.insert(l(3)));

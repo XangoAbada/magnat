@@ -22,8 +22,10 @@
 pub mod b2b;
 pub mod batch;
 pub mod catalog;
+pub mod chain;
 pub mod cost;
 pub mod inventory;
+pub mod mining;
 pub mod plant;
 pub mod shortage;
 pub mod store;
@@ -39,7 +41,7 @@ pub use b2b::{
 };
 pub use batch::{
     Batch, BatchEvent, BatchFlags, BatchId, BatchLedger, BatchLocation, BatchOrigin, BrandId,
-    CoalesceKey, DepositId, LineId, SlotId, TraceKind, TransportOrderId,
+    CoalesceKey, LineId, SlotId, TraceKind, TransportOrderId,
 };
 pub use catalog::{
     load_default, Catalog, CatalogError, CostAllocation, Emissions, Good, GoodForm, GoodSpec,
@@ -48,10 +50,12 @@ pub use catalog::{
     WarningKind, CATEGORIES_SCHEMA_VERSION, GOODS_SCHEMA_VERSION, NEEDS_SCHEMA_VERSION,
     RECIPES_SCHEMA_VERSION,
 };
+pub use chain::{Chain, ChainHandle};
 pub use cost::{allocate_cost, disposal_cost, waste_mass};
 pub use inventory::{
     InventoryPolicy, InventoryRule, MinMaxParams, PreferredSource, ReplenishRequest, Review,
 };
+pub use mining::{Deposits, MiningSite, NoDeposits};
 pub use plant::{
     advance_production, BreakCause, Charge, Dock, EmissionTotals, LineState, PlannedRun, Plant,
     PlantSite, ProductionCtx, ProductionLine, ProductionReport, ProductionSchedule, Shift,
@@ -59,10 +63,12 @@ pub use plant::{
 };
 pub use shortage::{RfqId, ShortageAction, ShortageStage, ShortageState};
 pub use store::{
-    BatchDraft, BatchSlice, MassIn, Reservation, StorageSlot, Store, StoreError, WarehouseRole,
+    BatchDraft, BatchSlice, MassIn, Reservation, ShelfState, Spoiled, StorageSlot, Store,
+    StoreError, WarehouseRole,
 };
 pub use transport::{
-    BodyType, Carrier, FailReason, FreightOracle, FreightQuote, Transport, TransportOrder,
+    body_for_storage, consolidate, BodyType, Carrier, ConsolidationLimits, FailReason,
+    FlatRateFreight, FreightOracle, FreightQuote, MilkRun, Transport, TransportOrder,
     TransportOrderState, TransportRequest, VehicleRequirements,
 };
 pub use tuning::{Tuning, TuningError, TUNING_SCHEMA_VERSION};

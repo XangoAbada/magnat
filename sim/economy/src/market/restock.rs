@@ -1,70 +1,95 @@
 //! Zaopatrzenie i półka: wyłożenie, zamówienie, odpis terminu (szew (b)).
+//!
+//! **Od WP11 towar jest tu fizyczny.** Do M6c zaplecze było mapą `GoodId → StockLine`,
+//! a półka wektorem linii z ilością i kosztem; dostawa dopisywała liczbę, sprzedaż ją
+//! odejmowała i nigdzie po drodze nie było masy, której mógłby pilnować bilans.
+//! Teraz zaplecze i półka są **slotami magazynu M6**, wyłożenie jest przeniesieniem
+//! partii w obrębie zakładu, a odpis terminu wraca z magazynu listą faktów.
 
 use super::*;
+use magnat_core::Mass;
 
 impl Market {
     /// Uzupełnienie półek z zaplecza (§5.3, co godzinę).
+    ///
+    /// Sufitem wyłożenia jest ekspozycja (`facings`), a nie zapas — półka mieści tyle,
+    /// ile mieści, i reszta zostaje na zapleczu. Przeniesienie idzie przez
+    /// `Store::backroom_to_shelf`, czyli **nie rusza bilansu**: towar nie został ani
+    /// zużyty, ani wyprodukowany, tylko przestawiony w tym samym zakładzie.
     pub fn restock_shelves(&self) {
         let mut m = self.lock();
         let mut restocks = 0u64;
+        let chain = m.chain.clone();
+        let mut ch = chain.lock();
+        let cat = chain.cat.clone();
         for i in 0..m.shops.len() {
-            let braki: Vec<(GoodId, Qty)> = m.shops[i]
+            let (backroom, shelf_slot) = (m.shops[i].backroom, m.shops[i].shelf_slot);
+            let plan: Vec<(GoodId, Mass)> = m.shops[i]
                 .shelf
                 .lines
                 .iter()
                 .filter_map(|l| {
                     let cap = SHELF_UNITS_PER_FACING * i64::from(l.facings.max(1));
-                    let brak = cap - l.qty.get();
-                    (brak > 0).then_some((l.good, Qty(brak)))
+                    let jest = cat
+                        .good(l.good)
+                        .units_of_mass(ch.store.shelf_state(shelf_slot, l.good).mass)
+                        .get();
+                    let brak = cap - jest;
+                    (brak > 0).then(|| (l.good, cat.good(l.good).mass_of_units(Qty(brak))))
                 })
                 .collect();
-            for (good, brak) in braki {
-                let Some(line) = m.shops[i].inventory.backroom.get_mut(&good) else {
-                    continue;
-                };
-                let take = Qty(brak.get().min(line.qty.get()));
-                if take.get() <= 0 {
+            for (good, brak) in plan {
+                let ile = ch
+                    .store
+                    .backroom_to_shelf(&cat, backroom, shelf_slot, good, brak);
+                if ile.0 <= 0 {
                     continue;
                 }
-                let cost = line.take(take);
-                let data = line.expires;
-                let Some(sl) = m.shops[i].shelf.line_mut(good) else {
-                    continue;
-                };
-                // Ta sama reguła co w `StockLine::receive`: półka wyczerpana nie
-                // ma czego przeterminować, więc nie przenosi swojej daty na towar
-                // dołożony po opróżnieniu.
-                if sl.qty.get() <= 0 {
-                    sl.expires = None;
-                }
-                sl.qty = Qty(sl.qty.get() + take.get());
-                sl.cost_total = sl
-                    .cost_total
-                    .checked_add(cost)
-                    .expect("półka: przepełnienie kosztu linii");
-                // Data ważności idzie z zapleczem na półkę — wcześniejsza z dwóch,
-                // tak samo jak przy dostawie. Bez niej odpis (§5.8) i przecena
-                // psującego się (§5.6) nie miałyby czego czytać o towarze wyłożonym.
-                sl.expires = match (sl.expires, data) {
-                    (Some(a), Some(b)) => Some(SimMinute(a.get().min(b.get()))),
-                    (a, b) => a.or(b),
-                };
-                let (offer, qty) = (sl.offer, sl.qty);
+                restocks += 1;
+            }
+            // Oferta pokazuje **półkę**, nie zapas: towar na zapleczu nie jest
+            // na sprzedaż (nagłówek `shop.rs`).
+            let odswiez: Vec<(crate::offer::OfferId, Qty)> = m.shops[i]
+                .shelf
+                .lines
+                .iter()
+                .map(|l| {
+                    (
+                        l.offer,
+                        cat.good(l.good)
+                            .units_of_mass(ch.store.shelf_state(shelf_slot, l.good).mass),
+                    )
+                })
+                .collect();
+            for (offer, qty) in odswiez {
                 if let Some(o) = m.offers.get_mut(offer) {
                     o.available = qty;
                 }
-                restocks += 1;
             }
         }
         m.stats.restocks += restocks;
     }
 
-    /// Zamówienia u dostawcy zewnętrznego i odbiór tego, co dojechało (§5.7).
+    /// Zamówienia u dostawcy i odbiór tego, co dojechało (§5.7).
+    ///
+    /// Różnica wobec M5 jest w kroku pierwszym: **towar przyjeżdża sam**, bo dostawa
+    /// jest rozładunkiem zlecenia transportowego wprost do slotu zaplecza. Tu zostaje
+    /// wyłącznie księgowanie — i to jest cała treść kroku 4 migracji z §6.3.
     pub fn reorder_and_receive(&self, books: &mut Books, t: Tick) {
         let mut m = self.lock();
         let rest = m.rest_of_world;
 
-        // 1. Odbiór. Dostawa jest zapłacona przy zamówieniu, więc tu jedzie sam towar.
+        // 1. Odbiór. Lista dostaw z `Wholesale` znaczy „dostawca **materializuje** ci
+        //    towar" i jest niepusta wyłącznie pod feature'em `infinite_supply`. Łańcuch
+        //    M6 niczego nie materializuje: partie leżą w slocie zaplecza, odkąd
+        //    ciężarówka je rozładowała, a pieniądz idzie listą `Settlement`.
+        //
+        //    Zapłata przeniosła się z chwili **zamówienia** do chwili **odbioru**
+        //    (WP11). Powód jest twardy: zapytanie ofertowe może nie znaleźć dostawcy,
+        //    a sklep, który zapłacił za towar, którego nikt nie przywiózł, ma dziurę
+        //    w kasie bez zdarzenia, które by ją tłumaczyło.
+        let chain = m.chain.clone();
+        let cat = chain.cat.clone();
         let mut deliv = std::mem::take(&mut m.deliv_buf);
         m.supplier.poll_deliveries(t, &mut deliv);
         m.stats.deliveries += deliv.len() as u64;
@@ -72,12 +97,39 @@ impl Market {
             let Some(i) = m.by_site.get(&d.site).copied() else {
                 continue;
             };
-            m.shops[i as usize]
-                .inventory
-                .backroom
-                .entry(d.good)
-                .or_default()
-                .receive(d.qty, d.paid, d.expires);
+            let (account, backroom) = (
+                m.shops[i as usize].account,
+                m.shops[i as usize].backroom,
+            );
+            let kat = m.goods.spec(d.good).map_or(StockCat::Other, |s| s.cat);
+            if books
+                .transfer(
+                    account,
+                    rest,
+                    d.paid,
+                    wholesale_memo(d.good, d.qty, kat, 0),
+                    t,
+                )
+                .is_err()
+            {
+                continue;
+            }
+            let draft = magnat_supply::BatchDraft {
+                good: d.good,
+                mass: cat.good(d.good).mass_of_units(d.qty),
+                quality: d.quality,
+                brand: None,
+                producer: d.buyer,
+                produced_at: SimMinute(t.get()),
+                cost: d.paid,
+                origin: magnat_supply::BatchOrigin::imported(),
+                flags: Default::default(),
+            };
+            let _ = chain
+                .lock()
+                .store
+                .put(&cat, backroom, draft, magnat_supply::MassIn::Initial);
+            post_purchase(&mut m.shops[i as usize].ledger, d.paid, t);
             post_receipt(&mut m.shops[i as usize].ledger, d.paid, t);
         }
         deliv.clear();
@@ -85,49 +137,37 @@ impl Market {
 
         // 2. Zamówienia. Sklepy w kolejności zakładania, towary w kolejności `BTreeMap` —
         // obie deterministyczne (00 §3.2).
+        let chain = m.chain.clone();
+        let cat = chain.cat.clone();
         for i in 0..m.shops.len() {
-            let braki: Vec<(GoodId, Qty)> = m.shops[i]
-                .inventory
-                .reorder
-                .iter()
-                .filter_map(|(g, p)| {
-                    let have = m.shops[i]
-                        .inventory
-                        .backroom
-                        .get(g)
-                        .map_or(0, |l| l.qty.get());
-                    let cel = docelowy_zapas(&m.shops[i], *g, p, m.supplier.goods(), t);
-                    (have < p.point.get().min(cel)).then(|| (*g, Qty(cel - have)))
-                })
-                .collect();
+            let braki: Vec<(GoodId, Qty)> = {
+                let ch = chain.lock();
+                let backroom = m.shops[i].backroom;
+                m.shops[i]
+                    .inventory
+                    .reorder
+                    .iter()
+                    .filter_map(|(g, p)| {
+                        let have = cat
+                            .good(*g)
+                            .units_of_mass(ch.store.available(backroom, *g, Q::MIN))
+                            .get();
+                        let cel = docelowy_zapas(&m.shops[i], *g, p, &m.goods, t);
+                        (have < p.point.get().min(cel)).then(|| (*g, Qty(cel - have)))
+                    })
+                    .collect()
+            };
             let (site, firm, account) = (m.shops[i].site, m.shops[i].firm, m.shops[i].account);
             for (good, qty) in braki {
                 let Some(q) = m.supplier.quote(good, qty, site, t) else {
                     continue;
                 };
-                // Sklep bez środków nie zamawia — i to jest cała „upadłość" w M5b.
-                // Prawdziwe postępowanie prowadzi M7 (`K-10`).
-                if books
-                    .transfer(
-                        account,
-                        rest,
-                        q.total(),
-                        wholesale_memo(
-                            good,
-                            q.qty,
-                            m.supplier
-                                .goods()
-                                .spec(good)
-                                .map_or(StockCat::Other, |s| s.cat),
-                            0,
-                        ),
-                        t,
-                    )
-                    .is_err()
-                {
+                // Sklep bez pokrycia nie zamawia — i to jest cała „upadłość" w M5b.
+                // Prawdziwe postępowanie prowadzi M7 (`K-10`). Pieniądz jeszcze nie
+                // wychodzi: sprawdzamy **pokrycie**, płacimy przy odbiorze.
+                if books.balance(account).map_or(0, |b| b.get()) < q.total().get() {
                     continue;
                 }
-                post_purchase(&mut m.shops[i].ledger, q.total(), t);
                 let _ = m.supplier.place_order(&q, firm, site, t);
             }
         }
@@ -135,71 +175,45 @@ impl Market {
 
     /// Odpis towaru przeterminowanego (§5.8). Zwraca łączną wartość odpisu.
     ///
-    /// Linia zapasu ma **jedną** datę ważności (M5 nie ma partii), więc przeterminowuje
-    /// się w całości naraz. M6 zastąpi to odpisem per `BatchId` i wtedy dopiero będzie
-    /// co odpisywać częściami.
-    pub fn expire_goods(&self, t: Tick) -> Money {
+    /// Magazyn zdejmuje partie po dacie sam (`Store::spoil`, kadencja minutowa)
+    /// i oddaje listę odpisów; tutaj trafia ta lista i zamienia się na wpis w księdze
+    /// zakładu. Różnica wobec M5 jest zasadnicza, choć niewidoczna w sygnaturze:
+    /// **przeterminowuje się partia, a nie linia**, więc świeża dostawa nie schodzi
+    /// na odpis razem z resztką sprzed tygodnia. To był największy pojedynczy błąd,
+    /// jaki balansator znalazł przy zamknięciu M5e (`AD-2` w dokumencie M5e).
+    pub fn absorb_spoilage(&self, spoiled: &[magnat_supply::Spoiled], t: Tick) -> Money {
         let mut m = self.lock();
-        let teraz = t.get();
         let mut razem = Money::ZERO;
+        // Sklepy w kolejności zakładania; wewnątrz sklepu odpisy w kolejności, w jakiej
+        // wyszły z magazynu (sloty rosnąco) — obie deterministyczne.
         for i in 0..m.shops.len() {
-            let mut odpis = Money::ZERO;
-            let mut sztuk = 0i64;
-
-            let zaplecze: Vec<GoodId> = m.shops[i]
-                .inventory
-                .backroom
-                .iter()
-                .filter(|(_, l)| l.qty.get() > 0 && l.expires.is_some_and(|e| e.get() <= teraz))
-                .map(|(g, _)| *g)
-                .collect();
-            for g in zaplecze {
-                if let Some(l) = m.shops[i].inventory.backroom.get_mut(&g) {
-                    let q = l.qty;
-                    sztuk += q.get();
-                    odpis = Money(odpis.get() + l.take(q).get());
-                    l.expires = None;
-                }
-            }
-
-            let polka: Vec<GoodId> = m.shops[i]
-                .shelf
-                .lines
-                .iter()
-                .filter(|l| l.qty.get() > 0 && l.expires.is_some_and(|e| e.get() <= teraz))
-                .map(|l| l.good)
-                .collect();
-            for g in polka {
-                let Some(sl) = m.shops[i].shelf.line_mut(g) else {
+            let (backroom, shelf_slot) = (m.shops[i].backroom, m.shops[i].shelf_slot);
+            let (mut odpis, mut masa) = (Money::ZERO, 0i64);
+            for s in spoiled {
+                if s.slot != backroom && s.slot != shelf_slot {
                     continue;
-                };
-                let q = sl.qty;
-                sztuk += q.get();
-                odpis = Money(odpis.get() + sl.take(q).get());
-                sl.expires = None;
-                let offer = sl.offer;
-                if let Some(o) = m.offers.get_mut(offer) {
-                    o.available = Qty::ZERO;
                 }
+                odpis = Money(odpis.get() + s.cost.get());
+                masa += s.mass.0;
             }
-
-            if odpis.get() > 0 {
-                let _ = ledger::post(
-                    &mut m.shops[i].ledger,
-                    JournalEntry::new(
-                        t,
-                        DecisionReason::Unspecified,
-                        &[
-                            (LedgerAccount::WriteOffExpense, odpis),
-                            (LedgerAccount::InventoryGoods, Money(-odpis.get())),
-                        ],
-                    ),
-                );
-                m.stats.write_offs += 1;
-                m.stats.write_off_value = Money(m.stats.write_off_value.get() + odpis.get());
-                m.stats.expired_qty += sztuk;
-                razem = Money(razem.get() + odpis.get());
+            if odpis.get() <= 0 {
+                continue;
             }
+            let _ = ledger::post(
+                &mut m.shops[i].ledger,
+                JournalEntry::new(
+                    t,
+                    DecisionReason::Unspecified,
+                    &[
+                        (LedgerAccount::WriteOffExpense, odpis),
+                        (LedgerAccount::InventoryGoods, Money(-odpis.get())),
+                    ],
+                ),
+            );
+            m.stats.write_offs += 1;
+            m.stats.write_off_value = Money(m.stats.write_off_value.get() + odpis.get());
+            m.stats.expired_qty += masa;
+            razem = Money(razem.get() + odpis.get());
         }
         razem
     }
@@ -272,4 +286,75 @@ fn docelowy_zapas(shop: &Shop, good: GoodId, p: &ReorderPolicy, goods: &GoodTabl
     // razem z realnym dostawcą; wtedy będzie też **czym** podnieść cenę hurtową.
     let _ = (tygodniowo, goods);
     p.target.get()
+}
+
+impl Market {
+    /// Odpis terminu w jednym kroku: psuje magazyn i księguje to, co zeszło.
+    ///
+    /// Nakładka nad [`Market::absorb_spoilage`] dla wołających, którzy prowadzą dobę
+    /// sklepu sami i nie mają skąd wziąć listy odpisów — scenariusze i testy. W pętli
+    /// symulacji psucie jest **minutowe** i robi je łańcuch (`Chain::step_minute`),
+    /// bo `prop_no_expired_on_shelf` pyta o każdy tick, a nie o każdą dobę.
+    pub fn expire_goods(&self, t: Tick) -> Money {
+        let chain = self.lock().chain.clone();
+        let zepsute = chain.lock().store.spoil(SimMinute(t.get()));
+        self.absorb_spoilage(&zepsute, t)
+    }
+
+    /// Księguje rozliczenia rynku B2B: zapłatę dostawcy i przyjęcie towaru (`AK-3`).
+    ///
+    /// `Settlement` niesie **fakty**: strony, towar, masę, kwotę netto i cło osobno.
+    /// Księgi nie widzi ani `sim/supply`, ani rynek B2B — kierunek zależności jest
+    /// odwrotny — więc to jest miejsce, w którym fakt staje się przelewem i wpisem
+    /// w dzienniku zakładu.
+    ///
+    /// Pieniądz idzie na konto sprzedawcy, gdy sprzedawcą jest firma z miasta, i na
+    /// `RestOfWorld`, gdy towar przyszedł zza granicy. To jest różnica, której M5 nie
+    /// mogła zrobić: `SupplierRef` miał jeden wariant i **każdy** zakup wyglądał jak
+    /// import, także wtedy, gdy mąka jechała z młyna o dwie ulice dalej.
+    pub fn absorb_settlements(
+        &self,
+        settlements: &[magnat_supply::Settlement],
+        books: &mut Books,
+        t: Tick,
+    ) -> Money {
+        let mut m = self.lock();
+        let rest = m.rest_of_world;
+        let mut razem = Money::ZERO;
+        for s in settlements {
+            let Some(i) = m.by_site.get(&s.deliver_to).copied() else {
+                continue;
+            };
+            let i = i as usize;
+            let kwota = Money(s.net.get() + s.duty.get());
+            if kwota.get() <= 0 {
+                continue;
+            }
+            let account = m.shops[i].account;
+            let odbiorca = match s.seller {
+                magnat_supply::SellerRef::Firm(f) => m
+                    .shops
+                    .iter()
+                    .find(|sh| sh.firm == f)
+                    .map_or(rest, |sh| sh.account),
+                magnat_supply::SellerRef::External(_) => rest,
+            };
+            let kat = m.goods.spec(s.good).map_or(StockCat::Other, |g| g.cat);
+            let qty = m.chain.cat.good(s.good).units_of_mass(s.mass);
+            let mut memo = wholesale_memo(s.good, qty, kat, 0);
+            memo.reason = s.reason;
+            // **Przyjęcie księguje się zawsze, zapłata tylko wtedy, gdy jest z czego.**
+            // Towar stoi już w magazynie — zlecenie transportowe go tam rozładowało —
+            // więc pominięcie przyjęcia rozjechałoby `InventoryGoods` z wyceną zapasu
+            // (P5) o wartość każdej dostawy, na którą sklepowi zabrakło. Sklep, który
+            // nie zapłacił, ma **zobowiązanie**: `TradePayable` schodzi na minus i to
+            // jest właściwa odpowiedź, bo długiem zajmuje się M7, a nie magazyn.
+            post_receipt(&mut m.shops[i].ledger, kwota, t);
+            if books.transfer(account, odbiorca, kwota, memo, t).is_ok() {
+                post_purchase(&mut m.shops[i].ledger, kwota, t);
+            }
+            razem = Money(razem.get() + kwota.get());
+        }
+        razem
+    }
 }

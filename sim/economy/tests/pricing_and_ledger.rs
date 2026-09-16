@@ -364,6 +364,7 @@ fn po_roku_bilans_zamyka_sie_co_do_grosza() {
         if let Some(books) = w.get_resource_mut::<Books>() {
             market.reorder_and_receive(books, t);
         }
+        common::doba_lancucha(&market, &mut w, t);
         if t0.is_multiple_of(MIESIAC) {
             if let Some(books) = w.get_resource_mut::<Books>() {
                 market.close_month(books, Tick(t0));

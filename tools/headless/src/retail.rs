@@ -14,7 +14,9 @@
 use std::sync::Arc;
 
 use magnat_agents::{AgentSources, NeedTable, PlaceTable, TravelOracle};
-use magnat_core::{DecisionReason, Entity, FirmId, Money, PlaceKind, Qty, SiteId, Tick};
+use magnat_core::{
+    DecisionReason, Entity, FirmId, Mass, Money, PlaceKind, Qty, SiteId, Tick,
+};
 use magnat_economy::{
     AccountId, AccountKind, AccountOwner, Books, EconomyData, GoodTable, HouseholdMonthReport,
     Market, ShopSeed, TxKind, TxMemo,
@@ -22,6 +24,7 @@ use magnat_economy::{
 use magnat_ecs::World;
 use magnat_jobs::JobPool;
 use magnat_spatial::{Aabb2, GridSpec, Vec2};
+use magnat_supply::{ChainHandle, FlatRateFreight, FreightOracle, TariffTable, Tuning};
 use magnat_world::{population::SITE_KEY_BASE, CityData};
 
 /// Emisja startowa na koncie reszty świata. Jedyne miejsce, w którym pieniądz
@@ -40,6 +43,57 @@ pub const KAPITAL_BANKU: i64 = 5_000_000_000;
 
 /// Ile metrów kwadratowych lokalu przypada na jedną linię asortymentu.
 const M2_NA_LINIE: u32 = 18;
+
+/// Identyfikator zakładu węzła granicznego. Poza przestrzenią zakładów miasta,
+/// tak samo jak bank: brama nie jest zakładem Etapu 7.
+const SITE_BRAMY: u32 = u32::MAX - 2;
+
+/// Przepustowość bramy towarowej w tonach na dobę. Ta sama liczba, którą generator
+/// miasta bierze do domknięcia podaży (`brama_t_na_dobe` dla `Highway`) — i to jest
+/// **celowo** ta sama liczba, bo pyta o to samo: ile tona po tonie przechodzi granicę.
+/// Różnica jest w tym, że generator używa jej raz, a węzeł w każdej dobie gry (`AK-1`).
+const BRAMA_T_NA_DOBE: i64 = 4_000;
+
+/// Czas dostawy importowej z bramy drogowej — dwie doby, zanim zaległość go wydłuży.
+const BRAMA_LEAD_MINUT: u32 = 2_880;
+
+/// Odległość ryczałtowa dla wyceny przewozu w moście.
+///
+/// `ponytail:` most nie dostaje `TrafficOracle`, tylko `Box<dyn TravelOracle>` —
+/// a prawdziwa wtyczka towarowa (`magnat_traffic::freight::RoadFreight`, WP12) potrzebuje
+/// routera i mapy pozycji ramp. Sufit nazwany: dopóki tu stoi stawka ryczałtowa, koszt
+/// dostawy nie zależy od geografii miasta. Droga wyjścia jest gotowa i czeka na wpięcie
+/// w M6e, kiedy świat będzie składany w jednym miejscu razem z ruchem.
+const KM_RYCZALT: u32 = 8;
+
+/// Buduje łańcuch dostaw miasta: katalog, strojenie, trasę i bramę towarową.
+///
+/// **Brama jest tu jedynym źródłem towaru i to jest świadome.** Zakłady produkcyjne
+/// Etapu 7 stoją w danych miasta, ale nie mają jeszcze linii, obsady ani zapasu
+/// startowego — ich uruchomienie to `R2` z §8 dokumentu fazy i należy do M6e razem
+/// z `data/scenarios/initial_stock.ron`. Do tego czasu sklep kupuje towar **przez
+/// granicę**: za pieniądze, z czasem dostawy, z ceną rosnącą przy dużych zakupach
+/// i z przepustowością, która się kończy. To jest cała różnica wobec `ExternalSupplier`,
+/// który dawał wszystko natychmiast i po stałej cenie.
+fn zbuduj_lancuch(city: &CityData, seed: u64) -> Result<ChainHandle, Box<dyn std::error::Error>> {
+    let cat = Arc::new(city.catalog.clone());
+    let tuning = Arc::new(Tuning::load_default()?);
+    let oracle: Arc<dyn FreightOracle> = Arc::new(FlatRateFreight {
+        km: KM_RYCZALT,
+        tuning: tuning.transport,
+        blocked: Vec::new(),
+    });
+    Ok(ChainHandle::with_import_gate(
+        cat,
+        tuning,
+        oracle,
+        TariffTable::load_default()?,
+        seed,
+        SiteId(Entity::new(SITE_BRAMY, std::num::NonZeroU32::MIN)),
+        Mass(BRAMA_T_NA_DOBE * 1_000_000),
+        BRAMA_LEAD_MINUT,
+    ))
+}
 
 /// Wynik postawienia gospodarki.
 pub struct Retail {
@@ -208,7 +262,17 @@ pub fn setup(
     );
     books.endow(rest, Money(EMISJA), Tick(0))?;
 
-    let market = Market::new(siatka(city), seed, data, goods, needs, places, rest);
+    let chain = zbuduj_lancuch(city, seed)?;
+    let market = Market::new(
+        siatka(city),
+        seed,
+        data,
+        goods,
+        chain.clone(),
+        needs,
+        places,
+        rest,
+    );
     let shops = obsadz_sklepy(city, &market, &mut books, rest);
 
     // Bank miasta (M5d §5.10, decyzja otwarta nr 7): `FirmId`, konto i kapitał,
@@ -235,8 +299,13 @@ pub fn setup(
 
     world.insert_resource(books);
     world.insert_resource(market.clone());
+    world.insert_resource(chain);
     world.register_resource_hash::<Books>();
     world.register_resource_hash::<Market>();
+    // Łańcuch wchodzi do hasha jako **jeden** zasób (`AL-3`): magazyn, zakłady,
+    // transport i rynek B2B w tej kolejności, arena partii w kolejności indeksów
+    // (`K-16`). Cztery osobne zasoby rozbiłyby krok, który i tak dotyka ich wszystkich.
+    world.register_resource_hash::<ChainHandle>();
 
     // **To jest cała podmiana z `Z-1`**: rynek zamiast atrapy miejsc z M3.
     *world.resource_mut::<AgentSources>() = AgentSources::new(Box::new(market.clone()), travel);

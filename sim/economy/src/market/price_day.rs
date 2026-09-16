@@ -54,7 +54,7 @@ impl Market {
             let mut kategorie = [StockCat::Food; STOCK_CAT_COUNT];
             let mut n_kat = 0usize;
             for l in &m.shops[i].shelf.lines {
-                if let Some(spec) = m.supplier.goods().spec(l.good) {
+                if let Some(spec) = m.goods.spec(l.good) {
                     if !kategorie[..n_kat].contains(&spec.cat) && n_kat < STOCK_CAT_COUNT {
                         kategorie[n_kat] = spec.cat;
                         n_kat += 1;
@@ -128,11 +128,14 @@ impl Market {
     pub fn reprice_all(&self, t: Tick) -> u64 {
         let mut m = self.lock();
         let seed = m.seed;
+        let chain = m.chain.clone();
+        let ch = chain.lock();
+        let cat = &chain.cat;
         let MarketInner {
             shops,
             offers,
             data,
-            supplier,
+            goods,
             tax,
             stats,
             ..
@@ -145,17 +148,18 @@ impl Market {
             for li in 0..shop.shelf.lines.len() {
                 let linia = shop.shelf.lines[li];
                 let good = linia.good;
-                let Some(spec) = supplier.goods().spec(good).copied() else {
+                let Some(spec) = goods.spec(good).copied() else {
                     continue;
                 };
-                let zaplecze = shop
-                    .inventory
-                    .backroom
-                    .get(&good)
-                    .copied()
-                    .unwrap_or_default();
-                let ilosc = zaplecze.qty.get() + linia.qty.get();
-                let koszt = zaplecze.cost_total.get() + linia.cost_total.get();
+                // Zapas czyta się z magazynu: zaplecze i półka to od WP11 dwa sloty
+                // tego samego zakładu, a nie dwa pola sklepu.
+                let zaplecze = ch.store.shelf_state(shop.backroom, good);
+                let polka = ch.store.shelf_state(shop.shelf_slot, good);
+                let ilosc = cat
+                    .good(good)
+                    .units_of_mass(magnat_core::Mass(zaplecze.mass.0 + polka.mass.0))
+                    .get();
+                let koszt = zaplecze.cost_total.get() + polka.cost_total.get();
                 // Koszt własny: średnia ważona zapasu, a przy pustym magazynie cena
                 // hurtowa. Cena nie może zależeć od tego, czy akurat jest towar —
                 // zależy od tego, ile kosztuje go zdobyć.
@@ -170,7 +174,7 @@ impl Market {
                     .get(&good)
                     .map_or(SHELF_UNITS_PER_FACING, |r| r.target.get().max(1));
                 let stock_bp = (ilosc.saturating_mul(BP) / cel).clamp(0, 200_000) as i32;
-                let termin = match (zaplecze.expires, linia.expires) {
+                let termin = match (zaplecze.expires_at, polka.expires_at) {
                     (Some(a), Some(b)) => Some(a.get().min(b.get())),
                     (a, b) => a.or(b).map(magnat_core::SimMinute::get),
                 }
@@ -250,21 +254,8 @@ impl Market {
         let i = m.by_site.get(&site).copied()?;
         let shop = &m.shops[i as usize];
         let pc = shop.controllers.get(&good)?;
-        let spec = *m.supplier.goods().spec(good)?;
-        let linia = shop.shelf.line(good).copied();
-        let zaplecze = shop
-            .inventory
-            .backroom
-            .get(&good)
-            .copied()
-            .unwrap_or_default();
-        let ilosc = zaplecze.qty.get() + linia.map_or(0, |l| l.qty.get());
-        let koszt = zaplecze.cost_total.get() + linia.map_or(0, |l| l.cost_total.get());
-        let unit_cost = if ilosc > 0 && koszt > 0 {
-            Money(koszt).mul_ratio(PRICE_UNIT, ilosc)
-        } else {
-            spec.wholesale_base
-        };
+        let ilosc = m.backroom_units(i as usize, good).get() + m.shelf_units(i as usize, good).get();
+        let unit_cost = m.unit_cost(i as usize, good);
         let cel = shop
             .inventory
             .reorder

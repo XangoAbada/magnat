@@ -23,7 +23,8 @@ use magnat_core::{
 use super::line::{BreakCause, Charge, LineState, ProductionLine};
 use super::PlantSite;
 use crate::batch::{BatchFlags, BatchOrigin};
-use crate::catalog::{Catalog, OutputKind, Recipe};
+use crate::catalog::{Catalog, OutputKind, Recipe, RecipeSource};
+use crate::mining::Deposits;
 use crate::cost::allocate_cost;
 use crate::store::BatchDraft;
 use crate::store::MassIn;
@@ -31,10 +32,16 @@ use crate::tuning::{Tuning, WattMinutes};
 use crate::{Plant, Store};
 
 /// To, co produkcja czyta i nie zmienia.
+///
+/// Wyjątkiem jest [`ProductionCtx::deposits`]: bilans złoża **zmienia się** w trakcie,
+/// bo wydobycie to jedyne miejsce w M6, gdzie masa wchodzi do gry spoza magazynu.
+/// Port bierze `&self` z wewnętrzną mutowalnością po stronie implementacji — pełne
+/// uzasadnienie w [`crate::mining`]. Zakład bez złoża dostaje [`crate::NoDeposits`].
 pub struct ProductionCtx<'a> {
     pub cat: &'a Catalog,
     pub tuning: &'a Tuning,
     pub world_seed: u64,
+    pub deposits: &'a dyn Deposits,
 }
 
 /// Co się wydarzyło w tym wywołaniu. Sumy, nie zdarzenia — zdarzenia są w pierścieniu
@@ -315,6 +322,23 @@ fn sprobuj_start(
         return false;
     }
 
+    // Wydobycie: masa wsadu pochodzi ze złoża, nie z magazynu (§5.10). Sprawdza się ją
+    // w tym samym miejscu co wejścia towarowe, bo skutek jest ten sam — linia bez wsadu
+    // stoi na `Starved`, zamiast udawać, że pracuje. Wyczerpane złoże jest więc
+    // nieodróżnialne od braku dostawy i **ma być** nieodróżnialne: w dół łańcucha
+    // kaskada niedoboru odpala się identycznie.
+    if let RecipeSource::Extraction(_) = r.source {
+        let starczy = zaklad
+            .mining
+            .is_some_and(|m| ctx.deposits.remaining(m.deposit).0 >= wsad.0);
+        if !starczy {
+            l.state = LineState::Starved {
+                missing: r.outputs.first().map_or(GoodId(0), |o| o.good),
+            };
+            return false;
+        }
+    }
+
     // Wszystkie wejścia sprawdzamy, **zanim** weźmiemy którekolwiek: rezerwacja trzech
     // i porażka na czwartym zostawiłaby zjedzony wsad i nieruszoną szarżę.
     for we in &r.inputs {
@@ -334,7 +358,7 @@ fn sprobuj_start(
         return false;
     }
 
-    let charge = pobierz_wsad(store, zaklad, r, rid, wsad, &zmiana);
+    let charge = pobierz_wsad(ctx, store, zaklad, r, rid, wsad, &zmiana);
     l.state = LineState::Running {
         recipe: rid,
         started: now,
@@ -439,6 +463,7 @@ fn brak_miejsca(
 
 /// Zabiera wejścia z magazynu i składa z nich wsad linii.
 fn pobierz_wsad(
+    ctx: &ProductionCtx<'_>,
     store: &mut Store,
     zaklad: &PlantSite,
     r: &Recipe,
@@ -446,6 +471,9 @@ fn pobierz_wsad(
     wsad: Mass,
     zmiana: &super::line::Shift,
 ) -> Charge {
+    if let RecipeSource::Extraction(_) = r.source {
+        return wydobadz(ctx, zaklad, rid, wsad, zmiana);
+    }
     let (mut masa, mut koszt) = (0i64, 0i64);
     let mut jakosc_wazona = 0i128;
     let mut najgorsze = Q::MAX;
@@ -500,6 +528,58 @@ fn pobierz_wsad(
         skill: zmiana.skill,
         wage_mult_pct: zmiana.wage_multiplier_pct,
         origin: BatchOrigin::from_inputs(zaklad.site, rid, &rodzice),
+    }
+}
+
+/// Wsad szyby, kopalni i ujęcia wody: masa schodzi ze złoża, nie z magazynu.
+///
+/// Trzy rzeczy dzieją się tu i **tylko** tu, bo nigdzie indziej w M6 masa nie wchodzi
+/// do gry spoza magazynu:
+/// 1. `Deposits::extract` zmniejsza rezerwę po stronie M1 i zwraca to, co faktycznie
+///    dał — do partii wchodzi **ta** liczba, nigdy żądana. Inaczej ostatnia szarża
+///    złoża wyprodukowałaby więcej, niż w nim było.
+/// 2. Koszt szarży to koszt wydobycia z [`MiningSite::cost_of`] — rośnie z głębokością,
+///    ubytkiem koncentracji i kwadratowo z wyczerpaniem. To on, a nie żadna reguła,
+///    zamyka szyb: w pewnym momencie import jest tańszy.
+/// 3. Jakość wsadu to **efektywna** koncentracja, czyli malejąca. Najlepsze żyły idą
+///    pierwsze, więc urobek z końcówki złoża jest gorszy — i widać to w produkcie.
+///
+/// [`MiningSite::cost_of`]: crate::MiningSite::cost_of
+fn wydobadz(
+    ctx: &ProductionCtx<'_>,
+    zaklad: &PlantSite,
+    rid: RecipeId,
+    wsad: Mass,
+    zmiana: &super::line::Shift,
+) -> Charge {
+    let Some(ms) = zaklad.mining else {
+        return Charge {
+            mass: Mass::ZERO,
+            q_in: Q::MIN,
+            q_worst: Q::MAX,
+            cost: Money::ZERO,
+            skill: zmiana.skill,
+            wage_mult_pct: zmiana.wage_multiplier_pct,
+            origin: BatchOrigin::from_inputs(zaklad.site, rid, &[]),
+        };
+    };
+    let poczatek = ctx.deposits.initial(ms.deposit);
+    let przed = ctx.deposits.remaining(ms.deposit);
+    let wydobyte = ctx.deposits.extract(ms.deposit, wsad);
+    let baza = Money(ctx.tuning.mining.base_gr_per_tonne);
+    let koszt = ms.cost_of(baza, wydobyte, przed, poczatek);
+    let q = ms.concentration_eff(przed, poczatek).clamp(0, 100) as u8;
+    let mut origin = BatchOrigin::from_inputs(zaklad.site, rid, &[]);
+    origin.deposit = Some(ms.deposit);
+    Charge {
+        // Faktycznie wydobyte, nie planowane — patrz punkt 1 w opisie.
+        mass: wydobyte,
+        q_in: Q::new(q),
+        q_worst: Q::MAX,
+        cost: koszt,
+        skill: zmiana.skill,
+        wage_mult_pct: zmiana.wage_multiplier_pct,
+        origin,
     }
 }
 
