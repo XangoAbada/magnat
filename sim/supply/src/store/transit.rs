@@ -100,11 +100,7 @@ impl Store {
         let mut ladunek = Vec::with_capacity(plan.len());
         for (id, ile) in plan {
             let cala = self.batches.get(id).is_some_and(|b| b.mass == ile);
-            let uchwyt = if cala {
-                id
-            } else {
-                self.split(id, ile)?
-            };
+            let uchwyt = if cala { id } else { self.split(id, ile)? };
             ladunek.push(uchwyt);
         }
         for id in &ladunek {
@@ -227,7 +223,7 @@ fn podziel_proporcjonalnie(calosc: i64, czesc: i64, suma: i64) -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::store::tests_support::{magazyn, draft, CHLEB, PIASEK};
+    use crate::store::tests_support::{draft, magazyn, CHLEB, PIASEK};
     use crate::store::MassIn;
     use magnat_core::LossKind;
 
@@ -237,7 +233,12 @@ mod tests {
     fn podzial_zachowuje_mase_i_pieniadz() {
         let (cat, mut s, slot) = magazyn();
         let id = s
-            .put(&cat, slot, draft(PIASEK, 999, 1_000_001, 0), MassIn::Produced)
+            .put(
+                &cat,
+                slot,
+                draft(PIASEK, 999, 1_000_001, 0),
+                MassIn::Produced,
+            )
             .expect("wstawienie");
         let nowa = s.split(id, Mass(333)).expect("podział");
         assert_eq!(s.batch(id).expect("stara").mass, Mass(666));
@@ -268,8 +269,16 @@ mod tests {
             .load(slot, CHLEB, Mass(2_000), Q::MIN, zlecenie)
             .expect("załadunek");
 
-        assert_eq!(s.stock_of(slot, CHLEB), Mass(3_000), "w slocie zostaje reszta");
-        assert_eq!(s.total_stock(CHLEB), Mass(5_000), "w bilansie nic nie ubyło");
+        assert_eq!(
+            s.stock_of(slot, CHLEB),
+            Mass(3_000),
+            "w slocie zostaje reszta"
+        );
+        assert_eq!(
+            s.total_stock(CHLEB),
+            Mass(5_000),
+            "w bilansie nic nie ubyło"
+        );
         assert_eq!(s.in_transit_mass(&ladunek), Mass(2_000));
         s.check_mass(CHLEB).expect("bilans masy");
         s.check_no_negative().expect("niezmienniki slotu");
@@ -302,7 +311,11 @@ mod tests {
             .unload(&cat, zlecenie, &ladunek, ciasny)
             .expect("rozładunek");
         assert_eq!(odrzucone, ladunek, "nic się nie zmieściło");
-        assert_eq!(s.in_transit_mass(&ladunek), Mass(5_000), "towar dalej istnieje");
+        assert_eq!(
+            s.in_transit_mass(&ladunek),
+            Mass(5_000),
+            "towar dalej istnieje"
+        );
         s.check_mass(CHLEB).expect("bilans masy");
 
         // Cudzego ładunku nie da się rozładować pod swoim numerem zlecenia.

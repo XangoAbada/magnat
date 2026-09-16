@@ -12,10 +12,14 @@
 //!
 //! Zakres M6a: katalog (WP1), partia i magazyn (WP2), receptury i model jakości (WP3).
 //! Zakres M6b: zakład fizyczny (WP4), zlecenia transportowe (WP5), polityki zapasów
-//! i kaskada niedoboru (WP6). Rynek B2B i wydobycie wchodzą w kolejnych podfazach.
+//! i kaskada niedoboru (WP6).
+//! Zakres M6c: rynek spot (WP7), kontrakty terminowe (WP8), import i eksport (WP9) —
+//! czyli strona, która odpowiada na akcje kaskady, zamiast pozwalać zapotrzebowaniu
+//! zniknąć. Wydobycie i koniec dostawcy zewnętrznego wchodzą w M6d.
 
 #![forbid(unsafe_code)]
 
+pub mod b2b;
 pub mod batch;
 pub mod catalog;
 pub mod cost;
@@ -26,6 +30,13 @@ pub mod store;
 pub mod transport;
 pub mod tuning;
 
+pub use b2b::{
+    gate_allows, B2b, ContractDelivery, ContractError, ContractPricing, DeliverySchedule,
+    ImportQuote, Penalty, PendingImport, Quote, QuoteId, Rfq, RfqDraft, RfqOutcome, SellerIndex,
+    SellerRef, Settlement, SupplyContract, SupplyContractDraft, TariffClass, TariffError,
+    TariffTable, TradeError, TradeGood, TradeNode, TradeNodeId, WhoTransports,
+    TARIFFS_SCHEMA_VERSION,
+};
 pub use batch::{
     Batch, BatchEvent, BatchFlags, BatchId, BatchLedger, BatchLocation, BatchOrigin, BrandId,
     CoalesceKey, DepositId, LineId, SlotId, TraceKind, TransportOrderId,
@@ -42,8 +53,8 @@ pub use inventory::{
     InventoryPolicy, InventoryRule, MinMaxParams, PreferredSource, ReplenishRequest, Review,
 };
 pub use plant::{
-    advance_production, BreakCause, Charge, Dock, EmissionTotals, LineState, Plant, PlantSite,
-    PlannedRun, ProductionCtx, ProductionLine, ProductionReport, ProductionSchedule, Shift,
+    advance_production, BreakCause, Charge, Dock, EmissionTotals, LineState, PlannedRun, Plant,
+    PlantSite, ProductionCtx, ProductionLine, ProductionReport, ProductionSchedule, Shift,
     SiteDwellResponse, UtilityMeter, VehicleArrivedAtSite,
 };
 pub use shortage::{RfqId, ShortageAction, ShortageStage, ShortageState};

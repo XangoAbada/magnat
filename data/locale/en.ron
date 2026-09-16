@@ -210,6 +210,12 @@
         "ui.shortage.Importing": One("importing"),
         "ui.shortage.Substituted": One("substituted"),
         "ui.shortage.Halted": One("halted"),
+        // ── M6c — B2B market ─────────────────────────────────────────────────
+        "ui.reason.SupplierChosen": One("supplier picked from {ofert} quotes ({przewaga} better)"),
+        "ui.reason.ContractSigned": One("contract for {miesiecy} months, {cennik} pricing"),
+        "ui.reason.ExportChosen": One("exported {masa} kg — {przewaga} above the local price"),
+        "ui.contract.pricing.fixed": One("fixed"),
+        "ui.contract.pricing.indexed": One("indexed"),
         "ui.card.title": One("Citizen"),
         "ui.card.header": One("{imie}, {wiek}, {zawod} — {adres}"),
         "ui.card.unemployed": One("unemployed"),

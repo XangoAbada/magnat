@@ -430,7 +430,11 @@ mod tests {
         let zuzyta = l.mtbf_minutes();
         l.condition = Q::MIN;
         assert!(zuzyta < nowa, "{zuzyta} < {nowa}");
-        assert_eq!(l.mtbf_minutes(), 1, "maszyna w stanie 0 nie dzieli przez zero");
+        assert_eq!(
+            l.mtbf_minutes(),
+            1,
+            "maszyna w stanie 0 nie dzieli przez zero"
+        );
     }
 
     /// Obniżenie produkcji z kaskady zmienia **wielkość** szarży, a nie decyzję

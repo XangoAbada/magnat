@@ -37,17 +37,30 @@ pub struct RfqId(pub u32);
 pub enum ShortageStage {
     Ok,
     /// Zużywaj rezerwę, alert w pulpicie.
-    Buffer { coverage_min: u32 },
+    Buffer {
+        coverage_min: u32,
+    },
     /// Produkcja proporcjonalnie obniżona.
-    Throttled { pct: u8 },
+    Throttled {
+        pct: u8,
+    },
     /// Zapytanie ofertowe — drożej, ale szybciej niż import.
-    SpotSearch { rfq: RfqId },
+    SpotSearch {
+        rfq: RfqId,
+    },
     /// Import — wolniej, ale zwykle jest.
-    Importing { eta: SimMinute },
+    Importing {
+        eta: SimMinute,
+    },
     /// Gorszy wyrób zamiast żadnego.
-    Substituted { alt: GoodId, quality_loss: u8 },
+    Substituted {
+        alt: GoodId,
+        quality_loss: u8,
+    },
     /// Linia `Starved`, koszty stałe lecą dalej.
-    Halted { since: SimMinute },
+    Halted {
+        since: SimMinute,
+    },
 }
 
 impl ShortageStage {
@@ -114,9 +127,21 @@ impl HashState for ShortageState {
 /// jak ma się zachować spot bez wyniku.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum ShortageAction {
-    OpenRfq { site: SiteId, good: GoodId, mass: Mass },
-    Import { site: SiteId, good: GoodId, mass: Mass },
-    Substitute { site: SiteId, good: GoodId, alt: GoodId },
+    OpenRfq {
+        site: SiteId,
+        good: GoodId,
+        mass: Mass,
+    },
+    Import {
+        site: SiteId,
+        good: GoodId,
+        mass: Mass,
+    },
+    Substitute {
+        site: SiteId,
+        good: GoodId,
+        alt: GoodId,
+    },
 }
 
 /// Zużycie towaru przez zakład w gramach na minutę, przy pełnej produkcji.
@@ -200,9 +225,9 @@ pub fn review(
         // przestaje schodzić, bo nikt go nie zużywa. Samo pokrycie wygląda wtedy na
         // ustabilizowane i drabina stanęłaby na imporcie na zawsze. Głodna linia jest
         // więc osobnym sygnałem: to ona, a nie liczba minut, mówi „zakład stoi".
-        let glodna = site.lines.iter().any(|l| {
-            matches!(l.state, crate::plant::LineState::Starved { missing } if missing == good)
-        });
+        let glodna = site.lines.iter().any(
+            |l| matches!(l.state, crate::plant::LineState::Starved { missing } if missing == good),
+        );
         let cel = if dno < teraz && poprawia_sie {
             // Dostawa przyszła: schodzimy od razu, nie po jednym szczeblu.
             dno

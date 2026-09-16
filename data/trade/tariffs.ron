@@ -1,0 +1,41 @@
+// Klasy taryfowe obrotu zagranicznego (M6c §5.9, WP9).
+//
+// **To jest stub i ma nim zostać.** Stawka celna jest polityką miasta i epoki, a ta
+// należy do M8 (`ChargeRegistry`) — M6 podaje liczbę tylko po to, żeby import z cłem
+// i bez cła nie kosztował tyle samo, bo inaczej cała ścieżka obciążeń byłaby martwa
+// aż do M8 i nikt by nie zauważył, że jej nie ma. M8 podmienia **całą tabelę**,
+// nie jej kształt: `TariffClassId` zostaje, `duty_bp` przestaje być stałą.
+//
+// Cło **nie modyfikuje ceny w ofercie** (`K-7`, 00 §4a). `ImportQuote` niesie cenę netto
+// i osobno rozpisane obciążenie, nigdy kwotę „z cłem w środku" — dzięki temu podwyżka
+// cła jest w panelu widoczna jako pozycja, a nie jako towar, który nagle podrożał.
+//
+// Przypisanie klasy idzie przez **domenę klucza towaru** (`AD-12`), nie przez tabelę
+// czterystu wierszy. Domen jest dwanaście i lista jest zamknięta, więc każdy towar ma
+// klasę z definicji, a nowy towar nie może jej zgubić przez przeoczenie w danych.
+// Test `kazda_domena_ma_klase_taryfowa` pilnuje, że pokrycie jest pełne.
+//
+// Jednostka: punkty bazowe ad valorem (100 bp = 1 %).
+(
+    schema_version: 1,
+    classes: [
+        // Surowce nieprzetworzone i płody rolne — cło najniższe. Miasto, które ich nie
+        // ma, i tak musi je sprowadzić; obciążanie ich wysoko dusiłoby całą produkcję.
+        (key: "raw", domains: ["raw", "agri"], duty_bp: 200),
+        // Żywność i pasze. Stawka średnia: ochrona rolnictwa lokalnego jest w tej grze
+        // decyzją gracza-miasta (M8), a nie założeniem wpisanym w dane.
+        (key: "food", domains: ["food", "feed"], duty_bp: 800),
+        // Paliwa. Osobna klasa, bo to ich dotyczy akcyza z M8 — i to na nich najszybciej
+        // widać, że obciążenie jest pozycją, a nie składnikiem ceny.
+        (key: "fuel", domains: ["fuel"], duty_bp: 500),
+        // Materiały, chemia, części, opakowania — wsad przemysłowy.
+        (key: "industrial", domains: ["mat", "chem", "part", "pack"], duty_bp: 400),
+        // Media i odpady. Zero, bo przez granicę nie jadą: woda idzie licznikiem
+        // (`D9`), a odpadów nikt nie importuje. Klasa istnieje, żeby pokrycie domen
+        // było pełne, a nie żeby ktoś kiedyś naliczył od niej cło.
+        (key: "utility", domains: ["util", "waste"], duty_bp: 0),
+        // Dobra konsumpcyjne — cło najwyższe, bo to jedyna domena, w której import
+        // konkuruje wprost z wyrobem gotowym lokalnego producenta.
+        (key: "consumer", domains: ["cons"], duty_bp: 1_200),
+    ],
+)

@@ -94,7 +94,11 @@ impl UtilityMeter {
     /// nie zauważył, bo zero jest poprawną kwotą.
     pub fn bill(&mut self, until: SimMinute) -> Money {
         let kwota = self.amount_due();
-        let dzielnik: i128 = if self.is_energy() { 60 * 1_000 } else { 1_000_000 };
+        let dzielnik: i128 = if self.is_energy() {
+            60 * 1_000
+        } else {
+            1_000_000
+        };
         let rozliczone = if self.tariff.0 == 0 {
             self.consumed
         } else {
@@ -154,7 +158,10 @@ mod tests {
         // 900 watominut to 15 Wh — poniżej grosza przy tej taryfie.
         m.draw_energy(WattMinutes(900));
         assert_eq!(m.bill(SimMinute(43_200)), Money::ZERO);
-        assert_eq!(m.consumed, 900, "licznik nie skasował nierozliczonego zużycia");
+        assert_eq!(
+            m.consumed, 900,
+            "licznik nie skasował nierozliczonego zużycia"
+        );
 
         // Po dołożeniu reszty rachunek wreszcie wychodzi.
         m.draw_energy(WattMinutes(60 * 1_000 - 900));

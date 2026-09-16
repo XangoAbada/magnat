@@ -47,12 +47,10 @@ pub use ids::{
 pub use money::split_proportional;
 pub use rng::{mix64, rng, Rng, StreamId, NO_ENTITY};
 pub use schema::ComponentSchemaId;
-pub use time::{
-    Cadence, DayOfWeek, MinuteOfDay, OpenHours, SimCalendar, SimClock, SimSpeed,
-};
+pub use time::{Cadence, DayOfWeek, MinuteOfDay, OpenHours, SimCalendar, SimClock, SimSpeed};
 pub use types::{
     DistrictId, Energy, GoodId, JobRoleId, Mass, Money, Mood, NeedCategoryId, Qty, RecipeId,
-    SimInstant, SimMinute, Tick, Volume, Q,
+    SimInstant, SimMinute, TariffClassId, Tick, Volume, Q,
 };
 pub use vocab::{
     ActivityKind, Biome, CommitmentKind, DeprivationEffect, FixedCost, GateKind, LifeEventKind,

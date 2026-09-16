@@ -91,6 +91,19 @@ pub fn shortage_stage(c: &Catalog, l: Locale, s: ShortageStageKind) -> String {
     c.fmt_key(l, &format!("ui.shortage.{}", s.name()), &[])
 }
 
+/// Rodzaj cennika w kontrakcie dostawy (M6c §5.8). Dwa słowa zamiast wariantu enuma:
+/// gracza obchodzi wyłącznie to, czy cena stoi, czy chodzi za indeksem — `Collar`
+/// jest indeksowany z klamrą, więc po jego stronie zdania nic się nie zmienia.
+#[must_use]
+pub fn contract_pricing(c: &Catalog, l: Locale, indexed: bool) -> String {
+    let key = if indexed {
+        "ui.contract.pricing.indexed"
+    } else {
+        "ui.contract.pricing.fixed"
+    };
+    c.fmt_key(l, key, &[])
+}
+
 /// Nazwa skutku deprywacji.
 #[must_use]
 pub fn deprivation(c: &Catalog, l: Locale, d: DeprivationEffect) -> String {
@@ -470,7 +483,11 @@ pub fn describe(c: &Catalog, l: Locale, r: DecisionReason) -> String {
                 ("pokrycie", &godziny(coverage_minutes)),
             ],
         ),
-        DecisionReason::ProductionHalted { site: _, line, cause } => c.fmt_key(
+        DecisionReason::ProductionHalted {
+            site: _,
+            line,
+            cause,
+        } => c.fmt_key(
             l,
             "ui.reason.ProductionHalted",
             &[
@@ -486,6 +503,44 @@ pub fn describe(c: &Catalog, l: Locale, r: DecisionReason) -> String {
             l,
             "ui.reason.SubstituteUsed",
             &[("strata", &quality_loss.to_string())],
+        ),
+        DecisionReason::SupplierChosen {
+            good: _,
+            seller: _,
+            quotes,
+            saving_bp,
+        } => c.fmt_key(
+            l,
+            "ui.reason.SupplierChosen",
+            &[
+                ("ofert", &quotes.to_string()),
+                ("przewaga", &procent_bp(i32::from(saving_bp))),
+            ],
+        ),
+        DecisionReason::ContractSigned {
+            good: _,
+            seller: _,
+            months,
+            indexed,
+        } => c.fmt_key(
+            l,
+            "ui.reason.ContractSigned",
+            &[
+                ("miesiecy", &months.to_string()),
+                ("cennik", &contract_pricing(c, l, indexed)),
+            ],
+        ),
+        DecisionReason::ExportChosen {
+            good: _,
+            premium_bp,
+            mass_kg,
+        } => c.fmt_key(
+            l,
+            "ui.reason.ExportChosen",
+            &[
+                ("przewaga", &procent_bp(i32::from(premium_bp))),
+                ("masa", &mass_kg.to_string()),
+            ],
         ),
     }
 }
@@ -691,6 +746,31 @@ mod tests {
                 alt: magnat_core::GoodId(4),
                 quality_loss: 8,
             },
+            DecisionReason::SupplierChosen {
+                good: magnat_core::GoodId(3),
+                seller: magnat_core::FirmId(magnat_core::Entity::new(4, std::num::NonZeroU32::MIN)),
+                quotes: 5,
+                saving_bp: 320,
+            },
+            DecisionReason::ContractSigned {
+                good: magnat_core::GoodId(3),
+                seller: magnat_core::FirmId(magnat_core::Entity::new(4, std::num::NonZeroU32::MIN)),
+                months: 12,
+                indexed: true,
+            },
+            // Drugi wariant cennika ma własny klucz, więc bez tego wpisu test
+            // „każdy powód ma tekst w obu językach" nie dotknąłby `...pricing.fixed`.
+            DecisionReason::ContractSigned {
+                good: magnat_core::GoodId(3),
+                seller: magnat_core::FirmId(magnat_core::Entity::new(4, std::num::NonZeroU32::MIN)),
+                months: 6,
+                indexed: false,
+            },
+            DecisionReason::ExportChosen {
+                good: magnat_core::GoodId(3),
+                premium_bp: 1_450,
+                mass_kg: 24_000,
+            },
         ]
     }
 
@@ -712,8 +792,10 @@ mod tests {
         // 29 wariantów i nie obejmowała ani `Repricing` (303), ani trzech powodów M4c/M4d
         // (205–207), które miały już ramiona w `describe`. Stan po M5d: Unspecified
         // + 100..=119 + 200..=207 + 300..=306 = 36. Po M6b dochodzi blok M6
-        // (400..=402), czyli 39.
-        assert_eq!(wszystkie().len(), 39);
+        // (400..=402), czyli 39. Po M6c trzy kolejne (403..=405) i **czwarty wpis**:
+        // `ContractSigned` stoi na liście dwa razy, bo `indexed` wybiera klucz
+        // lokalizacji, a wariant z jednym wpisem zostawiłby drugi klucz niesprawdzony.
+        assert_eq!(wszystkie().len(), 43);
     }
 
     #[test]

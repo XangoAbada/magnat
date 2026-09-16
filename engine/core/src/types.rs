@@ -103,6 +103,18 @@ scalar_newtype! {
     JobRoleId(u16)
 }
 
+scalar_newtype! {
+    /// Klasa taryfowa towaru w obrocie zagranicznym — indeks do `data/trade/tariffs.ron`.
+    ///
+    /// Mieszka w `core`, bo ma **dwóch** konsumentów znanych z nazwy i numeru fazy
+    /// (`K-8`): M6 nadaje ją w `TradeGood` i przekazuje dalej, M8 odczytuje ją przy
+    /// naliczaniu cła w `ChargeRegistry`. Sama klasa jest **etykietą**, nie stawką —
+    /// stawka jest polityką miasta i epoki, a ta należy do M8. Dlatego cło **nie
+    /// modyfikuje ceny w ofercie** (`K-7`): `ImportQuote` niesie cenę netto i osobno
+    /// rozpisane obciążenia, nigdy kwotę „z cłem w środku".
+    TariffClassId(u16)
+}
+
 /// Skala 0..=100: jakość, zaspokojenie potrzeby, poziom umiejętności.
 /// Konstruktor przycina do zakresu — wartość spoza skali nigdy nie powstaje.
 #[derive(

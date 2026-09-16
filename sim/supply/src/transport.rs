@@ -23,9 +23,9 @@ use magnat_core::{
 };
 use std::collections::BTreeMap;
 
+use crate::batch::SlotId;
 use crate::batch::{BatchId, TransportOrderId};
 use crate::catalog::{Catalog, StorageClass};
-use crate::batch::SlotId;
 use crate::tuning::TransportTuning;
 use crate::Store;
 
@@ -92,7 +92,10 @@ impl VehicleRequirements {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Carrier {
     OwnFleet(magnat_core::FirmId),
-    Hired { firm: magnat_core::FirmId, quote: Money },
+    Hired {
+        firm: magnat_core::FirmId,
+        quote: Money,
+    },
     Pipeline(PipelineId),
     Unassigned,
 }
@@ -204,8 +207,9 @@ impl HashState for TransportOrder {
         match self.state {
             TransportOrderState::Tendered { closes } => closes.hash_state(h),
             TransportOrderState::Assigned { pickup_eta } => pickup_eta.hash_state(h),
-            TransportOrderState::Loading { until }
-            | TransportOrderState::Unloading { until } => until.hash_state(h),
+            TransportOrderState::Loading { until } | TransportOrderState::Unloading { until } => {
+                until.hash_state(h)
+            }
             TransportOrderState::EnRoute { eta } => eta.hash_state(h),
             TransportOrderState::Failed(r) => h.write_u8(r as u8),
             _ => {}
@@ -384,7 +388,10 @@ impl Transport {
         carrier: Carrier,
         now: SimMinute,
     ) -> Result<SimMinute, TransportError> {
-        let o = self.orders.get_mut(&id.0).ok_or(TransportError::UnknownOrder)?;
+        let o = self
+            .orders
+            .get_mut(&id.0)
+            .ok_or(TransportError::UnknownOrder)?;
         if o.state.is_final() {
             return Err(TransportError::AlreadyFinal);
         }
@@ -412,7 +419,10 @@ impl Transport {
         id: TransportOrderId,
         _now: SimMinute,
     ) -> Result<Mass, TransportError> {
-        let o = self.orders.get_mut(&id.0).ok_or(TransportError::UnknownOrder)?;
+        let o = self
+            .orders
+            .get_mut(&id.0)
+            .ok_or(TransportError::UnknownOrder)?;
         if o.state.is_final() {
             return Err(TransportError::AlreadyFinal);
         }

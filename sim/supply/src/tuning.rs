@@ -12,7 +12,7 @@
 use magnat_core::{Energy, Mass, Money, UtilityService, Volume};
 use serde::Deserialize;
 
-pub const TUNING_SCHEMA_VERSION: u32 = 1;
+pub const TUNING_SCHEMA_VERSION: u32 = 2;
 
 #[derive(Clone, Copy, Debug, Deserialize)]
 pub struct ShortageTuning {
@@ -76,10 +76,45 @@ impl TransportTuning {
     /// wychodzi poza `i64` przy masie silosu.
     #[must_use]
     pub fn haul_cost(&self, mass: Mass, km: u32) -> Money {
-        let grosze = i128::from(mass.0) * i128::from(km) * i128::from(self.cost_gr_per_tonne_km)
-            / 1_000_000;
+        let grosze =
+            i128::from(mass.0) * i128::from(km) * i128::from(self.cost_gr_per_tonne_km) / 1_000_000;
         Money(grosze as i64)
     }
+}
+
+/// Rynek B2B (M6c §5.8).
+#[derive(Clone, Copy, Debug, Deserialize)]
+pub struct B2bTuning {
+    /// Jak długo zapytanie ofertowe zbiera oferty, zanim zostanie rozstrzygnięte.
+    pub rfq_window_minutes: u32,
+    /// Ilu dostawców w ogóle pytamy. Sufit, nie cel — indeks zwraca zwykle 3–12.
+    pub max_candidates: u8,
+    /// Narzut sprzedawcy ponad koszt wytworzenia, w punktach bazowych. Do M7 jedna
+    /// liczba dla wszystkich: osobowość cenowa firmy to `FirmPersonality`, a ta
+    /// należy do M7 i tam ma podmienić tę stałą, nie kształt wyceny.
+    pub seller_margin_bp: i64,
+    /// Amplituda szumu wyceny w punktach bazowych, symetrycznie w obie strony
+    /// (`StreamId::SupplyQuoteNoise`).
+    pub quote_noise_bp: i64,
+    /// Ile kosztuje w funkcji celu minuta spóźnienia wobec `needed_by`, za tonę.
+    pub late_penalty_gr_per_tonne_minute: i64,
+    /// Ile kosztuje w funkcji celu jeden punkt jakości poniżej `min_quality`, za tonę.
+    pub quality_penalty_gr_per_tonne_point: i64,
+}
+
+/// Import, eksport i węzły graniczne (M6c §5.9).
+#[derive(Clone, Copy, Debug, Deserialize)]
+pub struct TradeTuning {
+    /// Domyślna elastyczność ceny importowej wobec wolumenu, w promilach.
+    /// Zakup równy wolumenowi odniesienia podnosi cenę o `elasticity/10` procent.
+    pub elasticity_permille: u32,
+    /// Cena skupu eksportowego jako procent ceny importowej. Różnica jest marżą
+    /// świata zewnętrznego i to ona sprawia, że eksport nie jest odwrotnością importu.
+    pub export_spread_pct: u8,
+    /// Okno, w którym liczy się wolumen zakupów do elastyczności — 30 dób po 1 440 min.
+    pub window_minutes: u32,
+    /// Rozrzut czasu dostawy importowej w punktach bazowych `base_lead_minutes`.
+    pub lead_jitter_bp: i64,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize)]
@@ -91,6 +126,8 @@ pub struct Tuning {
     pub plant: PlantTuning,
     pub dock: DockTuning,
     pub transport: TransportTuning,
+    pub b2b: B2bTuning,
+    pub trade: TradeTuning,
 }
 
 #[derive(Debug)]
@@ -106,7 +143,10 @@ impl std::fmt::Display for TuningError {
             TuningError::Io(e) => write!(f, "data/tuning/supply.ron: {e}"),
             TuningError::Parse(e) => write!(f, "data/tuning/supply.ron: {e}"),
             TuningError::Schema { found, want } => {
-                write!(f, "data/tuning/supply.ron: schema_version {found}, oczekiwano {want}")
+                write!(
+                    f,
+                    "data/tuning/supply.ron: schema_version {found}, oczekiwano {want}"
+                )
             }
         }
     }
@@ -116,10 +156,8 @@ impl std::error::Error for TuningError {}
 
 impl Tuning {
     pub fn load(path: &std::path::Path) -> Result<Tuning, TuningError> {
-        let tekst =
-            std::fs::read_to_string(path).map_err(|e| TuningError::Io(e.to_string()))?;
-        let t: Tuning =
-            ron::from_str(&tekst).map_err(|e| TuningError::Parse(e.to_string()))?;
+        let tekst = std::fs::read_to_string(path).map_err(|e| TuningError::Io(e.to_string()))?;
+        let t: Tuning = ron::from_str(&tekst).map_err(|e| TuningError::Parse(e.to_string()))?;
         if t.schema_version != TUNING_SCHEMA_VERSION {
             return Err(TuningError::Schema {
                 found: t.schema_version,

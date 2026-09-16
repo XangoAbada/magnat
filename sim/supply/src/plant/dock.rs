@@ -112,11 +112,7 @@ impl Dock {
     /// przyspieszyć ani opóźnić tego, który stoi już w kolejce — FIFO po totalnym
     /// kluczu. Dlatego wołający **musi** podawać przybycia w kolejności tego klucza;
     /// system transportowy je sortuje, zanim tu zawoła.
-    pub fn arrive(
-        &mut self,
-        ev: &VehicleArrivedAtSite,
-        tuning: &DockTuning,
-    ) -> SiteDwellResponse {
+    pub fn arrive(&mut self, ev: &VehicleArrivedAtSite, tuning: &DockTuning) -> SiteDwellResponse {
         self.prune(ev.at);
         let przed = self.occupancy(ev.at);
 
@@ -145,9 +141,7 @@ impl Dock {
         let czekanie = start.0.saturating_sub(ev.at.0);
         SiteDwellResponse {
             release_at: release,
-            idle_fuel: magnat_core::Volume(
-                czekanie as i64 * tuning.idle_fuel_ml_per_minute,
-            ),
+            idle_fuel: magnat_core::Volume(czekanie as i64 * tuning.idle_fuel_ml_per_minute),
             on_street: przed >= usize::from(self.bays) + usize::from(self.yard_capacity),
         }
     }
@@ -160,9 +154,7 @@ impl Dock {
         }
         let k = SimCalendar::from_minute(at);
         match self.hours.next_open(k.day_index(), k.minute_of_day_typed()) {
-            Some((doba, minuta)) => {
-                SimMinute(doba * 1_440 + u64::from(minuta.get()))
-            }
+            Some((doba, minuta)) => SimMinute(doba * 1_440 + u64::from(minuta.get())),
             // Maska dni pusta — rampa nie otworzy się nigdy. Zwracamy `at`, bo
             // zwrócenie nieskończoności zamieniłoby błąd danych w zawieszony pojazd.
             None => at,
@@ -245,7 +237,11 @@ mod tests {
         assert_eq!(a.release_at, SimMinute(134), "10 min + 24 t × 1 min/t");
         assert_eq!(b.release_at, SimMinute(168), "drugi czeka na pierwszego");
         assert_eq!(a.idle_fuel, magnat_core::Volume(0));
-        assert_eq!(b.idle_fuel, magnat_core::Volume(34 * 25), "34 minuty postoju");
+        assert_eq!(
+            b.idle_fuel,
+            magnat_core::Volume(34 * 25),
+            "34 minuty postoju"
+        );
     }
 
     /// Dwa stanowiska obsługują dwa pojazdy równolegle — i przydział stanowiska
@@ -265,7 +261,12 @@ mod tests {
     #[test]
     fn po_zamknieciu_ciezarowka_czeka_do_rana() {
         // Doba 0 to poniedziałek (K-15). Rampa czynna 6:00–14:00 codziennie.
-        let mut d = Dock::new(1, 10, 0, OpenHours::new(6 * 60, 14 * 60, OpenHours::ALL_DAYS));
+        let mut d = Dock::new(
+            1,
+            10,
+            0,
+            OpenHours::new(6 * 60, 14 * 60, OpenHours::ALL_DAYS),
+        );
         let r = d.arrive(&zdarzenie(1, 20 * 60, 5), &strojenie());
         assert_eq!(
             r.release_at,

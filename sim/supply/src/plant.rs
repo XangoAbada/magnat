@@ -24,7 +24,9 @@ pub mod produce;
 pub mod utility;
 
 pub use dock::{Dock, DockEntry, SiteDwellResponse, VehicleArrivedAtSite, MAX_BAYS};
-pub use line::{BreakCause, Charge, LineState, PlannedRun, ProductionLine, ProductionSchedule, Shift};
+pub use line::{
+    BreakCause, Charge, LineState, PlannedRun, ProductionLine, ProductionSchedule, Shift,
+};
 pub use produce::{advance_production, ProductionCtx, ProductionReport};
 pub use utility::UtilityMeter;
 
@@ -143,6 +145,23 @@ impl PlantSite {
             .map_or(crate::shortage::ShortageStage::Ok, |s| s.stage)
     }
 
+    /// Wstawia rozstrzygnięty ładunek szczebla kaskady (M6c).
+    ///
+    /// Kaskada buduje `SpotSearch { rfq }` i `Importing { eta }` z **zaślepkami** —
+    /// `RfqId::default()` i czasem, którego nie ma z czego wyprowadzić, dopóki nie ma
+    /// rynku. Prawdziwe wartości zna dopiero rynek i to on je tu wpisuje, w tej samej
+    /// minucie, w której kaskada je zażądała. Zmiana **nie** zapisuje `DecisionReason`:
+    /// powód przejścia między szczeblami zapisał już `shortage::review`, a drugi wpis
+    /// o tym samym przejściu byłby duplikatem w karcie inspekcji.
+    ///
+    /// Brak wpisu dla tego towaru znaczy, że kaskada go nie zgłaszała — wtedy nic się
+    /// nie dzieje, zamiast powstawać szczebel bez historii.
+    pub fn set_stage(&mut self, good: GoodId, stage: crate::shortage::ShortageStage) {
+        if let Some(s) = self.shortage.iter_mut().find(|s| s.good == good) {
+            s.stage = stage;
+        }
+    }
+
     /// Zapisuje powód decyzji w pierścieniu zakładu — 00 §7 i bramka 5 fazy.
     pub fn note(&mut self, at: SimMinute, r: DecisionReason) {
         if self.reasons.len() == REASON_RING {
@@ -172,9 +191,7 @@ impl PlantSite {
         let licznik: i128 = self
             .lines
             .iter()
-            .map(|l| {
-                i128::from(l.nominal_throughput.0) * i128::from(l.state.activity_permille())
-            })
+            .map(|l| i128::from(l.nominal_throughput.0) * i128::from(l.state.activity_permille()))
             .sum();
         (255 * licznik / (mianownik * 1000)).clamp(0, 255) as u8
     }
@@ -278,7 +295,10 @@ impl Plant {
     /// Faktury za media, wystawiane raz na miesiąc. Zwraca listę
     /// `(zakład, dostawca, kwota)` — księguje je wołający, bo `sim/supply` nie zależy
     /// od `sim/economy` i zależeć nie może (kierunek jest odwrotny od M6a).
-    pub fn bill_utilities(&mut self, until: SimMinute) -> Vec<(SiteId, magnat_core::FirmId, Money)> {
+    pub fn bill_utilities(
+        &mut self,
+        until: SimMinute,
+    ) -> Vec<(SiteId, magnat_core::FirmId, Money)> {
         let mut faktury = Vec::new();
         for s in self.sites.values_mut() {
             for m in &mut s.meters {
@@ -313,7 +333,9 @@ impl HashState for Plant {
 pub fn stock_fill(store: &crate::Store, site: &PlantSite) -> u8 {
     let mut najgorszy = 0i128;
     for slot in site.inputs.iter().chain(site.outputs.iter()) {
-        let Some(sl) = store.slot(*slot) else { continue };
+        let Some(sl) = store.slot(*slot) else {
+            continue;
+        };
         if sl.role == WarehouseRole::Shelf {
             continue;
         }
@@ -342,10 +364,5 @@ fn udzial_v(uzyte: Volume, cap: Volume) -> i128 {
 /// i polityki zapasów.
 #[must_use]
 pub fn input_stock(store: &crate::Store, site: &PlantSite, good: GoodId) -> Mass {
-    Mass(
-        site.inputs
-            .iter()
-            .map(|s| store.stock_of(*s, good).0)
-            .sum(),
-    )
+    Mass(site.inputs.iter().map(|s| store.stock_of(*s, good).0).sum())
 }

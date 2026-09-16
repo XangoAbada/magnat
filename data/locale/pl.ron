@@ -211,6 +211,12 @@
         "ui.shortage.Importing": One("import"),
         "ui.shortage.Substituted": One("substytut"),
         "ui.shortage.Halted": One("postój"),
+        // ── M6c — rynek B2B ──────────────────────────────────────────────────
+        "ui.reason.SupplierChosen": One("wybrano dostawcę spośród {ofert} ofert (o {przewaga} lepsza)"),
+        "ui.reason.ContractSigned": One("kontrakt na {miesiecy} mies., cennik {cennik}"),
+        "ui.reason.ExportChosen": One("eksport {masa} kg — o {przewaga} drożej niż lokalnie"),
+        "ui.contract.pricing.fixed": One("stały"),
+        "ui.contract.pricing.indexed": One("indeksowany"),
         "ui.card.title": One("Mieszkaniec"),
         "ui.card.header": One("{imie}, {wiek}, {zawod} — {adres}"),
         "ui.card.unemployed": One("bez pracy"),

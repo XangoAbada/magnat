@@ -8,7 +8,7 @@
 // Jednostki: pieniądz w **groszach** (00 §2), masa w gramach, objętość w mililitrach,
 // czas w minutach. Żadnych złotówek i żadnych floatów — także tutaj.
 (
-    schema_version: 1,
+    schema_version: 2,
 
     // Odniesienie skali emisji dla `SiteRenderRec.emission` (M6 §6.4.3). Stała, a nie
     // „najbrudniejszy zakład epoki": ruchomy mianownik znaczyłby, że ten sam komin dymi
@@ -58,5 +58,34 @@
         minutes_per_km: 2,
         load_fixed_minutes: 15,
         pipeline_gr_per_tonne: 1_200,    // 12 zł/t, rurociąg szyb → rafineria (§7.2)
+    ),
+
+    // Rynek B2B (§5.8). Marża sprzedawcy jest tu **jedna dla wszystkich** — osobowość
+    // cenowa firmy to `FirmPersonality` z M7 i to ona ma tę liczbę podmienić, nie
+    // rozszczepić tabelę. 1 800 bp = 18 %, czyli marża młyna z łańcucha chleba (§7.1).
+    b2b: (
+        rfq_window_minutes: 60,
+        max_candidates: 12,
+        seller_margin_bp: 1_800,
+        // Dwaj dostawcy o identycznym koszcie nie podają tej samej ceny co do grosza.
+        // Bez szumu rozstrzygnięcie zależałoby wyłącznie od tie-breaku po indeksie
+        // encji, czyli zawsze wygrywałby ten sam zakład — i nigdy nie zobaczyłoby się
+        // w panelu, że ofert w ogóle było kilka.
+        quote_noise_bp: 200,
+        // Kary w funkcji celu są **wagami wyboru**, nie kosztem księgowym: nikt ich nie
+        // płaci. Kara umowna za niedostarczenie to `Penalty` w kontrakcie i tamta jest
+        // pieniądzem. Dwie różne liczby, które łatwo pomylić, bo obie nazywają się karą.
+        late_penalty_gr_per_tonne_minute: 4,
+        quality_penalty_gr_per_tonne_point: 900,
+    ),
+
+    // Import i eksport (§5.9). Elastyczność 300 ‰ znaczy: zakup równy wolumenowi
+    // odniesienia podnosi cenę o 30 %, dziesięciokrotny — o 300 %. To jest liczba,
+    // która decyduje, czy import jest darmowym zaworem bezpieczeństwa (`R4`).
+    trade: (
+        elasticity_permille: 300,
+        export_spread_pct: 82,
+        window_minutes: 43_200,          // 30 dób × 1 440 min
+        lead_jitter_bp: 1_500,           // ±15 % czasu dostawy
     ),
 )

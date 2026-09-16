@@ -90,8 +90,8 @@ REJESTR = {
     ("sim/world/src/city/mod.rs", "fn", 365): 24,
     ("sim/world/src/city/zoning.rs", "fn", 322): 36,
     # Rośnie o jedno ramię na wariant `DecisionReason` i **ma rosnąć** aż do M7c.
-    # 319 przed M6b, 355 po dopisaniu bloku M6 (400–402).
-    ("engine/ui/src/inspect/reason.rs", "fn", 355): 37,
+    # 319 przed M6b, 355 po bloku M6b (400–402), 397 po M6c (403–405).
+    ("engine/ui/src/inspect/reason.rs", "fn", 397): 37,
     ("sim/economy/src/data.rs", "fn", 268): 38,
     ("sim/economy/src/market/fulfil.rs", "fn", 258): 26,
 }

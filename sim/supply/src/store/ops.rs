@@ -140,6 +140,31 @@ impl Store {
         kawalek.mass
     }
 
+    /// Wydaje masę **poza miasto** — eksport przez węzeł graniczny (M6c §5.9).
+    /// Zwraca `(masa, koszt własny)`; masę wypuszczoną i jej koszt księguje wołający.
+    ///
+    /// Osobna operacja od [`Store::take`] i od [`Store::write_off`] z tego samego powodu,
+    /// dla którego tamte dwie są osobne: bilans masy (`00` §6) rozróżnia trzy wyjścia
+    /// i tylko jedno z nich jest eksportem. Towar zjedzony przez linię to `consumed`,
+    /// zepsuty to `losses`, a sprzedany za granicę to `exported` — zlanie ich domknęłoby
+    /// bilans i skłamało w rachunku, bo za eksport ktoś zapłacił.
+    pub fn export(&mut self, slot: SlotId, good: GoodId, mass: Mass) -> (Mass, Money) {
+        let Some(r) = self.reserve(slot, good, mass, Q::MIN) else {
+            let jest = self.available(slot, good, Q::MIN);
+            if jest.0 <= 0 {
+                return (Mass::ZERO, Money::ZERO);
+            }
+            return self.export(slot, good, jest);
+        };
+        let Ok(kawalek) = self.take(r) else {
+            return (Mass::ZERO, Money::ZERO);
+        };
+        // `take` zaksięgowało wydanie jako zużycie w łańcuchu. To było wyjście z miasta.
+        self.mass[good.0 as usize].consumed -= kawalek.mass.0;
+        self.mass[good.0 as usize].exported += kawalek.mass.0;
+        (kawalek.mass, kawalek.cost_total)
+    }
+
     /// Plan wydania `mass` gramów towaru ze slotu, w porządku FEFO, pomijając partie
     /// poniżej `min_q` i wstrzymane. `None`, jeśli w slocie nie ma tyle towaru.
     pub fn reserve(
@@ -234,7 +259,11 @@ impl Store {
             origin = Some(match origin {
                 None => b.origin,
                 Some(o) => crate::batch::BatchOrigin {
-                    site: if o.site == b.origin.site { o.site } else { None },
+                    site: if o.site == b.origin.site {
+                        o.site
+                    } else {
+                        None
+                    },
                     recipe: if o.recipe == b.origin.recipe {
                         o.recipe
                     } else {

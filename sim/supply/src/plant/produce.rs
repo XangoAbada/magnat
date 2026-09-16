@@ -23,9 +23,9 @@ use magnat_core::{
 use super::line::{BreakCause, Charge, LineState, ProductionLine};
 use super::PlantSite;
 use crate::batch::{BatchFlags, BatchOrigin};
-use crate::store::BatchDraft;
 use crate::catalog::{Catalog, OutputKind, Recipe};
 use crate::cost::allocate_cost;
+use crate::store::BatchDraft;
 use crate::store::MassIn;
 use crate::tuning::{Tuning, WattMinutes};
 use crate::{Plant, Store};
@@ -102,9 +102,8 @@ fn krok_linii(
         LineState::Maintenance { until } if now.0 >= until.0 => {
             l.condition = Q::new(ctx.tuning.plant.condition_after_service);
             l.worked_since_service = 0;
-            l.next_maintenance = SimMinute(
-                now.0 + u64::from(zaklad.schedule.maintenance_interval_hours) * 60,
-            );
+            l.next_maintenance =
+                SimMinute(now.0 + u64::from(zaklad.schedule.maintenance_interval_hours) * 60);
             l.state = LineState::Idle;
         }
         LineState::Setup { until, to_recipe } if now.0 >= until.0 => {
@@ -141,7 +140,8 @@ fn krok_linii(
             m.draw_energy(WattMinutes::per_minute(l.power_draw));
         }
         if ctx.tuning.plant.wear_minutes_per_point > 0
-            && l.worked_since_service.is_multiple_of(ctx.tuning.plant.wear_minutes_per_point)
+            && l.worked_since_service
+                .is_multiple_of(ctx.tuning.plant.wear_minutes_per_point)
         {
             l.condition = l.condition.saturating_sub(1);
         }
@@ -171,10 +171,7 @@ fn krok_linii(
 
 /// Postój, który właśnie się zaczął — a nie postój, który trwa. Karta inspekcji ma
 /// pokazać zdarzenie, nie powtarzać tej samej linijki 1 440 razy na dobę.
-fn nowy_postoj(
-    przed: LineState,
-    po: LineState,
-) -> Option<magnat_core::LineStopCause> {
+fn nowy_postoj(przed: LineState, po: LineState) -> Option<magnat_core::LineStopCause> {
     let a = przed.stop_cause();
     let b = po.stop_cause();
     if a == b {
@@ -247,7 +244,12 @@ fn awaria(
     // Klucz strumienia: zakład i linia w jednej liczbie. Osiem bitów na linię to
     // 256 linii w zakładzie — dwukrotność największej realnej rafinerii.
     let klucz = magnat_core::mix64((u64::from(site.entity().index()) << 8) | line as u64) as u32;
-    let mut r = rng(ctx.world_seed, StreamId::SupplyBreakdown, klucz, Tick(now.0));
+    let mut r = rng(
+        ctx.world_seed,
+        StreamId::SupplyBreakdown,
+        klucz,
+        Tick(now.0),
+    );
     r.gen_range_u32(l.mtbf_minutes()) == 0
 }
 
@@ -389,11 +391,7 @@ fn zezlomuj(
 /// Następna receptura do uruchomienia: z planu, jeśli plan coś przewiduje na teraz,
 /// inaczej ta, na którą linia jest przezbrojona. Zakład bez planu po prostu produkuje
 /// to, co produkował — piekarnia nie czeka na zlecenie, żeby upiec chleb.
-fn nastepna_receptura(
-    zaklad: &PlantSite,
-    l: &ProductionLine,
-    now: SimMinute,
-) -> Option<RecipeId> {
+fn nastepna_receptura(zaklad: &PlantSite, l: &ProductionLine, now: SimMinute) -> Option<RecipeId> {
     zaklad
         .schedule
         .plan
@@ -422,7 +420,11 @@ fn brak_miejsca(
         return r.outputs.first().map(|o| o.good);
     };
     let (mut masa, mut objetosc) = (0i64, 0i64);
-    for o in r.outputs.iter().filter(|o| o.kind != OutputKind::SelfConsumed) {
+    for o in r
+        .outputs
+        .iter()
+        .filter(|o| o.kind != OutputKind::SelfConsumed)
+    {
         let m = skaluj(o.mass, wsad, r.batch_mass);
         masa += m.0;
         objetosc += cat.volume_of(o.good, m).0;
@@ -455,14 +457,19 @@ fn pobierz_wsad(
             if zostalo <= 0 {
                 break;
             }
-            let ile = store.available(*slot, we.good, we.min_quality).0.min(zostalo);
+            let ile = store
+                .available(*slot, we.good, we.min_quality)
+                .0
+                .min(zostalo);
             if ile <= 0 {
                 continue;
             }
             let Some(rez) = store.reserve(*slot, we.good, Mass(ile), we.min_quality) else {
                 continue;
             };
-            let Ok(kawalek) = store.take(rez) else { continue };
+            let Ok(kawalek) = store.take(rez) else {
+                continue;
+            };
             masa += kawalek.mass.0;
             koszt += kawalek.cost_total.0;
             jakosc_wazona += i128::from(kawalek.quality.get()) * i128::from(kawalek.mass.0);
@@ -484,7 +491,11 @@ fn pobierz_wsad(
         // dla której woda w ogóle jest w bilansie.
         mass: wsad,
         q_in,
-        q_worst: if rodzice.is_empty() { Q::MAX } else { najgorsze },
+        q_worst: if rodzice.is_empty() {
+            Q::MAX
+        } else {
+            najgorsze
+        },
         cost: Money(koszt),
         skill: zmiana.skill,
         wage_mult_pct: zmiana.wage_multiplier_pct,
@@ -530,13 +541,11 @@ fn zamknij_szarze(
         .iter()
         .map(|(_, m)| skaluj(Mass(i64::from(*m)), wsad, r.batch_mass).0)
         .sum();
-    let koszt_pracy = osobominuty
-        * ctx.tuning.plant.wage_gr_per_person_minute
-        * i64::from(charge.wage_mult_pct)
-        / 100;
-    let koszt_energii = i128::from(energia.0)
-        * i128::from(ctx.tuning.utility.power_gr_per_kwh)
-        / 1_000;
+    let koszt_pracy =
+        osobominuty * ctx.tuning.plant.wage_gr_per_person_minute * i64::from(charge.wage_mult_pct)
+            / 100;
+    let koszt_energii =
+        i128::from(energia.0) * i128::from(ctx.tuning.utility.power_gr_per_kwh) / 1_000;
     let koszt_wody =
         i128::from(woda.0) * i128::from(ctx.tuning.utility.water_gr_per_m3) / 1_000_000;
     let narzut = skaluj(
@@ -545,9 +554,8 @@ fn zamknij_szarze(
         r.batch_mass,
     )
     .0;
-    let razem = Money(
-        charge.cost.0 + koszt_pracy + koszt_energii as i64 + koszt_wody as i64 + narzut,
-    );
+    let razem =
+        Money(charge.cost.0 + koszt_pracy + koszt_energii as i64 + koszt_wody as i64 + narzut);
 
     // ── jakość ──────────────────────────────────────────────────────────────────
     let jakosc = r.quality.quality(

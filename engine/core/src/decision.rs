@@ -24,7 +24,7 @@
 //!    z lokalizacją. Test pilnuje `size_of::<DecisionReason>() <= 24`.
 //! 6. Wariant, którego nie da się pokazać graczowi jednym zdaniem, jest źle zaprojektowany.
 
-use crate::ids::SiteId;
+use crate::ids::{FirmId, SiteId};
 use crate::time::MinuteOfDay;
 use crate::types::{GoodId, Q};
 use crate::vocab::{
@@ -261,8 +261,36 @@ pub enum DecisionReason {
         alt: GoodId,
         quality_loss: u8,
     } = 402,
-    // 403–499 zarezerwowane dla M6: `SupplierChosen`, `ContractSigned`, `ExportChosen`
-    // (M6c) dopisują się tutaj, na końcu bloku.
+    /// Rozstrzygnięcie zapytania ofertowego na rynku spot (M6c §5.8).
+    /// `saving_bp` to przewaga zwycięzcy nad drugą ofertą w punktach bazowych funkcji
+    /// celu — zero znaczy „jedyna oferta", a nie „remis". Gracz pytający „dlaczego
+    /// kupiłeś u nich" dostaje odpowiedź w postaci, w której da się ją sprawdzić:
+    /// ilu było chętnych i o ile ten był lepszy.
+    SupplierChosen {
+        good: GoodId,
+        seller: FirmId,
+        quotes: u16,
+        saving_bp: u16,
+    } = 403,
+    /// Podpisanie kontraktu terminowego (M6c §5.8). `months` to okres obowiązywania
+    /// w miesiącach 30-dniowych (`K-1`), `indexed` odróżnia cenę stałą od takiej,
+    /// która chodzi za indeksem — bo to jest różnica, o którą gracz pyta najpierw.
+    ContractSigned {
+        good: GoodId,
+        seller: FirmId,
+        months: u16,
+        indexed: bool,
+    } = 404,
+    /// Producent wybrał eksport zamiast sprzedaży lokalnej (M6c §5.9).
+    /// `premium_bp` to przewaga ceny eksportowej **po odjęciu transportu do węzła**
+    /// nad najlepszą ceną lokalną. Drenaż podaży jest emergentny, więc powód musi
+    /// nieść liczbę, z której wynikł — inaczej wzrost cen w mieście wygląda na błąd.
+    ExportChosen {
+        good: GoodId,
+        premium_bp: u16,
+        mass_kg: u32,
+    } = 405,
+    // 406–499 zarezerwowane dla M6.
     // ... kolejne fazy dopisują własne bloki na końcu pliku
 }
 
@@ -316,6 +344,9 @@ impl DecisionReason {
             DecisionReason::Shortage { .. } => 400,
             DecisionReason::ProductionHalted { .. } => 401,
             DecisionReason::SubstituteUsed { .. } => 402,
+            DecisionReason::SupplierChosen { .. } => 403,
+            DecisionReason::ContractSigned { .. } => 404,
+            DecisionReason::ExportChosen { .. } => 405,
         }
     }
 }

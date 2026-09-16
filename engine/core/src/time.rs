@@ -563,9 +563,15 @@ mod tests {
             rampa.next_open(0, MinuteOfDay::new(60)),
             Some((0, MinuteOfDay::new(6 * 60)))
         );
-        assert_eq!(rampa.next_open(0, MinuteOfDay::new(60)).map(|(d, _)| d), Some(0));
+        assert_eq!(
+            rampa.next_open(0, MinuteOfDay::new(60)).map(|(d, _)| d),
+            Some(0)
+        );
         // Pusta maska nie otworzy się nigdy i mówi to wprost.
-        assert_eq!(OpenHours::new(0, 100, 0).next_open(0, MinuteOfDay::MIDNIGHT), None);
+        assert_eq!(
+            OpenHours::new(0, 100, 0).next_open(0, MinuteOfDay::MIDNIGHT),
+            None
+        );
     }
 
     #[test]

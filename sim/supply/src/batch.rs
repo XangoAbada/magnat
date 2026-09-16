@@ -109,6 +109,23 @@ impl BatchOrigin {
             deposit,
         }
     }
+
+    /// Pochodzenie partii przywiezionej zza granicy (M6c §5.9).
+    ///
+    /// Ślad kończy się tutaj i **ma się tutaj kończyć**: świata zewnętrznego nie
+    /// symulujemy, więc panel „od pola do półki" ma powiedzieć „import", a nie domalować
+    /// wiarygodny łańcuch do złoża, którego nie ma. To ta sama zasada, którą M6 i M10
+    /// uzgodniły dla partii odtworzonej z agregatu (§6.4.2): przyznanie się do braku
+    /// danych jest tańsze i uczciwsze od fabrykowania.
+    #[must_use]
+    pub const fn imported() -> BatchOrigin {
+        BatchOrigin {
+            site: None,
+            recipe: None,
+            depth: 0,
+            deposit: None,
+        }
+    }
 }
 
 /// Flagi partii.

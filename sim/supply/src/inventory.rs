@@ -258,10 +258,7 @@ fn progi(r: &InventoryRule, rate_per_minute: i64, now: SimMinute) -> (i64, i64) 
         } => {
             let miesiac = SimCalendar::from_minute(now).month_of_year() as usize - 1;
             let m = i64::from(curve_permille[miesiac.min(11)]);
-            (
-                base.reorder_point.0 * m / 1_000,
-                base.target.0 * m / 1_000,
-            )
+            (base.reorder_point.0 * m / 1_000, base.target.0 * m / 1_000)
         }
     }
 }

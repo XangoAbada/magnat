@@ -148,11 +148,20 @@ pub enum StreamId {
     /// przyszedł po minucie (mikro), czy po godzinie (mezo) — na tym stoi tolerancja 0
     /// spójności LOD produkcji (00 §4).
     SupplyBreakdown = 200,
+    /// Drobny szum wyceny oferty na rynku spot (M6c §5.8). Klucz: indeks zakładu
+    /// sprzedawcy i minuta otwarcia zapytania — dwaj dostawcy o identycznym koszcie
+    /// wytworzenia nie podają tej samej ceny co do grosza, bo w rzeczywistości też nie
+    /// podają. Bez tego rozstrzygnięcie RFQ zależałoby wyłącznie od tie-breaku po
+    /// indeksie encji, czyli zawsze wygrywałby ten sam zakład.
+    SupplyQuoteNoise = 203,
     /// Opóźnienie przejazdu dostawczego wobec czasu z trasy (M6b §5.6).
     SupplyTransitDelay = 205,
-    // 201–204 i 206–219 zarezerwowane dla M6 zgodnie z przydziałem w §6.1 dokumentu
-    // fazy: 201 `SupplySpoilage`, 202 `SupplyQuality`, 203 `SupplyQuoteNoise`,
-    // 204 `SupplyYield`, 206 `SupplyImportLead`. Rezerwa dalsza 1200–1219.
+    /// Rozrzut czasu dostawy importowej wokół `TradeNode::base_lead_minutes` (M6c §5.9).
+    /// Klucz: indeks węzła i minuta złożenia zamówienia.
+    SupplyImportLead = 206,
+    // 201–202, 204 i 207–219 zarezerwowane dla M6 zgodnie z przydziałem w §6.1
+    // dokumentu fazy: 201 `SupplySpoilage`, 202 `SupplyQuality`, 204 `SupplyYield`.
+    // Rezerwa dalsza 1200–1219.
 }
 
 /// Encja zastępcza dla losowania bez encji (zdarzenie globalne, generator świata).
@@ -386,6 +395,8 @@ mod tests {
         assert_eq!(StreamId::PurchaseChoice as u16, 181);
         assert_eq!(StreamId::CreditScoringJitter as u16, 185);
         assert_eq!(StreamId::SupplyBreakdown as u16, 200);
+        assert_eq!(StreamId::SupplyQuoteNoise as u16, 203);
         assert_eq!(StreamId::SupplyTransitDelay as u16, 205);
+        assert_eq!(StreamId::SupplyImportLead as u16, 206);
     }
 }
