@@ -1,0 +1,93 @@
+// Kategorie potrzeb (M6a §5.1, `NeedCategoryId`). Kategoria jest **drobna** — to ona
+// odpowiada na pytanie „czym to podmienić", kiedy zabraknie towaru (PRD §8.4), więc
+// „pieczywo" i „mąka" są osobno, choć obie wpadają w ten sam `StockCat::Food`.
+//
+// `stock_cat` wiąże kategorię z grubym podziałem gospodarstwa domowego z M5: to on
+// indeksuje `Household.stock: [u8; 8]`, więc jest ośmiowartościowy i taki zostaje.
+// `None` znaczy „gospodarstwo tego nie trzyma w spiżarni" — ruda żelaza i olej smarowy
+// nie mają takiej kategorii i nie powinny jej udawać.
+//
+// Kolejność wpisów w tym pliku **nie jest** kontraktem: `NeedCategoryId` nadaje się
+// alfabetycznie po kluczu przy ładowaniu, tak samo jak `GoodId` (dok. 00 §5). Zapis gry
+// trzyma klucz, nie indeks.
+//
+// Fala A wypełnia część z nich. Reguła „każda kategoria konsumpcyjna ma ≥ 3 towary
+// różniące się jakością i ceną" należy do fali B (M7) — przy sześćdziesięciu towarach
+// fali A wyszłaby jedna kategoria na towar, czyli kategoria bez znaczenia.
+(
+    schema_version: 1,
+    categories: [
+        // ── żywność i napoje ────────────────────────────────────────────────────────
+        (key: "bread",             stock_cat: Some(Food)),
+        (key: "milled_grain",      stock_cat: Some(Food)),
+        (key: "baking_aux",        stock_cat: Some(Food)),
+        (key: "dairy",             stock_cat: Some(Food)),
+        (key: "meat",              stock_cat: Some(Food)),
+        (key: "vegetable",         stock_cat: Some(Food)),
+        (key: "fruit",             stock_cat: Some(Food)),
+        (key: "sweetener",         stock_cat: Some(Food)),
+        (key: "edible_fat",        stock_cat: Some(Food)),
+        (key: "beverage_soft",     stock_cat: Some(Drink)),
+        (key: "beverage_alcohol",  stock_cat: Some(Drink)),
+
+        // ── gospodarstwo domowe ─────────────────────────────────────────────────────
+        (key: "hygiene",           stock_cat: Some(Hygiene)),
+        (key: "cleaning",          stock_cat: Some(Cleaning)),
+        (key: "paper_household",   stock_cat: Some(Hygiene)),
+        (key: "clothing",          stock_cat: Some(Clothing)),
+        (key: "footwear",          stock_cat: Some(Clothing)),
+        (key: "medicine",          stock_cat: Some(Medicine)),
+        (key: "tobacco",           stock_cat: Some(Other)),
+        (key: "furniture",         stock_cat: Some(Other)),
+        (key: "appliance",         stock_cat: Some(Other)),
+        (key: "electronics",       stock_cat: Some(Other)),
+        (key: "vehicle",           stock_cat: Some(Other)),
+        (key: "leisure_goods",     stock_cat: Some(Other)),
+
+        // ── paliwa i media ──────────────────────────────────────────────────────────
+        // Paliwo jest jedyną kategorią przemysłową z `StockCat`, bo mieszkaniec
+        // naprawdę trzyma je w baku i to on je kupuje na stacji.
+        (key: "motor_fuel",        stock_cat: Some(Fuel)),
+        (key: "heating_fuel",      stock_cat: Some(Fuel)),
+        (key: "gaseous_fuel",      stock_cat: Some(Fuel)),
+        (key: "solid_fuel",        stock_cat: Some(Fuel)),
+        (key: "utility_media",     stock_cat: None),
+        (key: "water_drinking",    stock_cat: Some(Drink)),
+
+        // ── surowce ─────────────────────────────────────────────────────────────────
+        (key: "raw_ore",           stock_cat: None),
+        (key: "raw_mineral",       stock_cat: None),
+        (key: "raw_hydrocarbon",   stock_cat: None),
+        (key: "raw_biomass",       stock_cat: None),
+        (key: "raw_fibre",         stock_cat: None),
+        (key: "grain",             stock_cat: None),
+        (key: "oilseed",           stock_cat: None),
+        (key: "root_crop",         stock_cat: None),
+        (key: "livestock",         stock_cat: None),
+        (key: "raw_milk",          stock_cat: None),
+
+        // ── materiały i półprodukty ─────────────────────────────────────────────────
+        (key: "metal_primary",     stock_cat: None),
+        (key: "metal_rolled",      stock_cat: None),
+        (key: "binder",            stock_cat: None),
+        (key: "masonry",           stock_cat: None),
+        (key: "glass_flat",        stock_cat: None),
+        (key: "timber_sawn",       stock_cat: None),
+        (key: "timber_panel",      stock_cat: None),
+        (key: "paper_stock",       stock_cat: None),
+        (key: "polymer",           stock_cat: None),
+        (key: "bitumen",           stock_cat: None),
+        (key: "textile_material",  stock_cat: None),
+        (key: "leather_material",  stock_cat: None),
+
+        // ── chemia, rolnictwo, przemysł ─────────────────────────────────────────────
+        (key: "industrial_chemical", stock_cat: None),
+        (key: "lubricant",         stock_cat: None),
+        (key: "agrochemical",      stock_cat: None),
+        (key: "seed_material",     stock_cat: None),
+        (key: "animal_feed",       stock_cat: None),
+        (key: "machine_part",      stock_cat: None),
+        (key: "packaging",         stock_cat: None),
+        (key: "waste",             stock_cat: None),
+    ],
+)

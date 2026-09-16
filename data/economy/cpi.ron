@@ -23,27 +23,27 @@
 
     items: [
         // ── Food ───────────────────────────────────────────────────────────────
-        (key: "bread",        qty: 14250),
-        (key: "potato",       qty: 15750),
-        (key: "vegetables",   qty: 18000),
-        (key: "milk",         qty: 21000),
-        (key: "fruit",        qty:  9750),
-        (key: "poultry_meat", qty:  3375),
-        (key: "cheese",       qty:  1650),
-        (key: "meat",         qty:  8625),
-        (key: "sugar",        qty:  2850),
+        (key: "food_bread_wheat",    qty: 14250),
+        (key: "raw_potato",          qty: 15750),
+        (key: "food_vegetables",     qty: 18000),
+        (key: "food_milk",           qty: 21000),
+        (key: "food_fruit",          qty:  9750),
+        (key: "food_poultry_meat",   qty:  3375),
+        (key: "food_cheese",         qty:  1650),
+        (key: "food_meat",           qty:  8625),
+        (key: "food_sugar",          qty:  2850),
         // ── Drink ──────────────────────────────────────────────────────────────
-        (key: "juice",        qty:  4125),
-        (key: "beer",         qty: 14250),
+        (key: "food_juice",          qty:  4125),
+        (key: "food_beer",           qty: 14250),
         // ── Hygiene i Cleaning ─────────────────────────────────────────────────
-        (key: "soap",         qty:   525),
-        (key: "toilet_paper", qty:  1350),
-        (key: "cosmetics",    qty:   225),
-        (key: "detergent",    qty:  1050),
+        (key: "cons_soap",           qty:   525),
+        (key: "cons_toilet_paper",   qty:  1350),
+        (key: "cons_cosmetics",      qty:   225),
+        (key: "cons_detergent",      qty:  1050),
         // ── Medicine ───────────────────────────────────────────────────────────
-        (key: "medicine",     qty:   225),
+        (key: "cons_medicine",       qty:   225),
         // ── Clothing ───────────────────────────────────────────────────────────
-        (key: "clothing",     qty:  1650),
-        (key: "shoes",        qty:   300),
+        (key: "cons_clothing",       qty:  1650),
+        (key: "cons_shoes",          qty:   300),
     ],
 )

@@ -1,29 +1,37 @@
-// Punkty wejścia łańcuchów: rolnictwo i leśnictwo (M2 §5.8, KROK 1).
+// Punkty wejścia łańcuchów: rolnictwo i leśnictwo (M6a §5.4, KROK 1).
 //
-// Gospodarstwo **ma wejścia** (pasza, nawóz, woda) i mimo to jest punktem wejścia:
-// o tym decyduje flaga `source: Agriculture`, a nie pustka w `inputs`. Dokładnie po to
-// M6 dodał to pole — bez niego domknięcie musiałoby zgadywać, a obora karmiona paszą
-// z tej samej wsi wyglądałaby jak cykl bez wyjścia (M2 §9.1/14).
+// Gospodarstwo **ma wejścia** (pasza, nawóz, woda, materiał siewny) i mimo to jest punktem
+// wejścia: o tym decyduje flaga `source: Agriculture`, a nie pustka w `inputs`. Dokładnie
+// po to to pole istnieje — bez niego domknięcie musiałoby zgadywać, a obora karmiona paszą
+// z tej samej wsi wyglądałaby jak cykl bez wyjścia.
 //
 // Bilans masy tych receptur się nie domyka i **tak ma być**: zboże rośnie z gleby
 // i ze słońca, a te nie są towarem.
+//
+// Pole pszenicy bierze ziarno siewne z czyszczalni, która bierze pszenicę z pola —
+// to jest cykl i jest poprawny, bo przecina go flaga punktu wejścia (a w ostateczności
+// import ziarna kwalifikowanego).
 (
-    schema_version: 1,
+    schema_version: 2,
     recipes: [
         (
             key: "wheat_farming",
             source: Agriculture,
-            inputs: [("fertilizer", 20_000)],
-            outputs: [("wheat", 1_000_000)],
+            inputs: [
+                (good: "agri_fertilizer", mass_g: 20_000),
+                (good: "agri_seed_wheat", mass_g: 18_000, min_quality: 60),
+            ],
+            outputs: [(good: "raw_wheat", mass_g: 1_000_000)],
             duration_minutes: 1440,
             labour: [("production_worker", 900)],
             machine_class: "field",
+            quality: (base: 45, w_input: 35, w_skill: 15, w_tech: 20, w_machine: 10),
         ),
         (
             key: "potato_farming",
             source: Agriculture,
-            inputs: [("fertilizer", 15_000)],
-            outputs: [("potato", 1_200_000)],
+            inputs: [(good: "agri_fertilizer", mass_g: 15_000)],
+            outputs: [(good: "raw_potato", mass_g: 1_200_000)],
             duration_minutes: 1440,
             labour: [("production_worker", 1_100)],
             machine_class: "field",
@@ -31,8 +39,8 @@
         (
             key: "sugar_beet_farming",
             source: Agriculture,
-            inputs: [("fertilizer", 25_000)],
-            outputs: [("sugar_beet", 2_000_000)],
+            inputs: [(good: "agri_fertilizer", mass_g: 25_000)],
+            outputs: [(good: "raw_sugar_beet", mass_g: 2_000_000)],
             duration_minutes: 1440,
             labour: [("production_worker", 1_000)],
             machine_class: "field",
@@ -40,8 +48,8 @@
         (
             key: "rapeseed_farming",
             source: Agriculture,
-            inputs: [("fertilizer", 22_000)],
-            outputs: [("rapeseed", 700_000)],
+            inputs: [(good: "agri_fertilizer", mass_g: 22_000)],
+            outputs: [(good: "raw_rapeseed", mass_g: 700_000)],
             duration_minutes: 1440,
             labour: [("production_worker", 800)],
             machine_class: "field",
@@ -49,8 +57,11 @@
         (
             key: "vegetable_farming",
             source: Agriculture,
-            inputs: [("fertilizer", 18_000), ("water_raw", 40_000)],
-            outputs: [("vegetables", 900_000)],
+            inputs: [
+                (good: "agri_fertilizer", mass_g: 18_000),
+                (good: "util_water",      mass_g: 40_000),
+            ],
+            outputs: [(good: "food_vegetables", mass_g: 900_000)],
             duration_minutes: 1440,
             labour: [("production_worker", 2_400)],
             machine_class: "field",
@@ -58,8 +69,11 @@
         (
             key: "orchard",
             source: Agriculture,
-            inputs: [("fertilizer", 14_000), ("water_raw", 30_000)],
-            outputs: [("fruit", 800_000)],
+            inputs: [
+                (good: "agri_fertilizer", mass_g: 14_000),
+                (good: "util_water",      mass_g: 30_000),
+            ],
+            outputs: [(good: "food_fruit", mass_g: 800_000)],
             duration_minutes: 1440,
             labour: [("production_worker", 2_000)],
             machine_class: "field",
@@ -67,37 +81,51 @@
         (
             key: "dairy_farm",
             source: Agriculture,
-            inputs: [("fodder", 900_000), ("water_raw", 200_000)],
-            outputs: [("milk_raw", 700_000)],
+            inputs: [
+                (good: "feed_fodder", mass_g: 900_000),
+                (good: "util_water",  mass_g: 200_000),
+            ],
+            outputs: [(good: "raw_milk", mass_g: 700_000)],
             duration_minutes: 1440,
             labour: [("production_worker", 2_600)],
             machine_class: "barn",
+            emissions: (noise_db: 55, wastewater_ml: 120_000),
+            quality: (base: 45, w_input: 40, w_skill: 20, w_tech: 10, w_machine: 10, cap_by_worst_input: true, bonus_qc: 5),
         ),
         (
             key: "cattle_farm",
             source: Agriculture,
-            inputs: [("fodder", 1_200_000), ("water_raw", 150_000)],
-            outputs: [("livestock", 300_000)],
+            inputs: [
+                (good: "feed_fodder", mass_g: 1_200_000),
+                (good: "util_water",  mass_g: 150_000),
+            ],
+            outputs: [(good: "raw_livestock", mass_g: 300_000)],
             duration_minutes: 1440,
             labour: [("production_worker", 2_200)],
             machine_class: "barn",
+            emissions: (noise_db: 58, wastewater_ml: 90_000),
         ),
         (
             key: "poultry_farm",
             source: Agriculture,
-            inputs: [("fodder", 800_000), ("water_raw", 80_000)],
-            outputs: [("poultry", 350_000)],
+            inputs: [
+                (good: "feed_fodder", mass_g: 800_000),
+                (good: "util_water",  mass_g: 80_000),
+            ],
+            outputs: [(good: "raw_poultry", mass_g: 350_000)],
             duration_minutes: 1440,
             labour: [("production_worker", 1_400)],
             machine_class: "barn",
+            emissions: (noise_db: 60, wastewater_ml: 60_000),
         ),
         (
             key: "forestry",
             source: Agriculture,
-            outputs: [("timber", 900_000)],
+            outputs: [(good: "raw_timber", mass_g: 900_000)],
             duration_minutes: 1440,
             labour: [("production_worker", 1_800)],
             machine_class: "field",
+            emissions: (noise_db: 88),
         ),
     ],
 )

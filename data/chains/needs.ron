@@ -3,54 +3,61 @@
 // Dlaczego tutaj, a nie w `data/goods/`: schemat `Good` należy do M6 i nie ma powodu,
 // żeby model potrzeb wchodził mu do struktury towaru. Dlaczego nie w `data/needs/`:
 // ten katalog należy do modelu potrzeb M3/M5 i powstanie razem z nim. To jest liczba
-// **wejściowa do walidacji bilansu**, a nie model konsumpcji — mieszkańców w M2 nie ma.
+// **wejściowa do walidacji bilansu**, a nie model konsumpcji.
 //
-// `water_raw` jest w koszyku, choć woda jest **mediem**, nie zakupem: docelowo należy
-// do `UtilityService::Water` i do M8. W M2 nie ma mieszkańców ani sieci przesyłowych,
-// a bilans musi znać zapotrzebowanie miasta na wodę, bo od niego zależy liczba ujęć.
+// `raw_water` jest w koszyku, choć woda jest **mediem**, nie zakupem: docelowo należy
+// do `UtilityService::Water` i do M8. Bilans musi znać zapotrzebowanie miasta na wodę,
+// bo od niego zależy liczba ujęć. Pozycja opisuje pobór **surowy**, czyli to, co miasto
+// musi wziąć z ujęcia — uzdatnianie (`util_water`) zabiera z tego około 4%.
 // Kiedy M8 zbuduje wodociąg, ta pozycja z koszyka znika.
 //
 // Klucz to epoka **startowa** miasta, czyli ostatni pierścień z `data/epochs/`:
 // 1950 i 1970 → `postwar`, 1990 → `transition`, 2010 i 2020 → `contemporary`.
-// Epok starszych nie ma, bo `Epoch` zaczyna się w 1950 — pierścień `medieval` opisuje
-// zabudowę, nie rok, w którym gra się zaczyna.
+//
+// Klucze towarów przeszły w M6a na konwencję `<domena>_<nazwa>[_<wariant>]`; liczby
+// są te same co w M2, bo koszyk nie jest przedmiotem tej migracji. Nowe pozycje fali A
+// w koszyku `contemporary` to media i LPG — gospodarstwo domowe naprawdę je kupuje,
+// a bez nich prąd, ciepło i gaz sieciowy nie mają w mieście ani jednego odbiorcy
+// krajowego. Prąd i ciepło są w „gramach" umownych (1 g ≙ 1 kWh, patrz
+// `data/goods/utility.ron`): 9 kWh prądu i 24 kWh ciepła na osobę na dobę.
 (
     schema_version: 1,
     baskets: [
         // ── 1950 i 1970: dużo chleba i ziemniaka, mało dóbr trwałych ────────────────
         ("postwar", [
-            ("water_raw", 85_000), ("bread", 260), ("milk", 300), ("cheese", 12), ("meat", 85), ("poultry_meat", 20),
-            ("vegetables", 220), ("fruit", 90), ("potato", 300), ("sugar", 34),
-            ("beer", 120), ("juice", 15), ("cigarettes", 5),
-            ("soap", 6), ("detergent", 7), ("cosmetics", 1), ("toilet_paper", 9), ("medicine", 2),
-            ("clothing", 14), ("shoes", 3), ("books", 4), ("toys", 1),
-            ("furniture", 6), ("tv_set", 0), ("refrigerator", 0), ("washing_machine", 0),
-            ("bicycle", 2), ("car", 8),
-            ("fuel_petrol", 35), ("fuel_diesel", 18), ("heating_oil", 70),
+            ("raw_water", 85_000), ("food_bread_wheat", 260), ("food_milk", 300), ("food_cheese", 12), ("food_meat", 85), ("food_poultry_meat", 20),
+            ("food_vegetables", 220), ("food_fruit", 90), ("raw_potato", 300), ("food_sugar", 34),
+            ("food_beer", 120), ("food_juice", 15), ("cons_cigarettes", 5),
+            ("cons_soap", 6), ("cons_detergent", 7), ("cons_cosmetics", 1), ("cons_toilet_paper", 9), ("cons_medicine", 2),
+            ("cons_clothing", 14), ("cons_shoes", 3), ("cons_books", 4), ("cons_toys", 1),
+            ("cons_furniture", 6), ("cons_tv_set", 0), ("cons_refrigerator", 0), ("cons_washing_machine", 0),
+            ("cons_bicycle", 2), ("cons_car", 8),
+            ("fuel_petrol_95", 35), ("fuel_diesel_b7", 18), ("fuel_heating_oil", 70),
         ]),
 
         // ── 1990: transformacja ────────────────────────────────────────────────────
         ("transition", [
-            ("water_raw", 120_000), ("bread", 190), ("milk", 280), ("cheese", 22), ("meat", 115), ("poultry_meat", 45),
-            ("vegetables", 240), ("fruit", 130), ("potato", 210), ("sugar", 38),
-            ("beer", 190), ("juice", 55), ("cigarettes", 4),
-            ("soap", 7), ("detergent", 14), ("cosmetics", 3), ("toilet_paper", 18), ("medicine", 3),
-            ("clothing", 22), ("shoes", 4), ("books", 5), ("toys", 2),
-            ("furniture", 9), ("tv_set", 1), ("refrigerator", 1), ("washing_machine", 1),
-            ("bicycle", 1), ("car", 40),
-            ("fuel_petrol", 110), ("fuel_diesel", 35), ("heating_oil", 55),
+            ("raw_water", 120_000), ("food_bread_wheat", 190), ("food_milk", 280), ("food_cheese", 22), ("food_meat", 115), ("food_poultry_meat", 45),
+            ("food_vegetables", 240), ("food_fruit", 130), ("raw_potato", 210), ("food_sugar", 38),
+            ("food_beer", 190), ("food_juice", 55), ("cons_cigarettes", 4),
+            ("cons_soap", 7), ("cons_detergent", 14), ("cons_cosmetics", 3), ("cons_toilet_paper", 18), ("cons_medicine", 3),
+            ("cons_clothing", 22), ("cons_shoes", 4), ("cons_books", 5), ("cons_toys", 2),
+            ("cons_furniture", 9), ("cons_tv_set", 1), ("cons_refrigerator", 1), ("cons_washing_machine", 1),
+            ("cons_bicycle", 1), ("cons_car", 40),
+            ("fuel_petrol_95", 110), ("fuel_diesel_b7", 35), ("fuel_heating_oil", 55),
         ]),
 
         // ── 2010 i 2020: mniej węglowodanów, więcej wszystkiego innego ──────────────
         ("contemporary", [
-            ("water_raw", 145_000), ("bread", 150), ("milk", 230), ("cheese", 34), ("meat", 125), ("poultry_meat", 80),
-            ("vegetables", 260), ("fruit", 170), ("potato", 150), ("sugar", 40),
-            ("beer", 230), ("juice", 90), ("cigarettes", 2),
-            ("soap", 8), ("detergent", 20), ("cosmetics", 6), ("toilet_paper", 24), ("medicine", 5),
-            ("clothing", 30), ("shoes", 6), ("books", 4), ("toys", 4),
-            ("furniture", 12), ("tv_set", 2), ("refrigerator", 2), ("washing_machine", 2),
-            ("bicycle", 2), ("car", 70),
-            ("fuel_petrol", 150), ("fuel_diesel", 60), ("heating_oil", 30),
+            ("raw_water", 145_000), ("util_water", 139_000), ("food_bread_wheat", 150), ("food_milk", 230), ("food_cheese", 34), ("food_meat", 125), ("food_poultry_meat", 80),
+            ("food_vegetables", 260), ("food_fruit", 170), ("raw_potato", 150), ("food_sugar", 40),
+            ("food_beer", 230), ("food_juice", 90), ("cons_cigarettes", 2),
+            ("cons_soap", 8), ("cons_detergent", 20), ("cons_cosmetics", 6), ("cons_toilet_paper", 24), ("cons_medicine", 5),
+            ("cons_clothing", 30), ("cons_shoes", 6), ("cons_books", 4), ("cons_toys", 4),
+            ("cons_furniture", 12), ("cons_tv_set", 2), ("cons_refrigerator", 2), ("cons_washing_machine", 2),
+            ("cons_bicycle", 2), ("cons_car", 70),
+            ("fuel_petrol_95", 150), ("fuel_diesel_b7", 60), ("fuel_heating_oil", 30), ("fuel_lpg", 25),
+            ("util_electricity", 9), ("util_gas", 90), ("util_heat", 24),
         ]),
     ],
 )

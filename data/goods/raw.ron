@@ -1,37 +1,41 @@
-// Surowce — towary, które wchodzą do gospodarki z wydobycia, rolnictwa albo z importu
-// (M2 §5.8, katalog minimalny; właścicielem docelowego katalogu ~400 towarów jest M6).
+// Surowce pierwotne — wchodzą do gospodarki z wydobycia, rolnictwa albo z importu
+// (M6a §5.1, schemat docelowy; klucze w konwencji `<domena>_<nazwa>[_<wariant>]`).
 //
 // `external_base_price` to **grosze za 1000 jednostek natywnych**: za kilogram dla
-// towarów `Grams`, za sztukę dla `Milliunits` (1000 milisztuk = 1 sztuka). Jedno pole,
-// więc nie da się mieć stanu „importowalny bez ceny" (M2 §9.1/16). `None` = towaru
-// nie sprowadzi żaden dostawca zewnętrzny i musi powstać na miejscu.
+// postaci sypkich, ciekłych i gazowych, za sztukę dla sztukowych i paletowanych.
+// Jedno pole, więc stan „importowalny bez ceny" nie istnieje. `None` = towaru nie
+// sprowadzi żaden dostawca zewnętrzny i musi powstać na miejscu.
 //
-// `import_via` puste = wszystkie bramy towarowe (droga, kolej, port). W M2 zostaje puste
-// wszędzie **z rozmysłu**: jedyną bramą wspólną dla wszystkich profili jest `Highway`
-// (patrz `required` w `data/zoning/`), więc zawężenie listy do kolei albo portu wywracałoby
-// domknięcie łańcuchów w mieście rolniczym — i byłoby to zerwanie chronologii, nie realizm.
-// Zawężenie należy do M6, razem z dynamicznym limitem przepustowości importu.
+// `unit` zniknął ze schematu w M6a: jednostka jest **pochodną** `form`, więc nie da się
+// zadeklarować towaru sypkiego liczonego w sztukach.
+//
+// Warunki przechowywania: kruszywa i węgiel na placu (`Yard`), ropa w zbiorniku (`Tank`),
+// gaz w zbiorniku ciśnieniowym (`PressureTank`), bawełna i liść tytoniowy pod dachem
+// w suchym (`Dry`) — wilgoć niszczy je szybciej niż czas.
+//
+// `import_via` puste = wszystkie bramy towarowe (droga, kolej, port). Zawężenie należy
+// do M6b, razem z dynamicznym limitem przepustowości importu.
 (
-    schema_version: 1,
+    schema_version: 2,
     goods: [
         // ── kopaliny ────────────────────────────────────────────────────────────────
-        (key: "coal",          unit: Grams, density_g_per_l: 800,  external_base_price: Some((18))),
-        (key: "iron_ore",      unit: Grams, density_g_per_l: 2500, external_base_price: Some((12))),
-        (key: "limestone",     unit: Grams, density_g_per_l: 1600, external_base_price: Some((6))),
-        (key: "sand",          unit: Grams, density_g_per_l: 1500, external_base_price: Some((4))),
-        (key: "gravel",        unit: Grams, density_g_per_l: 1700, external_base_price: Some((5))),
-        (key: "clay",          unit: Grams, density_g_per_l: 1700, external_base_price: Some((5))),
-        (key: "crude_oil",     unit: Grams, density_g_per_l: 870,  external_base_price: Some((95))),
-        (key: "natural_gas",   unit: Grams, density_g_per_l: 1,    external_base_price: Some((70))),
+        (key: "raw_coal",         category: "solid_fuel",      form: Bulk,   density_g_per_l: 800,  storage: Yard,         external_base_price: Some((18))),
+        (key: "raw_iron_ore",     category: "raw_ore",         form: Bulk,   density_g_per_l: 2500, storage: Yard,         external_base_price: Some((12))),
+        (key: "raw_limestone",    category: "raw_mineral",     form: Bulk,   density_g_per_l: 1600, storage: Yard,         external_base_price: Some((6))),
+        (key: "raw_sand",         category: "raw_mineral",     form: Bulk,   density_g_per_l: 1500, storage: Yard,         has_quality: false, external_base_price: Some((4))),
+        (key: "raw_gravel",       category: "raw_mineral",     form: Bulk,   density_g_per_l: 1700, storage: Yard,         has_quality: false, external_base_price: Some((5))),
+        (key: "raw_clay",         category: "raw_mineral",     form: Bulk,   density_g_per_l: 1700, storage: Yard,         external_base_price: Some((5))),
+        (key: "raw_crude_oil",    category: "raw_hydrocarbon", form: Liquid, density_g_per_l: 870,  storage: Tank,         hazard: Flammable, external_base_price: Some((95))),
+        (key: "raw_natural_gas",  category: "raw_hydrocarbon", form: Gas,    density_g_per_l: 1,    storage: PressureTank, hazard: Explosive, external_base_price: Some((70))),
 
         // Woda surowa nie ma dostawcy zewnętrznego: miasto bierze ją z własnego ujęcia
-        // albo nie ma jej wcale. To jedyny towar w katalogu M2 bez ceny importowej
-        // i celowo — domknięcie musi umieć postawić zakład, a nie tylko kupić brakujące.
-        (key: "water_raw",     unit: Grams, density_g_per_l: 1000, external_base_price: None),
+        // albo nie ma jej wcale. Domknięcie musi umieć postawić zakład, a nie tylko
+        // kupić brakujące. Woda z kranu to osobny towar (`util_water`, `data/goods/utility.ron`).
+        (key: "raw_water",        category: "utility_media",   form: Liquid, density_g_per_l: 1000, storage: Tank,         has_quality: false),
 
         // ── surowce leśne i te, dla których region nie ma własnego źródła ────────────
-        (key: "timber",        unit: Grams, density_g_per_l: 600,  external_base_price: Some((28))),
-        (key: "cotton",        unit: Grams, density_g_per_l: 400,  external_base_price: Some((420))),
-        (key: "tobacco_leaf",  unit: Grams, density_g_per_l: 300,  external_base_price: Some((980))),
+        (key: "raw_timber",       category: "raw_biomass",     form: Bulk,   density_g_per_l: 600,  storage: Yard,         external_base_price: Some((28))),
+        (key: "raw_cotton",       category: "raw_fibre",       form: Bulk,   density_g_per_l: 400,  storage: Dry,          external_base_price: Some((420))),
+        (key: "raw_tobacco_leaf", category: "raw_biomass",     form: Bulk,   density_g_per_l: 300,  storage: Dry,          shelf_life_minutes: Some(1_051_200), external_base_price: Some((980))),
     ],
 )

@@ -87,6 +87,18 @@ scalar_newtype! {
 }
 
 scalar_newtype! {
+    /// Indeks do katalogu kategorii potrzeb (`data/needs/categories.ron`), stabilny
+    /// w obrębie wersji danych tak samo jak [`GoodId`].
+    ///
+    /// Kategoria jest **drobna** — „pieczywo", „paliwo silnikowe", „części maszyn" — i to
+    /// ona odpowiada na pytanie „czym to podmienić", kiedy zabraknie towaru (PRD §8.4).
+    /// Grubszy podział gospodarstwa domowego niesie [`crate::StockCat`] i to on indeksuje
+    /// `Household.stock`; jedna kategoria potrzeby wpada w co najwyżej jeden `StockCat`,
+    /// a odwzorowanie mieszka w danych, nie w kodzie.
+    NeedCategoryId(u16)
+}
+
+scalar_newtype! {
     /// Indeks do katalogu ról zawodowych.
     JobRoleId(u16)
 }

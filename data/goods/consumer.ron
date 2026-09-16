@@ -1,39 +1,50 @@
 // Towary konsumpcyjne — to one stoją w koszyku potrzeb epoki (`data/chains/needs.ron`)
-// i to ich popyt zamyka bilans z KROKU 5 domknięcia (M2 §5.8).
+// i to ich popyt zamyka bilans domknięcia.
 //
-// Sztukowe mają `unit: Milliunits` i **wymagany** `unit_mass_g`: ilości w recepturach
-// są zawsze w gramach, więc bez masy sztuki nie dałoby się policzyć bilansu masy
-// na jednej skali. Cena importowa jest wtedy za sztukę, nie za kilogram.
+// Postać rozstrzyga jednostkę: `Bulk`/`Liquid`/`Gas` liczą się w gramach i wymagają
+// gęstości, `Piece`/`Palletized` w milisztukach i wymagają masy oraz **objętości brutto**
+// sztuki. Objętość brutto jest większa niż masa podzielona przez gęstość materiału,
+// bo pudełko, styropian i paleta też zajmują miejsce w magazynie — i to ona decyduje,
+// ile lodówek wejdzie do hali, a nie stal, z której są zrobione.
+//
+// Terminy przydatności (w minutach): chleb 2 doby, mleko i nabiał tydzień, ser miesiąc
+// w chłodni, mięso 5 dób, drób 4 doby. To są terminy handlowe przy dochowanych warunkach
+// przechowywania — towar poza swoją klasą magazynu psuje się szybciej, ale tym zajmuje
+// się M6b, nie katalog.
 (
-    schema_version: 1,
+    schema_version: 2,
     goods: [
         // ── żywność ─────────────────────────────────────────────────────────────────
-        (key: "bread",        unit: Grams, density_g_per_l: 300,  external_base_price: Some((190))),
-        (key: "milk",         unit: Grams, density_g_per_l: 1030, external_base_price: Some((135))),
-        (key: "cheese",       unit: Grams, density_g_per_l: 1090, external_base_price: Some((1450))),
-        (key: "meat",         unit: Grams, density_g_per_l: 1020, external_base_price: Some((1180))),
-        (key: "poultry_meat", unit: Grams, density_g_per_l: 1020, external_base_price: Some((780))),
-        (key: "beer",         unit: Grams, density_g_per_l: 1008, external_base_price: Some((210))),
-        (key: "juice",        unit: Grams, density_g_per_l: 1045, external_base_price: Some((260))),
+        (key: "food_bread_wheat", category: "bread",            form: Bulk,   density_g_per_l: 300,  storage: Ambient, hazard: Perishable, shelf_life_minutes: Some(2_880),  external_base_price: Some((190))),
+        (key: "food_milk",        category: "dairy",            form: Liquid, density_g_per_l: 1030, storage: Chilled, hazard: Perishable, shelf_life_minutes: Some(10_080), external_base_price: Some((135))),
+        (key: "food_cheese",      category: "dairy",            form: Bulk,   density_g_per_l: 1090, storage: Chilled, hazard: Perishable, shelf_life_minutes: Some(43_200), external_base_price: Some((1450))),
+        (key: "food_meat",        category: "meat",             form: Bulk,   density_g_per_l: 1020, storage: Chilled, hazard: Perishable, shelf_life_minutes: Some(7_200),  external_base_price: Some((1180))),
+        (key: "food_poultry_meat", category: "meat",            form: Bulk,   density_g_per_l: 1020, storage: Chilled, hazard: Perishable, shelf_life_minutes: Some(5_760),  external_base_price: Some((780))),
+        (key: "food_beer",        category: "beverage_alcohol", form: Liquid, density_g_per_l: 1008, storage: Ambient, shelf_life_minutes: Some(259_200), external_base_price: Some((210))),
+        (key: "food_juice",       category: "beverage_soft",    form: Liquid, density_g_per_l: 1045, storage: Ambient, shelf_life_minutes: Some(172_800), external_base_price: Some((260))),
 
         // ── chemia gospodarcza i higiena ────────────────────────────────────────────
-        (key: "soap",         unit: Grams, density_g_per_l: 850,  external_base_price: Some((680))),
-        (key: "detergent",    unit: Grams, density_g_per_l: 1050, external_base_price: Some((520))),
-        (key: "cosmetics",    unit: Grams, density_g_per_l: 960,  external_base_price: Some((2400))),
-        (key: "toilet_paper", unit: Grams, density_g_per_l: 280,  external_base_price: Some((390))),
-        (key: "medicine",     unit: Grams, density_g_per_l: 900,  external_base_price: Some((9800))),
-        (key: "cigarettes",   unit: Grams, density_g_per_l: 320,  external_base_price: Some((4200))),
+        (key: "cons_soap",         category: "hygiene",         form: Bulk,   density_g_per_l: 850,  storage: Ambient, external_base_price: Some((680))),
+        (key: "cons_detergent",    category: "cleaning",        form: Bulk,   density_g_per_l: 1050, storage: Dry,     external_base_price: Some((520))),
+        (key: "cons_cosmetics",    category: "hygiene",         form: Bulk,   density_g_per_l: 960,  storage: Ambient, shelf_life_minutes: Some(1_051_200), external_base_price: Some((2400))),
+        (key: "cons_toilet_paper", category: "paper_household", form: Bulk,   density_g_per_l: 280,  storage: Dry,     external_base_price: Some((390))),
+        (key: "cons_medicine",     category: "medicine",        form: Bulk,   density_g_per_l: 900,  storage: Ambient, shelf_life_minutes: Some(1_576_800), external_base_price: Some((9800))),
+        (key: "cons_cigarettes",   category: "tobacco",         form: Bulk,   density_g_per_l: 320,  storage: Dry,     external_base_price: Some((4200))),
 
         // ── wyroby sztukowe ─────────────────────────────────────────────────────────
-        (key: "clothing",         unit: Milliunits, density_g_per_l: 400,  unit_mass_g: 400,     external_base_price: Some((4800))),
-        (key: "shoes",            unit: Milliunits, density_g_per_l: 500,  unit_mass_g: 800,     external_base_price: Some((9600))),
-        (key: "books",            unit: Milliunits, density_g_per_l: 700,  unit_mass_g: 450,     external_base_price: Some((2100))),
-        (key: "toys",             unit: Milliunits, density_g_per_l: 300,  unit_mass_g: 350,     external_base_price: Some((2600))),
-        (key: "furniture",        unit: Milliunits, density_g_per_l: 350,  unit_mass_g: 28_000,  external_base_price: Some((56_000))),
-        (key: "tv_set",           unit: Milliunits, density_g_per_l: 400,  unit_mass_g: 22_000,  external_base_price: Some((180_000))),
-        (key: "refrigerator",     unit: Milliunits, density_g_per_l: 300,  unit_mass_g: 60_000,  external_base_price: Some((210_000))),
-        (key: "washing_machine",  unit: Milliunits, density_g_per_l: 350,  unit_mass_g: 70_000,  external_base_price: Some((240_000))),
-        (key: "bicycle",          unit: Milliunits, density_g_per_l: 250,  unit_mass_g: 15_000,  external_base_price: Some((88_000))),
-        (key: "car",              unit: Milliunits, density_g_per_l: 300,  unit_mass_g: 950_000, external_base_price: Some((2_900_000))),
+        // Objętości brutto **wymyślone** — wynikają z kartonu wysyłkowego, nie z bryły
+        // wyrobu; do sprawdzenia przy kalibracji pojemności magazynów w M6b.
+        (key: "cons_clothing",        category: "clothing",    form: Piece,      unit_mass_g: 400,     unit_volume_ml: 3_000,      storage: Dry,     external_base_price: Some((4800))),
+        (key: "cons_shoes",           category: "footwear",    form: Piece,      unit_mass_g: 800,     unit_volume_ml: 6_000,      storage: Dry,     external_base_price: Some((9600))),
+        (key: "cons_books",           category: "leisure_goods", form: Piece,    unit_mass_g: 450,     unit_volume_ml: 1_200,      storage: Dry,     external_base_price: Some((2100))),
+        (key: "cons_toys",            category: "leisure_goods", form: Piece,    unit_mass_g: 350,     unit_volume_ml: 4_000,      storage: Ambient, external_base_price: Some((2600))),
+        (key: "cons_furniture",       category: "furniture",   form: Palletized, unit_mass_g: 28_000,  unit_volume_ml: 220_000,    storage: Dry,     external_base_price: Some((56_000))),
+        (key: "cons_tv_set",          category: "electronics", form: Piece,      unit_mass_g: 22_000,  unit_volume_ml: 120_000,    storage: Dry,     external_base_price: Some((180_000))),
+        (key: "cons_refrigerator",    category: "appliance",   form: Palletized, unit_mass_g: 60_000,  unit_volume_ml: 450_000,    storage: Ambient, external_base_price: Some((210_000))),
+        (key: "cons_washing_machine", category: "appliance",   form: Palletized, unit_mass_g: 70_000,  unit_volume_ml: 400_000,    storage: Ambient, external_base_price: Some((240_000))),
+        (key: "cons_bicycle",         category: "vehicle",     form: Piece,      unit_mass_g: 15_000,  unit_volume_ml: 230_000,    storage: Ambient, external_base_price: Some((88_000))),
+        // Samochód jest ładunkiem ponadgabarytowym — `Oversize` jest tu informacją
+        // dla placu, nie ostrzeżeniem o zagrożeniu.
+        (key: "cons_car",             category: "vehicle",     form: Piece,      unit_mass_g: 950_000, unit_volume_ml: 12_000_000, storage: Yard, hazard: Oversize, external_base_price: Some((2_900_000))),
     ],
 )

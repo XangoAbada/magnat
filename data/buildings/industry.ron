@@ -18,7 +18,7 @@
         (key: "cement_plant",     sector: Industry, zones: ["industry_heavy"], min_parcel_m2: 11000, m2_per_workplace: 256, wage_mult: 1.10, recipes: ["cement_plant"]),
         (key: "glassworks",       sector: Industry, zones: ["industry_heavy"], min_parcel_m2: 7000,  m2_per_workplace: 176, wage_mult: 1.08, recipes: ["glassworks"]),
         (key: "brickworks",       sector: Industry, zones: ["industry_heavy", "industry_light"], min_parcel_m2: 6000, m2_per_workplace: 208, wage_mult: 1.02, recipes: ["brickworks"]),
-        (key: "refinery",         sector: Industry, zones: ["industry_heavy"], min_parcel_m2: 16000, m2_per_workplace: 320, wage_mult: 1.32, recipes: ["refinery"]),
+        (key: "refinery",         sector: Industry, zones: ["industry_heavy"], min_parcel_m2: 16000, m2_per_workplace: 320, wage_mult: 1.32, recipes: ["refinery_crude_fractionation"]),
         (key: "petrochemical",    sector: Industry, zones: ["industry_heavy"], min_parcel_m2: 12000, m2_per_workplace: 288, wage_mult: 1.28, recipes: ["petrochemical"]),
         (key: "fertilizer_plant", sector: Industry, zones: ["industry_heavy"], min_parcel_m2: 10000, m2_per_workplace: 272, wage_mult: 1.18, recipes: ["fertilizer_plant"]),
         (key: "chemical_works",   sector: Industry, zones: ["industry_heavy"], min_parcel_m2: 8000,  m2_per_workplace: 224, wage_mult: 1.16, recipes: ["chemical_works"]),
@@ -52,8 +52,8 @@
         (key: "cigarette_factory",sector: Industry, zones: ["industry_light"], min_parcel_m2: 3000, m2_per_workplace: 88, wage_mult: 1.12, recipes: ["cigarette_factory"]),
 
         // ── przetwórstwo spożywcze ──────────────────────────────────────────────────
-        (key: "grain_mill",       sector: Industry, zones: ["industry_light"], min_parcel_m2: 2500, m2_per_workplace: 144, wage_mult: 0.96, recipes: ["milling"]),
-        (key: "bread_plant",      sector: Industry, zones: ["industry_light"], min_parcel_m2: 1200, m2_per_workplace: 64, wage_mult: 0.94, recipes: ["bakery"]),
+        (key: "grain_mill",       sector: Industry, zones: ["industry_light"], min_parcel_m2: 2500, m2_per_workplace: 144, wage_mult: 0.96, recipes: ["milling_wheat_t550"]),
+        (key: "bread_plant",      sector: Industry, zones: ["industry_light"], min_parcel_m2: 1200, m2_per_workplace: 64, wage_mult: 0.94, recipes: ["bakery_bread_wheat"]),
         (key: "yeast_plant",      sector: Industry, zones: ["industry_light"], min_parcel_m2: 2000, m2_per_workplace: 112, wage_mult: 0.98, recipes: ["yeast_plant"]),
         (key: "sugar_refinery",   sector: Industry, zones: ["industry_light", "industry_heavy"], min_parcel_m2: 8000, m2_per_workplace: 176, wage_mult: 1.02, recipes: ["sugar_refinery"]),
         (key: "oil_press",        sector: Industry, zones: ["industry_light"], min_parcel_m2: 3000, m2_per_workplace: 136, wage_mult: 0.98, recipes: ["oil_press"]),

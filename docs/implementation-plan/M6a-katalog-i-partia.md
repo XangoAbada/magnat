@@ -279,3 +279,26 @@ pub enum CostAllocation {
 ```
 
 `Waste` nie dostaje żadnego kosztu i **generuje** koszt utylizacji (`Good::disposal_cost`) albo przychód, jeśli ma odbiorcę (złom, makulatura, otręby na paszę). `SelfConsumed` nie dostaje kosztu i nie tworzy partii — od razu zasila licznik energii zakładu.
+
+---
+
+## Stan po zamknięciu M6a
+
+Kryteria trzech pakietów i kryterium zamknięcia podfazy, z liczbami.
+
+| Pakiet | Kryterium | Stan |
+|---|---|---|
+| WP1 | fala A w repo, `cargo test -p goods-graph` zielony (łącznie z testem negatywnym M2), CLI `goods-graph new <klucz>` generuje szkielet z szablonu kategorii i odpala walidację | **Spełnione.** Katalog: **90 towarów, 74 receptury, 59 kategorii** (było 70 / 62 / 0). `tools/goods-graph`: dziesięć testów, w tym `zapas_startowy_nie_jest_zrodlem` przeniesiony z M2 bez osłabienia. Reguły 1–4 są błędami ładowania, reguła 5 daje **19 ostrzeżeń** — jedno na towar, nie na parę (towar, receptura) |
+| WP2 | `prop_mass_conservation` i `prop_no_negative_stock` zielone na scenariuszu z samym magazynem; partia dzielona 1000 razy nie gubi ani grama, ani grosza | **Spełnione.** `sim/supply/tests/warehouse.rs`: strumień stu tysięcy operacji z pełnym sprawdzeniem co tysiąc kroków, dwadzieścia tysięcy operacji na ciasnym slocie i `proptest` na losowym przeplocie. Test podziału jest dosłowny: 1 000 000 g za 999 999 gr rozdzielone tysiąc razy wychodzi co do grama i co do grosza |
+| WP3 | przemiał zboża i frakcjonowanie ropy dają liczby z tabel §7 **dokumentu fazy** (±0 g); jakość wyjścia jest funkcją czystą | **Spełnione.** `milling_wheat_t550` i `refinery_crude_fractionation` domykają się do 1 000 000 g, `bakery_bread_wheat` do 165 800 g z ubytkiem 7 800 g jako `Evaporation`. `QualityModel::quality` jest funkcją czystą na `i32` z jednym dzieleniem; młyn przy zbożu q64 daje **mąkę q67**, bo sufit najgorszego wejścia przycina wynik |
+| Podfaza | kryteria WP1–WP3; partia dzielona 1000 razy nie gubi ani grama, ani grosza | **Zamknięte.** |
+
+**Odesłanie „§7 tego dokumentu" w kryterium WP3 wskazuje §7.1 i §7.2 dokumentu fazy** —
+podfaza nie ma własnej sekcji 7, bo testy i kryteria akceptacji nie są dzielone na podfazy
+(`K-17` pkt 3). Poprawione przy zamknięciu.
+
+Dwanaście korekt wpisanych w przód jest w tabeli „Zmiany wpisane po M6a" dokumentu fazy
+(`AD-1`…`AD-12`), sześć w `M6b-zaklad-i-transport.md` (`AE-1`…`AE-6`) i cztery
+w `M6d-zloza-i-koniec-dostawcy-zewnetrznego.md` (`AF-1`…`AF-4`). Dwa rozstrzygnięcia
+kontraktowe weszły do dokumentu nadrzędnego jako `K-33` (`GateKind` do `core`)
+i `K-34` (`LossKind` i `NeedCategoryId` do `core`).

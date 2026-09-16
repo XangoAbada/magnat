@@ -20,6 +20,7 @@ magnat-agents = { workspace = true }
 magnat-traffic = { workspace = true }
 magnat-ecs = { workspace = true }
 magnat-spatial = { workspace = true }
+magnat-supply = { workspace = true }
 magnat-voxel = { workspace = true }
 glam = { workspace = true }
 smallvec = { workspace = true }

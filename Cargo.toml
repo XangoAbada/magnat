@@ -14,9 +14,11 @@ members = [
     "sim/agents",
     "sim/economy",
     "sim/snapshot",
+    "sim/supply",
     "sim/traffic",
     "sim/world",
     "tools/balansator",
+    "tools/goods-graph",
     "tools/headless",
     "tools/magnat",
 ]
@@ -42,6 +44,7 @@ magnat-ui = { path = "engine/ui" }
 magnat-agents = { path = "sim/agents" }
 magnat-economy = { path = "sim/economy" }
 magnat-sim-snapshot = { path = "sim/snapshot" }
+magnat-supply = { path = "sim/supply" }
 magnat-traffic = { path = "sim/traffic" }
 magnat-voxel = { path = "engine/voxel" }
 magnat-world = { path = "sim/world" }

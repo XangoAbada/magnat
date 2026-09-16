@@ -10,7 +10,7 @@
 //! żadnej funkcji użyteczności, żadnego zapotrzebowania — te żyją w fazach.
 
 use crate::ids::{BuildingId, ParcelId, SiteId};
-use crate::types::DistrictId;
+use crate::types::{DistrictId, Qty};
 use serde::{Deserialize, Serialize};
 
 /// Makro dla słownika bez ładunku: warianty, `ALL`, `from_u8`.
@@ -405,6 +405,72 @@ vocab_enum! {
         Coal, IronOre, Oil, Gas, Aggregate, Groundwater, ClayDeposit,
     }
 }
+
+vocab_enum! {
+    /// Rodzaj bramy — punktu, którym towar i człowiek wchodzą do miasta.
+    ///
+    /// Tutaj, a nie w `sim/world`, od M6a: brama jest polem `Good::import_via` w katalogu
+    /// towarów (`sim/supply`), a `sim/supply` nie może zależeć od `sim/world` — zależność
+    /// idzie w drugą stronę, bo to generator miasta pyta katalog, a nie katalog generator.
+    /// Kryterium jest to samo co przy `RoadClass` (`K-23`): dwa crate'y, jeden słownik.
+    ///
+    /// **Kolejność wariantów jest kolejnością przetwarzania** w generatorze M2 — brama
+    /// drogowa powstaje przed kolejową, bo kolej domyka się do istniejącego układu.
+    GateKind {
+        Highway, RailFreight, RailPassenger, Port, Airport,
+    }
+}
+
+impl GateKind {
+    /// Klucz tekstowy — ten, który stoi w `data/` i w zapisie gry.
+    #[must_use]
+    pub const fn key(self) -> &'static str {
+        match self {
+            GateKind::Highway => "highway",
+            GateKind::RailFreight => "rail_freight",
+            GateKind::RailPassenger => "rail_passenger",
+            GateKind::Port => "port",
+            GateKind::Airport => "airport",
+        }
+    }
+
+    /// Czy brama jest kolejowa — tory powstają dopiero w M2c (Etap 4 daje im cel).
+    #[must_use]
+    pub const fn is_rail(self) -> bool {
+        matches!(self, GateKind::RailFreight | GateKind::RailPassenger)
+    }
+
+    /// Przepustowość dobowa w [`Qty`] (milisztuki). Skala jest **wstępna**: prawdziwym
+    /// konsumentem jest limit importu w M6 i to M6 ją skalibruje. M2 dostarczył pole,
+    /// nie bilans handlowy.
+    #[must_use]
+    pub const fn capacity(self) -> Qty {
+        Qty(match self {
+            GateKind::Highway => 60_000_000,
+            GateKind::RailFreight => 250_000_000,
+            GateKind::RailPassenger => 0,
+            GateKind::Port => 400_000_000,
+            GateKind::Airport => 4_000_000,
+        })
+    }
+}
+
+vocab_enum! {
+    /// Powód, dla którego masa zeszła z bilansu. Właścicielem słownika jest M6, ale mieszka
+    /// w `core`, bo księguje go także M5 (odpis towaru przeterminowanego na półce)
+    /// i M7 (odpis w rachunku wyniku).
+    ///
+    /// Reguła, dla której ten enum w ogóle istnieje: **masa znikająca bez kategorii jest
+    /// błędem testu, nie zaokrągleniem** (M6 §7.3 pkt 1). Kolejność wariantów jest
+    /// kontraktem, bo `as_index()` indeksuje histogram strat w panelu zakładu.
+    LossKind {
+        Drying, Evaporation, Spoilage, Expired, Spillage, ProcessWaste, Setup,
+        TransportDamage, Theft, Storage,
+    }
+}
+
+/// Liczba kategorii strat — rozmiar histogramu strat.
+pub const LOSS_KIND_COUNT: usize = LossKind::ALL.len();
 
 vocab_enum! {
     /// Biom. Konsument poza M1: M2 (strefowanie i zieleń), M5/M6 (rolnictwo i leśnictwo),

@@ -1,121 +1,247 @@
-// Przetwórstwo spożywcze (M2 §5.8).
+// Przetwórstwo spożywcze (M6a §5.4). Tu mieszka **łańcuch referencyjny nr 1**:
+// pole → młyn → piekarnia, z otrębami i zanieczyszczeniami jako osobnymi strumieniami.
 //
 // Drożdżownia bierze mąkę, a piekarnia bierze drożdże — to jest zależność, nie cykl.
 // Cykle w grafie receptur są normalne i pożądane, ale każdy musi mieć wejście z importu
-// albo z wydobycia; w katalogu M2 nie ma ani jednego i tak ma zostać, dopóki M6 nie
-// wprowadzi swoich (rafineria ↔ elektrownia).
+// albo z wydobycia.
 (
-    schema_version: 1,
+    schema_version: 2,
     recipes: [
+        // ── młyn: przemiał pszenicy na mąkę typ 550 ─────────────────────────────────
+        //
+        // Z tony pszenicy schodzi 760 kg mąki, 220 kg otrąb i 20 kg zanieczyszczeń —
+        // nic nie ubywa, więc `process_loss_g` jest zerem. Wydajność przemiału (wyciąg)
+        // to nie jest strata: otręby są **produktem**, który idzie do paszy i ma cenę.
+        // Dlatego podział kosztu musi iść za wartością rynkową, a nie za masą — inaczej
+        // otręby kosztowałyby tyle co mąka i mąka wyszłaby o jedną piątą za tanio.
+        //
+        // `cap_by_worst_input` jest tu sednem modelu jakości: dobra mąka nie powstanie
+        // ze słabego zboża, choćby młyn był nowy i obsada wyszkolona.
         (
-            key: "milling",
+            key: "milling_wheat_t550",
             source: Manufacturing,
-            inputs: [("wheat", 1_300_000)],
-            outputs: [("flour", 1_000_000)],
-            process_loss_g: 300_000,
-            duration_minutes: 240,
-            labour: [("production_worker", 500)],
-            machine_class: "roller_mill",
+            inputs: [(good: "raw_wheat", mass_g: 1_000_000, min_quality: 60)],
+            outputs: [
+                (good: "food_flour_t550",        mass_g: 760_000, kind: Main),
+                (good: "feed_bran",              mass_g: 220_000, kind: ByProduct),
+                (good: "waste_grain_screenings", mass_g: 20_000,  kind: Waste),
+            ],
+            process_loss_g: 0,
+            duration_minutes: 40,
+            batch_mass_g: 1_000_000,
+            energy_wh: 55_000,
+            labour: [("production_worker", 36)],
+            machine_class: "mill_roller",
+            setup: (minutes: 50, scrap_mass_g: 30_000),
+            emissions: (noise_db: 74, pm_g: 600),
+            quality: (base: 50, w_input: 40, w_skill: 20, w_tech: 15, w_machine: 10, cap_by_worst_input: true, bonus_qc: 3),
+            cost_allocation: ByMarketValue,
         ),
+
+        // ── piekarnia: chleb pszenny ────────────────────────────────────────────────
+        //
+        // Cztery składniki — mąka, woda, drożdże i sól. Sól jest w recepturze dlatego,
+        // że bez niej chleba po prostu nie ma, a nie dla ozdoby bilansu.
+        //
+        // Ubytek 7,8 kg na szarżę to **odparowanie** w piecu, nie odpad: `loss_kind`
+        // musi to rozróżniać, bo odpad się wywozi i płaci za tonę, a para uchodzi kominem.
         (
-            key: "bakery",
+            key: "bakery_bread_wheat",
             source: Manufacturing,
-            inputs: [("flour", 700_000), ("water_raw", 380_000), ("yeast", 20_000)],
-            outputs: [("bread", 1_000_000)],
-            process_loss_g: 100_000,
-            duration_minutes: 240,
-            labour: [("production_worker", 1_600)],
-            machine_class: "deck_oven",
+            inputs: [
+                (good: "food_flour_t550", mass_g: 100_000, min_quality: 55),
+                (good: "util_water",      mass_g: 62_000),
+                (good: "food_yeast",      mass_g: 2_000),
+                (good: "food_salt",       mass_g: 1_800),
+            ],
+            outputs: [(good: "food_bread_wheat", mass_g: 158_000, kind: Main)],
+            process_loss_g: 7_800,
+            loss_kind: Evaporation,
+            duration_minutes: 190,
+            batch_mass_g: 165_800,
+            energy_wh: 18_000,
+            labour: [("production_worker", 84)],
+            machine_class: "bakery_oven_deck",
+            setup: (minutes: 35, scrap_mass_g: 4_000),
+            emissions: (noise_db: 58, plume: Steam),
+            quality: (base: 50, w_input: 35, w_skill: 30, w_tech: 10, w_machine: 15, cap_by_worst_input: true, bonus_qc: 6),
+            cost_allocation: ByMass,
         ),
+
         (
             key: "yeast_plant",
             source: Manufacturing,
-            inputs: [("flour", 300_000), ("sugar", 100_000), ("water_raw", 700_000)],
-            outputs: [("yeast", 1_000_000)],
+            inputs: [
+                (good: "food_flour_t550", mass_g: 300_000),
+                (good: "food_sugar",      mass_g: 100_000),
+                (good: "util_water",      mass_g: 700_000),
+            ],
+            outputs: [(good: "food_yeast", mass_g: 1_000_000)],
             process_loss_g: 100_000,
+            loss_kind: Evaporation,
             duration_minutes: 600,
+            energy_wh: 90_000,
             labour: [("production_worker", 700)],
             machine_class: "fermenter",
+            emissions: (noise_db: 60, wastewater_ml: 220_000, plume: Steam),
         ),
         (
             key: "sugar_refinery",
             source: Manufacturing,
-            inputs: [("sugar_beet", 7_000_000), ("water_raw", 500_000)],
-            outputs: [("sugar", 1_000_000)],
+            inputs: [
+                (good: "raw_sugar_beet", mass_g: 7_000_000),
+                (good: "util_water",     mass_g: 500_000),
+            ],
+            outputs: [(good: "food_sugar", mass_g: 1_000_000)],
             process_loss_g: 6_500_000,
+            loss_kind: Evaporation,
             duration_minutes: 480,
+            energy_wh: 820_000,
             labour: [("production_worker", 1_500)],
             machine_class: "evaporator",
+            emissions: (noise_db: 72, wastewater_ml: 900_000, plume: Steam),
         ),
         (
             key: "oil_press",
             source: Manufacturing,
-            inputs: [("rapeseed", 2_500_000)],
-            outputs: [("rapeseed_oil", 900_000), ("fodder", 1_500_000)],
+            inputs: [(good: "raw_rapeseed", mass_g: 2_500_000, min_quality: 45)],
+            outputs: [
+                (good: "food_rapeseed_oil", mass_g: 900_000,   kind: Main),
+                (good: "feed_fodder",       mass_g: 1_500_000, kind: ByProduct),
+            ],
             process_loss_g: 100_000,
+            loss_kind: ProcessWaste,
             duration_minutes: 300,
+            energy_wh: 160_000,
             labour: [("production_worker", 800)],
             machine_class: "press",
+            emissions: (noise_db: 68),
+            cost_allocation: ByMarketValue,
         ),
         (
             key: "dairy",
             source: Manufacturing,
-            inputs: [("milk_raw", 2_000_000)],
-            outputs: [("milk", 1_600_000), ("cheese", 180_000)],
+            inputs: [(good: "raw_milk", mass_g: 2_000_000, min_quality: 55)],
+            outputs: [
+                (good: "food_milk",   mass_g: 1_600_000, kind: Main),
+                (good: "food_cheese", mass_g: 180_000,   kind: Main),
+            ],
             process_loss_g: 220_000,
+            loss_kind: ProcessWaste,
             duration_minutes: 180,
+            energy_wh: 140_000,
             labour: [("production_worker", 1_100)],
             machine_class: "pasteurizer",
+            emissions: (noise_db: 62, wastewater_ml: 400_000, plume: Steam),
+            quality: (base: 50, w_input: 40, w_skill: 20, w_tech: 15, w_machine: 15, cap_by_worst_input: true, bonus_qc: 4),
+            cost_allocation: ByMarketValue,
         ),
         (
             key: "meat_plant",
             source: Manufacturing,
-            inputs: [("livestock", 2_000_000)],
-            outputs: [("meat", 1_100_000), ("leather", 120_000)],
+            inputs: [(good: "raw_livestock", mass_g: 2_000_000, min_quality: 50)],
+            outputs: [
+                (good: "food_meat",   mass_g: 1_100_000, kind: Main),
+                (good: "mat_leather", mass_g: 120_000,   kind: ByProduct),
+            ],
             process_loss_g: 780_000,
+            loss_kind: ProcessWaste,
             duration_minutes: 300,
+            energy_wh: 190_000,
             labour: [("production_worker", 2_400)],
             machine_class: "cutting_line",
+            emissions: (noise_db: 66, wastewater_ml: 600_000),
+            cost_allocation: ByMarketValue,
         ),
         (
             key: "poultry_plant",
             source: Manufacturing,
-            inputs: [("poultry", 1_500_000)],
-            outputs: [("poultry_meat", 1_000_000)],
+            inputs: [(good: "raw_poultry", mass_g: 1_500_000, min_quality: 50)],
+            outputs: [(good: "food_poultry_meat", mass_g: 1_000_000)],
             process_loss_g: 500_000,
+            loss_kind: ProcessWaste,
             duration_minutes: 240,
+            energy_wh: 150_000,
             labour: [("production_worker", 1_800)],
             machine_class: "cutting_line",
+            emissions: (noise_db: 66, wastewater_ml: 450_000),
         ),
         (
             key: "brewery",
             source: Manufacturing,
-            inputs: [("wheat", 180_000), ("water_raw", 1_000_000), ("yeast", 10_000), ("sugar", 30_000)],
-            outputs: [("beer", 1_200_000)],
+            inputs: [
+                (good: "raw_wheat",  mass_g: 180_000, min_quality: 55),
+                (good: "util_water", mass_g: 1_000_000),
+                (good: "food_yeast", mass_g: 10_000),
+                (good: "food_sugar", mass_g: 30_000),
+            ],
+            outputs: [(good: "food_beer", mass_g: 1_200_000)],
             process_loss_g: 20_000,
+            loss_kind: Evaporation,
             duration_minutes: 600,
+            energy_wh: 210_000,
             labour: [("production_worker", 900)],
             machine_class: "fermenter",
+            emissions: (noise_db: 64, wastewater_ml: 300_000, plume: Steam),
+            quality: (base: 50, w_input: 30, w_skill: 30, w_tech: 20, w_machine: 15, cap_by_worst_input: true, bonus_qc: 5),
         ),
         (
             key: "juice_plant",
             source: Manufacturing,
-            inputs: [("fruit", 700_000), ("sugar", 60_000), ("water_raw", 300_000)],
-            outputs: [("juice", 1_000_000)],
+            inputs: [
+                (good: "food_fruit", mass_g: 700_000, min_quality: 50),
+                (good: "food_sugar", mass_g: 60_000),
+                (good: "util_water", mass_g: 300_000),
+            ],
+            outputs: [(good: "food_juice", mass_g: 1_000_000)],
             process_loss_g: 60_000,
+            loss_kind: ProcessWaste,
             duration_minutes: 240,
+            energy_wh: 120_000,
             labour: [("production_worker", 700)],
             machine_class: "pasteurizer",
+            emissions: (noise_db: 62, wastewater_ml: 180_000, plume: Steam),
         ),
+
+        // Paszarnia domyka pętlę młyna: otręby, które przy przemiale schodzą jako produkt
+        // uboczny, wracają do obory jako podstawowy nośnik paszy.
         (
             key: "feed_mill",
             source: Manufacturing,
-            inputs: [("wheat", 600_000), ("potato", 400_000)],
-            outputs: [("fodder", 950_000)],
+            inputs: [
+                (good: "raw_wheat",  mass_g: 400_000),
+                (good: "raw_potato", mass_g: 300_000),
+                (good: "feed_bran",  mass_g: 350_000),
+            ],
+            outputs: [(good: "feed_fodder", mass_g: 1_000_000)],
             process_loss_g: 50_000,
+            loss_kind: ProcessWaste,
             duration_minutes: 180,
+            energy_wh: 70_000,
             labour: [("production_worker", 400)],
-            machine_class: "roller_mill",
+            machine_class: "mill_roller",
+            emissions: (noise_db: 72, pm_g: 800),
+        ),
+
+        // Czyszczalnia nasion: z pszenicy konsumpcyjnej robi materiał siewny. Zanieczyszczenia
+        // idą tam, gdzie z młyna — do odpadu z kosztem odbioru za tonę.
+        (
+            key: "seed_plant",
+            source: Manufacturing,
+            inputs: [(good: "raw_wheat", mass_g: 1_000_000, min_quality: 65)],
+            outputs: [
+                (good: "agri_seed_wheat",        mass_g: 950_000, kind: Main),
+                (good: "waste_grain_screenings", mass_g: 30_000,  kind: Waste),
+            ],
+            process_loss_g: 20_000,
+            loss_kind: Drying,
+            duration_minutes: 180,
+            energy_wh: 22_000,
+            labour: [("production_worker", 300)],
+            machine_class: "seed_cleaner",
+            setup: (minutes: 40, scrap_mass_g: 6_000),
+            emissions: (noise_db: 68, pm_g: 900),
+            quality: (base: 55, w_input: 40, w_skill: 15, w_tech: 20, w_machine: 10, cap_by_worst_input: true, bonus_qc: 4),
         ),
     ],
 )

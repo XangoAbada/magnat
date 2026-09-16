@@ -1,0 +1,83 @@
+// Media mierzone licznikiem — wytwarzanie i uzdatnianie (fala A, M6a §5.4).
+//
+// Te cztery receptury istnieją po to, żeby graf się domknął: uzdatnianie daje piekarni wodę,
+// elektrownia i ciepłownia dają miastu prąd i ciepło, gazownia rozdziela gaz z odwiertu.
+// Docelowo mediami zajmuje się `UtilityMeter` i sieci przesyłowe (M6b, M8) — wtedy ten
+// plik znika razem z `data/goods/utility.ron`.
+//
+// **Umowa jednostkowa**: 1 g `util_electricity` i `util_heat` ≙ 1 kWh. Dzięki temu bilans
+// masy obowiązuje i tutaj bez wyjątku: z tony węgla schodzi 2 400 „gramów" prądu, a reszta
+// jest stratą procesową — czyli popiołem, żużlem i spalinami. To jest fikcja księgowa
+// nazwana wprost, a nie masa, która zniknęła bez kategorii.
+//
+// Sprawności są **wymyślone** i trzymają rząd wielkości: elektrownia węglowa 2,4 MWh
+// z tony (ok. 33% sprawności przy 7 kWh/kg), ciepłownia 6 kWh z kilograma przy 85%,
+// uzdatnianie wody 0,35 kWh/m³, straty sieciowe gazu 1,5%.
+(
+    schema_version: 2,
+    recipes: [
+        (
+            key: "water_treatment",
+            source: Manufacturing,
+            inputs: [(good: "raw_water", mass_g: 1_000_000)],
+            outputs: [(good: "util_water", mass_g: 960_000)],
+            process_loss_g: 40_000,
+            loss_kind: Spillage,
+            duration_minutes: 60,
+            batch_mass_g: 1_000_000,
+            energy_wh: 350,
+            labour: [("production_worker", 12)],
+            machine_class: "water_clarifier",
+            emissions: (noise_db: 54, wastewater_ml: 40_000),
+            quality: (base: 60, w_input: 30, w_skill: 10, w_tech: 30, w_machine: 20),
+        ),
+        (
+            key: "power_plant_coal",
+            source: Manufacturing,
+            inputs: [
+                (good: "raw_coal",   mass_g: 1_000_000, min_quality: 40),
+                (good: "util_water", mass_g: 300_000),
+            ],
+            outputs: [(good: "util_electricity", mass_g: 2_400)],
+            process_loss_g: 1_297_600,
+            loss_kind: ProcessWaste,
+            duration_minutes: 60,
+            batch_mass_g: 1_300_000,
+            energy_wh: 0,
+            labour: [("production_worker", 45)],
+            machine_class: "power_boiler_turbine",
+            emissions: (noise_db: 80, pm_g: 3_400, co2_g: 2_300_000, wastewater_ml: 60_000, plume: Steam),
+        ),
+        (
+            key: "heat_plant_coal",
+            source: Manufacturing,
+            inputs: [
+                (good: "raw_coal",   mass_g: 500_000, min_quality: 40),
+                (good: "util_water", mass_g: 200_000),
+            ],
+            outputs: [(good: "util_heat", mass_g: 3_000)],
+            process_loss_g: 697_000,
+            loss_kind: ProcessWaste,
+            duration_minutes: 60,
+            batch_mass_g: 700_000,
+            energy_wh: 4_500,
+            labour: [("production_worker", 20)],
+            machine_class: "heat_boiler",
+            emissions: (noise_db: 68, pm_g: 2_100, co2_g: 1_150_000, plume: Steam),
+        ),
+        (
+            key: "gas_distribution",
+            source: Manufacturing,
+            inputs: [(good: "raw_natural_gas", mass_g: 1_000_000)],
+            outputs: [(good: "util_gas", mass_g: 985_000)],
+            process_loss_g: 15_000,
+            loss_kind: Spillage,
+            duration_minutes: 60,
+            batch_mass_g: 1_000_000,
+            energy_wh: 12_000,
+            labour: [("production_worker", 8)],
+            machine_class: "gas_compressor",
+            emissions: (noise_db: 72),
+        ),
+    ],
+)

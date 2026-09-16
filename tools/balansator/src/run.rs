@@ -40,7 +40,7 @@ const PROFILE: &str = "mixed";
 const SWAPS: u32 = 200_000;
 /// Towar, który dostaje szok podaży. Klucz, nie `GoodId`: identyfikator zależy
 /// od katalogu miasta, a nazwa nie.
-const SHOCK_GOOD: &str = "bread";
+const SHOCK_GOOD: &str = "food_bread_wheat";
 /// Szok podaży: +80 % ceny hurtowej (§7.4, bramka G4).
 const SHOCK_BP: i32 = 18_000;
 /// Wojna cenowa gracza: −15 % względem najtańszego w promieniu 1 200 m.

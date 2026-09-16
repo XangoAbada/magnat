@@ -1,0 +1,20 @@
+[package]
+name = "goods-graph"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "goods-graph"
+path = "src/main.rs"
+bench = false
+
+[dependencies]
+magnat-core = { workspace = true }
+magnat-supply = { workspace = true }
+clap = { workspace = true }
+
+[lints]
+workspace = true

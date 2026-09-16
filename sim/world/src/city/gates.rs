@@ -15,49 +15,10 @@ use magnat_core::{rng, IVec2, Qty, StreamId, Tick};
 use magnat_spatial::Vec2;
 use serde::{Deserialize, Serialize};
 
-/// Rodzaj bramy. Kolejność wariantów jest kolejnością przetwarzania — brama drogowa
-/// powstaje przed kolejową, bo kolej domyka się do istniejącego układu, nie odwrotnie.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Serialize, Deserialize)]
-pub enum GateKind {
-    Highway,
-    RailFreight,
-    RailPassenger,
-    Port,
-    Airport,
-}
-
-impl GateKind {
-    #[must_use]
-    pub const fn key(self) -> &'static str {
-        match self {
-            GateKind::Highway => "highway",
-            GateKind::RailFreight => "rail_freight",
-            GateKind::RailPassenger => "rail_passenger",
-            GateKind::Port => "port",
-            GateKind::Airport => "airport",
-        }
-    }
-
-    /// Przepustowość dobowa w `Qty` (milisztuki). Skala jest **wstępna**: prawdziwym
-    /// konsumentem jest limit importu w M6 i to M6 ją skalibruje. M2 ma dostarczyć
-    /// pole, nie bilans handlowy.
-    /// Czy brama jest kolejowa — tory powstają dopiero w M2c (Etap 4 daje im cel).
-    #[must_use]
-    pub const fn is_rail(self) -> bool {
-        matches!(self, GateKind::RailFreight | GateKind::RailPassenger)
-    }
-
-    #[must_use]
-    pub const fn capacity(self) -> Qty {
-        Qty(match self {
-            GateKind::Highway => 60_000_000,
-            GateKind::RailFreight => 250_000_000,
-            GateKind::RailPassenger => 0,
-            GateKind::Port => 400_000_000,
-            GateKind::Airport => 4_000_000,
-        })
-    }
-}
+/// Rodzaj bramy. Słownik przeniesiony do `engine/core::vocab` w M6a (`K-33`): pole
+/// `Good::import_via` w katalogu towarów należy do `sim/supply`, a ten nie może zależeć
+/// od `sim/world`. Re-eksport zostaje, więc nazwy z M2 nie drgnęły.
+pub use magnat_core::GateKind;
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct CityGate {

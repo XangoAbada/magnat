@@ -28,33 +28,33 @@
 
     goods: [
         // ── Food: chleb i ziemniak przed mięsem — to jest ranga substytutu ────────
-        (key: "bread",        cat: Food,     quality: 52, shelf_life_days: 3,   lead_time_days: 1, markup_bp: Some(2600)),
-        (key: "potato",       cat: Food,     quality: 48, shelf_life_days: 60,  lead_time_days: 2, markup_bp: Some(3000)),
-        (key: "vegetables",   cat: Food,     quality: 55, shelf_life_days: 10,  lead_time_days: 1, markup_bp: Some(3400)),
-        (key: "milk",         cat: Food,     quality: 56, shelf_life_days: 7,   lead_time_days: 1, markup_bp: Some(2800)),
-        (key: "fruit",        cat: Food,     quality: 58, shelf_life_days: 8,   lead_time_days: 1, markup_bp: Some(3600)),
-        (key: "poultry_meat", cat: Food,     quality: 60, shelf_life_days: 4,   lead_time_days: 1, markup_bp: None),
-        (key: "cheese",       cat: Food,     quality: 66, shelf_life_days: 30,  lead_time_days: 2, markup_bp: None),
-        (key: "meat",         cat: Food,     quality: 70, shelf_life_days: 5,   lead_time_days: 1, markup_bp: Some(3800)),
-        (key: "sugar",        cat: Food,     quality: 45, shelf_life_days: 720, lead_time_days: 3, markup_bp: Some(2400)),
+        (key: "food_bread_wheat",    cat: Food,      quality: 52, shelf_life_days: 3,   lead_time_days: 1, markup_bp: Some(2600)),
+        (key: "raw_potato",          cat: Food,      quality: 48, shelf_life_days: 60,  lead_time_days: 2, markup_bp: Some(3000)),
+        (key: "food_vegetables",     cat: Food,      quality: 55, shelf_life_days: 10,  lead_time_days: 1, markup_bp: Some(3400)),
+        (key: "food_milk",           cat: Food,      quality: 56, shelf_life_days: 7,   lead_time_days: 1, markup_bp: Some(2800)),
+        (key: "food_fruit",          cat: Food,      quality: 58, shelf_life_days: 8,   lead_time_days: 1, markup_bp: Some(3600)),
+        (key: "food_poultry_meat",   cat: Food,      quality: 60, shelf_life_days: 4,   lead_time_days: 1, markup_bp: None),
+        (key: "food_cheese",         cat: Food,      quality: 66, shelf_life_days: 30,  lead_time_days: 2, markup_bp: None),
+        (key: "food_meat",           cat: Food,      quality: 70, shelf_life_days: 5,   lead_time_days: 1, markup_bp: Some(3800)),
+        (key: "food_sugar",          cat: Food,      quality: 45, shelf_life_days: 720, lead_time_days: 3, markup_bp: Some(2400)),
 
         // ── Drink ────────────────────────────────────────────────────────────────
-        (key: "juice",        cat: Drink,    quality: 55, shelf_life_days: 90,  lead_time_days: 2, markup_bp: Some(3400)),
-        (key: "beer",         cat: Drink,    quality: 58, shelf_life_days: 180, lead_time_days: 2, markup_bp: Some(4000)),
+        (key: "food_juice",          cat: Drink,     quality: 55, shelf_life_days: 90,  lead_time_days: 2, markup_bp: Some(3400)),
+        (key: "food_beer",           cat: Drink,     quality: 58, shelf_life_days: 180, lead_time_days: 2, markup_bp: Some(4000)),
 
         // ── Hygiene ──────────────────────────────────────────────────────────────
-        (key: "soap",         cat: Hygiene,  quality: 50, shelf_life_days: 720, lead_time_days: 3, markup_bp: Some(3600)),
-        (key: "toilet_paper", cat: Hygiene,  quality: 48, shelf_life_days: 720, lead_time_days: 3, markup_bp: Some(3000)),
-        (key: "cosmetics",    cat: Hygiene,  quality: 72, shelf_life_days: 540, lead_time_days: 5, markup_bp: Some(6000)),
+        (key: "cons_soap",           cat: Hygiene,   quality: 50, shelf_life_days: 720, lead_time_days: 3, markup_bp: Some(3600)),
+        (key: "cons_toilet_paper",   cat: Hygiene,   quality: 48, shelf_life_days: 720, lead_time_days: 3, markup_bp: Some(3000)),
+        (key: "cons_cosmetics",      cat: Hygiene,   quality: 72, shelf_life_days: 540, lead_time_days: 5, markup_bp: Some(6000)),
 
         // ── Cleaning ─────────────────────────────────────────────────────────────
-        (key: "detergent",    cat: Cleaning, quality: 52, shelf_life_days: 720, lead_time_days: 3, markup_bp: Some(3400)),
+        (key: "cons_detergent",      cat: Cleaning,  quality: 52, shelf_life_days: 720, lead_time_days: 3, markup_bp: Some(3400)),
 
         // ── Medicine ─────────────────────────────────────────────────────────────
-        (key: "medicine",     cat: Medicine, quality: 78, shelf_life_days: 540, lead_time_days: 2, markup_bp: Some(2200)),
+        (key: "cons_medicine",       cat: Medicine,  quality: 78, shelf_life_days: 540, lead_time_days: 2, markup_bp: Some(2200)),
 
         // ── Clothing ─────────────────────────────────────────────────────────────
-        (key: "clothing",     cat: Clothing, quality: 58, shelf_life_days: 0,   lead_time_days: 7, markup_bp: Some(8000)),
-        (key: "shoes",        cat: Clothing, quality: 62, shelf_life_days: 0,   lead_time_days: 9, markup_bp: Some(9000)),
+        (key: "cons_clothing",       cat: Clothing,  quality: 58, shelf_life_days: 0,   lead_time_days: 7, markup_bp: Some(8000)),
+        (key: "cons_shoes",          cat: Clothing,  quality: 62, shelf_life_days: 0,   lead_time_days: 9, markup_bp: Some(9000)),
     ],
 )

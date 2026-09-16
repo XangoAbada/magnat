@@ -1,16 +1,27 @@
-// Płody rolne (M2 §5.8). Wchodzą do gospodarki przez receptury `Agriculture`,
-// czyli przez jawny punkt wejścia domknięcia — nie przez „puste inputs" (M2 §9.1/14).
+// Płody rolne i materiał siewny (M6a §5.1). Wchodzą do gospodarki przez receptury
+// `Agriculture`, czyli przez jawny punkt wejścia domknięcia — nie przez „puste inputs".
+//
+// Terminy przydatności są w **minutach** (doba = 1440) i opisują towar w warunkach,
+// których wymaga jego `storage`, a nie na blacie: warzywa i owoce w chłodni trzymają
+// dwa tygodnie (20 160), mleko surowe trzy doby (4 320), ziemniak i burak przezimują
+// w kopcu. Zwierzę żywe terminu nie ma — psuje się dopiero mięso z niego.
 (
-    schema_version: 1,
+    schema_version: 2,
     goods: [
-        (key: "wheat",       unit: Grams, density_g_per_l: 780,  external_base_price: Some((52))),
-        (key: "potato",      unit: Grams, density_g_per_l: 700,  external_base_price: Some((38))),
-        (key: "sugar_beet",  unit: Grams, density_g_per_l: 650,  external_base_price: Some((21))),
-        (key: "rapeseed",    unit: Grams, density_g_per_l: 690,  external_base_price: Some((96))),
-        (key: "vegetables",  unit: Grams, density_g_per_l: 600,  external_base_price: Some((140))),
-        (key: "fruit",       unit: Grams, density_g_per_l: 620,  external_base_price: Some((190))),
-        (key: "milk_raw",    unit: Grams, density_g_per_l: 1030, external_base_price: Some((88))),
-        (key: "livestock",   unit: Grams, density_g_per_l: 900,  external_base_price: Some((330))),
-        (key: "poultry",     unit: Grams, density_g_per_l: 900,  external_base_price: Some((290))),
+        (key: "raw_wheat",      category: "grain",         form: Bulk,   density_g_per_l: 780,  storage: Silo,    shelf_life_minutes: Some(1_051_200), external_base_price: Some((52))),
+        (key: "raw_potato",     category: "root_crop",     form: Bulk,   density_g_per_l: 700,  storage: Dry,     shelf_life_minutes: Some(259_200),   external_base_price: Some((38))),
+        (key: "raw_sugar_beet", category: "root_crop",     form: Bulk,   density_g_per_l: 650,  storage: Yard,    shelf_life_minutes: Some(43_200),    external_base_price: Some((21))),
+        (key: "raw_rapeseed",   category: "oilseed",       form: Bulk,   density_g_per_l: 690,  storage: Silo,    shelf_life_minutes: Some(525_600),   external_base_price: Some((96))),
+        (key: "food_vegetables", category: "vegetable",    form: Bulk,   density_g_per_l: 600,  storage: Chilled, hazard: Perishable, shelf_life_minutes: Some(20_160), external_base_price: Some((140))),
+        (key: "food_fruit",     category: "fruit",         form: Bulk,   density_g_per_l: 620,  storage: Chilled, hazard: Perishable, shelf_life_minutes: Some(20_160), external_base_price: Some((190))),
+        (key: "raw_milk",       category: "raw_milk",      form: Liquid, density_g_per_l: 1030, storage: Chilled, hazard: Perishable, shelf_life_minutes: Some(4_320),  external_base_price: Some((88))),
+        (key: "raw_livestock",  category: "livestock",     form: Bulk,   density_g_per_l: 900,  storage: Yard,    external_base_price: Some((330))),
+        (key: "raw_poultry",    category: "livestock",     form: Bulk,   density_g_per_l: 900,  storage: Yard,    external_base_price: Some((290))),
+
+        // Materiał siewny (fala A). Kwalifikowane ziarno siewne jest droższe od
+        // konsumpcyjnego — czyszczenie, zaprawianie i badanie zdolności kiełkowania;
+        // 140 gr/kg to liczba **wymyślona**, do sprawdzenia przy kalibracji M6b.
+        // Termin roczny to zdolność kiełkowania, nie zepsucie się ziarna.
+        (key: "agri_seed_wheat", category: "seed_material", form: Bulk,  density_g_per_l: 780,  storage: Silo,    shelf_life_minutes: Some(525_600),   external_base_price: Some((140))),
     ],
 )

@@ -1,0 +1,36 @@
+// Części maszyn, opakowania i odpady (fala A, M6a §5.1).
+//
+// Części i opakowania są **sztukowe**: ilości w recepturach zostają w gramach, a `unit_mass_g`
+// przelicza je na sztuki. `unit_volume_ml` jest objętością brutto — łożysko w pudełku,
+// karton na płasko, butelka pusta i pełna powietrza zajmują znacznie więcej niż ich stal
+// czy granulat.
+//
+// Odpady nie mają ceny importowej i **muszą** mieć `disposal_cost` (grosze za tonę) — to
+// on jest ich odbiorcą w rozumieniu reguły 2 walidatora. Odpad bez ujścia zapchałby
+// magazyn zakładu i nikt nigdy nie dowiedziałby się dlaczego.
+//
+// Wszystkie ceny i koszty utylizacji w tym pliku są **wymyślone** (rząd wielkości z cen
+// katalogowych i stawek za odbiór odpadu przemysłowego) — do sprawdzenia przy kalibracji M6b.
+(
+    schema_version: 2,
+    goods: [
+        // ── części maszyn ───────────────────────────────────────────────────────────
+        // 6204 to łożysko kulkowe zwykłe 20×47×14 mm, ok. 100 g.
+        (key: "part_bearing_6204",  category: "machine_part", form: Piece, unit_mass_g: 100,   unit_volume_ml: 260,     storage: Dry, external_base_price: Some((1_200))),
+        (key: "part_pump_seal",     category: "machine_part", form: Piece, unit_mass_g: 25,    unit_volume_ml: 90,      storage: Dry, external_base_price: Some((900))),
+        (key: "part_electric_motor", category: "machine_part", form: Piece, unit_mass_g: 8_000, unit_volume_ml: 14_000, storage: Dry, external_base_price: Some((26_000))),
+
+        // ── opakowania ──────────────────────────────────────────────────────────────
+        (key: "pack_carton",     category: "packaging", form: Piece,      unit_mass_g: 300,    unit_volume_ml: 2_400,   storage: Dry,  external_base_price: Some((180))),
+        (key: "pack_pallet",     category: "packaging", form: Palletized, unit_mass_g: 25_000, unit_volume_ml: 150_000, storage: Yard, external_base_price: Some((4_500))),
+        (key: "pack_bottle_pet", category: "packaging", form: Piece,      unit_mass_g: 30,     unit_volume_ml: 1_600,   storage: Dry,  external_base_price: Some((45))),
+
+        // ── odpady ──────────────────────────────────────────────────────────────────
+        // Zanieczyszczenia z czyszczenia ziarna: plewy, nasiona chwastów, kamyki.
+        // 120 zł za tonę odbioru.
+        (key: "waste_grain_screenings", category: "waste", form: Bulk, density_g_per_l: 500,  storage: Silo, has_quality: false, disposal_cost: (12_000)),
+        // Pozostałość podestylacyjna: ciężka, lepka, zaliczana do odpadów niebezpiecznych.
+        // 480 zł za tonę.
+        (key: "waste_refinery_residue", category: "waste", form: Bulk, density_g_per_l: 1100, storage: Yard, hazard: Toxic, has_quality: false, disposal_cost: (48_000)),
+    ],
+)

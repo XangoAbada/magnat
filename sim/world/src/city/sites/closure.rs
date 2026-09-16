@@ -106,8 +106,8 @@ pub fn supply_closure_check(
         }
     }
     for r in &zainstalowane {
-        for (g, _) in &cat.recipe(*r).inputs {
-            demanded[g.0 as usize] = true;
+        for w in &cat.recipe(*r).inputs {
+            demanded[w.good.0 as usize] = true;
         }
     }
 
@@ -122,7 +122,7 @@ pub fn supply_closure_check(
             if importowalny[g] {
                 import[g] = import[g].max(1);
             } else {
-                rep.missing.push(cat.goods[g].key.clone());
+                rep.missing.push(cat.goods[g].key.to_string());
             }
         }
     }
@@ -155,7 +155,7 @@ pub fn supply_closure_check(
             for s in sites.iter_mut() {
                 let dotyczy = s.recipes.iter().any(|x| {
                     let rec = cat.recipe(*x);
-                    rec.outputs.iter().any(|(o, _)| o.0 as usize == g)
+                    rec.outputs.iter().any(|o| o.good.0 as usize == g)
                         // Przy nadmiarze ruszamy **tylko** zakłady, dla których ten towar
                         // jest wyjściem wiodącym — inaczej ścięcie nadmiaru skóry
                         // zabrałoby miastu mięso.
@@ -218,7 +218,7 @@ pub fn supply_closure_check(
     let stosunek = |g: usize| supply[g] as f64 / demand[g] as f64;
     rep.ratios = (0..n)
         .filter(|g| demanded[*g] && demand[*g] > 0)
-        .map(|g| (cat.goods[g].key.clone(), stosunek(g) as f32))
+        .map(|g| (cat.goods[g].key.to_string(), stosunek(g) as f32))
         .collect();
     rep.worst = rep
         .ratios
@@ -232,11 +232,11 @@ pub fn supply_closure_check(
         .unwrap_or_default();
     rep.imported = (0..n)
         .filter(|g| import[*g] > 0)
-        .map(|g| (cat.goods[g].key.clone(), import[g] / 1000))
+        .map(|g| (cat.goods[g].key.to_string(), import[g] / 1000))
         .collect();
     rep.byproduct_surplus = (0..n)
         .filter(|g| demanded[*g] && demand[*g] > 0 && !wiodacy[*g] && stosunek(*g) > RATIO_MAX)
-        .map(|g| (cat.goods[g].key.clone(), stosunek(g) as f32))
+        .map(|g| (cat.goods[g].key.to_string(), stosunek(g) as f32))
         .collect();
     for g in 0..n {
         if !demanded[g] || demand[g] <= 0 {
@@ -269,7 +269,7 @@ fn zgas_nadmiarowe(
             sites[*i]
                 .recipes
                 .iter()
-                .any(|x| cat.recipe(*x).outputs.iter().any(|(o, _)| *o == g))
+                .any(|x| cat.recipe(*x).outputs.iter().any(|o| o.good == g))
         })
         .collect();
     // Ostatni zakład wolno zgasić tylko wtedy, kiedy towar da się sprowadzić. Inaczej
@@ -304,9 +304,9 @@ fn wiodace_dla(cat: &Catalog, r: RecipeId, demand: &[i64]) -> Option<GoodId> {
     let rec = cat.recipe(r);
     rec.outputs
         .iter()
-        .map(|(g, _)| {
-            let y = rec.daily_yield(*g).max(1);
-            (*g, demand[g.0 as usize] as f64 / y as f64)
+        .map(|o| {
+            let y = rec.daily_yield(o.good).max(1);
+            (o.good, demand[o.good.0 as usize] as f64 / y as f64)
         })
         .max_by(|a, b| a.1.total_cmp(&b.1).then(b.0 .0.cmp(&a.0 .0)))
         .map(|(g, _)| g)
@@ -344,15 +344,15 @@ fn bilans(
         let k = i64::from(s.capacity_scale);
         for r in &s.recipes {
             let rec = cat.recipe(*r);
-            for (g, _) in &rec.outputs {
-                let v = rec.daily_yield(*g).saturating_mul(k) / i64::from(SCALE_BASE);
-                supply[g.0 as usize] = supply[g.0 as usize].saturating_add(v);
+            for o in &rec.outputs {
+                let v = rec.daily_yield(o.good).saturating_mul(k) / i64::from(SCALE_BASE);
+                supply[o.good.0 as usize] = supply[o.good.0 as usize].saturating_add(v);
             }
             // Wejścia rolnictwa **też** są popytem: obora naprawdę zjada paszę, choć
             // formalnie jest punktem wejścia łańcucha (`RecipeSource::Agriculture`).
-            for (g, _) in &rec.inputs {
-                let v = rec.daily_input(*g).saturating_mul(k) / i64::from(SCALE_BASE);
-                demand[g.0 as usize] = demand[g.0 as usize].saturating_add(v);
+            for w in &rec.inputs {
+                let v = rec.daily_input(w.good).saturating_mul(k) / i64::from(SCALE_BASE);
+                demand[w.good.0 as usize] = demand[w.good.0 as usize].saturating_add(v);
             }
         }
     }
@@ -362,38 +362,70 @@ fn bilans(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::city::catalog::{Good, GoodUnit, Recipe, RecipeSource, RecipeSpec};
+    use crate::city::catalog::{
+        CostAllocation, Emissions, Good, GoodForm, HazardClass, NeedCategory, QualityModel, Recipe,
+        RecipeInput, RecipeOutput, RecipeSource, Setup, StorageClass,
+    };
+    use magnat_core::{Energy, LossKind, Mass, Money, NeedCategoryId, Volume, Q};
 
     /// Katalog dwutowarowy z jedną recepturą wytwórczą, której szarża domyka bilans masy:
     /// 500 g mąki → 400 g chleba + 100 g ubytku. Bez świata, bo `bilans` go nie potrzebuje.
     fn katalog() -> Catalog {
-        let towar = |key: &str| Good {
-            key: key.to_string(),
-            unit: GoodUnit::Grams,
+        let towar = |i: u16, key: &str| Good {
+            key: key.into(),
+            id: GoodId(i),
+            category: NeedCategoryId(0),
+            form: GoodForm::Bulk,
             density_g_per_l: 500,
-            unit_mass_g: 0,
+            unit_mass: Mass::ZERO,
+            unit_volume: Volume::ZERO,
+            shelf_life_minutes: None,
+            storage: StorageClass::Ambient,
+            hazard: HazardClass::None,
+            has_quality: true,
+            substitutes: Vec::new(),
             external_base_price: None,
             import_via: Vec::new(),
+            disposal_cost: Money::ZERO,
         };
-        let spec = RecipeSpec {
-            key: "bakery".to_string(),
-            source: RecipeSource::Manufacturing,
-            inputs: vec![("flour".to_string(), 500)],
-            outputs: vec![("bread".to_string(), 400)],
-            process_loss_g: 100,
-            duration_minutes: 60,
-            labour: Vec::new(),
-            machine_class: String::new(),
+        let wejscie = |g: GoodId, m: i64| RecipeInput {
+            good: g,
+            mass: Mass(m),
+            min_quality: Q::MIN,
+            substitutes: Vec::new(),
+            critical: true,
         };
-        Catalog {
-            goods: vec![towar("bread"), towar("flour")],
-            recipes: vec![Recipe {
-                spec,
-                inputs: vec![(FLOUR, 500)],
-                outputs: vec![(BREAD, 400)],
+        Catalog::from_parts(
+            vec![towar(0, "bread"), towar(1, "flour")],
+            vec![Recipe {
+                key: "bakery".into(),
+                id: PIEKARNIA,
+                source: RecipeSource::Manufacturing,
+                inputs: vec![wejscie(FLOUR, 500)],
+                outputs: vec![RecipeOutput {
+                    good: BREAD,
+                    mass: Mass(400),
+                    kind: crate::city::catalog::OutputKind::Main,
+                }],
+                batch_mass: Mass(500),
+                duration_minutes: 60,
+                process_loss: Mass(100),
+                loss_kind: LossKind::ProcessWaste,
+                energy: Energy::ZERO,
+                water: Volume::ZERO,
+                labour: Vec::new(),
+                machine_class: "".into(),
+                setup: Setup::default(),
+                emissions: Emissions::default(),
+                quality: QualityModel::default(),
+                cost_allocation: CostAllocation::ByMass,
             }],
-            basket: vec![(BREAD, 1)],
-        }
+            vec![NeedCategory {
+                key: "test".to_string(),
+                stock_cat: None,
+            }],
+            vec![(BREAD, 1)],
+        )
     }
 
     const BREAD: GoodId = GoodId(0);

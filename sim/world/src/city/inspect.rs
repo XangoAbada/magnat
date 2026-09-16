@@ -124,7 +124,7 @@ pub fn parcel_card(city: &CityData, punkt: Vec2) -> Vec<String> {
                         "  receptury: {}",
                         site.recipes
                             .iter()
-                            .map(|r| city.catalog.recipe(*r).key().to_string())
+                            .map(|r| city.catalog.recipe(*r).key.to_string())
                             .collect::<Vec<_>>()
                             .join(" · ")
                     ));

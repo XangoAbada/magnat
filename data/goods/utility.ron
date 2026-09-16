@@ -1,0 +1,27 @@
+// Media mierzone licznikiem (fala A, M6a §5.1).
+//
+// **Dlaczego to w ogóle są towary.** Prąd, ciepło, gaz sieciowy i woda z kranu nie są
+// towarami w sensie magazynowym — nie da się ich odłożyć na półkę i nie mają partii.
+// Docelowo są `UtilityMeter` i sieciami przesyłowymi (M6b, M8). W fali A stoją tu jako
+// zwykłe towary **wyłącznie po to, żeby graf produktów się domknął**: piekarnia musi mieć
+// skąd wziąć wodę, a elektrownia musi mieć co wystawić. Kiedy M6b wprowadzi licznik,
+// ten plik znika, a nie zmienia właściciela.
+//
+// **Umowa jednostkowa**: dla prądu i ciepła 1 g ≙ 1 kWh. To jest fikcja księgowa, nie
+// fizyka — ale fikcja **spójna**: bilans masy elektrowni schodzi wtedy z tony węgla do
+// 2 400 g „energii" plus popiół i spaliny jako strata procesowa, więc reguła
+// `Σ wejść == Σ wyjść + strata` obowiązuje bez wyjątku również tutaj. Gaz sieciowy i woda
+// mają masę prawdziwą.
+//
+// Ceny są **cenami taryfowymi dostawcy zewnętrznego**, bo miasto może kupić media z sieci
+// krajowej zamiast je wytwarzać: prąd 0,80 zł/kWh, ciepło 0,25 zł/kWh, gaz 2,50 zł/kg,
+// woda 10 zł/m³. Wszystkie cztery do sprawdzenia przy kalibracji.
+(
+    schema_version: 2,
+    goods: [
+        (key: "util_water",       category: "water_drinking", form: Liquid, density_g_per_l: 1000, storage: Tank,    has_quality: false, external_base_price: Some((1))),
+        (key: "util_electricity", category: "utility_media",  form: Gas,    density_g_per_l: 1,    storage: Ambient, has_quality: false, external_base_price: Some((80_000))),
+        (key: "util_gas",         category: "utility_media",  form: Gas,    density_g_per_l: 1,    storage: PressureTank, hazard: Explosive, has_quality: false, external_base_price: Some((250))),
+        (key: "util_heat",        category: "utility_media",  form: Gas,    density_g_per_l: 1,    storage: Ambient, has_quality: false, external_base_price: Some((250))),
+    ],
+)

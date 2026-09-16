@@ -433,8 +433,8 @@ fn zapotrzebowanie_zakladow(
             continue;
         }
         for r in &a.recipes {
-            for (g, _) in &cat.recipe(*r).outputs {
-                let slot = &mut recepta_dla[g.0 as usize];
+            for o in &cat.recipe(*r).outputs {
+                let slot = &mut recepta_dla[o.good.0 as usize];
                 if slot.is_none_or(|(stary, _)| r.0 < stary.0) {
                     *slot = Some((*r, SiteArchetypeId(ai as u16)));
                 }
@@ -466,9 +466,10 @@ fn zapotrzebowanie_zakladow(
         let mut next = popyt.to_vec();
         for (r, _, s) in &skala {
             let rec = cat.recipe(*r);
-            for (g, _) in &rec.inputs {
-                let na_dobe = rec.daily_input(*g) as f64 * s;
-                next[g.0 as usize] = next[g.0 as usize].saturating_add(na_dobe.round() as i64);
+            for w in &rec.inputs {
+                let na_dobe = rec.daily_input(w.good) as f64 * s;
+                next[w.good.0 as usize] =
+                    next[w.good.0 as usize].saturating_add(na_dobe.round() as i64);
             }
         }
         required = next;
@@ -546,7 +547,7 @@ fn posadz_produkcje(
                 .recipe(*r)
                 .outputs
                 .iter()
-                .all(|(g, _)| cat.good(*g).has_external_price())
+                .all(|o| cat.good(o.good).has_external_price())
         {
             continue;
         }
@@ -563,7 +564,7 @@ fn posadz_produkcje(
             .recipes
             .iter()
             .flat_map(|r| cat.recipe(*r).outputs.iter())
-            .any(|(g, _)| !cat.good(*g).has_external_price())
+            .any(|o| !cat.good(o.good).has_external_price())
     };
     zostalo.sort_by_key(|(a, _, _)| (!musi_powstac(*a), a.0));
 

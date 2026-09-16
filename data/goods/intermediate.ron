@@ -1,40 +1,83 @@
-// Półprodukty (M2 §5.8). Żaden z nich nie trafia do koszyka potrzeb mieszkańca — są
-// wejściem innych receptur, czyli to na nich stoją cykle z §5.8 („rafineria ↔ elektrownia,
+// Półprodukty i paliwa (M6a §5.1). Większość z nich nie trafia do koszyka mieszkańca —
+// są wejściem innych receptur, czyli to na nich stoją cykle („rafineria ↔ elektrownia,
 // huta ↔ fabryka maszyn"). Każdy taki cykl ma mieć wejście z importu albo wydobycia;
 // tego pilnuje walidator, nie dobra wola danych.
+//
+// Fala A dokłada tu produkty pełnego frakcjonowania ropy (LPG, gaz rafineryjny, asfalt,
+// baza olejowa), otręby z przemiału i sól piekarniczą — bez nich żaden z dwóch łańcuchów
+// referencyjnych nie domyka się co do grama.
+//
+// Klasa niebezpieczeństwa idzie za fizyką, nie za intuicją: paliwa ciekłe `Flammable`,
+// LPG i gaz rafineryjny `Explosive`, baza detergentowa `Corrosive` (silnie alkaliczna).
+// Baza olejowa **nie** jest ani żrąca, ani trująca — olej bazowy grupy I to nie odpad
+// przepracowany, więc zostaje `None`.
 (
-    schema_version: 1,
+    schema_version: 2,
     goods: [
         // ── hutnictwo i materiały budowlane ─────────────────────────────────────────
-        (key: "coke",            unit: Grams, density_g_per_l: 500,  external_base_price: Some((40))),
-        (key: "pig_iron",        unit: Grams, density_g_per_l: 7000, external_base_price: Some((90))),
-        (key: "steel",           unit: Grams, density_g_per_l: 7850, external_base_price: Some((150))),
-        (key: "steel_sheet",     unit: Grams, density_g_per_l: 7850, external_base_price: Some((210))),
-        (key: "steel_sections",  unit: Grams, density_g_per_l: 7850, external_base_price: Some((190))),
-        (key: "cement",          unit: Grams, density_g_per_l: 1400, external_base_price: Some((26))),
-        (key: "concrete",        unit: Grams, density_g_per_l: 2400, external_base_price: None),
-        (key: "bricks",          unit: Grams, density_g_per_l: 1800, external_base_price: Some((34))),
-        (key: "glass",           unit: Grams, density_g_per_l: 2500, external_base_price: Some((120))),
+        (key: "mat_coke",           category: "solid_fuel",   form: Bulk,   density_g_per_l: 500,  storage: Yard, external_base_price: Some((40))),
+        (key: "mat_pig_iron",       category: "metal_primary", form: Bulk,  density_g_per_l: 7000, storage: Yard, external_base_price: Some((90))),
+        (key: "mat_steel",          category: "metal_primary", form: Bulk,  density_g_per_l: 7850, storage: Yard, external_base_price: Some((150))),
+        (key: "mat_steel_sheet",    category: "metal_rolled", form: Bulk,   density_g_per_l: 7850, storage: Dry,  external_base_price: Some((210))),
+        (key: "mat_steel_sections", category: "metal_rolled", form: Bulk,   density_g_per_l: 7850, storage: Yard, external_base_price: Some((190))),
+        (key: "mat_cement",         category: "binder",       form: Bulk,   density_g_per_l: 1400, storage: Silo, shelf_life_minutes: Some(129_600), external_base_price: Some((26))),
+
+        // Beton nie ma ceny importowej i **nie może jej dostać**: betonu nie sprowadza się
+        // z drugiego końca kraju, on wiąże po drodze. Termin 90 minut to czas do początku
+        // wiązania, nie data przydatności — i to on wymusza betoniarnię w mieście.
+        // Na tym stoi test negatywny `zapas_startowy_nie_jest_zrodlem`.
+        (key: "mat_concrete",       category: "binder",       form: Bulk,   density_g_per_l: 2400, storage: Ambient, shelf_life_minutes: Some(90)),
+
+        (key: "mat_bricks",         category: "masonry",      form: Bulk,   density_g_per_l: 1800, storage: Yard, external_base_price: Some((34))),
+        // Prefabrykat: jedyny odbiorca betonu w katalogu fali A. Beton bez odbiorcy
+        // zapchałby magazyn betoniarni, a w rzeczywistości albo jedzie na budowę (tej
+        // w katalogu nie ma, bo budowa jest zdarzeniem miasta, nie recepturą), albo
+        // idzie na stół formierski. Płyta 1,2 t, cena 1 200 zł za sztukę — **wymyślona**.
+        (key: "mat_precast_panel",  category: "masonry",      form: Piece,  unit_mass_g: 1_200_000, unit_volume_ml: 700_000, storage: Yard, hazard: Oversize, external_base_price: Some((120_000))),
+        (key: "mat_glass",          category: "glass_flat",   form: Bulk,   density_g_per_l: 2500, storage: Dry,  external_base_price: Some((120))),
 
         // ── drewno, papier, chemia ──────────────────────────────────────────────────
-        (key: "lumber",          unit: Grams, density_g_per_l: 550,  external_base_price: Some((62))),
-        (key: "plywood",         unit: Grams, density_g_per_l: 620,  external_base_price: Some((105))),
-        (key: "paper",           unit: Grams, density_g_per_l: 800,  external_base_price: Some((150))),
-        (key: "cardboard",       unit: Grams, density_g_per_l: 700,  external_base_price: Some((115))),
-        (key: "plastic_granule", unit: Grams, density_g_per_l: 950,  external_base_price: Some((310))),
-        (key: "fuel_petrol",     unit: Grams, density_g_per_l: 745,  external_base_price: Some((190))),
-        (key: "fuel_diesel",     unit: Grams, density_g_per_l: 830,  external_base_price: Some((175))),
-        (key: "heating_oil",     unit: Grams, density_g_per_l: 860,  external_base_price: Some((140))),
-        (key: "fertilizer",      unit: Grams, density_g_per_l: 1100, external_base_price: Some((78))),
-        (key: "detergent_base",  unit: Grams, density_g_per_l: 1050, external_base_price: Some((260))),
-        (key: "textile_fabric",  unit: Grams, density_g_per_l: 450,  external_base_price: Some((620))),
-        (key: "leather",         unit: Grams, density_g_per_l: 860,  external_base_price: Some((890))),
+        (key: "mat_lumber",         category: "timber_sawn",  form: Bulk,   density_g_per_l: 550,  storage: Yard, external_base_price: Some((62))),
+        (key: "mat_plywood",        category: "timber_panel", form: Bulk,   density_g_per_l: 620,  storage: Dry,  external_base_price: Some((105))),
+        (key: "mat_paper",          category: "paper_stock",  form: Bulk,   density_g_per_l: 800,  storage: Dry,  external_base_price: Some((150))),
+        (key: "mat_cardboard",      category: "paper_stock",  form: Bulk,   density_g_per_l: 700,  storage: Dry,  external_base_price: Some((115))),
+        (key: "chem_plastic_granule", category: "polymer",    form: Bulk,   density_g_per_l: 950,  storage: Dry,  external_base_price: Some((310))),
 
-        // ── półprodukty spożywcze ───────────────────────────────────────────────────
-        (key: "flour",           unit: Grams, density_g_per_l: 590,  external_base_price: Some((74))),
-        (key: "yeast",           unit: Grams, density_g_per_l: 1050, external_base_price: Some((310))),
-        (key: "sugar",           unit: Grams, density_g_per_l: 850,  external_base_price: Some((160))),
-        (key: "rapeseed_oil",    unit: Grams, density_g_per_l: 915,  external_base_price: Some((420))),
-        (key: "fodder",          unit: Grams, density_g_per_l: 620,  external_base_price: Some((58))),
+        // ── paliwa ciekłe i gazowe ──────────────────────────────────────────────────
+        (key: "fuel_petrol_95",     category: "motor_fuel",   form: Liquid, density_g_per_l: 745,  storage: Tank, hazard: Flammable, external_base_price: Some((190))),
+        (key: "fuel_diesel_b7",     category: "motor_fuel",   form: Liquid, density_g_per_l: 830,  storage: Tank, hazard: Flammable, external_base_price: Some((175))),
+        (key: "fuel_heating_oil",   category: "heating_fuel", form: Liquid, density_g_per_l: 860,  storage: Tank, hazard: Flammable, external_base_price: Some((140))),
+        // LPG: propan-butan skroplony pod ciśnieniem — stąd `Liquid` przy `PressureTank`.
+        // 230 gr/kg **wymyślone** na podstawie ceny pompowej minus akcyza; do kalibracji.
+        (key: "fuel_lpg",           category: "gaseous_fuel", form: Liquid, density_g_per_l: 540,  storage: PressureTank, hazard: Explosive, external_base_price: Some((230))),
+        // Gaz rafineryjny: frakcja `SelfConsumed` kolumny — rafineria spala go u siebie.
+        // Cena jest po to, żeby miał **odbiorcę** w rozumieniu reguły 2 (sprzedaż na zewnątrz);
+        // 60 gr/kg to liczba **wymyślona**.
+        (key: "fuel_refinery_gas",  category: "gaseous_fuel", form: Gas,    density_g_per_l: 2,    storage: PressureTank, hazard: Explosive, external_base_price: Some((60))),
+
+        // Asfalt jeździ i magazynuje się na gorąco, więc zbiornik, nie plac.
+        // 55 gr/kg **wymyślone**.
+        (key: "mat_bitumen",        category: "bitumen",      form: Liquid, density_g_per_l: 1030, storage: Tank, external_base_price: Some((55))),
+        // Baza olejowa — półprodukt olejów smarowych. 380 gr/kg **wymyślone**.
+        (key: "chem_lubricant_base", category: "lubricant",   form: Liquid, density_g_per_l: 880,  storage: Tank, external_base_price: Some((380))),
+
+        (key: "agri_fertilizer",    category: "agrochemical", form: Bulk,   density_g_per_l: 1100, storage: Dry,  external_base_price: Some((78))),
+        (key: "chem_detergent_base", category: "industrial_chemical", form: Liquid, density_g_per_l: 1050, storage: Tank, hazard: Corrosive, external_base_price: Some((260))),
+        (key: "mat_textile_fabric", category: "textile_material", form: Bulk, density_g_per_l: 450, storage: Dry, external_base_price: Some((620))),
+        (key: "mat_leather",        category: "leather_material", form: Bulk, density_g_per_l: 860, storage: Dry, external_base_price: Some((890))),
+
+        // ── półprodukty spożywcze i pasze ───────────────────────────────────────────
+        (key: "food_flour_t550",    category: "milled_grain", form: Bulk,   density_g_per_l: 590,  storage: Dry,     shelf_life_minutes: Some(172_800), external_base_price: Some((74))),
+        // Drożdże prasowane: chłodnia i miesiąc życia (43 200 minut).
+        (key: "food_yeast",         category: "baking_aux",   form: Bulk,   density_g_per_l: 1050, storage: Chilled, hazard: Perishable, shelf_life_minutes: Some(43_200), external_base_price: Some((310))),
+        // Sól piekarnicza — czwarty składnik chleba. Fala A sprowadza ją z zewnątrz:
+        // warzelni w katalogu nie ma i do fali B nie będzie. 45 gr/kg **wymyślone**.
+        (key: "food_salt",          category: "baking_aux",   form: Bulk,   density_g_per_l: 1200, storage: Dry,     has_quality: false, external_base_price: Some((45))),
+        (key: "food_sugar",         category: "sweetener",    form: Bulk,   density_g_per_l: 850,  storage: Dry,     external_base_price: Some((160))),
+        (key: "food_rapeseed_oil",  category: "edible_fat",   form: Liquid, density_g_per_l: 915,  storage: Ambient, shelf_life_minutes: Some(259_200), external_base_price: Some((420))),
+        (key: "feed_fodder",        category: "animal_feed",  form: Bulk,   density_g_per_l: 620,  storage: Silo,    shelf_life_minutes: Some(129_600), external_base_price: Some((58))),
+        // Otręby — produkt uboczny przemiału, główny nośnik paszy. 45 gr/kg **wymyślone**.
+        // Cena jest wymagana, bo przemiał dzieli koszt `ByMarketValue`.
+        (key: "feed_bran",          category: "animal_feed",  form: Bulk,   density_g_per_l: 350,  storage: Silo,    shelf_life_minutes: Some(86_400), external_base_price: Some((45))),
     ],
 )

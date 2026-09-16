@@ -23,7 +23,7 @@ const MIESIAC: u64 = magnat_core::time::MINUTES_PER_MONTH;
 /// Mydło: kategoria `Hygiene`, termin 720 dni. Towar nietrwały (chleb) zaciemniłby
 /// testy księgowe odpisami — te mają własny test niżej.
 fn mydlo() -> magnat_core::GoodId {
-    good_by_key(&EconomyData::load_default().unwrap(), "soap")
+    good_by_key(&EconomyData::load_default().unwrap(), "cons_soap")
 }
 
 /// Doba sklepu w kolejności z `MarketSystem`: odpis → obserwacja → przecena.
@@ -172,7 +172,7 @@ fn przecena_psujacego_sie_towaru_schodzi_ponizej_kosztu() {
     // z terminem — inaczej ten mechanizm nigdy by się nie uruchomił.
     let b = bench(41, &[Vec2::new(300.0, 0.0)]);
     let site = b.sites[0];
-    let g = good_by_key(&EconomyData::load_default().unwrap(), "bread");
+    let g = good_by_key(&EconomyData::load_default().unwrap(), "food_bread_wheat");
     b.market.deliver_now(
         site,
         g,
@@ -284,7 +284,7 @@ fn podglad_ceny_zgadza_sie_z_tym_co_zrobi_przecena() {
 fn towar_przeterminowany_schodzi_ze_stanu_i_obciaza_wynik() {
     let b = bench(91, &[Vec2::new(300.0, 0.0)]);
     let site = b.sites[0];
-    let g = good_by_key(&EconomyData::load_default().unwrap(), "bread");
+    let g = good_by_key(&EconomyData::load_default().unwrap(), "food_bread_wheat");
     b.market.deliver_now(
         site,
         g,

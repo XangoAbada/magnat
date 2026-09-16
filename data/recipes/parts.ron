@@ -1,0 +1,115 @@
+// Części maszyn i opakowania (fala A, M6a §5.4).
+//
+// Wszystkie szarże są liczone tak, żeby dawały **równy tysiąc sztuk**: masa wyjścia
+// dzieli się przez `unit_mass_g` towaru bez reszty. To nie jest kosmetyka — ilości
+// w recepturach są w gramach, a sztuki powstają dopiero z podziału, więc szarża, która
+// nie dzieli się bez reszty, produkowałaby ułamek łożyska.
+//
+// Dane procesowe (czasy, energia, osobominuty) są **wymyślone** i trzymają rząd wielkości
+// typowego gniazda obróbczego albo wtryskarki — do sprawdzenia przy kalibracji M6b.
+(
+    schema_version: 2,
+    recipes: [
+        // 1000 łożysk 6204 po 100 g; 10% odpada jako wióry i braki toczenia.
+        (
+            key: "bearing_works",
+            source: Manufacturing,
+            inputs: [(good: "mat_steel", mass_g: 110_000, min_quality: 60)],
+            outputs: [(good: "part_bearing_6204", mass_g: 100_000)],
+            process_loss_g: 10_000,
+            loss_kind: ProcessWaste,
+            duration_minutes: 120,
+            batch_mass_g: 110_000,
+            energy_wh: 9_000,
+            labour: [("production_worker", 180)],
+            machine_class: "grinding_line",
+            setup: (minutes: 60, scrap_mass_g: 2_000),
+            emissions: (noise_db: 82),
+            quality: (base: 50, w_input: 35, w_skill: 20, w_tech: 25, w_machine: 20, cap_by_worst_input: true, bonus_qc: 5),
+        ),
+        // 1000 uszczelnień po 25 g, wtrysk z granulatu.
+        (
+            key: "seal_works",
+            source: Manufacturing,
+            inputs: [(good: "chem_plastic_granule", mass_g: 26_000)],
+            outputs: [(good: "part_pump_seal", mass_g: 25_000)],
+            process_loss_g: 1_000,
+            loss_kind: ProcessWaste,
+            duration_minutes: 90,
+            batch_mass_g: 26_000,
+            energy_wh: 3_200,
+            labour: [("production_worker", 90)],
+            machine_class: "injection_molding",
+            setup: (minutes: 45, scrap_mass_g: 800),
+            emissions: (noise_db: 70),
+        ),
+        // 1000 silników po 8 kg: blacha na obudowę i pakiet, stal na wał i wirnik,
+        // granulat na izolację i osprzęt.
+        (
+            key: "electric_motor_plant",
+            source: Manufacturing,
+            inputs: [
+                (good: "mat_steel_sheet",      mass_g: 5_000_000, min_quality: 55),
+                (good: "mat_steel",            mass_g: 3_600_000),
+                (good: "chem_plastic_granule", mass_g: 600_000),
+            ],
+            outputs: [(good: "part_electric_motor", mass_g: 8_000_000)],
+            process_loss_g: 1_200_000,
+            loss_kind: ProcessWaste,
+            duration_minutes: 480,
+            batch_mass_g: 9_200_000,
+            energy_wh: 260_000,
+            labour: [("production_worker", 3_200)],
+            machine_class: "assembly_line",
+            setup: (minutes: 120, scrap_mass_g: 40_000),
+            emissions: (noise_db: 76),
+            quality: (base: 50, w_input: 30, w_skill: 25, w_tech: 25, w_machine: 20, cap_by_worst_input: true, bonus_qc: 5),
+        ),
+        // 1000 kartonów po 300 g, wykrawanych z tektury.
+        (
+            key: "carton_plant",
+            source: Manufacturing,
+            inputs: [(good: "mat_cardboard", mass_g: 320_000)],
+            outputs: [(good: "pack_carton", mass_g: 300_000)],
+            process_loss_g: 20_000,
+            loss_kind: ProcessWaste,
+            duration_minutes: 120,
+            batch_mass_g: 320_000,
+            energy_wh: 7_000,
+            labour: [("production_worker", 240)],
+            machine_class: "die_cutter",
+            emissions: (noise_db: 74, pm_g: 400),
+        ),
+        // 1000 palet po 25 kg; 6% tarcicy schodzi na przycinkę i braki.
+        (
+            key: "pallet_works",
+            source: Manufacturing,
+            inputs: [(good: "mat_lumber", mass_g: 26_500_000)],
+            outputs: [(good: "pack_pallet", mass_g: 25_000_000)],
+            process_loss_g: 1_500_000,
+            loss_kind: ProcessWaste,
+            duration_minutes: 480,
+            batch_mass_g: 26_500_000,
+            energy_wh: 60_000,
+            labour: [("production_worker", 1_600)],
+            machine_class: "nailing_line",
+            emissions: (noise_db: 88, pm_g: 1_200),
+        ),
+        // 1000 butelek PET 1,5 l po 30 g.
+        (
+            key: "pet_bottle_plant",
+            source: Manufacturing,
+            inputs: [(good: "chem_plastic_granule", mass_g: 31_000)],
+            outputs: [(good: "pack_bottle_pet", mass_g: 30_000)],
+            process_loss_g: 1_000,
+            loss_kind: ProcessWaste,
+            duration_minutes: 60,
+            batch_mass_g: 31_000,
+            energy_wh: 4_500,
+            labour: [("production_worker", 60)],
+            machine_class: "blow_molder",
+            setup: (minutes: 30, scrap_mass_g: 600),
+            emissions: (noise_db: 72),
+        ),
+    ],
+)

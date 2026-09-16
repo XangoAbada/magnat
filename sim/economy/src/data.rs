@@ -875,7 +875,7 @@ mod tests {
         // „posprzątał" alfabetycznie.
         let d = EconomyData::load_default().expect("data/economy/");
         let poz = |k: &str| d.retail.goods.iter().position(|g| g.key == k).unwrap();
-        assert!(poz("bread") < poz("meat"));
-        assert!(poz("potato") < poz("cheese"));
+        assert!(poz("food_bread_wheat") < poz("food_meat"));
+        assert!(poz("raw_potato") < poz("food_cheese"));
     }
 }

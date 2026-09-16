@@ -26,6 +26,10 @@ ron = { workspace = true }
 # Hash stanu świata mieszka w `engine/io` — testem bramki 2 jest porównanie hashy,
 # a nie inspekcja własnych struktur.
 magnat-io = { workspace = true }
+# Tylko do testów: `GoodTable::build` **pomija** klucze, których nie umie rozwiązać,
+# więc rozjazd nazw między `data/economy/` a katalogiem M6 znikałby po cichu (`AF-3`).
+# Zależność produkcyjna przyjdzie z WP11, kiedy półka zacznie brać towar z magazynu.
+magnat-supply = { workspace = true }
 criterion = { workspace = true }
 proptest = { workspace = true }
 

@@ -23,7 +23,7 @@
         (key: "clay_pit_works",   sector: Extraction, zones: ["extraction"], min_parcel_m2: 2500, m2_per_workplace: 384, wage_mult: 1.00, recipes: ["clay_pit"],         needs_deposit: Some(ClayDeposit), grammar: Some("zaklad_wydobywczy")),
         (key: "oil_field",        sector: Extraction, zones: ["extraction"], min_parcel_m2: 3000, m2_per_workplace: 416, wage_mult: 1.30, recipes: ["oil_well"],         needs_deposit: Some(Oil),         grammar: Some("zaklad_wydobywczy")),
         (key: "gas_field",        sector: Extraction, zones: ["extraction"], min_parcel_m2: 3000, m2_per_workplace: 448, wage_mult: 1.30, recipes: ["gas_well"],         needs_deposit: Some(Gas),         grammar: Some("zaklad_wydobywczy")),
-        (key: "waterworks",       sector: Extraction, zones: ["extraction", "industry_light", "logistics", "agriculture", "green"], min_parcel_m2: 600, m2_per_workplace: 480, wage_mult: 1.00, recipes: ["water_intake"], grammar: Some("zaklad_wydobywczy"), consumes: [("fuel_diesel", 40_000)]),
+        (key: "waterworks",       sector: Extraction, zones: ["extraction", "industry_light", "logistics", "agriculture", "green"], min_parcel_m2: 600, m2_per_workplace: 480, wage_mult: 1.00, recipes: ["water_intake"], grammar: Some("zaklad_wydobywczy"), consumes: [("fuel_diesel_b7", 40_000)]),
 
         // Wypełniacz strefy wydobywczej: skład kruszywa bez własnego złoża. Bez niego
         // działka `Extraction` bez złoża zostawałaby pusta, a strefa jest przydzielona.

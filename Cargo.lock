@@ -1029,6 +1029,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "goods-graph"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "magnat-core",
+ "magnat-supply",
+]
+
+[[package]]
 name = "gpu-allocator"
 version = "0.28.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1475,6 +1484,7 @@ dependencies = [
  "magnat-io",
  "magnat-jobs",
  "magnat-spatial",
+ "magnat-supply",
  "proptest",
  "ron",
  "serde",
@@ -1581,6 +1591,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "magnat-supply"
+version = "0.1.0"
+dependencies = [
+ "magnat-core",
+ "proptest",
+ "ron",
+ "serde",
+]
+
+[[package]]
 name = "magnat-traffic"
 version = "0.1.0"
 dependencies = [
@@ -1639,6 +1659,7 @@ dependencies = [
  "magnat-jobs",
  "magnat-nav",
  "magnat-spatial",
+ "magnat-supply",
  "magnat-traffic",
  "magnat-voxel",
  "proptest",

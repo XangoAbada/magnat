@@ -209,9 +209,9 @@ fn migawka(tracking: LostSaleTracking, cash_complete: bool) -> ShopPanelSnapshot
             delta_bp: 1_670,
         }],
         good_keys: vec![
-            (CHLEB, "bread".to_string()),
-            (MLEKO, "milk".to_string()),
-            (SER, "cheese".to_string()),
+            (CHLEB, "food_bread_wheat".to_string()),
+            (MLEKO, "food_milk".to_string()),
+            (SER, "food_cheese".to_string()),
         ],
     }
 }
@@ -329,24 +329,24 @@ fn kazdy_towar_ma_nazwe_w_obu_jezykach() {
     // wyszedłby dopiero jako surowy klucz na ekranie gracza.
     let c = Catalog::load().expect("data/locale/");
     let towary = [
-        "bread",
-        "potato",
-        "vegetables",
-        "milk",
-        "fruit",
-        "poultry_meat",
-        "cheese",
-        "meat",
-        "sugar",
-        "juice",
-        "beer",
-        "soap",
-        "toilet_paper",
-        "cosmetics",
-        "detergent",
-        "medicine",
-        "clothing",
-        "shoes",
+        "food_bread_wheat",
+        "raw_potato",
+        "food_vegetables",
+        "food_milk",
+        "food_fruit",
+        "food_poultry_meat",
+        "food_cheese",
+        "food_meat",
+        "food_sugar",
+        "food_juice",
+        "food_beer",
+        "cons_soap",
+        "cons_toilet_paper",
+        "cons_cosmetics",
+        "cons_detergent",
+        "cons_medicine",
+        "cons_clothing",
+        "cons_shoes",
     ];
     for t in towary {
         let k = c

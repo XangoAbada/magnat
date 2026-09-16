@@ -10,11 +10,11 @@
     schema_version: 1,
     archetypes: [
         // ── handel detaliczny: normatywy z §5.8 pkt 2 ───────────────────────────────
-        (key: "corner_shop",     sector: Retail, zones: ["commercial"], min_parcel_m2: 120,  m2_per_workplace: 54, wage_mult: 0.92, per_pop: Some(1500), place_kind: Some(Grocery),  weight: 70, consumes: [("cardboard", 6_000)]),
-        (key: "supermarket",     sector: Retail, zones: ["commercial"], min_parcel_m2: 1800, m2_per_workplace: 67, wage_mult: 0.96, per_pop: Some(12000), place_kind: Some(Grocery), consumes: [("cardboard", 60_000)]),
-        (key: "discount_store",  sector: Retail, zones: ["commercial"], min_parcel_m2: 1400, m2_per_workplace: 88, wage_mult: 0.90, per_pop: Some(10000), place_kind: Some(Grocery), consumes: [("cardboard", 45_000)]),
-        (key: "hypermarket",     sector: Retail, zones: ["commercial"], min_parcel_m2: 6000, m2_per_workplace: 77, wage_mult: 0.98, per_pop: Some(60000), place_kind: Some(Grocery), consumes: [("cardboard", 180_000)]),
-        (key: "petrol_station",  sector: Retail, zones: ["commercial", "logistics"], min_parcel_m2: 700, m2_per_workplace: 144, wage_mult: 0.98, per_pop: Some(8000), consumes: [("fuel_petrol", 900_000), ("fuel_diesel", 400_000)]),
+        (key: "corner_shop",     sector: Retail, zones: ["commercial"], min_parcel_m2: 120,  m2_per_workplace: 54, wage_mult: 0.92, per_pop: Some(1500), place_kind: Some(Grocery),  weight: 70, consumes: [("mat_cardboard", 6_000)]),
+        (key: "supermarket",     sector: Retail, zones: ["commercial"], min_parcel_m2: 1800, m2_per_workplace: 67, wage_mult: 0.96, per_pop: Some(12000), place_kind: Some(Grocery), consumes: [("mat_cardboard", 60_000)]),
+        (key: "discount_store",  sector: Retail, zones: ["commercial"], min_parcel_m2: 1400, m2_per_workplace: 88, wage_mult: 0.90, per_pop: Some(10000), place_kind: Some(Grocery), consumes: [("mat_cardboard", 45_000)]),
+        (key: "hypermarket",     sector: Retail, zones: ["commercial"], min_parcel_m2: 6000, m2_per_workplace: 77, wage_mult: 0.98, per_pop: Some(60000), place_kind: Some(Grocery), consumes: [("mat_cardboard", 180_000)]),
+        (key: "petrol_station",  sector: Retail, zones: ["commercial", "logistics"], min_parcel_m2: 700, m2_per_workplace: 144, wage_mult: 0.98, per_pop: Some(8000), consumes: [("fuel_petrol_95", 900_000), ("fuel_diesel_b7", 400_000)]),
         (key: "pharmacy",        sector: Retail, zones: ["commercial"], min_parcel_m2: 120, m2_per_workplace: 42, wage_mult: 1.18, per_pop: Some(7000), place_kind: Some(Pharmacy)),
         (key: "bakery_shop",     sector: Retail, zones: ["commercial"], min_parcel_m2: 100, m2_per_workplace: 38, wage_mult: 0.90, per_pop: Some(6000), place_kind: Some(Grocery)),
         (key: "specialty_shop",  sector: Retail, zones: ["commercial"], min_parcel_m2: 150, m2_per_workplace: 48, wage_mult: 1.02, per_pop: Some(9000), place_kind: Some(Clothing), weight: 45),
@@ -27,18 +27,18 @@
         (key: "hotel",           sector: Services, zones: ["commercial", "office"], min_parcel_m2: 900, m2_per_workplace: 72, wage_mult: 1.04, weight: 12, place_kind: Some(Social)),
 
         // ── biura: mix epoki (§5.8 pkt 3) ──────────────────────────────────────────
-        (key: "design_office",   sector: Office, zones: ["office", "commercial"], min_parcel_m2: 400, m2_per_workplace: 26, wage_mult: 1.10, weight: 60, epochs: ["postwar", "transition"], consumes: [("paper", 9_000)]),
-        (key: "it_office",       sector: Office, zones: ["office"], min_parcel_m2: 400, m2_per_workplace: 19, wage_mult: 1.45, weight: 60, epochs: ["transition", "contemporary"], consumes: [("paper", 3_000)]),
-        (key: "bank_branch",     sector: Office, zones: ["office", "commercial"], min_parcel_m2: 250, m2_per_workplace: 29, wage_mult: 1.30, weight: 30, consumes: [("paper", 5_000)]),
-        (key: "office_suite",    sector: Office, zones: ["office"], min_parcel_m2: 300, m2_per_workplace: 24, wage_mult: 1.12, weight: 90, consumes: [("paper", 7_000)]),
+        (key: "design_office",   sector: Office, zones: ["office", "commercial"], min_parcel_m2: 400, m2_per_workplace: 26, wage_mult: 1.10, weight: 60, epochs: ["postwar", "transition"], consumes: [("mat_paper", 9_000)]),
+        (key: "it_office",       sector: Office, zones: ["office"], min_parcel_m2: 400, m2_per_workplace: 19, wage_mult: 1.45, weight: 60, epochs: ["transition", "contemporary"], consumes: [("mat_paper", 3_000)]),
+        (key: "bank_branch",     sector: Office, zones: ["office", "commercial"], min_parcel_m2: 250, m2_per_workplace: 29, wage_mult: 1.30, weight: 30, consumes: [("mat_paper", 5_000)]),
+        (key: "office_suite",    sector: Office, zones: ["office"], min_parcel_m2: 300, m2_per_workplace: 24, wage_mult: 1.12, weight: 90, consumes: [("mat_paper", 7_000)]),
 
         // ── logistyka ──────────────────────────────────────────────────────────────
-        (key: "warehouse",       sector: Logistics, zones: ["logistics"], min_parcel_m2: 2500, m2_per_workplace: 512, wage_mult: 1.00, weight: 80, consumes: [("cardboard", 30_000)]),
-        (key: "freight_depot",   sector: Logistics, zones: ["logistics"], min_parcel_m2: 3500, m2_per_workplace: 448, wage_mult: 1.06, weight: 45, consumes: [("fuel_diesel", 600_000)]),
+        (key: "warehouse",       sector: Logistics, zones: ["logistics"], min_parcel_m2: 2500, m2_per_workplace: 512, wage_mult: 1.00, weight: 80, consumes: [("mat_cardboard", 30_000)]),
+        (key: "freight_depot",   sector: Logistics, zones: ["logistics"], min_parcel_m2: 3500, m2_per_workplace: 448, wage_mult: 1.06, weight: 45, consumes: [("fuel_diesel_b7", 600_000)]),
         // Skład budowlany jest jedynym odbiorcą betonu, cegły i tarcicy w mieście, które
         // niczego nie buduje. Bez niego cała gałąź cement → beton nie miałaby popytu
         // i wypadłaby z bilansu, choć w danych jest.
         (key: "construction_yard", sector: Logistics, zones: ["logistics"], min_parcel_m2: 2000, m2_per_workplace: 416, wage_mult: 1.02, weight: 40,
-            consumes: [("concrete", 900_000), ("bricks", 260_000), ("lumber", 150_000), ("cement", 40_000)]),
+            consumes: [("mat_concrete", 900_000), ("mat_bricks", 260_000), ("mat_lumber", 150_000), ("mat_cement", 40_000)]),
     ],
 )
