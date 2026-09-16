@@ -173,6 +173,26 @@ Zasady:
 Powód: kontekst główny jest zasobem tej samej klasy co czas — wypełniony wynikami `grep`
 przestaje mieścić kontrakt fazy, a wtedy błędy zaczynają wyglądać jak niewiedza.
 
+## Reguła: podsumowanie po commicie mówi po ludzku
+
+Podsumowanie, które piszesz po ostatnim commicie podfazy, czyta człowiek — nie recenzent
+i nie następna sesja. Ma tłumaczyć, **co się zmieniło i dlaczego to ma znaczenie**, prostymi
+zdaniami.
+
+- Krótkie zdania, konkrety, strona czynna. „Piekarnia zużywa teraz wodę i mąkę, a gdy ich
+  zabraknie — przestaje piec", nie „zaimplementowano mechanizm konsumpcji surowców
+  z obsługą niedoborów".
+- Żargonu używaj tylko wtedy, gdy nazywa rzecz, której nie da się nazwać inaczej
+  (nazwa typu, systemu, pliku). Nie ozdabiaj nim zdań.
+- Bez marketingu i bez nadęcia: żadnych „kompleksowy", „solidny", „w pełni zintegrowany",
+  „znacząco usprawnia", żadnych emoji i list z pogrubionymi hasłami bez treści.
+- Powiedz też, czego **nie** zrobiono i co z tego wynika dla następnej podfazy — to jest
+  najważniejsza część, a zwykle wypada pierwsza.
+- Liczby zamiast przymiotników: ile testów przechodzi, ile plików, jaki jest sufit.
+
+Ta reguła dotyczy tekstu do użytkownika, nie komunikatu commita — commit nadal jest
+jednostką recenzji i opisuje zmianę technicznie.
+
 ## Język i lokalizacja
 
 **Angielski:** kod, identyfikatory, nazwy plików i katalogów, klucze w `data/`, nazwy gałęzi,
