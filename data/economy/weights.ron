@@ -14,7 +14,7 @@
 // Wszystkie dwanaście potrzeb musi tu być, także te, których nie zaspokaja zakup:
 // brak wpisu to błąd ładowania, nie ciche zero (ta sama reguła co w `data/needs/`).
 (
-    schema_version: 1,
+    schema_version: 2,
     needs: [
         (key: "Hunger",      price: 0.34, quality: 0.18, brand: 0.05, dist: 0.26, loyalty: 0.09, status: 0.03, novelty: 0.05),
         (key: "Sleep",       price: 0.20, quality: 0.20, brand: 0.05, dist: 0.40, loyalty: 0.10, status: 0.00, novelty: 0.05),

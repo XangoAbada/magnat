@@ -16,7 +16,7 @@
 // ogranicznikiem, którego pilnuje bramka G3 (brak spirali deflacji), a `k_stock`
 // i `k_comp` decydują o reaktywności szoku podaży (G4).
 (
-    schema_version: 1,
+    schema_version: 2,
 
     pricing: (
         // Marża docelowa nad kosztem własnym, w punktach bazowych (3000 = +30 %).

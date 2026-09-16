@@ -53,11 +53,11 @@ pub use types::{
     Qty, RecipeId, SimInstant, SimMinute, TariffClassId, Tick, Volume, Q,
 };
 pub use vocab::{
-    ActionKind, ActivityKind, Biome, BodyType, CommitmentKind, DeprivationEffect, FixedCost,
-    GateKind, LeaveCause, LifeEventKind, LineStopCause, LoanKind, LossKind, MigrationKind,
-    NeedKind, PlaceKind, PlaceRef, PriceBasis, PriceDriver, RejectCause, RejectCredit,
-    ResourceKind, RoadClass, ShortageStageKind, StockCat, TraitId, TransportMode, UtilityKind,
-    UtilityService, WageCause, WorldCoord, FIXED_COST_COUNT, LOSS_KIND_COUNT, NEED_COUNT,
-    REJECT_CAUSE_COUNT, STOCK_CAT_COUNT, UTILITY_KIND_COUNT,
+    ActionKind, ActivityKind, BankruptcyTrigger, Biome, BodyType, ClaimPriority, CommitmentKind,
+    DeprivationEffect, FixedCost, GateKind, LeaveCause, LifeEventKind, LineStopCause, LoanKind,
+    LossKind, MigrationKind, NeedKind, PlaceKind, PlaceRef, PriceBasis, PriceDriver, RejectCause,
+    RejectCredit, ResourceKind, RoadClass, ShortageStageKind, StockCat, TraitId, TransportMode,
+    UtilityKind, UtilityService, WageCause, WorldCoord, CLAIM_PRIORITY_COUNT, FIXED_COST_COUNT,
+    LOSS_KIND_COUNT, NEED_COUNT, REJECT_CAUSE_COUNT, STOCK_CAT_COUNT, UTILITY_KIND_COUNT,
 };
 pub use weather::{weather_at, Weather};

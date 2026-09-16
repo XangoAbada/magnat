@@ -269,7 +269,11 @@ pub fn assess_credit(
             }
             (limit, dsti_bp)
         }
-        LoanKind::WorkingCapital => {
+        // Obrotowy i inwestycyjny idą **tą samą ścieżką**: obie są kredytem firmy
+        // i obie ocenia się pokryciem obsługi długu przepływami. Różnica siedzi
+        // w produkcie (`spread_bp`, `term_months`), a nie w regule — osobna gałąź
+        // powtarzałaby ten sam kod, żeby na końcu zwrócić tę samą parę liczb.
+        LoanKind::WorkingCapital | LoanKind::Investment => {
             if app.months_in_business < p.scoring.min_months_in_business {
                 return odmowa(
                     app.kind,
@@ -418,6 +422,14 @@ impl LoanBook {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.loans.is_empty()
+    }
+
+    /// Wszystkie kredyty w kolejności nadania. Potrzebne postępowaniu upadłościowemu
+    /// (M7d): niespłacony kapitał kredytu jest roszczeniem banku, choć nie jest
+    /// jeszcze zaległością — rata przyszłego miesiąca nigdy nie zapadnie, bo firmy
+    /// wtedy nie będzie.
+    pub fn iter(&self) -> impl Iterator<Item = &Loan> {
+        self.loans.iter()
     }
 
     /// Suma niespłaconego kapitału — tyle pieniądza kredytowego krąży po mieście.

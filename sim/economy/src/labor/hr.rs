@@ -579,3 +579,55 @@ fn termin_szkoleniowy(
         d.trained += 1;
     }
 }
+
+/// Rozwiązanie **wszystkich** umów zakładu — upadłość pracodawcy (M7d WP9).
+///
+/// Nie jest to ani rotacja, ani zwolnienie za wynik: firma przestaje istnieć, więc
+/// odchodzą wszyscy i wszyscy z tego samego powodu (`LeaveCause::Redundancy`).
+/// Wariant istnieje w `core` od M7b **właśnie po to** i do tej chwili nie miał pisarza.
+///
+/// Idzie przez [`odejdz`], czyli przez tę samą jedyną drogę co każde inne wyjście
+/// z etatu — dzięki temu etat wraca do puli wakatów miasta, komponent mieszkańca się
+/// czyści, a niezmiennik 4 z M7 §7.2 („każdy `Employment` zakończony dokładnie raz")
+/// trzyma się bez osobnej ścieżki, którą trzeba by osobno testować.
+///
+/// Zwraca listę `(mieszkaniec, odprawa)`. Odprawa jest **naliczona, nie wypłacona** —
+/// firma w upadłości z definicji nie ma czym płacić, więc kwota staje się roszczeniem
+/// w postępowaniu, a nie przelewem.
+pub fn dismiss_all(
+    hr: &magnat_firms::HrTuning,
+    firms: &mut Firms,
+    people: &mut impl Workforce,
+    site: SiteId,
+    now: SimMinute,
+) -> Vec<(CitizenId, Money)> {
+    let zaloga: Vec<(CitizenId, JobRoleId, u32, Money)> = match firms.site(site) {
+        Some(s) => s
+            .positions
+            .iter()
+            .flat_map(|p| {
+                p.filled
+                    .iter()
+                    .map(move |e| (e.citizen, p.role, staz(e.since, now), e.wage_month))
+            })
+            .collect(),
+        None => return Vec::new(),
+    };
+    let mut out = Vec::with_capacity(zaloga.len());
+    for (c, role, staz_dni, stawka) in zaloga {
+        odejdz(
+            firms,
+            people,
+            Leave {
+                citizen: c,
+                site,
+                role,
+                cause: LeaveCause::Redundancy,
+                tenure_days: staz_dni,
+            },
+            now,
+        );
+        out.push((c, severance(stawka, staz_dni, hr)));
+    }
+    out
+}

@@ -198,3 +198,72 @@ fn budzet_kredyt_i_koszyk_cpi_wchodza_do_hasha() {
     let _ = market.budget_log();
     assert_eq!(base, world_state_hash(&w), "odczyt podglądu zmienił świat");
 }
+
+/// Finanse firm wchodzą do hasha (M7d, 00 §3.6).
+///
+/// Bramka 2 fazy wymaga, żeby **każdy** komponent M7 wszedł do funkcji haszującej.
+/// Dla finansów znaczy to trzy rzeczy osobno, bo osobno się psują: zaległość, umowa
+/// i postępowanie. Milczenie hasha o którejkolwiek z nich znaczyłoby, że dwa przebiegi
+/// tego samego ziarna wolno rozjechać w tym, kto komu jest winien — a to jest liczba,
+/// od której zależy, czy firma za trzy miesiące jeszcze istnieje.
+#[test]
+fn finanse_firm_wchodza_do_hasha() {
+    use magnat_core::{BankruptcyTrigger, Entity, FirmId, SiteId};
+    use magnat_economy::corpfin::{
+        AssetKind, AssetRef, ClaimOrigin, CorpFinance, InsolvencyParams,
+    };
+    use magnat_economy::credit::LoanBook;
+    use std::num::NonZeroU32;
+
+    let ent = |i: u32| Entity::new(i, NonZeroU32::MIN);
+    let params = InsolvencyParams::load_default().expect("data/tuning/insolvency.ron");
+
+    let swiat_z = |f: &dyn Fn(&mut CorpFinance)| {
+        let mut w = World::new(7);
+        let mut fin = CorpFinance::new(params.clone());
+        f(&mut fin);
+        w.insert_resource(fin);
+        w.register_resource_hash::<CorpFinance>();
+        world_state_hash(&w)
+    };
+
+    let pusty = swiat_z(&|_| {});
+    assert_eq!(pusty, swiat_z(&|_| {}), "ten sam stan, inny hash");
+
+    let z_dlugiem = swiat_z(&|fin| {
+        fin.arrears_mut().accrue(
+            magnat_economy::AccountOwner::Firm(FirmId(ent(2))),
+            magnat_economy::AccountOwner::RestOfWorld,
+            Money(123_456),
+            ClaimOrigin::Rent,
+            Tick(1),
+        );
+    });
+    assert_ne!(pusty, z_dlugiem, "zaległość nie rusza hasha");
+
+    let z_leasingiem = swiat_z(&|fin| {
+        fin.sign_lease(
+            FirmId(ent(2)),
+            FirmId(ent(3)),
+            AccountId(0),
+            AssetRef::new(SiteId(ent(9)), AssetKind::Equipment),
+            Money(1_000),
+            24,
+            Money(5_000),
+        );
+    });
+    assert_ne!(pusty, z_leasingiem, "leasing nie rusza hasha");
+
+    let z_upadloscia = swiat_z(&|fin| {
+        fin.open_bankruptcy(
+            FirmId(ent(2)),
+            AccountId(0),
+            BankruptcyTrigger::CourtOrder,
+            0,
+            &LoanBook::new(),
+            Tick(1),
+        );
+    });
+    assert_ne!(pusty, z_upadloscia, "postępowanie nie rusza hasha");
+    assert_ne!(z_dlugiem, z_upadloscia, "dwa różne stany, ten sam hash");
+}

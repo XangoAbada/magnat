@@ -14,7 +14,7 @@
 // Ten plik stroi **balansator** (M5e): `a_bp` i `max_step_bp` decydują o tym, czy
 // pętla kredytowa się stabilizuje, czyli o bramkach G1 i G2.
 (
-    schema_version: 1,
+    schema_version: 2,
 
     // ── ocena zdolności kredytowej (§6.5: „historia, zabezpieczenie, przepływy") ──
     scoring: (
@@ -47,6 +47,49 @@
             spread_bp: 300,
             term_months: 12,
             max_multiple_bp: 30000,
+        ),
+        // Kredyt inwestycyjny (M7d): pięć lat, do dziesięciokrotności miesięcznych
+        // kosztów stałych. Tańszy od obrotowego, bo idzie pod zabezpieczenie
+        // rzeczowe — wyposażenie zakładu, a nie zapas, który schodzi z półki.
+        investment: (
+            spread_bp: 200,
+            term_months: 60,
+            max_multiple_bp: 100000,
+        ),
+    ),
+
+    // ── instrumenty pozakredytowe (M7d §5.12, PRD §7.8) ──────────────────────────
+    //
+    // Wszystkie trzy są tą samą transakcją w trzech opakowaniach: firma oddaje
+    // przyszłe pieniądze za dzisiejsze. Cena rośnie wraz z tym, jak mało zostaje
+    // wierzycielowi w zamian — leasingodawca trzyma rzecz, faktor dostaje kwotę
+    // od cudzego dłużnika, obligatariusz nie ma nic poza obietnicą, i to on
+    // liczy sobie najwięcej.
+    finance: (
+        // Leasing: trzy lata, wykup za 10 % wartości początkowej. Dwie niezapłacone
+        // raty z rzędu kończą umowę — rzecz wraca do leasingodawcy i **nie wchodzi**
+        // do masy upadłościowej, bo nigdy nie należała do firmy.
+        lease: (
+            spread_bp: 400,
+            term_months: 36,
+            buyout_bp: 1000,
+            repossess_after: 2,
+        ),
+        // Faktoring: faktor zostawia sobie 4 % kwoty. Nie kupuje należności
+        // świeższych niż 10 dób (jeszcze nie są problemem) ani drobnych
+        // (koszt obsługi zjadłby marżę).
+        factoring: (
+            discount_bp: 400,
+            min_age_days: 10,
+            min_amount_gr: 50000,
+        ),
+        // Obligacja: kupon o 600 bp nad stopę bazową. Droższa od kredytu, bo
+        // nabywca nie ma zabezpieczenia i w upadłości stoi w `Unsecured`.
+        bond: (
+            coupon_spread_bp: 600,
+            term_months: 36,
+            min_issue_gr: 5000000,
+            min_lot_gr: 100000,
         ),
     ),
 

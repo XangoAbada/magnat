@@ -27,7 +27,7 @@ use magnat_core::{
 };
 use serde::Deserialize;
 
-pub const ECONOMY_SCHEMA_VERSION: u32 = 1;
+pub const ECONOMY_SCHEMA_VERSION: u32 = 2;
 
 // ── błędy ────────────────────────────────────────────────────────────────────────
 
@@ -458,6 +458,9 @@ pub struct LoanProduct {
 pub struct LoanProducts {
     pub consumer: LoanProduct,
     pub working_capital: LoanProduct,
+    /// Kredyt inwestycyjny firmy (M7d §5.12): dłuższy i tańszy od obrotowego,
+    /// bo idzie pod zabezpieczenie rzeczowe, a nie pod zapas.
+    pub investment: LoanProduct,
 }
 
 impl LoanProducts {
@@ -466,8 +469,55 @@ impl LoanProducts {
         match kind {
             LoanKind::Consumer => self.consumer,
             LoanKind::WorkingCapital => self.working_capital,
+            LoanKind::Investment => self.investment,
         }
     }
+}
+
+/// Instrumenty pozakredytowe firmy (M7d §5.12, PRD §7.8).
+///
+/// Leasing, faktoring i obligacja stoją tu razem z produktami kredytowymi, bo są
+/// tym samym: ceną, po której firma zamienia przyszłe pieniądze na dzisiejsze.
+/// Różnią się tym, co zostawiają w zamian — leasing cudzą rzecz w użyciu, faktoring
+/// mniejszą kwotę teraz, obligacja dług wobec wielu wierzycieli zamiast jednego.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Deserialize)]
+pub struct FinanceProducts {
+    pub lease: LeaseProduct,
+    pub factoring: FactoringProduct,
+    pub bond: BondProduct,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Deserialize)]
+pub struct LeaseProduct {
+    /// Marża leasingodawcy nad stopę bazową.
+    pub spread_bp: i32,
+    pub term_months: u16,
+    /// Cena wykupu jako część wartości początkowej, w punktach bazowych.
+    pub buyout_bp: i64,
+    /// Ile rat z rzędu bez zapłaty kończy umowę i zabiera rzecz.
+    pub repossess_after: u8,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Deserialize)]
+pub struct FactoringProduct {
+    /// Dyskonto faktora: tyle punktów bazowych zostaje u niego z każdej złotówki.
+    pub discount_bp: i64,
+    /// Należność młodsza niż tyle dób nie jest jeszcze problemem i faktor jej nie kupi.
+    pub min_age_days: u16,
+    /// Najniższa kwota, po którą faktor się schyla.
+    pub min_amount_gr: i64,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Deserialize)]
+pub struct BondProduct {
+    /// Kupon roczny nad stopę bazową — obligacja firmy jest droższa od kredytu,
+    /// bo nabywca nie ma zabezpieczenia.
+    pub coupon_spread_bp: i32,
+    pub term_months: u16,
+    /// Najmniejsza sensowna emisja; poniżej niej koszt obsługi zjada korzyść.
+    pub min_issue_gr: i64,
+    /// Najmniejszy pakiet, jaki obejmuje jeden nabywca.
+    pub min_lot_gr: i64,
 }
 
 /// Reguła typu Taylora w arytmetyce całkowitej (M5d §5.10).
@@ -487,6 +537,7 @@ pub struct BaseRateRule {
 pub struct BankParams {
     pub scoring: CreditScoring,
     pub products: LoanProducts,
+    pub finance: FinanceProducts,
     pub base_rate: BaseRateRule,
 }
 
@@ -495,6 +546,7 @@ struct BankFile {
     schema_version: u32,
     scoring: CreditScoring,
     products: LoanProducts,
+    finance: FinanceProducts,
     base_rate: BaseRateRule,
 }
 
@@ -825,6 +877,7 @@ impl EconomyData {
             bank: BankParams {
                 scoring: bf.scoring,
                 products: bf.products,
+                finance: bf.finance,
                 base_rate: bf.base_rate,
             },
             cpi: CpiSpec {

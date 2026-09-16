@@ -100,8 +100,11 @@ REJESTR = {
     # zakładał, że M7c rozetnie tę funkcję przebudową `DecisionReason` na
     # `Citizen | Firm | City`. Przebudowa nie weszła (patrz `AX-7` w `M7c-…md`),
     # więc funkcja rośnie dalej, a adres podziału przesuwa się na osobną zmianę.
-    ("engine/ui/src/inspect/reason.rs", "fn", 499): 37,
-    ("sim/economy/src/data.rs", "fn", 268): 38,
+    # 566 po M7d: siedem ramion bloku finansowego (505–510, przy czym
+    # `BankruptcyOpened` ma dwa — brak płynności mierzy się dobami, ujemny kapitał nie).
+    ("engine/ui/src/inspect/reason.rs", "fn", 566): 37,
+    # 269 po M7d: jedna linia za `finance: bf.finance` w budowie `BankParams`.
+    ("sim/economy/src/data.rs", "fn", 269): 38,
 }
 
 POCZATEK_ITEMU = re.compile(

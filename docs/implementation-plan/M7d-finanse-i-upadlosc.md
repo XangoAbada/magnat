@@ -11,7 +11,7 @@ zostają w dokumencie fazy — tu jest wyłącznie to, co robisz w tej porcji.
 | **Pakiety robocze** | WP8, WP9 |
 | **Projekt techniczny** | §5.12, §5.13 |
 | **Wynik do pokazania** | Firma bierze kredyt, przestaje go obsługiwać, bankrutuje, a wierzyciele są zaspokajani w udokumentowanej kolejności. |
-| **Kryterium zamknięcia** | Kryteria WP8 i WP9. **Decyzja właściciela produktu** (`00-postep.md`): kolejność zaspokajania — pracownicy vs wierzyciel zabezpieczony — musi być rozstrzygnięta przed startem WP9. |
+| **Kryterium zamknięcia** | Kryteria WP8 i WP9. **Decyzja właściciela produktu** (`00-postep.md`): kolejność zaspokajania rozstrzygnięta przed startem WP9 — **pracownicy przed wierzycielem zabezpieczonym**, wariant domyślny `D7`. Układ siedzi w `ClaimPriority` (`engine/core`) i jest tam regułą podziału, nie tylko indeksem. |
 | **Poprzednia / następna** | `M7c-polityki-i-menedzerowie.md` · `M7e-ai-firm.md` |
 
 Kredyt, leasing, faktoring i obligacje oraz postępowanie upadłościowe z syndykiem, kolejnością zaspokojenia i wyprzedażą majątku.
@@ -22,8 +22,8 @@ Kredyt, leasing, faktoring i obligacje oraz postępowanie upadłościowe z syndy
 
 | WP | Nazwa | Zależy od | Rozmiar |
 |---|---|---|---|
-| WP8 | Finanse firmy: kredyt, leasing, faktoring, obligacje | WP1, M5 (`BaseRate`, księga) | M |
-| WP9 | Bankructwo: syndyk, kolejność zaspokojenia, wyprzedaż | WP8, WP3 | M |
+| WP8 ✅ | Finanse firmy: kredyt, leasing, faktoring, obligacje | WP1, M5 (`BaseRate`, księga) | M |
+| WP9 ✅ | Bankructwo: syndyk, kolejność zaspokojenia, wyprzedaż | WP8, WP3 | M |
 
 ### WP8 — Finanse firmy
 
@@ -35,6 +35,11 @@ Bank jest zwykłą firmą z polityką kredytową; kreację pieniądza księguje 
 *Kryterium ukończenia:* test zachowania pieniądza przechodzi z włączonymi wszystkimi czterema
 instrumentami; harmonogram rat sumuje się dokładnie do kwoty kredytu + odsetek (i64, reszta do
 pierwszej raty wg reguły z dokumentu 00 §2).
+**Spełnione:** `cztery_instrumenty_zachowuja_pieniadz` (60 miesięcy gry, wszystkie cztery naraz
+i na przemian) oraz `harmonogram_kredytu_inwestycyjnego_sumuje_sie_co_do_grosza` — oba
+w `sim/economy/tests/corpfin.rs`. Resztę zmiata **ostatnia** rata, nie pierwsza (`AU`-owa
+własność P6 z M5d); reguła z 00 §2 dotyczy podziału kwoty między strony i jest spełniona
+w `split_proportional`, którym idzie podział masy upadłościowej.
 
 ### WP9 — Bankructwo i syndyk
 
@@ -49,7 +54,12 @@ Postępowanie przyjmuje wierzycieli z zewnątrz przez `file_claim` — M7 jest w
 całej upadłości, żadna faza nie ma własnej ścieżki egzekucji.
 
 *Kryterium ukończenia:* property-test `bankruptcy_conserves_money_and_assets` (§7) zielony na
-10 000 losowych konfiguracji.
+10 000 losowych konfiguracji. **Spełnione** — `sim/economy/tests/corpfin.rs`. Test stoi na
+**czystej** funkcji `Bankruptcy::plan_distribution`, bo niezmienniki 5, 6 i 7 mówią o planie
+wypłat, a nie o przelewach; niezmienniki 1, 2 i 3 (pieniądz, loty, leasingi) wymagają realnych
+kont i sprawdza je `postepowanie_nie_gubi_pieniedzy_ani_lotow` na pełnym przebiegu. Niezmiennik 4
+(każdy `Employment` zakończony dokładnie raz) jest w `sim/economy/tests/labor.rs`, bo tam stoi
+rusztowanie rynku pracy — `upadlosc_konczy_kazda_umowe_dokladnie_raz`.
 
 ---
 
@@ -168,6 +178,27 @@ Przebieg:
 
 Skutki w dzielnicy (§7.8: „skutki w dzielnicy") są emergentne: fala bezrobocia → spadek popytu
 w okolicznych sklepach → spadek wartości gruntu. Żadnych modyfikatorów „na sztywno".
+
+---
+
+## Zmiany wpisane po M7d
+
+Korekty **tej** podfazy naniesione w trakcie jej wykonania (`K-18`). Poprawki dokumentu
+fazy są w tabeli „Zmiany wpisane po M7d" w `M7-firmy-ai-i-rynek-pracy.md`.
+Gwiazdka = zmiana zakresu albo kryterium.
+
+| # | Co | Dlaczego |
+|---|---|---|
+| `BA-1`* | **Finanse firmy i upadłość mieszkają w `sim/economy::corpfin`, a nie w `sim/firms`.** §5.12 i §5.13 wypisywały `Loan`, `Lease`, `Bond`, `Bankruptcy` i `Claim` jako typy `sim/firms` | `sim/firms` **nie zna `Books`** i znać nie może: zależność idzie `economy → firms → policy` i odwrócenie zamyka cykl, którego Cargo nie zbuduje. Finanse bez ksiąg to same nazwy pól — kredyt, który niczego nie przelewa, i syndyk, który niczego nie wypłaca. To ten sam podział, który `D2` narzucił rynkowi pracy, a `AY-3` wykonawcy polityki cenowej: mechanizm jest tam, gdzie dane |
+| `BA-2`* | **Wierzycielem jest `AccountOwner`, a nie własny enum `Creditor` z §5.13.** `Creditor::City(ClaimKind)` zastępuje para `AccountOwner::City` + `ClaimOrigin::Tax`; M8 zgłasza roszczenie dokładnie tak samo, przez `file_claim` | Typ odpowiadający na pytanie „kto ma konto" już istnieje, pokrywa pracownika, bank, dostawcę, miasto i resztę świata, i ma porządek liniowy potrzebny do determinizmu podziału. Drugi enum o tym samym znaczeniu rozjechałby się przy pierwszym nowym uczestniku — ta sama reguła, którą `K-8` stosuje do słowników |
+| `BA-3`* | **Loty upadłościowe nie są `Offer` z rynku M5.** §5.13 obiecywało wystawianie ich „jako zwykłych ofert"; są własną pozycją z ceną rundy, a jedynym wejściem zakupu jest `CorpFinance::bid_lot` — to samo dla AI firm (M7e) i dla gracza (M9) | `Offer` jest ceną **półkową towaru** dla gospodarstwa domowego i indeksuje się po `CategoryId::Stock(StockCat)`. Tokarka nie ma `StockCat` i mieszkaniec jej nie kupi, więc lot nie miałby warstwy, w której mógłby stanąć. To jest dokładnie argument, którym `K-36` odrzucił `Quote` jako widok na `Offer`. Obietnica „bez osobnego podsystemu aukcyjnego" zostaje spełniona inaczej: nie ma licytacji, remisów ani drugiego mechanizmu wyceny — jest cena rundy i jedno wejście |
+| `BA-4`* | **`AssetRef` ma dwa rodzaje aktywa, nie trzy: wyposażenie i zapas.** §5.12 zakładało maszyny jako osobne aktywa | M6 nie prowadzi **egzemplarzy** maszyn, tylko klasy w recepturze (`MachineClassId`), więc nie ma czego wskazać — maszyna jest częścią wyposażenia zakładu. Przypadek (2) z `K-18`: typ z przykładu nie istnieje w tej szerokości. Trzeci wariant powstanie razem z egzemplarzami, nie wcześniej |
+| `BA-5` | **`Lease` rozróżnia „umowa skończona" (`ended`) od „rzecz jest firmy" (`bought_out`).** §5.12 miało jedno pole | Upadłość kończy **wszystkie** umowy firmy, więc gdyby „skończona" znaczyło „moja", każda rzecz leasingowana wchodziłaby do masy dokładnie w tej chwili, w której najbardziej nie powinna. Złapał to test niezmiennika 3 z §7.2 przy pierwszym uruchomieniu — nie przegląd kodu |
+| `BA-6` | **Wynagrodzenie syndyka jest przycięte do gotówki w masie.** §5.13 podawało je jako `proceeds × trustee_fee_bp` bez ograniczenia | Postępowanie, w którym loty sprzedano, a gotówka zdążyła zejść, wypłacałoby syndykowi kwotę, której nie ma — i podział przestawałby się sumować do masy. Złamanie niezmiennika 6 z §7.2 **niewidoczne dla żadnego pojedynczego przelewu**; znalazł je property-test na 10 000 przypadków, przy gotówce zero i niezerowych wpływach |
+| `BA-7`* | **Progi upadłości są w `data/tuning/insolvency.ron`, nie w `data/economy/`.** Produkty finansowe (kredyt inwestycyjny, leasing, faktoring, obligacja) dochodzą do `data/economy/bank.ron`, którego `schema_version` idzie 1 → 2 razem z całym katalogiem | Wykonanie `K-35`: w `data/tuning/` siedzą liczby, **które wolno przestawić bez zmiany znaczenia modelu** — po ilu dobach niepłacenia sąd otwiera postępowanie, ile bierze syndyk, o ile tanieje lot. Produkt kredytowy zmienia kształt rozwiązania i zostaje przy `consumer` i `working_capital`, bo rozdzielenie ich na dwa pliki kazałoby czytać oba, żeby zrozumieć jeden. `data/economy/` jest własnością M5 i nie ma być workiem na cudze liczby |
+| `BA-8`* | **Konsumenta `PayrollOutbox` w M7d nie ma — adres przesuwa się na M7e.** Zamiast tego M7d domyka **stronę kosztową**: niezapłacona pozycja (czynsz, media, płace, rata) zostaje zaległością i zobowiązaniem w księdze, zamiast znikać bez śladu | Notatka po M7b uzasadniała odłożenie tym, że „firma bez przychodu i bez kredytu nie ma z czego zapłacić". Powód nie zniknął: `SitePnlMonth` nie ma przychodu do M7e (`AV-2`), a zakłady produkcyjne nie mają księgi wcale. Wypłata realnej listy płac z konta, na które nic nie wpływa, wywróciłaby saldo każdej firmy w pierwszym miesiącu — czyli dokładnie to, przed czym tamta notatka ostrzegała, tylko o jedną podfazę później. **Co M7d z tego domyka mimo wszystko:** odprawy przy upadłości są naliczane imiennie (`AccountOwner::Citizen`) i wypłacane z masy, więc niezmiennik 4 z §7.2 ma pisarza i test |
+| `BA-9` | **Dwa nowe słowniki w `core` i sześć powodów decyzji (505–510).** `BankruptcyTrigger` i `ClaimPriority` — patrz `K-48` | Oba są ładunkami `DecisionReason`, a ładunek centralnego enuma nie może pochodzić z crate'u, który od `core` zależy — ta sama reguła, która wypchnęła tam `WageCause` (`K-45`) i `PriceDriver` (`K-30`) |
+| `BA-10` | **`CorpFinance` rozbity na cztery pliki przy domknięciu pakietu**: `params.rs` (kalibracja z RON), `ops.rs` (leasing, obligacja, faktoring), `proceedings.rs` (postępowanie), `mod.rs` (rejestr i hasz) | Przegląd strukturalny (CLAUDE.md): jeden plik miał 1216 linii i jeden blok `impl` 921. Podział był mechaniczny — przeniesienie bloków bez zmiany zachowania — więc wszedł w tym samym commicie, zgodnie z odpowiedzią nr 1 reguły |
 
 ---
 

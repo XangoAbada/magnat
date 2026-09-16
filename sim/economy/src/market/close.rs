@@ -2,13 +2,22 @@
 
 use super::*;
 
+use crate::corpfin::{ClaimOrigin, CorpFinance};
+
 impl Market {
     /// Koszty stałe miesiąca, amortyzacja i domknięcie okresu (§5.8).
     ///
-    /// Sklep bez środków **nie płaci** i to jest cała „upadłość" w M5 — postępowanie
-    /// prowadzi M7 (`K-10`). Zapis księgowy powstaje wyłącznie po udanym przelewie,
-    /// więc `BankCurrent` nigdy nie rozjeżdża się z saldem konta w `Books`.
-    pub fn close_month(&self, books: &mut Books, t: Tick) -> Money {
+    /// Zapis księgowy powstaje wyłącznie po udanym przelewie, więc `BankCurrent`
+    /// nigdy nie rozjeżdża się z saldem konta w `Books`.
+    ///
+    /// **Od M7d nieudany przelew nie jest ciszą.** Do tej pory sklep bez środków
+    /// po prostu nie płacił i nie zostawało po tym nic: ani długu, ani śladu
+    /// w księdze. Dług, którego nie ma, nie może wpędzić firmy w bankructwo ani stać
+    /// się roszczeniem w postępowaniu — więc od tej chwili niezapłacona pozycja
+    /// zostaje **zaległością** wobec wierzyciela i zobowiązaniem w księdze
+    /// (`*Payable`). Koszt firmy jest ten sam, bo koszt powstaje w chwili, w której
+    /// się należy, a nie w chwili zapłaty; zmienia się druga strona zapisu.
+    pub fn close_month(&self, books: &mut Books, fin: &mut CorpFinance, t: Tick) -> Money {
         let mut m = self.lock();
         let rest = m.rest_of_world;
         let koszty = m.data.costs;
@@ -18,8 +27,18 @@ impl Market {
             let (site, konto, slots) =
                 (m.shops[i].site, m.shops[i].account, m.shops[i].shelf.slots);
             let (czynsz, media, place) = koszty.monthly(slots);
-            let pozycje: [(Money, TxKind, LedgerAccount); 3] = [
-                (czynsz, TxKind::Rent { site }, LedgerAccount::RentExpense),
+            let firma = m.shops[i].firm;
+            // Czwarta i piąta kolumna: czym staje się ta pozycja, gdy nie ma z czego
+            // jej zapłacić. Czynsz, media i płace mają w upadłości różne priorytety
+            // (`ClaimPriority`), więc niezapłacona pozycja musi pamiętać, czym była.
+            let pozycje: [(Money, TxKind, LedgerAccount, LedgerAccount, ClaimOrigin); 3] = [
+                (
+                    czynsz,
+                    TxKind::Rent { site },
+                    LedgerAccount::RentExpense,
+                    LedgerAccount::TradePayable,
+                    ClaimOrigin::Rent,
+                ),
                 (
                     media,
                     TxKind::Utility {
@@ -27,29 +46,45 @@ impl Market {
                         kind: magnat_core::UtilityService::Electricity,
                     },
                     LedgerAccount::UtilitiesExpense,
+                    LedgerAccount::TradePayable,
+                    ClaimOrigin::Utility,
                 ),
-                (place, TxKind::Wage { site }, LedgerAccount::WagesExpense),
+                (
+                    place,
+                    TxKind::Wage { site },
+                    LedgerAccount::WagesExpense,
+                    LedgerAccount::WagePayable,
+                    ClaimOrigin::Wages,
+                ),
             ];
-            for (kwota, kind, konto_ks) in pozycje {
+            for (kwota, kind, konto_ks, konto_zob, origin) in pozycje {
                 if kwota.get() <= 0 {
                     continue;
                 }
                 let memo = TxMemo::new(kind, DecisionReason::Unspecified);
-                if books.transfer(konto, rest, kwota, memo, t).is_err() {
-                    continue;
-                }
+                let zaplacone = books.transfer(konto, rest, kwota, memo, t).is_ok();
+                // Koszt jest ten sam w obu gałęziach — różni się druga strona zapisu:
+                // zapłacone schodzi z rachunku, niezapłacone rośnie na zobowiązaniu.
+                let druga = if zaplacone {
+                    (LedgerAccount::BankCurrent, Money(-kwota.get()))
+                } else {
+                    (konto_zob, Money(-kwota.get()))
+                };
                 let _ = ledger::post(
                     &mut m.shops[i].ledger,
-                    JournalEntry::new(
-                        t,
-                        DecisionReason::Unspecified,
-                        &[
-                            (konto_ks, kwota),
-                            (LedgerAccount::BankCurrent, Money(-kwota.get())),
-                        ],
-                    ),
+                    JournalEntry::new(t, DecisionReason::Unspecified, &[(konto_ks, kwota), druga]),
                 );
-                suma = Money(suma.get() + kwota.get());
+                if zaplacone {
+                    suma = Money(suma.get() + kwota.get());
+                } else {
+                    fin.arrears_mut().accrue(
+                        AccountOwner::Firm(firma),
+                        AccountOwner::RestOfWorld,
+                        kwota,
+                        origin,
+                        t,
+                    );
+                }
             }
             // Amortyzacja jest kosztem **bezgotówkowym** — nie ma po niej przelewu
             // i dlatego nie może iść tą samą ścieżką co czynsz.
@@ -70,7 +105,7 @@ impl Market {
             // Kredyt obrotowy **przed** domknięciem okresu: odsetki zaksięgowane po
             // `close_period` wpadłyby do następnego miesiąca i RZiS przestałby się
             // zgadzać z przepływami (korekta wpisana do M5d po M5c).
-            suma = Money(suma.get() + m.service_working_capital(i, books, t).get());
+            suma = Money(suma.get() + m.service_working_capital(i, books, fin, t).get());
             m.maybe_borrow_working_capital(i, books, t);
             let _ = ledger::close_period(
                 &mut m.shops[i].ledger,
@@ -92,7 +127,13 @@ impl MarketInner {
     /// grosza — uruchomienie i spłata kredytu ruszają trzy rzeczy naraz (podaż
     /// pieniądza, saldo rachunku, księgę) i pominięcie trzeciej wychodzi dopiero
     /// w teście M5c, daleko od przyczyny.
-    fn service_working_capital(&mut self, i: usize, books: &mut Books, t: Tick) -> Money {
+    fn service_working_capital(
+        &mut self,
+        i: usize,
+        books: &mut Books,
+        fin: &mut CorpFinance,
+        t: Tick,
+    ) -> Money {
         let Some(bank) = self.bank else {
             return Money::ZERO;
         };
@@ -122,6 +163,10 @@ impl MarketInner {
                 .is_err()
             {
                 // Sklep bez środków nie płaci — zaległość, nie debet bez pokrycia.
+                // Od M7d zaległość jest **rzeczą**, a nie samym licznikiem: bank ma
+                // roszczenie, a wiek najstarszej niezapłaconej pozycji jest pierwszą
+                // drogą do postępowania upadłościowego (M7d §5.13).
+                self.arrear_for_loan(fin, i, id, rata.interest, t);
                 if let Some(l) = self.loans.get_mut(id) {
                     l.arrears_months = l.arrears_months.saturating_add(1);
                 }
@@ -142,6 +187,7 @@ impl MarketInner {
         }
         if rata.principal.get() > 0 {
             if books.destroy_credit(konto, rata.principal, id, t).is_err() {
+                self.arrear_for_loan(fin, i, id, rata.principal, t);
                 if let Some(l) = self.loans.get_mut(id) {
                     l.arrears_months = l.arrears_months.saturating_add(1);
                 }
@@ -172,6 +218,30 @@ impl MarketInner {
             self.shops[i].loan = None;
         }
         wyszlo
+    }
+
+    /// Zaległość wobec banku z niezapłaconej raty.
+    ///
+    /// Osobno, bo woła ją i gałąź odsetkowa, i kapitałowa — a dwie kopie tych pięciu
+    /// linii rozjechałyby się przy pierwszej zmianie strony wierzyciela.
+    fn arrear_for_loan(
+        &mut self,
+        fin: &mut CorpFinance,
+        i: usize,
+        id: crate::books::LoanId,
+        kwota: Money,
+        t: Tick,
+    ) {
+        let Some(bank) = self.bank else {
+            return;
+        };
+        fin.arrears_mut().accrue(
+            AccountOwner::Firm(self.shops[i].firm),
+            AccountOwner::Bank(bank.firm),
+            kwota,
+            ClaimOrigin::Loan(id),
+            t,
+        );
     }
 
     /// Wniosek o kredyt obrotowy, kiedy na rachunku zostało mniej niż miesiąc kosztów.

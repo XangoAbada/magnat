@@ -188,8 +188,11 @@ firms::hr::loss_multiplier(ManagementQuality) -> i32    // -> M6: straty, w tysi
 firms::Site::labor_pct(..) -> u16                       // -> M6: pokrycie etatowe w promilach (K-44)
 firms::labor_policy::score_application(..) -> i32       // decyzja FIRMY o kandydacie
 firms::labor_policy::wage_escalation_step(..) -> Money  // decyzja FIRMY o podbiciu stawki
-firms::finance::request_loan(firm, kind, amount) -> Result<LoanId, CreditDenial>
-firms::finance::open_bankruptcy(firm, trigger) -> BankruptcyId
+// UWAGA (BB-2): te dwie nie powstały pod tym adresem. Kredyt firmy prowadzi
+// `sim/economy::credit` (M5d + produkt inwestycyjny M7d), postępowanie upadłościowe
+// `sim/economy::corpfin` — patrz „Zmiany wpisane po M7d".
+economy::corpfin::CorpFinance::open_bankruptcy(..) -> BankruptcyId
+economy::corpfin::Bankruptcy::file_claim(..) -> Result<ClaimId, ClaimRejected>
 firms::ai::{decide_operational, decide_tactical, decide_strategic}
 firms::ai::apply_decision(cmds, firm, Decided<T>)       // jedyna droga wykonania akcji
 firms::lifecycle::found_firm(citizen, intent) -> FirmId
@@ -309,11 +312,14 @@ tak, żeby wpięcie M8 nie wymagało pisania tego testu od nowa.
 
 ```
 1. Pieniądz:   Σ gotówka wszystkich uczestników PRZED + Σ wpływy ze sprzedaży masy
-               == Σ gotówka PO + opłata syndyka
-               (gotówka nie powstaje ani nie ginie; opłata syndyka to jawny transfer)
-2. Aktywa:     każdy AssetLot kończy w DOKŁADNIE jednym ze stanów: sprzedany (nowy właściciel)
-               | zwrócony leasingodawcy | AssetWriteOff — suma liczności == suma początkowa,
-               przecięcia zbiorów puste
+               == Σ gotówka PO + opłata syndyka + Σ wypłat do sektora gospodarstw
+               (gotówka nie powstaje ani nie ginie; opłata syndyka to jawny transfer.
+                Ostatni składnik dopisany po M7d — BB-4: gospodarstwa nie mają kont
+                w `Books`, więc wypłata dla człowieka zdejmuje kwotę z ksiąg i domyka
+                się dopiero po drugiej stronie granicy sektora)
+2. Aktywa:     każdy AssetLot kończy w DOKŁADNIE jednym stanie `LotFate`: Sold (nowy
+               właściciel) | ReturnedToLessor | WrittenOff — suma liczności == suma
+               początkowa, przecięcia zbiorów puste, `InEstate` po domknięciu puste
 3. Leasingi:   żadne aktywo leasingowane nie trafiło do masy ani nie zostało sprzedane
 4. Ludzie:     każdy Employment zakończony dokładnie raz, dokładnie jedna odprawa naliczona
 5. Roszczenia: Σ wypłat per priorytet <= Σ roszczeń per priorytet; żaden niższy priorytet nie
@@ -511,6 +517,24 @@ Zrównoleglalne: WP2, WP8, WP10, WP16. WP6b blokowane przez AST od M9 (D17), WP1
 kontrakt `sim/macro` od M10 (dostarczony).
 WP17 rośnie razem z pozostałymi, nie na końcu — testy 7.1, 7.2 i 7.3 powstają odpowiednio razem
 z WP5, WP9 i WP10, bo napisane po fakcie już niczego nie złapią.
+
+---
+
+## Zmiany wpisane po M7d
+
+Poprawki dokumentu **fazy** naniesione w trakcie podfazy M7d (`K-18`). Korekty samej
+podfazy są w tabeli „Zmiany wpisane po M7d" w `M7d-finanse-i-upadlosc.md`.
+Gwiazdka = zmiana zakresu albo kryterium.
+
+| # | Co | Dlaczego |
+|---|---|---|
+| `BB-1`* | **§6 „Dostarczam" zmienia adres finansów: `Loan`, `Lease`, `Bond`, `Bankruptcy`, `Claim`, `AssetLot` i `ClaimPriority` **nie** są typami `sim/firms`.** Mieszkają w `sim/economy::corpfin` (`ClaimPriority` i `BankruptcyTrigger` w `engine/core`, `K-48`). Podpisy mają dziś postać `CorpFinance::{sign_lease, pay_lease, issue_bond, pay_coupon, redeem_bond, factor_receivable, check_insolvency, open_bankruptcy, add_lot, bid_lot, step_case, settle_scrap, distribute}` oraz `Bankruptcy::{file_claim, plan_distribution}` | `sim/firms` nie zna `Books` i nie może: zależność idzie `economy → firms → policy`. To ten sam podział, który `D2` narzucił rynkowi pracy, a `AY-3` wykonawcy polityki cenowej — mechanizm jest tam, gdzie dane, a decyzja tam, gdzie firma. Szczegóły i pozostałe cztery korekty projektu: `BA-1`…`BA-4` w dokumencie podfazy |
+| `BB-2`* | **`firms::finance::request_loan` i `firms::finance::open_bankruptcy` z §6 nie powstały i nie powstaną pod tym adresem.** Kredyt firmy prowadzi `sim/economy::credit` od M5d (M7d dokłada mu produkt inwestycyjny i zaległość z niezapłaconej raty), postępowanie — `sim/economy::corpfin` | Przypadek (2) z `K-18`: API z przykładu nie istnieje i nazywa się inaczej. Drugi rejestr kredytów obok `LoanBook` byłby dokładnie tym błędem, który `K-8` opisuje przy słownikach: rozjazd przy pierwszej zmianie, widoczny dopiero jako inna suma podaży pieniądza |
+| `BB-3`* | **Decyzja właściciela produktu z `D7` jest podjęta: pracownicy przed wierzycielem zabezpieczonym.** Układ siedzi w `ClaimPriority` w `engine/core` i jest tam **regułą podziału**, nie tylko kontraktem indeksu — podział idzie po `as_index()` rosnąco. Odhaczone w `00-postep.md` | Wariant domyślny M7 przyjęty bez zmian. Dokument podfazy zapowiadał, że zmiana układu to jedna stała i tak zostało: przestawienie wariantów przestawia wynik każdej upadłości, nie dotykając ani jednej linii logiki |
+| `BB-4`* | **Niezmiennik 1 z §7.2 ma dopisek o granicy sektora gospodarstw.** Brzmi: „Σ gotówka uczestników PRZED + Σ wpływy ze sprzedaży masy == Σ gotówka PO + opłata syndyka **+ Σ wypłat do sektora gospodarstw**" | Gospodarstwa nie mają kont w `Books` (M5b) i wypłata dla człowieka przechodzi kanałem `household_sector_out` — suma sald w księgach **spada** o tę kwotę. Równanie bez tego składnika jest fałszywe, a fałszywy niezmiennik jest gorszy od żadnego, bo test pod niego napisany pęka z właściwego powodu i wygląda na błąd kodu |
+| `BB-5` | **§7.2 pkt 2 mówi o `LotFate`, a nie o `AssetWriteOff` jako rekordzie.** Lot kończy w dokładnie jednym z czterech stanów: `InEstate` (nigdy po domknięciu), `Sold`, `ReturnedToLessor`, `WrittenOff` | Przypadek (2) z `K-18`. Osobny rekord odpisu byłby drugą listą o tej samej treści co masa i rozjechałby się z nią przy pierwszej zmianie; jawność, o którą chodziło, daje wariant stanu — nie da się go pominąć, bo `LotFate` nie ma wartości domyślnej |
+| `BB-6` | **Blok `DecisionReason` fazy M7 rośnie o sześć: `LoanTaken = 505`, `LeaseSigned = 506`, `ReceivablesFactored = 507`, `BondIssued = 508`, `BankruptcyOpened = 509`, `ClaimSettled = 510`.** Wartości są od tej chwili wieczne | `AY-6` przewidywało, że blok rośnie dalej płasko, i tak się stało — przebudowa `DecisionReason` na `Citizen \| Firm \| City` nadal nie weszła i nadal należy do osobnej zmiany. `StreamId` M7d **nie zajmuje żadnego numeru**: postępowanie jest deterministyczne z kolejności identyfikatorów, a nie z losowania |
+| `BB-7`* | **`PayrollOutbox` nadal nie ma konsumenta — adres przesuwa się z M7d na M7e.** Uzasadnienie i to, co M7d z tego domyka mimo wszystko, są w `BA-8` | Powód, dla którego M7b odłożył to do M7d, nie zniknął: `SitePnlMonth` nie ma przychodu do M7e (`AV-2`), a zakłady produkcyjne nie mają księgi wcale. Wypłata realnej listy płac z konta, na które nic nie wpływa, wywróciłaby saldo każdej firmy w pierwszym miesiącu |
 
 ---
 

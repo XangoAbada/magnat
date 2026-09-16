@@ -14,7 +14,7 @@
 // `None` → `default_markup_bp`. **To jest cena startowa, nie polityka cenowa**:
 // od M5c cenę ustala `reprice`, a ta kolumna zostaje tylko jako punkt wyjścia.
 (
-    schema_version: 1,
+    schema_version: 2,
     default_markup_bp: 3200,
 
     // Jaki sklep czym handluje. `PlaceKind` przychodzi z archetypu zakładu

@@ -219,11 +219,75 @@ vocab_enum! {
     ///
     /// - `Consumer` — kredyt konsumpcyjny gospodarstwa domowego.
     /// - `WorkingCapital` — kredyt obrotowy zakładu pod zapasy i koszty stałe.
+    /// - `Investment` — kredyt inwestycyjny firmy pod nakład na zakład (M7d §5.12).
+    ///   Dopisany **na końcu**, bo indeks wybiera produkt w `data/economy/bank.ron`.
     LoanKind {
         Consumer,
         WorkingCapital,
+        Investment,
     }
 }
+
+vocab_enum! {
+    /// Co otwarło postępowanie upadłościowe (M7d §5.13, PRD §7.8).
+    ///
+    /// W `core` z tej samej reguły co [`WageCause`] (`K-45`): jest ładunkiem
+    /// `DecisionReason::BankruptcyOpened`, a ładunek centralnego enuma nie może
+    /// pochodzić z crate'u, który od `core` zależy. Drugi czytelnik znany z nazwy
+    /// i numeru fazy: M8 (kara administracyjna jako `CourtOrder`), M9 (karta firmy).
+    ///
+    /// Plan fazy zapisywał wariant jako `IlliquidDays { n }`; liczba dób idzie
+    /// osobnym polem powodu, bo `vocab_enum!` daje słownik, a nie enum z ładunkiem
+    /// — i tak jest lepiej, bo histogram przyczyn upadłości liczy przyczyny,
+    /// a nie pary (przyczyna, długość).
+    ///
+    /// - `Illiquid` — firma nie zapłaciła wymagalnych zobowiązań przez próg dób.
+    /// - `NegativeEquity` — kapitał własny ujemny **i** kredyt w zaległości.
+    /// - `CourtOrder` — postanowienie z zewnątrz (M8: egzekucja administracyjna).
+    BankruptcyTrigger {
+        Illiquid,
+        NegativeEquity,
+        CourtOrder,
+    }
+}
+
+vocab_enum! {
+    /// Kolejność zaspokojenia w upadłości (M7d §5.13, `K-10`).
+    ///
+    /// Ładunek `DecisionReason::ClaimSettled`, więc w `core` — ta sama reguła co przy
+    /// [`BankruptcyTrigger`]. Drugi czytelnik: M8 zgłasza roszczenie miasta jako
+    /// `Public` i musi je nazwać, nie mając własnej ścieżki egzekucji (`K-10`).
+    ///
+    /// **Kolejność wariantów JEST regułą podziału**, a nie tylko kontraktem indeksu:
+    /// podział idzie po `as_index()` rosnąco i niższy priorytet nie dostaje ani
+    /// grosza, dopóki wyższy nie jest zaspokojony w całości. Dzięki temu zmiana
+    /// układu (decyzja właściciela produktu, `D7` fazy M7) jest zmianą tej listy,
+    /// a nie zmianą logiki podziału.
+    ///
+    /// Układ przyjęty przez właściciela produktu: **pracownicy przed wierzycielem
+    /// zabezpieczonym**. Skutek jest zamierzony — ryzyko przenosi się na bank, czyli
+    /// na stronę, która je wycenia, a upadłość zostaje widoczna w dzielnicy, bo ludzie
+    /// dostają wypłatę i wydają ją lokalnie.
+    ///
+    /// - `Wages` — zaległe wynagrodzenia.
+    /// - `Severance` — odprawy.
+    /// - `Secured` — wierzyciele zabezpieczeni, **do wartości zabezpieczenia**;
+    ///   nadwyżka ponad nią spada do `Unsecured` jawnym roszczeniem, nie po cichu.
+    /// - `Public` — miasto: podatki, składki, opłaty, kary administracyjne (M8).
+    /// - `Unsecured` — dostawcy, obligatariusze, kary umowne.
+    /// - `Owners` — właściciele; to, co zostanie, czyli zwykle nic.
+    ClaimPriority {
+        Wages,
+        Severance,
+        Secured,
+        Public,
+        Unsecured,
+        Owners,
+    }
+}
+
+/// Liczba priorytetów — rozmiar histogramu wypłat syndyka (M7d §5.13).
+pub const CLAIM_PRIORITY_COUNT: usize = ClaimPriority::ALL.len();
 
 vocab_enum! {
     /// Dlaczego bank odmówił kredytu (M5d §5.10).

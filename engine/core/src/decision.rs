@@ -28,9 +28,10 @@ use crate::ids::{FirmId, SiteId};
 use crate::time::MinuteOfDay;
 use crate::types::{GoodId, JobRoleId, PolicyId, Q};
 use crate::vocab::{
-    ActionKind, CommitmentKind, DeprivationEffect, FixedCost, LeaveCause, LifeEventKind,
-    LineStopCause, LoanKind, MigrationKind, NeedKind, PlaceRef, PriceDriver, RejectCause,
-    RejectCredit, ShortageStageKind, StockCat, TraitId, TransportMode, UtilityKind, WageCause,
+    ActionKind, BankruptcyTrigger, ClaimPriority, CommitmentKind, DeprivationEffect, FixedCost,
+    LeaveCause, LifeEventKind, LineStopCause, LoanKind, MigrationKind, NeedKind, PlaceRef,
+    PriceDriver, RejectCause, RejectCredit, ShortageStageKind, StockCat, TraitId, TransportMode,
+    UtilityKind, WageCause,
 };
 use serde::{Deserialize, Serialize};
 
@@ -352,7 +353,65 @@ pub enum DecisionReason {
         skill_mgmt: Q,
         prev: u8,
     } = 504,
-    // 505–599 zarezerwowane dla M7.
+    /// Firma uruchomiła instrument dłużny (M7d WP8, PRD §7.8).
+    ///
+    /// Jeden wariant na kredyt obrotowy i inwestycyjny, bo `LoanKind` już je rozróżnia
+    /// — drugi wariant powielałby słownik, który po to powstał. `rate_bp` to stopa
+    /// roczna z decyzji banku, `term_months` — długość harmonogramu; razem odpowiadają
+    /// na pytanie „ile mnie to kosztuje i jak długo", czyli na to, które gracz zadaje.
+    LoanTaken {
+        kind: LoanKind,
+        rate_bp: i16,
+        term_months: u16,
+    } = 505,
+    /// Firma podpisała leasing (M7d WP8). `months` to okres do wykupu.
+    ///
+    /// Osobno od [`DecisionReason::LoanTaken`], bo leasing **nie tworzy pieniądza**
+    /// i nie daje aktywa: rzecz należy do leasingodawcy aż do wykupu i w upadłości
+    /// do masy nie wchodzi. To jest różnica, którą karta inspekcji ma pokazać, zanim
+    /// gracz policzy na nią majątek firmy.
+    LeaseSigned {
+        site: SiteId,
+        months: u16,
+    } = 506,
+    /// Firma sprzedała należności z dyskontem (M7d WP8, faktoring).
+    ///
+    /// `count` to liczba sprzedanych pozycji, `discount_bp` — marża faktora.
+    /// Dla obserwatora jest to typowy sygnał kłopotów z płynnością i dlatego ma
+    /// własny wariant: „wzięli kredyt" i „sprzedali należności" to dwie różne
+    /// diagnozy tej samej firmy.
+    ReceivablesFactored {
+        count: u16,
+        discount_bp: u16,
+    } = 507,
+    /// Firma wypuściła obligacje (M7d WP8). `coupon_bp` to kupon roczny,
+    /// `months` — czas do wykupu. Nabywcami są mieszkańcy z oszczędnościami
+    /// i inne firmy; rynek wtórny należy do M10.
+    BondIssued {
+        coupon_bp: u16,
+        months: u16,
+    } = 508,
+    /// Otwarto postępowanie upadłościowe (M7d WP9, `K-10`).
+    ///
+    /// `days` ma znaczenie tylko przy `BankruptcyTrigger::Illiquid` (ile dób firma
+    /// nie płaciła wymagalnych zobowiązań) i przy pozostałych wyzwalaczach jest zerem
+    /// — liczba stoi obok słownika, a nie w nim, żeby histogram przyczyn upadłości
+    /// liczył przyczyny, a nie pary (przyczyna, długość).
+    BankruptcyOpened {
+        trigger: BankruptcyTrigger,
+        days: u16,
+    } = 509,
+    /// Syndyk zaspokoił roszczenia jednego priorytetu (M7d WP9).
+    ///
+    /// `ratio_bp` to stopień zaspokojenia w punktach bazowych — 10 000 znaczy
+    /// „w całości", 0 „nie starczyło na nic". To jest liczba, której szuka
+    /// i pracownik, i bank, i dostawca, więc powód niesie ją zamiast kwoty:
+    /// kwota jest indywidualna, stopień zaspokojenia dotyczy całego priorytetu.
+    ClaimSettled {
+        priority: ClaimPriority,
+        ratio_bp: u16,
+    } = 510,
+    // 511–599 zarezerwowane dla M7.
     // ... kolejne fazy dopisują własne bloki na końcu pliku
 }
 
@@ -414,6 +473,12 @@ impl DecisionReason {
             DecisionReason::JobLeft { .. } => 502,
             DecisionReason::PolicyApplied { .. } => 503,
             DecisionReason::ManagerAssigned { .. } => 504,
+            DecisionReason::LoanTaken { .. } => 505,
+            DecisionReason::LeaseSigned { .. } => 506,
+            DecisionReason::ReceivablesFactored { .. } => 507,
+            DecisionReason::BondIssued { .. } => 508,
+            DecisionReason::BankruptcyOpened { .. } => 509,
+            DecisionReason::ClaimSettled { .. } => 510,
         }
     }
 }

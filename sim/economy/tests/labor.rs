@@ -829,3 +829,110 @@ fn dwa_przebiegi_tego_samego_ziarna_daja_ten_sam_stan() {
     };
     assert_eq!(hash(()), hash(()));
 }
+
+// ── M7d: upadłość pracodawcy ─────────────────────────────────────────────────────
+
+/// Niezmiennik 4 z M7 §7.2: **każdy `Employment` zakończony dokładnie raz, dokładnie
+/// jedna odprawa naliczona**.
+///
+/// Upadłość jest jedynym zdarzeniem, które rozwiązuje wszystkie umowy zakładu naraz,
+/// więc jest też jedynym, przy którym da się zwolnić kogoś dwa razy albo policzyć mu
+/// dwie odprawy — a ani jednego, ani drugiego nie widać w saldzie, dopóki ktoś nie
+/// policzy ludzi. Ten test ich liczy.
+#[test]
+fn upadlosc_konczy_kazda_umowe_dokladnie_raz() {
+    let mut firms = Firms::new();
+    let mut people = TestPeople::default();
+    let m = rynek();
+
+    let huta = firma(&mut firms, "Huta");
+    let site = zaklad(
+        &mut firms,
+        huta,
+        0,
+        0,
+        &[(SPAWACZ, 3, WIDELKI_SPAWACZ), (KASJER, 2, WIDELKI_KASJER)],
+    );
+    // Drugi zakład tej samej firmy — upadłość zakładu nie ma prawa ruszyć cudzej
+    // załogi ani załogi sąsiedniej hali.
+    let obok = zaklad(&mut firms, huta, 1, 0, &[(SPAWACZ, 2, WIDELKI_SPAWACZ)]);
+
+    for i in 0..5u32 {
+        let c = people.dodaj(i, Some(SPAWACZ), 60, 0);
+        let (rola, gdzie) = if i < 3 { (SPAWACZ, site) } else { (SPAWACZ, obok) };
+        people.hire(c, gdzie, rola, ShiftKind::Day, Money(500_000));
+        firms
+            .site_mut(gdzie)
+            .expect("zakład")
+            .positions
+            .iter_mut()
+            .find(|p| p.role == rola)
+            .expect("stanowisko")
+            .filled
+            .push(magnat_firms::Employment {
+                citizen: c,
+                role: rola,
+                wage_month: Money(500_000),
+                since: SimMinute(0),
+                shift: ShiftKind::Day,
+                benefits: magnat_firms::BenefitSet(0),
+                perf_ema: 500,
+                warnings: 0,
+            });
+    }
+    let przed = people.releases;
+
+    let odprawy = magnat_economy::labor::hr::dismiss_all(
+        &m.hr_tuning(),
+        &mut firms,
+        &mut people,
+        site,
+        SimMinute(400 * 1440),
+    );
+
+    assert_eq!(odprawy.len(), 3, "odprawa dla każdego z załogi, i tylko dla niej");
+    assert_eq!(people.releases - przed, 3, "etat wraca do puli dokładnie raz");
+    let kto: Vec<CitizenId> = odprawy.iter().map(|(c, _)| *c).collect();
+    let mut unikaty = kto.clone();
+    unikaty.sort_unstable();
+    unikaty.dedup();
+    assert_eq!(unikaty.len(), kto.len(), "ktoś dostał dwie odprawy");
+    assert!(
+        odprawy.iter().all(|(_, m)| m.get() > 0),
+        "odprawa po roku pracy nie może być zerowa"
+    );
+
+    // Zakład jest pusty, sąsiedni nietknięty.
+    let pusty: usize = firms
+        .site(site)
+        .expect("zakład")
+        .positions
+        .iter()
+        .map(|p| p.filled.len())
+        .sum();
+    assert_eq!(pusty, 0, "w upadłym zakładzie ktoś został");
+    let sasiad: usize = firms
+        .site(obok)
+        .expect("zakład")
+        .positions
+        .iter()
+        .map(|p| p.filled.len())
+        .sum();
+    assert_eq!(sasiad, 2, "upadłość ruszyła cudzą załogę");
+    for (c, _) in &odprawy {
+        assert!(
+            people.facts(*c).is_some_and(|f| f.job.is_none()),
+            "mieszkaniec nadal ma zapisaną pracę"
+        );
+    }
+
+    // Powtórne wołanie na pustym zakładzie nie produkuje drugiej odprawy.
+    let znowu = magnat_economy::labor::hr::dismiss_all(
+        &m.hr_tuning(),
+        &mut firms,
+        &mut people,
+        site,
+        SimMinute(400 * 1440),
+    );
+    assert!(znowu.is_empty(), "druga odprawa dla tej samej załogi");
+}

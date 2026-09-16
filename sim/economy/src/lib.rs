@@ -47,6 +47,7 @@ pub mod books;
 pub mod budget;
 pub mod chain_supply;
 pub mod choice;
+pub mod corpfin;
 pub mod cpi;
 pub mod credit;
 pub mod data;

@@ -10,7 +10,7 @@
 // `thr0` jest ujemne, bo `f(x) = −ln(1+x)` jest ujemna dla każdego dodatniego
 // stosunku ceny do budżetu. Próg bliski zeru znaczy „kupi tylko okazję".
 (
-    schema_version: 1,
+    schema_version: 2,
 
     // Softmax zamiast argmax (PRD §6.4). T → 0 degeneruje rynek do monopolu,
     // T → ∞ do rzutu monetą.

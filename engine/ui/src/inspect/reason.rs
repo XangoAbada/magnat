@@ -8,10 +8,10 @@
 use crate::loc::{Catalog, Locale};
 use magnat_agents::SocialClass;
 use magnat_core::{
-    ActionKind, ActivityKind, CommitmentKind, DecisionReason, DeprivationEffect, FixedCost,
-    LeaveCause, LifeEventKind, LineStopCause, LoanKind, MigrationKind, Money, NeedKind,
-    PriceDriver, RejectCause, RejectCredit, ShortageStageKind, StockCat, TraitId, TransportMode,
-    UtilityKind, WageCause,
+    ActionKind, ActivityKind, BankruptcyTrigger, ClaimPriority, CommitmentKind, DecisionReason,
+    DeprivationEffect, FixedCost, LeaveCause, LifeEventKind, LineStopCause, LoanKind, MigrationKind,
+    Money, NeedKind, PriceDriver, RejectCause, RejectCredit, ShortageStageKind, StockCat, TraitId,
+    TransportMode, UtilityKind, WageCause,
 };
 
 /// Nazwa potrzeby w języku gracza.
@@ -90,6 +90,24 @@ pub fn line_stop_cause(c: &Catalog, l: Locale, s: LineStopCause) -> String {
 #[must_use]
 pub fn shortage_stage(c: &Catalog, l: Locale, s: ShortageStageKind) -> String {
     c.fmt_key(l, &format!("ui.shortage.{}", s.name()), &[])
+}
+
+/// Nazwa wyzwalacza postępowania upadłościowego (M7d §5.13).
+#[must_use]
+pub fn bankruptcy_trigger(c: &Catalog, l: Locale, b: BankruptcyTrigger) -> String {
+    c.fmt_key(l, &format!("ui.bankruptcy.{}", b.name()), &[])
+}
+
+/// Nazwa priorytetu zaspokojenia w upadłości (M7d §5.13).
+#[must_use]
+pub fn claim_priority(c: &Catalog, l: Locale, p: ClaimPriority) -> String {
+    c.fmt_key(l, &format!("ui.claim_priority.{}", p.name()), &[])
+}
+
+/// Miesiące jako odmieniony liczebnik.
+#[must_use]
+pub fn months(c: &Catalog, l: Locale, n: u32) -> String {
+    c.plural(l, c.must("ui.unit.months"), u64::from(n))
 }
 
 /// Nazwa powodu ruszenia stawki w ofercie pracy (M7b §5.5).
@@ -663,6 +681,73 @@ pub fn describe(c: &Catalog, l: Locale, r: DecisionReason) -> String {
                 ("poprzednia", &prev.to_string()),
             ],
         ),
+        DecisionReason::LoanTaken {
+            kind,
+            rate_bp,
+            term_months,
+        } => c.fmt_key(
+            l,
+            "ui.reason.LoanTaken",
+            &[
+                ("produkt", &loan_kind(c, l, kind)),
+                ("oprocentowanie", &procent_bp(i32::from(rate_bp))),
+                ("okres", &months(c, l, u32::from(term_months))),
+            ],
+        ),
+        DecisionReason::LeaseSigned { site: _, months: m } => c.fmt_key(
+            l,
+            "ui.reason.LeaseSigned",
+            &[("okres", &months(c, l, u32::from(m)))],
+        ),
+        DecisionReason::ReceivablesFactored {
+            count,
+            discount_bp,
+        } => c.fmt_key(
+            l,
+            "ui.reason.ReceivablesFactored",
+            &[
+                ("ile", &count.to_string()),
+                ("dyskonto", &procent_bp(i32::from(discount_bp))),
+            ],
+        ),
+        DecisionReason::BondIssued {
+            coupon_bp,
+            months: m,
+        } => c.fmt_key(
+            l,
+            "ui.reason.BondIssued",
+            &[
+                ("kupon", &procent_bp(i32::from(coupon_bp))),
+                ("okres", &months(c, l, u32::from(m))),
+            ],
+        ),
+        // Niewypłacalność mierzona czasem czyta się inaczej niż ta mierzona bilansem:
+        // „nie płaci od trzech miesięcy" i „ma więcej długów niż majątku" to dwa
+        // różne zdania o firmie, a gracz zadaje o nie dwa różne pytania.
+        DecisionReason::BankruptcyOpened {
+            trigger: BankruptcyTrigger::Illiquid,
+            days: d,
+        } => c.fmt_key(
+            l,
+            "ui.reason.BankruptcyIlliquid",
+            &[("dni", &days(c, l, u32::from(d)))],
+        ),
+        DecisionReason::BankruptcyOpened { trigger, days: _ } => c.fmt_key(
+            l,
+            "ui.reason.BankruptcyOpened",
+            &[("powod", &bankruptcy_trigger(c, l, trigger))],
+        ),
+        DecisionReason::ClaimSettled {
+            priority,
+            ratio_bp,
+        } => c.fmt_key(
+            l,
+            "ui.reason.ClaimSettled",
+            &[
+                ("grupa", &claim_priority(c, l, priority)),
+                ("stopien", &procent_bp(i32::from(ratio_bp))),
+            ],
+        ),
     }
 }
 
@@ -952,6 +1037,37 @@ mod tests {
                 skill_mgmt: Q::new(71),
                 prev: 50,
             },
+            DecisionReason::LoanTaken {
+                kind: LoanKind::Investment,
+                rate_bp: 740,
+                term_months: 60,
+            },
+            DecisionReason::LeaseSigned {
+                site: magnat_core::SiteId(magnat_core::Entity::new(7, std::num::NonZeroU32::MIN)),
+                months: 36,
+            },
+            DecisionReason::ReceivablesFactored {
+                count: 4,
+                discount_bp: 400,
+            },
+            DecisionReason::BondIssued {
+                coupon_bp: 1100,
+                months: 36,
+            },
+            // Upadłość z braku płynności wybiera **inny klucz** niż upadłość
+            // bilansowa — ten sam powód, dla którego `PolicyApplied` stoi tu dwa razy.
+            DecisionReason::BankruptcyOpened {
+                trigger: BankruptcyTrigger::Illiquid,
+                days: 92,
+            },
+            DecisionReason::BankruptcyOpened {
+                trigger: BankruptcyTrigger::NegativeEquity,
+                days: 0,
+            },
+            DecisionReason::ClaimSettled {
+                priority: ClaimPriority::Wages,
+                ratio_bp: 10_000,
+            },
         ]
     }
 
@@ -980,7 +1096,10 @@ mod tests {
         // `Hired` bez drugiego kandydata i `WageRaise` przycięty do sufitu marży
         // wybierają inne klucze — razem 48. Po M7c dochodzą `PolicyApplied` (503,
         // dwa wpisy: reguła zwykła i zapasowa) oraz `ManagerAssigned` (504) — 51.
-        assert_eq!(wszystkie().len(), 51);
+        // Po M7d blok finansowy (505..=510) i **siódmy wpis**: `BankruptcyOpened`
+        // stoi dwa razy, bo brak płynności mierzy się dobami, a ujemny kapitał nie —
+        // i to są dwa różne zdania o firmie, więc i dwa klucze. Razem 58.
+        assert_eq!(wszystkie().len(), 58);
     }
 
     #[test]
@@ -1025,6 +1144,12 @@ mod tests {
             }
             for r in RejectCause::ALL {
                 assert!(!reject_cause(&c, l, *r).is_empty());
+            }
+            for b in BankruptcyTrigger::ALL {
+                assert!(!bankruptcy_trigger(&c, l, *b).is_empty());
+            }
+            for p in ClaimPriority::ALL {
+                assert!(!claim_priority(&c, l, *p).is_empty());
             }
         }
     }

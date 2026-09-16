@@ -1,0 +1,65 @@
+// Niewypłacalność i postępowanie upadłościowe (M7d §5.13, PRD §7.8).
+//
+// Ten plik jest w `data/tuning/`, a nie w `data/economy/`, i to jest wykonanie
+// `K-35`: `data/economy/` należy do M5 i nie ma być workiem na cudze liczby.
+// Tu siedzą liczby, **które wolno przestawić bez zmiany znaczenia modelu** —
+// po ilu dobach niepłacenia sąd otwiera postępowanie, ile bierze syndyk, o ile
+// tanieje lot w kolejnej rundzie. Kształt postępowania (kolejność zaspokojenia)
+// nie jest tutaj: siedzi w `ClaimPriority` w `engine/core`, bo jest regułą
+// podziału, a nie parametrem.
+//
+// Progi stroi balansator razem z bramką „≥ 1 bankructwo i ≥ 1 nowa firma na każde
+// 100 firm rocznie" (M7 §7.10). Za niski próg daje miasto, w którym nikt nie
+// upada; za wysoki — kaskadę, w której upadek jednej firmy zabiera dostawców.
+(
+    schema_version: 1,
+
+    // ── kiedy firma jest niewypłacalna ───────────────────────────────────────────
+    //
+    // Dwie drogi, bo niewypłacalność ma dwie postacie i gracz musi je odróżniać:
+    // można nie mieć czym zapłacić mimo majątku (płynność) i można nie mieć
+    // majątku mimo gotówki (bilans).
+    trigger: (
+        // Ile dób z rzędu firma ma wymagalne zaległości, zanim sąd otworzy
+        // postępowanie. 90 dób to trzy miesiące w kalendarzu 360-dniowym (`K-1`).
+        illiquid_days: 90,
+        // Zaległość mniejsza niż tyle groszy nie liczy się do licznika dób —
+        // firma nie upada przez zaokrąglenie na rachunku za prąd.
+        illiquid_min_gr: 100000,
+        // Druga droga: kapitał własny ujemny **i** kredyt w zaległości co najmniej
+        // tyle miesięcy. Sam ujemny kapitał nie wystarcza — młoda firma po nakładzie
+        // inwestycyjnym ma go ujemnym z definicji i to nie jest jeszcze upadłość.
+        negative_equity_arrears_months: 3,
+    ),
+
+    // ── postępowanie ─────────────────────────────────────────────────────────────
+    estate: (
+        // Wynagrodzenie syndyka z masy, w punktach bazowych od wpływów.
+        // To jest **jawny transfer**, a nie ubytek: pieniądz idzie na konto miasta
+        // i test zachowania pieniądza go widzi.
+        trustee_fee_bp: 500,
+        // Trzy rundy po 15 dób — całe postępowanie mieści się w 1,5 miesiąca.
+        rounds: 3,
+        round_days: 15,
+        // Dyskonto ceny w kolejnych rundach. Pierwsza runda idzie po wycenie,
+        // każda następna taniej. Długość listy musi być równa `rounds`.
+        round_discount_bp: [0, 2500, 5000],
+        // Lot niesprzedany po ostatniej rundzie idzie po wartości złomu: tyle
+        // punktów bazowych wyceny. Reszta jest **jawnie spisywana** rekordem
+        // odpisu, a nie znika po cichu (niezmiennik 2 z M7 §7.2).
+        scrap_bp: 1000,
+    ),
+
+    // ── wycena masy ──────────────────────────────────────────────────────────────
+    //
+    // Wycena nie jest ceną — jest punktem wyjścia dla rund. Wyposażenie liczy się
+    // po wartości księgowej po amortyzacji, zapas po koszcie, i to jest cała
+    // różnica między nimi: pierwsze zużyło się w czasie, drugie nie.
+    valuation: (
+        // Wyposażenie: tyle punktów bazowych wartości księgowej netto. Poniżej
+        // 100 %, bo maszyna wyjęta z hali jest warta mniej niż w hali.
+        equipment_bp: 7000,
+        // Zapas: tyle punktów bazowych kosztu nabycia.
+        inventory_bp: 6000,
+    ),
+)

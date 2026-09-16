@@ -55,6 +55,14 @@ impl LaborMarket {
         self.last
     }
 
+    /// Strojenie kadr — potrzebne postępowaniu upadłościowemu, żeby policzyć odprawę
+    /// tą samą regułą co zwykłe zwolnienie (M7d). `Copy`, więc to jest odczyt,
+    /// a nie wypożyczenie rynku.
+    #[must_use]
+    pub fn hr_tuning(&self) -> magnat_firms::HrTuning {
+        self.tuning.hr
+    }
+
     #[must_use]
     pub fn roles(&self) -> &RoleTable {
         &self.roles

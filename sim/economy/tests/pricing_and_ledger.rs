@@ -336,6 +336,9 @@ fn po_roku_bilans_zamyka_sie_co_do_grosza() {
     let market = w.get_resource::<Market>().unwrap().clone();
     let konto = market.account_of(site).unwrap();
     let mut buf: Vec<PurchaseIntent> = Vec::new();
+    // Zaległości nie powstaną w tym przebiegu — sklep ma z czego płacić — ale
+    // `close_month` ich wymaga, bo od M7d nieudany przelew zostawia dług.
+    let mut fin = magnat_economy::corpfin::CorpFinance::default();
     let mut sprzedanych = 0usize;
 
     for dzien in 1..=360u64 {
@@ -367,7 +370,7 @@ fn po_roku_bilans_zamyka_sie_co_do_grosza() {
         common::doba_lancucha(&market, &mut w, t);
         if t0.is_multiple_of(MIESIAC) {
             if let Some(books) = w.get_resource_mut::<Books>() {
-                market.close_month(books, Tick(t0));
+                market.close_month(books, &mut fin, Tick(t0));
             }
         }
     }

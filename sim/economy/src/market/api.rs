@@ -159,6 +159,78 @@ impl Market {
         self.lock().plants.len()
     }
 
+    // ── odczyty dla finansów firmy (M7d) ─────────────────────────────────────────
+    //
+    // Wszystkie pięć czyta to, co w rynku już leży, i żaden niczego nie liczy od nowa.
+    // Stoją tutaj, a nie w `corpfin`, z tego samego powodu, dla którego `shop_accounts`
+    // stoi tutaj, a nie w `policy_run`: wnętrze rynku jest za zamkiem, a postępowanie
+    // upadłościowe nie ma prawa go otwierać.
+
+    /// Firma prowadząca ten zakład — sklep albo zakład produkcyjny.
+    #[must_use]
+    pub fn firm_of(&self, site: SiteId) -> Option<magnat_core::FirmId> {
+        let m = self.lock();
+        m.by_site
+            .get(&site)
+            .map(|i| m.shops[*i as usize].firm)
+            .or_else(|| m.plants.get(&site).map(|(f, _)| *f))
+    }
+
+    /// Kapitał własny zakładu z jego księgi — druga droga do niewypłacalności
+    /// (M7d §5.13). Zakład bez księgi zwraca zero: nie wiemy, że jest pod kreską,
+    /// więc nie twierdzimy, że jest.
+    #[must_use]
+    pub fn equity_of(&self, site: SiteId) -> Money {
+        let m = self.lock();
+        match m.by_site.get(&site) {
+            Some(i) => {
+                let t = m.tick;
+                ledger::balance_sheet(&m.shops[*i as usize].ledger, t).equity_total
+            }
+            None => Money::ZERO,
+        }
+    }
+
+    /// Ile miesięcy zalega kredyt tego zakładu.
+    #[must_use]
+    pub fn loan_arrears_of(&self, site: SiteId) -> u8 {
+        let m = self.lock();
+        m.by_site
+            .get(&site)
+            .and_then(|i| m.shops[*i as usize].loan)
+            .and_then(|id| m.loans.get(id))
+            .map_or(0, |l| l.arrears_months)
+    }
+
+    /// Wartość księgowa majątku zakładu: `(wyposażenie netto, zapas po koszcie)`.
+    /// To jest wejście wyceny masy, a nie sama wycena — dyskonto dokłada
+    /// [`crate::corpfin::ValuationParams`].
+    #[must_use]
+    pub fn book_assets_of(&self, site: SiteId) -> (Money, Money) {
+        let m = self.lock();
+        match m.by_site.get(&site) {
+            Some(i) => {
+                let t = m.tick;
+                let b = ledger::balance_sheet(&m.shops[*i as usize].ledger, t);
+                (b.fixed_net, b.inventory)
+            }
+            None => (Money::ZERO, Money::ZERO),
+        }
+    }
+
+    /// Daje postępowaniu wgląd w rejestr kredytów bez wypuszczania go spod zamka.
+    pub fn with_loans<R>(&self, f: impl FnOnce(&crate::credit::LoanBook) -> R) -> R {
+        let m = self.lock();
+        f(&m.loans)
+    }
+
+    /// Dopisuje powód do dziennika decyzji zakładu (wyjaśnialność, 00 §7).
+    pub fn log_firm_decision(&self, site: SiteId, reason: magnat_core::DecisionReason) {
+        let mut m = self.lock();
+        let idx = site.entity().index();
+        m.log_budget(idx, reason);
+    }
+
     /// Konto reszty świata — druga strona zakupów u dostawcy i wypłat dochodu.
     #[must_use]
     pub fn rest_of_world(&self) -> AccountId {

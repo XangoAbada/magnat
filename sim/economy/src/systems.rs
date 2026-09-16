@@ -21,6 +21,7 @@ use magnat_ecs::{System, SystemCtx, SystemDesc, SystemId, World};
 
 use crate::books::{Books, TxKind, TxMemo};
 use crate::budget::HouseholdProfile;
+use crate::corpfin::CorpFinance;
 use crate::market::{HouseholdMonth, HouseholdMonthReport, Market, PurchaseIntent};
 
 /// Rozliczenie, uzupełnianie półek i zaopatrzenie.
@@ -152,8 +153,32 @@ impl System for MarketSystem {
             // 6. Koszty stałe, amortyzacja, domknięcie okresu (M5c §5.8).
             //    Po zaopatrzeniu, bo miesiąc ma się domknąć na stanie, który
             //    ta doba zostawiła.
+            // Domknięcie miesiąca dotyka naraz ksiąg i rejestru zaległości, a dwóch
+            // pożyczek `&mut World` naraz nie ma — więc finanse firm wyjmuje się
+            // ze świata na czas kroku, tak samo jak `LaborSystem` wyjmuje rynek pracy.
+            let mut fin = ctx
+                .world_mut()
+                .get_resource_mut::<CorpFinance>()
+                .map(std::mem::take);
             if let Some(books) = ctx.world_mut().get_resource_mut::<Books>() {
-                market.close_month(books, t);
+                match fin.as_mut() {
+                    Some(f) => {
+                        market.close_month(books, f, t);
+                    }
+                    // Świat bez finansów firm to scenariusz sprzed M7d (albo test
+                    // samego detalu). Miesiąc domyka się wtedy na rejestrze na jedną
+                    // chwilę, którego nikt potem nie czyta — koszt jest ten sam,
+                    // a gałęzi „bez zaległości" w `close_month` nie ma, bo byłaby
+                    // drugą, nietestowaną ścieżką księgowania.
+                    None => {
+                        let mut pusty = CorpFinance::default();
+                        market.close_month(books, &mut pusty, t);
+                    }
+                }
+            }
+            if let (Some(f), Some(slot)) = (fin, ctx.world_mut().get_resource_mut::<CorpFinance>())
+            {
+                *slot = f;
             }
             // 6a. Domknięcie miesiąca CPI i stopa bazowa banku centralnego.
             //     Ostatnie, bo czyta indeks policzony z pełnego miesiąca dób.

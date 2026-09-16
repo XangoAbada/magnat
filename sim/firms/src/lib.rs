@@ -35,7 +35,7 @@ pub use hr::employment::{payday, BenefitSet, Employment, PayrollItem, PayrollRun
 pub use hr::productivity::{effective_labor, loss_multiplier, ManagementQuality};
 pub use hr::roles::{RoleTable, RoleWeights};
 pub use hr::training::{benefit_cost, benefit_gains, bonus, skill_ceiling, trained_skill};
-pub use hr::tuning::{LaborTuning, ManagerTuning, LABOR_TUNING_SCHEMA_VERSION};
+pub use hr::tuning::{HrTuning, LaborTuning, ManagerTuning, LABOR_TUNING_SCHEMA_VERSION};
 pub use hr::turnover::{
     quit_pressure, severance, should_dismiss, turnover_mult, update_perf, QuitPressure,
 };

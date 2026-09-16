@@ -17,7 +17,7 @@
 //
 // Kwoty w groszach (00 §2), udziały w promilach.
 (
-    schema_version: 1,
+    schema_version: 2,
 
     // ── koszty stałe ─────────────────────────────────────────────────────────────
     //
