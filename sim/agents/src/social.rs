@@ -553,7 +553,7 @@ fn kontakty(
     world: &mut World,
     e: Entity,
     day: u64,
-    params: &crate::demography::SocialParams,
+    params: &crate::demography::table::SocialParams,
     raport: &mut SocialReport,
 ) {
     let site = world
@@ -679,7 +679,7 @@ fn zanik(
     world: &mut World,
     e: Entity,
     day: u64,
-    params: &crate::demography::SocialParams,
+    params: &crate::demography::table::SocialParams,
     raport: &mut SocialReport,
 ) {
     let Some(rel) = world.get::<crate::components::RelationsRef>(e).copied() else {
@@ -751,7 +751,7 @@ fn plotka(
     world: &mut World,
     e: Entity,
     day: u64,
-    params: &crate::demography::SocialParams,
+    params: &crate::demography::table::SocialParams,
     raport: &mut SocialReport,
 ) {
     let Some(rel) = world.get::<crate::components::RelationsRef>(e).copied() else {

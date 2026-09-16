@@ -183,12 +183,12 @@ jobs:
   struct-guard:
     name: kontrola strukturalna (progi R1 §6)
     runs-on: ubuntu-latest
-    # Tryb ostrzegawczy (R-WP1, `D-R2`): job raportuje, nie blokuje. Jest trzecim
-    # poziomem po regule w `CLAUDE.md` i hooku — siatką bezpieczeństwa na wypadek
-    # pracy bez agenta. `continue-on-error` schodzi dopiero wtedy, gdy kolumna
-    # „błąd" pokaże zera poza wyjątkami z R1 §5, czyli po zamknięciu R-WP10;
-    # do tego czasu czerwony job byłby stanem normalnym, a to psuje każdą bramkę.
-    continue-on-error: true
+    # `continue-on-error` zeszło przy domknięciu R1 — job jest bramką, nie raportem.
+    # Warunek z R-WP1 został spełniony: kolumna „błąd" pokazuje zera poza wyjątkami,
+    # a wyjątki nie są zwolnieniem symbolu, tylko **zamrożeniem stanu** — klucz
+    # w `REJESTR` niesie wartość, więc dopisanie jednej linii do zwolnionej funkcji
+    # zapala bramkę z powrotem. Każda pozycja ma wiersz w rejestrze długu w
+    # `R1-refaktor-po-M5.md`, z nazwanym sufitem i fazą-właścicielem.
     steps:
       - uses: actions/checkout@v4
       - name: test wykrywacza

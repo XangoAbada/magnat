@@ -5,12 +5,12 @@
 
 use super::*;
 
-pub const ARCHETYPE_SCHEMA_VERSION: u32 = 1;
-pub const CHAIN_SCHEMA_VERSION: u32 = 1;
-pub const FIRM_NAMES_SCHEMA_VERSION: u32 = 1;
+const ARCHETYPE_SCHEMA_VERSION: u32 = 1;
+const CHAIN_SCHEMA_VERSION: u32 = 1;
+const FIRM_NAMES_SCHEMA_VERSION: u32 = 1;
 
 /// Skala bazowa archetypu. `capacity_scale` 1000 = jedna receptura chodząca bez przerwy.
-pub const SCALE_BASE: u16 = 1000;
+pub(super) const SCALE_BASE: u16 = 1000;
 /// Widełki skalowania z KROKU 5 (§5.8).
 ///
 /// **Korekta I-2 wobec planu:** dolna granica to 0,02 skali bazowej, a nie 0,4. Próg 0,4
@@ -18,11 +18,11 @@ pub const SCALE_BASE: u16 = 1000;
 /// domknąć zaokrąglenia. Przy liczbie zakładów wyprowadzonej z popytu ta granica wiąże
 /// wyłącznie dla **ostatniego, niepodzielnego** zakładu — a miasteczko czterdziestotysięczne
 /// naprawdę ma jedną małą piekarnię, a nie linię przemysłową chodzącą na 40 %.
-pub const SCALE_MIN: u16 = 20;
-pub const SCALE_MAX: u16 = 2500;
+pub(super) const SCALE_MIN: u16 = 20;
+pub(super) const SCALE_MAX: u16 = 2500;
 /// Dopuszczalny przedział `supply/demand` — warunek akceptacji domknięcia (test T11).
-pub const RATIO_MIN: f64 = 0.85;
-pub const RATIO_MAX: f64 = 1.30;
+pub(super) const RATIO_MIN: f64 = 0.85;
+pub(super) const RATIO_MAX: f64 = 1.30;
 
 /// Indeks w katalogu archetypów (`data/buildings/`), stabilny w obrębie wersji danych.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]

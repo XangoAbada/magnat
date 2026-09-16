@@ -527,7 +527,7 @@ fn odplyw(world: &mut World, day: u64, raport: &mut MigrationReport) {
 fn niezadowolenie(
     world: &World,
     sklad: &[u32],
-    params: &crate::demography::MigrationParams,
+    params: &crate::demography::table::MigrationParams,
     day: u64,
     hh_idx: u32,
 ) -> Option<MigrationKind> {
@@ -572,7 +572,7 @@ pub fn wyprowadz(world: &mut World, hh_e: Entity, cmd: &mut CommandBuffer) -> u3
 
     for m in sklad.iter() {
         let Some(c) = znajdz(world, *m) else { continue };
-        demography::wyprowadz_mieszkanca(world, c, cmd);
+        demography::month::wyprowadz_mieszkanca(world, c, cmd);
         n += 1;
     }
 
@@ -1041,8 +1041,8 @@ fn usamodzielnienie(world: &mut World, day: u64, raport: &mut MigrationReport) {
         if world.get::<Employment>(e).is_some_and(Employment::has_job) {
             continue;
         }
-        demography::opusc_gospodarstwo(world, e, day, &mut cmd);
-        demography::wyprowadz_mieszkanca(world, e, &mut cmd);
+        demography::day::opusc_gospodarstwo(world, e, day, &mut cmd);
+        demography::month::wyprowadz_mieszkanca(world, e, &mut cmd);
         wyjechali += 1;
         raport.reasons.push((
             e.index(),
@@ -1072,7 +1072,7 @@ pub fn zaloz_gospodarstwo(world: &mut World, citizen: Entity, day: u64) -> Optio
     let dzielnica = world.get::<Residence>(citizen).map_or(0, |r| r.district);
     let home = world.resource_mut::<Vacancies>().take_home_in(dzielnica)?;
     let mut cmd = CommandBuffer::new(demography_system_id());
-    demography::opusc_gospodarstwo(world, citizen, day, &mut cmd);
+    demography::day::opusc_gospodarstwo(world, citizen, day, &mut cmd);
     magnat_ecs::flush_commands(world, std::slice::from_mut(&mut cmd));
     let (building, unit, district) = (home.building, home.unit, home.district);
 

@@ -36,24 +36,24 @@ use magnat_voxel::{CarveShape, EditOp, EditQueue, MaterialRegistry};
 use smallvec::SmallVec;
 use std::ops::Range;
 
-mod capacity;
+pub(super) mod capacity;
 mod footprint;
 mod interiors;
-mod model;
+pub(super) mod model;
 
-pub use capacity::{
-    recompute_pop_capacity, rescale_dwellings, ETATOW_NA_MIESZKANCA, ETATY_SCALE_MAX,
-    ETATY_SCALE_MIN, GESTOSC_MAX, GESTOSC_MIN, OSOB_NA_MIESZKANIE,
-};
-pub use footprint::{footprint_for, rozpietosc};
+pub use capacity::{ETATOW_NA_MIESZKANCA, OSOB_NA_MIESZKANIE};
 pub use model::{
-    building_id, wage_band, BuildReport, Building, BuildingSet, BuildingSignature, Entrance,
-    EntranceKind, JobRole, JobTable, ShiftId, ShiftKey, Unit, UnitIdx, UnitKind, UnitOccupant,
-    WageBand, Workplace, JOBS_SCHEMA_VERSION, MIN_BUDYNKOW_DZIELNICY, PROMIEN_SASIEDZTWA_M,
+    building_id, BuildReport, Building, BuildingSet, BuildingSignature, Entrance, EntranceKind,
+    JobRole, JobTable, ShiftId, ShiftKey, Unit, UnitIdx, UnitKind, UnitOccupant, WageBand,
+    Workplace, MIN_BUDYNKOW_DZIELNICY, PROMIEN_SASIEDZTWA_M,
 };
 
-use footprint::{bryla, rogi, wejscia, zapas, Axis2, MIN_FOOTPRINT_M2, MIN_FRONT_M, OVERHANG_M};
+use footprint::{
+    bryla, footprint_for, rogi, rozpietosc, wejscia, zapas, Axis2, MIN_FOOTPRINT_M2, MIN_FRONT_M,
+    OVERHANG_M,
+};
 use interiors::{interiors, stan_techniczny};
+use model::wage_band;
 
 // ── Wybór gramatyki ──────────────────────────────────────────────────────────────────
 

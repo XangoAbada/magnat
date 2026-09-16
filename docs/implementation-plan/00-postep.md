@@ -265,11 +265,33 @@ Ma własne kryteria akceptacji w §7 swojego dokumentu. Twarde: żaden hash nie 
 - [x] **R-WP6** `sim/traffic/src/oracle.rs`, `trip.rs` · [x] **R-WP7** `sim/agents/src/demography.rs`
 - [x] **R-WP8** `sim/world/src/city/build.rs` · [x] **R-WP9** `sim/world/src/city/mod.rs`
 - [x] **R-WP11** `sim/agents/src/planner.rs` · [x] **R-WP12** `sim/economy/src/market.rs`
-- [ ] **R-WP10** `transit.rs`, `micro.rs`, usunięcie rusztowań `pub use` (ostatni — po wszystkich podziałach)
+- [x] **R-WP10** `transit.rs`, `micro.rs`, usunięcie rusztowań `pub use` (ostatni — po wszystkich podziałach)
 - [x] **Decyzje blokujące** — `D-R1` (progi metryk) i `D-R2` (reguła / hook / oba) przyjęte domyślnie
 
 R-WP11 i R-WP12 dopisane przy zamknięciu R-WP1 (`D-1` w tabeli zmian dokumentu R1): pierwszy
 przebieg skryptu pokazał dwa pliki powyżej progu błędu, które nie należały do żadnego pakietu.
+
+**R1 zamknięte.** Siedem kryteriów akceptacji z §7:
+
+- [x] 1. **Determinizm** — żaden hash nie zmienił się o bit przez dwanaście pakietów.
+- [x] 2. **Zielony `master` po każdym pakiecie** — `clippy -D warnings` i `cargo test --workspace`
+  przed każdym commitem, nie po ostatnim. Przy okazji naprawiony `cargo fmt --all --check`,
+  czerwony na `master` od sześciu faz.
+- [x] 3. **Bez regresji wydajności** — `bench_guard` w progach `D-8`: 28 pozycji `OK`, zero
+  ostrzeżeń, maksymalne odchylenie `+8,3 %`. **Uruchomione raz, przy domknięciu** — i to
+  odsłoniło `D-R8`.
+- [x] 4. **Żaden plik produkcyjny powyżej 1200 linii** poza listą wyjątków z §5.
+- [x] 5. **Żaden blok `impl` powyżej 500 i żadna funkcja powyżej 250** — z klauzulą wyjątków
+  dopisaną przy domknięciu (`D-31`, decyzja właściciela produktu). Osiem pozycji w rejestrze długu.
+- [x] 6. **Reguła i skrypt działają i mają test własny** — `struct_guard.py` z dziewięcioma
+  bramkami w `--self-test`, sekcja w `CLAUDE.md`, hook `PreToolUse` w `.claude/settings.json`,
+  job `struct-guard` w CI **bez `continue-on-error`**.
+- [x] 7. **Publiczne API skrzyń** — niezmienione poza zwężeniami wypisanymi w `D-32`.
+
+Otwarte, świadomie i z adresem: **`D-R7`** (cztery testy akceptacyjne M2d i M3d padają na
+`master` i nie biegą w CI — trzy z czterech zdiagnozowane, dwa to przeterminowane testy),
+**`D-R8`** (13 z 41 benchmarków bez linii bazowej). Oba to **zmiany zachowania**, czyli
+jawnie poza §2, i oba mają propozycję domyślną w §9.
 
 ### M6 — Łańcuch dostaw
 `M6-lancuch-dostaw.md` · wymaga: M5, R1
@@ -401,6 +423,8 @@ Jedna linia na zamknięty pakiet roboczy lub bramkę. Najnowsze na górze.
 
 | Data | Faza | Co zamknięto | Uwagi |
 |---|---|---|---|
+| 2026-09-16 | R1 | **R1 domknięte — siedem kryteriów akceptacji z §7, dwanaście pakietów, trzynaście commitów.** Bramka `struct-guard` przestała być raportem i stała się **bramką**: zero przekroczeń progu błędu, `continue-on-error` zeszło z CI. Osiem pozostających przekroczeń to **zamrożenia stanu, nie zwolnienia symbolu** — klucz w `REJESTR` niesie wartość, więc dopisanie jednej linii zapala bramkę z powrotem; `--self-test` ma osobną bramkę na **martwy wpis** w rejestrze. **`D-29`: scenariusze `tools/headless` przestały być mierzone** — poprawka w dostawie R-WP1, bo granicę rysuje sam crate (`lib.rs` wystawia `population` i `retail`, reszta to moduły binarki), a lista mierzonych plików powstaje z odczytu `lib.rs`, nie z wypisania | **Kryterium nr 3 uruchomione po raz pierwszy w całym R1**: 28 pozycji `OK`, zero ostrzeżeń, maksymalne odchylenie `+8,3 %` przy progu 10 % — i **`D-R8`**: 13 z 41 benchmarków nie ma linii bazowej od M3, więc `bench_guard` od trzech faz cicho nie mierzy planera, mikro pieszych, demografii i Etapu 8. Trzecia dziura w bramkach znaleziona przez R1, po `cargo fmt` i `D-R7`. `D-31`: kryterium nr 5 dostaje klauzulę wyjątków, symetryczną do nr 4. `D-33`: **`R2` nie powstaje** — został jeden plik wyglądający jak to, co R1 dzielił (`lsystem.rs`), a na jeden plik nie opłaca się dokument. Poprawki `K-18` do **M8e** (`ZoneUse` kontra `ZoneKind` w kodzie) i **M7c** (`describe` 319 linii rozpada się z konstrukcji po przebudowie `DecisionReason`) |
+| 2026-09-16 | R1 | **R-WP10 — piesi wychodzą z pliku o pojazdach, minuta komunikacji z planowania, rusztowania R1 schodzą.** `micro.rs` 593 + `pedestrians.rs` 201 + `idm.rs` 207 + `lanes.rs` 140; `transit.rs` 640 + `plan.rs` 218 + `sim.rs` 369 — **ostatni `impl` powyżej 500 (689) zszedł do 360** bez dotykania `advance`, którego podział byłby przepisaniem struktury pożyczek, nie przeniesieniem bloku. Porównanie treści: `micro` 8 linii po stronie starej (same sygnatury z `pub(super)`), `transit` **jedna**. Sprzątanie `D-R3`: trzy globy `pub use` i dwie listy wycięte, **16 ścieżek importu wyprostowanych w 5 plikach**; dziewięć `pub use` zostało, bo na każdym stoi `lib.rs`, `tests/` albo `benches/` | Determinizm: trzy złote sekwencje, `m3day` zgodny przy 1, 16 i `--micro 2000`/4 wątkach, `m5shop` przy 1 i 8, testy LOD i mezo zielone, 848 testów. `D-30`: **`D-13` było w jednej trzeciej nieprawdziwe** — `ArchetypeSpec`, `ChainTemplate` i `FirmNames` mają konsumenta, bo podróżują przez **pole publiczne**, czego grep po nazwie nie widzi. `D-32`: zwężenia są zmianą publicznego API i są wypisane, jak wymaga kryterium nr 7. Rejestr długu: pozycje 30–38 |
 | 2026-09-16 | R1 | **R-WP12 — osiem szwów rynku na osiem plików; największy plik repo przestał nim być.** `market.rs` **3249 → 571** (rodzic trzyma stan: `MarketInner` z 30 polami, `new`, `lock`, `impl HashState`), plus `api.rs` 262, `close.rs` 258, `fulfil.rs` 646, `household.rs` 392, `lifecycle.rs` 284, `price_day.rs` 295, `readout.rs` 317, `restock.rs` 275. **Trzy bloki `impl` powyżej 500 (878, 827, 513) → największy 313.** Pięć przekroczeń progu błędu → **jedno**, i to zastane (`candidates` 258). Dowód: **91 funkcji odnalezionych dosłownie** w nowych plikach, zero linii po stronie starej, `hash_state` 18 tokenów mieszających i ciało identyczne | Determinizm: trzy złote sekwencje, **`m5shop` zgodny przy 1 i 8 wątkach**, pełny wydruk scenariusza różni się **jedną linią — czasem przebiegu**, metryki balansatora z sondy 30-dobowej **bajt w bajt**, bramki G1–G9 zielone. `money_conservation` 4, `single_entry_point` 2, `state_hash` 6, `shop_panel` 5 — zielone. Dwa podniesienia widoczności, oba z komunikatu kompilatora, **żadne pole `MarketInner` nie otwarte** (`D-4`/`D-8` po raz czwarty); `lib.rs` bez zmiany znaku. `D-25`…`D-28`. Rejestr długu: pozycje 26–29 |
 | 2026-09-16 | R1 | **R-WP11 — cztery fazy doby planera na cztery pliki; `Log` zostaje przy orkiestratorze, bo piszą do niego wszystkie cztery.** `canvas.rs` 315, `commitments.rs` 372, `rhythm.rs` 315 (fazy 2 i 4 — nazwa `rhythm`, bo `crate::needs` jest zajęte), `tasks.rs` 410, `mod.rs` 382. Porównanie treści: **jedna linia** — sygnatura zawinięta przez rustfmt. Zero odchyleń od tabeli §4, zero przeliterowanych ścieżek `super::`, `lib.rs` i `systems.rs` bez zmiany ani jednego znaku | Determinizm: trzy złote sekwencje zgodne, **złoty wydruk `render_day_debug` bajt w bajt**, `plan_golden_anna` / `plan_day_jest_czysta_funkcja` / `plan_explain_matches` zielone. `D-23`: §4 wymieniało 22 kandydatów na podniesienie, potrzebnych było 17 — trzeci raz z rzędu, bo widoczność podnosi się **tylko dla ruchu poprzecznego**. `D-24`: `tests/contract.rs` czytał `src/planner.rs` po ścieżce; skanuje teraz cały katalog, czyli test jest **mocniejszy** niż był. Po raz trzeci obalona diagnoza z §1: planer miał własny test **i 18 integracyjnych**. Rejestr długu: pozycja 25 |
 | 2026-09-16 | R1 | **R-WP9 — raport, dwa odciski, kontrole grafu i domknięcie sieci wychodzą z `city/mod.rs`; zostaje samo `generate_city`.** `report.rs` 383, `finalize.rs` 231, `checks.rs` 100 (+117 testów), `hash.rs` 163; `mod.rs` **1410 → 575** linii pliku i **1378 → 534** poza deklaracjami. Cztery przekroczenia progu błędu → **jedno**. **`city_hash` przeniesiony dosłownie i policzony mechanicznie**, bo zgubione pole nadal się kompiluje: 51 wywołań mieszających przed i po, identyczna sekwencja typów, 9 pętli, **ciało bajt w bajt**; `world_hash_m2` — 19 i 6, tak samo. Porównanie wielozbiorów: **zero linii** po stronie starej | `D-20`: powstało pięć plików, nie cztery, i `lines` rozcięte na 72 + 214 — bo **§7 jest nadrzędne wobec §4** (precedens `D-11`). `D-21`: podział `mod.rs` na rodzeństwo nie kosztuje ani jednej przeliterowanej ścieżki, w odróżnieniu od podziału pliku-modułu na podkatalog. `D-22`: trzecia awaria `city_m2d` ma adres — też przeterminowany test (`access: None` kontra `pass_2`). `checks.rs` dostał test, którego naprawdę nie było (`D-10` sprawdzone: `mod.rs` nie miał `#[cfg(test)]` w ogóle), z bramką sprawdzoną mutacją. Rejestr długu: pozycja 24 |

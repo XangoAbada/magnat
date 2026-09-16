@@ -252,3 +252,12 @@ zdarzenia `political/scandal` przez sondę — a ujawnienie uderza w kandydata i
 | `sys_macro_indicators` | `events` | EveryMonth | W: `MacroIndicators`, `DemographyParams` |
 
 ---
+
+## Zmiany wpisane po R1
+
+Zgodnie z `K-18`. Wpisane jest **tylko to, co wiadomo na pewno** po refaktorze R1.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| ★ | **`Policy::Zoning { parcel: ParcelId, use_: ZoneUse }` z §5.2 nazywa typ, którego nie ma.** W kodzie od M2c jest **`ZoneKind`** (`sim/world/src/city/zoning.rs`), z wariantami `Residential(ResDensity)`, `Green`, `Extraction`, `Water`, `Undevelopable` i pozostałymi. Jedno z dwóch trzeba poprawić i **tańsza jest poprawka w dokumencie**: `ZoneKind` jest w kodzie od trzech faz, czyta go generator, zabudowa i wycena | Rozjazd znaleziony przy R1, przy czytaniu `assign_zones` do rejestru długu strukturalnego. Nie kosztuje dziś nic, a przy starcie M8e kosztowałby pół dnia szukania typu, którego nie ma |
+| | **`assign_zones` ma 322 linie i jest jedną funkcją — M8e będzie musiał ją rozciąć, i to jest powód, dla którego R1 tego nie zrobił.** Dziś strefa powstaje **raz, dla całego miasta**, w sześciu ponumerowanych krokach na wspólnej macierzy `score[n][16]`. `Policy::Zoning` potrzebuje ścieżki „przekwalifikuj **jedną** parcelę w trakcie gry", czyli rozdzielenia *policz punktację* od *przydziel* — a to jest zmiana kształtu, nie przeniesienie bloku. Pozycja 36 rejestru długu w `R1-refaktor-po-M5.md` | Najczystszy szew, gdyby M8e szukał punktu zaczepienia: **krok 6** (bufor przemysłu ciężkiego, linie ~1010–1080) czyta `score`, `area` i sąsiedztwo, mutuje `zone` i zwraca dwa ostrzeżenia — wychodzi przeniesieniem bloku z sygnaturą na pięć argumentów. Kroki 1–4 są splecione: krok 4 czyta macierz z kroku 1 i kwoty z kroku 3. **Rng w tym pliku nie ma wcale**; determinizm stoi na `sort_by(total_cmp)` z jawnymi remisami po `BlockId` i na kolejności kroków |

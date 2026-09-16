@@ -1,3 +1,4 @@
+use super::day::{usun_relacje, zwolnij_slaby};
 use super::*;
 
 /// Przelicza typ gospodarstwa po zmianie składu (§5.6: typ jest funkcją składu).

@@ -34,13 +34,13 @@ use serde::Deserialize;
 use std::collections::BTreeMap;
 use std::path::Path;
 
-mod day;
-mod month;
-mod table;
+pub(super) mod day;
+pub(super) mod month;
+pub(super) mod table;
 
-pub use day::*;
-pub use month::*;
-pub use table::*;
+pub use day::step_day;
+pub use month::{compatibility, przeklasyfikuj};
+pub use table::{Ages, DemographyError, DemographyTable, StatusWeights};
 
 pub const DEMOGRAPHY_SCHEMA_VERSION: u32 = 1;
 

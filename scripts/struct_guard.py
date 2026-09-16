@@ -59,6 +59,41 @@ WYJATKI_PLIK = {
 # (R1 §6), a benchmarki są przyrządem pomiarowym, nie kodem gry.
 KATALOGI_POMIJANE = ("tests/", "benches/", "target/")
 
+# Scenariusze `tools/headless` to bramki CI z CLI zamiast `#[test]` — `ci.yml`
+# uruchamia `m3day` i `m5shop` z `--out`/`--expect` i porównuje ciągi hashy.
+# Obowiązuje ten sam powód, którym R1 §2 zwolniło `tests/`: w `m5shop::run`
+# kolejność wydruku **jest** raportem, a abstrakcja nad nią pogarsza jedyną
+# własność, jaką ten kod ma. Granicę rysuje sam crate — `tools/headless/src/lib.rs`
+# wystawia dokładnie to, co ma więcej niż jednego konsumenta (`population`,
+# `retail`), a scenariusze zostają modułami binarki. Mierzymy więc to, co
+# deklaruje `lib.rs`, i nic poza tym; lista nie może się zestarzeć, bo powstaje
+# z odczytu tego pliku.
+#
+# Nie dotyczy `tools/magnat` ani `tools/balansator`: klient graficzny jest kodem
+# produktu (dzielił go R-WP2), a balansator narodził się z granicami.
+HEADLESS = "tools/headless/src/"
+
+# Przekroczenia progu błędu przyjęte świadomie przy domknięciu R1 (`D-31`: kryterium
+# akceptacji nr 5 dostało klauzulę wyjątków, symetryczną do nr 4). Każda pozycja ma
+# wiersz w rejestrze długu strukturalnego na końcu `R1-refaktor-po-M5.md` — z nazwanym
+# sufitem, powodem, dla którego podział nie jest przeniesieniem bloku, i fazą-właścicielem.
+#
+# Klucz niesie **wartość**, nie tylko nazwę: dopisanie choćby jednej linii do którejkolwiek
+# z tych funkcji przestawia liczbę i bramka zapala się z powrotem. Wyjątek jest więc
+# zamrożeniem stanu, nie zwolnieniem symbolu — i to jest jedyny powód, dla którego job
+# `struct-guard` w CI może przestać być czerwony na stałe. Bramka, która zawsze świeci
+# na czerwono, zostanie wyłączona (ryzyko R-5), a wtedy nie łapie już niczego.
+REJESTR = {
+    ("sim/world/src/city/lsystem.rs", "impl", 605): 33,
+    ("sim/world/src/city/lsystem.rs", "fn", 317): 34,
+    ("sim/world/src/city/lsystem.rs", "fn", 257): 35,
+    ("sim/world/src/city/mod.rs", "fn", 365): 24,
+    ("sim/world/src/city/zoning.rs", "fn", 322): 36,
+    ("engine/ui/src/inspect/reason.rs", "fn", 319): 37,
+    ("sim/economy/src/data.rs", "fn", 268): 38,
+    ("sim/economy/src/market/fulfil.rs", "fn", 258): 26,
+}
+
 POCZATEK_ITEMU = re.compile(
     r"""(?P<test>\#\[cfg\(test\)\])
       | (?P<impl>\bimpl\b)
@@ -171,11 +206,30 @@ def zmierz(sciezka: pathlib.Path, tekst: str) -> list[tuple[str, str, int]]:
     return wynik
 
 
-def pliki_produkcyjne(sciezki) -> list[pathlib.Path]:
+def moduly_biblioteczne_headless(korzen: pathlib.Path) -> set[str]:
+    """Pliki `tools/headless/src/`, które wystawia `lib.rs` — te i tylko te mierzymy.
+
+    Czytane z pliku, nie wypisane z listy: lista by się zestarzała przy pierwszym
+    module dopisanym do `lib.rs`, a wtedy bramka przestałaby mierzyć most, na
+    którym stoi klient graficzny i balansator.
+    """
+    lib = korzen / HEADLESS / "lib.rs"
+    try:
+        tresc = lib.read_text(encoding="utf-8")
+    except OSError:
+        return set()
+    nazwy = {m.group(1) for m in re.finditer(r"^\s*pub mod (\w+)\s*;", tresc, re.M)}
+    return {f"{HEADLESS}{n}.rs" for n in nazwy} | {f"{HEADLESS}lib.rs"}
+
+
+def pliki_produkcyjne(sciezki, korzen: pathlib.Path | None = None) -> list[pathlib.Path]:
+    headless = moduly_biblioteczne_headless(korzen) if korzen else None
     wybrane = []
     for p in sciezki:
         s = p.as_posix()
         if p.suffix != ".rs" or any(k in s for k in KATALOGI_POMIJANE):
+            continue
+        if headless is not None and HEADLESS in s and not any(s.endswith(h) for h in headless):
             continue
         wybrane.append(p)
     return sorted(wybrane)
@@ -209,6 +263,10 @@ def raport(korzen: pathlib.Path, pliki: list[pathlib.Path], jako_json: bool) -> 
             if wartosc <= ostrzezenie:
                 continue
             zwolniony = metryka == "plik" and wzgledna in WYJATKI_PLIK
+            powod = WYJATKI_PLIK.get(wzgledna) if zwolniony else None
+            wpis = REJESTR.get((wzgledna, metryka, wartosc))
+            if not zwolniony and wpis and wartosc > blad:
+                zwolniony, powod = True, f"rejestr długu R1, pozycja {wpis}"
             pozycje.append(
                 {
                     "plik": wzgledna,
@@ -216,7 +274,7 @@ def raport(korzen: pathlib.Path, pliki: list[pathlib.Path], jako_json: bool) -> 
                     "opis": opis,
                     "linie": wartosc,
                     "prog": "wyjątek" if zwolniony else ("błąd" if wartosc > blad else "ostrzeżenie"),
-                    "powod": WYJATKI_PLIK.get(wzgledna) if zwolniony else None,
+                    "powod": powod,
                 }
             )
 
@@ -289,6 +347,43 @@ def test_wykrywacza() -> int:
     bez_testow = najwieksze.get("plik", 0) < 2000
     kod |= 0 if bez_testow else 1
     print(f"{'OK    ' if bez_testow else 'BLAD  '} blok #[cfg(test)] poza metryka pliku")
+
+    # Wykluczenie scenariuszy `tools/headless` jest filtrem, nie metryką — regres
+    # w nim (np. wykluczenie całego `tools/`) byłby **cichy**, bo bramka świeciłaby
+    # wtedy na zielono z mniejszą liczbą plików. Sprawdzamy więc na prawdziwym
+    # repozytorium, że most `retail` nadal jest mierzony, a scenariusz już nie.
+    korzen = pathlib.Path(__file__).resolve().parent.parent
+    mierzone = {p.as_posix() for p in pliki_produkcyjne(korzen.glob("**/*.rs"), korzen)}
+    for wzgledna, ma_byc in (("tools/headless/src/retail.rs", True), ("tools/headless/src/m5shop.rs", False)):
+        jest = any(s.endswith(wzgledna) for s in mierzone)
+        ok = jest == ma_byc
+        kod |= 0 if ok else 1
+        czy = "mierzony" if ma_byc else "pominiety"
+        print(f"{'OK    ' if ok else 'BLAD  '} {wzgledna} {czy}")
+    # `tools/magnat` to kod produktu, nie scenariusz — musi zostać mierzony.
+    klient = any(s.endswith("tools/magnat/src/app.rs") for s in mierzone)
+    kod |= 0 if klient else 1
+    print(f"{'OK    ' if klient else 'BLAD  '} tools/magnat/src/app.rs mierzony")
+
+    # Wpis w `REJESTR`, który przestał odpowiadać czemukolwiek w kodzie, jest martwy:
+    # ktoś podzielił funkcję i zapomniał usunąć zwolnienie, więc następne przekroczenie
+    # w tym samym miejscu przejdzie po cichu. Sprawdzamy, że każda pozycja nadal opisuje
+    # realne przekroczenie — w drugą stronę bramka broni się sama, bo klucz niesie wartość.
+    biezace = set()
+    for plik in pliki_produkcyjne(korzen.glob("**/*.rs"), korzen):
+        wzgledna = plik.relative_to(korzen).as_posix()
+        if not any(wzgledna == k[0] for k in REJESTR):
+            continue
+        try:
+            for metryka, _, wartosc in zmierz(plik, plik.read_text(encoding="utf-8")):
+                biezace.add((wzgledna, metryka, wartosc))
+        except (OSError, UnicodeDecodeError):
+            continue
+    martwe = [k for k in REJESTR if k not in biezace]
+    kod |= 0 if not martwe else 1
+    print(f"{'OK    ' if not martwe else 'BLAD  '} REJESTR bez martwych wpisow ({len(REJESTR)} pozycji)")
+    for k in martwe:
+        print(f"       martwy wpis: {k[0]} {k[1]} {k[2]} (pozycja {REJESTR[k]})")
     return kod
 
 
@@ -311,7 +406,7 @@ def hook() -> int:
         return 0
 
     korzen = pathlib.Path(__file__).resolve().parent.parent
-    pliki = pliki_produkcyjne(zmienione_wzgledem_head(korzen))
+    pliki = pliki_produkcyjne(zmienione_wzgledem_head(korzen), korzen)
     if not pliki:
         return 0
 
@@ -361,11 +456,11 @@ def main() -> int:
 
     korzen = pathlib.Path(__file__).resolve().parent.parent
     if args.changed:
-        pliki = pliki_produkcyjne(zmienione_wzgledem_head(korzen))
+        pliki = pliki_produkcyjne(zmienione_wzgledem_head(korzen), korzen)
         if not pliki:
             return 0
         return min(raport(korzen, pliki, args.json), 0)  # hook informuje, nie blokuje
-    return raport(korzen, pliki_produkcyjne(korzen.glob("**/*.rs")), args.json)
+    return raport(korzen, pliki_produkcyjne(korzen.glob("**/*.rs"), korzen), args.json)
 
 
 if __name__ == "__main__":

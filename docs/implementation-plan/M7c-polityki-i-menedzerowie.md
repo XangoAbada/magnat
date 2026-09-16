@@ -153,3 +153,14 @@ Pierścień 32 wpisów per firma (wzorzec pamięci z §17.7); starsze wpisy idą
 Koszt: 24 B × 32 × 10 000 firm ≈ 7,7 MB — w budżecie §17.7.
 Inspektor (WP16) tłumaczy wariant enuma na zdanie po polsku — tłumaczenie jest w warstwie UI,
 w symulacji nie ma żadnych stringów.
+
+---
+
+## Zmiany wpisane po R1
+
+Zgodnie z `K-18`. Wpisane jest **tylko to, co wiadomo na pewno** po refaktorze R1.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| ★ | **Przebudowa `DecisionReason` na `Citizen(CitizenReason) \| Firm(FirmReason) \| City(CityReason)` z §5.11 rozwiązuje przy okazji problem, którego dokument nie nazywa:** `engine/ui/src/inspect/reason.rs::describe` ma **319 linii** i jest jedynym miejscem, w którym `DecisionReason` staje się tekstem dla gracza. Po podziale enuma `describe` **rozpada się z konstrukcji** na trzy funkcje, a każdy podzbiór zachowuje własną wyczerpywalność sprawdzaną przez kompilator | To jest jedyna ścieżka wyjścia dla pozycji 37 rejestru długu w `R1-refaktor-po-M5.md`. R1 tego nie ruszył, bo `DecisionReason` jest dziś enumem **płaskim**: podział `describe` daje albo powtórzenie listy wariantów we wzorcach (dwa miejsca do zapomnienia zamiast jednego), albo pomocnicze funkcje zwracające `Option<String>` — a to **kasuje wyczerpywalność**, czyli jedyną rzecz, która gwarantuje, że nowy wariant nie przejdzie bez tekstu. `K-12` mówi o tym wprost: brak ramienia ma łamać kompilację, a nie po cichu wyświetlać pustą kartę |
+| | **Zanim M7c to zrobi, `describe` urośnie.** M6 dopisuje sześć wariantów (`Shortage`, `SupplierChosen`, `ContractSigned`, `ExportChosen`, `SubstituteUsed`, `ProductionHalted`), czyli ~60 linii — plus wpisy w `data/locale/pl.ron` i `en.ron`, bo każdy tekst widoczny dla gracza powstaje w obu wersjach w tej samej zmianie | Odnotowane, żeby M7c nie zdziwił się rozmiarem funkcji, którą ma rozciąć, i żeby M6 wiedziało, że dokłada do pozycji, która już jest nad progiem błędu |

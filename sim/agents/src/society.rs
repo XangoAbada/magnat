@@ -83,12 +83,12 @@ pub fn step_day(world: &mut World, day: u64, hooks: &mut dyn InheritanceHook) ->
 
     if is_month_start(day) {
         raport.status = Some(social::step_month(world, day));
-        raport.lifecycle = Some(demography::step_month(world, day));
+        raport.lifecycle = Some(demography::month::step_month(world, day));
         raport.migration = Some(migration::step_month(world, day));
         odbuduj_indeks(world);
     }
 
-    raport.day = demography::step_day(world, day, hooks);
+    raport.day = demography::day::step_day(world, day, hooks);
     raport.social = social::step_day(world, day);
     raport
 }

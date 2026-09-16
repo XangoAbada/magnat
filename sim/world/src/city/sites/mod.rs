@@ -32,7 +32,7 @@
 
 mod closure;
 mod data;
-mod place;
+pub(super) mod place;
 
 use super::blocks::BlockSet;
 use super::build::{self, BuildInput, BuildingSet, UnitIdx, UnitOccupant, Workplace};
@@ -56,11 +56,9 @@ use std::path::Path;
 
 pub use closure::{supply_closure_check, ClosureReport};
 pub use data::{
-    Archetype, ArchetypeSpec, ChainTemplate, FirmNames, SiteArchetypeId, SiteCatalog,
-    SiteDataError, ARCHETYPE_SCHEMA_VERSION, CHAIN_SCHEMA_VERSION, FIRM_NAMES_SCHEMA_VERSION,
-    RATIO_MAX, RATIO_MIN, SCALE_BASE, SCALE_MAX, SCALE_MIN,
+    Archetype, ArchetypeSpec, ChainTemplate, FirmNames, SiteArchetypeId, SiteCatalog, SiteDataError,
 };
-pub use place::populate;
+use data::{RATIO_MAX, RATIO_MIN, SCALE_BASE, SCALE_MAX, SCALE_MIN};
 
 /// Sektor gospodarki. Grupuje archetypy do wypełniania stref i do nazw firm;
 /// pełna klasyfikacja PKD to nie jest zadanie M2.
@@ -143,7 +141,7 @@ pub fn site_id(i: u32) -> SiteId {
 }
 
 #[must_use]
-pub fn firm_id(i: u32) -> FirmId {
+pub(super) fn firm_id(i: u32) -> FirmId {
     FirmId(Entity::new(i, NonZeroU32::new(1).expect("1 != 0")))
 }
 
@@ -196,7 +194,7 @@ impl SiteSet {
 /// lokalem, nie zakładem z własnym budynkiem, i przypisanie mu `SiteSeed` obejmującego
 /// całą kamienicę mówiłoby nieprawdę o tym, kto jest właścicielem mieszkań.
 #[must_use]
-pub const fn niemieszkalna(z: ZoneKind) -> bool {
+pub(super) const fn niemieszkalna(z: ZoneKind) -> bool {
     matches!(
         z,
         ZoneKind::Commercial

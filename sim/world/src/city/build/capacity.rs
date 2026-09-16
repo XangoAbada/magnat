@@ -34,8 +34,8 @@ pub const ETATOW_NA_MIESZKANCA: f32 = 0.531_25;
 
 /// Dolna i górna granica zagęszczenia mieszkań. Poza nimi kalibracja przestaje być
 /// kalibracją, a zaczyna produkować kawalerki 30-metrowe albo apartamenty w blokowisku.
-pub const GESTOSC_MIN: f32 = 0.55;
-pub const GESTOSC_MAX: f32 = 3.20;
+const GESTOSC_MIN: f32 = 0.55;
+const GESTOSC_MAX: f32 = 3.20;
 
 /// Widełki przelicznika „m² lokalu na stanowisko" przy kalibracji drugiej połowy T10.
 /// Szersze niż mieszkaniowe i to jest uzasadnione: 0,30 × przelicznik bazowy daje biuro

@@ -840,7 +840,10 @@ fn rebind_workplaces(
         if ile <= 0.0 || cel <= 0.0 {
             break;
         }
-        let nowa = (wp_scale * ile / cel).clamp(build::ETATY_SCALE_MIN, build::ETATY_SCALE_MAX);
+        let nowa = (wp_scale * ile / cel).clamp(
+            build::capacity::ETATY_SCALE_MIN,
+            build::capacity::ETATY_SCALE_MAX,
+        );
         if (nowa - wp_scale).abs() < 0.005 {
             break;
         }
@@ -886,7 +889,7 @@ fn rebind_workplaces(
                     .round()
                     .max(1.0) as u32;
                 let mult = epoch_mult * arch.map_or(1.0, |a| a.spec.wage_mult);
-                let band = build::wage_band(role, mult, tier);
+                let band = build::model::wage_band(role, mult, tier);
                 for _ in 0..ile {
                     nowe.push(Workplace {
                         unit: UnitIdx(ui),

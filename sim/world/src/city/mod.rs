@@ -350,7 +350,7 @@ pub fn generate_city(
             build::build_all(&build_input, &mut geom, &mut parcel_set, &edits, pool);
         // Kalibracja pojemności mieszkaniowej do `target_pop` (T10, korekta I-6) — przed
         // Etapem 7, bo zakłady odwołują się do zakresów lokali.
-        let dwelling_scale = build::rescale_dwellings(&mut buildings, plan.target_pop);
+        let dwelling_scale = build::capacity::rescale_dwellings(&mut buildings, plan.target_pop);
         tik(&mut stage, "gramatyka i zabudowa");
 
         // ── M2e ─────────────────────────────────────────────────────────────────────
@@ -362,7 +362,7 @@ pub fn generate_city(
             value::average_by_kind(&districts, &parcel_set, &value::FRINGE_KINDS),
         );
         // Etap 7: obsada budynków firmami-danymi i domknięcie łańcuchów produktowych.
-        let sites = sites::populate(
+        let sites = sites::place::populate(
             &build_input,
             &catalog,
             &site_catalog,
@@ -377,7 +377,7 @@ pub fn generate_city(
     // Obietnica korekty C9 z M2c: pojemność dzielnicy liczona z mieszkań, nie z gęstości
     // strefy. Dopiero teraz jest z czego — do M2d `Unit` nie istniał. Po Etapie 7,
     // bo on dostawia budynki na zieleni i w wydobyciu (korekta F2).
-    build::recompute_pop_capacity(&mut districts, &parcel_set, &buildings);
+    build::capacity::recompute_pop_capacity(&mut districts, &parcel_set, &buildings);
     tik(&mut stage, "etap 7 — firmy i domknięcie łańcuchów");
 
     // `pass_2` **po** Etapie 7 (§5.7): dostęp do pracy i handlu nie istnieje wcześniej,
