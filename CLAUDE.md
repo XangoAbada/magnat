@@ -139,6 +139,40 @@ Powód, dla którego ta reguła w ogóle jest: przez sześć faz kryterium ukoń
 „test przechodzi" i to jest właściwe kryterium — ale przechodzący test nie odróżnia czterystu
 linii dopisanych do modułu od czterystu linii dopisanych do worka. Pomiar jest w `R1` §1.
 
+## Reguła: subagenci oszczędzają kontekst
+
+**Pracę, której wynikiem jest wniosek, a nie treść plików, oddajemy subagentowi** (`Task`).
+Główna sesja ma trzymać kontrakty, plan fazy i pisany kod — nie surowe wyniki przeszukiwań.
+
+Do subagenta idzie:
+
+- rozpoznanie w kodzie („gdzie liczony jest podatek", „kto woła `Wholesale::quote`") — wraca
+  lista `plik:linia` z jednym zdaniem, nie wklejone pliki;
+- przeglądy i audyty wielu plików: recenzja przed commitem, sprawdzenie zgodności z kontraktem,
+  szukanie literałów tekstowych w UI, `TODO` w kodzie;
+- zadania masowe i mechaniczne: zmiana nazwy w wielu plikach, dopisanie tego samego wzorca,
+  generowanie powtarzalnych testów i danych;
+- czytanie długich dokumentów planu **nie swojej** fazy, gdy potrzebny jest jeden fakt.
+
+Zostaje w głównej sesji:
+
+- dokument `00-konwencje-i-kontrakty.md` i dokument robionej właśnie (pod)fazy — te czyta się
+  w całości samemu, bo są kontraktem, a nie materiałem do streszczenia;
+- decyzje dotykające kontraktów, determinizmu i `K-n`;
+- kod pisany w ramach pakietu roboczego, jego testy i commit.
+
+Zasady:
+
+- **Zleca się wniosek, nie przeszukanie.** Prompt mówi, czego szukamy i w jakiej formie ma wrócić
+  odpowiedź. Subagent zwracający dwieście linii kodu nie oszczędził niczego.
+- **Niezależne zlecenia idą równolegle** — kilka wywołań w jednej wiadomości.
+- Wynik subagenta jest raportem, nie prawdą. Zanim wejdzie do kodu albo do planu, sprawdzamy
+  wskazane miejsce — zwłaszcza gdy dotyczy determinizmu albo księgowości.
+- Subagent nie odhacza postępu i nie commituje. `00-postep.md` i dziennik prowadzi główna sesja.
+
+Powód: kontekst główny jest zasobem tej samej klasy co czas — wypełniony wynikami `grep`
+przestaje mieścić kontrakt fazy, a wtedy błędy zaczynają wyglądać jak niewiedza.
+
 ## Język i lokalizacja
 
 **Angielski:** kod, identyfikatory, nazwy plików i katalogów, klucze w `data/`, nazwy gałęzi,
