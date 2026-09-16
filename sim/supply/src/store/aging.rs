@@ -141,78 +141,8 @@ impl Store {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::batch::BatchFlags;
-    use crate::catalog::{Catalog, GoodForm, HazardClass, NeedCategory, StorageClass};
-    use crate::store::{BatchDraft, MassIn, WarehouseRole};
-    use magnat_core::{Entity, FirmId, GoodId, NeedCategoryId, SiteId};
-    use std::num::NonZeroU32;
-
-    fn encja(i: u32) -> Entity {
-        Entity::new(i, NonZeroU32::new(1).expect("generacja"))
-    }
-
-    /// Katalog dwutowarowy: chleb (psuje się po dobie) i piasek (nie psuje się).
-    fn katalog() -> Catalog {
-        let towar = |i: u16, key: &str, zycie: Option<u32>| crate::catalog::Good {
-            key: key.into(),
-            id: GoodId(i),
-            category: NeedCategoryId(0),
-            form: GoodForm::Bulk,
-            density_g_per_l: 500,
-            unit_mass: Mass::ZERO,
-            unit_volume: Volume::ZERO,
-            shelf_life_minutes: zycie,
-            storage: StorageClass::Ambient,
-            hazard: HazardClass::None,
-            has_quality: true,
-            substitutes: Vec::new(),
-            external_base_price: None,
-            import_via: Vec::new(),
-            disposal_cost: Money::ZERO,
-        };
-        Catalog::from_parts(
-            vec![
-                towar(0, "food_bread_wheat", Some(1440)),
-                towar(1, "raw_sand", None),
-            ],
-            Vec::new(),
-            vec![NeedCategory {
-                key: "test".to_string(),
-                stock_cat: None,
-            }],
-            Vec::new(),
-        )
-    }
-
-    const CHLEB: GoodId = GoodId(0);
-
-    fn draft(good: GoodId, masa: i64, koszt: i64, minuta: u64) -> BatchDraft {
-        BatchDraft {
-            good,
-            mass: Mass(masa),
-            quality: Q::new(60),
-            brand: None,
-            producer: FirmId(encja(0)),
-            produced_at: SimMinute(minuta),
-            cost: Money(koszt),
-            origin: BatchOrigin::default(),
-            flags: BatchFlags::default(),
-        }
-    }
-
-    fn magazyn() -> (Catalog, Store, SlotId) {
-        let cat = katalog();
-        let mut s = Store::new(cat.goods.len());
-        let slot = s.add_slot(
-            SiteId(encja(1)),
-            WarehouseRole::Backroom,
-            StorageClass::Ambient,
-            Mass(10_000_000),
-            Volume(100_000_000),
-            0,
-        );
-        (cat, s, slot)
-    }
+    use crate::store::tests_support::{draft, magazyn, CHLEB};
+    use crate::store::MassIn;
 
     /// Masa znikająca bez kategorii jest błędem testu, nie zaokrągleniem: przeterminowany
     /// chleb schodzi z magazynu **jako `LossKind::Expired`**, a bilans dalej się domyka.

@@ -9,8 +9,8 @@ use crate::loc::{Catalog, Locale};
 use magnat_agents::SocialClass;
 use magnat_core::{
     ActivityKind, CommitmentKind, DecisionReason, DeprivationEffect, FixedCost, LifeEventKind,
-    LoanKind, MigrationKind, Money, NeedKind, PriceDriver, RejectCause, RejectCredit, StockCat,
-    TraitId, TransportMode, UtilityKind,
+    LineStopCause, LoanKind, MigrationKind, Money, NeedKind, PriceDriver, RejectCause,
+    RejectCredit, ShortageStageKind, StockCat, TraitId, TransportMode, UtilityKind,
 };
 
 /// Nazwa potrzeby w języku gracza.
@@ -77,6 +77,18 @@ pub fn reject_credit(c: &Catalog, l: Locale, r: RejectCredit) -> String {
 #[must_use]
 pub fn fixed_cost(c: &Catalog, l: Locale, f: FixedCost) -> String {
     c.fmt_key(l, &format!("ui.fixed_cost.{}", f.name()), &[])
+}
+
+/// Nazwa powodu postoju linii produkcyjnej (M6b §5.5).
+#[must_use]
+pub fn line_stop_cause(c: &Catalog, l: Locale, s: LineStopCause) -> String {
+    c.fmt_key(l, &format!("ui.line_stop.{}", s.name()), &[])
+}
+
+/// Nazwa stopnia kaskady niedoboru (M6b §5.7, PRD §8.4).
+#[must_use]
+pub fn shortage_stage(c: &Catalog, l: Locale, s: ShortageStageKind) -> String {
+    c.fmt_key(l, &format!("ui.shortage.{}", s.name()), &[])
 }
 
 /// Nazwa skutku deprywacji.
@@ -439,7 +451,50 @@ pub fn describe(c: &Catalog, l: Locale, r: DecisionReason) -> String {
                 ("brakowalo", &procent_bp(i32::from(gap_permille) * 10)),
             ],
         ),
+        // ── M6: łańcuch dostaw ───────────────────────────────────────────────────
+        // Towar jest w ładunku, ale nie w zdaniu: `GoodId` rozwiązuje katalog z
+        // `sim/supply`, a `engine/ui` od niego nie zależy i zależeć nie ma (`AD-3`).
+        // Nazwę towaru dokłada panel, który katalog trzyma — tak samo jak przy
+        // `Repricing` od M5c.
+        DecisionReason::Shortage {
+            good: _,
+            from,
+            to,
+            coverage_minutes,
+        } => c.fmt_key(
+            l,
+            "ui.reason.Shortage",
+            &[
+                ("z", &shortage_stage(c, l, from)),
+                ("na", &shortage_stage(c, l, to)),
+                ("pokrycie", &godziny(coverage_minutes)),
+            ],
+        ),
+        DecisionReason::ProductionHalted { site: _, line, cause } => c.fmt_key(
+            l,
+            "ui.reason.ProductionHalted",
+            &[
+                ("linia", &(u32::from(line) + 1).to_string()),
+                ("powod", &line_stop_cause(c, l, cause)),
+            ],
+        ),
+        DecisionReason::SubstituteUsed {
+            good: _,
+            alt: _,
+            quality_loss,
+        } => c.fmt_key(
+            l,
+            "ui.reason.SubstituteUsed",
+            &[("strata", &quality_loss.to_string())],
+        ),
     }
+}
+
+/// Pokrycie zapasu w godzinach z jednym miejscem po przecinku. Minuty są jednostką
+/// kaskady, ale gracz myśli w godzinach — „zostały ci 3,2 h mąki" jest zdaniem,
+/// a „192 min" jest odczytem z przyrządu.
+fn godziny(minuty: u32) -> String {
+    format!("{},{}", minuty / 60, minuty % 60 * 10 / 60)
 }
 
 /// Punkty bazowe jako procent z jednym miejscem po przecinku, ze znakiem.
@@ -620,6 +675,22 @@ mod tests {
                 cost: FixedCost::Housing,
                 gap_permille: 420,
             },
+            DecisionReason::Shortage {
+                good: magnat_core::GoodId(3),
+                from: ShortageStageKind::Buffer,
+                to: ShortageStageKind::Throttled,
+                coverage_minutes: 192,
+            },
+            DecisionReason::ProductionHalted {
+                site: magnat_core::SiteId(magnat_core::Entity::new(9, std::num::NonZeroU32::MIN)),
+                line: 1,
+                cause: LineStopCause::NoPower,
+            },
+            DecisionReason::SubstituteUsed {
+                good: magnat_core::GoodId(3),
+                alt: magnat_core::GoodId(4),
+                quality_loss: 8,
+            },
         ]
     }
 
@@ -640,8 +711,9 @@ mod tests {
         // Lista musi być **kompletna**, inaczej bramka nie jest bramką: po M5c mieściła
         // 29 wariantów i nie obejmowała ani `Repricing` (303), ani trzech powodów M4c/M4d
         // (205–207), które miały już ramiona w `describe`. Stan po M5d: Unspecified
-        // + 100..=119 + 200..=207 + 300..=306 = 36.
-        assert_eq!(wszystkie().len(), 36);
+        // + 100..=119 + 200..=207 + 300..=306 = 36. Po M6b dochodzi blok M6
+        // (400..=402), czyli 39.
+        assert_eq!(wszystkie().len(), 39);
     }
 
     #[test]

@@ -84,6 +84,62 @@ impl Store {
         Ok(id)
     }
 
+    /// Ile towaru **da się** wydać ze slotu przy tym progu jakości — bez rezerwowania
+    /// czegokolwiek.
+    ///
+    /// Istnieje, bo linia produkcyjna musi sprawdzić **wszystkie** wejścia, zanim
+    /// weźmie którekolwiek: rezerwacja trzech wejść i porażka na czwartym zostawiłaby
+    /// trzy partie oznaczone i zjedzony wsad, a szarża i tak by nie ruszyła.
+    #[must_use]
+    pub fn available(&self, slot: SlotId, good: GoodId, min_q: Q) -> Mass {
+        let Some(sl) = self.slots.get(slot.0 as usize) else {
+            return Mass::ZERO;
+        };
+        Mass(
+            sl.batches
+                .iter()
+                .filter_map(|b| self.batches.get(*b))
+                .filter(|b| {
+                    b.good == good && b.quality >= min_q && !b.flags.has(BatchFlags::QUARANTINED)
+                })
+                .map(|b| b.mass.0)
+                .sum(),
+        )
+    }
+
+    /// Odpisuje masę ze slotu z podaną kategorią straty — złom przezbrojenia, ubytek
+    /// w magazynie, towar zniszczony kontrolą. Zwraca masę faktycznie odpisaną.
+    ///
+    /// Osobno od [`Store::take`], bo `take` księguje `consumed` (towar poszedł dalej
+    /// w łańcuch), a to jest `losses` (towar zszedł z bilansu). Pomylenie tych dwóch
+    /// domknęłoby bilans i skłamało w rachunku wyniku.
+    pub fn write_off(
+        &mut self,
+        slot: SlotId,
+        good: GoodId,
+        mass: Mass,
+        kind: magnat_core::LossKind,
+    ) -> Mass {
+        let Some(r) = self.reserve(slot, good, mass, Q::MIN) else {
+            // Mniej niż żądano — odpisujemy tyle, ile jest.
+            let jest = self.available(slot, good, Q::MIN);
+            if jest.0 <= 0 {
+                return Mass::ZERO;
+            }
+            return self.write_off(slot, good, jest, kind);
+        };
+        let Ok(kawalek) = self.take(r) else {
+            return Mass::ZERO;
+        };
+        // `take` zaksięgowało to jako zużycie i COGS — a to była strata. Przeksięgowanie
+        // w jednym miejscu jest tańsze niż drugi wariant `take` z flagą.
+        self.mass[good.0 as usize].consumed -= kawalek.mass.0;
+        self.mass[good.0 as usize].losses[kind.as_index()] += kawalek.mass.0;
+        self.cogs = Money(self.cogs.0 - kawalek.cost_total.0);
+        self.write_offs = Money(self.write_offs.0 + kawalek.cost_total.0);
+        kawalek.mass
+    }
+
     /// Plan wydania `mass` gramów towaru ze slotu, w porządku FEFO, pomijając partie
     /// poniżej `min_q` i wstrzymane. `None`, jeśli w slocie nie ma tyle towaru.
     pub fn reserve(
@@ -142,6 +198,7 @@ impl Store {
         let mut jakosc_wazona = 0i128;
         let mut brand = None;
         let mut expires_at: Option<SimMinute> = None;
+        let mut origin: Option<crate::batch::BatchOrigin> = None;
         let mut puste: Vec<BatchId> = Vec::new();
 
         for (id, ile) in &r.items {
@@ -171,6 +228,26 @@ impl Store {
                 (Some(a), Some(c)) => Some(SimMinute(a.0.min(c.0))),
                 (Some(a), None) => Some(a),
             };
+            // Pochodzenie scala się tą samą regułą co przy łączeniu partii: wspólne
+            // pole zostaje, różne się zeruje. Zmyślony ślad jest gorszy od braku
+            // śladu (M6 §6.4.2) — i to jest jedyne miejsce, w którym można go zmyślić.
+            origin = Some(match origin {
+                None => b.origin,
+                Some(o) => crate::batch::BatchOrigin {
+                    site: if o.site == b.origin.site { o.site } else { None },
+                    recipe: if o.recipe == b.origin.recipe {
+                        o.recipe
+                    } else {
+                        None
+                    },
+                    depth: o.depth.max(b.origin.depth),
+                    deposit: if o.deposit == b.origin.deposit {
+                        o.deposit
+                    } else {
+                        None
+                    },
+                },
+            });
             if b.mass.0 == 0 {
                 puste.push(*id);
             }
@@ -203,6 +280,7 @@ impl Store {
             cost_total: Money(koszt),
             brand,
             expires_at,
+            origin: origin.unwrap_or_default(),
         })
     }
 }
@@ -210,80 +288,10 @@ impl Store {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::batch::BatchOrigin;
-    use crate::catalog::{GoodForm, HazardClass, NeedCategory, StorageClass};
+    use crate::catalog::{HazardClass, StorageClass};
+    use crate::store::tests_support::{draft, encja, katalog, magazyn, CHLEB, PIASEK};
     use crate::store::WarehouseRole;
-    use magnat_core::{Entity, NeedCategoryId};
-    use magnat_core::{FirmId, SiteId};
-    use std::num::NonZeroU32;
-
-    fn encja(i: u32) -> Entity {
-        Entity::new(i, NonZeroU32::new(1).expect("generacja"))
-    }
-
-    /// Katalog dwutowarowy: chleb (psuje się po dobie) i piasek (nie psuje się).
-    fn katalog() -> Catalog {
-        let towar = |i: u16, key: &str, zycie: Option<u32>| crate::catalog::Good {
-            key: key.into(),
-            id: GoodId(i),
-            category: NeedCategoryId(0),
-            form: GoodForm::Bulk,
-            density_g_per_l: 500,
-            unit_mass: Mass::ZERO,
-            unit_volume: Volume::ZERO,
-            shelf_life_minutes: zycie,
-            storage: StorageClass::Ambient,
-            hazard: HazardClass::None,
-            has_quality: true,
-            substitutes: Vec::new(),
-            external_base_price: None,
-            import_via: Vec::new(),
-            disposal_cost: Money::ZERO,
-        };
-        Catalog::from_parts(
-            vec![
-                towar(0, "food_bread_wheat", Some(1440)),
-                towar(1, "raw_sand", None),
-            ],
-            Vec::new(),
-            vec![NeedCategory {
-                key: "test".to_string(),
-                stock_cat: None,
-            }],
-            Vec::new(),
-        )
-    }
-
-    const CHLEB: GoodId = GoodId(0);
-    const PIASEK: GoodId = GoodId(1);
-
-    fn draft(good: GoodId, masa: i64, koszt: i64, minuta: u64) -> BatchDraft {
-        BatchDraft {
-            good,
-            mass: Mass(masa),
-            quality: Q::new(60),
-            brand: None,
-            producer: FirmId(encja(0)),
-            produced_at: SimMinute(minuta),
-            cost: Money(koszt),
-            origin: BatchOrigin::default(),
-            flags: BatchFlags::default(),
-        }
-    }
-
-    fn magazyn() -> (Catalog, Store, SlotId) {
-        let cat = katalog();
-        let mut s = Store::new(cat.goods.len());
-        let slot = s.add_slot(
-            SiteId(encja(1)),
-            WarehouseRole::Backroom,
-            StorageClass::Ambient,
-            Mass(10_000_000),
-            Volume(100_000_000),
-            0,
-        );
-        (cat, s, slot)
-    }
+    use magnat_core::SiteId;
 
     /// Kryterium ukończenia WP2: **partia dzielona 1000 razy nie gubi ani grama,
     /// ani grosza.** Kwota jest celowo niepodzielna przez 1000, żeby reszta musiała

@@ -32,6 +32,9 @@ use crate::catalog::{Catalog, StorageClass};
 mod aging;
 mod invariants;
 mod ops;
+#[cfg(test)]
+mod tests_support;
+mod transit;
 
 /// Rola magazynu w zakładzie.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
@@ -139,6 +142,11 @@ pub struct BatchSlice {
     pub brand: Option<BrandId>,
     /// Najwcześniejsza data przydatności w wydanej porcji.
     pub expires_at: Option<SimMinute>,
+    /// Pochodzenie wydanej porcji: głębokość jako **maksimum**, zakład, receptura
+    /// i złoże tylko wtedy, gdy **wszystkie** wydane partie niosą to samo. Dodane
+    /// w M6b, bo bez tego linia produkcyjna nie ma z czego zbudować `BatchOrigin`
+    /// wyrobu i ślad „od pola do półki" urywałby się na pierwszym przetworzeniu.
+    pub origin: BatchOrigin,
 }
 
 /// Wiersz bilansu masy jednego towaru.
@@ -190,6 +198,14 @@ impl Store {
     #[must_use]
     pub fn ledger(&self) -> &BatchLedger {
         &self.ledger
+    }
+
+    /// Uchwyty wszystkich żywych partii, w kolejności indeksów w arenie.
+    ///
+    /// Dla testów własnościowych i dla migawki — kod symulacji dociera do partii
+    /// przez magazyn, pojazd albo półkę, nigdy przekrojowo (`K-16`).
+    pub fn all_handles(&self) -> impl Iterator<Item = BatchId> + '_ {
+        self.batches.iter().map(|(h, _)| h)
     }
 
     #[must_use]

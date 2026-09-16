@@ -11,14 +11,20 @@
 //! nazwy z dokumentu M2 nie drgnęły.
 //!
 //! Zakres M6a: katalog (WP1), partia i magazyn (WP2), receptury i model jakości (WP3).
-//! Zakład, transport, rynek B2B i wydobycie wchodzą w kolejnych podfazach.
+//! Zakres M6b: zakład fizyczny (WP4), zlecenia transportowe (WP5), polityki zapasów
+//! i kaskada niedoboru (WP6). Rynek B2B i wydobycie wchodzą w kolejnych podfazach.
 
 #![forbid(unsafe_code)]
 
 pub mod batch;
 pub mod catalog;
 pub mod cost;
+pub mod inventory;
+pub mod plant;
+pub mod shortage;
 pub mod store;
+pub mod transport;
+pub mod tuning;
 
 pub use batch::{
     Batch, BatchEvent, BatchFlags, BatchId, BatchLedger, BatchLocation, BatchOrigin, BrandId,
@@ -32,6 +38,20 @@ pub use catalog::{
     RECIPES_SCHEMA_VERSION,
 };
 pub use cost::{allocate_cost, disposal_cost, waste_mass};
+pub use inventory::{
+    InventoryPolicy, InventoryRule, MinMaxParams, PreferredSource, ReplenishRequest, Review,
+};
+pub use plant::{
+    advance_production, BreakCause, Charge, Dock, EmissionTotals, LineState, Plant, PlantSite,
+    PlannedRun, ProductionCtx, ProductionLine, ProductionReport, ProductionSchedule, Shift,
+    SiteDwellResponse, UtilityMeter, VehicleArrivedAtSite,
+};
+pub use shortage::{RfqId, ShortageAction, ShortageStage, ShortageState};
 pub use store::{
     BatchDraft, BatchSlice, MassIn, Reservation, StorageSlot, Store, StoreError, WarehouseRole,
 };
+pub use transport::{
+    BodyType, Carrier, FailReason, FreightOracle, FreightQuote, Transport, TransportOrder,
+    TransportOrderState, TransportRequest, VehicleRequirements,
+};
+pub use tuning::{Tuning, TuningError, TUNING_SCHEMA_VERSION};

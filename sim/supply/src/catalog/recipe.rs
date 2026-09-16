@@ -29,6 +29,21 @@ impl RecipeSource {
     }
 }
 
+/// Klasa maszyny — **abstrakcyjna zdolność** („potrzebuję młyna walcowego"), nie obiekt
+/// fizyczny. Receptura wymaga klasy, linia produkcyjna ją ma, archetyp budynku deklaruje,
+/// ile slotów której klasy mieści hala (M6 §6.4.1).
+///
+/// Indeks w [`Catalog::machine_classes`](crate::Catalog::machine_classes), czyli w tablicy
+/// **wyprowadzonej z receptur** przy ładowaniu, a nie w osobnym pliku danych.
+///
+/// `ponytail:` katalog klas maszyn nie istnieje, bo nie ma jeszcze czego w nim trzymać —
+/// cena maszyny, jej pobór i decyzja inwestycyjna należą do M7. Sufit jest nazwany:
+/// w chwili, w której klasa maszyny dostanie własne parametry, tablica przenosi się do
+/// `data/machines/classes.ron`, a `MachineClassId` przestaje być pochodną receptur.
+/// Do tego czasu drugi plik danych do utrzymania kosztowałby więcej, niż daje.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+pub struct MachineClassId(pub u16);
+
 /// Rodzaj wyjścia szarży.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Deserialize)]
 pub enum OutputKind {
@@ -266,10 +281,17 @@ impl Recipe {
         masa.saturating_mul(1440) / i64::from(self.duration_minutes.max(1))
     }
 
-    /// Suma mas wejść szarży.
+    /// Suma mas wejść szarży — **razem z wodą z licznika**.
+    ///
+    /// Woda jest medium licznikowym, nie towarem w partii (`D9` fazy, wpisane w M6b):
+    /// piekarni nikt nie dowozi wody ciężarówką. Ma za to masę i ta masa wychodzi
+    /// z pieca jako chleb, więc musi wejść do bilansu — inaczej reguła
+    /// `Σ wejść == Σ wyjść + ubytek` nie domknęłaby się dla żadnej z dwudziestu
+    /// jeden receptur, które wody używają. Gęstość 1 g/ml, więc mililitr **jest**
+    /// gramem i przeliczenie nie ma gdzie zgubić reszty.
     #[must_use]
     pub fn input_mass(&self) -> Mass {
-        Mass(self.inputs.iter().map(|i| i.mass.0).sum())
+        Mass(self.inputs.iter().map(|i| i.mass.0).sum::<i64>() + self.water.0)
     }
 
     /// Suma mas wyjść szarży — razem z odpadem i tym, co zakład spala u siebie.

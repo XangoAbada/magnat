@@ -35,8 +35,8 @@ pub use load::{
     NEEDS_SCHEMA_VERSION, RECIPES_SCHEMA_VERSION,
 };
 pub use recipe::{
-    CostAllocation, Emissions, OutputKind, PlumeKind, QualityModel, Recipe, RecipeInput,
-    RecipeInputSpec, RecipeOutput, RecipeOutputSpec, RecipeSource, RecipeSpec, Setup,
+    CostAllocation, Emissions, MachineClassId, OutputKind, PlumeKind, QualityModel, Recipe,
+    RecipeInput, RecipeInputSpec, RecipeOutput, RecipeOutputSpec, RecipeSource, RecipeSpec, Setup,
 };
 
 use magnat_core::{GoodId, Mass, NeedCategoryId, Qty, RecipeId, Volume};
@@ -53,6 +53,9 @@ pub struct Catalog {
     pub categories: Vec<NeedCategory>,
     /// Koszyk potrzeb epoki startowej: (towar, gramy na mieszkańca na dobę).
     pub basket: Vec<(GoodId, i64)>,
+    /// Klasy maszyn, alfabetycznie, bez powtórzeń. **Wyprowadzone z receptur**, nie
+    /// wczytane z osobnego pliku — patrz [`MachineClassId`].
+    pub machine_classes: Vec<Box<str>>,
     /// Towary w kategorii, rosnąco po `GoodId`. Indeks, nie dane — odtwarzany przy
     /// ładowaniu, żeby `in_category` nie musiał skanować katalogu.
     by_category: Vec<Vec<GoodId>>,
@@ -77,13 +80,44 @@ impl Catalog {
                 v.push(g.id);
             }
         }
+        let mut machine_classes: Vec<Box<str>> = recipes
+            .iter()
+            .filter(|r| !r.machine_class.is_empty())
+            .map(|r| r.machine_class.clone())
+            .collect();
+        machine_classes.sort_unstable();
+        machine_classes.dedup();
         Catalog {
             goods,
             recipes,
             categories,
             basket,
+            machine_classes,
             by_category,
         }
+    }
+
+    /// Klasa maszyny wymagana przez recepturę. `None` = receptura nie wymaga maszyny
+    /// (pakowanie ręczne, uprawa polowa) i pójdzie na dowolnej linii.
+    #[must_use]
+    pub fn machine_class_of(&self, r: &Recipe) -> Option<MachineClassId> {
+        self.machine_class_id(&r.machine_class)
+    }
+
+    #[must_use]
+    pub fn machine_class_id(&self, key: &str) -> Option<MachineClassId> {
+        if key.is_empty() {
+            return None;
+        }
+        self.machine_classes
+            .binary_search_by(|c| (**c).cmp(key))
+            .ok()
+            .map(|i| MachineClassId(i as u16))
+    }
+
+    #[must_use]
+    pub fn machine_class_key(&self, c: MachineClassId) -> &str {
+        &self.machine_classes[c.0 as usize]
     }
 
     #[must_use]

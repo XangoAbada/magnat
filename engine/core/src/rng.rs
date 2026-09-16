@@ -140,6 +140,19 @@ pub enum StreamId {
     /// właściciela; numer strumienia zostaje, bo niesie go każdy zapis sprzed M7.
     FirmPricing = 186,
     // 187–199 zarezerwowane dla M5 (m.in. rynek pracy od M7); rezerwa dalsza 1180–1199.
+
+    // ── M6: 200..=219 — łańcuch dostaw ──────────────────────────────────────────
+    /// Awaria maszyny. Klucz: indeks linii i minuta — rozkład geometryczny o średniej
+    /// `mtbf * condition/100`, losowany **co minutę pracy**, nie raz na szarżę. Dzięki
+    /// temu ta sama linia psuje się w tej samej minucie niezależnie od tego, czy krok
+    /// przyszedł po minucie (mikro), czy po godzinie (mezo) — na tym stoi tolerancja 0
+    /// spójności LOD produkcji (00 §4).
+    SupplyBreakdown = 200,
+    /// Opóźnienie przejazdu dostawczego wobec czasu z trasy (M6b §5.6).
+    SupplyTransitDelay = 205,
+    // 201–204 i 206–219 zarezerwowane dla M6 zgodnie z przydziałem w §6.1 dokumentu
+    // fazy: 201 `SupplySpoilage`, 202 `SupplyQuality`, 203 `SupplyQuoteNoise`,
+    // 204 `SupplyYield`, 206 `SupplyImportLead`. Rezerwa dalsza 1200–1219.
 }
 
 /// Encja zastępcza dla losowania bez encji (zdarzenie globalne, generator świata).
@@ -372,5 +385,7 @@ mod tests {
         assert_eq!(StreamId::PurchaseNoise as u16, 180);
         assert_eq!(StreamId::PurchaseChoice as u16, 181);
         assert_eq!(StreamId::CreditScoringJitter as u16, 185);
+        assert_eq!(StreamId::SupplyBreakdown as u16, 200);
+        assert_eq!(StreamId::SupplyTransitDelay as u16, 205);
     }
 }

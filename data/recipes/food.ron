@@ -49,11 +49,16 @@
             key: "bakery_bread_wheat",
             source: Manufacturing,
             inputs: [
-                (good: "food_flour_t550", mass_g: 100_000, min_quality: 55),
-                (good: "util_water",      mass_g: 62_000),
+                // Otręby jako substytut mąki to chleb razowy, a nie oszustwo: piec je
+                // przyjmie jeden do jednego, wyrób wyjdzie gorszy o dwanaście punktów
+                // jakości. To jest przedostatnia deska ratunku z PRD §8.4 i **jedyne**
+                // wejście fali A, które ją ma — pozostałe czekają na falę B (`R6`).
+                (good: "food_flour_t550", mass_g: 100_000, min_quality: 55,
+                 substitutes: [(good: "feed_bran", mass_ratio_permille: 1000, quality_penalty: 12)]),
                 (good: "food_yeast",      mass_g: 2_000),
                 (good: "food_salt",       mass_g: 1_800),
             ],
+            water_ml: 62_000,
             outputs: [(good: "food_bread_wheat", mass_g: 158_000, kind: Main)],
             process_loss_g: 7_800,
             loss_kind: Evaporation,
@@ -74,8 +79,8 @@
             inputs: [
                 (good: "food_flour_t550", mass_g: 300_000),
                 (good: "food_sugar",      mass_g: 100_000),
-                (good: "util_water",      mass_g: 700_000),
             ],
+            water_ml: 700_000,
             outputs: [(good: "food_yeast", mass_g: 1_000_000)],
             process_loss_g: 100_000,
             loss_kind: Evaporation,
@@ -90,8 +95,8 @@
             source: Manufacturing,
             inputs: [
                 (good: "raw_sugar_beet", mass_g: 7_000_000),
-                (good: "util_water",     mass_g: 500_000),
             ],
+            water_ml: 500_000,
             outputs: [(good: "food_sugar", mass_g: 1_000_000)],
             process_loss_g: 6_500_000,
             loss_kind: Evaporation,
@@ -171,10 +176,10 @@
             source: Manufacturing,
             inputs: [
                 (good: "raw_wheat",  mass_g: 180_000, min_quality: 55),
-                (good: "util_water", mass_g: 1_000_000),
                 (good: "food_yeast", mass_g: 10_000),
                 (good: "food_sugar", mass_g: 30_000),
             ],
+            water_ml: 1_000_000,
             outputs: [(good: "food_beer", mass_g: 1_200_000)],
             process_loss_g: 20_000,
             loss_kind: Evaporation,
@@ -191,8 +196,8 @@
             inputs: [
                 (good: "food_fruit", mass_g: 700_000, min_quality: 50),
                 (good: "food_sugar", mass_g: 60_000),
-                (good: "util_water", mass_g: 300_000),
             ],
+            water_ml: 300_000,
             outputs: [(good: "food_juice", mass_g: 1_000_000)],
             process_loss_g: 60_000,
             loss_kind: ProcessWaste,

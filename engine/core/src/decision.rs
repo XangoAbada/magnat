@@ -28,9 +28,9 @@ use crate::ids::SiteId;
 use crate::time::MinuteOfDay;
 use crate::types::{GoodId, Q};
 use crate::vocab::{
-    CommitmentKind, DeprivationEffect, FixedCost, LifeEventKind, LoanKind, MigrationKind, NeedKind,
-    PlaceRef, PriceDriver, RejectCause, RejectCredit, StockCat, TraitId, TransportMode,
-    UtilityKind,
+    CommitmentKind, DeprivationEffect, FixedCost, LifeEventKind, LineStopCause, LoanKind,
+    MigrationKind, NeedKind, PlaceRef, PriceDriver, RejectCause, RejectCredit, ShortageStageKind,
+    StockCat, TraitId, TransportMode, UtilityKind,
 };
 use serde::{Deserialize, Serialize};
 
@@ -233,6 +233,36 @@ pub enum DecisionReason {
     /// → odmowa → zaległość" nie daje się wyjaśnić graczowi do końca.
     BudgetShortfall { cost: FixedCost, gap_permille: i16 } = 306,
     // 307–399 zarezerwowane dla M5.
+
+    // ── M6: 400..=499 ────────────────────────────────────────────────────────────
+    /// Zakład wszedł na kolejny stopień kaskady niedoboru (M6b §5.7, PRD §8.4).
+    /// `coverage_minutes` to pokrycie zapasu w minutach w chwili przejścia — liczba,
+    /// którą gracz widzi w panelu łańcucha jako „zostało ci 3 h mąki".
+    /// Zapisywane na **każdym** przejściu, także w dół: powrót do `Ok` też jest
+    /// odpowiedzią na pytanie „co się stało z moją piekarnią".
+    Shortage {
+        good: GoodId,
+        from: ShortageStageKind,
+        to: ShortageStageKind,
+        coverage_minutes: u32,
+    } = 400,
+    /// Linia stanęła (M6b §5.5). `line` to indeks linii w zakładzie, nie `Entity` —
+    /// linia nie jest encją ECS, a karta inspekcji i tak pokazuje ją jako „linia 2".
+    ProductionHalted {
+        site: SiteId,
+        line: u16,
+        cause: LineStopCause,
+    } = 401,
+    /// Zakład użył substytutu zamiast brakującego wejścia (M6b §5.7, PRD §8.4).
+    /// `quality_loss` to spadek jakości wyjścia w punktach skali `Q` — cena substytucji,
+    /// przez którą stoi ona **przedostatnia** w kaskadzie, tuż przed postojem.
+    SubstituteUsed {
+        good: GoodId,
+        alt: GoodId,
+        quality_loss: u8,
+    } = 402,
+    // 403–499 zarezerwowane dla M6: `SupplierChosen`, `ContractSigned`, `ExportChosen`
+    // (M6c) dopisują się tutaj, na końcu bloku.
     // ... kolejne fazy dopisują własne bloki na końcu pliku
 }
 
@@ -283,6 +313,9 @@ impl DecisionReason {
             DecisionReason::CreditApproved { .. } => 304,
             DecisionReason::CreditRejected { .. } => 305,
             DecisionReason::BudgetShortfall { .. } => 306,
+            DecisionReason::Shortage { .. } => 400,
+            DecisionReason::ProductionHalted { .. } => 401,
+            DecisionReason::SubstituteUsed { .. } => 402,
         }
     }
 }

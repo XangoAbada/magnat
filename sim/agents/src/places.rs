@@ -16,7 +16,7 @@ use crate::components::{Employment, Identity, Needs, Personality, Residence, Vit
 use crate::needs::NeedTable;
 use crate::store::Knowledge;
 use magnat_core::{
-    BuildingId, CitizenId, DayOfWeek, DecisionReason, Entity, HouseholdId, MinuteOfDay, Money,
+    BuildingId, CitizenId, DecisionReason, Entity, HouseholdId, MinuteOfDay, Money,
     NeedKind, PlaceKind, PlaceRef, SimMinute, SiteId, TransportMode, WorldCoord, Q,
 };
 use magnat_sim_snapshot::PedestrianRecord;
@@ -278,53 +278,11 @@ pub fn site_of(e: &Employment) -> Option<PlaceRef> {
 
 // ── typy kontraktu ──────────────────────────────────────────────────────────────
 
-/// Godziny otwarcia miejsca. `days` to maska `DayOfWeek` (K-15) — nigdy dzień miesiąca.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct OpenHours {
-    pub open: MinuteOfDay,
-    pub close: MinuteOfDay,
-    pub days: u8,
-}
-
-impl OpenHours {
-    /// Czynne bez przerwy — dom, szpital.
-    pub const ALWAYS: OpenHours = OpenHours {
-        open: MinuteOfDay::MIDNIGHT,
-        close: MinuteOfDay::MIDNIGHT,
-        days: 0b111_1111,
-    };
-
-    #[must_use]
-    pub fn new(open_min: u16, close_min: u16, days: u8) -> OpenHours {
-        OpenHours {
-            open: MinuteOfDay::new(open_min),
-            close: MinuteOfDay::new(close_min),
-            days,
-        }
-    }
-
-    #[must_use]
-    pub const fn is_always(&self) -> bool {
-        self.open.get() == self.close.get() && self.days == 0b111_1111
-    }
-
-    #[must_use]
-    pub fn is_open(&self, dow: DayOfWeek, at: MinuteOfDay) -> bool {
-        if self.days & (1 << (dow as u8)) == 0 {
-            return false;
-        }
-        if self.is_always() {
-            return true;
-        }
-        let (o, c, t) = (self.open.get(), self.close.get(), at.get());
-        if o <= c {
-            t >= o && t < c
-        } else {
-            // Lokal czynny przez północ — wtedy „po otwarciu LUB przed zamknięciem".
-            t >= o || t < c
-        }
-    }
-}
+/// Godziny otwarcia. **Typ mieszka od M6b w `engine/core`** (`K-8`): pyta o niego M3
+/// przy planowaniu doby, M6 przy kolejce rampy (godziny dostaw) i M8 przy regulacji
+/// miejskiej, a duplikat rozjechałby się przy pierwszej zmianie warunku „czynne przez
+/// północ". Reeksport, żeby nazwy z M3 nie drgnęły.
+pub use magnat_core::OpenHours;
 
 /// Domyślne godziny otwarcia per rodzaj miejsca.
 ///
@@ -868,6 +826,7 @@ impl PlaceProvider for EmptyPlaces {
 
 #[cfg(test)]
 mod tests {
+    use magnat_core::DayOfWeek;
     use super::*;
 
     #[test]

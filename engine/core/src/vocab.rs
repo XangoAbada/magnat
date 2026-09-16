@@ -473,6 +473,36 @@ vocab_enum! {
 pub const LOSS_KIND_COUNT: usize = LossKind::ALL.len();
 
 vocab_enum! {
+    /// Dlaczego linia produkcyjna nie produkuje. Właścicielem jest M6, ale słownik mieszka
+    /// w `core`, bo jest **ładunkiem** `DecisionReason::ProductionHalted` — a ładunek
+    /// centralnego enuma nie może pochodzić z crate'u, który od `core` zależy (`K-20`).
+    /// Czyta go karta inspekcji zakładu (M6e), pulpit firmy (M7) i alert miejski
+    /// przy odcięciu mediów (M8).
+    ///
+    /// `Starved` i `Blocked` są tu obok awarii z rozmysłu: dla gracza „stoi, bo nie ma
+    /// mąki" i „stoi, bo się zepsuło" to ta sama klasa pytania, a rozdzielenie ich na
+    /// dwa enumy zmusiłoby kartę inspekcji do dwóch ścieżek dla jednego zdania.
+    /// Kolejność wariantów jest kontraktem, bo `as_index()` indeksuje histogram postojów.
+    LineStopCause {
+        Wear, NoPower, NoWater, NoStaff, Strike, Starved, Blocked, Setup, Maintenance,
+    }
+}
+
+vocab_enum! {
+    /// Stopień kaskady niedoboru (PRD §8.4) **bez ładunku** — ładunek zostaje po stronie
+    /// M6 w `supply::ShortageStage`, tutaj jest sam stopień, bo tyle niesie
+    /// `DecisionReason::Shortage` i tyle pokazuje karta inspekcji.
+    ///
+    /// Kolejność jest kolejnością prób z PRD i **jest kontraktem**: bufor → obniżenie
+    /// produkcji → spot → import → substytut → postój. Test kaskady sprawdza, że
+    /// przejścia idą po `as_index()` w górę, więc przestawienie wariantów przestawiłoby
+    /// znaczenie testu, a nie tylko liczby.
+    ShortageStageKind {
+        Ok, Buffer, Throttled, SpotSearch, Importing, Substituted, Halted,
+    }
+}
+
+vocab_enum! {
     /// Biom. Konsument poza M1: M2 (strefowanie i zieleń), M5/M6 (rolnictwo i leśnictwo),
     /// M8 (zdarzenia pogodowe zależne od pokrycia terenu).
     Biome {

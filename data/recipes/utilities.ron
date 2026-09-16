@@ -36,8 +36,8 @@
             source: Manufacturing,
             inputs: [
                 (good: "raw_coal",   mass_g: 1_000_000, min_quality: 40),
-                (good: "util_water", mass_g: 300_000),
             ],
+            water_ml: 300_000,
             outputs: [(good: "util_electricity", mass_g: 2_400)],
             process_loss_g: 1_297_600,
             loss_kind: ProcessWaste,
@@ -53,8 +53,8 @@
             source: Manufacturing,
             inputs: [
                 (good: "raw_coal",   mass_g: 500_000, min_quality: 40),
-                (good: "util_water", mass_g: 200_000),
             ],
+            water_ml: 200_000,
             outputs: [(good: "util_heat", mass_g: 3_000)],
             process_loss_g: 697_000,
             loss_kind: ProcessWaste,

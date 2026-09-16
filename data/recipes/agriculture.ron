@@ -59,8 +59,8 @@
             source: Agriculture,
             inputs: [
                 (good: "agri_fertilizer", mass_g: 18_000),
-                (good: "util_water",      mass_g: 40_000),
             ],
+            water_ml: 40_000,
             outputs: [(good: "food_vegetables", mass_g: 900_000)],
             duration_minutes: 1440,
             labour: [("production_worker", 2_400)],
@@ -71,8 +71,8 @@
             source: Agriculture,
             inputs: [
                 (good: "agri_fertilizer", mass_g: 14_000),
-                (good: "util_water",      mass_g: 30_000),
             ],
+            water_ml: 30_000,
             outputs: [(good: "food_fruit", mass_g: 800_000)],
             duration_minutes: 1440,
             labour: [("production_worker", 2_000)],
@@ -83,8 +83,8 @@
             source: Agriculture,
             inputs: [
                 (good: "feed_fodder", mass_g: 900_000),
-                (good: "util_water",  mass_g: 200_000),
             ],
+            water_ml: 200_000,
             outputs: [(good: "raw_milk", mass_g: 700_000)],
             duration_minutes: 1440,
             labour: [("production_worker", 2_600)],
@@ -97,8 +97,8 @@
             source: Agriculture,
             inputs: [
                 (good: "feed_fodder", mass_g: 1_200_000),
-                (good: "util_water",  mass_g: 150_000),
             ],
+            water_ml: 150_000,
             outputs: [(good: "raw_livestock", mass_g: 300_000)],
             duration_minutes: 1440,
             labour: [("production_worker", 2_200)],
@@ -110,8 +110,8 @@
             source: Agriculture,
             inputs: [
                 (good: "feed_fodder", mass_g: 800_000),
-                (good: "util_water",  mass_g: 80_000),
             ],
+            water_ml: 80_000,
             outputs: [(good: "raw_poultry", mass_g: 350_000)],
             duration_minutes: 1440,
             labour: [("production_worker", 1_400)],

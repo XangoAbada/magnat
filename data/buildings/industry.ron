@@ -64,6 +64,23 @@
         (key: "juice_plant",      sector: Industry, zones: ["industry_light"], min_parcel_m2: 2500, m2_per_workplace: 104, wage_mult: 0.98, recipes: ["juice_plant"]),
         (key: "feed_mill",        sector: Industry, zones: ["industry_light"], min_parcel_m2: 2500, m2_per_workplace: 152, wage_mult: 0.94, recipes: ["feed_mill"]),
 
+        // ── części zamienne i opakowania ────────────────────────────────────────────
+        //
+        // Dopisane w M6b (`AE-6`). Bez nich `part_bearing_6204` i `part_pump_seal` nie
+        // mają w mieście producenta, a są **wejściem naprawy** linii produkcyjnej —
+        // awaria dawałaby się wtedy usunąć wyłącznie importem, czyli scenariusz
+        // logistyczny, który WP4 ma pokazać, nie miałby się gdzie wydarzyć. Opakowania
+        // dołączają do tej samej grupy, bo są tym samym rodzajem sieroty: receptura
+        // jest, archetypu nie było.
+        (key: "bearing_works",    sector: Industry, zones: ["industry_light", "industry_heavy"], min_parcel_m2: 3000, m2_per_workplace: 96, wage_mult: 1.08, recipes: ["bearing_works"]),
+        (key: "seal_works",       sector: Industry, zones: ["industry_light"], min_parcel_m2: 2000, m2_per_workplace: 80, wage_mult: 1.04, recipes: ["seal_works"]),
+        (key: "electric_motor_plant", sector: Industry, zones: ["industry_light", "industry_heavy"], min_parcel_m2: 5000, m2_per_workplace: 104, wage_mult: 1.12, recipes: ["electric_motor_plant"]),
+        (key: "carton_plant",     sector: Industry, zones: ["industry_light"], min_parcel_m2: 3000, m2_per_workplace: 128, wage_mult: 0.96, recipes: ["carton_plant"]),
+        (key: "pallet_works",     sector: Industry, zones: ["industry_light", "logistics"], min_parcel_m2: 2500, m2_per_workplace: 136, wage_mult: 0.92, recipes: ["pallet_works"]),
+        (key: "pet_bottle_plant", sector: Industry, zones: ["industry_light"], min_parcel_m2: 2500, m2_per_workplace: 112, wage_mult: 1.00, recipes: ["pet_bottle_plant"]),
+        (key: "seed_plant",       sector: Industry, zones: ["industry_light"], min_parcel_m2: 2000, m2_per_workplace: 144, wage_mult: 0.94, recipes: ["seed_plant"]),
+        (key: "precast_plant",    sector: Industry, zones: ["industry_heavy", "industry_light"], min_parcel_m2: 6000, m2_per_workplace: 176, wage_mult: 1.06, recipes: ["precast_plant"]),
+
         // Wypełniacze strefy lekkiej: to one stoją na większości działek przemysłowych.
         (key: "machine_shop",     sector: Industry, zones: ["industry_light"], min_parcel_m2: 600, m2_per_workplace: 88, wage_mult: 1.02, weight: 90),
         (key: "repair_works",     sector: Industry, zones: ["industry_light"], min_parcel_m2: 500, m2_per_workplace: 96, wage_mult: 0.98, weight: 70),

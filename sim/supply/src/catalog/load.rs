@@ -232,18 +232,11 @@ impl Catalog {
         let recipes = wczytaj_receptury(recipes_dir, &idx, &goods)?;
         let basket = wczytaj_koszyk(needs, &idx, epoch_key)?;
 
-        let mut by_category = vec![Vec::new(); categories.len()];
-        for g in &goods {
-            by_category[g.category.0 as usize].push(g.id);
-        }
-
-        let cat = Catalog {
-            goods,
-            recipes,
-            categories,
-            basket,
-            by_category,
-        };
+        // Indeks kategorii i tablica klas maszyn są **pochodnymi**, nie danymi, więc
+        // składa je jedno miejsce — `from_parts`. Powielenie tego tutaj dałoby katalog
+        // z `data/` i katalog testowy o różnych indeksach, czyli najgorszy możliwy rodzaj
+        // różnicy: taki, którego nie widać, dopóki test nie przejdzie, a produkcja nie.
+        let cat = Catalog::from_parts(goods, recipes, categories, basket);
         cat.validate_reachability()?;
         cat.validate_consumers()?;
         Ok(cat)
@@ -420,8 +413,11 @@ fn zloz_recepture(
     // Bilans masy obowiązuje **wyłącznie wytwarzanie**. Kopalnia i pole nie mają wejścia
     // towarowego — ich masa pochodzi ze złoża i z gleby, a te nie są towarem. Gdyby
     // reguła obejmowała też je, każdy punkt wejścia łańcucha byłby formalnie nielegalny.
+    //
+    // Woda z licznika (`water_ml`) liczy się po stronie wejść: jest medium, nie towarem,
+    // ale ma masę i ta masa wychodzi z pieca jako chleb (`D9`, wpisane w M6b).
     if spec.source == RecipeSource::Manufacturing {
-        let we: i64 = inputs.iter().map(|i| i.mass.0).sum();
+        let we: i64 = inputs.iter().map(|i| i.mass.0).sum::<i64>() + spec.water_ml;
         let wy: i64 = outputs.iter().map(|o| o.mass.0).sum();
         if we != wy + spec.process_loss_g {
             return Err(CatalogError::MassBalance {

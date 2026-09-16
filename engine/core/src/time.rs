@@ -380,6 +380,91 @@ impl SimClock {
     }
 }
 
+/// Godziny otwarcia. `days` to maska [`DayOfWeek`] (`K-15`) — nigdy dzień miesiąca,
+/// bo tydzień dryfuje względem miesiąca i „w każdy wtorek" to inny rytm niż „1. i 15.".
+///
+/// Mieszka w `core`, a nie u pierwszego konsumenta (`K-8`): M3 pyta o godziny miejsca
+/// przy planowaniu doby, M6 o **godziny dostaw** przy kolejce rampy (§5.5), a M8 będzie
+/// je regulował przepisem miejskim. Trzy fazy, jeden kształt — duplikat rozjechałby się
+/// przy pierwszej zmianie, a tu „czynne przez północ" jest niełatwym warunkiem
+/// brzegowym, który nikt nie chce pisać dwa razy.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct OpenHours {
+    pub open: MinuteOfDay,
+    pub close: MinuteOfDay,
+    pub days: u8,
+}
+
+impl OpenHours {
+    /// Wszystkie dni tygodnia.
+    pub const ALL_DAYS: u8 = 0b111_1111;
+
+    /// Czynne bez przerwy — dom, szpital, rurociąg.
+    pub const ALWAYS: OpenHours = OpenHours {
+        open: MinuteOfDay::MIDNIGHT,
+        close: MinuteOfDay::MIDNIGHT,
+        days: OpenHours::ALL_DAYS,
+    };
+
+    #[must_use]
+    pub fn new(open_min: u16, close_min: u16, days: u8) -> OpenHours {
+        OpenHours {
+            open: MinuteOfDay::new(open_min),
+            close: MinuteOfDay::new(close_min),
+            days,
+        }
+    }
+
+    #[must_use]
+    pub const fn is_always(&self) -> bool {
+        self.open.get() == self.close.get() && self.days == OpenHours::ALL_DAYS
+    }
+
+    #[must_use]
+    pub fn is_open(&self, dow: DayOfWeek, at: MinuteOfDay) -> bool {
+        if self.days & (1 << (dow as u8)) == 0 {
+            return false;
+        }
+        if self.is_always() {
+            return true;
+        }
+        let (o, c, t) = (self.open.get(), self.close.get(), at.get());
+        if o <= c {
+            t >= o && t < c
+        } else {
+            // Lokal czynny przez północ — wtedy „po otwarciu LUB przed zamknięciem".
+            t >= o || t < c
+        }
+    }
+
+    /// Najbliższa minuta od `at` (w tej samej albo następnej dobie), w której jest
+    /// otwarte. `None`, jeśli maska dni jest pusta — wtedy nie otworzy się nigdy.
+    ///
+    /// To jest pytanie kolejki rampy: ciężarówka, która przyjechała po zamknięciu,
+    /// nie znika i nie rozładowuje się — czeka do otwarcia (M6 §7.3 pkt 6).
+    #[must_use]
+    pub fn next_open(&self, from_day: u64, at: MinuteOfDay) -> Option<(u64, MinuteOfDay)> {
+        if self.days == 0 {
+            return None;
+        }
+        let mut minuta = at;
+        // Najdalej siedem dób: maska jest niepusta, więc któraś doba się otworzy.
+        for (krok, dzien) in (from_day..=from_day + 7).enumerate() {
+            let dow = DayOfWeek::from_day_index(dzien);
+            if self.days & (1 << (dow as u8)) != 0 {
+                if self.is_open(dow, minuta) {
+                    return Some((dzien, minuta));
+                }
+                if krok > 0 || minuta.get() < self.open.get() {
+                    return Some((dzien, self.open));
+                }
+            }
+            minuta = MinuteOfDay::MIDNIGHT;
+        }
+        None
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -449,6 +534,38 @@ mod tests {
         // Mikro biegnie w każdej minucie; 600 podkroków dzieje się wewnątrz systemu.
         assert!(Cadence::EveryMicroTick.due(Tick(1)));
         assert_eq!(MICRO_STEPS_PER_TICK, 600);
+    }
+
+    /// Lokal czynny przez północ jest jedynym niełatwym warunkiem brzegowym
+    /// w `OpenHours` — i jedynym powodem, dla którego nikt nie chce pisać tego dwa razy.
+    #[test]
+    fn godziny_przez_polnoc_i_najblizsze_otwarcie() {
+        let nocny = OpenHours::new(22 * 60, 4 * 60, OpenHours::ALL_DAYS);
+        assert!(nocny.is_open(DayOfWeek::Monday, MinuteOfDay::new(23 * 60)));
+        assert!(nocny.is_open(DayOfWeek::Monday, MinuteOfDay::new(60)));
+        assert!(!nocny.is_open(DayOfWeek::Monday, MinuteOfDay::new(12 * 60)));
+
+        // Rampa czynna 6:00-14:00 w dni robocze. Ciężarówka, która przyjechała
+        // w sobotę po południu, czeka do poniedziałku rano — nie znika.
+        let rampa = OpenHours::new(6 * 60, 14 * 60, 0b001_1111);
+        // Doba 0 to poniedziałek (K-15), więc doba 5 to sobota.
+        assert_eq!(
+            rampa.next_open(5, MinuteOfDay::new(15 * 60)),
+            Some((7, MinuteOfDay::new(6 * 60)))
+        );
+        // W godzinach otwarcia odpowiedzią jest ta sama minuta.
+        assert_eq!(
+            rampa.next_open(0, MinuteOfDay::new(7 * 60)),
+            Some((0, MinuteOfDay::new(7 * 60)))
+        );
+        // Przed otwarciem — ta sama doba, minuta otwarcia.
+        assert_eq!(
+            rampa.next_open(0, MinuteOfDay::new(60)),
+            Some((0, MinuteOfDay::new(6 * 60)))
+        );
+        assert_eq!(rampa.next_open(0, MinuteOfDay::new(60)).map(|(d, _)| d), Some(0));
+        // Pusta maska nie otworzy się nigdy i mówi to wprost.
+        assert_eq!(OpenHours::new(0, 100, 0).next_open(0, MinuteOfDay::MIDNIGHT), None);
     }
 
     #[test]

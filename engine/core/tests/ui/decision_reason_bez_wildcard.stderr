@@ -1,8 +1,8 @@
-error[E0004]: non-exhaustive patterns: `DecisionReason::Unspecified`, `DecisionReason::Commitment { .. }`, `DecisionReason::NeedCritical { .. }` and 33 more not covered
+error[E0004]: non-exhaustive patterns: `DecisionReason::Unspecified`, `DecisionReason::Commitment { .. }`, `DecisionReason::NeedCritical { .. }` and 36 more not covered
  --> tests/ui/decision_reason_bez_wildcard.rs:7:11
   |
 7 |     match powod {
-  |           ^^^^^ patterns `DecisionReason::Unspecified`, `DecisionReason::Commitment { .. }`, `DecisionReason::NeedCritical { .. }` and 33 more not covered
+  |           ^^^^^ patterns `DecisionReason::Unspecified`, `DecisionReason::Commitment { .. }`, `DecisionReason::NeedCritical { .. }` and 36 more not covered
   |
 note: `DecisionReason` defined here
  --> src/decision.rs

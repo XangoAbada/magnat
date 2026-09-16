@@ -1,0 +1,62 @@
+// Strojenie łańcucha dostaw (M6, decyzja otwarta `D7` przyjęta w M6b).
+//
+// To są **liczby do kalibracji balansatorem**, nie prawdy objawione. Siedzą w danych,
+// a nie w kodzie, z tego samego powodu co diagram podstawowy ruchu (`K-24`): kalibracja
+// ma być widoczna w diffie, a nie w rekompilacji. Właścicielem wartości jest od M6e
+// `tools/balansator`; właścicielem schematu M6.
+//
+// Jednostki: pieniądz w **groszach** (00 §2), masa w gramach, objętość w mililitrach,
+// czas w minutach. Żadnych złotówek i żadnych floatów — także tutaj.
+(
+    schema_version: 1,
+
+    // Odniesienie skali emisji dla `SiteRenderRec.emission` (M6 §6.4.3). Stała, a nie
+    // „najbrudniejszy zakład epoki": ruchomy mianownik znaczyłby, że ten sam komin dymi
+    // inaczej po wejściu nowej epoki, a dwa zrzuty ekranu z różnych lat przestają być
+    // porównywalne. Kalibrowane na najbrudniejszy zakład epoki przemysłowej.
+    emission_ref_pm_g_per_min: 40,
+
+    // Progi kaskady niedoboru (PRD §8.4), w minutach pokrycia zapasu.
+    // Kolejność prób jest w kodzie i jest kontraktem; tutaj są tylko liczby.
+    shortage: (
+        buffer_minutes: 480,        // < 8 h — zużywaj rezerwę, alert w pulpicie
+        throttled_minutes: 240,     // < 4 h — produkcja proporcjonalnie obniżona
+        importing_minutes: 120,     // < 2 h — spot bez wyniku, czas na import
+        min_throughput_pct: 25,     // do ilu procent schodzi obniżona produkcja
+    ),
+
+    // Taryfy mediów. Do M8 są stałe i takie same dla wszystkich — M8 podmieni je
+    // polityką miasta i sieciami przesyłowymi, nie ruszając kształtu licznika.
+    utility: (
+        power_gr_per_kwh: 65,       // 0,65 zł/kWh — liczba z łańcucha referencyjnego §7.1
+        gas_gr_per_kwh: 28,
+        heat_gr_per_kwh: 30,
+        water_gr_per_m3: 480,
+        sewage_gr_per_m3: 390,
+    ),
+
+    // Zakład fizyczny.
+    plant: (
+        wear_minutes_per_point: 2_400,   // ile minut pracy zjada jeden punkt `condition`
+        maintenance_minutes: 240,        // konserwacja planowa
+        repair_minutes: 180,             // naprawa po awarii, gdy część jest na stanie
+        condition_after_service: 96,     // maszyna po przeglądzie nie jest nowa
+        wage_gr_per_person_minute: 38,   // stub do M7: jedna stawka na osobominutę
+        overhead_gr_per_batch: 1_800,    // amortyzacja i media stałe na szarżę
+    ),
+
+    // Rampa.
+    dock: (
+        idle_fuel_ml_per_minute: 25,     // paliwo postojowe — wraca do M4 w `SiteDwellResponse`
+    ),
+
+    // Transport. Stawki z łańcuchów referencyjnych §7.1 i §7.2 (4,20 zł/km wywrotka,
+    // 2,10 zł/km furgonetka) sprowadzone do jednej stawki tonokilometrowej — różnicowanie
+    // per klasa pojazdu przychodzi razem z ciężarówkami w katalogu M4.
+    transport: (
+        cost_gr_per_tonne_km: 175,
+        minutes_per_km: 2,
+        load_fixed_minutes: 15,
+        pipeline_gr_per_tonne: 1_200,    // 12 zł/t, rurociąg szyb → rafineria (§7.2)
+    ),
+)

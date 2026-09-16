@@ -127,3 +127,18 @@ pub struct TradeGood {
 - **Czas:** `lead = base_lead_minutes * (1 + backlog / capacity_per_day)`. Przeciążony węzeł wydłuża kolejkę wszystkim.
 - **Cło:** `TariffTable` — w M6 stub z `data/trade/tariffs.ron`, M8 podmienia na politykę miasta i epoki.
 - **Eksport:** producent porównuje `p_export = base_price * export_spread_pct/100 − koszt_transportu_do_węzła` z najlepszą ceną lokalną. Jeśli eksport wygrywa, powstaje zwykły `TransportOrder` **do** węzła — zajmuje ciężarówkę, kierowcę i rampę, i **zabiera masę z lokalnej podaży**. Wzrost cen w mieście jest emergentny, nie zaprogramowany. To jest cała mechanika „drenażu" z §8.5.
+
+---
+
+## Zmiany wpisane po M6b
+
+Zgodnie z `K-18`. Wpisane jest **tylko to, co wiadomo na pewno** po zamknięciu podfazy M6b.
+Gwiazdka = zmiana zakresu albo kryterium.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| AG-1 ★ | **Fala A ma dokładnie jeden substytut w całym katalogu** (`feed_bran` zamiast `food_flour_t550` w `bakery_bread_wheat`, dopisany w M6b). `Good::substitutes` jest puste dla **wszystkich** towarów, a `RecipeInput::substitutes` dla wszystkich wejść poza tym jednym. Wypełnienie należy do fali B, czyli tutaj | Konsekwencja nie jest kosmetyczna: szczebel `Substituted` kaskady niedoboru (§5.7) był nieosiągalny dla każdego towaru, czyli jedna szósta maszyny stanów z PRD §8.4 nie miała jak się wydarzyć. Reguła `R6` („≥ 3 towary na kategorię potrzeby") nie jest spełniona dla **żadnej** z 59 kategorii, więc ostrzeżenie `CriticalInputWithoutSubstitute` z reguły 5 walidatora zapala się na wszystkim — a ostrzeżenie dotyczące każdego przypadku jest tłem, nie sygnałem. **Gdzie wpisywać:** substytutu szuka się najpierw w `RecipeInput`, a dopiero potem przy towarze, bo to proces przyjmuje zamiennik, nie towar sam w sobie — i to tam jest `min_quality`, z którym zamiennik musi się zgadzać |
+| AG-2 | **`RfqId` już istnieje: `magnat_supply::shortage::RfqId`.** Zadeklarował go M6b, bo kaskada niesie uchwyt zapytania ofertowego w `ShortageStage::SpotSearch`. WP7 **przejmuje ten typ**, a nie definiuje drugiego | Ta sama droga, którą M6a zadeklarował `LineId` i `TransportOrderId` na użytek M6b: typ mieszka tam, gdzie pierwszy konsument, a właściciel przejmuje go bez przenumerowania. Duplikat rozjechałby się przy pierwszej zmianie i dałby dwa nieporównywalne uchwyty do tego samego zapytania |
+| AG-3 ★ | **Wejściem rynku jest lista `ShortageAction`, nie trait.** `shortage::review` zwraca `OpenRfq { site, good, mass }` i `Import { site, good, mass }`; WP7 i WP9 mają je konsumować. Dopóki nikt ich nie obsługuje, drabina wchodzi szczebel wyżej — czyli zachowuje się dokładnie tak, jak ma się zachować spot bez wyniku | Trait z jedną atrapą byłby abstrakcją bez drugiego konsumenta (YAGNI z `CLAUDE.md`), a przy okazji odwróciłby kierunek zależności: kaskada musiałaby znać rynek. Akcje idą w drugą stronę i to jest właściwa strona — zakład mówi, czego potrzebuje, rynek decyduje, skąd to wziąć |
+| AG-4 ★ | **Import w kaskadzie ma na razie stałe ETA 8 h**, wpisane wprost w `shortage::zbuduj` z komentarzem `ponytail:`. WP9 podmienia to na `lead_minutes` z `TradeNode` razem z kolejką i ceną rosnącą z wolumenem | Zapisane, bo to jest liczba, która wygląda jak kalibracja, a nie jest nią: dopóki węzła granicznego nie ma, ETA importu nie ma z czego wynikać, a wpisanie jej do `data/tuning/supply.ron` sugerowałoby, że wolno ją stroić. Po WP9 ma **zniknąć**, a nie przenieść się do danych |
+| AG-5 | **`Good::tariff_class` nadal nie istnieje** (`AD-4`), a `Good::import_via: Vec<GateKind>` — owszem, i jest wypełnione w katalogu fali A | Bez zmian wobec `AD-4`; zapisane, bo WP9 jest pierwszym pakietem, który obu tych pól dotyka, i warto wiedzieć, że jedno zastaje gotowe, a drugie zakłada |
