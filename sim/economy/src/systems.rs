@@ -67,7 +67,10 @@ impl System for MarketSystem {
         //    komentarzem. Tutaj zostaje samo księgowanie tego, co łańcuch zostawił
         //    w skrzynce: odpisy terminu, rozliczenia B2B i faktury za media.
         //    Fakty wychodzą listą, księguje ten, kto ma księgę (`AI-1`).
-        let chain = ctx.world().get_resource::<magnat_supply::ChainHandle>().cloned();
+        let chain = ctx
+            .world()
+            .get_resource::<magnat_supply::ChainHandle>()
+            .cloned();
         let lancuch = chain.as_ref().map(magnat_supply::ChainHandle::take_tick);
         if let Some(w) = &lancuch {
             if !w.spoiled.is_empty() {
@@ -91,6 +94,16 @@ impl System for MarketSystem {
 
         let cal = SimCalendar::new(t);
         if cal.is_hour_boundary() {
+            // 1a. Polityki o kadencji godzinowej (M9d §5.6). Dobowe wykonują się
+            //     niżej, razem z resztą doby sklepu — `run_policies` odsiewa je samo
+            //     po `Cadence`, więc kadencja jest jedną regułą w jednym miejscu,
+            //     a nie dwoma listami zakładów.
+            //
+            //     Granica doby jest **też** granicą godziny, więc bez tego warunku
+            //     polityka godzinowa wykonałaby się o północy dwa razy.
+            if !cal.is_day_boundary() {
+                run_policies(ctx.world_mut(), &market, t);
+            }
             // 2. Migawka gospodarstw dla decyzji zakupowej.
             refresh_households(ctx.world(), &mut self.households);
             market.refresh_households(&self.households);
@@ -120,6 +133,12 @@ impl System for MarketSystem {
             // i oddaje listę; tutaj zostaje samo księgowanie tego, co zeszło ze slotów
             // tego sklepu. Do M6c była to własna pętla po liniach zapasu.
             market.observe_competitors(t);
+            // 4a. Polityki zdelegowanych zakładów (M7c WP7) — **między obserwacją
+            //     a przeceną**. Reguła czyta świeży obraz konkurencji i ustawia
+            //     sterownik ceny, a `reprice_all` go wykonuje razem z ogranicznikiem
+            //     marży. Odwrotna kolejność znaczyłaby, że polityka pracuje na obrazie
+            //     sprzed doby, a jej wynik i tak zostaje nadpisany tego samego dnia.
+            run_policies(ctx.world_mut(), &market, t);
             market.reprice_all(t);
             // 5. Dostawy i zamówienia u dostawcy zewnętrznego.
             if let Some(books) = ctx.world_mut().get_resource_mut::<Books>() {
@@ -451,3 +470,29 @@ pub fn register_books(world: &mut World) {
 
 /// Powód transakcji, gdy sprzedaży nie da się przypisać decyzji (import, korekta).
 pub const UNSPECIFIED: DecisionReason = DecisionReason::Unspecified;
+
+/// Doba polityk: rejestr firm, salda zakładów i wykonanie reguł (M7c WP7).
+///
+/// Rejestr firm **wyjmuje się** ze świata na czas kroku, bo salda prowadzi `Books`,
+/// a dwóch pożyczek `&mut World` naraz nie ma. Ten sam wzorzec, którym `LaborSystem`
+/// wyjmuje rynek pracy, a `sim/agents` — `AgentSources`.
+fn run_policies(world: &mut World, market: &Market, t: Tick) {
+    let konta = market.shop_accounts();
+    let salda: std::collections::BTreeMap<magnat_core::SiteId, Money> = world
+        .get_resource::<Books>()
+        .map(|b| {
+            konta
+                .iter()
+                .filter_map(|(site, acc)| b.balance(*acc).map(|m| (*site, m)))
+                .collect()
+        })
+        .unwrap_or_default();
+    let Some(mut firms) = world
+        .get_resource_mut::<magnat_firms::Firms>()
+        .map(std::mem::take)
+    else {
+        return;
+    };
+    market.run_policies(&mut firms, &salda, t);
+    *world.resource_mut::<magnat_firms::Firms>() = firms;
+}

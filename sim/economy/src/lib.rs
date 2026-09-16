@@ -56,6 +56,7 @@ pub mod ledger;
 pub mod market;
 pub mod offer;
 pub mod panel;
+pub mod policy_run;
 pub mod pricing;
 pub mod shop;
 pub mod supply;
@@ -110,6 +111,7 @@ pub use panel::{
     BalanceSample, CompetitorRow, CustomerStats, FinanceSummary, LostSalesView, PriceDist,
     ShelfRow, ShopPanelSnapshot,
 };
+pub use policy_run::{preset_for, PolicyDay};
 pub use pricing::{
     preview_price, reprice, CompetitorEntry, CompetitorRef, CompetitorSnapshot, FirmPricing,
     ObservedElasticity, PriceController, PriceExperiment, PricePolicy, PricingCtx,
@@ -119,8 +121,8 @@ pub use shop::{
     ShelfLine, Shop, ShopCustomers, ShopInventory, ShopLostSales, LOST_SALE_RING,
 };
 pub use supply::{
-    line_total, Delivery, GoodSpec, GoodTable, OrderId, PurchaseQuote,
-    SupplyError, Wholesale, PRICE_UNIT,
+    line_total, Delivery, GoodSpec, GoodTable, OrderId, PurchaseQuote, SupplyError, Wholesale,
+    PRICE_UNIT,
 };
 pub use systems::{
     pay_incomes, register_books, register_economy, settle_household_month, settle_transactions,

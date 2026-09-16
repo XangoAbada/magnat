@@ -10,6 +10,7 @@ use std::collections::BTreeMap;
 use crate::firm::{Firm, FirmStatus};
 use crate::hr::employment::{payday, PayrollItem, PayrollRun};
 use crate::key::{due, firm_id, slots, FirmKey, KeyCounter, Scheduler, Tier};
+use crate::manager::Manager;
 use crate::site::{Site, SitePnlMonth};
 
 /// Kubełki slotów decyzyjnych — **indeks pochodny**, nie stan.
@@ -54,8 +55,11 @@ impl SlotIndex {
 
 /// Firmy świata wraz z zakładami.
 pub struct Firms {
-    firms: BTreeMap<FirmKey, Firm>,
-    sites: BTreeMap<SiteId, Site>,
+    pub(crate) firms: BTreeMap<FirmKey, Firm>,
+    pub(crate) sites: BTreeMap<SiteId, Site>,
+    /// Menedżerowie świata, kluczowani mieszkańcem. `BTreeMap`, bo po tej kolejności
+    /// idzie przeliczanie jakości zarządzania, a ono wchodzi do hasha stanu.
+    pub(crate) managers: BTreeMap<CitizenId, Manager>,
     counter: KeyCounter,
     scheduler: Scheduler,
     slot_index: SlotIndex,
@@ -66,6 +70,7 @@ impl Default for Firms {
         Firms {
             firms: BTreeMap::new(),
             sites: BTreeMap::new(),
+            managers: BTreeMap::new(),
             counter: KeyCounter::default(),
             scheduler: Scheduler::new(),
             slot_index: SlotIndex::new(),
@@ -314,6 +319,11 @@ impl HashState for Firms {
         for (id, s) in &self.sites {
             id.0.hash_state(h);
             s.hash_state(h);
+        }
+        h.write_u32(self.managers.len() as u32);
+        for (c, m) in &self.managers {
+            c.0.hash_state(h);
+            m.hash_state(h);
         }
         self.counter.hash_state(h);
         // Kolejka przepełnienia **musi** wejść do hasha (M7 §7.5): przesunięcie

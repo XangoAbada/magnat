@@ -1486,6 +1486,7 @@ dependencies = [
  "magnat-firms",
  "magnat-io",
  "magnat-jobs",
+ "magnat-policy",
  "magnat-spatial",
  "magnat-supply",
  "proptest",
@@ -1514,6 +1515,7 @@ dependencies = [
  "magnat-core",
  "magnat-ecs",
  "magnat-io",
+ "magnat-policy",
  "magnat-supply",
  "proptest",
  "ron",
@@ -1573,6 +1575,16 @@ dependencies = [
  "criterion",
  "magnat-core",
  "magnat-jobs",
+ "smallvec",
+]
+
+[[package]]
+name = "magnat-policy"
+version = "0.1.0"
+dependencies = [
+ "magnat-core",
+ "ron",
+ "serde",
  "smallvec",
 ]
 
@@ -2825,6 +2837,9 @@ name = "smallvec"
 version = "1.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ba467056f1b547ed52077911161fc86985becbc60e8e1857c8a144dab0def891"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "smithay-client-toolkit"

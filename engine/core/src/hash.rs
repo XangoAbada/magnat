@@ -15,8 +15,8 @@
 use crate::arena::{Arena, ArenaHandle};
 use crate::entity::Entity;
 use crate::types::{
-    DistrictId, Energy, GoodId, JobRoleId, Mass, Money, Mood, NeedCategoryId, Qty, RecipeId,
-    SimInstant, SimMinute, Tick, Volume, Q,
+    DistrictId, Energy, GoodId, JobRoleId, Mass, Money, Mood, NeedCategoryId, PolicyId, Qty,
+    RecipeId, SimInstant, SimMinute, Tick, Volume, Q,
 };
 use xxhash_rust::xxh3::Xxh3;
 
@@ -196,7 +196,8 @@ impl_hash_state_newtype!(
     GoodId,
     RecipeId,
     JobRoleId,
-    NeedCategoryId
+    NeedCategoryId,
+    PolicyId
 );
 
 impl HashState for Q {

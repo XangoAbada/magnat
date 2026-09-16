@@ -82,6 +82,95 @@ fn kazda_zmiana_stanu_firmy_rusza_hash() {
 }
 
 #[test]
+fn menedzer_i_delegacja_wchodza_do_hasha() {
+    // M7c: menedżer zmienia produktywność zakładu, jego rotację i jego straty,
+    // a autonomia decyduje, czy polityka w ogóle się wykona. Wszystko troje jest
+    // stanem symulacji, więc milczenie hasha o nich znaczyłoby, że dwa przebiegi
+    // tego samego ziarna wolno rozjechać w wyniku produkcyjnym całego miasta.
+    use magnat_core::{BuildingId, CitizenId, Entity, Money, SiteId, Q};
+    use magnat_firms::{
+        Autonomy, LaborTuning, Manager, ManagerStyle, Ring, Site, SiteDelegation, SitePnlMonth,
+        SiteTypeId,
+    };
+    use std::num::NonZeroU32;
+
+    let e = |i: u32| Entity::new(i, NonZeroU32::MIN);
+    let zaklad = |firm: FirmKey| Site {
+        id: SiteId(e(500)),
+        firm,
+        site_type: SiteTypeId(0),
+        building: BuildingId(e(500)),
+        district: DistrictId(1),
+        floor_m2: 200,
+        positions: Vec::new(),
+        mgmt: magnat_firms::ManagementQuality::NEUTRAL,
+        tech: Q::new(50),
+        fixed_cost_month: Money(100_000),
+        hr_accrued: Money::ZERO,
+        pnl: Ring::<SitePnlMonth, 36>::new(),
+        opened: SimMinute(0),
+        delegation: None,
+    };
+    let t = LaborTuning::load_default()
+        .expect("data/tuning/labor.ron")
+        .manager;
+
+    let zbuduj = |menedzer: Option<(u32, u8, ManagerStyle, Autonomy)>| {
+        let mut w = swiat(3);
+        let f = w.get_resource_mut::<Firms>().expect("rejestr");
+        assert!(f.add_site(zaklad(FirmKey(1))));
+        if let Some((c, skill, styl, autonomia)) = menedzer {
+            let obywatel = CitizenId(e(c));
+            let mgr = Manager::new(obywatel, Q::new(skill), styl, SimMinute(0));
+            let mut deleg = SiteDelegation::new(
+                obywatel,
+                magnat_policy::Policy::empty(
+                    magnat_core::PolicyId(1),
+                    "t",
+                    magnat_policy::PolicyDomain::Pricing,
+                ),
+                autonomia,
+            );
+            deleg.autonomy = autonomia;
+            assert!(f.assign_manager(SiteId(e(500)), mgr, deleg, |_| Q::new(50), &t, Tick(0)));
+        }
+        world_state_hash(&w)
+    };
+
+    let bez = zbuduj(None);
+    let z_menedzerem = zbuduj(Some((800, 70, ManagerStyle::Coach, Autonomy::Full)));
+    assert_ne!(bez, z_menedzerem, "przypisanie menedżera nie ruszyło hasha");
+
+    // Każde z trzech pól osobno: inny człowiek, inna umiejętność, inna autonomia.
+    assert_ne!(
+        z_menedzerem,
+        zbuduj(Some((801, 70, ManagerStyle::Coach, Autonomy::Full))),
+        "inny menedżer daje ten sam hash"
+    );
+    assert_ne!(
+        z_menedzerem,
+        zbuduj(Some((800, 71, ManagerStyle::Coach, Autonomy::Full))),
+        "inna umiejętność zarządzania daje ten sam hash"
+    );
+    assert_ne!(
+        z_menedzerem,
+        zbuduj(Some((800, 70, ManagerStyle::Coach, Autonomy::PricesOnly))),
+        "inna autonomia daje ten sam hash"
+    );
+    // Styl kierowania też: z niego wychodzi agresja licytacyjna i wybór kandydata.
+    assert_ne!(
+        z_menedzerem,
+        zbuduj(Some((800, 70, ManagerStyle::Dealmaker, Autonomy::Full))),
+        "inny styl kierowania daje ten sam hash"
+    );
+    // Ten sam stan — ten sam hash, także po przejściu przez przypisanie.
+    assert_eq!(
+        z_menedzerem,
+        zbuduj(Some((800, 70, ManagerStyle::Coach, Autonomy::Full)))
+    );
+}
+
+#[test]
 fn dziennik_decyzji_rozroznia_powod() {
     // Dwa wpisy w tym samym ticku, różne powody — wyjaśnialność jest stanem,
     // a nie ozdobą karty inspekcji (dokument 00 §7).

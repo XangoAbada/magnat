@@ -556,6 +556,42 @@ vocab_enum! {
 }
 
 vocab_enum! {
+    /// Podstawa ceny: kwota brutto płacona w detalu czy netto w hurcie (`K-7`).
+    ///
+    /// **Przeniesione z `sim/economy::offer` do `core` przy starcie M7c** — wykonanie
+    /// `K-8` dla podstawy ceny, ten sam ruch co `RoadClass` (`K-23`) i `GateKind`
+    /// (`K-33`). Powód jest twardy: `Metric::Price` w języku reguł (`sim/policy`)
+    /// **musi** nieść podstawę, bo walidator odrzuca mieszanie brutto z netto w jednym
+    /// porównaniu (M9d §5.6) — a `sim/policy` nie może zależeć od `sim/economy`,
+    /// bo zależność idzie `economy → firms → policy` i odwrócenie zamknęłoby cykl.
+    /// Duplikat enuma odpada z tego samego powodu co zawsze: rozjechałby się przy
+    /// pierwszej zmianie, a tu chodzi o liczbę, którą widzi gracz na półce.
+    ///
+    /// Nazwy wariantów zostają takie, jakie M5 nadał w `Offer.price_basis`
+    /// (`GrossRetail`/`NetB2B`), a nie `Gross`/`Net` z przykładu w M9d: przenosiny
+    /// nie są okazją do przemianowania pola, które siedzi w arenie 80 tys. ofert.
+    PriceBasis {
+        GrossRetail, NetB2B,
+    }
+}
+
+vocab_enum! {
+    /// Rodzaj akcji polityki — ładunek `DecisionReason::PolicyApplied` (M7c WP6b).
+    ///
+    /// **Rodzaj, a nie akcja.** Pełna `Action` z języka reguł niesie `Expr`, czyli
+    /// drzewo za wskaźnikiem, i do 24-bajtowego powodu nie wejdzie (`K-12` zasada 5).
+    /// Do dziennika idzie więc odpowiedź na pytanie „co polityka zrobiła" w rozdzielczości,
+    /// w jakiej gracz je zadaje; pełne wejścia i wynik pokazuje dry-run M9.
+    ///
+    /// Kolejność wariantów jest kontraktem, bo `as_index()` indeksuje histogram akcji
+    /// w panelu polityk. Kolejność jest ta sama co w `policy::Action`.
+    ActionKind {
+        SetPrice, AdjustPrice, SetMargin, ClampPrice, OrderUpTo, OrderQty, Markdown,
+        RemoveFromShelf, Hire, RaiseWage, PlanProduction, Alert, AskPlayer,
+    }
+}
+
+vocab_enum! {
     /// Biom. Konsument poza M1: M2 (strefowanie i zieleń), M5/M6 (rolnictwo i leśnictwo),
     /// M8 (zdarzenia pogodowe zależne od pokrycia terenu).
     Biome {

@@ -26,11 +26,11 @@
 
 use crate::ids::{FirmId, SiteId};
 use crate::time::MinuteOfDay;
-use crate::types::{GoodId, JobRoleId, Q};
+use crate::types::{GoodId, JobRoleId, PolicyId, Q};
 use crate::vocab::{
-    CommitmentKind, DeprivationEffect, FixedCost, LeaveCause, LifeEventKind, LineStopCause,
-    LoanKind, MigrationKind, NeedKind, PlaceRef, PriceDriver, RejectCause, RejectCredit,
-    ShortageStageKind, StockCat, TraitId, TransportMode, UtilityKind, WageCause,
+    ActionKind, CommitmentKind, DeprivationEffect, FixedCost, LeaveCause, LifeEventKind,
+    LineStopCause, LoanKind, MigrationKind, NeedKind, PlaceRef, PriceDriver, RejectCause,
+    RejectCredit, ShortageStageKind, StockCat, TraitId, TransportMode, UtilityKind, WageCause,
 };
 use serde::{Deserialize, Serialize};
 
@@ -326,7 +326,33 @@ pub enum DecisionReason {
         cause: LeaveCause,
         tenure_days: u16,
     } = 502,
-    // 503–599 zarezerwowane dla M7.
+    /// Reguła polityki wyzwoliła się i firma wykonała jej akcję (M7c WP6b, `K-11`).
+    ///
+    /// **Ten sam wariant dla gracza i dla AI** — to jest cała treść `sim/policy`:
+    /// reguła z edytora M9 i reguła wygenerowana przez tier taktyczny M7e wykonują się
+    /// tym samym kodem i zapisują ten sam powód. Gdyby były dwa warianty, różnica
+    /// wróciłaby tylnymi drzwiami w karcie inspekcji.
+    ///
+    /// `rule` to indeks reguły w polityce (0..=7 — twardy limit ośmiu reguł z M9d §5.6),
+    /// `action` — rodzaj wykonanej akcji. Pełne wejścia i różnicę „cel vs. wykonanie"
+    /// pokazuje dry-run M9; do 24 bajtów wchodzi to, po czym gracz tę decyzję odnajdzie.
+    PolicyApplied {
+        policy: PolicyId,
+        rule: u8,
+        action: ActionKind,
+    } = 503,
+    /// Zakład dostał menedżera albo go stracił (M7c WP7, PRD §7.5).
+    ///
+    /// `prev` to jakość zarządzania **sprzed** zmiany, `skill_mgmt` — umiejętność
+    /// przychodzącego menedżera. Odejście menedżera zapisuje się tym samym wariantem
+    /// z `skill_mgmt` zastępstwa, bo dla gracza „przyszedł nowy" i „został po nim
+    /// zastępca" to odpowiedź na to samo pytanie: dlaczego zakład nagle produkuje inaczej.
+    ManagerAssigned {
+        site: SiteId,
+        skill_mgmt: Q,
+        prev: u8,
+    } = 504,
+    // 505–599 zarezerwowane dla M7.
     // ... kolejne fazy dopisują własne bloki na końcu pliku
 }
 
@@ -386,6 +412,8 @@ impl DecisionReason {
             DecisionReason::Hired { .. } => 500,
             DecisionReason::WageRaise { .. } => 501,
             DecisionReason::JobLeft { .. } => 502,
+            DecisionReason::PolicyApplied { .. } => 503,
+            DecisionReason::ManagerAssigned { .. } => 504,
         }
     }
 }

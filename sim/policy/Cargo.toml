@@ -1,0 +1,21 @@
+[package]
+name = "magnat-policy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+magnat-core.workspace = true
+serde.workspace = true
+smallvec = { workspace = true, features = ["serde"] }
+ron.workspace = true
+
+[dev-dependencies]
+# Ten sam RON, którym ładuje się `data/policies/` — polityka z tekstu i polityka
+# z edytora muszą dać to samo drzewo (§7.9).
+ron.workspace = true

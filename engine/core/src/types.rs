@@ -104,6 +104,17 @@ scalar_newtype! {
 }
 
 scalar_newtype! {
+    /// Polityka w katalogu reguł — indeks nadawany przy ładowaniu `data/policies/`
+    /// albo przez edytor gracza (M9d §5.6).
+    ///
+    /// Mieszka w `core`, bo jest **ładunkiem centralnego enuma**: `DecisionReason::PolicyApplied`
+    /// niesie go do karty inspekcji, a ładunek nie może pochodzić z crate'u, który od `core`
+    /// zależy — ta sama reguła, która wypchnęła tu `PriceDriver` (`K-30`) i `WageCause` (`K-45`).
+    /// Konsumenci: M7 (polityki firm AI), M9 (edytor reguł i dry-run), M12 (modding).
+    PolicyId(u16)
+}
+
+scalar_newtype! {
     /// Złoże surowca pierwotnego — indeks w tablicy złóż świata (M1).
     ///
     /// Mieszka w `core`, bo ma **dwóch** konsumentów znanych z nazwy i numeru fazy

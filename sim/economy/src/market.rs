@@ -57,6 +57,7 @@ use magnat_spatial::{GridSpec, Vec2};
 
 use crate::books::{AccountId, AccountOwner, Books, LoanId, SupplierRef, TxKind, TxMemo};
 use crate::budget::{budget_ref_for_need, plan_budget, HouseholdBudget, HouseholdProfile};
+use crate::chain_supply::default_supplier;
 use crate::choice::{
     choose_offer, days_bought, dominant_term, offer_noise, purchase_threshold, rating_of,
     utility_of_offer, wanted_qty, weights_for, BuyerState, Candidate,
@@ -79,10 +80,9 @@ use crate::shop::{
     AssortmentPolicy, LostSale, LostSaleHistogram, LostSaleTracking, ReorderPolicy, Shelf,
     ShelfLine, Shop, ShopCustomers, ShopInventory, ShopLostSales,
 };
-use crate::chain_supply::default_supplier;
 use crate::supply::{line_total, GoodTable, Wholesale, PRICE_UNIT};
-use magnat_supply::ChainHandle;
 use crate::tax::{NoTax, TaxEngine};
+use magnat_supply::ChainHandle;
 
 /// Ile jednostek towaru mieści jedno miejsce na półce, ile razy tyle leży na zapleczu
 /// i przy jakim stanie sklep zamawia.
@@ -274,12 +274,12 @@ pub struct HouseholdMonthReport {
 /// sprzedaży — to jest podgląd dla panelu, nie historia.
 const BUDGET_LOG_RING: usize = 256;
 
-struct MarketInner {
+pub(crate) struct MarketInner {
     offers: Arena<Offer>,
     index: OfferIndex,
     /// Sklepy w kolejności zakładania; `by_site` daje dostęp po `SiteId`.
-    shops: Vec<Shop>,
-    by_site: BTreeMap<SiteId, u32>,
+    pub(crate) shops: Vec<Shop>,
+    pub(crate) by_site: BTreeMap<SiteId, u32>,
     /// Konta zakładów produkcyjnych (`AP-2`). Zakład **nie jest** sklepem: nie ma
     /// półki, ceny ani pierścienia utraconych sprzedaży, a księgi zakładowej dostanie
     /// dopiero w M7 razem z rachunkiem wyniku firmy. Ma za to rachunek bieżący i to
@@ -294,10 +294,10 @@ struct MarketInner {
     supplier: Box<dyn Wholesale + Send>,
     /// Katalog detaliczny. Wyjęty z dostawcy, bo czyta go osiemnaście miejsc rynku,
     /// a nie jest własnością dostawcy — jest własnością danych.
-    goods: GoodTable,
+    pub(crate) goods: GoodTable,
     /// Łańcuch dostaw M6: magazyn, zakłady, transport, rynek B2B. Uchwyt, nie kopia —
     /// ten sam łańcuch widzi produkcja i ten sam widzi półka.
-    chain: ChainHandle,
+    pub(crate) chain: ChainHandle,
     data: EconomyData,
     needs: Arc<NeedTable>,
     places: Arc<PlaceTable>,
@@ -323,7 +323,7 @@ struct MarketInner {
     committed: BTreeMap<u32, Money>,
     rest_of_world: AccountId,
     /// Hak podatkowy (`K-7`). W M5 `NoTax`; M8 wstawia `CityTaxEngine`.
-    tax: Box<dyn TaxEngine>,
+    pub(crate) tax: Box<dyn TaxEngine>,
     seed: u64,
     tick: Tick,
     stats: MarketStats,
@@ -398,7 +398,7 @@ impl Market {
         })))
     }
 
-    fn lock(&self) -> std::sync::MutexGuard<'_, MarketInner> {
+    pub(crate) fn lock(&self) -> std::sync::MutexGuard<'_, MarketInner> {
         // Zatrucie zamka znaczy panikę w systemie symulacji — wtedy świat i tak jest
         // do wyrzucenia, więc rozwijamy ją dalej zamiast liczyć na stanie sprzed paniki.
         self.0.lock().expect("Market: zatruty zamek")
@@ -500,10 +500,7 @@ impl MarketInner {
             let ch = self.chain.lock();
             let b = ch.store.shelf_state(backroom, good);
             let p = ch.store.shelf_state(shelf_slot, good);
-            (
-                b.mass.0 + p.mass.0,
-                b.cost_total.get() + p.cost_total.get(),
-            )
+            (b.mass.0 + p.mass.0, b.cost_total.get() + p.cost_total.get())
         };
         let ilosc = self
             .chain

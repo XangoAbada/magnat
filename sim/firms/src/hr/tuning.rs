@@ -12,7 +12,7 @@ use serde::Deserialize;
 use std::path::Path;
 
 /// Wersja schematu `data/tuning/labor.ron`.
-pub const LABOR_TUNING_SCHEMA_VERSION: u32 = 1;
+pub const LABOR_TUNING_SCHEMA_VERSION: u32 = 2;
 
 #[derive(Clone, Copy, Debug, Deserialize)]
 pub struct SearchTuning {
@@ -51,6 +51,18 @@ pub struct HrTuning {
     pub talent_step: u8,
 }
 
+/// Menedżerowie i delegowanie (M7c WP7).
+#[derive(Clone, Copy, Debug, Deserialize)]
+pub struct ManagerTuning {
+    pub span_optimum: u16,
+    pub span_penalty: u8,
+    pub morale_weight_bp: i32,
+    pub replacement_drop: u8,
+    pub turnover_mult_worst: i32,
+    pub turnover_mult_best: i32,
+    pub headhunt_premium_bp: i32,
+}
+
 #[derive(Clone, Copy, Debug, Deserialize)]
 pub struct BenefitTuning {
     pub health_gain: u8,
@@ -68,6 +80,7 @@ pub struct LaborTuning {
     pub search: SearchTuning,
     pub wage: WageTuning,
     pub hr: HrTuning,
+    pub manager: ManagerTuning,
     pub benefits: BenefitTuning,
 }
 
@@ -124,6 +137,17 @@ impl LaborTuning {
         }
         if t.wage.reservation_floor_bp > t.wage.reservation_start_bp {
             return Err(TuningError::BadRange("wage.reservation"));
+        }
+        // Mnożnik rotacji idzie **w dół** wraz z jakością zarządzania: gorszy menedżer
+        // ma mieć wyższą rotację. Odwrócona para przeszłaby przez parser i dałaby
+        // symulację, w której lepszy menedżer traci więcej ludzi — a to jest dokładnie
+        // ten błąd, którego szuka test monotoniczności z §7.4, tylko znaleziony przy
+        // ładowaniu zamiast po pięciu latach przebiegu.
+        if t.manager.turnover_mult_best > t.manager.turnover_mult_worst {
+            return Err(TuningError::BadRange("manager.turnover_mult"));
+        }
+        if t.manager.span_optimum == 0 {
+            return Err(TuningError::BadRange("manager.span_optimum"));
         }
         Ok(t)
     }

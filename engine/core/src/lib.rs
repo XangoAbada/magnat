@@ -49,15 +49,15 @@ pub use rng::{mix64, rng, Rng, StreamId, NO_ENTITY};
 pub use schema::ComponentSchemaId;
 pub use time::{Cadence, DayOfWeek, MinuteOfDay, OpenHours, SimCalendar, SimClock, SimSpeed};
 pub use types::{
-    DepositId, DistrictId, Energy, GoodId, JobRoleId, Mass, Money, Mood, NeedCategoryId, Qty,
-    RecipeId, SimInstant, SimMinute, TariffClassId, Tick, Volume, Q,
+    DepositId, DistrictId, Energy, GoodId, JobRoleId, Mass, Money, Mood, NeedCategoryId, PolicyId,
+    Qty, RecipeId, SimInstant, SimMinute, TariffClassId, Tick, Volume, Q,
 };
 pub use vocab::{
-    ActivityKind, Biome, BodyType, CommitmentKind, DeprivationEffect, FixedCost, GateKind,
-    LeaveCause, LifeEventKind, LineStopCause, LoanKind, LossKind, MigrationKind, NeedKind,
-    PlaceKind, PlaceRef, PriceDriver, RejectCause, RejectCredit, ResourceKind, RoadClass,
-    ShortageStageKind, StockCat, TraitId, TransportMode, UtilityKind, UtilityService, WageCause,
-    WorldCoord, FIXED_COST_COUNT, LOSS_KIND_COUNT, NEED_COUNT, REJECT_CAUSE_COUNT,
-    STOCK_CAT_COUNT, UTILITY_KIND_COUNT,
+    ActionKind, ActivityKind, Biome, BodyType, CommitmentKind, DeprivationEffect, FixedCost,
+    GateKind, LeaveCause, LifeEventKind, LineStopCause, LoanKind, LossKind, MigrationKind,
+    NeedKind, PlaceKind, PlaceRef, PriceBasis, PriceDriver, RejectCause, RejectCredit,
+    ResourceKind, RoadClass, ShortageStageKind, StockCat, TraitId, TransportMode, UtilityKind,
+    UtilityService, WageCause, WorldCoord, FIXED_COST_COUNT, LOSS_KIND_COUNT, NEED_COUNT,
+    REJECT_CAUSE_COUNT, STOCK_CAT_COUNT, UTILITY_KIND_COUNT,
 };
 pub use weather::{weather_at, Weather};

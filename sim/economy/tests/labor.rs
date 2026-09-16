@@ -234,6 +234,7 @@ fn zaklad(
         hr_accrued: Money::ZERO,
         pnl: Ring::<SitePnlMonth, 36>::new(),
         opened: SimMinute(0),
+        delegation: None,
     };
     assert!(firms.add_site(site), "zakład bez firmy");
     id

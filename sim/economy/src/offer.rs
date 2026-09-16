@@ -27,11 +27,11 @@ pub type OfferId = ArenaHandle<Offer>;
 /// w hurcie. VAT wyodrębnia się dopiero przy rozliczeniu (`Transaction::{net,tax,gross}`),
 /// nie w ofercie. Dzięki temu podwyżka VAT-u uderza w popyt natychmiast, bo zmienia cenę
 /// widzianą przez klienta.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
-pub enum PriceBasis {
-    GrossRetail,
-    NetB2B,
-}
+///
+/// **Typ wyprowadził się do `engine/core::vocab` w M7c** (`K-47`, wykonanie `K-8`):
+/// podstawę ceny niesie każda metryka cenowa języka reguł, a `sim/policy` nie może
+/// zależeć od `sim/economy`. Nazwa tutaj zostaje, bo to ona stoi w `Offer.price_basis`.
+pub use magnat_core::PriceBasis;
 
 /// Warstwa indeksu ofert. W M5 kategorią jest kategoria zapasu gospodarstwa domowego
 /// (`StockCat` z `engine/core` — to M5 przypisuje `GoodId` do kategorii, jak zapowiada

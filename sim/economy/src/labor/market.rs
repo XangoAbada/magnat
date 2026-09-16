@@ -159,6 +159,15 @@ impl LaborMarket {
         hr::turnover(self, firms, people, seed, now, &mut d);
         // 3. Kadry: świadczenia (codziennie) oraz premie i szkolenia (raz w miesiącu).
         hr::personnel(self, firms, people, &mut d);
+        // 3a. Kto kieruje zakładem: obsadzone stanowisko kierownicze staje się
+        //     menedżerem (M7c WP7). Po rotacji, bo to ona zwalnia stanowiska.
+        hr::reconcile_managers(self, firms, people, now);
+        // 3b. Jakość zarządzania na dziś. **Przed** licytacją i przed rotacją jutra,
+        //     bo z niej wychodzi i agresja podbicia, i ciśnienie na odejście —
+        //     nastrój załogi chodzi z dnia na dzień, więc jakość też.
+        let nastroje = hr::site_morale(firms, people);
+        let mt = self.tuning.manager;
+        firms.refresh_management(|id| nastroje.get(&id).copied().unwrap_or(Q::new(50)), &mt);
         // 4. Wygaśnięcia i licytacja — **przed** publikacją, żeby oferta, która
         //    właśnie wygasła, mogła się dziś ukazać na nowo.
         bidding::expire_and_escalate(self, firms, now, &mut d);

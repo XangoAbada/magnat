@@ -91,10 +91,16 @@ REJESTR = {
     # jedno wywołanie `bilans_zloz`, jedno pole w `CityData` i pusta linia.
     ("sim/world/src/city/mod.rs", "fn", 368): 24,
     ("sim/world/src/city/zoning.rs", "fn", 322): 36,
-    # Rośnie o jedno ramię na wariant `DecisionReason` i **ma rosnąć** aż do M7c.
-    # 319 przed M6b, 355 po bloku M6b (400–402), 397 po M6c (403–405),
-    # 451 po M7b (500–502, przy czym `WageRaise` ma dwa ramiona: podwyżka i sufit).
-    ("engine/ui/src/inspect/reason.rs", "fn", 451): 37,
+    # Rośnie o jedno ramię na wariant `DecisionReason`. 319 przed M6b, 355 po bloku
+    # M6b (400–402), 397 po M6c (403–405), 451 po M7b (500–502, przy czym `WageRaise`
+    # ma dwa ramiona: podwyżka i sufit), 493 po M7c (503–504, przy czym `PolicyApplied`
+    # ma dwa ramiona: reguła zwykła i zapasowa; 499 po sformatowaniu pliku).
+    #
+    # **Prognoza z rejestru się nie sprawdziła i to jest wpisane wprost**: R1 poz. 37
+    # zakładał, że M7c rozetnie tę funkcję przebudową `DecisionReason` na
+    # `Citizen | Firm | City`. Przebudowa nie weszła (patrz `AX-7` w `M7c-…md`),
+    # więc funkcja rośnie dalej, a adres podziału przesuwa się na osobną zmianę.
+    ("engine/ui/src/inspect/reason.rs", "fn", 499): 37,
     ("sim/economy/src/data.rs", "fn", 268): 38,
 }
 

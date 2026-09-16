@@ -150,12 +150,7 @@ impl Market {
             .iter()
             .find(|s| s.firm == firm)
             .map(|s| s.account)
-            .or_else(|| {
-                m.plants
-                    .values()
-                    .find(|(f, _)| *f == firm)
-                    .map(|(_, a)| *a)
-            })
+            .or_else(|| m.plants.values().find(|(f, _)| *f == firm).map(|(_, a)| *a))
     }
 
     /// Ile zakładów produkcyjnych stoi w mieście.

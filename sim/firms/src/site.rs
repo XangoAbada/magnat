@@ -85,6 +85,12 @@ pub struct Site {
     pub hr_accrued: Money,
     pub pnl: Ring<SitePnlMonth, 36>,
     pub opened: SimMinute,
+    /// Menedżer i polityka, jeśli zakład jest zdelegowany (M7c WP7).
+    ///
+    /// `None` znaczy „prowadzi go właściciel" — dla firmy AI jest to zakład sterowany
+    /// tierem operacyjnym M7e, dla gracza zakład, który klika sam. Jedno i drugie jest
+    /// poprawnym stanem, a nie brakiem.
+    pub delegation: Option<crate::manager::SiteDelegation>,
 }
 
 impl Site {
@@ -130,6 +136,7 @@ impl Site {
             hr_accrued: Money::ZERO,
             pnl: Ring::new(),
             opened: at.opened,
+            delegation: None,
         }
     }
 
@@ -247,5 +254,12 @@ impl HashState for Site {
         self.hr_accrued.hash_state(h);
         self.pnl.hash_state(h);
         self.opened.hash_state(h);
+        match &self.delegation {
+            None => h.write_u8(0),
+            Some(d) => {
+                h.write_u8(1);
+                d.hash_state(h);
+            }
+        }
     }
 }

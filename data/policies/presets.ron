@@ -1,0 +1,165 @@
+// Presety polityk — wzorce reguł, z których firma AI i gracz biorą gotowy zestaw
+// (M7 §6, M7c WP6b; język: M9d §5.6).
+//
+// Klucz tekstowy jest kontraktem zapisu gry, kolejność wpisów — nie: katalog sortuje
+// się po kluczu przy ładowaniu (00 §5, `GoodId` tak samo).
+//
+// `id` w każdym preseсie jest zerem i to jest poprawne: numer nadaje dopiero
+// przypisanie do zakładu (`PolicyCatalog::instantiate`), tak jak `GoodId` powstaje
+// przy ładowaniu katalogu, a nie stoi w pliku.
+//
+// Każdy preset przechodzi walidator przy ładowaniu. Preset, który go nie przejdzie,
+// **zatrzymuje ładowanie** — polityka, która wygląda na działającą i nic nie robi,
+// jest gorsza od komunikatu o błędzie.
+(
+    schema_version: 1,
+    presets: [
+        // Cena dynamiczna z ogranicznikiem — PRD §6.3 wprost („−2 % względem
+        // najtańszego konkurenta w promieniu 3 km", marża 25 % jako zapasowa).
+        //
+        // Ogranicznik nie jest ozdobą: bez niego pierwsza wojna cenowa w dzielnicy
+        // zjeżdża obie strony poniżej kosztu własnego. Widełki są w cenie **brutto**,
+        // bo tyle płaci klient i taka stoi w ofercie (`K-7`) — dlatego porównanie
+        // idzie brutto do brutto i koszt własny nie pojawia się tu ani razu.
+        (
+            key: "retail_discount",
+            policy: (
+                id: (0),
+                name: "Dyskont dzielnicowy",
+                domain: Pricing,
+                rules: [
+                    (
+                        when: Cmp(
+                            lhs: Metric(CompetitorCount(radius_m: 3000)),
+                            op: Gt,
+                            rhs: Lit(Count(0)),
+                        ),
+                        then: [
+                            SetPrice(
+                                good: This,
+                                to: Bin(
+                                    lhs: Metric(CheapestCompetitorPrice(
+                                        good: This, radius_m: 3000, basis: GrossRetail,
+                                    )),
+                                    op: Pct,
+                                    rhs: Lit(Bp((9800))),
+                                ),
+                            ),
+                            // Ogranicznik liczy się z **kosztu własnego**, a nie
+                            // z własnej ceny: przycięcie wartości do przedziału
+                            // wyprowadzonego z niej samej nie przycina niczego.
+                            // Koszt jest netto, cena brutto, więc przejście między
+                            // podstawami jest **jawne** (`K-7`) — dokładnie tak, jak
+                            // gracz musiałby je złożyć w edytorze M9.
+                            ClampPrice(
+                                good: This,
+                                min: Convert(to: GrossRetail, of: Bin(
+                                    lhs: Metric(UnitCost(This)),
+                                    op: Pct,
+                                    rhs: Lit(Bp((10500))),
+                                )),
+                                max: Convert(to: GrossRetail, of: Bin(
+                                    lhs: Metric(UnitCost(This)),
+                                    op: Pct,
+                                    rhs: Lit(Bp((16000))),
+                                )),
+                            ),
+                        ],
+                        note: "PRD §6.3: cena dynamiczna z limitem",
+                    ),
+                ],
+                fallback: Some(SetMargin(good: This, bp: (2500))),
+                cadence: Daily,
+                cooldown_h: 12,
+            ),
+        ),
+        // Zapas min–max. To jest preset, który odpowiada na kryterium WP7: zakład
+        // zdelegowany menedżerowi ma **nie pustoszeć** przez rok gry bez gracza.
+        //
+        // Dwa progi, nie jeden: dolny zamawia, górny krzyczy. Zamówienie „do 10 dni"
+        // przy zapasie poniżej trzech dni daje siedem dni bufora na dostawę — tyle,
+        // ile wynosi najdłuższy czas dostawy w katalogu detalicznym M5.
+        (
+            key: "stock_min_max",
+            policy: (
+                id: (0),
+                name: "Zapas min-max",
+                domain: Stock,
+                rules: [
+                    (
+                        when: Cmp(
+                            lhs: Metric(StockDays(This)),
+                            op: Lt,
+                            rhs: Lit(Days(3)),
+                        ),
+                        then: [OrderUpTo(good: This, days: Lit(Days(10)))],
+                        note: "poniżej trzech dni zapasu — zamawiamy",
+                    ),
+                    (
+                        when: Cmp(
+                            lhs: Metric(StockDays(This)),
+                            op: Gt,
+                            rhs: Lit(Days(21)),
+                        ),
+                        then: [Alert(msg: 1, severity: Warning)],
+                        note: "martwy zapas",
+                    ),
+                ],
+                cadence: Daily,
+                cooldown_h: 12,
+            ),
+        ),
+        // Przecena psującego się. Schodkowo po terminie przydatności, a nie liniowo:
+        // gracz ma rozumieć, dlaczego cena spadła akurat dziś, a stopień da się
+        // pokazać jednym zdaniem w karcie inspekcji.
+        //
+        // Ostatni stopień wycofuje towar z półki — to jest odpowiedź na „czemu to
+        // jeszcze stoi", której sama przecena nie daje.
+        (
+            key: "perishables_markdown",
+            policy: (
+                id: (0),
+                name: "Nie wyrzucamy",
+                domain: Pricing,
+                rules: [
+                    (
+                        when: Cmp(
+                            lhs: Metric(DaysToExpiry(This)),
+                            op: Le,
+                            rhs: Lit(Days(0)),
+                        ),
+                        then: [Alert(msg: 2, severity: Critical)],
+                        note: "termin minął",
+                    ),
+                    (
+                        when: Cmp(
+                            lhs: Metric(DaysToExpiry(This)),
+                            op: Lt,
+                            rhs: Lit(Days(1)),
+                        ),
+                        then: [Markdown(good: This, bp: (7000))],
+                        note: "ostatni dzień",
+                    ),
+                    (
+                        when: And(
+                            Cmp(
+                                lhs: Metric(DaysToExpiry(This)),
+                                op: Lt,
+                                rhs: Lit(Days(2)),
+                            ),
+                            Cmp(
+                                lhs: Metric(StockDays(This)),
+                                op: Gt,
+                                rhs: Lit(Days(1)),
+                            ),
+                        ),
+                        then: [Markdown(good: This, bp: (4000))],
+                        note: "dwa dni do terminu, a zapasu na dłużej",
+                    ),
+                ],
+                cadence: Hourly,
+                cooldown_h: 6,
+            ),
+        ),
+    ],
+)

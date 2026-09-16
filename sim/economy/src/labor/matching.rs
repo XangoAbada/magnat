@@ -34,6 +34,18 @@ fn requirements(m: &LaborMarket, role: JobRoleId, managerial: bool) -> SkillReq 
     }
 }
 
+/// Wagi wyboru kandydata — **decyzja menedżera zakładu** (M7c, `AV-6`).
+///
+/// Zakład bez menedżera wybiera neutralnie i to jest stan przejściowy do M7e, kiedy
+/// osobowość dyrektora nada wagi także firmom bez delegacji. Do M7c wagi były stałą
+/// `HiringPolicy::NEUTRAL` w całym mieście, więc nadzorca i handlowiec zatrudniali
+/// tak samo.
+fn wagi_wyboru(firms: &Firms, site: magnat_core::SiteId) -> HiringPolicy {
+    firms
+        .style_of(site)
+        .map_or(HiringPolicy::NEUTRAL, magnat_firms::ManagerStyle::hiring)
+}
+
 /// Wystawia ofertę na każdy wakat, który jeszcze jej nie ma (WP4).
 ///
 /// Stawka startowa to **dolny kraniec widełek**, a nie mediana rynku: firma licytuje
@@ -282,6 +294,7 @@ pub(super) fn hire(
             min_skill: o.requirements.min_skill,
             min_edu: o.requirements.min_edu,
         };
+        let wagi = wagi_wyboru(firms, o.site);
         let mut ranking: Vec<(i32, u32, usize)> = idx
             .iter()
             .filter(|i| !zatrudnieni_dzis.contains(&m.apps[**i].citizen))
@@ -293,7 +306,7 @@ pub(super) fn hire(
                     wage_expectation: a.wage_expectation,
                 };
                 (
-                    score_application(&kandydat, &wakat, &HiringPolicy::NEUTRAL),
+                    score_application(&kandydat, &wakat, &wagi),
                     a.citizen.0.index(),
                     *i,
                 )

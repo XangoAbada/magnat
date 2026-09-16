@@ -8,10 +8,10 @@
 use crate::loc::{Catalog, Locale};
 use magnat_agents::SocialClass;
 use magnat_core::{
-    ActivityKind, CommitmentKind, DecisionReason, DeprivationEffect, FixedCost, LeaveCause,
-    LifeEventKind, LineStopCause, LoanKind, MigrationKind, Money, NeedKind, PriceDriver,
-    RejectCause, RejectCredit, ShortageStageKind, StockCat, TraitId, TransportMode, UtilityKind,
-    WageCause,
+    ActionKind, ActivityKind, CommitmentKind, DecisionReason, DeprivationEffect, FixedCost,
+    LeaveCause, LifeEventKind, LineStopCause, LoanKind, MigrationKind, Money, NeedKind,
+    PriceDriver, RejectCause, RejectCredit, ShortageStageKind, StockCat, TraitId, TransportMode,
+    UtilityKind, WageCause,
 };
 
 /// Nazwa potrzeby w języku gracza.
@@ -102,6 +102,12 @@ pub fn wage_cause(c: &Catalog, l: Locale, w: WageCause) -> String {
 #[must_use]
 pub fn leave_cause(c: &Catalog, l: Locale, k: LeaveCause) -> String {
     c.fmt_key(l, &format!("ui.leave_cause.{}", k.name()), &[])
+}
+
+/// Nazwa rodzaju akcji polityki (M7c §5.11).
+#[must_use]
+pub fn action_kind(c: &Catalog, l: Locale, a: ActionKind) -> String {
+    c.fmt_key(l, &format!("ui.action_kind.{}", a.name()), &[])
 }
 
 /// Rodzaj cennika w kontrakcie dostawy (M6c §5.8). Dwa słowa zamiast wariantu enuma:
@@ -578,7 +584,10 @@ pub fn describe(c: &Catalog, l: Locale, r: DecisionReason) -> String {
         } => c.fmt_key(
             l,
             "ui.reason.WageFrozen",
-            &[("dni", &c.plural(l, c.must("ui.unit.days"), u64::from(days_open)))],
+            &[(
+                "dni",
+                &c.plural(l, c.must("ui.unit.days"), u64::from(days_open)),
+            )],
         ),
         DecisionReason::WageRaise {
             role: _,
@@ -590,7 +599,10 @@ pub fn describe(c: &Catalog, l: Locale, r: DecisionReason) -> String {
             "ui.reason.WageRaise",
             &[
                 ("przyrost", &procent_bp(i32::from(delta_bp))),
-                ("dni", &c.plural(l, c.must("ui.unit.days"), u64::from(days_open))),
+                (
+                    "dni",
+                    &c.plural(l, c.must("ui.unit.days"), u64::from(days_open)),
+                ),
                 ("powod", &wage_cause(c, l, cause)),
             ],
         ),
@@ -607,6 +619,48 @@ pub fn describe(c: &Catalog, l: Locale, r: DecisionReason) -> String {
                     "staz",
                     &c.plural(l, c.must("ui.unit.days"), u64::from(tenure_days)),
                 ),
+            ],
+        ),
+        // Reguła zapasowa („INACZEJ" z gramatyki M9d) jest **innym zdaniem**, a nie
+        // regułą numer 255: gracz pytający „która reguła to zrobiła" ma usłyszeć,
+        // że nie pasowała żadna, a nie zobaczyć numer, którego nie ma na liście.
+        DecisionReason::PolicyApplied {
+            policy,
+            rule: u8::MAX,
+            action,
+        } => c.fmt_key(
+            l,
+            "ui.reason.PolicyFallback",
+            &[
+                ("polityka", &policy.get().to_string()),
+                ("akcja", &action_kind(c, l, action)),
+            ],
+        ),
+        DecisionReason::PolicyApplied {
+            policy,
+            rule,
+            action,
+        } => c.fmt_key(
+            l,
+            "ui.reason.PolicyApplied",
+            &[
+                ("polityka", &policy.get().to_string()),
+                // Reguły numeruje się dla gracza od jedynki — w edytorze M9 są
+                // wierszami listy, a pierwszy wiersz nie jest wierszem zerowym.
+                ("regula", &(u16::from(rule) + 1).to_string()),
+                ("akcja", &action_kind(c, l, action)),
+            ],
+        ),
+        DecisionReason::ManagerAssigned {
+            site: _,
+            skill_mgmt,
+            prev,
+        } => c.fmt_key(
+            l,
+            "ui.reason.ManagerAssigned",
+            &[
+                ("umiejetnosc", &skill_mgmt.get().to_string()),
+                ("poprzednia", &prev.to_string()),
             ],
         ),
     }
@@ -880,6 +934,24 @@ mod tests {
                 cause: LeaveCause::BetterOffer,
                 tenure_days: 420,
             },
+            DecisionReason::PolicyApplied {
+                policy: magnat_core::PolicyId(3),
+                rule: 0,
+                action: ActionKind::SetPrice,
+            },
+            // Reguła zapasowa wybiera **inny klucz** lokalizacji, więc bez drugiego
+            // wpisu połowa ramienia zostałaby niesprawdzona — ten sam powód, dla
+            // którego `Hired` i `WageRaise` stoją na tej liście po dwa razy.
+            DecisionReason::PolicyApplied {
+                policy: magnat_core::PolicyId(3),
+                rule: u8::MAX,
+                action: ActionKind::SetMargin,
+            },
+            DecisionReason::ManagerAssigned {
+                site: magnat_core::SiteId(magnat_core::Entity::new(7, std::num::NonZeroU32::MIN)),
+                skill_mgmt: Q::new(71),
+                prev: 50,
+            },
         ]
     }
 
@@ -906,8 +978,9 @@ mod tests {
         // lokalizacji, a wariant z jednym wpisem zostawiłby drugi klucz niesprawdzony.
         // Po M7b blok M7 (500..=502) plus dwa wpisy z tego samego powodu co wyżej:
         // `Hired` bez drugiego kandydata i `WageRaise` przycięty do sufitu marży
-        // wybierają inne klucze — razem 48.
-        assert_eq!(wszystkie().len(), 48);
+        // wybierają inne klucze — razem 48. Po M7c dochodzą `PolicyApplied` (503,
+        // dwa wpisy: reguła zwykła i zapasowa) oraz `ManagerAssigned` (504) — 51.
+        assert_eq!(wszystkie().len(), 51);
     }
 
     #[test]
@@ -943,6 +1016,9 @@ mod tests {
             }
             for r in RejectCredit::ALL {
                 assert!(!reject_credit(&c, l, *r).is_empty());
+            }
+            for a in ActionKind::ALL {
+                assert!(!action_kind(&c, l, *a).is_empty());
             }
             for f in FixedCost::ALL {
                 assert!(!fixed_cost(&c, l, *f).is_empty());

@@ -14,6 +14,7 @@ members = [
     "sim/agents",
     "sim/economy",
     "sim/firms",
+    "sim/policy",
     "sim/snapshot",
     "sim/supply",
     "sim/traffic",
@@ -45,6 +46,7 @@ magnat-ui = { path = "engine/ui" }
 magnat-agents = { path = "sim/agents" }
 magnat-economy = { path = "sim/economy" }
 magnat-firms = { path = "sim/firms" }
+magnat-policy = { path = "sim/policy" }
 magnat-sim-snapshot = { path = "sim/snapshot" }
 magnat-supply = { path = "sim/supply" }
 magnat-traffic = { path = "sim/traffic" }

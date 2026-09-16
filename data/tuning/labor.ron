@@ -13,7 +13,7 @@
 // Jednostki: pieniądz w groszach (00 §2), czas w dobach, ułamki w punktach bazowych
 // (1 bp = 1/10 000) albo w promilach tam, gdzie tak liczy kod. Żadnych floatów.
 (
-    schema_version: 1,
+    schema_version: 2,
 
     // Jak kandydat szuka pracy (PRD §17.5: rozważa kilka ofert, nie wszystkie).
     search: (
@@ -76,6 +76,35 @@
         // Sufit umiejętności przy wykształceniu 0; każdy poziom podnosi go o `talent_step`.
         talent_base: 55,
         talent_step: 12,
+    ),
+
+    // Menedżerowie i delegowanie (M7c WP7, PRD §7.5).
+    //
+    // Jakość zarządzania jest **rzadkim zasobem** i ma nim zostać: menedżer rozciągnięty
+    // na sześć zakładów jest gorszy niż ten sam człowiek na dwóch, a zakład bez menedżera
+    // nie jest zarządzany źle — jest zarządzany przeciętnie (`ManagementQuality::NEUTRAL`).
+    manager: (
+        // Ile zakładów menedżer prowadzi bez straty jakości. Powyżej — degradacja
+        // liniowa po `span_penalty` punktów skali Q na każdy nadmiarowy zakład.
+        span_optimum: 2,
+        span_penalty: 8,
+        // Nastrój załogi przesuwa jakość zarządzania: mnożnik wpływu w punktach
+        // bazowych. 3 000 bp znaczy, że pełna rozpiętość nastroju (0..100) przesuwa
+        // jakość o 30 punktów skali — menedżer w zbuntowanym zakładzie naprawdę
+        // zarządza gorzej, a nie tylko „ma trudniej".
+        morale_weight_bp: 3_000,
+        // Ile jakości traci zakład, z którego menedżer odszedł. Zastępstwo bierze
+        // medianę firmy **minus tyle** — stąd „dobry menedżer to zasób rzadki"
+        // ma konsekwencje, a nie tylko opis (§5.4).
+        replacement_drop: 20,
+        // Mnożnik rotacji przy zarządzaniu skrajnym, w tysięcznych: 1 400 przy zerowym,
+        // 700 przy doskonałym (§5.4, trzeci kanał wpływu menedżera). Rozpiętość ≥ ±30 %
+        // jest wymaganiem, nie kalibracją — mnożnik 0,98–1,02 byłby kosmetyką (`R6`).
+        turnover_mult_worst: 1_400,
+        turnover_mult_best: 700,
+        // Premia w ofercie bezpośredniej na stanowisko **kierownicze**, ponad zwykłą
+        // premię headhuntingu: dobrego menedżera podkupuje się drożej (§5.4).
+        headhunt_premium_bp: 2_000,
     ),
 
     // Świadczenia pozapłacowe. **Realne zaspokojenie potrzeby, nie liczba dodana

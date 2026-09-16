@@ -11,12 +11,17 @@ use magnat_firms::{next_bid, Firms};
 use super::offer::{JobOffer, JobOfferId};
 use super::{LaborDay, LaborMarket, Workforce};
 
-/// Agresja licytacyjna firmy, 0..=100.
+/// Agresja licytacyjna zakładu, 0..=100 — **decyzja menedżera** (M7c, `AV-6`).
 ///
-/// Wywodzi ją z osobowości dyrektora M7e; do tego czasu całe miasto licytuje tak samo
-/// i **to jest właściwy stan przejściowy**: gdyby M7b zgadywał osobowość, M7e musiałby
-/// najpierw odgadnięcie usunąć.
-const AGGRESSION: u8 = 0;
+/// Do M7c była stałą zerową i całe miasto licytowało tak samo. Od M7c wychodzi ze
+/// stylu kierowania: handlowiec podbija szybko, biurokrata w ogóle. Zakład bez
+/// menedżera zostaje przy zerze i to nadal jest właściwy stan przejściowy —
+/// osobowość dyrektora, która nada agresję **każdej** firmie, powstaje w M7e.
+fn aggression(firms: &Firms, site: magnat_core::SiteId) -> u8 {
+    firms
+        .style_of(site)
+        .map_or(0, magnat_firms::ManagerStyle::aggression)
+}
 
 /// Zapas marży, o który firma wolno przekracza kraniec widełek. Hak zerowy do M7e —
 /// `SitePnlMonth` nie ma jeszcze przychodu, więc marży nie ma z czego policzyć (`AR-7`).
@@ -58,7 +63,7 @@ pub(super) fn expire_and_escalate(
             o.wage_month,
             o.band,
             niedobor,
-            AGGRESSION,
+            aggression(firms, o.site),
             MARGIN_HEADROOM_BP,
             &m.tuning.wage,
         );
@@ -66,6 +71,14 @@ pub(super) fn expire_and_escalate(
     }
 
     for (id, bid, dni) in podbicia {
+        let kolejnosc = m
+            .offers
+            .get(id)
+            .and_then(|o| firms.style_of(o.site))
+            .map_or(
+                DOMYSLNA_KOLEJNOSC,
+                magnat_firms::ManagerStyle::benefit_order,
+            );
         let Some(o) = m.offers.get_mut(id) else {
             continue;
         };
@@ -73,7 +86,7 @@ pub(super) fn expire_and_escalate(
             // Sufit. Pieniędzy już nie ma, ale świadczenie pozapłacowe jeszcze jest —
             // i to jest realna decyzja firmy, a nie obejście: kandydat dostaje opiekę
             // medyczną zamiast podwyżki, a firma płaci za nią mniej niż za stawkę.
-            dolozy_swiadczenie(o);
+            dolozy_swiadczenie(o, kolejnosc);
             if !o.frozen {
                 o.frozen = true;
                 firms.log(
@@ -114,18 +127,23 @@ pub(super) fn expire_and_escalate(
     m.index.mark_dirty();
 }
 
+/// Kolejność świadczeń zakładu bez menedżera: kolejność **kosztu**, najtańsze najpierw.
+const DOMYSLNA_KOLEJNOSC: [u8; 4] = [
+    magnat_firms::BenefitSet::MEALS,
+    magnat_firms::BenefitSet::HEALTH,
+    magnat_firms::BenefitSet::TRAINING,
+    magnat_firms::BenefitSet::COMPANY_CAR,
+];
+
 /// Świadczenie zamiast podwyżki, gdy stawka stoi na suficie.
 ///
-/// Kolejność jest stała i **jest** kolejnością kosztu: najtańsze najpierw. Oferta,
-/// która ma już wszystko, zostaje bez zmian — i wtedy wakat po prostu wisi.
-fn dolozy_swiadczenie(o: &mut JobOffer) {
+/// Do M7c kolejność była sztywna i była kolejnością kosztu. Od M7c jest **decyzją
+/// menedżera** (`AV-6`): trener zaczyna od szkoleń, handlowiec od auta służbowego.
+/// Zestaw jest ten sam u każdego — styl przestawia priorytet, a nie odbiera świadczenie.
+/// Oferta, która ma już wszystko, zostaje bez zmian i wtedy wakat po prostu wisi.
+fn dolozy_swiadczenie(o: &mut JobOffer, kolejnosc: [u8; 4]) {
     use magnat_firms::BenefitSet;
-    for flaga in [
-        BenefitSet::MEALS,
-        BenefitSet::HEALTH,
-        BenefitSet::TRAINING,
-        BenefitSet::COMPANY_CAR,
-    ] {
+    for flaga in kolejnosc {
         if !o.benefits.has(flaga) {
             o.benefits = BenefitSet(o.benefits.0 | flaga);
             return;
@@ -174,8 +192,12 @@ pub(super) fn headhunt(
         // `(SiteId, pozycja w obsadzie)`, czyli deterministyczna z definicji.
         let mut zatrudnieni: Vec<(magnat_core::CitizenId, magnat_firms::FirmKey, Money)> =
             Vec::new();
-        let mut wakaty: Vec<(magnat_core::SiteId, magnat_firms::FirmKey, (Money, Money))> =
-            Vec::new();
+        let mut wakaty: Vec<(
+            magnat_core::SiteId,
+            magnat_firms::FirmKey,
+            (Money, Money),
+            bool,
+        )> = Vec::new();
         for (id, site) in firms.sites() {
             if site.district != district {
                 continue;
@@ -185,14 +207,14 @@ pub(super) fn headhunt(
                     continue;
                 }
                 if p.vacancies() > 0 {
-                    wakaty.push((id, site.firm, p.wage_band));
+                    wakaty.push((id, site.firm, p.wage_band, p.managerial));
                 }
                 for e in &p.filled {
                     zatrudnieni.push((e.citizen, site.firm, e.wage_month));
                 }
             }
         }
-        for (site, firma, band) in wakaty {
+        for (site, firma, band, kierownicze) in wakaty {
             if firmy_dzis.contains(&firma) {
                 continue;
             }
@@ -218,6 +240,20 @@ pub(super) fn headhunt(
             if people.facts(c).is_none() {
                 continue;
             }
+            // **Dobrego menedżera podkupuje się drożej** (M7c §5.4): stanowisko
+            // kierownicze dostaje własną, wyższą premię. Bez tego rozdziału jakość
+            // zarządzania byłaby zasobem rzadkim, o który nikt nie konkuruje —
+            // a wtedy „menedżer jako zasób" jest opisem, nie mechaniką.
+            // `max`, a nie podstawienie: premia kierownicza ma być **nie mniejsza**
+            // od zwykłej, a nie „inna". Podstawienie znaczyłoby, że przestawienie
+            // `wage.headhunt_premium_bp` w balansatorze ponad wartość menedżerską
+            // czyni menedżerów najtańszymi do podkupienia — czyli odwraca zdanie,
+            // które ta gałąź ma wypowiadać.
+            let premia = if kierownicze {
+                premia.max(m.tuning.manager.headhunt_premium_bp)
+            } else {
+                premia
+            };
             let proponowana =
                 Money(obecna.get().saturating_mul(i64::from(10_000 + premia)) / 10_000);
             // Sufit widełek obowiązuje także tutaj: przeciąganie nie jest wyjątkiem

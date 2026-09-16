@@ -156,3 +156,57 @@ fn rynek_pracy_wchodzi_do_hasha_stanu() {
         "doba rynku pracy nie ruszyła hasha stanu"
     );
 }
+
+#[test]
+#[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
+fn zaklady_dostaja_menedzerow_i_jakosc_zarzadzania_przestaje_byc_stala() {
+    // M7c WP7 w prawdziwym mieście. Do M7c `Site::mgmt` było na wartości neutralnej
+    // w **każdym** zakładzie: menedżer istniał jako pole, a nie jako ktoś. Od M7c
+    // obsadzone stanowisko kierownicze staje się menedżerem, a jego umiejętność,
+    // rozpiętość kierowania i nastrój załogi rozsuwają jakość zarządzania po skali.
+    let (app, _) = miasto(3);
+    let rejestr = app.world.get_resource::<Firms>().expect("rejestr firm");
+
+    assert!(
+        rejestr.manager_count() > 0,
+        "miasto z {} zakładami nie ma ani jednego menedżera",
+        rejestr.site_count()
+    );
+
+    // Jakość zarządzania przestała być jedną liczbą. Rozrzut, a nie średnia:
+    // średnia mogłaby wyjść przeciętna także wtedy, gdyby wszystkie zakłady
+    // siedziały dokładnie na wartości neutralnej.
+    let jakosci: Vec<u8> = rejestr.sites().map(|(_, s)| s.mgmt.0).collect();
+    let min = jakosci.iter().copied().min().expect("zakłady");
+    let max = jakosci.iter().copied().max().expect("zakłady");
+    assert!(
+        max > min,
+        "jakość zarządzania jest w całym mieście równa {min}"
+    );
+    let neutralne = jakosci
+        .iter()
+        .filter(|q| **q == magnat_firms::ManagementQuality::NEUTRAL.0)
+        .count();
+    assert!(
+        neutralne < jakosci.len(),
+        "żaden zakład nie odszedł od zarządzania przeciętnego"
+    );
+
+    // Każde przypisanie menedżera zostawiło powód (00 §7). Dziennik firmy ma 32 wpisy,
+    // więc szukamy w tych, które jeszcze nie wypadły — wystarczy jeden, żeby pokazać,
+    // że droga zapisu istnieje, bo drugiej drogi do `Site::mgmt` nie ma.
+    let z_powodem = rejestr
+        .iter()
+        .flat_map(|(_, f)| f.log.iter())
+        .filter(|w| {
+            matches!(
+                w.reason,
+                magnat_core::DecisionReason::ManagerAssigned { .. }
+            )
+        })
+        .count();
+    assert!(
+        z_powodem > 0,
+        "menedżerowie przyszli bez ani jednego powodu"
+    );
+}

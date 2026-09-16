@@ -27,6 +27,9 @@ magnat-supply = { workspace = true }
 # krok licytacji, sufit marży — zostają u M7. Zależność idzie `economy → firms`
 # i odwrócić się nie da: `sim/firms` stoi na maszynerii ofert tego crate'a.
 magnat-firms = { workspace = true }
+# Silnik reguł (`K-11`) — wykonawca polityk zdelegowanych zakładów stoi tutaj,
+# bo to sklep ma półkę; `sim/policy` mówi co zrobić, nie komu.
+magnat-policy = { workspace = true }
 serde = { workspace = true }
 ron = { workspace = true }
 

@@ -44,6 +44,139 @@ pub fn labor_coverage(
         .collect()
 }
 
+/// Kto kieruje zakładem: obsadzone stanowisko kierownicze staje się menedżerem
+/// (M7c WP7).
+///
+/// Bez tego kroku menedżerowie istnieliby wyłącznie tam, gdzie ktoś ich przypisał
+/// ręcznie — czyli w testach i u gracza — a miasto stawiane przez most M7a miałoby
+/// dziesięć tysięcy zakładów o zarządzaniu dokładnie przeciętnym. Katalog typów
+/// zakładów wypisuje stanowiska kierownicze (`Staffing::managerial`), rynek pracy
+/// je obsadza; tutaj domyka się pętla: **kto siedzi na tym etacie, ten kieruje**.
+///
+/// Odejście z etatu kierowniczego zdejmuje menedżera i zakład spada do jakości
+/// zastępstwa — tą samą drogą, którą przechodzi menedżer podkupiony przez konkurenta.
+///
+/// **Polityki tu nie ma i być nie może.** Zestaw reguł firmy AI generuje tier
+/// taktyczny (M7e); do tego czasu delegacja niesie politykę pustą, czyli menedżera
+/// bez instrukcji. To jest różnica, którą widać w wyniku: jakość zarządzania działa
+/// od razu, wykonywanie reguł czeka na źródło reguł.
+pub(super) fn reconcile_managers(
+    m: &LaborMarket,
+    firms: &mut Firms,
+    people: &impl Workforce,
+    now: SimMinute,
+) {
+    use magnat_firms::{Autonomy, Manager, ManagerStyle, SiteDelegation};
+
+    let t = m.tuning.manager;
+    // Kto powinien kierować którym zakładem: najlepszy z obsadzonych stanowisk
+    // kierowniczych. Kolejność po `SiteId`, więc nie zależy od niczego poza rejestrem.
+    /// Kandydat na menedżera zakładu: kto, z jaką umiejętnością i w jakim stylu.
+    type Kandydat = (CitizenId, magnat_core::Q, ManagerStyle);
+    let mut plan: Vec<(SiteId, Option<Kandydat>)> = Vec::new();
+    for (id, site) in firms.sites() {
+        let mut naj: Option<Kandydat> = None;
+        for p in site.positions.iter().filter(|p| p.managerial) {
+            for e in &p.filled {
+                let Some(f) = people.facts(e.citizen) else {
+                    continue;
+                };
+                let skill = people.skill_in(e.citizen, p.role);
+                if naj.is_none_or(|n| skill.get() > n.1.get()) {
+                    naj = Some((e.citizen, skill, styl(f.ambition, f.loyalty)));
+                }
+            }
+        }
+        let obecny = firms.manager_of_site(id).map(|mgr| mgr.citizen);
+        match (obecny, naj) {
+            // Ten sam człowiek dalej na stanowisku — nic się nie zmienia.
+            (Some(a), Some((b, _, _))) if a == b => continue,
+            (None, None) => continue,
+            _ => plan.push((id, naj)),
+        }
+    }
+
+    // Nastroje **raz na przebieg**, nie raz na zakład. Przypisanie menedżera nie
+    // zmienia obsady, więc nastrój załogi nie ma jak drgnąć w środku tej pętli —
+    // a liczenie go w środku dałoby pierwszej dobie świata 10 tys. × 10 tys.
+    // przebiegów po obsadzie, czyli dobę realną zamiast milisekundy.
+    let nastroje = site_morale(firms, people);
+    let nastroj = |s: SiteId| nastroje.get(&s).copied().unwrap_or(magnat_core::Q::new(50));
+    for (id, kandydat) in plan {
+        // **Odpinamy ten jeden zakład, nie całego menedżera.** `release_manager`
+        // odpowiada na „ten człowiek przestał pracować" i zdejmuje mu wszystkie
+        // zakłady — użyta tutaj kosztowałaby zakład, w którym nic się nie zmieniło.
+        firms.detach_site(id, &nastroj, &t);
+        let Some((c, skill, styl)) = kandydat else {
+            continue;
+        };
+        // Polityka zostaje, jeśli zakład już jakąś nosił — menedżer się zmienił,
+        // a instrukcje nie.
+        let polityka = firms
+            .site(id)
+            .and_then(|s| s.delegation.as_ref().map(|d| d.policy.clone()))
+            .unwrap_or_else(|| {
+                magnat_policy::Policy::empty(
+                    magnat_core::PolicyId(0),
+                    "",
+                    magnat_policy::PolicyDomain::Pricing,
+                )
+            });
+        let mgr = Manager::new(c, skill, styl, now);
+        let deleg = SiteDelegation::new(c, polityka, Autonomy::PricesOnly);
+        firms.assign_manager(id, mgr, deleg, nastroj, &t, Tick(now.0));
+    }
+}
+
+/// Styl kierowania z cech dyrektora-mieszkańca.
+///
+/// **Wyprowadzony z `Personality` M3, a nie losowany**: ambicja i lojalność są już
+/// w komponencie mieszkańca i to one mają tłumaczyć, dlaczego ten człowiek kieruje
+/// tak, a nie inaczej. Losowanie dałoby ten sam rozkład i zero wyjaśnienia,
+/// a M7e podmieni tu źródło na pełną osobowość, nie na inną monetę.
+fn styl(ambition: magnat_core::Q, loyalty: magnat_core::Q) -> magnat_firms::ManagerStyle {
+    use magnat_firms::ManagerStyle as S;
+    match (ambition.get() >= 60, loyalty.get() >= 60) {
+        (true, false) => S::Dealmaker,
+        (true, true) => S::Taskmaster,
+        (false, true) => S::Coach,
+        (false, false) => S::Bureaucrat,
+    }
+}
+
+/// Nastrój załogi zakładu w skali `Q` — wejście jakości zarządzania (M7c §5.4).
+///
+/// Średnia po obsadzie, w kolejności stanowisk i obsadzenia, nigdy po mapie (00 §3.2).
+/// Zakład bez załogi dostaje środek skali: pusty zakład nie jest zakładem o złym
+/// nastroju, tylko zakładem bez ludzi — a menedżer nie ma tam czego popsuć.
+#[must_use]
+pub fn site_morale(
+    firms: &Firms,
+    people: &impl Workforce,
+) -> std::collections::BTreeMap<SiteId, magnat_core::Q> {
+    firms
+        .sites()
+        .map(|(id, site)| {
+            let mut suma = 0i32;
+            let mut ilu = 0i32;
+            for p in &site.positions {
+                for e in &p.filled {
+                    if let Some(f) = people.facts(e.citizen) {
+                        suma += i32::from(f.vitals.mood);
+                        ilu += 1;
+                    }
+                }
+            }
+            let q = if ilu == 0 {
+                50
+            } else {
+                ((suma / ilu + 100) / 2).clamp(0, 100)
+            };
+            (id, magnat_core::Q::new(q as u8))
+        })
+        .collect()
+}
+
 /// Ile dób pracuje ten człowiek na tym etacie.
 fn staz(since: SimMinute, now: SimMinute) -> u32 {
     ((now.0.saturating_sub(since.0)) / 1440) as u32
@@ -172,6 +305,7 @@ pub(super) fn turnover(
     d: &mut LaborDay,
 ) {
     let hr = m.tuning.hr;
+    let mt = m.tuning.manager;
     let mut plan: Vec<(CitizenId, SiteId, JobRoleId, LeaveCause, u32, Money)> = Vec::new();
     for (id, site) in firms.sites() {
         for p in &site.positions {
@@ -193,7 +327,18 @@ pub(super) fn turnover(
                     }
                     _ => 0,
                 };
-                let cisnienie = quit_pressure(f.vitals.mood, f.vitals.stress, staz_dni, luka, &hr);
+                // Jakość zarządzania **mnoży** ciśnienie na odejście — trzeci kanał
+                // wpływu menedżera (M7c §5.4). Do M7c rotacja nie zależała od tego,
+                // kto zakładem kieruje, choć tabela w planie ten kanał obiecywała.
+                let cisnienie = quit_pressure(
+                    f.vitals.mood,
+                    f.vitals.stress,
+                    staz_dni,
+                    luka,
+                    site.mgmt,
+                    &hr,
+                    &mt,
+                );
                 let mut r = rng(seed, StreamId::LaborQuit, e.citizen.0.index(), Tick(now.0));
                 if u32::from(cisnienie.per_10k) > r.gen_range_u32(10_000) {
                     plan.push((

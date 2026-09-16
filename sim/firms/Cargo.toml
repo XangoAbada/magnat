@@ -19,11 +19,16 @@ magnat-ecs = { workspace = true }
 magnat-supply = { workspace = true }
 # Mieszkaniec jako pracownik: `Vitals`, `Skills`, komponent `Employment` (link D1).
 magnat-agents = { workspace = true }
+# Silnik reguł (`K-11`). Zależność idzie `firms → policy` i odwrócić się nie może:
+# polityka nie wie, czym jest firma, a firma nosi politykę w delegacji zakładu.
+magnat-policy = { workspace = true }
 serde = { workspace = true }
 ron = { workspace = true }
 smallvec = { workspace = true }
 
 [dev-dependencies]
+# Pusta polityka w teście hasha — delegacja bez niej nie powstanie.
+magnat-policy = { workspace = true }
 # Hash stanu świata mierzy się jego jedynym wejściem (`world_state_hash`),
 # a nie kopią funkcji haszującej w teście.
 magnat-io = { workspace = true }

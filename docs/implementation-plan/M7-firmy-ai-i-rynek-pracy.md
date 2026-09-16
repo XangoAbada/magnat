@@ -133,7 +133,7 @@ dopiero po ostatniej podfazie; podfaza zamyka się własnym kryterium ze swojego
 |---|---|---|---|---|
 | **M7a — Firma jako dane** ✅ | WP1, WP2, WP3 | 5.1, 5.2, 5.3 | 10 000 firm w świecie, każda z przypisanymi trzema slotami decyzyjnymi; dodanie typu zakładu nie dotyka kodu. | `M7a-firma-jako-dane.md` |
 | **M7b — Rynek pracy** ✅ | WP4, WP5, WP6 | 5.5 | Pensje emergentne: niedobór roli podnosi ofertę bez żadnej tabeli płac w kodzie. | `M7b-rynek-pracy.md` |
-| **M7c — Polityki i menedżerowie** | WP6b, WP7 | 5.4, 5.11 | Reguła gracza i polityka firmy AI wykonują się tym samym kodem; różnica leży w jakości menedżera. | `M7c-polityki-i-menedzerowie.md` |
+| **M7c — Polityki i menedżerowie** ✅ | WP6b, WP7 | 5.4, 5.11 | Reguła gracza i polityka firmy AI wykonują się tym samym kodem; różnica leży w jakości menedżera. | `M7c-polityki-i-menedzerowie.md` |
 | **M7d — Finanse i upadłość** | WP8, WP9 | 5.12, 5.13 | Firma bierze kredyt, przestaje go obsługiwać, bankrutuje, a wierzyciele są zaspokajani w udokumentowanej kolejności. | `M7d-finanse-i-upadlosc.md` |
 | **M7e — AI firm** | WP10, WP11, WP12, WP12b, WP14 | 5.6, 5.7, 5.8, 5.9, 5.15 | Konkurencja reaguje na gracza: otwarcie sklepu obok zmienia ceny i asortyment sąsiadów w mierzalny sposób. | `M7e-ai-firm.md` |
 | **M7f — Makro i domknięcie** | WP13, WP15, WP16, WP17 | 5.10, 5.14, 5.16 | Pełny artefakt fazy z §1 dokumentu fazy: konkurencja reaguje na gracza, pensje emergentne. | `M7f-makro-i-domkniecie.md` |
@@ -511,6 +511,24 @@ Zrównoleglalne: WP2, WP8, WP10, WP16. WP6b blokowane przez AST od M9 (D17), WP1
 kontrakt `sim/macro` od M10 (dostarczony).
 WP17 rośnie razem z pozostałymi, nie na końcu — testy 7.1, 7.2 i 7.3 powstają odpowiednio razem
 z WP5, WP9 i WP10, bo napisane po fakcie już niczego nie złapią.
+
+---
+
+## Zmiany wpisane po M7c
+
+Poprawki dokumentu **fazy** naniesione w trakcie podfazy M7c (`K-18`). Korekty samej
+podfazy są w tabeli „Zmiany wpisane po M7c" w `M7c-polityki-i-menedzerowie.md`.
+Gwiazdka = zmiana zakresu albo kryterium.
+
+| # | Co | Dlaczego |
+|---|---|---|
+| `AY-1`* | **§6 „Dostarczam" traci `policy::register_metric` i `register_action`**, a `FirmPolicy` dostaje adres: jest aliasem `policy::Policy`. Podpisy mają dziś postać `evaluate(&Policy, &MetricCtx, &impl PolicyView) -> SmallVec<[Decided<&Action>; 8]>`, `validate(&Policy) -> Result<(), PolicyError>`, `explain(&ConditionExpr, &MetricCtx, &impl PolicyView) -> ExplainTree` | Rejestry: `D18` mówi wprost, że drugiego konsumenta nikt nie potwierdził, a rejestr z jedną implementacją jest abstrakcją, której zakazuje YAGNI (`AX-4`). Podpisy: ewaluator potrzebuje kontekstu towaru (`TEN_TOWAR`, `AX-1`) i **nie kopiuje akcji**, bo kopia jest alokacją na ścieżce gorącej (`AX-9`). `explain` bierze warunek, a nie regułę, bo wyjaśnia się warunek — akcja się wykonuje |
+| `AY-2` | **`sim/policy` zależy od `engine/core` i od niczego więcej.** Do §6 „Konsumuję" dochodzi `PolicyView` jako jedyne wejście reguły do świata; `FirmView` z §5.8 będzie jego implementacją, a nie osobną drogą | Zależność `economy → firms → policy` jest jednostronna i zamyka cykl, jeśli ją odwrócić. Konsekwencja, której plan nie nazywał: `PriceBasis` musiał wyprowadzić się do `core` (`K-47`), bo metryka cenowa niesie podstawę, a `sim/policy` nie widzi `sim/economy` |
+| `AY-3`* | **Wykonawca akcji polityki mieszka w `sim/economy` (`policy_run`), nie w `sim/firms` ani w `sim/policy`.** §6 tego adresu nie podawał | Półkę, cenę i zapas ma sklep, a sklep jest w `sim/economy`. To ten sam podział, który `D2` narzucił rynkowi pracy: mechanizm jest tam, gdzie dane, a decyzja tam, gdzie firma. `sim/policy` mówi **co zrobić** i nie wie, czym jest sklep |
+| `AY-4`* | **Kryterium §7.9 pkt 4 („bez alokacji na ścieżce gorącej") jest mierzone, a nie deklarowane** — test z licznikiem alokacji w osobnej binarce testowej | Zmierzone przy pierwszym uruchomieniu: 6 897 alokacji na 1 000 ewaluacji, wszystkie z kopiowania akcji. Kryterium napisane bez pomiaru przeszłoby |
+| `AY-5` | **Decyzje otwarte fazy zamknięte w M7c: `D13`, `D17`, `D18`.** `D13` (gdzie liczone są straty modyfikowane przez menedżera) — `loss_multiplier(ManagementQuality)` ma od M7c realnego pisarza po stronie M7 i M6 stosuje go u siebie bez zmian. `D17` (termin AST od M9) — specyfikacja jest w `M9d-jezyk-regul.md` §5.6, była gotowa i wystarczyła; awaryjny wariant „tymczasowy zestaw reguł" nie był potrzebny. `D18` (zakres `sim/policy` poza firmami) — rozstrzygnięte **przez niebudowanie**: rejestrów nie ma, dopóki M8 albo M3 nie zgłosi, że na nich buduje (`AX-4`) | Wszystkie trzy dało się rozstrzygnąć tym, co pokazał kod, a nie uzgodnieniem. `D11` (limit przeciągania menedżerów gracza) zostaje otwarta: przeciąganie menedżerów działa od M7c i ma wyższą premię, ale ocena, czy jest frustrujące, wymaga gracza — adres **M9** |
+| `AY-6`* | **§5.11 obiecuje przebudowę `DecisionReason` na `Citizen \| Firm \| City` i ta przebudowa w M7c nie weszła.** Blok M7 rośnie dalej płasko: `PolicyApplied = 503`, `ManagerAssigned = 504` | Przebudowa dotyka 370 miejsc w dziesięciu crate'ach i nie wnosi nic do kryteriów M7c; jej właściwym miejscem jest osobna zmiana, nie commit podfazy (`AX-7`). Wpisane tutaj, żeby M7d i M7e nie zakładały, że `FirmReason` już istnieje: warianty z §5.11 dopisuje się **płasko do bloku M7**, tak jak zrobiły to M7b i M7c |
+| `AY-7` | **`FirmReason` z §5.11 ma dziś trzy warianty mniej, niż wypisuje lista, i dwa więcej.** Powstały `Hired`, `WageRaise`, `JobLeft` (M7b) oraz `PolicyApplied` i `ManagerAssigned` (M7c); `ManagerAssigned` niesie `prev: u8`, a nie `prev_quality: u16`, bo `ManagementQuality` jest bajtem | Przypadek (2) z `K-18`: typ z przykładu nie istnieje w tej szerokości. Reszta listy (`PriceCut`, `LoanTaken`, `Bankruptcy`, `Founded`, …) czeka na podfazy, które są ich właścicielami |
 
 ---
 
