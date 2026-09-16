@@ -130,6 +130,31 @@ pub const fn target_pop(size: WorldSize) -> u32 {
     }
 }
 
+/// Bilans otwarcia złóż miasta (`AP-1`).
+///
+/// Obejmuje **wszystkie** złoża w granicach świata, także te, pod którymi Etap 7 nie
+/// postawił kopalni: M6 pyta o pozostałość po identyfikatorze, a nie po tym, czy ktoś
+/// już kopie. Osobna funkcja, a nie pięć linii w `generate_city` — ta ostatnia jest
+/// listą etapów generacji i ma nią zostać (rejestr długu R1, pozycja 24).
+fn bilans_zloz(
+    plan: &CityPlan,
+    t: &dyn TerrainQuery,
+) -> std::sync::Arc<crate::deposit::DepositLedger> {
+    let bok = plan.size.meters() as i32;
+    std::sync::Arc::new(crate::deposit::DepositLedger::from_rows(
+        t.deposits_in(magnat_core::IRect::from_size(
+            magnat_core::IVec2::ZERO,
+            bok,
+            bok,
+        ))
+        .into_iter()
+        .map(|id| {
+            let d = t.deposit(id);
+            (id, d.remaining(), d.reserves)
+        }),
+    ))
+}
+
 #[derive(Clone, Debug)]
 pub struct CityData {
     pub plan: CityPlan,
@@ -150,6 +175,13 @@ pub struct CityData {
     /// Katalog towarów i receptur, na którym domknięto łańcuchy. Trzymany, bo karta
     /// inspekcji i raport mówią o towarach kluczami, a nie indeksami.
     pub catalog: catalog::Catalog,
+    /// Bilans wydobycia złóż, na których to miasto stanęło (`AP-1`).
+    ///
+    /// Tu, a nie w `WorldData`, z tego samego powodu, dla którego tu stoi `catalog`:
+    /// czyta go most stawiający gospodarkę, a on widzi miasto, nie teren. Pisarz jest
+    /// jeden — kopalnia przez `magnat_supply::Deposits` — a kto stoi na którym złożu,
+    /// wie wyłącznie Etap 7 (`SiteSeed::deposit`).
+    pub deposits: std::sync::Arc<crate::deposit::DepositLedger>,
     pub site_catalog: sites::SiteCatalog,
     /// Komendy voxelowe całej generacji, z indeksem chunkowym.
     ///
@@ -406,6 +438,8 @@ pub fn generate_city(
 
     roads.geom = geom;
 
+    let deposits = bilans_zloz(plan, t);
+
     let mut warnings = Vec::new();
     if stats.rejection_pct() > 40 {
         warnings.push(format!(
@@ -568,6 +602,7 @@ pub fn generate_city(
         sites,
         access,
         catalog,
+        deposits,
         site_catalog,
         edits: edit_index,
         report,

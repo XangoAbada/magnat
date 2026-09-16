@@ -219,6 +219,30 @@ impl Batch {
             self.expires_at.map_or(u32::MAX, |e| (e.0 / 1440) as u32),
         ))
     }
+
+    /// Klucz agregacji **trybu awaryjnego** (WP15, §7.4).
+    ///
+    /// Traci markę, producenta i tygodniową precyzję daty, zyskuje rząd wielkości:
+    /// `(good, quality / 20, expires_at / 10080)`. Włącza się progiem na liczbie
+    /// partii, więc przełączenie jest deterministyczne i odwracalne — a nie decyzją
+    /// „gdy zrobi się ciasno".
+    ///
+    /// Partia `TRACED` nie ma klucza także tutaj: panel „od pola do półki" gubiłby
+    /// wtedy ślad dokładnie wtedy, gdy świat jest duży, czyli gdy gracz najbardziej
+    /// go potrzebuje.
+    #[must_use]
+    pub fn coalesce_key_coarse(&self) -> Option<CoalesceKey> {
+        if self.flags.has(BatchFlags::TRACED) {
+            return None;
+        }
+        Some((
+            self.good.0,
+            self.quality.get() / 20,
+            u16::MAX,
+            u32::MAX,
+            self.expires_at.map_or(u32::MAX, |e| (e.0 / 10_080) as u32),
+        ))
+    }
 }
 
 impl HashState for Batch {
@@ -295,6 +319,11 @@ pub struct BatchEvent {
 #[derive(Clone, Debug, Default)]
 pub struct BatchLedger {
     events: Vec<BatchEvent>,
+    /// Kto z kogo powstał: `(dziecko, rodzic)`. Osobno od zdarzeń, bo to jest
+    /// **krawędź**, a nie etap — i bez niej ślad urywa się na pierwszym przetworzeniu:
+    /// bochenek chleba ma własną historię od wyjęcia z pieca, ale „od pola do półki"
+    /// zaczyna się na polu, czyli w partii, której ten bochenek jest wnukiem.
+    parents: Vec<(BatchId, BatchId)>,
 }
 
 impl BatchLedger {
@@ -302,13 +331,35 @@ impl BatchLedger {
         self.events.push(e);
     }
 
+    /// Zapisuje, że `child` powstało z `parent`.
+    pub fn link(&mut self, child: BatchId, parent: BatchId) {
+        if child != parent {
+            self.parents.push((child, parent));
+        }
+    }
+
     /// Historia jednej partii, w kolejności zapisu.
+    ///
+    /// `ponytail:` przeszukanie liniowe. Sufit nazwany: do dziennika trafiają wyłącznie
+    /// partie z flagą `TRACED`, czyli te, na które ktoś patrzy — rzędu dziesiątek, nie
+    /// sześciuset tysięcy. Droga wyjścia to indeks `BatchId → zakres`, i wejdzie wtedy,
+    /// gdy `bench_trace_batch_depth12` pokaże, że jest potrzebny.
     #[must_use]
     pub fn trace(&self, b: BatchId) -> Vec<BatchEvent> {
         self.events
             .iter()
             .copied()
             .filter(|e| e.batch == b)
+            .collect()
+    }
+
+    /// Rodzice partii, w kolejności zapisania.
+    #[must_use]
+    pub fn parents_of(&self, b: BatchId) -> Vec<BatchId> {
+        self.parents
+            .iter()
+            .filter(|(c, _)| *c == b)
+            .map(|(_, p)| *p)
             .collect()
     }
 

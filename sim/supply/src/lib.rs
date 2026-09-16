@@ -29,6 +29,8 @@ pub mod mining;
 pub mod plant;
 pub mod shortage;
 pub mod store;
+pub mod systems;
+pub mod trace;
 pub mod transport;
 pub mod tuning;
 
@@ -50,7 +52,12 @@ pub use catalog::{
     WarningKind, CATEGORIES_SCHEMA_VERSION, GOODS_SCHEMA_VERSION, NEEDS_SCHEMA_VERSION,
     RECIPES_SCHEMA_VERSION,
 };
-pub use chain::{Chain, ChainHandle};
+pub use chain::{Chain, ChainHandle, ChainTick};
+pub use systems::ChainSystem;
+pub use trace::{
+    batches_in_role, supply_graph, trace_batch, BatchTrace, SupplyCoverage, SupplyEdge,
+    SupplyGraphView, TraceOrigin, TraceStage,
+};
 pub use cost::{allocate_cost, disposal_cost, waste_mass};
 pub use inventory::{
     InventoryPolicy, InventoryRule, MinMaxParams, PreferredSource, ReplenishRequest, Review,
@@ -59,12 +66,12 @@ pub use mining::{Deposits, MiningSite, NoDeposits};
 pub use plant::{
     advance_production, BreakCause, Charge, Dock, EmissionTotals, LineState, PlannedRun, Plant,
     PlantSite, ProductionCtx, ProductionLine, ProductionReport, ProductionSchedule, Shift,
-    SiteDwellResponse, UtilityMeter, VehicleArrivedAtSite,
+    SiteDwellResponse, UtilityBill, UtilityMeter, VehicleArrivedAtSite,
 };
 pub use shortage::{RfqId, ShortageAction, ShortageStage, ShortageState};
 pub use store::{
     BatchDraft, BatchSlice, MassIn, Reservation, ShelfState, Spoiled, StorageSlot, Store,
-    StoreError, WarehouseRole,
+    StoreError, WarehouseRole, BATCH_HARD_LIMIT, BATCH_SOFT_LIMIT,
 };
 pub use transport::{
     body_for_storage, consolidate, BodyType, Carrier, ConsolidationLimits, FailReason,

@@ -127,7 +127,41 @@ impl Market {
     #[must_use]
     pub fn account_of(&self, site: SiteId) -> Option<AccountId> {
         let m = self.lock();
-        m.by_site.get(&site).map(|i| m.shops[*i as usize].account)
+        m.by_site
+            .get(&site)
+            .map(|i| m.shops[*i as usize].account)
+            .or_else(|| m.plants.get(&site).map(|(_, a)| *a))
+    }
+
+    /// Zapisuje zakład produkcyjny jako stronę rozliczeń B2B (`AP-2`).
+    ///
+    /// Osobno od [`Market::open_shop`], bo zakład **nie jest** sklepem i nie ma
+    /// dostać półki: wspólna ścieżka dałaby osiemset sklepów bez klientów, które
+    /// bramka G6 policzyłaby jako koncentrację handlu.
+    pub fn register_plant(&self, site: SiteId, firm: magnat_core::FirmId, account: AccountId) {
+        self.lock().plants.insert(site, (firm, account));
+    }
+
+    /// Konto firmy, jeśli prowadzi w mieście sklep albo zakład.
+    #[must_use]
+    pub fn account_of_firm(&self, firm: magnat_core::FirmId) -> Option<AccountId> {
+        let m = self.lock();
+        m.shops
+            .iter()
+            .find(|s| s.firm == firm)
+            .map(|s| s.account)
+            .or_else(|| {
+                m.plants
+                    .values()
+                    .find(|(f, _)| *f == firm)
+                    .map(|(_, a)| *a)
+            })
+    }
+
+    /// Ile zakładów produkcyjnych stoi w mieście.
+    #[must_use]
+    pub fn plant_count(&self) -> usize {
+        self.lock().plants.len()
     }
 
     /// Konto reszty świata — druga strona zakupów u dostawcy i wypłat dochodu.

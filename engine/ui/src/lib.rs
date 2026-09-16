@@ -35,6 +35,7 @@ pub mod widgets;
 pub use inspect::citizen::{zlotowki, CitizenCard, CitizenModel, CitizenPanel, NeedRow, StatusRow};
 pub use inspect::reason::{describe, zegar};
 pub use inspect::shop::{ShopCard, ShopTab, ShopView};
+pub use inspect::supply::{SupplyCard, SupplyTab, SupplyView};
 pub use inspect::timeline::{
     actual_from_trace, render_day_text, ActualBlock, CitizenHeader, DayTimeline, TimelineRow,
     DRIFT_HIGHLIGHT_MIN,

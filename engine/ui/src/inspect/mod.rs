@@ -8,6 +8,7 @@
 pub mod citizen;
 pub mod reason;
 pub mod shop;
+pub mod supply;
 pub mod timeline;
 pub mod trip;
 

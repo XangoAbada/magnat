@@ -110,6 +110,37 @@ impl SystemDesc {
     }
 }
 
+/// Krawędzie z jawnych `before`/`after`. Wyniesione z [`ScheduleBuilder::build`],
+/// bo są osobnym pytaniem: „co autor zadeklarował" wobec „co wynika z dostępów".
+fn krawedzie_jawne(
+    systems: &[Box<dyn System>],
+    index_of: &dyn Fn(SystemId) -> Option<usize>,
+) -> Result<Vec<(usize, usize)>, ScheduleError> {
+    let mut jawne = Vec::new();
+    for (i, sys) in systems.iter().enumerate() {
+        let desc = sys.desc();
+        for target in &desc.after {
+            let Some(j) = index_of(*target) else {
+                return Err(ScheduleError::UnknownConstraint {
+                    system: desc.name,
+                    target: *target,
+                });
+            };
+            jawne.push((j, i));
+        }
+        for target in &desc.before {
+            let Some(j) = index_of(*target) else {
+                return Err(ScheduleError::UnknownConstraint {
+                    system: desc.name,
+                    target: *target,
+                });
+            };
+            jawne.push((i, j));
+        }
+    }
+    Ok(jawne)
+}
+
 pub trait System: Send + Sync + 'static {
     fn desc(&self) -> &SystemDesc;
     fn run(&mut self, ctx: &mut SystemCtx<'_>);
@@ -316,9 +347,31 @@ impl ScheduleBuilder {
         let index_of = |id: SystemId| systems.iter().position(|s| s.desc().id == id);
         let mut edges: Vec<Vec<usize>> = vec![Vec::new(); n];
 
-        // 2. Krawędzie z konfliktów dostępów.
+        // 2. Ograniczenia jawne — **przed** konfliktami, bo to one rozstrzygają spór.
+        //
+        //    Kolejność kroków 2 i 3 jest odwrotna niż do M6e i to nie jest kosmetyka
+        //    (`AP-6`). Konflikt dostępów mówi „tych dwóch nie wolno puścić równolegle"
+        //    i nie ma zdania o kierunku — kierunek brał się z kolejności kanonicznej,
+        //    czyli z **hasha nazwy**. Dla pary systemów wyłącznych (`K-21`) konflikt
+        //    zachodzi zawsze, więc jawne `before` między nimi dawało cykl zawsze wtedy,
+        //    gdy hash trafił odwrotnie — a trafiał losowo, bo nazwa jest nazwą.
+        //    Skutek: kontraktu kolejności (`D12` fazy M6: psucie przed detalem)
+        //    **nie dało się wyrazić**, choć jest to dokładnie to, do czego `before`
+        //    służy. Ograniczenie jawne jest deklaracją autora, konflikt jest wnioskiem
+        //    z dostępów; deklaracja wygrywa.
+        let jawne = krawedzie_jawne(&systems, &index_of)?;
+        for (a, b) in &jawne {
+            edges[*a].push(*b);
+        }
+
+        // 3. Krawędzie z konfliktów dostępów — pomijane tam, gdzie jawne ograniczenie
+        //    ustawiło już parę w drugą stronę. Kolejność i tak zostaje wymuszona, tylko
+        //    kierunkiem, który zadeklarował autor.
         for i in 0..n {
             for j in (i + 1)..n {
+                if jawne.contains(&(j, i)) {
+                    continue;
+                }
                 if systems[i]
                     .desc()
                     .access
@@ -326,29 +379,6 @@ impl ScheduleBuilder {
                 {
                     edges[i].push(j);
                 }
-            }
-        }
-
-        // 3. Ograniczenia jawne.
-        for i in 0..n {
-            let desc = systems[i].desc();
-            for target in &desc.after {
-                let Some(j) = index_of(*target) else {
-                    return Err(ScheduleError::UnknownConstraint {
-                        system: desc.name,
-                        target: *target,
-                    });
-                };
-                edges[j].push(i);
-            }
-            for target in &desc.before {
-                let Some(j) = index_of(*target) else {
-                    return Err(ScheduleError::UnknownConstraint {
-                        system: desc.name,
-                        target: *target,
-                    });
-                };
-                edges[i].push(j);
             }
         }
         for e in &mut edges {

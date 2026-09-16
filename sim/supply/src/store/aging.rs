@@ -42,6 +42,9 @@ impl Store {
                 .filter(|b| self.batches.get(*b).is_some_and(|b| b.expired_at(now)))
                 .collect();
             for id in przeterminowane {
+                // Etap śladu **przed** usunięciem partii: po `remove` nie ma już czego
+                // opisać, a ślad ma się kończyć powodem, a nie urwaniem.
+                self.zapisz_odpis(id, SlotId(i as u32));
                 let Some(b) = self.batches.remove(id) else {
                     continue;
                 };
@@ -68,6 +71,12 @@ impl Store {
     /// bo przedłużanie przydatności byłoby tworzeniem świeżości z niczego. Koszt sumuje
     /// się dokładnie, bez zaokrągleń.
     pub fn merge_in_slot(&mut self, slot: SlotId) -> usize {
+        self.merge_in_slot_with(slot, false)
+    }
+
+    /// Scalanie z wyborem klucza: zwykłego albo awaryjnego
+    /// ([`crate::Batch::coalesce_key_coarse`]).
+    pub fn merge_in_slot_with(&mut self, slot: SlotId, coarse: bool) -> usize {
         let Some(sl) = self.slots.get(slot.0 as usize) else {
             return 0;
         };
@@ -76,7 +85,13 @@ impl Store {
             let Some(b) = self.batches.get(*id) else {
                 continue;
             };
-            let Some(k) = b.coalesce_key() else { continue };
+            let Some(k) = (if coarse {
+                b.coalesce_key_coarse()
+            } else {
+                b.coalesce_key()
+            }) else {
+                continue;
+            };
             match grupy.iter_mut().find(|(g, _)| *g == k) {
                 Some((_, v)) => v.push(*id),
                 None => grupy.push((k, vec![*id])),
@@ -156,7 +171,47 @@ impl Store {
         }
         scalone
     }
+
+    /// Scalanie partii rozproszone po indeksie slotu (`BatchCoalesceSystem`, WP15).
+    ///
+    /// Slot o indeksie `i` scala się w minucie `i % 1440` doby. Deterministyczne, bo
+    /// po indeksie slotu, a nie po zegarze (00 §3.3), i amortyzowane: dwadzieścia
+    /// tysięcy slotów rozkłada się na dobę po czternaście na minutę, zamiast stanąć
+    /// jednym czterdziestomilisekundowym szczytem raz na dobę.
+    ///
+    /// Powyżej [`BATCH_SOFT_LIMIT`] przełącza się na klucz awaryjny. Próg jest na
+    /// liczbie partii **całego magazynu**, a nie tego slotu: tryb awaryjny ma być
+    /// własnością świata, żeby dwa przebiegi tego samego ziarna nie rozjechały się
+    /// na tym, który slot akurat przekroczył próg pierwszy.
+    pub fn coalesce_phase(&mut self, phase: u32) -> usize {
+        let coarse = self.emergency_coalescing();
+        let mut scalone = 0;
+        let mut i = phase as usize;
+        while i < self.slots.len() {
+            scalone += self.merge_in_slot_with(SlotId(i as u32), coarse);
+            i += 1_440;
+        }
+        scalone
+    }
+
+    /// Czy magazyn pracuje w trybie awaryjnym agregacji (§7.4).
+    #[must_use]
+    pub fn emergency_coalescing(&self) -> bool {
+        self.live_batches() > BATCH_SOFT_LIMIT
+    }
 }
+
+/// Miękki próg liczby aktywnych partii (§7.4): powyżej niego klucz agregacji
+/// redukuje się do awaryjnego. Sześćset tysięcy to szacunek metropolii 400 tys.
+/// mieszkańców z §7.4 — magazyn, który go przekroczył, ma więcej partii, niż plan
+/// przewidywał, i płaci za to markami, a nie pamięcią.
+pub const BATCH_SOFT_LIMIT: usize = 600_000;
+
+/// Twardy limit z §7.4. Nie jest egzekwowany odrzucaniem partii — odrzucona partia
+/// byłaby masą zniknioną bez kategorii, czyli złamaniem `prop_mass_conservation`.
+/// Jest **progiem alarmowym**: przekroczenie znaczy, że tryb awaryjny nie wystarczył
+/// i problem jest w danych albo w polityce zapasów, a nie w agregacji.
+pub const BATCH_HARD_LIMIT: usize = 1_000_000;
 
 #[cfg(test)]
 mod tests {

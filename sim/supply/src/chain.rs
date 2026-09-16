@@ -21,7 +21,7 @@
 
 use std::sync::{Arc, Mutex, MutexGuard};
 
-use magnat_core::{FirmId, HashState, Money, SimMinute, SiteId, StateHasher};
+use magnat_core::{HashState, SimMinute, SiteId, StateHasher};
 
 use crate::b2b::{Settlement, B2b};
 use crate::catalog::Catalog;
@@ -43,6 +43,13 @@ pub struct Chain {
     /// zakład prowadzi — dla sklepu jest nią M5 i to on te liczby odświeża; M6
     /// wyłącznie je wykonuje.
     pub rules: Vec<(SiteId, Vec<InventoryRule>)>,
+    /// Akcje kaskady i przeglądu zapasów zebrane przez rozproszone przeglądy, czekające
+    /// na najbliższą granicę godziny (`AP-4`). Nie wchodzi do hasha: między systemami
+    /// jednego ticku bywa niepusta, ale na granicy ticku — czyli tam, gdzie liczy się
+    /// hash — jest pusta zawsze, bo `step_hour` opróżnia ją w tej samej minucie,
+    /// w której ją napełnia. Ten sam argument, którym `Market` trzyma poza hashem
+    /// `planned` i `committed`.
+    pending: Vec<ShortageAction>,
 }
 
 impl Chain {
@@ -54,6 +61,7 @@ impl Chain {
             transport: Transport::new(),
             b2b,
             rules: Vec::new(),
+            pending: Vec::new(),
         }
     }
 
@@ -84,6 +92,8 @@ impl Chain {
             world_seed,
             deposits,
         };
+        // Zegar stempla śladu — raz na minutę, dla całego magazynu (`AP-8`).
+        self.store.set_now(now);
         let sites: Vec<SiteId> = self.plant.sites().collect();
         for s in &sites {
             advance_production(&ctx, &mut self.store, &mut self.plant, *s, now, 1);
@@ -95,9 +105,23 @@ impl Chain {
 
     /// Godzina łańcucha: kaskada niedoboru, przegląd zapasów, rynek.
     ///
+    /// **Wołana co minutę, nie co godzinę** (`AP-4`, wykonanie §5.11). Część
+    /// **per zakład** — kaskada niedoboru i przegląd zapasów — jest rozproszona po
+    /// indeksie: zakład o indeksie `i` przegląda się w minucie `i % 60`, więc każdy
+    /// dostaje swoją godzinę, ale nie wszystkie naraz. Deterministyczne, bo po indeksie
+    /// encji, a nie po zegarze (00 §3.3). Bez tego dziewięć tysięcy przeglądów wypadało
+    /// w jednej minucie na sześćdziesiąt, czyli ~12 ms raz na godzinę — a budżet §7.4
+    /// mówi 2,0 ms **p99**, więc jedna minuta na sześćdziesiąt to 1,7 % ticków i budżet
+    /// przestaje się domykać z definicji, niezależnie od tego, jak szybki jest kod.
+    ///
+    /// Część **globalna** — rozstrzyganie zapytań, dostawy kontraktowe, import —
+    /// zostaje na granicy godziny: jest rzędu sześciuset otwartych zapytań, nie
+    /// dziewięciu tysięcy zakładów, i rozpraszanie nic by nie kupiło. Akcje zebrane
+    /// przez rozproszone przeglądy czekają w [`Chain::pending`] do tej chwili.
+    ///
     /// `AJ-3`: kaskada **przed** rynkiem, bo rynek konsumuje akcje wyprodukowane przez
-    /// kaskadę w tej samej godzinie. Odwrócona kolejność nie wywala się — daje
-    /// o godzinę starsze dane, czyli `SpotSearch` z uchwytem sprzed godziny.
+    /// kaskadę. Odwrócona kolejność nie wywala się — daje o godzinę starsze dane,
+    /// czyli `SpotSearch` z uchwytem sprzed godziny.
     pub fn step_hour(
         &mut self,
         cat: &Catalog,
@@ -105,15 +129,26 @@ impl Chain {
         oracle: &dyn FreightOracle,
         now: SimMinute,
     ) -> Vec<Settlement> {
-        let sites: Vec<SiteId> = self.plant.sites().collect();
-        let mut akcje: Vec<ShortageAction> = Vec::new();
+        let faza = (now.0 % 60) as usize;
+        let sites: Vec<SiteId> = self
+            .plant
+            .sites()
+            .enumerate()
+            .filter(|(i, _)| i % 60 == faza)
+            .map(|(_, s)| s)
+            .collect();
         for s in &sites {
             if let Some(p) = self.plant.get_mut(*s) {
                 let mut wlasne = shortage::review(cat, &self.store, p, now, &tuning.shortage);
-                akcje.append(&mut wlasne);
+                self.pending.append(&mut wlasne);
             }
         }
-        akcje.extend(self.przeglad_zapasow(cat, now));
+        let mut przeglad = self.przeglad_zapasow(cat, now, faza);
+        self.pending.append(&mut przeglad);
+        if !now.0.is_multiple_of(60) {
+            return Vec::new();
+        }
+        let akcje = std::mem::take(&mut self.pending);
         self.b2b.serve(
             &akcje,
             cat,
@@ -144,18 +179,60 @@ impl Chain {
         rozliczenia
     }
 
-    /// Doba łańcucha: indeks dostawców, okno cen spot, wchłonięcie eksportu,
-    /// scalanie partii i sprzątanie zamkniętych zleceń.
-    pub fn step_day(&mut self, cat: &Catalog, tuning: &Tuning) {
-        self.b2b.reindex(cat, &self.plant);
-        self.b2b.roll_day(tuning);
-        self.b2b.absorb_exports(&mut self.store);
-        self.transport.prune();
+    /// Doba łańcucha: scalanie partii, indeks dostawców, okno cen spot, wchłonięcie
+    /// eksportu i sprzątanie zamkniętych zleceń.
+    ///
+    /// **Wołana co minutę**, tak samo jak [`Chain::step_hour`] i z tego samego powodu
+    /// (`AP-4`): scalanie partii jest pracą **per slot**, a slotów jest rzędu
+    /// dwudziestu tysięcy — slot o indeksie `i` scala się w minucie `i % 1440`.
+    /// Reszta doby jest globalna i zostaje na granicy doby.
+    pub fn step_day(&mut self, cat: &Catalog, tuning: &Tuning, now: SimMinute) -> usize {
+        let scalone = self.store.coalesce_phase((now.0 % 1_440) as u32);
+        if now.0.is_multiple_of(1_440) {
+            self.b2b.reindex(cat, &self.plant);
+            self.b2b.roll_day(tuning);
+            self.b2b.absorb_exports(&mut self.store);
+            self.transport.prune();
+        }
+        scalone
+    }
+
+    /// Pełna minuta łańcucha: produkcja, przewozy, psucie, przeglądy, rynek, doba.
+    ///
+    /// Kolejność jest kontraktem i zbiera trzy uzgodnienia w jednym miejscu:
+    /// psucie przed detalem (`D12` — detal biegnie po tej funkcji), kaskada przed
+    /// rynkiem (`AJ-3`, wewnątrz [`Chain::step_hour`]) i przybycia przed eksportem
+    /// (`AJ-3` — [`Chain::step_minute`] rozładowuje, [`Chain::step_day`] wypuszcza).
+    #[allow(clippy::too_many_arguments)]
+    pub fn step(
+        &mut self,
+        cat: &Catalog,
+        tuning: &Tuning,
+        oracle: &dyn FreightOracle,
+        deposits: &dyn Deposits,
+        world_seed: u64,
+        now: SimMinute,
+    ) -> ChainTick {
+        let spoiled = self.step_minute(cat, tuning, oracle, deposits, world_seed, now);
+        let settlements = self.step_hour(cat, tuning, oracle, now);
+        let coalesced = self.step_day(cat, tuning, now);
+        // Faktura za media raz na miesiąc gry (`K-1`: 30 dób po 1440 minut).
+        let bills = if now.0 > 0 && now.0.is_multiple_of(30 * 1_440) {
+            self.bill_utilities(now)
+        } else {
+            Vec::new()
+        };
+        ChainTick {
+            spoiled,
+            settlements,
+            bills,
+            coalesced,
+        }
     }
 
     /// Faktury za media — wychodzą z łańcucha **listą faktów**, tym samym wzorcem
     /// co `Settlement` (`AI-1`): `sim/supply` księgi nie widzi i widzieć nie może.
-    pub fn bill_utilities(&mut self, until: SimMinute) -> Vec<(SiteId, FirmId, Money)> {
+    pub fn bill_utilities(&mut self, until: SimMinute) -> Vec<crate::plant::UtilityBill> {
         self.plant.bill_utilities(until)
     }
 
@@ -166,13 +243,26 @@ impl Chain {
     /// jedną listę, więc przegląd wchodzi do niej jako zwykłe zapytanie ofertowe.
     /// Preferencja zakładu rozstrzyga, czy idzie do rynku lokalnego, czy od razu
     /// do importu; `Any` znaczy „najpierw szukaj u siebie".
-    fn przeglad_zapasow(&self, cat: &Catalog, now: SimMinute) -> Vec<ShortageAction> {
+    /// `faza` jest rozproszeniem po indeksie (`AP-4`), a `now` przesuwa się o nią
+    /// wstecz — i to przesunięcie **nie jest kosmetyką**. `Review::Periodic` pyta
+    /// o konkretną minutę doby (przegląd sklepu o 4:00); gdyby zakład o fazie 5
+    /// sprawdzał regułę zegarem nieprzesuniętym, pytałby o nią w minucie 245 i nigdy
+    /// nie trafiłby w 240 — czyli **pięćdziesiąt dziewięć zakładów na sześćdziesiąt
+    /// nie zamówiłoby nigdy niczego**. Po przesunięciu każdy zakład widzi ten sam
+    /// zegar reguły, a różni się wyłącznie minutą, w której go odczytuje.
+    fn przeglad_zapasow(&self, cat: &Catalog, now: SimMinute, faza: usize) -> Vec<ShortageAction> {
+        let zegar = SimMinute(now.0.saturating_sub(faza as u64));
         let mut akcje = Vec::new();
-        for (site, rules) in &self.rules {
+        for (site, rules) in self
+            .rules
+            .iter()
+            .enumerate()
+            .filter_map(|(i, r)| (i % 60 == faza).then_some(r))
+        {
             let Some(p) = self.plant.get(*site) else {
                 continue;
             };
-            for r in crate::inventory::review(cat, &self.store, &self.transport, p, rules, now) {
+            for r in crate::inventory::review(cat, &self.store, &self.transport, p, rules, zegar) {
                 // `Any` znaczy „najpierw szukaj u siebie" — i to „najpierw" trzeba
                 // rozstrzygnąć **tutaj**, bo zapytanie ofertowe bez ani jednego
                 // dostawcy nie kończy się importem, tylko odmową. Miasto, w którym
@@ -245,6 +335,23 @@ impl HashState for Chain {
     }
 }
 
+/// Co minuta łańcucha zostawia wołającemu.
+///
+/// Fakty wychodzą **listą**, a księguje ten, kto ma księgę — ten sam wzorzec, którym
+/// rynek oddaje `Settlement`, a zakład fakturę za media (`AI-1`, `AM-4`). `sim/supply`
+/// nie widzi `Books` i widzieć nie może: zależność idzie `economy → supply`.
+#[derive(Debug, Default)]
+pub struct ChainTick {
+    /// Odpisy terminu ważności — slot, towar, masa, koszt własny.
+    pub spoiled: Vec<crate::store::Spoiled>,
+    /// Rozliczenia rynku B2B do zaksięgowania.
+    pub settlements: Vec<Settlement>,
+    /// Faktury za media. Niepuste raz na miesiąc gry.
+    pub bills: Vec<crate::plant::UtilityBill>,
+    /// Ile partii zniknęło przez scalanie w tej minucie — miara dla WP15.
+    pub coalesced: usize,
+}
+
 /// Uchwyt do łańcucha, współdzielony z detalem.
 ///
 /// Ten sam wzorzec co `Market` w M5 i `TrafficOracle` w M4, i z tego samego powodu
@@ -257,6 +364,14 @@ impl HashState for Chain {
 #[derive(Clone)]
 pub struct ChainHandle {
     inner: Arc<Mutex<Chain>>,
+    /// Skrzynka nadawcza kroku: fakty, które łańcuch zostawia do zaksięgowania
+    /// (`AP-4`). Osobny zamek od `inner`, bo odbiera ją **inny system** niż ten, który
+    /// ją napełnia, i trzymanie jej pod zamkiem łańcucha znaczyłoby, że rynek detaliczny
+    /// blokuje produkcję na czas księgowania.
+    ///
+    /// Nie wchodzi do hasha: napełnia się i opróżnia w tej samej minucie, więc na
+    /// granicy ticku — czyli tam, gdzie hash się liczy — jest pusta zawsze.
+    outbox: Arc<Mutex<ChainTick>>,
     /// Katalog, strojenie i trasa są **wejściem**, nie stanem: nie zmieniają się
     /// w przebiegu i nie wchodzą do hasha, więc stoją poza zamkiem.
     pub cat: Arc<Catalog>,
@@ -275,6 +390,7 @@ impl ChainHandle {
     ) -> ChainHandle {
         ChainHandle {
             inner: Arc::new(Mutex::new(chain)),
+            outbox: Arc::new(Mutex::new(ChainTick::default())),
             cat,
             tuning,
             oracle,
@@ -355,6 +471,7 @@ impl ChainHandle {
                 transport: Transport::new(),
                 b2b,
                 rules: Vec::new(),
+                pending: Vec::new(),
             },
             cat,
             tuning,
@@ -377,10 +494,35 @@ impl ChainHandle {
     pub fn lock(&self) -> MutexGuard<'_, Chain> {
         self.inner.lock().expect("łańcuch dostaw")
     }
+
+    /// Odkłada wynik minuty do odbioru przez księgującego.
+    ///
+    /// # Panics
+    /// Gdy zamek skrzynki jest zatruty.
+    pub fn post_tick(&self, t: ChainTick) {
+        let mut o = self.outbox.lock().expect("skrzynka łańcucha");
+        o.spoiled.extend(t.spoiled);
+        o.settlements.extend(t.settlements);
+        o.bills.extend(t.bills);
+        o.coalesced += t.coalesced;
+    }
+
+    /// Odbiera i **opróżnia** skrzynkę. Woła to ten, kto ma księgę.
+    ///
+    /// # Panics
+    /// Gdy zamek skrzynki jest zatruty.
+    #[must_use]
+    pub fn take_tick(&self) -> ChainTick {
+        std::mem::take(&mut *self.outbox.lock().expect("skrzynka łańcucha"))
+    }
 }
 
 impl HashState for ChainHandle {
+    /// Łańcuch i **bilans złóż** — w tej kolejności. Złoża wchodzą tutaj, a nie
+    /// osobnym zasobem, bo są jedynym wejściem produkcji, które zmienia się w grze:
+    /// katalog, strojenie i trasa są stałe, a wydobycie nie (`AP-1`).
     fn hash_state(&self, h: &mut StateHasher) {
         self.lock().hash_state(h);
+        self.deposits.hash_state(h);
     }
 }

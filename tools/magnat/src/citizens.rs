@@ -136,6 +136,7 @@ impl Citizens {
                 city,
                 zaludnione.places.clone(),
                 oracle,
+                &zaludnione.traffic,
                 seed,
                 &JobPool::new(threads),
             )?;
@@ -165,6 +166,7 @@ impl Citizens {
         // `sim/economy` (ustawia rynkowi tick i rozlicza intencje z minuty `t−1`),
         // a nie preferencją klienta.
         if market.is_some() {
+            builder.add(magnat_supply::ChainSystem::new());
             builder.add(MarketSystem::new(&world));
         }
         builder

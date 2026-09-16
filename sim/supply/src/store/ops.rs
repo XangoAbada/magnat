@@ -11,6 +11,7 @@ use magnat_core::{split_proportional, GoodId, Mass, Money, SimMinute, Volume, Q}
 
 use super::{
     qty_of, wstaw_fefo, BatchDraft, BatchSlice, MassIn, Reservation, SlotId, Store, StoreError,
+    TakeKind,
 };
 use crate::batch::{Batch, BatchFlags, BatchId, BatchLocation};
 use crate::catalog::Catalog;
@@ -57,6 +58,18 @@ impl Store {
         } else {
             Q::new(50)
         };
+        // **Ślad dziedziczy się w dół łańcucha.** Wyrób zrobiony ze śledzonego wsadu
+        // jest śledzony, nawet jeśli nikt go ręcznie nie wskazał — inaczej panel
+        // „od pola do półki" pokazywałby pole i nic więcej, bo mąka byłaby śledzona,
+        // a chleb z niej upieczony już nie (`AP-8`).
+        let site_slotu = self.site_of(slot);
+        let po_rodzicach = matches!(source, MassIn::Produced)
+            && site_slotu
+                .is_some_and(|site| self.pending_parents.iter().any(|(s, _, _)| *s == site));
+        let mut flags = draft.flags;
+        if po_rodzicach {
+            flags.set(BatchFlags::TRACED);
+        }
         let b = Batch {
             good: draft.good,
             mass: draft.mass,
@@ -70,7 +83,7 @@ impl Store {
             cost_total: draft.cost,
             origin: draft.origin,
             location: BatchLocation::Slot(slot),
-            flags: draft.flags,
+            flags,
         };
         let sledzona = b.flags.has(BatchFlags::TRACED);
         let id = self.batches.insert(b);
@@ -89,7 +102,29 @@ impl Store {
         self.paid_in = Money(self.paid_in.0 + draft.cost.0);
 
         if sledzona {
-            self.zapisz(id, draft.produced_at, crate::batch::TraceKind::Produced);
+            // Wejście masy do świata ma trzy różne znaczenia i ślad ma je rozróżniać:
+            // wyrób zszedł z linii, dostawa przekroczyła granicę, zapas otworzył świat.
+            let kind = match source {
+                MassIn::Produced => crate::batch::TraceKind::Produced,
+                MassIn::Imported => crate::batch::TraceKind::Arrived,
+                MassIn::Initial => crate::batch::TraceKind::Stored,
+            };
+            let site = site_slotu;
+            self.zapisz(id, kind, site);
+            // Wyrób dziedziczy rodziców po wejściach pobranych w tym zakładzie.
+            if matches!(source, MassIn::Produced) {
+                if let Some(site) = site {
+                    let rodzice: Vec<BatchId> = self
+                        .pending_parents
+                        .iter()
+                        .filter(|(s, _, _)| *s == site)
+                        .map(|(_, _, b)| *b)
+                        .collect();
+                    for p in rodzice {
+                        self.ledger.link(id, p);
+                    }
+                }
+            }
         }
         Ok(id)
     }
@@ -138,7 +173,7 @@ impl Store {
             }
             return self.write_off(slot, good, jest, kind);
         };
-        let Ok(kawalek) = self.take(r) else {
+        let Ok(kawalek) = self.take_as(r, TakeKind::Loss(kind)) else {
             return Mass::ZERO;
         };
         // `take` zaksięgowało to jako zużycie i COGS — a to była strata. Przeksięgowanie
@@ -166,7 +201,10 @@ impl Store {
             }
             return self.export(slot, good, jest);
         };
-        let Ok(kawalek) = self.take(r) else {
+        // `TakeKind::Move`, a nie `Consume`: towar wyjeżdżający za granicę nie jest
+        // niczyim wsadem, więc nie może zostać rodzicem wyrobu, który powstanie
+        // w tym zakładzie po nim.
+        let Ok(kawalek) = self.take_as(r, TakeKind::Move) else {
             return (Mass::ZERO, Money::ZERO);
         };
         // `take` zaksięgowało wydanie jako zużycie w łańcuchu. To było wyjście z miasta.
@@ -223,6 +261,20 @@ impl Store {
     /// Koszt dzieli się proporcjonalnie do masy przez [`split_proportional`], więc suma
     /// części równa się kwocie dzielonej **zawsze**, także przy tysiącu podziałów.
     pub fn take(&mut self, r: Reservation) -> Result<BatchSlice, StoreError> {
+        self.take_as(r, TakeKind::Consume)
+    }
+
+    /// Wydanie z jawnym powodem — to on rozstrzyga, jaki etap śladu zostaje zapisany
+    /// i czy wydana partia zostaje **rodzicem** przyszłego wyrobu (`AP-8`).
+    ///
+    /// Bez tego rozróżnienia bochenek sprzedany klientowi i mąka zjedzona przez piec
+    /// zapisywałyby ten sam etap, a sprzedaż z półki dopisywałaby się do rodziców
+    /// wyrobu, którego nikt w sklepie nie robi.
+    pub(crate) fn take_as(
+        &mut self,
+        r: Reservation,
+        kind: TakeKind,
+    ) -> Result<BatchSlice, StoreError> {
         for (id, _) in &r.items {
             if !self.batches.contains(*id) {
                 return Err(StoreError::StaleReservation);
@@ -293,6 +345,33 @@ impl Store {
             });
             if b.mass.0 == 0 {
                 puste.push(*id);
+            }
+        }
+
+        // Ślad wydania. Partia zjedzona przez linię zostaje **rodzicem** wyrobu, który
+        // z niej powstanie; sprzedana, odpisana i przełożona nie zostaje niczyim
+        // rodzicem, bo nic z niej nie powstaje (`AP-8`).
+        let miejsce = self.site_of(r.slot);
+        let etap = kind.trace_kind();
+        for (id, ile) in &r.items {
+            if self
+                .batches
+                .get(*id)
+                .is_some_and(|b| b.flags.has(BatchFlags::TRACED))
+            {
+                // Masa **wydana**, nie reszta zostająca w magazynie — patrz
+                // komentarz przy `Store::zapisz_masa`.
+                self.zapisz_masa(*id, etap, miejsce, Some(*ile));
+                if matches!(kind, TakeKind::Consume) {
+                    if let Some(site) = miejsce {
+                        // Nowa szarża zastępuje poprzednią: wpisy tego zakładu
+                        // z innej minuty należą do wsadu, który już się wypiekł.
+                        let teraz = self.now;
+                        self.pending_parents
+                            .retain(|(s, t, _)| *s != site || *t == teraz);
+                        self.pending_parents.push((site, teraz, *id));
+                    }
+                }
             }
         }
 

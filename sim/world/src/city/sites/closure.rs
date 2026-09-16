@@ -446,6 +446,7 @@ mod tests {
             archetype: SiteArchetypeId(0),
             recipes: vec![PIEKARNIA],
             capacity_scale: scale,
+            deposit: None,
             workplaces: 0..0,
             parcel: crate::city::parcels::parcel_id(0),
         }

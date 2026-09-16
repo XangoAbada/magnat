@@ -42,6 +42,12 @@ impl Zloze {
     }
 }
 
+impl magnat_core::HashState for Zloze {
+    fn hash_state(&self, h: &mut magnat_core::StateHasher) {
+        h.write_i64(self.extracted.get());
+    }
+}
+
 impl Deposits for Zloze {
     fn remaining(&self, _id: DepositId) -> Mass {
         Mass(self.reserves.0 - self.extracted.get())

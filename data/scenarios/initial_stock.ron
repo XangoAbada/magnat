@@ -1,0 +1,53 @@
+// Zapas startowy zakładów Etapu 7 (M6 §8, ryzyko `R2`; wykonane w M6e jako `AO-3`).
+//
+// **Po co ten plik istnieje.** Graf produktów jest cykliczny i ma być cykliczny:
+// rafineria potrzebuje prądu, elektrownia paliwa, huta maszyn, fabryka maszyn stali
+// (M6 §7.2). Każdy taki cykl daje się rozciąć importem albo złożem — i walidator
+// `goods-graph` tego pilnuje — ale rozcięcie kosztuje czas dostawy. Świat, który
+// startuje z pustymi magazynami, spędza pierwsze dwa tygodnie na czekaniu, aż
+// pierwsza ciężarówka przejedzie przez cykl, a przez ten czas wszystko stoi na
+// `Halted` i kaskada niedoboru mierzy bootstrap zamiast gospodarki.
+//
+// **Czego ten plik NIE robi.** Zapas startowy **nie jest źródłem w grafie** (M6 §6.4.1,
+// zaostrzenie przyjęte przez M2): walidator domknięcia nie ma prawa go widzieć.
+// Inaczej przeszedłby w CI łańcuch, który raz wystartuje i nigdy się nie odtworzy
+// po wyczerpaniu zapasu — czyli dokładnie ta klasa błędu, którą walidator ma łapać.
+// Punktami wejścia zostają wyłącznie `RecipeSource::Extraction`, `Agriculture`
+// i `Good::external_base_price`.
+//
+// **Dlaczego cztery liczby, a nie tabela czterystu towarów.** Proporcje wejść i wyjść
+// są już rozstrzygnięte: recepturą (`Recipe::inputs`) i skalą zakładu
+// (`SiteSeed::capacity_scale`, którą KROK 5 domknięcia łańcuchów wyrównał do popytu).
+// Jedynym wolnym parametrem jest **na ile dób ten bufor wystarcza**, a to jest jedna
+// liczba na cały świat. Tabela per towar byłaby czterystoma okazjami do rozjechania
+// się z recepturą i zerem nowej informacji.
+//
+// Jednostki: doby gry (1440 minut), jakość w skali `Q` 0..=100.
+(
+    schema_version: 1,
+
+    // Ile dób nominalnego zużycia wejść stoi w magazynie wejściowym zakładu w minucie
+    // zero. Czternaście, bo tyle deklaruje mitygacja `R2` w §8 dokumentu fazy — i tyle
+    // wystarcza, żeby najdłuższy cykl fali A (ropa → rafineria → paliwo → transport)
+    // domknął się własną produkcją, zanim bufor zejdzie do zera.
+    input_days: 14,
+
+    // Ile dób nominalnej produkcji stoi w magazynie wyjściowym. Dwie, nie czternaście:
+    // wyjście ma **wystartować rynek**, a nie zastąpić go na dwa tygodnie. Piekarnia
+    // z czternastodobowym zapasem chleba nie piekłaby nic i sprzedawała towar
+    // przeterminowany — a `prop_no_expired_on_shelf` byłby wtedy pierwszym, który
+    // się o tym dowie.
+    output_days: 2,
+
+    // Jakość zapasu startowego. Sześćdziesiąt, czyli „przeciętny towar przeciętnego
+    // dostawcy": powyżej minimum jakościowego receptur fali A (q55–q60), a poniżej
+    // tego, co zakład wyprodukuje sam przy dobrej obsadzie. Świat nie zaczyna się
+    // od najlepszego towaru, jaki kiedykolwiek powstał.
+    quality: 60,
+
+    // Ile dób obrotu ma pokrywać cel polityki zapasu zakładu i przy jakim pokryciu
+    // zakład zamawia. Odpowiednik `reorder_point` / `target` z `InventoryPolicy::MinMax`,
+    // wyrażony w dobach, bo masa zależy od receptury i skali, a doby nie.
+    reorder_days: 3,
+    target_days: 10,
+)

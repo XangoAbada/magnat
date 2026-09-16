@@ -280,6 +280,12 @@ struct MarketInner {
     /// Sklepy w kolejności zakładania; `by_site` daje dostęp po `SiteId`.
     shops: Vec<Shop>,
     by_site: BTreeMap<SiteId, u32>,
+    /// Konta zakładów produkcyjnych (`AP-2`). Zakład **nie jest** sklepem: nie ma
+    /// półki, ceny ani pierścienia utraconych sprzedaży, a księgi zakładowej dostanie
+    /// dopiero w M7 razem z rachunkiem wyniku firmy. Ma za to rachunek bieżący i to
+    /// wystarcza, żeby rozliczenie rynku B2B miało dokąd trafić — bez tego zakup mąki
+    /// przez piekarnię był darmowy, a pieniądz przestawał się domykać z masą.
+    plants: BTreeMap<SiteId, (magnat_core::FirmId, AccountId)>,
     /// Kto dostarcza towar na zaplecze. Od WP11 **`dyn`**, a nie typ konkretny:
     /// bez tego nie ma jak podmienić dostawcy zewnętrznego na rynek B2B, a kryterium
     /// pakietu mówi wprost o przełączniku (`AK-2`). Domyślną implementacją jest
@@ -360,6 +366,7 @@ impl Market {
             index: OfferIndex::new(grid),
             shops: Vec::new(),
             by_site: BTreeMap::new(),
+            plants: BTreeMap::new(),
             supplier,
             goods,
             chain,
@@ -650,6 +657,12 @@ impl HashState for Market {
         for (site, i) in &m.by_site {
             site.entity().hash_state(h);
             m.shops[*i as usize].hash_state(h);
+        }
+        h.write_u32(m.plants.len() as u32);
+        for (site, (firm, acc)) in &m.plants {
+            site.entity().hash_state(h);
+            firm.entity().hash_state(h);
+            h.write_u32(acc.0);
         }
         h.write_u32(m.intents.len() as u32);
         for it in &m.intents {

@@ -264,6 +264,31 @@ pub fn shop_card(ui: &mut egui::Ui, card: &ShopCard, tab: &mut ShopTab, c: &Cata
     ui.label(egui::RichText::new(card.render_tab(c, l, *tab)).monospace());
 }
 
+/// Panel łańcucha dostaw: rząd zakładek, nagłówek, treść wybranej zakładki (WP13).
+///
+/// Ten sam kształt co [`shop_card`] i z tego samego powodu: treść idzie z karty
+/// w monospace, więc złoty test broni dokładnie tego, co widzi gracz, a nie drugiej
+/// ścieżki obok.
+pub fn supply_card(
+    ui: &mut egui::Ui,
+    card: &crate::SupplyCard,
+    tab: &mut crate::SupplyTab,
+    c: &Catalog,
+    l: Locale,
+) {
+    ui.horizontal(|ui| {
+        for t in crate::SupplyTab::ALL {
+            if ui.selectable_label(*tab == t, t.label(c, l)).clicked() {
+                *tab = t;
+            }
+        }
+    });
+    ui.separator();
+    ui.label(egui::RichText::new(card.render_header(c, l)).monospace());
+    ui.separator();
+    ui.label(egui::RichText::new(card.render_tab(c, l, *tab)).monospace());
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

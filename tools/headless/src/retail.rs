@@ -24,12 +24,29 @@ use magnat_economy::{
 use magnat_ecs::World;
 use magnat_jobs::JobPool;
 use magnat_spatial::{Aabb2, GridSpec, Vec2};
-use magnat_supply::{ChainHandle, FlatRateFreight, FreightOracle, TariffTable, Tuning};
+use magnat_supply::{ChainHandle, FreightOracle, TariffTable, Tuning};
+use magnat_traffic::TrafficOracle;
 use magnat_world::{population::SITE_KEY_BASE, CityData};
 
-/// Emisja startowa na koncie reszty świata. Jedyne miejsce, w którym pieniądz
-/// powstaje z niczego — wszystko dalej jest przelewem, żeby P1 miał co pilnować.
+/// Emisja startowa na koncie reszty świata — **część stała**. Jedyne miejsce,
+/// w którym pieniądz powstaje z niczego; wszystko dalej jest przelewem, żeby P1 miał
+/// co pilnować.
 pub const EMISJA: i64 = 10_000_000_000;
+
+/// Emisja dla świata o tylu zakładach Etapu 7 (`AP-3`).
+///
+/// Od M6e kapitał obrotowy dostaje nie tylko sklep, ale i zakład produkcyjny, więc
+/// stała emisja przestała wystarczać: metropolia ma rząd tysiąca zakładów, a stała
+/// pokrywała kilkadziesiąt. Objaw był myląco odległy od przyczyny — `brak środków
+/// w granicach limitu debetu` przy zakładaniu **losowego** zakładu, czyli tego,
+/// na którym konto reszty świata akurat się skończyło.
+///
+/// Emisja pokrywa każdy zakład stawką zakładu produkcyjnego, także sklep: różnica
+/// idzie na zapas startowy i wypłaty, a zaniżenie kosztowałoby drugi taki błąd.
+#[must_use]
+pub fn emisja(sites: usize) -> Money {
+    Money(EMISJA.saturating_add(sites as i64 * crate::plants::KAPITAL_ZAKLADU))
+}
 
 /// Kapitał obrotowy sklepu. `ponytail:` stała zamiast modelu kapitału — sufit
 /// nazwany: sklep, który ma za mało, po prostu nie zamawia. Kapitał zakładany
@@ -57,14 +74,12 @@ const BRAMA_T_NA_DOBE: i64 = 4_000;
 /// Czas dostawy importowej z bramy drogowej — dwie doby, zanim zaległość go wydłuży.
 const BRAMA_LEAD_MINUT: u32 = 2_880;
 
-/// Odległość ryczałtowa dla wyceny przewozu w moście.
+/// Stała opłata za podstawienie pojazdu, w groszach (`AM-5`).
 ///
-/// `ponytail:` most nie dostaje `TrafficOracle`, tylko `Box<dyn TravelOracle>` —
-/// a prawdziwa wtyczka towarowa (`magnat_traffic::freight::RoadFreight`, WP12) potrzebuje
-/// routera i mapy pozycji ramp. Sufit nazwany: dopóki tu stoi stawka ryczałtowa, koszt
-/// dostawy nie zależy od geografii miasta. Droga wyjścia jest gotowa i czeka na wpięcie
-/// w M6e, kiedy świat będzie składany w jednym miejscu razem z ruchem.
-const KM_RYCZALT: u32 = 8;
+/// Wyodrębniona z kilometrów, bo bez niej konsolidacja dostaw nie oszczędza nic:
+/// koszt liniowy w masie znaczy, że dziesięć kursów po tonie kosztuje tyle samo co
+/// jeden po dziesięć, a wtedy `dc_beats_direct` spełnia się tożsamościowo.
+const PODSTAWIENIE_GR: i64 = 4_000;
 
 /// Buduje łańcuch dostaw miasta: katalog, strojenie, trasę i bramę towarową.
 ///
@@ -75,30 +90,61 @@ const KM_RYCZALT: u32 = 8;
 /// granicę**: za pieniądze, z czasem dostawy, z ceną rosnącą przy dużych zakupach
 /// i z przepustowością, która się kończy. To jest cała różnica wobec `ExternalSupplier`,
 /// który dawał wszystko natychmiast i po stałej cenie.
-fn zbuduj_lancuch(city: &CityData, seed: u64) -> Result<ChainHandle, Box<dyn std::error::Error>> {
+fn zbuduj_lancuch(
+    city: &CityData,
+    traffic: &Arc<TrafficOracle>,
+    seed: u64,
+) -> Result<ChainHandle, Box<dyn std::error::Error>> {
     let cat = Arc::new(city.catalog.clone());
     let tuning = Arc::new(Tuning::load_default()?);
-    let oracle: Arc<dyn FreightOracle> = Arc::new(FlatRateFreight {
-        km: KM_RYCZALT,
-        tuning: tuning.transport,
-        blocked: Vec::new(),
-    });
+    // **Prawdziwe kilometry po grafie M4** (`AO-4`). Do M6d stała tu atrapa
+    // `FlatRateFreight` z jedną odległością dla całego miasta — wystarczała do
+    // przetestowania maszyny stanów zlecenia i do niczego więcej: przy stałej
+    // odległości centrum dystrybucyjne wygrywa albo przegrywa z arytmetyki,
+    // a nie z geografii. Brama graniczna dostaje pozycję razem z zakładami, bo
+    // inaczej trasa do niej nie istnieje i import przestaje być wykonalny.
+    let mut rampy = crate::plants::rampy(city);
+    let brama = SiteId(Entity::new(SITE_BRAMY, std::num::NonZeroU32::MIN));
+    rampy.insert(brama, brama_pos(city));
+    let oracle: Arc<dyn FreightOracle> = Arc::new(magnat_traffic::freight::RoadFreight::new(
+        traffic.clone(),
+        traffic.catalog().clone(),
+        rampy,
+        PODSTAWIENIE_GR,
+    ));
     Ok(ChainHandle::with_import_gate(
         cat,
         tuning,
         oracle,
         TariffTable::load_default()?,
         seed,
-        SiteId(Entity::new(SITE_BRAMY, std::num::NonZeroU32::MIN)),
+        brama,
         Mass(BRAMA_T_NA_DOBE * 1_000_000),
         BRAMA_LEAD_MINUT,
-    ))
+    )
+    .with_deposits(city.deposits.clone()))
+}
+
+/// Pozycja bramy towarowej: pierwsza brama drogowa miasta, a gdy takiej nie ma —
+/// środek miasta. Brama nie jest zakładem Etapu 7, więc nie ma budynku, z którego
+/// dałoby się wziąć AABB.
+fn brama_pos(city: &CityData) -> magnat_core::WorldCoord {
+    city.roads
+        .gates
+        .iter()
+        .find(|g| !g.kind.is_rail())
+        .map_or_else(
+            || magnat_core::WorldCoord::new(city.center.x as i32, city.center.y as i32, 0),
+            |g| magnat_core::WorldCoord::new(g.pos.x as i32, g.pos.y as i32, 0),
+        )
 }
 
 /// Wynik postawienia gospodarki.
 pub struct Retail {
     pub market: Market,
     pub shops: usize,
+    /// Zakłady produkcyjne Etapu 7 postawione jako `PlantSite` (`AO-3`).
+    pub plants: crate::plants::PlantsReport,
     /// Ile gospodarstw dostało pierwszą wypłatę i na jaką sumę.
     pub incomes: (u64, Money),
     /// Pierwsze rozliczenie miesiąca gospodarstw — koperty, koszty stałe, kredyty.
@@ -246,6 +292,7 @@ pub fn setup(
     city: &CityData,
     places: Arc<PlaceTable>,
     travel: Box<dyn TravelOracle>,
+    traffic: &Arc<TrafficOracle>,
     seed: u64,
     pool: &JobPool,
 ) -> Result<Retail, Box<dyn std::error::Error>> {
@@ -260,9 +307,9 @@ pub fn setup(
         None,
         Money::ZERO,
     );
-    books.endow(rest, Money(EMISJA), Tick(0))?;
+    books.endow(rest, emisja(city.sites.sites.len()), Tick(0))?;
 
-    let chain = zbuduj_lancuch(city, seed)?;
+    let chain = zbuduj_lancuch(city, traffic, seed)?;
     let market = Market::new(
         siatka(city),
         seed,
@@ -274,6 +321,17 @@ pub fn setup(
         rest,
     );
     let shops = obsadz_sklepy(city, &market, &mut books, rest);
+    // Zakłady produkcyjne — **po** sklepach, bo obie ścieżki chodzą po tej samej liście
+    // `city.sites.sites` i muszą się na niej nie przeciąć, a `to_sklep` jest jedynym
+    // rozstrzygnięciem, które je rozdziela.
+    let plants = if std::env::var_os("MAGNAT_NO_PLANTS").is_some() { Default::default() } else { crate::plants::obsadz_zaklady(
+        city,
+        &chain,
+        &market,
+        &mut books,
+        rest,
+        &crate::plants::InitialStock::load_default()?,
+    ) };
 
     // Bank miasta (M5d §5.10, decyzja otwarta nr 7): `FirmId`, konto i kapitał,
     // a jego „AI" to `assess_credit`. Identyfikator poza przestrzenią firm miasta,
@@ -319,6 +377,7 @@ pub fn setup(
     Ok(Retail {
         market,
         shops,
+        plants,
         incomes,
         budgets,
     })

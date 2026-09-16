@@ -158,7 +158,9 @@ pub struct Deposit {
     pub concentration: Q,
     /// Gramy surowca — **wartość pierwotna**, całkowitoliczbowa.
     pub reserves: Mass,
-    /// 0 na starcie; M6 wyłącznie inkrementuje.
+    /// Wyczerpanie **sprzed startu świata** — historia eksploatacji losowana przy
+    /// generacji. Po jej zamknięciu nie drga: wydobycie w grze prowadzi
+    /// [`DepositLedger`], bo to ono ma dwóch czytelników i wchodzi do hasha stanu.
     pub extracted: Mass,
     pub depth_top_m: i16,
     pub depth_bottom_m: i16,
@@ -190,6 +192,9 @@ impl Deposit {
         )
     }
 
+    /// Pozostałość **w chwili startu świata**: zasoby pierwotne minus wyczerpanie
+    /// z historii generacji. Bieżącą pozostałość zna wyłącznie
+    /// [`DepositLedger::remaining`] — patrz komentarz przy ledgerze.
     #[inline]
     #[must_use]
     pub fn remaining(&self) -> Mass {
@@ -244,51 +249,137 @@ impl Deposit {
     }
 }
 
-/// Bilans złóż widziany przez łańcuch dostaw (M6d §5.10, `K-13`).
+/// Bilans wydobycia widziany przez łańcuch dostaw (M6d §5.10, `K-13`, `K-39`).
 ///
 /// Wtyczka do portu [`magnat_supply::Deposits`] — wzorzec `Z-1`: definicja i atrapa
 /// stoją w crate'cie, który pyta (`sim/supply`), implementacja w tym, który umie
 /// odpowiedzieć. Dzięki temu M6 nie widzi ani `Deposit`, ani `DepositShape`, ani
-/// jednego voxela, a jedyną prawdą o pozostałej masie zostaje `Deposit::extracted`.
+/// jednego voxela.
 ///
-/// `RefCell`, bo port bierze `&self`: wydobycie dzieje się w środku
+/// **Ledger posiada, a nie pożycza** (`AP-1`, wykonanie `AO-6`). Do M6d była to
+/// nakładka na `&mut [Deposit]`, co wystarczało testom — ale `ChainHandle::deposits`
+/// wymaga `Arc<dyn Deposits + Send + Sync + 'static>`, a pożyczka nie spełnia żadnego
+/// z tych trzech warunków. Pytanie „gdzie wtedy mieszka `WorldData::deposits`, skoro
+/// sięga po nie dwóch właścicieli" rozstrzyga się **podziałem liczby, nie podziałem
+/// tablicy**:
+///
+/// - [`Deposit::extracted`] to wyczerpanie **sprzed startu świata** — parametr generacji
+///   (`gen::deposits` losuje historię eksploatacji). Po zamknięciu generacji nie drga,
+///   więc zostaje w `WorldData` razem z geometrią i wchodzi do hasha terenu.
+/// - `DepositLedger::mined` to wydobycie **w tej grze**. Zmienia się co minutę, ma
+///   jednego pisarza (`extract`) i wchodzi do hasha stanu przez `ChainHandle`.
+///
+/// Te dwie liczby nie są dwiema prawdami o tym samym: pierwsza jest historią świata,
+/// druga jego rozgrywką. [`Deposit::remaining`] odpowiada na pytanie „ile było
+/// w chwili zero", [`DepositLedger::remaining`] na „ile jest teraz" — i to jest
+/// jedyne pytanie, które zadaje kopalnia.
+///
+/// `RwLock`, bo port bierze `&self`: wydobycie dzieje się w środku
 /// `advance_production`, gdzie magazyn i zakład są już pożyczone mutowalnie.
-/// Pożyczka jest krótka (jedno `extract`) i nie przeżywa wywołania, więc panika
-/// z `borrow_mut` jest tu niemożliwa inaczej niż przez reentrancję, której w pętli
-/// produkcji nie ma.
-pub struct DepositLedger<'a> {
-    deposits: std::cell::RefCell<&'a mut [Deposit]>,
+#[derive(Debug)]
+pub struct DepositLedger {
+    /// Wydobycie od startu świata, indeksowane `DepositId`.
+    mined: std::sync::RwLock<Vec<Mass>>,
+    /// Pozostałość w chwili zero — `reserves − extracted` z generacji.
+    at_start: Vec<Mass>,
+    /// Zasoby pierwotne — mianownik wyczerpania w `MiningSite::cost_per_tonne`.
+    reserves: Vec<Mass>,
 }
 
-impl<'a> DepositLedger<'a> {
+impl DepositLedger {
+    /// Bilans otwarcia dla złóż wygenerowanego świata.
+    ///
+    /// Indeksem jest `DepositId.0`, a nie pozycja w przekazanym wycinku — generator
+    /// nadaje identyfikatory kolejno, ale poleganie na tym byłoby założeniem, które
+    /// nic nie pilnuje.
     #[must_use]
-    pub fn new(deposits: &'a mut [Deposit]) -> DepositLedger<'a> {
+    pub fn new(deposits: &[Deposit]) -> DepositLedger {
+        DepositLedger::from_rows(deposits.iter().map(|d| (d.id, d.remaining(), d.reserves)))
+    }
+
+    /// Bilans otwarcia z trójek `(złoże, pozostałość w chwili zero, zasoby pierwotne)`.
+    ///
+    /// Osobno od [`DepositLedger::new`], bo generator miasta widzi złoża wyłącznie
+    /// przez [`crate::TerrainQuery`] (`K-13`) i nie ma wycinka `[Deposit]` do podania.
+    #[must_use]
+    pub fn from_rows(rows: impl IntoIterator<Item = (DepositId, Mass, Mass)>) -> DepositLedger {
+        let rows: Vec<_> = rows.into_iter().collect();
+        let n = rows.iter().map(|(id, _, _)| id.0 as usize + 1).max().unwrap_or(0);
+        let mut at_start = vec![Mass::ZERO; n];
+        let mut reserves = vec![Mass::ZERO; n];
+        for (id, start, res) in rows {
+            at_start[id.0 as usize] = start;
+            reserves[id.0 as usize] = res;
+        }
         DepositLedger {
-            deposits: std::cell::RefCell::new(deposits),
+            mined: std::sync::RwLock::new(vec![Mass::ZERO; n]),
+            at_start,
+            reserves,
+        }
+    }
+
+    /// Ile wydobyto z tego złoża od startu świata — wejście wyrobiska M11
+    /// (`Deposit::voxels_for`) i karty inspekcji.
+    ///
+    /// # Panics
+    /// Gdy zamek jest zatruty, czyli gdy inny wątek spanikował w środku wydobycia.
+    #[must_use]
+    pub fn mined(&self, id: DepositId) -> Mass {
+        self.mined
+            .read()
+            .expect("bilans złóż")
+            .get(id.0 as usize)
+            .copied()
+            .unwrap_or(Mass::ZERO)
+    }
+
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.at_start.len()
+    }
+
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.at_start.is_empty()
+    }
+}
+
+impl magnat_core::HashState for DepositLedger {
+    /// Po indeksach złóż, bo `DepositId` jest indeksem i kolejność jest stała (00 §3.2).
+    /// Do hasha wchodzi **wyłącznie** wydobycie: zasoby i pozostałość otwarcia są
+    /// wejściem z generacji i haszuje je `WorldData`.
+    fn hash_state(&self, h: &mut StateHasher) {
+        let m = self.mined.read().expect("bilans złóż");
+        h.write_u32(m.len() as u32);
+        for x in m.iter() {
+            h.write_i64(x.0);
         }
     }
 }
 
-impl magnat_supply::Deposits for DepositLedger<'_> {
+impl magnat_supply::Deposits for DepositLedger {
     fn remaining(&self, id: DepositId) -> Mass {
-        self.deposits
-            .borrow()
-            .get(id.0 as usize)
-            .map_or(Mass::ZERO, Deposit::remaining)
+        let i = id.0 as usize;
+        let Some(start) = self.at_start.get(i) else {
+            return Mass::ZERO;
+        };
+        Mass((start.0 - self.mined(id).0).max(0))
     }
 
     fn initial(&self, id: DepositId) -> Mass {
-        self.deposits
-            .borrow()
-            .get(id.0 as usize)
-            .map_or(Mass::ZERO, |d| d.reserves)
+        self.reserves.get(id.0 as usize).copied().unwrap_or(Mass::ZERO)
     }
 
     fn extract(&self, id: DepositId, want: Mass) -> Mass {
-        self.deposits
-            .borrow_mut()
-            .get_mut(id.0 as usize)
-            .map_or(Mass::ZERO, |d| d.extract(want))
+        let i = id.0 as usize;
+        let Some(start) = self.at_start.get(i) else {
+            return Mass::ZERO;
+        };
+        let mut m = self.mined.write().expect("bilans złóż");
+        let zostalo = (start.0 - m[i].0).max(0);
+        let got = want.0.clamp(0, zostalo);
+        m[i] = Mass(m[i].0 + got);
+        Mass(got)
     }
 }
 

@@ -173,6 +173,52 @@ impl Market {
         }
     }
 
+    /// Faktury za media zakładów produkcyjnych (§5.11, `UtilityBillingSystem`).
+    ///
+    /// Zakład płaci **na zewnątrz**: sieci przesyłowe i ich właściciel to zakres M8,
+    /// a do tego czasu prąd i woda przychodzą spoza miasta tak samo jak towar
+    /// importowany. Konsekwencja jest zamierzona i uczciwa — pieniądz za media
+    /// wychodzi z obiegu miasta na konto reszty świata, więc P1 dalej się domyka,
+    /// a rachunek zakładu obciąża to, co naprawdę zużył licznik.
+    ///
+    /// Zakład bez konta (albo faktura na zero) jest pomijany, nie zerowany: licznik
+    /// zachowa naliczenie i wystawi je w następnym miesiącu.
+    pub fn absorb_utility_bills(
+        &self,
+        bills: &[magnat_supply::UtilityBill],
+        books: &mut Books,
+        t: Tick,
+    ) -> Money {
+        if bills.is_empty() {
+            return Money::ZERO;
+        }
+        let m = self.lock();
+        let rest = m.rest_of_world;
+        let mut razem = Money::ZERO;
+        for f in bills {
+            if f.amount.get() <= 0 {
+                continue;
+            }
+            let konto = m
+                .by_site
+                .get(&f.site)
+                .map(|i| m.shops[*i as usize].account)
+                .or_else(|| m.plants.get(&f.site).map(|(_, a)| *a));
+            let Some(konto) = konto else { continue };
+            let memo = TxMemo::new(
+                TxKind::Utility {
+                    site: f.site,
+                    kind: f.kind,
+                },
+                DecisionReason::Unspecified,
+            );
+            if books.transfer(konto, rest, f.amount, memo, t).is_ok() {
+                razem = Money(razem.get() + f.amount.get());
+            }
+        }
+        razem
+    }
+
     /// Odpis towaru przeterminowanego (§5.8). Zwraca łączną wartość odpisu.
     ///
     /// Magazyn zdejmuje partie po dacie sam (`Store::spoil`, kadencja minutowa)
@@ -322,21 +368,32 @@ impl Market {
         let rest = m.rest_of_world;
         let mut razem = Money::ZERO;
         for s in settlements {
-            let Some(i) = m.by_site.get(&s.deliver_to).copied() else {
-                continue;
-            };
-            let i = i as usize;
             let kwota = Money(s.net.get() + s.duty.get());
             if kwota.get() <= 0 {
                 continue;
             }
-            let account = m.shops[i].account;
+            // Kupującym jest sklep **albo zakład produkcyjny** (`AP-2`). Do M6d była
+            // to wyłącznie pierwsza możliwość, więc dostawa mąki do piekarni nie miała
+            // konta, z którego zapłacić — rozliczenie było po cichu pomijane, towar
+            // wjeżdżał do magazynu za darmo i `Store::paid_in` rozjeżdżał się
+            // z `Books`. Objaw: `prop_cost_vs_mass` czerwony o wartość każdej
+            // dostawy między zakładami.
+            let sklep = m.by_site.get(&s.deliver_to).copied().map(|i| i as usize);
+            let account = match sklep {
+                Some(i) => m.shops[i].account,
+                None => match m.plants.get(&s.deliver_to) {
+                    Some((_, a)) => *a,
+                    None => continue,
+                },
+            };
             let odbiorca = match s.seller {
                 magnat_supply::SellerRef::Firm(f) => m
                     .shops
                     .iter()
                     .find(|sh| sh.firm == f)
-                    .map_or(rest, |sh| sh.account),
+                    .map(|sh| sh.account)
+                    .or_else(|| m.plants.values().find(|(pf, _)| *pf == f).map(|(_, a)| *a))
+                    .unwrap_or(rest),
                 magnat_supply::SellerRef::External(_) => rest,
             };
             let kat = m.goods.spec(s.good).map_or(StockCat::Other, |g| g.cat);
@@ -349,9 +406,16 @@ impl Market {
             // (P5) o wartość każdej dostawy, na którą sklepowi zabrakło. Sklep, który
             // nie zapłacił, ma **zobowiązanie**: `TradePayable` schodzi na minus i to
             // jest właściwa odpowiedź, bo długiem zajmuje się M7, a nie magazyn.
-            post_receipt(&mut m.shops[i].ledger, kwota, t);
-            if books.transfer(account, odbiorca, kwota, memo, t).is_ok() {
-                post_purchase(&mut m.shops[i].ledger, kwota, t);
+            //
+            // Zakład księgi zakładowej nie ma i mieć nie będzie do M7 — dla niego
+            // zostaje sam przelew, a rachunek wyniku dopisze faza, która go zaprojektuje.
+            if let Some(i) = sklep {
+                post_receipt(&mut m.shops[i].ledger, kwota, t);
+                if books.transfer(account, odbiorca, kwota, memo, t).is_ok() {
+                    post_purchase(&mut m.shops[i].ledger, kwota, t);
+                }
+            } else {
+                let _ = books.transfer(account, odbiorca, kwota, memo, t);
             }
             razem = Money(razem.get() + kwota.get());
         }

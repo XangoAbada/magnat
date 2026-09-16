@@ -12,11 +12,19 @@ bench = false
 
 [dependencies]
 magnat-core = { workspace = true }
+# Od M6e łańcuch ma **własny** system w harmonogramie (`AO-2`, `AP-4`) — do M6d
+# kadencję wołał `MarketSystem` z `sim/economy`, czyli M5 prowadził zegar M6.
+magnat-ecs = { workspace = true }
 serde = { workspace = true }
 ron = { workspace = true }
 
 [dev-dependencies]
 proptest = { workspace = true }
+criterion = { workspace = true }
+
+[[bench]]
+name = "supply_bench"
+harness = false
 
 [lints]
 workspace = true

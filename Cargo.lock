@@ -1413,6 +1413,7 @@ dependencies = [
  "magnat-render",
  "magnat-sim-snapshot",
  "magnat-spatial",
+ "magnat-supply",
  "magnat-traffic",
  "magnat-ui",
  "magnat-voxel",
@@ -1446,6 +1447,7 @@ dependencies = [
  "magnat-headless",
  "magnat-io",
  "magnat-jobs",
+ "magnat-supply",
  "magnat-traffic",
  "ron",
  "serde",
@@ -1521,6 +1523,8 @@ dependencies = [
  "magnat-ui",
  "magnat-voxel",
  "magnat-world",
+ "ron",
+ "serde",
 ]
 
 [[package]]
@@ -1595,7 +1599,9 @@ dependencies = [
 name = "magnat-supply"
 version = "0.1.0"
 dependencies = [
+ "criterion",
  "magnat-core",
+ "magnat-ecs",
  "proptest",
  "ron",
  "serde",
@@ -1628,6 +1634,7 @@ dependencies = [
  "magnat-economy",
  "magnat-ecs",
  "magnat-nav",
+ "magnat-supply",
  "magnat-traffic",
  "ron",
  "serde",

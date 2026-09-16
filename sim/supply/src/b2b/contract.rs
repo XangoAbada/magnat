@@ -185,6 +185,18 @@ impl SupplyContract {
         kwota
     }
 
+    /// Kara zapłacona: schodzi **dokładnie tyle, ile jest długu**, i nigdy więcej.
+    ///
+    /// Metoda kontraktu, nie rynku (`AP-9`): to jest niezmiennik `prop_contract_penalty`
+    /// („suma kar naliczonych równa sumie zapłaconych"), a niezmiennik ma mieszkać przy
+    /// danych, których dotyczy. [`crate::B2b::pay_penalty`] wyłącznie odnajduje kontrakt.
+    pub fn pay_penalty(&mut self, amount: Money) -> Money {
+        let dlug = Money(self.penalty_accrued.0 - self.penalty_paid.0);
+        let kwota = Money(amount.0.min(dlug.0).max(0));
+        self.penalty_paid = Money(self.penalty_paid.0 + kwota.0);
+        kwota
+    }
+
     /// Dostawa doszła. `late_minutes` liczy się od terminu, nie od wysyłki.
     pub fn record_fulfilled(&mut self, mass: Mass, late_minutes: u32) {
         self.fulfilled_mass = Mass(self.fulfilled_mass.0 + mass.0);
@@ -534,6 +546,17 @@ impl B2b {
                         now,
                     )
                     .is_ok();
+                let cena = Money(
+                    (i128::from(d.unit_price.0) * i128::from(masa.0) / 1_000_000) as i64,
+                );
+                if wyslane {
+                    // Zmiana właściciela przeszacowuje koszt własny na cenę zapłaconą
+                    // (`AP-7`) — tak samo jak przy sprzedaży spotowej.
+                    if let Some(o) = transport.get(id) {
+                        let cargo = o.cargo.clone();
+                        store.resell(&cargo, cena);
+                    }
+                }
                 if let Some(c) = self.contracts.get_mut(&idx) {
                     if wyslane {
                         c.record_fulfilled(masa, 0);
@@ -543,10 +566,7 @@ impl B2b {
                             seller: SellerRef::Firm(c.seller),
                             good: d.good,
                             mass: masa,
-                            net: Money(
-                                (i128::from(d.unit_price.0) * i128::from(masa.0) / 1_000_000)
-                                    as i64,
-                            ),
+                            net: cena,
                             duty: Money::ZERO,
                             order: Some(id),
                             reason: powod,
@@ -577,14 +597,11 @@ impl B2b {
     /// Kara umowna zapłacona — druga połowa `prop_contract_penalty`. Wołający przelewa
     /// pieniądz, rynek odnotowuje, że dług zszedł.
     pub fn pay_penalty(&mut self, id: ContractId, amount: Money) -> Result<Money, ContractError> {
-        let c = self
+        Ok(self
             .contracts
             .get_mut(&id.entity().index())
-            .ok_or(ContractError::Unknown)?;
-        let dlug = Money(c.penalty_accrued.0 - c.penalty_paid.0);
-        let kwota = Money(amount.0.min(dlug.0).max(0));
-        c.penalty_paid = Money(c.penalty_paid.0 + kwota.0);
-        Ok(kwota)
+            .ok_or(ContractError::Unknown)?
+            .pay_penalty(amount))
     }
 
     /// Wszystkie kary naliczone i zapłacone w mieście — wejście testu własnościowego.

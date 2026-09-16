@@ -118,6 +118,7 @@ pub fn single(cfg: &RunCfg, seed: u64) -> Result<RunFile, String> {
         &city,
         zaludnione.places.clone(),
         zaludnione.travel_oracle(),
+        &zaludnione.traffic,
         seed,
         &pool,
     )
@@ -135,6 +136,7 @@ pub fn single(cfg: &RunCfg, seed: u64) -> Result<RunFile, String> {
 
     let mut builder = ScheduleBuilder::new();
     builder
+        .add(magnat_supply::ChainSystem::new())
         .add(MarketSystem::new(&world))
         .add(DayLoopSystem::new(&world))
         .add(ReplanCooldownSystem::new(&world))

@@ -59,29 +59,30 @@ impl System for MarketSystem {
         };
         market.set_tick(t);
 
-        // 0. Minuta łańcucha dostaw (M6): produkcja, przewozy, psucie.
+        // 0. Odbiór minuty łańcucha dostaw (M6).
         //
-        //    **To jest rusztowanie, nie docelowa kadencja.** §5.11 fazy M6 rozpisuje
-        //    łańcuch na osiem systemów ECS z rozproszeniem po indeksie encji i to jest
-        //    robota M6e. Tutaj stoi jedno wywołanie, bo WP11 bez niego nie ma jak się
-        //    wydarzyć: półka bierze towar z magazynu, a do magazynu nic nie dojedzie,
-        //    dopóki ktoś nie ruszy zlecenia transportowego. Kolejność wobec sprzedaży
-        //    jest za to **kontraktem już teraz** (`D12`): psucie przed detalem.
+        //    **Kadencję prowadzi od M6e `supply.Chain`**, nie ten system (`AP-4`):
+        //    łańcuch ma własny `SystemId` i stoi w DAG **przed** rynkiem, więc
+        //    kontrakt `D12` (psucie przed detalem) jest krawędzią grafu, a nie
+        //    komentarzem. Tutaj zostaje samo księgowanie tego, co łańcuch zostawił
+        //    w skrzynce: odpisy terminu, rozliczenia B2B i faktury za media.
+        //    Fakty wychodzą listą, księguje ten, kto ma księgę (`AI-1`).
         let chain = ctx.world().get_resource::<magnat_supply::ChainHandle>().cloned();
-        if let Some(chain) = &chain {
-            let zepsute = {
-                let mut ch = chain.lock();
-                ch.step_minute(
-                    &chain.cat,
-                    &chain.tuning,
-                    chain.oracle.as_ref(),
-                    chain.deposits.as_ref(),
-                    market.seed(),
-                    magnat_core::SimMinute(t.get()),
-                )
-            };
-            if !zepsute.is_empty() {
-                market.absorb_spoilage(&zepsute, t);
+        let lancuch = chain.as_ref().map(magnat_supply::ChainHandle::take_tick);
+        if let Some(w) = &lancuch {
+            if !w.spoiled.is_empty() {
+                market.absorb_spoilage(&w.spoiled, t);
+            }
+        }
+
+        // 0a. Rozliczenia B2B i faktury za media — **przed** rozliczeniem intencji,
+        //     bo obie pozycje dotyczą minuty, która się właśnie skończyła.
+        if let Some(w) = &lancuch {
+            if !w.settlements.is_empty() || !w.bills.is_empty() {
+                if let Some(books) = ctx.world_mut().get_resource_mut::<Books>() {
+                    market.absorb_settlements(&w.settlements, books, t);
+                    market.absorb_utility_bills(&w.bills, books, t);
+                }
             }
         }
 
@@ -93,26 +94,9 @@ impl System for MarketSystem {
             // 2. Migawka gospodarstw dla decyzji zakupowej.
             refresh_households(ctx.world(), &mut self.households);
             market.refresh_households(&self.households);
-            // 3. Godzina łańcucha: kaskada niedoboru, przegląd zapasów, rynek B2B.
-            //    **Przed** wyłożeniem półki, bo dostawa, która właśnie dojechała,
-            //    ma trafić na półkę w tej samej godzinie, a nie w następnej.
-            if let Some(chain) = &chain {
-                let rozliczenia = {
-                    let mut ch = chain.lock();
-                    ch.step_hour(
-                        &chain.cat,
-                        &chain.tuning,
-                        chain.oracle.as_ref(),
-                        magnat_core::SimMinute(t.get()),
-                    )
-                };
-                if !rozliczenia.is_empty() {
-                    if let Some(books) = ctx.world_mut().get_resource_mut::<Books>() {
-                        market.absorb_settlements(&rozliczenia, books, t);
-                    }
-                }
-            }
-            // 3a. Półki z zaplecza.
+            // 3a. Półki z zaplecza. Rozliczenia rynku B2B są już zaksięgowane
+            //     (krok 0a), więc dostawa, która właśnie dojechała, trafia na półkę
+            //     w tej samej godzinie, a nie w następnej.
             market.restock_shelves();
         }
         if cal.is_month_boundary() {
@@ -135,10 +119,6 @@ impl System for MarketSystem {
             // Odpis terminu robi magazyn (`Store::spoil`, kadencja minutowa łańcucha)
             // i oddaje listę; tutaj zostaje samo księgowanie tego, co zeszło ze slotów
             // tego sklepu. Do M6c była to własna pętla po liniach zapasu.
-            if let Some(chain) = &chain {
-                let mut ch = chain.lock();
-                ch.step_day(&chain.cat, &chain.tuning);
-            }
             market.observe_competitors(t);
             market.reprice_all(t);
             // 5. Dostawy i zamówienia u dostawcy zewnętrznego.

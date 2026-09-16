@@ -25,6 +25,7 @@ magnat-economy = { workspace = true }
 # scenariusza `m5shop` i balansatora. Nazwa crate'u mówi „headless", bo tam ten most
 # powstał; co z tego wyniknie dla struktury, rozstrzyga refaktor R1.
 magnat-headless = { workspace = true }
+magnat-supply = { workspace = true }
 egui = { workspace = true }
 egui-winit = { workspace = true }
 magnat-sim-snapshot = { workspace = true }

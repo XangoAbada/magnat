@@ -130,6 +130,10 @@ pub struct SiteSeed {
     pub recipes: Vec<RecipeId>,
     /// 1000 = skala bazowa archetypu.
     pub capacity_scale: u16,
+    /// Złoże, na którym zakład stoi — `None` dla wszystkiego, co nie kopie (`AL-17`).
+    /// Niesie je dalej `PlantSite::mining`, a stamtąd `BatchOrigin::deposit`, czyli
+    /// ślad „od pola do półki" z PRD §14.4.
+    pub deposit: Option<magnat_core::DepositId>,
     pub workplaces: Range<u32>,
     /// Parcela zakładu — do karty inspekcji i do testów spójności.
     pub parcel: magnat_core::ParcelId,

@@ -60,6 +60,20 @@ impl HashState for EmissionTotals {
     }
 }
 
+/// Faktura za medium: zakład, dostawca, **rodzaj medium** i kwota.
+///
+/// Struktura, a nie trójka z §6.1 (`AP-5`): księgujący potrzebuje rodzaju, bo
+/// `TxKind::Utility` go niesie, a bez niego rachunek zakładu pokazywałby prąd i wodę
+/// jako jedną pozycję „media" — czyli dokładnie tę informację, po którą gracz
+/// otwiera kartę zakładu, gdy rachunek urósł.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct UtilityBill {
+    pub site: SiteId,
+    pub supplier: magnat_core::FirmId,
+    pub kind: magnat_core::UtilityService,
+    pub amount: Money,
+}
+
 /// Zakład: linie, harmonogram, magazyny, liczniki i rampa.
 #[derive(Clone, Debug)]
 pub struct PlantSite {
@@ -309,16 +323,18 @@ impl Plant {
     /// Faktury za media, wystawiane raz na miesiąc. Zwraca listę
     /// `(zakład, dostawca, kwota)` — księguje je wołający, bo `sim/supply` nie zależy
     /// od `sim/economy` i zależeć nie może (kierunek jest odwrotny od M6a).
-    pub fn bill_utilities(
-        &mut self,
-        until: SimMinute,
-    ) -> Vec<(SiteId, magnat_core::FirmId, Money)> {
+    pub fn bill_utilities(&mut self, until: SimMinute) -> Vec<UtilityBill> {
         let mut faktury = Vec::new();
         for s in self.sites.values_mut() {
             for m in &mut s.meters {
-                let kwota = m.bill(until);
-                if kwota.0 != 0 {
-                    faktury.push((s.site, m.supplier, kwota));
+                let amount = m.bill(until);
+                if amount.0 != 0 {
+                    faktury.push(UtilityBill {
+                        site: s.site,
+                        supplier: m.supplier,
+                        kind: m.kind,
+                        amount,
+                    });
                 }
             }
         }

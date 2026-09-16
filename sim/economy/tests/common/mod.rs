@@ -398,7 +398,12 @@ pub fn doba_lancucha(market: &Market, w: &mut World, t: Tick) {
         let mut ch = chain.lock();
         let mut zepsute = Vec::new();
         let mut rozliczenia = Vec::new();
-        for minuta in [dzien * 1_440 + 240, dzien * 1_440 + 420] {
+        // **Wszystkie sześćdziesiąt faz rozproszenia** (`AP-4`), a nie dwie minuty:
+        // od M6e zakład o indeksie `i` przegląda się w minucie `i % 60`, więc przebieg
+        // trafiający w jedną fazę obsłużyłby jeden sklep na sześćdziesiąt. Zakres
+        // 240..=360 obejmuje komplet faz i dwie granice godziny, czyli także krok,
+        // w którym rynek rozstrzyga zebrane zapytania.
+        for minuta in (dzien * 1_440 + 240)..=(dzien * 1_440 + 360) {
             let teraz = magnat_core::SimMinute(minuta);
             zepsute.append(&mut ch.step_minute(
                 &chain.cat,
@@ -415,7 +420,13 @@ pub fn doba_lancucha(market: &Market, w: &mut World, t: Tick) {
                 teraz,
             ));
         }
-        ch.step_day(&chain.cat, &chain.tuning);
+        for minuta in 0..1_440u64 {
+            ch.step_day(
+                &chain.cat,
+                &chain.tuning,
+                magnat_core::SimMinute(dzien * 1_440 + minuta),
+            );
+        }
         (zepsute, rozliczenia)
     };
     if !zepsute.is_empty() {

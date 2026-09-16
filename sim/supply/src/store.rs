@@ -33,7 +33,7 @@ mod aging;
 mod invariants;
 mod ops;
 mod retail;
-pub use aging::Spoiled;
+pub use aging::{Spoiled, BATCH_HARD_LIMIT, BATCH_SOFT_LIMIT};
 pub use retail::ShelfState;
 #[cfg(test)]
 mod tests_support;
@@ -147,6 +147,30 @@ pub struct Reservation {
     items: Vec<(BatchId, Mass)>,
 }
 
+/// Po co magazyn wydaje towar — rozstrzyga etap śladu i pokrewieństwo partii.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum TakeKind {
+    /// Wsad linii produkcyjnej: wydana partia zostaje rodzicem wyrobu.
+    Consume,
+    /// Sprzedaż z półki.
+    Sell,
+    /// Odpis z kategorią straty.
+    Loss(magnat_core::LossKind),
+    /// Przełożenie w obrębie zakładu albo wyjazd poza miasto.
+    Move,
+}
+
+impl TakeKind {
+    pub(crate) fn trace_kind(self) -> crate::batch::TraceKind {
+        match self {
+            TakeKind::Consume => crate::batch::TraceKind::Consumed,
+            TakeKind::Sell => crate::batch::TraceKind::Sold,
+            TakeKind::Loss(k) => crate::batch::TraceKind::Lost(k),
+            TakeKind::Move => crate::batch::TraceKind::Loaded,
+        }
+    }
+}
+
 /// Wynik wydania: masa, jakość ważona masą, koszt własny i marka najstarszej partii.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct BatchSlice {
@@ -189,6 +213,27 @@ pub struct Store {
     batches: Arena<Batch>,
     slots: Vec<StorageSlot>,
     ledger: BatchLedger,
+    /// Minuta symulacji, którą magazyn stempluje zdarzenia śladu.
+    ///
+    /// Pole, a nie argument dwunastu metod: `load`, `unload`, `split` i `shelf_pick`
+    /// nie mają powodu znać zegara — poza jednym, czysto sprawozdawczym. Ustawia je
+    /// `Chain::step_minute` raz na minutę, więc wartość jest zawsze zegarem bieżącego
+    /// ticku, a kod symulacji i tak jej nie czyta (00 §3.5 dotyczy czasu **realnego**).
+    now: SimMinute,
+    /// Partie `TRACED` pobrane z magazynu zakładu i jeszcze nieprzypisane do wyrobu.
+    ///
+    /// `ponytail:` klucz to sam zakład, nie linia. Sufit nazwany: dwie linie tego
+    /// samego zakładu przerabiające **śledzone** partie w zachodzących na siebie
+    /// szarżach podzieliłyby się rodzicami. Flagę `TRACED` nadaje się ręcznie
+    /// kilkunastu partiom, więc przypadek jest osiągalny wyłącznie umyślnie; droga
+    /// wyjścia to klucz `(zakład, linia)`, kiedy `Charge` zacznie nieść numer linii.
+    ///
+    /// Minuta w kluczu **nie jest ozdobą**: receptura ma kilka wyjść (rafineria ma
+    /// osiem), a wpis skasowany przy pierwszym z nich zostawiłby pozostałe siedem bez
+    /// rodziców — i bez flagi śladu, bo ona dziedziczy się tą samą drogą. Ślad diesla
+    /// urywał się wtedy na benzynie, czyli na wyjściu, które akurat stało pierwsze
+    /// w pliku. Wpisy nie znikają po użyciu; zastępuje je następna szarża tego zakładu.
+    pending_parents: Vec<(magnat_core::SiteId, SimMinute, BatchId)>,
     mass: Vec<MassRow>,
     paid_in: Money,
     cogs: Money,
@@ -217,6 +262,55 @@ impl Store {
     #[must_use]
     pub fn ledger(&self) -> &BatchLedger {
         &self.ledger
+    }
+
+    /// Ustawia zegar stempla śladu. Woła to kadencja łańcucha raz na minutę.
+    pub fn set_now(&mut self, now: SimMinute) {
+        self.now = now;
+    }
+
+    #[must_use]
+    pub fn now(&self) -> SimMinute {
+        self.now
+    }
+
+    /// Ile slotów areny partii zajęto od startu świata — **maksimum historyczne**,
+    /// bo `Arena` z M0 nigdy nie kompaktuje (`K-16`: uchwyt po zwolnieniu ma nigdy
+    /// nie być ponownie ważny, więc slot wraca do obiegu razem z generacją, a tablica
+    /// nie maleje). Miara budżetu pamięci WP15: to ona, a nie
+    /// [`Store::live_batches`], mnoży się przez rozmiar partii.
+    /// Obejmuje partię śladem — **to jest punkt wejścia gracza** z §6.4.2: „partie
+    /// wskazane ręcznie w UI".
+    ///
+    /// Ślad zaczyna się w chwili wskazania, a nie wstecz, i to jest uczciwe: historii,
+    /// której dziennik nie zapisał, nie da się odtworzyć, a dopisanie jej byłoby
+    /// zmyślaniem. Etap `Stored` zapisany tutaj mówi prawdę — „w tej minucie partia
+    /// leżała w tym slocie" — i od niego ślad rośnie w przód, razem z flagą, która
+    /// dziedziczy się na wszystko, co z tej partii powstanie.
+    pub fn mark_traced(&mut self, id: BatchId) -> bool {
+        let Some(b) = self.batches.get_mut(id) else {
+            return false;
+        };
+        if b.flags.has(BatchFlags::TRACED) {
+            return true;
+        }
+        b.flags.set(BatchFlags::TRACED);
+        let site = match self.batches.get(id).map(|b| b.location) {
+            Some(crate::batch::BatchLocation::Slot(s)) => self.site_of(s),
+            _ => None,
+        };
+        self.zapisz(id, crate::batch::TraceKind::Stored, site);
+        true
+    }
+
+    /// Sloty magazynowe jednego zakładu, w kolejności indeksów.
+    pub fn slots_of(&self, site: SiteId) -> impl Iterator<Item = &StorageSlot> {
+        self.slots.iter().filter(move |s| s.site == site)
+    }
+
+    #[must_use]
+    pub fn arena_slots(&self) -> usize {
+        self.batches.slot_count()
     }
 
     /// Uchwyty wszystkich żywych partii, w kolejności indeksów w arenie.
@@ -310,20 +404,61 @@ impl Store {
         self.slots[slot.0 as usize].used_volume = Volume(suma);
     }
 
-    fn zapisz(&mut self, id: BatchId, at: SimMinute, kind: crate::batch::TraceKind) {
+    /// Zapisuje etap śladu — **tylko** dla partii z flagą `TRACED`.
+    ///
+    /// `site` jest miejscem, w którym etap się wydarzył, a nie zakładem pochodzenia:
+    /// do M6d dziennik stemplował wszystko `origin.site`, więc oś czasu bochenka
+    /// pokazywała piekarnię także przy rozładunku w sklepie. Panel „od pola do półki"
+    /// pyta „gdzie **wtedy** był", nie „skąd pochodzi".
+    fn zapisz(&mut self, id: BatchId, kind: crate::batch::TraceKind, site: Option<SiteId>) {
+        let masa = self.batches.get(id).map(|b| b.mass);
+        self.zapisz_masa(id, kind, site, masa);
+    }
+
+    /// Etap śladu o **jawnej** masie — dla wydania, w którym z partii schodzi część.
+    ///
+    /// Bez tego etap `Consumed` opisywał resztę zostającą w magazynie, a nie porcję,
+    /// która poszła na linię: partia zjedzona w całości zostawiała w śladzie zero
+    /// gramów. Oś czasu w panelu pokazywałaby wtedy „zużyto 0 kg mąki", czyli
+    /// dokładnie odwrotność tego, co się stało.
+    fn zapisz_masa(
+        &mut self,
+        id: BatchId,
+        kind: crate::batch::TraceKind,
+        site: Option<SiteId>,
+        mass: Option<Mass>,
+    ) {
         let Some(b) = self.batches.get(id) else {
             return;
         };
+        if !b.flags.has(BatchFlags::TRACED) {
+            return;
+        }
         let e = crate::batch::BatchEvent {
             batch: id,
-            at,
-            site: b.origin.site,
+            at: self.now,
+            site: site.or(b.origin.site),
             kind,
-            mass: b.mass,
+            mass: mass.unwrap_or(b.mass),
             cost_cumulative: b.cost_total,
             quality: b.quality,
         };
         self.ledger.push(e);
+    }
+
+    /// Zakład, do którego należy slot.
+    fn site_of(&self, slot: SlotId) -> Option<SiteId> {
+        self.slots.get(slot.0 as usize).map(|s| s.site)
+    }
+
+    /// Etap „przeterminowane" — ostatni w śladzie partii, która nie doszła do klienta.
+    fn zapisz_odpis(&mut self, id: BatchId, slot: SlotId) {
+        let site = self.site_of(slot);
+        self.zapisz(
+            id,
+            crate::batch::TraceKind::Lost(magnat_core::LossKind::Expired),
+            site,
+        );
     }
 }
 

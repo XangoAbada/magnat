@@ -25,6 +25,7 @@ magnat-agents = { workspace = true }
 magnat-economy = { workspace = true }
 magnat-traffic = { workspace = true }
 magnat-headless = { workspace = true }
+magnat-supply = { workspace = true }
 clap = { workspace = true }
 ron = { workspace = true }
 serde = { workspace = true }

@@ -156,6 +156,7 @@ pub fn run(a: &M5ShopArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
         &city,
         zaludnione.places.clone(),
         zaludnione.travel_oracle(),
+        &zaludnione.traffic,
         a.seed,
         &pool,
     )?;
@@ -170,6 +171,14 @@ pub fn run(a: &M5ShopArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
             .map(|s| market.inventory_value(*s).get())
             .sum::<i64>()
             / 100
+    );
+    eprintln!(
+        "zakłady: {} produkcyjnych, {} linii, {} kopalń ze złożem ({} bez), zapas startowy za {} zł",
+        r.plants.sites,
+        r.plants.lines,
+        r.plants.mines,
+        r.plants.mines_without_deposit,
+        r.plants.stock_value.get() / 100
     );
     if r.shops == 0 {
         eprintln!("BRAK SKLEPÓW — scenariusz nie ma czego pokazać");
@@ -193,6 +202,7 @@ pub fn run(a: &M5ShopArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
 
     let mut builder = ScheduleBuilder::new();
     builder
+        .add(magnat_supply::ChainSystem::new())
         .add(MarketSystem::new(&world))
         .add(DayLoopSystem::new(&world))
         .add(ReplanCooldownSystem::new(&world))

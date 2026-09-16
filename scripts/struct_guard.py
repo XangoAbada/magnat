@@ -87,7 +87,9 @@ REJESTR = {
     ("sim/world/src/city/lsystem.rs", "impl", 605): 33,
     ("sim/world/src/city/lsystem.rs", "fn", 317): 34,
     ("sim/world/src/city/lsystem.rs", "fn", 257): 35,
-    ("sim/world/src/city/mod.rs", "fn", 365): 24,
+    # 365 do M6d, 368 po M6e: trzy linie za bilans otwarcia złóż (`AP-1`) —
+    # jedno wywołanie `bilans_zloz`, jedno pole w `CityData` i pusta linia.
+    ("sim/world/src/city/mod.rs", "fn", 368): 24,
     ("sim/world/src/city/zoning.rs", "fn", 322): 36,
     # Rośnie o jedno ramię na wariant `DecisionReason` i **ma rosnąć** aż do M7c.
     # 319 przed M6b, 355 po bloku M6b (400–402), 397 po M6c (403–405).

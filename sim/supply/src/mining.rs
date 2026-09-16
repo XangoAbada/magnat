@@ -20,13 +20,19 @@
 //! Determinizm na tym nie cierpi: kolejność zakładów w pętli produkcji jest ustalona,
 //! więc kolejność wydobycia też.
 
-use magnat_core::{DepositId, Mass, Money, Q};
+use magnat_core::{DepositId, HashState, Mass, Money, Q, StateHasher};
 
 /// Bilans złoża — jedyne, czego M6 od M1 potrzebuje (`K-13`).
 ///
 /// Masa jest w **gramach**, w arytmetyce całkowitej. Voxele wyrobiska są pochodną
 /// wizualną i liczy je M1 (`Deposit::voxels_for`); tutaj nie pojawiają się ani razu.
-pub trait Deposits {
+///
+/// **Dlaczego `HashState` w supertraitcie** (`AP-1`): wydobycie jest stanem symulacji
+/// — ta sama doba z tym samym ziarnem ma dać tę samą pozostałość — więc bilans złóż
+/// musi wejść do funkcji haszującej (00 §3.6). Wchodzi przez [`crate::ChainHandle`],
+/// bo to on trzyma uchwyt; gdyby port nie umiał się zahaszować, hash świata milczałby
+/// o jedynej liczbie, którą kopalnia zmienia.
+pub trait Deposits: HashState {
     /// Ile jeszcze zostało.
     fn remaining(&self, id: DepositId) -> Mass;
     /// Ile było na początku — mianownik wyczerpania.
@@ -43,6 +49,10 @@ pub trait Deposits {
 /// stoi na `Starved`, bo jej masa nie ma skąd przyjść; to samo, co wcześniej robił
 /// `batch_mass == 0`, tylko z powodem widocznym w karcie inspekcji.
 pub struct NoDeposits;
+
+impl HashState for NoDeposits {
+    fn hash_state(&self, _h: &mut StateHasher) {}
+}
 
 impl Deposits for NoDeposits {
     fn remaining(&self, _id: DepositId) -> Mass {

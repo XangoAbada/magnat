@@ -59,6 +59,12 @@ impl Store {
         let k = klucz_fefo(arena, nowy_id);
         let poz = lista.partition_point(|b| klucz_fefo(arena, *b) < k);
         lista.insert(poz, nowy_id);
+        // Odłamek dziedziczy ślad: `Batch::clone` przeniósł flagi, więc kawałek partii
+        // śledzonej też jest śledzony — a ślad musi wiedzieć, z czego się oddzielił,
+        // inaczej „od pola do półki" urywa się na pierwszym załadunku ciężarówki.
+        let miejsce = self.site_of(slot);
+        self.zapisz(nowy_id, crate::batch::TraceKind::Split, miejsce);
+        self.ledger.link(nowy_id, id);
         Some(nowy_id)
     }
 
@@ -116,6 +122,8 @@ impl Store {
                 b.location = BatchLocation::InTransit(order);
                 b.flags.clear(BatchFlags::RESERVED);
             }
+            let skad = self.site_of(slot);
+            self.zapisz(*id, crate::batch::TraceKind::Departed, skad);
         }
         Some(ladunek)
     }
@@ -161,6 +169,8 @@ impl Store {
             if let Some(b) = self.batches.get_mut(*id) {
                 b.location = BatchLocation::Slot(slot);
             }
+            let dokad = self.site_of(slot);
+            self.zapisz(*id, crate::batch::TraceKind::Unloaded, dokad);
         }
         Ok(odrzucone)
     }
@@ -209,6 +219,55 @@ impl Store {
                 .sum(),
         )
     }
+
+    /// Przeszacowuje koszt własny ładunku na **cenę, którą zapłacił kupujący**
+    /// (`AP-7`).
+    ///
+    /// **Dlaczego to musi istnieć.** `cost_total` partii znaczy „ile ta masa kosztuje
+    /// tego, kto ją trzyma". Przy przewozie między zakładami partia zmienia właściciela,
+    /// a jej koszt zostawał kosztem **sprzedawcy** — więc piekarnia wyceniała mąkę po
+    /// koszcie wytworzenia młyna, płacąc za nią cenę z marżą. Różnica to dokładnie
+    /// marża sprzedawcy i znikała z bilansu: `check_cost` przechodził, bo `paid_in`
+    /// też jej nie widział, ale księga kupującego (`InventoryGoods`) rozjeżdżała się
+    /// z wyceną magazynu o wartość każdej lokalnej dostawy. To jest niezmiennik `P5`
+    /// i to on ten błąd znalazł.
+    ///
+    /// Ścieżka importowa robiła to od M6c poprawnie (`cost: paid + duty`) — ale import
+    /// **tworzy** partię, a sprzedaż lokalna ją **przenosi**, więc jedyna droga, która
+    /// tego nie robiła, była zarazem jedyną, której do M6e nikt nie przeszedł: zakłady
+    /// nie produkowały, więc nie miały czego sprzedawać.
+    ///
+    /// Obie księgi kontrolne rosną razem z kosztem: `cogs` o koszt sprzedawcy (towar
+    /// zszedł z jego bilansu), `paid_in` o cenę kupującego. Dzięki temu
+    /// [`Store::check_cost`] domyka się co do grosza, a różnica jest tym, czym jest —
+    /// wynikiem sprzedawcy, a nie zgubionym groszem.
+    pub fn resell(&mut self, cargo: &[BatchId], price: Money) {
+        if cargo.is_empty() || price.0 <= 0 {
+            return;
+        }
+        let stary: i64 = cargo
+            .iter()
+            .filter_map(|b| self.batches.get(*b))
+            .map(|b| b.cost_total.0)
+            .sum();
+        let wagi: Vec<u64> = cargo
+            .iter()
+            .map(|b| self.batches.get(*b).map_or(0, |x| x.mass.0.max(0) as u64))
+            .collect();
+        if wagi.iter().all(|w| *w == 0) {
+            return;
+        }
+        // Podział sumuje się do kwoty dzielonej co do grosza (00 §2); reszta trafia
+        // do pierwszej partii wg ustalonego porządku, czyli kolejności ładowania.
+        let czesci = split_proportional(price, &wagi);
+        for (b, c) in cargo.iter().zip(czesci) {
+            if let Some(x) = self.batches.get_mut(*b) {
+                x.cost_total = c;
+            }
+        }
+        self.cogs = Money(self.cogs.0 + stary);
+        self.paid_in = Money(self.paid_in.0 + price.0);
+    }
 }
 
 /// Podział wielkości pochodnej (objętość, milisztuki) proporcjonalnie do masy.
@@ -217,6 +276,7 @@ fn podziel_proporcjonalnie(calosc: i64, czesc: i64, suma: i64) -> i64 {
     if suma <= 0 {
         return 0;
     }
+
     (i128::from(calosc) * i128::from(czesc) / i128::from(suma)) as i64
 }
 

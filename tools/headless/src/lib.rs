@@ -10,12 +10,15 @@
 //! Wystawione jest dokładnie to, co ma więcej niż jednego konsumenta:
 //! - [`population`] — budowa miasta M2 i Etap 8 (`zbuduj_miasto`, `swiat_agentow`,
 //!   `zaludnij`),
-//! - [`retail`] — most „zakłady Etapu 7 → rynek detaliczny" (`AB-1`).
+//! - [`retail`] — most „zakłady Etapu 7 → rynek detaliczny" (`AB-1`),
+//! - [`plants`] — ten sam Etap 7 od strony produkcji: `SiteSeed` → `PlantSite`
+//!   z liniami, licznikami, rampą i zapasem startowym (`AO-3`).
 //!
 //! Scenariusze (`m3day`, `m5shop`, `nav`, …) zostają modułami **binarki**: mają CLI,
 //! raport i kod wyjścia, czyli wszystko to, czego biblioteka nie powinna nieść.
 
 #![forbid(unsafe_code)]
 
+pub mod plants;
 pub mod population;
 pub mod retail;

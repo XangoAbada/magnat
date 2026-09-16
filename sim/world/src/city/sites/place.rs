@@ -15,6 +15,10 @@ struct Przydzial {
     /// Zakłady jednego szablonu w jednym klastrze tworzą jedną firmę.
     firma_grupa: u32,
     capacity_scale: u16,
+    /// Złoże pod działką, jeśli archetyp go wymagał (`AL-17`). Wynik sprawdzenia
+    /// [`zloze_ok`] — do M6d był wyrzucany, a kopalnia dostawała później receptury
+    /// `Extraction` bez informacji, z czego kopie.
+    deposit: Option<magnat_core::DepositId>,
 }
 
 /// Kandydat na zakład: zabudowana (albo zabudowywalna) parcela w strefie niemieszkalnej.
@@ -73,6 +77,7 @@ pub fn populate(
                     grupa
                 },
                 capacity_scale: SCALE_BASE,
+                deposit: None,
             });
         }
     }
@@ -367,6 +372,7 @@ fn wypelnij(
                 archetype: SiteArchetypeId(j as u16),
                 firma_grupa: *grupa,
                 capacity_scale: SCALE_BASE,
+                deposit: None,
             });
             continue;
         }
@@ -381,6 +387,7 @@ fn wypelnij(
                     archetype: SiteArchetypeId(j as u16),
                     firma_grupa: *grupa,
                     capacity_scale: SCALE_BASE,
+                    deposit: None,
                 });
                 break;
             }
@@ -618,6 +625,7 @@ fn posadz_produkcje(
                 archetype: aid,
                 firma_grupa: moja_grupa,
                 capacity_scale: skala,
+                deposit: zloze_pod(bi, &kand[i], a),
             });
         }
         if !cos_stanelo {
@@ -654,6 +662,7 @@ fn posadz_produkcje(
                 archetype: aid,
                 firma_grupa: *grupa,
                 capacity_scale: skala,
+                deposit: zloze_pod(bi, &kand[i], a),
             });
         }
         // ── 3c. Rozluźnienie strefy — zamiast przestrefowania kwartału (korekta I-3) ──
@@ -679,6 +688,7 @@ fn posadz_produkcje(
                 archetype: aid,
                 firma_grupa: *grupa,
                 capacity_scale: skala,
+                deposit: zloze_pod(bi, &kand[i], a),
             });
         }
         if zostalo[slot].1 > 0 {
@@ -701,13 +711,19 @@ fn znajdz(kand: &[Kand], a: &Archetype, extra: &dyn Fn(&Kand) -> bool) -> Option
 
 /// Czy pod działką leży złoże, którego archetyp wymaga (M1 `deposit_at`, K-13).
 fn zloze_ok(bi: &BuildInput, k: &Kand, a: &Archetype) -> bool {
-    let Some(want) = a.spec.needs_deposit else {
-        return true;
-    };
-    match bi.terrain.deposit_at(k.pos.x as i32, k.pos.y as i32) {
-        Some(id) => bi.terrain.deposit(id).resource == want,
-        None => false,
-    }
+    a.spec.needs_deposit.is_none() || zloze_pod(bi, k, a).is_some()
+}
+
+/// Złoże wymaganego rodzaju pod działką — **wynik**, nie sama zgoda (`AL-17`).
+///
+/// Do M6d ta sama logika siedziała w [`zloze_ok`] i zwracała `bool`, przez co
+/// identyfikator, który już był policzony, znikał. Potrzebuje go M6e: `PlantSite`
+/// z receptury `Extraction` bez `DepositId` stoi na `Starved`, bo jego masa nie ma
+/// skąd przyjść — a wyglądałoby to na brak zapotrzebowania, nie na brak przypisania.
+fn zloze_pod(bi: &BuildInput, k: &Kand, a: &Archetype) -> Option<magnat_core::DepositId> {
+    let want = a.spec.needs_deposit?;
+    let id = bi.terrain.deposit_at(k.pos.x as i32, k.pos.y as i32)?;
+    (bi.terrain.deposit(id).resource == want).then_some(id)
 }
 
 // ── Materializacja encji ─────────────────────────────────────────────────────────────
@@ -770,6 +786,7 @@ fn utworz_zaklady(
             archetype: p.archetype,
             recipes: a.recipes.clone(),
             capacity_scale: p.capacity_scale,
+            deposit: p.deposit,
             workplaces: 0..0,
             parcel: crate::city::parcels::parcel_id(p.parcel),
         });

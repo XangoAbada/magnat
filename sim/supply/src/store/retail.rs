@@ -114,6 +114,8 @@ impl Store {
             if let Some(b) = self.batches.get_mut(uchwyt) {
                 b.location = BatchLocation::Slot(to);
             }
+            let cel_site = self.site_of(to);
+            self.zapisz(uchwyt, crate::batch::TraceKind::Shelved, cel_site);
             przeniesione += m.0;
         }
         Mass(przeniesione)
@@ -147,7 +149,7 @@ impl Store {
             return None;
         }
         let r = self.reserve(shelf, good, mass, Q::MIN)?;
-        self.take(r).ok()
+        self.take_as(r, crate::store::TakeKind::Sell).ok()
     }
 
     /// Stan półki dla jednego towaru — masa, jakość, marka, najwcześniejsza data
