@@ -1,0 +1,95 @@
+// Strojenie rynku pracy (M7b, `K-35`).
+//
+// To są **liczby do kalibracji balansatorem**, nie prawdy objawione. Siedzą w danych
+// z tego samego powodu co progi kaskady niedoboru w `supply.ron`: kalibracja ma być
+// widoczna w diffie, a nie w rekompilacji. Właścicielem schematu jest M7, właścicielem
+// wartości — `tools/balansator` (bramka rynku pracy, M7f).
+//
+// **Czego tu nie ma i nie będzie: tabeli płac.** Widełki roli mieszkają
+// w `data/jobs/roles.ron` (M2) i są przedziałem, w którym firma **licytuje**;
+// mediana w interfejsie jest agregatem ofert i zawartych umów, a nie odczytem
+// z tabeli. Tutaj stoją wyłącznie parametry samej licytacji.
+//
+// Jednostki: pieniądz w groszach (00 §2), czas w dobach, ułamki w punktach bazowych
+// (1 bp = 1/10 000) albo w promilach tam, gdzie tak liczy kod. Żadnych floatów.
+(
+    schema_version: 1,
+
+    // Jak kandydat szuka pracy (PRD §17.5: rozważa kilka ofert, nie wszystkie).
+    search: (
+        // Ile ofert kandydat w ogóle obejrzy. Widełki, bo liczba jest losowana
+        // strumieniem `StreamId::LaborSearch` — człowiek szukający pracy nie
+        // przegląda rynku, tylko tyle, na ile ma cierpliwości.
+        offers_min: 3,
+        offers_max: 15,
+        // Ile dni wisi opublikowana oferta, zanim wygaśnie i trzeba ją odnowić.
+        offer_days_valid: 14,
+        // Ile dni bez akceptowalnego kandydata, zanim firma ruszy stawkę.
+        escalate_after_days: 3,
+        // Zatrudniony rozgląda się rzadziej niż bezrobotny: co ile dni.
+        on_the_job_every_days: 10,
+    ),
+
+    // Płaca progowa kandydata i licytacja firmy.
+    wage: (
+        // Bezrobotny startuje z oczekiwaniem na poziomie ostatniej płacy
+        // (albo mediany zawodu, jeśli nigdy nie pracował) i **schodzi z niego
+        // z czasem bezrobocia** — to jest cała degresja przy nadmiarze podaży.
+        reservation_start_bp: 10_200,
+        // Kto nigdy nie pracował, nie zna własnej ceny i **kotwiczy poniżej mediany**:
+        // nie ma czym uzasadnić stawki powyżej tego, co rynek płaci sprawdzonym.
+        // To jest druga połowa degresji przy nadmiarze podaży — pierwszą jest
+        // spadek oczekiwań z czasem bezrobocia.
+        reservation_newcomer_bp: 9_000,
+        reservation_floor_bp: 6_500,
+        reservation_decay_bp_per_day: 45,
+        // Krok licytacji: procent obecnej stawki, przed mnożnikami agresji i niedoboru.
+        base_step_bp: 300,
+        // Powyżej tego indeksu niedoboru firma sięga po headhunting.
+        headhunt_shortage: 600,
+        // Premia w ofercie bezpośredniej wobec obecnej stawki przeciąganego.
+        headhunt_premium_bp: 1_200,
+        // O ile lepsza musi być oferta, żeby zatrudniony w ogóle ją rozważył.
+        // Ambicja obniża ten próg, lojalność podwyższa (M7b §5.5 pkt 2).
+        switch_threshold_bp: 800,
+    ),
+
+    // Kadry: szkolenia, premie, zwolnienia, rotacja.
+    hr: (
+        // Koszt szkolenia jako część miesięcznej stawki i przyrost umiejętności.
+        training_cost_bp: 5_000,
+        training_gain: 4,
+        // Ile miesięcy pracy w roli musi minąć między szkoleniami.
+        training_every_months: 6,
+        // Premia: maksymalny udział stawki i próg oceny, od którego się należy.
+        bonus_max_bp: 800,
+        bonus_perf_threshold: 650,
+        // Odprawa: ile dni stawki za każdy pełny rok stażu, z sufitem.
+        severance_days_per_year: 10,
+        severance_days_max: 90,
+        // Zwolnienie za wynik: próg oceny i liczba upomnień.
+        dismiss_perf: 300,
+        dismiss_warnings: 3,
+        // Bazowe ciśnienie na odejście dobrowolne, w punktach bazowych na dobę.
+        // 2 bp/dobę to ~7 % rotacji rocznej, czyli dolny kraniec pasma z §7.10.
+        quit_base_per_10k: 2,
+        // Sufit umiejętności przy wykształceniu 0; każdy poziom podnosi go o `talent_step`.
+        talent_base: 55,
+        talent_step: 12,
+    ),
+
+    // Świadczenia pozapłacowe. **Realne zaspokojenie potrzeby, nie liczba dodana
+    // do nastroju** (kryterium WP6): opieka medyczna podnosi potrzebę `Health`
+    // pracownikowi, posiłki `Hunger`, auto służbowe `Mobility`.
+    benefits: (
+        // Punkty potrzeby na dobę.
+        health_gain: 3,
+        meals_gain: 4,
+        car_gain: 3,
+        // Koszt dla firmy jako część stawki miesięcznej, per świadczenie.
+        health_cost_bp: 600,
+        meals_cost_bp: 400,
+        car_cost_bp: 1_500,
+        training_cost_bp: 200,
+    ),
+)

@@ -54,10 +54,10 @@ pub use types::{
 };
 pub use vocab::{
     ActivityKind, Biome, BodyType, CommitmentKind, DeprivationEffect, FixedCost, GateKind,
-    LifeEventKind,
-    LineStopCause, LoanKind, LossKind, MigrationKind, NeedKind, PlaceKind, PlaceRef, PriceDriver,
-    RejectCause, RejectCredit, ResourceKind, RoadClass, ShortageStageKind, StockCat, TraitId,
-    TransportMode, UtilityKind, UtilityService, WorldCoord, FIXED_COST_COUNT, LOSS_KIND_COUNT,
-    NEED_COUNT, REJECT_CAUSE_COUNT, STOCK_CAT_COUNT, UTILITY_KIND_COUNT,
+    LeaveCause, LifeEventKind, LineStopCause, LoanKind, LossKind, MigrationKind, NeedKind,
+    PlaceKind, PlaceRef, PriceDriver, RejectCause, RejectCredit, ResourceKind, RoadClass,
+    ShortageStageKind, StockCat, TraitId, TransportMode, UtilityKind, UtilityService, WageCause,
+    WorldCoord, FIXED_COST_COUNT, LOSS_KIND_COUNT, NEED_COUNT, REJECT_CAUSE_COUNT,
+    STOCK_CAT_COUNT, UTILITY_KIND_COUNT,
 };
 pub use weather::{weather_at, Weather};

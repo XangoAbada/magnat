@@ -315,3 +315,16 @@ wymaga zmiany, znaczy to, że przy okazji zmieniliśmy zachowanie, i trzeba to c
 Własność: `sim/economy` należy do M5, więc wyciągnięcie jądra idzie przez M5 tak samo jak
 moduł `labor` (D2). Zakres zmian w M7: `ai::operational`, `labor_policy`, `hr::productivity`
 wołają jądro zamiast liczyć u siebie.
+
+---
+
+## Zmiany wpisane po M7b
+
+Poprawki wpisane przez podfazę **M7b** (`K-18`).
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| ★ | **`SitePnlMonth` potrzebuje przychodu i to M7e jest jego pisarzem** (`AR-7` zapowiadał to od M7a; M7b pokazał, co za tym stoi). Bez przychodu nie da się policzyć marży zakładu, a bez marży `wage_ceiling` nie ma czym przesunąć sufitu licytacji i zostaje przy krańcu widełek roli (`AU-4` w `M7b-rynek-pracy.md`) | To jest różnica między „firma nie licytuje powyżej tego, co ta praca jest warta w tej dzielnicy" a „firma nie licytuje powyżej tego, na co ją stać" — a §7.1 pkt 4 obiecuje to drugie. Wpięcie jest jedną liczbą przekazywaną do `next_bid`, nie zmianą kształtu reguły |
+| ★ | **Osobowość firmy ma w rynku pracy dwa gotowe gniazda:** `bidding::AGGRESSION` (0..=100, mnoży krok licytacji) i `HiringPolicy { quality_focus, price_focus }` (przesuwa wagi scoringu kandydata). Oba stoją dziś na wartości neutralnej i oba są w kodzie w jednym miejscu | Dwa zakłady różniące się wyłącznie osobowością dyrektora mają się różnić **tym, kogo zatrudnią i za ile** — a to jest najbardziej widoczny w rozgrywce skutek §12.1. Gniazda są, więc M7e podłącza, zamiast przebudowywać |
+| ★ | **`FirmView` zastanie rynek pracy już podzielony na jawne i ukryte.** Jawne: stawki w ofertach, `LaborMarketStats` (mediany, indeks niedoboru, czas wakatu). Ukryte: widełki stanowiska (`JobOffer::band`), koszt jednostkowy, marża | Test asymetrii §7.3 ma po M7b konkretną granicę do sprawdzenia, a nie deklarację: mutacja widełek gracza **nie może** zmienić decyzji konkurenta, mutacja jego stawki w ofercie **musi**. To jest wariant negatywny tamtego testu po stronie kadrowej |
+| | **Pamięć firmy o kandydacie (`FirmMemory`) i siła polecenia z grafu relacji nie powstały w M7b** — `Application` nie ma pola `referral`, a `score_application` nie ma członu `history` | Obie dane są własnością M10 (relacje) i M7e (pamięć decyzji). Pole bez pisarza jest kosztem razy liczba aplikacji i zerem wartości (`AR-6`); scoring przyjmuje je jako dodatkowe pole `CandidateFacts`, bez zmiany reszty |

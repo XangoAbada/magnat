@@ -32,6 +32,12 @@
 //! Co dokłada **M5e**:
 //! - §5.12 — [`ShopPanelSnapshot`]: jedyne wejście interfejsu do gospodarki.
 //!
+//! Co dokłada **M7b** (autor M7, właściciel crate'a M5 — `D2`):
+//! - §5.5 — rynek pracy ([`labor`]): oferty i aplikacje na tej samej maszynerii aren
+//!   co oferty detaliczne, licytacja płac z indeksem niedoboru, headhunting
+//!   i kadry. **Nigdzie w tym module nie ma tabeli płac** — pensja jest wynikiem
+//!   licytacji o człowieka.
+//!
 //! Czego tu **nie ma** i gdzie to jest: rynek B2B i partie towaru należą do M6,
 //! podatki do M8, pełne panele gracza do M9.
 
@@ -45,6 +51,7 @@ pub mod cpi;
 pub mod credit;
 pub mod data;
 pub mod kernel;
+pub mod labor;
 pub mod ledger;
 pub mod market;
 pub mod offer;
@@ -83,6 +90,11 @@ pub use data::{
 pub use kernel::{
     annuity_payment, clamp_to_margin, ledger_post, monthly_interest, next_price, next_price_full,
     take_cogs, LedgerError, PriceBreakdown, PriceInput, StockValue, BP,
+};
+pub use labor::{
+    register_labor, Application, JobIndex, JobOffer, JobOfferId, LaborDay, LaborHandle,
+    LaborMarket, LaborMarketStats, LaborSystem, PersonFacts, RoleStats, Seeker, SkillReq,
+    Workforce,
 };
 pub use ledger::{
     balance_sheet, cash_flow, close_period, income_statement, post, BalanceSheet, CashFlow,

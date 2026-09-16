@@ -23,6 +23,10 @@ magnat-agents = { workspace = true }
 # przestała być testowa. Kierunek jest jednokierunkowy i taki zostaje: `sim/supply`
 # jest crate'em liściastym i o gospodarce detalicznej nie wie nic.
 magnat-supply = { workspace = true }
+# Rynek pracy M7b mieszka tutaj (`D2`), ale **reguły firmy** — scoring kandydata,
+# krok licytacji, sufit marży — zostają u M7. Zależność idzie `economy → firms`
+# i odwrócić się nie da: `sim/firms` stoi na maszynerii ofert tego crate'a.
+magnat-firms = { workspace = true }
 serde = { workspace = true }
 ron = { workspace = true }
 

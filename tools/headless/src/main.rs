@@ -12,6 +12,7 @@ mod century;
 mod day;
 mod m3day;
 mod m5shop;
+mod m7labor;
 mod nav;
 mod testworld;
 mod worldgen;
@@ -115,6 +116,8 @@ enum Command {
     Nav(nav::NavArgs),
     /// Wynik podfazy M5b: sklepy z magazynem, zakupy i rozliczenie pieniądza.
     M5shop(m5shop::M5ShopArgs),
+    /// Wynik podfazy M7b: rynek pracy i pensje emergentne w mieście (M7b).
+    M7labor(m7labor::M7LaborArgs),
 }
 
 fn uruchom() -> Result<std::process::ExitCode, Box<dyn std::error::Error>> {
@@ -131,6 +134,7 @@ fn uruchom() -> Result<std::process::ExitCode, Box<dyn std::error::Error>> {
         Some(Command::M3day(a)) => return m3day::run(a),
         Some(Command::Nav(a)) => return nav::run(a),
         Some(Command::M5shop(a)) => return m5shop::run(a),
+        Some(Command::M7labor(a)) => return m7labor::run(a),
         None => {}
     }
 

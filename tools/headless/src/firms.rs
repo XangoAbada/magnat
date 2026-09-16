@@ -22,7 +22,7 @@ use magnat_ecs::World;
 use magnat_firms::hr::employment::Employment;
 use magnat_firms::{Firm, FirmKey, Firms, Owner, Site, SitePlacement, SiteTypeCatalog};
 
-use magnat_world::city::sites::site_id;
+use magnat_world::city::sites::site_id as site_id_swiata;
 use magnat_world::{CityData, UnitOccupant, SITE_KEY_BASE};
 use std::collections::BTreeMap;
 
@@ -98,14 +98,21 @@ pub fn zbuduj_firmy(
             }
             continue;
         };
-        let id = site_id(i as u32);
+        // **Dwie przestrzenie identyfikatorów, jeden zakład** (`AU-1`). Generator
+        // numeruje zakłady od zera i tym numerem oznacza lokale (`UnitOccupant::Site`),
+        // a gospodarka — M5 (sklepy), M6 (zakłady) i komponent `Employment` mieszkańca —
+        // używa klucza przesuniętego o `SITE_KEY_BASE`. `Site.id` musi być tym drugim:
+        // inaczej firma i jej zakład produkcyjny są dla kodu dwoma różnymi miejscami,
+        // a rynek pracy nie ma jak dopisać pokrycia etatowego do właściwej linii.
+        let id = crate::plants::site_id(i);
+        let id_swiata = site_id_swiata(i as u32);
         let widelki = widelki_zakladu(city, s);
         let mut site = Site::from_type(
             SitePlacement {
                 id,
                 building: s.building,
                 district: DistrictId(dzielnica_zakladu(city, s)),
-                floor_m2: powierzchnia_zakladu(city, s, id),
+                floor_m2: powierzchnia_zakladu(city, s, id_swiata),
                 opened: SimMinute(0),
             },
             firma,

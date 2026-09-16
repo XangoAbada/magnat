@@ -1483,6 +1483,7 @@ dependencies = [
  "magnat-agents",
  "magnat-core",
  "magnat-ecs",
+ "magnat-firms",
  "magnat-io",
  "magnat-jobs",
  "magnat-spatial",

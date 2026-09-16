@@ -84,6 +84,7 @@ impl System for FirmSystem {
         if !wyplaty.is_empty() {
             if let Some(out) = world.get_resource_mut::<PayrollOutbox>() {
                 out.pending.items.extend(wyplaty.items);
+                out.pending.hr_costs.extend(wyplaty.hr_costs);
             }
         }
     }

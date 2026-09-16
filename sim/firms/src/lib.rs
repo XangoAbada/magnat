@@ -21,6 +21,7 @@ pub mod catalog;
 pub mod firm;
 pub mod hr;
 pub mod key;
+pub mod labor_policy;
 pub mod registry;
 pub mod ring;
 pub mod site;
@@ -31,6 +32,13 @@ pub use firm::{DecisionLog, Firm, FirmStatus, LoggedDecision, Owner, OwnerShare}
 pub use hr::employment::{payday, BenefitSet, Employment, PayrollItem, PayrollRun, Position};
 pub use hr::productivity::{effective_labor, loss_multiplier, ManagementQuality};
 pub use hr::roles::{RoleTable, RoleWeights};
+pub use hr::training::{benefit_cost, benefit_gains, bonus, skill_ceiling, trained_skill};
+pub use hr::tuning::{LaborTuning, LABOR_TUNING_SCHEMA_VERSION};
+pub use hr::turnover::{quit_pressure, severance, should_dismiss, update_perf, QuitPressure};
+pub use labor_policy::{
+    meets_requirements, next_bid, score_application, switch_threshold_bp, wage_ceiling,
+    wage_escalation_step, Bid, CandidateFacts, HiringPolicy, OpeningFacts,
+};
 pub use key::{due, firm_id, slots, DecisionSlots, FirmKey, Scheduler, Tier};
 pub use registry::Firms;
 pub use ring::Ring;

@@ -162,6 +162,20 @@ pub enum StreamId {
     // 201–202, 204 i 207–219 zarezerwowane dla M6 zgodnie z przydziałem w §6.1
     // dokumentu fazy: 201 `SupplySpoilage`, 202 `SupplyQuality`, 204 `SupplyYield`.
     // Rezerwa dalsza 1200–1219.
+
+    // ── M7: 220..=239 — firmy i rynek pracy (`K-4`) ──────────────────────────────
+    /// Które oferty pracy kandydat w ogóle obejrzy (M7b §5.5, PRD §17.5).
+    /// Klucz: indeks encji mieszkańca i doba — kandydat rozważa 3–15 ofert, a nie
+    /// wszystkie, więc **wybór podzbioru jest losowaniem** i musi mieć własny strumień.
+    /// Bez niego przeglądanie szłoby zawsze po kolejności indeksu areny, czyli ten sam
+    /// zakład byłby oglądany pierwszy przez całe miasto przez całą grę.
+    LaborSearch = 220,
+    /// Odejście dobrowolne (M7b §5.5, WP6). Klucz: indeks encji pracownika i doba.
+    /// Ciśnienie na odejście jest liczone deterministycznie z nastroju, stresu, stażu
+    /// i różnicy płacy wobec mediany zawodu; strumień rozstrzyga **czy dziś**, a nie
+    /// **czy w ogóle** — inaczej cała załoga o tym samym nastroju odchodziłaby naraz.
+    LaborQuit = 221,
+    // 222–239 zarezerwowane dla M7. Rezerwa dalsza 1220–1239.
 }
 
 /// Encja zastępcza dla losowania bez encji (zdarzenie globalne, generator świata).
@@ -398,5 +412,7 @@ mod tests {
         assert_eq!(StreamId::SupplyQuoteNoise as u16, 203);
         assert_eq!(StreamId::SupplyTransitDelay as u16, 205);
         assert_eq!(StreamId::SupplyImportLead as u16, 206);
+        assert_eq!(StreamId::LaborSearch as u16, 220);
+        assert_eq!(StreamId::LaborQuit as u16, 221);
     }
 }

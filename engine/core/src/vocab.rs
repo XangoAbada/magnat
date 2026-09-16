@@ -518,6 +518,44 @@ vocab_enum! {
 }
 
 vocab_enum! {
+    /// Dlaczego firma ruszyła stawkę w ofercie pracy (M7b §5.5, PRD §6.6).
+    ///
+    /// Ładunek `DecisionReason::WageRaise`, więc mieszka w `core` z tego samego powodu
+    /// co `PriceDriver` i `LineStopCause` (`K-20`): ładunek centralnego enuma nie może
+    /// pochodzić z crate'u, który od `core` zależy. Czyta go karta inspekcji firmy,
+    /// panel ludzi (M7c) i związki zawodowe (M10, `K-9`) — bo „o ile i dlaczego
+    /// podniesiono" jest wejściem żądania płacowego.
+    ///
+    /// **`Ceiling` nie jest powodem podwyżki, tylko powodem jej braku.** Krok
+    /// przycięty do sufitu marży zapisuje się z tym powodem i z przyrostem, który
+    /// realnie został — zero znaczy „oferta zamrożona, wakat zostaje pusty".
+    /// To jest odpowiedź na pytanie gracza „dlaczego nikogo nie zatrudniłeś"
+    /// i dlatego stoi tu obok podwyżek, a nie w osobnym słowniku (M7 §7.1 pkt 4).
+    ///
+    /// Kolejność wariantów jest kontraktem: `as_index()` indeksuje histogram przyczyn
+    /// podwyżek w panelu rynku pracy.
+    WageCause {
+        NoCandidates, Shortage, Headhunt, Counteroffer, Ceiling,
+    }
+}
+
+vocab_enum! {
+    /// Dlaczego pracownik przestał pracować w tym zakładzie (M7b §5.5, WP6).
+    ///
+    /// Ładunek `DecisionReason::JobLeft`, ta sama reguła co przy [`WageCause`].
+    /// Kryterium WP6 brzmi: **odejście zawsze ma powód po stronie odchodzącego** —
+    /// więc słownik obejmuje i odejścia dobrowolne, i zwolnienia, i wyjście z rynku
+    /// pracy, którego firma nie wywołała (emerytura, zgon, wyjazd z miasta; tamte
+    /// prowadzi M3, a M7 tylko domyka po nich etat).
+    ///
+    /// `Dismissed` to zwolnienie **za wynik**, `Redundancy` — z powodu kosztów;
+    /// dla gracza to dwa różne zdania i dwie różne konsekwencje reputacyjne.
+    LeaveCause {
+        BetterOffer, Mood, Stress, Dismissed, Redundancy, LeftLabourForce,
+    }
+}
+
+vocab_enum! {
     /// Biom. Konsument poza M1: M2 (strefowanie i zieleń), M5/M6 (rolnictwo i leśnictwo),
     /// M8 (zdarzenia pogodowe zależne od pokrycia terenu).
     Biome {

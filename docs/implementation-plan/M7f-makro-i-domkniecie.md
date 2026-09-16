@@ -258,3 +258,17 @@ Wartości są przypisane na stałe i nigdy nie zmieniają numeru (dokument 00 §
 | 248–259 | rezerwa M7 | wolne dla rozszerzeń fazy (nie przydzielać poza M7) |
 
 ---
+
+---
+
+## Zmiany wpisane po M7b
+
+Poprawki wpisane przez podfazę **M7b** (`K-18`). Wszystkie trzy pierwsze to **jedna
+liczba widziana z trzech stron** i domykają się razem z `AT-1`.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| ★ | **Miasto 4 km ma 23 912 etatów przy 18,5 tys. siły roboczej** — o jedną trzecią za dużo miejsc pracy. Rynek pracy odpowiada na to poprawnie i widać to w przebiegu `m7labor`: chroniczny niedobór podbija stawki **do sufitu widełek w prawie każdym zawodzie**, a bezrobocie utrzymuje się na 6,8 % wyłącznie dzięki tarciu wyszukiwania | To jest ta sama rozbieżność co `AT-1` („215 firm zamiast 6–10 tys.") i `AT-4`, tylko zmierzona od strony skutku: nie brakuje firm, brakuje **ludzi na etatach, które już stoją**. Domknięcie przez powstawanie firm samo w sobie nie wystarczy — trzeba albo gęstszej populacji, albo rzadszej obsady zabudowy |
+| ★ | **Most stawiający firmy nadaje jedne widełki wszystkim rolom spoza `Workplace` M2** (2 800–5 200 zł). W przebiegu widać skutek: mediana kilkunastu zawodów dochodzi do **dokładnie tej samej kwoty**, bo dochodzi do tego samego sufitu | Zawód bez własnych widełek nie ma czym się różnić od innego zawodu bez własnych widełek — a `data/jobs/roles.ron` ma `wage_base` dla **wszystkich** 46 ról. Brakuje wyłącznie przeliczenia przez epokę i zamożność dzielnicy, które M2 robi dla ról ze swojego podziału lokali |
+| ★ | **Scenariusz `m7labor` nie stawia rynku detalicznego ani produkcji**, więc nastrój i stres pracownika stoją w nim zamrożone na wartościach z generacji, a rotacja liczy się ze stanu, który się nie zmienia. Pełne miasto ze wszystkim naraz stawia `m5shop` | Artefakt fazy z §1 wymaga jednego przebiegu, w którym **wszystko** biegnie razem: doba mieszkańca, produkcja, detal i rynek pracy. Złożenie `m5shop` z `labor::setup` to jedno wywołanie, ale przebieg pięcioletni trzeba wtedy liczyć w profilu `release` i zmierzyć jego koszt — to jest zadanie WP17 |
+| | **`LaborDay` niesie już komplet metryk bramki rynku pracy**: zatrudnienia, odejścia, zwolnienia, wyjścia z rynku pracy, podwyżki, oferty zamrożone na suficie, oferty bezpośrednie, szkolenia, wakaty, siła robocza i bezrobocie | Bramka balansatora z §1 pkt 4 („mediana płacy per `JobRoleId` × dzielnica × czas, rotacja, czas wakatu") czyta te liczby z zasobu, a nie parsuje wydruku. `LaborMarketStats::per_role` daje medianę i czas wakatu per klucz |

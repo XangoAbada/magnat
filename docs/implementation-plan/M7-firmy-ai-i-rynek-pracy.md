@@ -132,7 +132,7 @@ dopiero po ostatniej podfazie; podfaza zamyka się własnym kryterium ze swojego
 | Podfaza | WP | §5 | Wynik do pokazania | Dokument |
 |---|---|---|---|---|
 | **M7a — Firma jako dane** ✅ | WP1, WP2, WP3 | 5.1, 5.2, 5.3 | 10 000 firm w świecie, każda z przypisanymi trzema slotami decyzyjnymi; dodanie typu zakładu nie dotyka kodu. | `M7a-firma-jako-dane.md` |
-| **M7b — Rynek pracy** | WP4, WP5, WP6 | 5.5 | Pensje emergentne: niedobór roli podnosi ofertę bez żadnej tabeli płac w kodzie. | `M7b-rynek-pracy.md` |
+| **M7b — Rynek pracy** ✅ | WP4, WP5, WP6 | 5.5 | Pensje emergentne: niedobór roli podnosi ofertę bez żadnej tabeli płac w kodzie. | `M7b-rynek-pracy.md` |
 | **M7c — Polityki i menedżerowie** | WP6b, WP7 | 5.4, 5.11 | Reguła gracza i polityka firmy AI wykonują się tym samym kodem; różnica leży w jakości menedżera. | `M7c-polityki-i-menedzerowie.md` |
 | **M7d — Finanse i upadłość** | WP8, WP9 | 5.12, 5.13 | Firma bierze kredyt, przestaje go obsługiwać, bankrutuje, a wierzyciele są zaspokajani w udokumentowanej kolejności. | `M7d-finanse-i-upadlosc.md` |
 | **M7e — AI firm** | WP10, WP11, WP12, WP12b, WP14 | 5.6, 5.7, 5.8, 5.9, 5.15 | Konkurencja reaguje na gracza: otwarcie sklepu obok zmienia ceny i asortyment sąsiadów w mierzalny sposób. | `M7e-ai-firm.md` |
@@ -511,6 +511,23 @@ Zrównoleglalne: WP2, WP8, WP10, WP16. WP6b blokowane przez AST od M9 (D17), WP1
 kontrakt `sim/macro` od M10 (dostarczony).
 WP17 rośnie razem z pozostałymi, nie na końcu — testy 7.1, 7.2 i 7.3 powstają odpowiednio razem
 z WP5, WP9 i WP10, bo napisane po fakcie już niczego nie złapią.
+
+---
+
+## Zmiany wpisane po M7b
+
+Poprawki dokumentu **fazy** naniesione w trakcie podfazy M7b (`K-18`). Korekty samej
+podfazy są w tabeli „Zmiany wpisane po M7b" w `M7b-rynek-pracy.md`.
+Gwiazdka = zmiana zakresu albo kryterium.
+
+| # | Co | Dlaczego |
+|---|---|---|
+| `AV-1` | **Powód decyzji nazywa się `DecisionReason::Hired`, a nie `Hire`** (§4, kryterium WP4), a blok M7 otwierają `Hired = 500`, `WageRaise = 501`, `JobLeft = 502` | Nazwa wariantu opisuje **fakt**, a nie czynność — tak jak `SupplierChosen` i `ContractSigned` w bloku M6. Wartości są od tej chwili wieczne (`K-45`) |
+| `AV-2`* | **`§7.1 pkt 4` mierzy się dziś wobec widełek stanowiska, a nie wobec marży** — patrz `AU-4` w dokumencie podfazy. Treść kryterium („firma rezygnuje z produkcji zamiast płacić poniżej progu rentowności") zostaje bez zmian, zmienia się liczba, z którą się porównuje | `SitePnlMonth` nie ma przychodu do M7e (`AR-7`), więc marży nie ma z czego policzyć. Wpisane teraz, żeby M7e wiedział, że domknięcie tego kryterium należy do niego, a nie do §7.1 „w ogóle" |
+| `AV-3` | **Decyzje otwarte zamknięte w M7b: `D2`, `D5`, `D6`, `D19`.** `D2` i `D19` — wykonaniem, nie negocjacją: moduł `labor` stoi w `sim/economy`, a reguły firmy w `sim/firms::labor_policy`, ze wstrzyknięciem w stronę wymuszoną kierunkiem zależności (`AU-5`). `D5` (płaca minimalna) — do M8 stałej nie ma wcale, bo dolnym ogranicznikiem jest widełka roli z `data/jobs/`, a ta pochodzi z danych; pytanie „czy płaca minimalna wiąże istniejące umowy" zostaje dla M8 i nic w M7b od niego nie zależy. `D6` — potrącenia są zerem i podpis listy płac się przez to nie zmienił | Wszystkie cztery dało się rozstrzygnąć tym, co pokazał kod, a nie uzgodnieniem |
+| `AV-4`* | **§6 „Dostarczam" dostaje `economy::labor::LaborMarket` i `LaborSystem` jako jawne wejście**, a funkcje z listy mają dziś podpisy: `post_offer(&mut LaborMarket, JobOffer) -> JobOfferId`, `apply_for(&mut LaborMarket, JobOfferId, CitizenId, Money, Q, u8, SimMinute) -> bool`, `shortage_index(&LaborMarket, JobRoleId, DistrictId) -> u16` | Podpisy z §6 zakładały wolne funkcje nad ukrytym stanem globalnym; rynek jest zasobem świata i wchodzi do hasha, więc każda z nich musi go dostać jawnie. Ten sam wzorzec, którym M6c poprawił swoje sygnatury (`AI-3`) |
+| `AV-5` | **Do §6 „Konsumuję" dochodzi `sim/agents::migration::{Vacancies, release_job_of}`** — pula etatów miasta jest wejściem regulatora napływu (M3c §5.7) i rynek pracy musi ją prowadzić: zajęty etat z niej schodzi, zwolniony wraca | Bez tego `min(wakaty, pustostany)` przestaje opisywać miasto już po pierwszym miesiącu gry, a regulator populacji dostaje wejście, które kłamie. Kontrakt był zapisany w dokumencie podfazy jako korekta po M3c i teraz jest wykonany |
+| `AV-6` | **Do „hooków zostawionych jawnie" dochodzą dwa: `AGGRESSION` (agresja licytacyjna z osobowości dyrektora) i `HiringPolicy` (wagi wyboru kandydata)** — oba stoją dziś na wartości neutralnej z adresem M7e | Zgadywanie osobowości w M7b znaczyłoby, że M7e musi najpierw usunąć odgadnięcie. Wartość neutralna jest właściwym stanem przejściowym i widać ją w jednym miejscu, a nie w dziesięciu |
 
 ---
 

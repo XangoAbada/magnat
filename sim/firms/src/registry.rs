@@ -241,9 +241,17 @@ impl Firms {
                         });
                     }
                 }
+                // Koszt kadrowy miesiąca (premie, odprawy, świadczenia, szkolenia)
+                // wchodzi do kosztu pracy i zeruje się razem z zamknięciem miesiąca —
+                // inaczej narastałby przez całą grę i rachunek wyniku kłamałby coraz
+                // bardziej z każdym miesiącem.
+                let kadry = std::mem::replace(&mut site.hr_accrued, magnat_core::Money::ZERO);
+                if kadry.get() != 0 {
+                    run.hr_costs.push((key, id, kadry));
+                }
                 site.pnl.push(SitePnlMonth {
                     month: miesiac,
-                    labor: magnat_core::Money(labor),
+                    labor: magnat_core::Money(labor.saturating_add(kadry.get())),
                     fixed: site.fixed_cost_month,
                 });
             }

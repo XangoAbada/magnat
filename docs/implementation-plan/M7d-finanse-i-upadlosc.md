@@ -168,3 +168,15 @@ Przebieg:
 
 Skutki w dzielnicy (§7.8: „skutki w dzielnicy") są emergentne: fala bezrobocia → spadek popytu
 w okolicznych sklepach → spadek wartości gruntu. Żadnych modyfikatorów „na sztywno".
+
+---
+
+## Zmiany wpisane po M7b
+
+Poprawki wpisane przez podfazę **M7b** (`K-18`).
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| ★ | **`PayrollOutbox` czeka na konsumenta i to jest zadanie M7d.** Skrzynka niesie dwie listy: `PayrollRun::items` (brutto per umowa, potrącenia zerowe — `D6`) i dołożone w M7b `PayrollRun::hr_costs` (koszt kadrowy per zakład: premie, odprawy, świadczenia, szkolenia). Dziś nikt jej nie opróżnia, a dochód gospodarstwa nadal płynie z konta „reszta świata" | Zamknięcie obiegu **wymaga finansów**: firma bez przychodu i bez kredytu nie ma z czego zapłacić, więc księgowanie listy płac bez M7d wywróciłoby saldo każdej firmy w mieście w pierwszym miesiącu. Kolejność jest więc właściwa, ale dług trzeba widzieć: do M7d pieniądz za pracę **nie przechodzi** przez konto firmy |
+| ★ | **`Household.income_monthly` jest od M7b prowadzone przez rynek pracy** — zatrudnienie je podnosi, odejście obniża, a wartość nigdy nie schodzi poniżej zera. To jest **denormalizacja**, nie drugie źródło prawdy: umowa po stronie firmy zostaje jedyną prawdą o płacy (`D1`) | Gdy M7d zacznie księgować wypłaty z konta firmy, ta liczba przestaje być kanałem dochodu i zostaje wyłącznie tym, czym jest w M5: prognozą, z której gospodarstwo planuje budżet. Przejście trzeba zrobić **jednym ruchem**, inaczej gospodarstwo dostanie pensję dwa razy |
+| ★ | **Bankructwo zastanie na liście płac ludzi, nie tylko liczby.** Rejestr firm po M7b prowadzi obsadę w czasie: `Position::filled` zmienia się codziennie, a każde wyjście z etatu idzie przez `hr::odejdz` — jedyną drogę, która zwalnia etat i po stronie firmy, i po stronie mieszkańca, i w puli wakatów miasta | Niezmiennik 4 z §7.2 („każdy `Employment` zakończony dokładnie raz, dokładnie jedna odprawa naliczona") ma po M7b gotowy mechanizm: syndyk woła tę samą funkcję z `LeaveCause::Redundancy`. Wariant `Redundancy` istnieje w `core` od M7b **właśnie po to** i do M7d nie ma pisarza |

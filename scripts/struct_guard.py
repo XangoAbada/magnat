@@ -92,8 +92,9 @@ REJESTR = {
     ("sim/world/src/city/mod.rs", "fn", 368): 24,
     ("sim/world/src/city/zoning.rs", "fn", 322): 36,
     # Rośnie o jedno ramię na wariant `DecisionReason` i **ma rosnąć** aż do M7c.
-    # 319 przed M6b, 355 po bloku M6b (400–402), 397 po M6c (403–405).
-    ("engine/ui/src/inspect/reason.rs", "fn", 397): 37,
+    # 319 przed M6b, 355 po bloku M6b (400–402), 397 po M6c (403–405),
+    # 451 po M7b (500–502, przy czym `WageRaise` ma dwa ramiona: podwyżka i sufit).
+    ("engine/ui/src/inspect/reason.rs", "fn", 451): 37,
     ("sim/economy/src/data.rs", "fn", 268): 38,
 }
 

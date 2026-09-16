@@ -8,9 +8,10 @@
 use crate::loc::{Catalog, Locale};
 use magnat_agents::SocialClass;
 use magnat_core::{
-    ActivityKind, CommitmentKind, DecisionReason, DeprivationEffect, FixedCost, LifeEventKind,
-    LineStopCause, LoanKind, MigrationKind, Money, NeedKind, PriceDriver, RejectCause,
-    RejectCredit, ShortageStageKind, StockCat, TraitId, TransportMode, UtilityKind,
+    ActivityKind, CommitmentKind, DecisionReason, DeprivationEffect, FixedCost, LeaveCause,
+    LifeEventKind, LineStopCause, LoanKind, MigrationKind, Money, NeedKind, PriceDriver,
+    RejectCause, RejectCredit, ShortageStageKind, StockCat, TraitId, TransportMode, UtilityKind,
+    WageCause,
 };
 
 /// Nazwa potrzeby w języku gracza.
@@ -89,6 +90,18 @@ pub fn line_stop_cause(c: &Catalog, l: Locale, s: LineStopCause) -> String {
 #[must_use]
 pub fn shortage_stage(c: &Catalog, l: Locale, s: ShortageStageKind) -> String {
     c.fmt_key(l, &format!("ui.shortage.{}", s.name()), &[])
+}
+
+/// Nazwa powodu ruszenia stawki w ofercie pracy (M7b §5.5).
+#[must_use]
+pub fn wage_cause(c: &Catalog, l: Locale, w: WageCause) -> String {
+    c.fmt_key(l, &format!("ui.wage_cause.{}", w.name()), &[])
+}
+
+/// Nazwa powodu odejścia z pracy (M7b WP6).
+#[must_use]
+pub fn leave_cause(c: &Catalog, l: Locale, k: LeaveCause) -> String {
+    c.fmt_key(l, &format!("ui.leave_cause.{}", k.name()), &[])
 }
 
 /// Rodzaj cennika w kontrakcie dostawy (M6c §5.8). Dwa słowa zamiast wariantu enuma:
@@ -542,6 +555,73 @@ pub fn describe(c: &Catalog, l: Locale, r: DecisionReason) -> String {
                 ("masa", &mass_kg.to_string()),
             ],
         ),
+        DecisionReason::Hired {
+            role: _,
+            score,
+            runner_up,
+        } => c.fmt_key(
+            l,
+            "ui.reason.Hired",
+            &[
+                ("wynik", &score.to_string()),
+                ("drugi", &drugi_w_kolejce(c, l, runner_up)),
+            ],
+        ),
+        // Podwyżka przycięta do zera jest **innym zdaniem**, a nie tym samym z liczbą
+        // zero: firma nie podniosła stawki, bo przy wyższej ten etat przestaje się
+        // opłacać. Gracz pytający „dlaczego wakat stoi pusty" dostaje tu odpowiedź.
+        DecisionReason::WageRaise {
+            role: _,
+            delta_bp: 0,
+            days_open,
+            cause: _,
+        } => c.fmt_key(
+            l,
+            "ui.reason.WageFrozen",
+            &[("dni", &c.plural(l, c.must("ui.unit.days"), u64::from(days_open)))],
+        ),
+        DecisionReason::WageRaise {
+            role: _,
+            delta_bp,
+            days_open,
+            cause,
+        } => c.fmt_key(
+            l,
+            "ui.reason.WageRaise",
+            &[
+                ("przyrost", &procent_bp(i32::from(delta_bp))),
+                ("dni", &c.plural(l, c.must("ui.unit.days"), u64::from(days_open))),
+                ("powod", &wage_cause(c, l, cause)),
+            ],
+        ),
+        DecisionReason::JobLeft {
+            role: _,
+            cause,
+            tenure_days,
+        } => c.fmt_key(
+            l,
+            "ui.reason.JobLeft",
+            &[
+                ("powod", &leave_cause(c, l, cause)),
+                (
+                    "staz",
+                    &c.plural(l, c.must("ui.unit.days"), u64::from(tenure_days)),
+                ),
+            ],
+        ),
+    }
+}
+
+/// Wynik drugiego kandydata albo informacja, że drugiego nie było.
+///
+/// `i32::MIN` znaczy „jedyny chętny", a nie „kandydat fatalny" — i te dwa zdania
+/// muszą się różnić, bo oferta z jednym chętnym mówi o rynku pracy coś innego
+/// niż oferta, w której ktoś przegrał.
+fn drugi_w_kolejce(c: &Catalog, l: Locale, runner_up: i32) -> String {
+    if runner_up == i32::MIN {
+        c.fmt_key(l, "ui.reason.no_runner_up", &[])
+    } else {
+        runner_up.to_string()
     }
 }
 
@@ -771,6 +851,35 @@ mod tests {
                 premium_bp: 1_450,
                 mass_kg: 24_000,
             },
+            DecisionReason::Hired {
+                role: magnat_core::JobRoleId(4),
+                score: 780,
+                runner_up: 640,
+            },
+            // Jedyny chętny ma własny klucz, tak samo jak drugi wariant cennika wyżej.
+            DecisionReason::Hired {
+                role: magnat_core::JobRoleId(4),
+                score: 780,
+                runner_up: i32::MIN,
+            },
+            DecisionReason::WageRaise {
+                role: magnat_core::JobRoleId(4),
+                delta_bp: 930,
+                days_open: 14,
+                cause: WageCause::NoCandidates,
+            },
+            // Krok przycięty do sufitu marży — drugie zdanie, nie ta sama liczba.
+            DecisionReason::WageRaise {
+                role: magnat_core::JobRoleId(4),
+                delta_bp: 0,
+                days_open: 21,
+                cause: WageCause::Ceiling,
+            },
+            DecisionReason::JobLeft {
+                role: magnat_core::JobRoleId(4),
+                cause: LeaveCause::BetterOffer,
+                tenure_days: 420,
+            },
         ]
     }
 
@@ -795,7 +904,10 @@ mod tests {
         // (400..=402), czyli 39. Po M6c trzy kolejne (403..=405) i **czwarty wpis**:
         // `ContractSigned` stoi na liście dwa razy, bo `indexed` wybiera klucz
         // lokalizacji, a wariant z jednym wpisem zostawiłby drugi klucz niesprawdzony.
-        assert_eq!(wszystkie().len(), 43);
+        // Po M7b blok M7 (500..=502) plus dwa wpisy z tego samego powodu co wyżej:
+        // `Hired` bez drugiego kandydata i `WageRaise` przycięty do sufitu marży
+        // wybierają inne klucze — razem 48.
+        assert_eq!(wszystkie().len(), 48);
     }
 
     #[test]

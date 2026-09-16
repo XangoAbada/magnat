@@ -26,11 +26,11 @@
 
 use crate::ids::{FirmId, SiteId};
 use crate::time::MinuteOfDay;
-use crate::types::{GoodId, Q};
+use crate::types::{GoodId, JobRoleId, Q};
 use crate::vocab::{
-    CommitmentKind, DeprivationEffect, FixedCost, LifeEventKind, LineStopCause, LoanKind,
-    MigrationKind, NeedKind, PlaceRef, PriceDriver, RejectCause, RejectCredit, ShortageStageKind,
-    StockCat, TraitId, TransportMode, UtilityKind,
+    CommitmentKind, DeprivationEffect, FixedCost, LeaveCause, LifeEventKind, LineStopCause,
+    LoanKind, MigrationKind, NeedKind, PlaceRef, PriceDriver, RejectCause, RejectCredit,
+    ShortageStageKind, StockCat, TraitId, TransportMode, UtilityKind, WageCause,
 };
 use serde::{Deserialize, Serialize};
 
@@ -291,6 +291,42 @@ pub enum DecisionReason {
         mass_kg: u32,
     } = 405,
     // 406–499 zarezerwowane dla M6.
+
+    // ── M7: 500..=599 ────────────────────────────────────────────────────────────
+    /// Firma wybrała kandydata (M7b §5.5, PRD §6.6). `score` to wynik scoringu
+    /// zatrudnionego, `runner_up` — drugiego w kolejce; `i32::MIN` znaczy „nie było
+    /// drugiego", a nie „drugi był fatalny". Dwie liczby zamiast jednej, bo pytanie
+    /// gracza brzmi „dlaczego **on**", a nie „czy był dobry": różnica między pierwszym
+    /// a drugim jest całą odpowiedzią i bez niej powód byłby oceną bez skali.
+    Hired {
+        role: JobRoleId,
+        score: i32,
+        runner_up: i32,
+    } = 500,
+    /// Firma ruszyła stawkę w wiszącej ofercie (M7b §5.5, PRD §6.6).
+    /// `delta_bp` to przyrost wobec stawki poprzedniej w punktach bazowych,
+    /// `days_open` — ile dni oferta wisiała bez akceptowalnego kandydata.
+    ///
+    /// **`delta_bp == 0` przy `cause: Ceiling` jest wpisem pełnoprawnym**: znaczy
+    /// „dalej nie licytuję, bo przy wyższej stawce ten etat przestaje się opłacać".
+    /// Nieobsadzony wakat jest poprawnym wynikiem (M7 §7.1 pkt 4) i musi mieć zdanie,
+    /// którym da się go graczowi wytłumaczyć.
+    WageRaise {
+        role: JobRoleId,
+        delta_bp: u16,
+        days_open: u16,
+        cause: WageCause,
+    } = 501,
+    /// Pracownik przestał pracować w tym zakładzie (M7b WP6). Powód jest zapisywany
+    /// **po stronie odchodzącego** — także wtedy, gdy odejście jest zwolnieniem.
+    /// `tenure_days` to staż w dobach: rotacja tygodniowa i rotacja po pięciu latach
+    /// to dwie różne diagnozy tego samego zdarzenia.
+    JobLeft {
+        role: JobRoleId,
+        cause: LeaveCause,
+        tenure_days: u16,
+    } = 502,
+    // 503–599 zarezerwowane dla M7.
     // ... kolejne fazy dopisują własne bloki na końcu pliku
 }
 
@@ -347,6 +383,9 @@ impl DecisionReason {
             DecisionReason::SupplierChosen { .. } => 403,
             DecisionReason::ContractSigned { .. } => 404,
             DecisionReason::ExportChosen { .. } => 405,
+            DecisionReason::Hired { .. } => 500,
+            DecisionReason::WageRaise { .. } => 501,
+            DecisionReason::JobLeft { .. } => 502,
         }
     }
 }

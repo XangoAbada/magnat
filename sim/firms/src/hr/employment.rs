@@ -193,6 +193,11 @@ impl PayrollItem {
 #[derive(Clone, PartialEq, Eq, Debug, Default)]
 pub struct PayrollRun {
     pub items: Vec<PayrollItem>,
+    /// Koszt kadrowy zakładu za miniony miesiąc — premie, odprawy, świadczenia
+    /// i szkolenia razem (M7b WP6). Osobna lista od wypłat, bo obciąża firmę
+    /// per zakład, a nie per umowa; adresatem części z tych kwot jest pracownik,
+    /// a części dostawca usługi.
+    pub hr_costs: Vec<(FirmKey, SiteId, Money)>,
 }
 
 impl PayrollRun {
@@ -202,9 +207,15 @@ impl PayrollRun {
         Money(self.items.iter().map(|i| i.gross.get()).sum())
     }
 
+    /// Łączny koszt kadrowy poza listą płac.
+    #[must_use]
+    pub fn total_hr(&self) -> Money {
+        Money(self.hr_costs.iter().map(|(_, _, m)| m.get()).sum())
+    }
+
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.items.is_empty()
+        self.items.is_empty() && self.hr_costs.is_empty()
     }
 }
 

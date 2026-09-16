@@ -77,6 +77,12 @@ pub struct Site {
     /// Dla zakładu handlowego jest wyposażeniem sklepu.
     pub tech: Q,
     pub fixed_cost_month: Money,
+    /// Koszt kadrowy narosły w tym miesiącu: premie, odprawy, świadczenia, szkolenia
+    /// (M7b WP6). Lista płac dolicza go do kosztu pracy w rachunku wyniku i zeruje.
+    ///
+    /// Osobne pole, a nie doliczanie na bieżąco do `pnl`: rachunek wyniku zakładu
+    /// domyka się raz w miesiącu i ma opisywać miesiąc, a nie rosnąć w środku doby.
+    pub hr_accrued: Money,
     pub pnl: Ring<SitePnlMonth, 36>,
     pub opened: SimMinute,
 }
@@ -121,6 +127,7 @@ impl Site {
             mgmt: ManagementQuality::NEUTRAL,
             tech: Q::new(50),
             fixed_cost_month: spec.fixed_cost_month(at.floor_m2),
+            hr_accrued: Money::ZERO,
             pnl: Ring::new(),
             opened: at.opened,
         }
@@ -159,6 +166,12 @@ impl Site {
         let promile = praca.saturating_mul(1000) / mianownik;
         u16::try_from(promile.clamp(0, i64::from(magnat_supply::PlantSite::FULL_LABOR)))
             .unwrap_or(magnat_supply::PlantSite::FULL_LABOR)
+    }
+
+    /// Dopisuje koszt kadrowy do miesiąca. Jedyna droga zmiany `hr_accrued` —
+    /// zerowanie należy do listy płac.
+    pub fn accrue_hr(&mut self, kwota: Money) {
+        self.hr_accrued = Money(self.hr_accrued.get().saturating_add(kwota.get()));
     }
 
     /// Liczba zatrudnionych.
@@ -231,6 +244,7 @@ impl HashState for Site {
         h.write_u8(self.mgmt.0);
         h.write_u8(self.tech.get());
         self.fixed_cost_month.hash_state(h);
+        self.hr_accrued.hash_state(h);
         self.pnl.hash_state(h);
         self.opened.hash_state(h);
     }
