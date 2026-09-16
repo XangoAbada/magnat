@@ -22,9 +22,9 @@ Model firmy i zakładu, stabilny `FirmKey`, scheduler trzech poziomów decyzji, 
 
 | WP | Nazwa | Zależy od | Rozmiar |
 |---|---|---|---|
-| WP1 | Model firmy, `FirmKey`, scheduler decyzji i budżet shardingu | szkic `sim/firms` z M5/M6 | M |
-| WP2 | Katalog typów zakładów w `data/site_types/` + walidator | WP1 | S |
-| WP3 | Stanowiska, zatrudnienie, lista płac, produktywność | WP1, WP2, M3, M6 | M |
+| [x] WP1 | Model firmy, `FirmKey`, scheduler decyzji i budżet shardingu | szkic `sim/firms` z M5/M6 | M |
+| [x] WP2 | Katalog typów zakładów w `data/site_types/` + walidator | WP1 | S |
+| [x] WP3 | Stanowiska, zatrudnienie, lista płac, produktywność | WP1, WP2, M3, M6 | M |
 
 ### WP1 — Model firmy, `FirmKey`, scheduler decyzji
 
@@ -37,6 +37,12 @@ Scheduler: przydział firmy do slotu decyzyjnego każdego z trzech poziomów (§
 dwa przebiegi dają identyczną sekwencję `(tick, FirmKey, tier)`; hash stanu ECS obejmuje wszystkie
 komponenty M7.
 
+**Spełnione** (`sim/firms/tests/scheduling.rs`, `state_hash.rs`): 10 000 firm, każda z trzema
+slotami w kalendarzu 12 × 30, dwa przebiegi dają identyczną sekwencję, każda firma decyduje
+operacyjnie **dokładnie raz** na dobę, a kolejność zakładania firm nie zmienia hasha. Stan
+wchodzi do hasha świata przez zasób `Firms` (`AR-8`), razem z kolejką przepełnienia slotów;
+kubełki indeksu pochodnego do hasha nie wchodzą i ma to własny test.
+
 ### WP2 — Katalog typów zakładów w danych
 
 `data/site_types/*.ron` — po jednym pliku na branżę (`extraction.ron`, `processing.ron`,
@@ -46,8 +52,13 @@ komponenty M7.
 
 *Kryterium ukończenia:* walidator w CI — każdy `SiteType` ma domknięty zestaw `JobRoleId`
 (każda rola istnieje w `data/jobs/`), każda receptura wskazuje istniejące `GoodId`, każdy typ ma
-co najmniej jedno stanowisko menedżerskie; dodanie nowego pliku RON nie wymaga rekompilacji poza
-ładowaniem danych.
+co najmniej jedno stanowisko menedżerskie; **zbiory kluczy `data/site_types/` i `data/buildings/`
+pokrywają się** (`AR-1`); dodanie nowego pliku RON nie wymaga rekompilacji poza ładowaniem danych.
+
+**Spełnione** (`sim/firms/tests/catalog.rs` — dziewięć asercji na prawdziwych danych,
+`tools/headless/tests/site_types.rs` — trzy reguły krzyżowe): 96 typów zakładów w dziewięciu
+plikach branżowych, 96 z 96 archetypów firmowych pokrytych, zero dziur w obie strony. Każda
+z czterech reguł ma test negatywny, czyli test tego, że walidator faktycznie odrzuca.
 
 ### WP3 — Stanowiska, zatrudnienie, lista płac, produktywność
 
@@ -56,6 +67,14 @@ co najmniej jedno stanowisko menedżerskie; dodanie nowego pliku RON nie wymaga 
 
 *Kryterium ukończenia:* zakład z załogą wytwarza w M6 wynik proporcjonalny do `effective_labor`;
 test LOD — przebieg mikro i mezo tego samego zakładu daje identyczną sumę wypłat (tolerancja 0).
+
+**Spełnione, każde zdanie osobno.** Pierwsze: `sim/supply/tests/plant.rs`
+(`obsada_zakladu_jest_drugim_ogranicznikiem_szarzy`) — ten sam młyn, ta sama doba, ten sam wsad,
+pełna obsada miele pełną produkcję, połowa obsady około połowy, zakład bez ludzi stoi.
+Wymagało to dołożenia `PlantSite::labor_pct` po stronie M6 (`AR-10`, `K-44`), bo do M7a praca
+nie była wejściem produkcji. Drugie: `sim/firms/tests/payroll_and_labor.rs`
+(`suma_wyplat_nie_zalezy_od_gestosci_liczenia_czasu`) — miesiąc liczony dobami i minutami daje
+identyczną sumę wypłat, tolerancja 0.
 
 ---
 
@@ -254,3 +273,38 @@ out  = base * tech_mult(tech) / 1000 * mgmt_mult(mgmt) / 1000
 `mood01` to `Mood(-100..=100)` przeskalowany jawnie do 0..100 — żeby zły nastrój nie wytwarzał
 ujemnej pracy. Wagi są per zawód: dla `researcher` liczy się umiejętność, dla `truck_driver`
 energia i zdrowie. Zmiana wag = zmiana danych, nie kodu.
+
+---
+
+## Zmiany wpisane po M7a
+
+Korekty naniesione w trakcie wykonania tej podfazy. Gwiazdka = zmiana zakresu
+albo kryterium. Format jak w tabelach korekt pozostałych faz (`K-18` pkt b).
+
+| # | Co | Dlaczego |
+|---|---|---|
+| `AR-1`* | **Kryterium WP2 dostaje czwartą regułę: zbiory kluczy `data/site_types/` i `data/buildings/` muszą się pokrywać.** Egzekwuje ją `SiteTypeCatalog::load` (`CatalogError::NoArchetype`) w jedną stronę, a test `tools/headless/tests/site_types.rs` w drugą | Katalog typów zakładów powstał jako osobny plik obok istniejącego katalogu archetypów M2 (decyzja właściciela produktu przy starcie podfazy), a oba opisują **ten sam** zakład tym samym kluczem tekstowym. To jest jedyny realny koszt tego podziału i bez walidatora byłby cichy: archetyp zmienia nazwę, zakład traci typ, obsada wychodzi pusta, a objawem jest zakład bez ani jednego pracownika zauważony kiedyś w panelu |
+| `AR-2`* | **`SiteType` przycięty do pól, które nie mają właściciela gdzie indziej.** Nie powstają: `footprint_m2` i `permitted_zones` (są w archetypie M2 jako `min_parcel_m2` i `zones`), `lines` (wyprowadzane z receptur, M6b), `utilities` (liczniki `UtilityMeter`, M6b), `dock_trucks_per_hour` (`Dock`, M6b), `emissions` (`PlantSite::emissions`, M6b), `shelf_capacity_m3_per_100m2` (`Shelf`, M5b), `epoch_from` (pole `epochs` w archetypie). Dochodzi `fixed_cost` — czynsz za m² i ryczałt administracyjny | Każde z tych pól ma już pisarza i czytelnika w innej fazie. Powtórzenie któregokolwiek dałoby drugą prawdę o tej samej liczbie — dokładnie to, przed czym broni `AR-1`, tylko wewnątrz jednego rekordu |
+| `AR-3`* | **`staffing.per_100m2: f32` zastąpione przez `per_10000m2: u16`.** Wiersz obsady liczy się w całkowitych stanowiskach na 10 000 m² | Dwa powody, każdy osobno wystarczający. **(1)** Liczba stanowisk wchodzi do stanu trwałego, a tam floata nie ma (00 §2). **(2)** Mianownik 1 000 był za gruby: zakłady w `data/buildings/` mają od 22 m² na stanowisko (biuro) do 1 920 m² (las, pole), więc gospodarstwo rolne wymagałoby połowy stanowiska i w `u16` wychodziłoby 1 — cała gałąź rolna miasta byłaby **dwukrotnie** przeobsadzona, razem z dwukrotnie zawyżonym kosztem pracy. Przy 10 000 biuro ma 4 500, pole 5, i obie liczby są dokładne |
+| `AR-4`* | **`tech_mult` przesunięty z 800..1400 na 700..1300**, przy zachowanej rozpiętości 600. Punkt neutralny wypada przy `Q(50)` | Znalazł to test, który miał sprawdzić rzecz oczywistą: że wzorcowy pracownik daje pełny etat. `Q::new(50)` jest wartością domyślną `PlantSite::tech` (M6) i `Site::tech`, czyli znaczy „wyposażenie przeciętne" — a w skali 800..1400 przeciętne wyposażenie dawało **ciche +10%** do przepustowości każdego zakładu w mieście. Mnożnik bez punktu neutralnego nie jest mnożnikiem, tylko przesunięciem skali ukrytym w kalibracji |
+| `AR-5` | **`FirmBooks` nie powstaje w M7a.** `Firm` nie ma pola `cash` ani historii kapitału | Konto firmy prowadzi `Books` z M5 pod `AccountOwner::Firm(FirmId)` i to jest jedyne saldo; druga kopia gotówki byłaby drugą prawdą. Kredyty, leasingi, obligacje i należności to §5.12, czyli **M7d** — w M7a byłyby pustą strukturą |
+| `AR-6` | **`Firm` bez pól `contracts`, `personality`, `strategy` i `policy`** wymienionych w §5.2 | Każde z nich ma właściciela w dalszej podfazie (`policy` — M7c, `personality` i `strategy` — M7e, `contracts` — M6 i M7d). Pole bez pisarza jest kosztem razy dziesięć tysięcy firm i zerem wartości; `Firm` dostanie je wtedy, gdy ktoś zacznie je zapisywać |
+| `AR-7` | **`Site` bez `shift_plan` i bez `manager`; `SitePnlMonth` ma dwie pozycje, a nie pełny rachunek wyniku** | Harmonogram zmian już istnieje jako `PlantSite::schedule` (M6b) i drugi byłby sprzecznością, nie nadmiarem. Menedżer należy do M7c. Rachunek wyniku dostaje `labor` i `fixed`, bo tylko te dwie pozycje mają w M7a pisarza; przychody dokłada M7e, kiedy zacznie je czytać — zera udające pomiar są gorsze od braku pola |
+| `AR-8` | **Firma i zakład nie są komponentami ECS**, wbrew brzmieniu WP1. Cały stan siedzi w zasobie `Firms` (`BTreeMap`), wpiętym do hasha przez `register_resource_hash` | Do firmy dociera się zawsze przez klucz albo przez zakład, nigdy przekrojowo po archetypach — czyli dokładnie ten argument, który wypchnął partie i oferty do aren (`K-16`). Wzorzec jest w projekcie ustalony: `Market` (M5) i `Plant` (M6) są zasobami z `BTreeMap`. Kryterium WP1 („hash stanu ECS obejmuje wszystkie komponenty M7") jest spełnione, bo zasób wchodzi do hasha na tych samych prawach co komponent |
+| `AR-9` | **Scheduler dostaje kubełki slotów** — indeks pochodny per minuta doby, dzień miesiąca i dzień kwartału, **poza hashem** | Bez niego przydział slotów jest skanem po wszystkich firmach w każdym ticku: 10 tys. firm razy 1440 minut razy 3 poziomy to 43 mln sprawdzeń na dobę gry, czyli budżet z §7.6 zjedzony w całości przez samą pętlę „czy to już". Kubełki nie wchodzą do hasha, bo są funkcją zbioru kluczy i odtwarzają się z niego w całości; kolejka przepełnienia wchodzi, bo **jest** stanem |
+| `AR-10`* | **`PlantSite` (M6) dostaje `labor_pct`** — patrz `K-44`. Pisarzem jest most M7a, czytelnikiem `sprobuj_start` | Do M7a praca nie była wejściem produkcji: młyn mielił tyle samo z pełną obsadą, z połową i bez nikogo, a płace były kosztem stojącym obok wyniku, nie jego przyczyną. Bez tego pola cała warstwa HR z PRD §7.5 nie miałaby jak objawić się w gospodarce, a kryterium WP3 („wynik proporcjonalny do `effective_labor`") byłoby niesprawdzalne |
+| `AR-11` | **`D16` rozstrzygnięte jako rozszerzenie schematu `data/jobs/roles.ron`** (wersja 1 na 2, pole `weights`), a nie osobny plik. `magnat_firms::RoleTable` jest **drugim widokiem** na ten sam plik — patrz `K-43` | Osobny plik musiałby powtarzać kolejność ról, a dwie listy o wymuszonej wspólnej kolejności rozjeżdżają się przy pierwszej zmianie. Przejęcie `JobTable` przez `sim/firms` ciągnęłoby za sobą `UnitClass`, czyli gramatykę budynków M2 |
+| `AR-12` | **Katalog ról rośnie z 4 do 46.** Cztery role M2 zostają na swoich miejscach | Obsada 96 typów zakładów potrzebuje zawodów, a nie jednej roli na rodzaj lokalu. Cztery pierwsze wpisy są nieruchome, bo `JobTable::role_for` bierze **pierwszą** rolę danej klasy lokalu — przestawienie ich przebudowałoby obsadę lokali M2 |
+| `AR-13` | **Blok `StreamId` fazy M7 to 220–239, nie 240–259** | `K-4` przypisuje 220–239 fazie M7, a 240–259 fazie M8. Dokument fazy podawał drugi z tych zakresów w §1 i w §6 — poprawione po obu stronach (`AS-1`). M7a i tak nie zajęła ani jednego numeru, bo niczego nie losuje |
+| `AR-14` | **Blok `DecisionReason` M7 (500–599) zostaje po M7a w całości wolny** | M7a buduje mechanizm dziennika decyzji (pierścień 32 wpisów, w hashu), ale **żadnej decyzji nie podejmuje** — pierwszym pisarzem jest M7b. Precedens jest w dzienniku: M5a zostawiła swój blok wolny z tego samego powodu. Wariant bez pisarza łamałby przy okazji regułę „wariant, którego nie da się pokazać graczowi jednym zdaniem, jest źle zaprojektowany", bo nie dałoby się napisać, kiedy powstaje |
+| `AR-15` | **`Owner::External` bez ładunku** zamiast `External(ChainId)` | `ChainId` powstaje razem z sieciami zewnętrznymi w M7f. Do tego czasu wariant niesie sam fakt zewnętrzności i to wystarcza mostowi, który stawia firmy zastane |
+| `AR-16` | **Most „miasto → firmy" (`tools/headless::firms`) czyta obsadę z komponentów ECS, a nie z `Workplace.occupant`** | `Workplace.occupant` jest **zawsze** `None`, także po Etapie 8 — sprawdzone w kodzie, nie założone. Zatrudnienie Etapu 8 żyje w komponencie `magnat_agents::Employment` (`site = SITE_KEY_BASE + indeks zakładu`). Most zbudowany na `occupant` dałby wszystkie firmy bez ani jednego pracownika. Druga pułapka tej samej klasy: `SiteSeed.units` obejmuje lokale **całego budynku**, więc powierzchnia zakładu liczy się z filtrem `UnitOccupant::Site` — inaczej sklep na parterze kamienicy dostaje powierzchnię kamienicy razem z mieszkaniami |
+
+### Co zostaje otwarte po M7a
+
+| # | Co | Adres |
+|---|---|---|
+| `AT-1` | **W mieście 4 km staje 215 firm i 217 zakładów**, przy obietnicy §1 dokumentu fazy, że „miasto 150 tys. startuje z ~6–10 tys. firm AI". Proporcjonalnie wychodzi rząd 800, czyli dziesięciokrotnie za mało. To nie jest brak M7a — tyle zakładów stawia Etap 7 generatora — ale obietnica fazy stoi i ktoś musi ją domknąć: albo powstawaniem firm, albo gęstszym obsadzeniem zabudowy | **M7f** (powstawanie firm, §5.14), przy udziale M2 |
+| `AT-2` | **`labor_pct` jest wpisywane raz, przy stawianiu miasta.** Obsada z Etapu 8 jest zdjęciem, a nie liczbą prowadzoną: nikt jej nie aktualizuje przy odejściu, śmierci ani zatrudnieniu, więc wpięcie jej w produkcję na stałe dałoby wartość, która zamarza | **M7b** — rynek pracy jest pierwszą podfazą, która tę obsadę prowadzi, i to on przenosi zapis `labor_pct` z mostu do systemu |
+| `AT-3` | **Trzy role z katalogu nie mają ani jednego zakładu**: `retail_clerk` (rola generyczna M2, w zakładach zastąpiona przez `cashier` i `sales_assistant`), `journalist` i `leasing_agent`. Te dwie należą do redakcji i do nieruchomości, a takich archetypów w `data/buildings/` nie ma — `SiteTypeCategory::Media` ma jeden typ, `RealEstate` zero | **M10** (media, §7.6) i **M10** (rynek nieruchomości, §6.7) |
+| `AT-4` | **Obsada z Etapu 8 nie zgadza się co do roli z obsadą z katalogu M7.** M2 przypisuje jedną rolę na klasę lokalu, katalog M7 rozbija ją na zawody, więc most dopisuje stanowiska spoza planu katalogu. W mieście 4 km obsadzonych jest 14 405 z 23 912 etatów | **M7b** — to jest dokładnie ta rozbieżność, którą rynek pracy ma zamykać zatrudnieniem i zwolnieniem |

@@ -1,0 +1,27 @@
+// Typy zakładów — finanse (M7, PRD §7.2).
+//
+// Jeden wpis, bo `bank_branch` jest jedynym archetypem tej branży w `data/buildings/`.
+// Osobny plik zamiast dopisania do `business_services.ron` dlatego, że kategoria jest
+// kontraktem dla reguł podatkowych i licencyjnych — bank ma być odróżnialny od biura
+// projektowego w danych, a nie po nazwie klucza.
+//
+// Obsada: `bank_teller` skaluje się z powierzchnią sali, `loan_officer` z zapleczem,
+// a ochrona jest `per_site` — jeden posterunek niezależnie od tego, jak duży jest oddział.
+(
+    schema_version: 1,
+    site_types: [
+        (
+            key: "bank_branch",
+            category: Finance,
+            staffing: [
+                ( role: "bank_teller", per_10000m2: 200, min: 3 ),
+                ( role: "loan_officer", per_10000m2: 80, min: 1 ),
+                ( role: "office_clerk", per_10000m2: 60, min: 1 ),
+                ( role: "security_guard", per_site: 1 ),
+                ( role: "office_manager", per_site: 1, managerial: true ),
+            ],
+            capex: ( build: 180000000, equip_per_100m2: 11000000 ),
+            fixed_cost: ( rent_per_m2: 6400, admin: 720000 ),
+        ),
+    ],
+)

@@ -316,7 +316,16 @@ fn sprobuj_start(
         .map(|i| zaklad.throttle_pct(i.good))
         .min()
         .unwrap_or(100);
-    let wsad = l.charge_mass(r.duration_minutes, pct);
+    // Dwa niezależne ograniczniki szarży i **oba** muszą się zmieścić: wsad mówi,
+    // ile jest z czego robić, obsada — ile jest komu. Mnożenie, a nie minimum:
+    // zakład z połową ludzi i połową mąki robi ćwierć szarży, bo brakuje mu obu rzeczy.
+    let wsad = Mass(
+        i64::try_from(
+            i128::from(l.charge_mass(r.duration_minutes, pct).0) * i128::from(zaklad.labor_pct)
+                / i128::from(PlantSite::FULL_LABOR),
+        )
+        .unwrap_or(i64::MAX),
+    );
     if wsad.0 <= 0 || r.batch_mass.0 <= 0 {
         l.state = LineState::Idle;
         return false;

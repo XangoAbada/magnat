@@ -1,0 +1,50 @@
+// Typy zakładów — usługi dla firm (M7, PRD §7.2).
+//
+// Biuro to najwyższe `per_10000m2` w katalogu (38–53), bo `m2_per_workplace` biurka to
+// dwadzieścia kilka metrów, a nie dwieście. Konsekwencja jest finansowa: w tej branży
+// prawie cały koszt to płace, a `capex` jest umeblowaniem — dlatego `build` jest tu
+// mniejszy niż w niejednym sklepie, a `equip_per_100m2` wyższy.
+//
+// `it_office` ma najdroższe stanowisko i najwyższy czynsz, bo konkuruje o tę samą
+// powierzchnię biurową co reszta, mając kilkukrotnie wyższą płacę do udźwignięcia.
+(
+    schema_version: 1,
+    site_types: [
+        (
+            key: "design_office",
+            category: BusinessServices,
+            staffing: [
+                ( role: "engineer", per_10000m2: 240, min: 3 ),
+                ( role: "office_clerk", per_10000m2: 100, min: 2 ),
+                ( role: "it_specialist", per_10000m2: 40, min: 1 ),
+                ( role: "office_manager", per_site: 1, managerial: true ),
+            ],
+            capex: ( build: 120000000, equip_per_100m2: 5600000 ),
+            fixed_cost: ( rent_per_m2: 4600, admin: 420000 ),
+        ),
+        (
+            key: "it_office",
+            category: BusinessServices,
+            staffing: [
+                ( role: "it_specialist", per_10000m2: 380, min: 4 ),
+                ( role: "engineer", per_10000m2: 80, min: 1 ),
+                ( role: "office_clerk", per_10000m2: 70, min: 2 ),
+                ( role: "office_manager", per_site: 1, managerial: true ),
+            ],
+            capex: ( build: 150000000, equip_per_100m2: 9000000 ),
+            fixed_cost: ( rent_per_m2: 5800, admin: 560000 ),
+        ),
+        (
+            key: "office_suite",
+            category: BusinessServices,
+            staffing: [
+                ( role: "office_clerk", per_10000m2: 280, min: 3 ),
+                ( role: "accountant", per_10000m2: 80, min: 1 ),
+                ( role: "it_specialist", per_10000m2: 60, min: 1 ),
+                ( role: "office_manager", per_site: 1, managerial: true ),
+            ],
+            capex: ( build: 110000000, equip_per_100m2: 4800000 ),
+            fixed_cost: ( rent_per_m2: 4200, admin: 380000 ),
+        ),
+    ],
+)

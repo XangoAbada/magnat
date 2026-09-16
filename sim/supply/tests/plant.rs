@@ -468,3 +468,39 @@ fn przeglad_zdarza_sie_raz_na_okres_a_nie_w_kolko() {
         "maszyna po przeglądzie nie jest nowa, ale jest sprawna"
     );
 }
+
+/// Kryterium M7a WP3, zdanie pierwsze: **zakład z załogą wytwarza wynik proporcjonalny
+/// do pracy**, którą w niego włożono.
+///
+/// Do M7a pole `labor_pct` nie istniało i młyn mielił tyle samo z pełną obsadą, z połową
+/// i bez nikogo — praca nie była wejściem produkcji, tylko kosztem obok niej. Teraz jest
+/// drugim ogranicznikiem szarży, obok wsadu.
+///
+/// Wartość liczy `magnat_firms::Site::labor_pct` z formy i umiejętności konkretnych
+/// ludzi; M6 dostaje gotową liczbę i nie zagląda do środka (M7 §8, ryzyko `R8`).
+#[test]
+fn obsada_zakladu_jest_drugim_ogranicznikiem_szarzy() {
+    let zmiel = |labor: u16| -> i64 {
+        let mut m = Mlyn::nowy(50_000);
+        m.plant
+            .get_mut(m.site)
+            .expect("zakład")
+            .labor_pct = labor;
+        // Osiem godzin zmiany dziennej, ta sama doba, ten sam wsad.
+        m.biegnij(8 * 60, 480).produced.0
+    };
+
+    let pelna = zmiel(PlantSite::FULL_LABOR);
+    let polowa = zmiel(500);
+    let pusty = zmiel(0);
+
+    assert!(pelna > 0, "młyn z pełną obsadą ma mleć");
+    assert_eq!(pusty, 0, "młyn bez ludzi ma stać, a nie mleć sam");
+    // Proporcjonalność z dokładnością do ziarnistości szarży: linia mieli całymi
+    // szarżami, więc połowa pracy nie daje co do grama połowy mąki.
+    let stosunek = polowa * 1000 / pelna;
+    assert!(
+        (440..=560).contains(&stosunek),
+        "połowa obsady dała {stosunek}‰ produkcji zamiast około 500‰"
+    );
+}

@@ -1,0 +1,57 @@
+// Typy zakładów — magazyn i transport (M7, PRD §7.2).
+//
+// Branża, w której powierzchnia nie jest miejscem pracy, tylko towarem: `per_10000m2` rzędu
+// 2–3 przy `m2_per_workplace` powyżej 400. Halę obsługuje garstka ludzi, a reszta etatów
+// (`dispatcher`, `office_manager`) jest funkcją liczby zleceń, nie metrów — dlatego siedzi
+// w `per_site`.
+//
+// Kierowca stoi w `freight_depot`, a nie w magazynie: to depot ma tabor. Magazyn kupuje
+// przewóz — ta sama decyzja, którą M6d zapisał po stronie kosztu dostawy.
+(
+    schema_version: 1,
+    site_types: [
+        (
+            key: "warehouse",
+            category: Logistics,
+            staffing: [
+                ( role: "warehouse_operator", per_10000m2: 10, min: 4 ),
+                ( role: "forklift_operator", per_10000m2: 10, min: 2 ),
+                ( role: "stocker", per_site: 2 ),
+                ( role: "dispatcher", per_site: 2 ),
+                ( role: "office_manager", per_site: 1, managerial: true ),
+                ( role: "security_guard", per_site: 2 ),
+            ],
+            capex: ( build: 420000000, equip_per_100m2: 2200000 ),
+            fixed_cost: ( rent_per_m2: 1300, admin: 640000 ),
+        ),
+        (
+            key: "freight_depot",
+            category: Logistics,
+            staffing: [
+                ( role: "truck_driver", per_10000m2: 10, min: 6 ),
+                ( role: "warehouse_operator", per_10000m2: 10, min: 3 ),
+                ( role: "forklift_operator", per_10000m2: 10, min: 2 ),
+                ( role: "dispatcher", per_site: 3 ),
+                ( role: "mechanic", per_site: 2 ),
+                ( role: "office_manager", per_site: 1, managerial: true ),
+                ( role: "security_guard", per_site: 2 ),
+            ],
+            capex: ( build: 560000000, equip_per_100m2: 3000000 ),
+            fixed_cost: ( rent_per_m2: 1100, admin: 820000 ),
+        ),
+        (
+            key: "construction_yard",
+            category: Logistics,
+            staffing: [
+                ( role: "warehouse_operator", per_10000m2: 10, min: 2 ),
+                ( role: "forklift_operator", per_10000m2: 10, min: 2 ),
+                ( role: "truck_driver", per_10000m2: 10, min: 2 ),
+                ( role: "mechanic", per_site: 2 ),
+                ( role: "office_clerk", per_site: 1 ),
+                ( role: "shift_foreman", per_site: 1, managerial: true ),
+            ],
+            capex: ( build: 260000000, equip_per_100m2: 1800000 ),
+            fixed_cost: ( rent_per_m2: 900, admin: 420000 ),
+        ),
+    ],
+)

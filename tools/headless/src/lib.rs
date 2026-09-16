@@ -19,6 +19,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod firms;
 pub mod plants;
 pub mod population;
 pub mod retail;

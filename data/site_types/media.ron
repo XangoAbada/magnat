@@ -1,0 +1,29 @@
+// Typy zakładów — media i poligrafia (M7, PRD §7.2).
+//
+// Jeden wpis: `printing_house` jest w `data/buildings/industry.ron` opisany jako przemysł
+// lekki, ale jego wyrobem jest nakład, nie materiał — i to rozstrzyga o kategorii, bo od niej
+// zależy, czyim popytem zakład żyje. Drukarnia bez gazety nie ma czego drukować.
+//
+// `office_clerk` w obsadzie hali to przygotowalnia — jedno stanowisko na 1000 m², które
+// odróżnia drukarnię od tłoczni.
+(
+    schema_version: 1,
+    site_types: [
+        (
+            key: "printing_house",
+            category: Media,
+            staffing: [
+                ( role: "printer_operator", per_10000m2: 90, min: 6 ),
+                ( role: "machine_operator", per_10000m2: 30, min: 2 ),
+                ( role: "quality_inspector", per_10000m2: 10, min: 1 ),
+                ( role: "forklift_operator", per_10000m2: 10, min: 1 ),
+                ( role: "mechanic", per_10000m2: 10, min: 1 ),
+                ( role: "office_clerk", per_10000m2: 10, min: 1 ),
+                ( role: "shift_foreman", per_site: 2, managerial: true ),
+                ( role: "plant_manager", per_site: 1, managerial: true ),
+            ],
+            capex: ( build: 380000000, equip_per_100m2: 14000000 ),
+            fixed_cost: ( rent_per_m2: 1900, admin: 560000 ),
+        ),
+    ],
+)

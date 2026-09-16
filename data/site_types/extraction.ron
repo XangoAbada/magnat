@@ -1,0 +1,259 @@
+// Typy zakładów — wydobycie i rolnictwo (M7, PRD §7.2).
+//
+// Zarządcza strona archetypu z `data/buildings/primary.ron`: kto tu pracuje, ile kosztuje
+// uruchomienie i ile kosztuje samo stanie. Obsada nie jest przepisaniem `m2_per_workplace` —
+// tamten przelicznik daje **liczbę stanowisk**, ten plik mówi, **jakich zawodów** i w jakiej
+// proporcji, bo kopalnia o tej samej powierzchni co pole pszenicy zatrudnia kogoś innego.
+//
+// Reguła tej branży: praca jest rozłożona po terenie, nie po hali. Stąd niskie `per_10000m2`
+// (kopalnia ~4, farma 1) i ciężar przeniesiony na `per_site` — sztygar i kierownik są potrzebni
+// raz na zakład, niezależnie od tego, jak duże jest wyrobisko. Ziarnistość `per_10000m2` jest
+// tu najgrubsza w katalogu: 1 to minimum, więc farma o `m2_per_workplace` 1440 wychodzi
+// nieco przeobsadzona — poprawka należy do kalibracji, nie do schematu.
+//
+// Czynsz w groszach za m² miesięcznie: grunt rolny i wyrobisko to najtańsza ziemia w mieście
+// (50–150), bo nikt inny jej nie chce. To ma znaczenie przy wyborze lokalizacji.
+(
+    schema_version: 1,
+    site_types: [
+        (
+            key: "coal_mine",
+            category: Extraction,
+            staffing: [
+                ( role: "miner", per_10000m2: 30, min: 8 ),
+                ( role: "mechanic", per_10000m2: 10, min: 2 ),
+                ( role: "electrician", per_site: 2 ),
+                ( role: "shift_foreman", per_site: 3, managerial: true ),
+                ( role: "plant_manager", per_site: 1, managerial: true ),
+                ( role: "security_guard", per_site: 2 ),
+            ],
+            capex: ( build: 2800000000, equip_per_100m2: 12000000 ),
+            fixed_cost: ( rent_per_m2: 120, admin: 1800000 ),
+        ),
+        (
+            key: "iron_mine",
+            category: Extraction,
+            staffing: [
+                ( role: "miner", per_10000m2: 30, min: 8 ),
+                ( role: "mechanic", per_10000m2: 10, min: 2 ),
+                ( role: "electrician", per_site: 2 ),
+                ( role: "shift_foreman", per_site: 3, managerial: true ),
+                ( role: "plant_manager", per_site: 1, managerial: true ),
+                ( role: "security_guard", per_site: 2 ),
+            ],
+            capex: ( build: 3000000000, equip_per_100m2: 12000000 ),
+            fixed_cost: ( rent_per_m2: 120, admin: 1800000 ),
+        ),
+        (
+            key: "aggregate_pit",
+            category: Extraction,
+            staffing: [
+                ( role: "drill_operator", per_10000m2: 10, min: 2 ),
+                ( role: "machine_operator", per_10000m2: 10, min: 2 ),
+                ( role: "truck_driver", per_10000m2: 10, min: 2 ),
+                ( role: "shift_foreman", per_site: 2, managerial: true ),
+                ( role: "plant_manager", per_site: 1, managerial: true ),
+            ],
+            capex: ( build: 800000000, equip_per_100m2: 6000000 ),
+            fixed_cost: ( rent_per_m2: 80, admin: 700000 ),
+        ),
+        (
+            key: "limestone_works",
+            category: Extraction,
+            staffing: [
+                ( role: "drill_operator", per_10000m2: 10, min: 2 ),
+                ( role: "machine_operator", per_10000m2: 10, min: 2 ),
+                ( role: "truck_driver", per_10000m2: 10, min: 2 ),
+                ( role: "shift_foreman", per_site: 2, managerial: true ),
+                ( role: "plant_manager", per_site: 1, managerial: true ),
+            ],
+            capex: ( build: 850000000, equip_per_100m2: 6000000 ),
+            fixed_cost: ( rent_per_m2: 80, admin: 700000 ),
+        ),
+        (
+            key: "clay_pit_works",
+            category: Extraction,
+            staffing: [
+                ( role: "drill_operator", per_10000m2: 10, min: 2 ),
+                ( role: "machine_operator", per_10000m2: 10, min: 2 ),
+                ( role: "truck_driver", per_10000m2: 10, min: 1 ),
+                ( role: "shift_foreman", per_site: 2, managerial: true ),
+                ( role: "plant_manager", per_site: 1, managerial: true ),
+            ],
+            capex: ( build: 600000000, equip_per_100m2: 5000000 ),
+            fixed_cost: ( rent_per_m2: 70, admin: 600000 ),
+        ),
+        (
+            key: "oil_field",
+            category: Extraction,
+            staffing: [
+                ( role: "drill_operator", per_10000m2: 20, min: 4 ),
+                ( role: "process_operator", per_10000m2: 10, min: 2 ),
+                ( role: "mechanic", per_site: 3 ),
+                ( role: "shift_foreman", per_site: 2, managerial: true ),
+                ( role: "plant_manager", per_site: 1, managerial: true ),
+                ( role: "security_guard", per_site: 2 ),
+            ],
+            capex: ( build: 6500000000, equip_per_100m2: 25000000 ),
+            fixed_cost: ( rent_per_m2: 150, admin: 2400000 ),
+        ),
+        (
+            key: "gas_field",
+            category: Extraction,
+            staffing: [
+                ( role: "drill_operator", per_10000m2: 10, min: 3 ),
+                ( role: "process_operator", per_10000m2: 10, min: 3 ),
+                ( role: "mechanic", per_site: 3 ),
+                ( role: "shift_foreman", per_site: 2, managerial: true ),
+                ( role: "plant_manager", per_site: 1, managerial: true ),
+                ( role: "security_guard", per_site: 2 ),
+            ],
+            capex: ( build: 6000000000, equip_per_100m2: 24000000 ),
+            fixed_cost: ( rent_per_m2: 150, admin: 2400000 ),
+        ),
+        (
+            key: "waterworks",
+            category: Extraction,
+            staffing: [
+                ( role: "process_operator", per_10000m2: 10, min: 3 ),
+                ( role: "mechanic", per_10000m2: 10, min: 1 ),
+                ( role: "lab_technician", per_site: 1 ),
+                ( role: "shift_foreman", per_site: 2, managerial: true ),
+                ( role: "plant_manager", per_site: 1, managerial: true ),
+            ],
+            capex: ( build: 1400000000, equip_per_100m2: 18000000 ),
+            fixed_cost: ( rent_per_m2: 90, admin: 900000 ),
+        ),
+        (
+            key: "extraction_yard",
+            category: Extraction,
+            staffing: [
+                ( role: "machine_operator", per_10000m2: 10, min: 2 ),
+                ( role: "truck_driver", per_10000m2: 10, min: 1 ),
+                ( role: "shift_foreman", per_site: 1, managerial: true ),
+            ],
+            capex: ( build: 180000000, equip_per_100m2: 2500000 ),
+            fixed_cost: ( rent_per_m2: 60, admin: 250000 ),
+        ),
+        (
+            key: "wheat_farm",
+            category: Extraction,
+            staffing: [
+                ( role: "field_worker", per_10000m2: 7, min: 4 ),
+                ( role: "machine_operator", per_site: 2 ),
+                ( role: "farm_manager", per_site: 1, managerial: true ),
+            ],
+            capex: ( build: 220000000, equip_per_100m2: 900000 ),
+            fixed_cost: ( rent_per_m2: 60, admin: 180000 ),
+        ),
+        (
+            key: "potato_farm",
+            category: Extraction,
+            staffing: [
+                ( role: "field_worker", per_10000m2: 8, min: 4 ),
+                ( role: "machine_operator", per_site: 2 ),
+                ( role: "farm_manager", per_site: 1, managerial: true ),
+            ],
+            capex: ( build: 200000000, equip_per_100m2: 900000 ),
+            fixed_cost: ( rent_per_m2: 60, admin: 180000 ),
+        ),
+        (
+            key: "sugar_beet_farm",
+            category: Extraction,
+            staffing: [
+                ( role: "field_worker", per_10000m2: 7, min: 4 ),
+                ( role: "machine_operator", per_site: 2 ),
+                ( role: "farm_manager", per_site: 1, managerial: true ),
+            ],
+            capex: ( build: 210000000, equip_per_100m2: 900000 ),
+            fixed_cost: ( rent_per_m2: 60, admin: 180000 ),
+        ),
+        (
+            key: "rapeseed_farm",
+            category: Extraction,
+            staffing: [
+                ( role: "field_worker", per_10000m2: 7, min: 4 ),
+                ( role: "machine_operator", per_site: 2 ),
+                ( role: "farm_manager", per_site: 1, managerial: true ),
+            ],
+            capex: ( build: 210000000, equip_per_100m2: 900000 ),
+            fixed_cost: ( rent_per_m2: 60, admin: 180000 ),
+        ),
+        (
+            key: "market_garden",
+            category: Extraction,
+            staffing: [
+                ( role: "field_worker", per_10000m2: 10, min: 6 ),
+                ( role: "farm_manager", per_site: 1, managerial: true ),
+            ],
+            capex: ( build: 160000000, equip_per_100m2: 1200000 ),
+            fixed_cost: ( rent_per_m2: 90, admin: 150000 ),
+        ),
+        (
+            key: "orchard_farm",
+            category: Extraction,
+            staffing: [
+                ( role: "field_worker", per_10000m2: 10, min: 5 ),
+                ( role: "machine_operator", per_site: 1 ),
+                ( role: "farm_manager", per_site: 1, managerial: true ),
+            ],
+            capex: ( build: 180000000, equip_per_100m2: 1100000 ),
+            fixed_cost: ( rent_per_m2: 80, admin: 150000 ),
+        ),
+        (
+            key: "dairy_farm",
+            category: Extraction,
+            staffing: [
+                ( role: "livestock_keeper", per_10000m2: 10, min: 4 ),
+                ( role: "field_worker", per_10000m2: 10, min: 2 ),
+                ( role: "mechanic", per_site: 1 ),
+                ( role: "farm_manager", per_site: 1, managerial: true ),
+            ],
+            capex: ( build: 340000000, equip_per_100m2: 1800000 ),
+            fixed_cost: ( rent_per_m2: 70, admin: 220000 ),
+        ),
+        (
+            key: "cattle_farm",
+            category: Extraction,
+            staffing: [
+                ( role: "livestock_keeper", per_10000m2: 10, min: 4 ),
+                ( role: "field_worker", per_10000m2: 10, min: 2 ),
+                ( role: "farm_manager", per_site: 1, managerial: true ),
+            ],
+            capex: ( build: 320000000, equip_per_100m2: 1600000 ),
+            fixed_cost: ( rent_per_m2: 70, admin: 220000 ),
+        ),
+        (
+            key: "poultry_farm",
+            category: Extraction,
+            staffing: [
+                ( role: "livestock_keeper", per_10000m2: 10, min: 4 ),
+                ( role: "machine_operator", per_site: 1 ),
+                ( role: "farm_manager", per_site: 1, managerial: true ),
+            ],
+            capex: ( build: 280000000, equip_per_100m2: 2000000 ),
+            fixed_cost: ( rent_per_m2: 70, admin: 200000 ),
+        ),
+        (
+            key: "smallholding",
+            category: Extraction,
+            staffing: [
+                ( role: "field_worker", per_10000m2: 7, min: 1 ),
+                ( role: "farm_manager", per_site: 1, managerial: true ),
+            ],
+            capex: ( build: 24000000, equip_per_100m2: 400000 ),
+            fixed_cost: ( rent_per_m2: 50, admin: 40000 ),
+        ),
+        (
+            key: "forest_district",
+            category: Extraction,
+            staffing: [
+                ( role: "logger", per_10000m2: 5, min: 3 ),
+                ( role: "machine_operator", per_site: 1 ),
+                ( role: "farm_manager", per_site: 1, managerial: true ),
+            ],
+            capex: ( build: 90000000, equip_per_100m2: 700000 ),
+            fixed_cost: ( rent_per_m2: 50, admin: 120000 ),
+        ),
+    ],
+)

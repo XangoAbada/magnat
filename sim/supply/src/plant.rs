@@ -105,10 +105,25 @@ pub struct PlantSite {
     /// nie ma skąd wziąć masy i stoi na `Starved`; to jest właściwa odpowiedź, a nie
     /// błąd danych, bo wypełniacz strefy przemysłowej naprawdę nie ma czego kopać.
     pub mining: Option<crate::mining::MiningSite>,
+    /// Pokrycie etatowe zakładu w promilach: 1000 = obsada kompletna i w formie.
+    ///
+    /// **Pisarzem jest M7** (`magnat_firms::FirmSystem`), czytelnikiem `sprobuj_start`.
+    /// Do M7a pole stało na 1000 i było neutralne — zakład produkował tyle, ile miał
+    /// wsadu, niezależnie od tego, czy ktokolwiek w nim pracował. Teraz linia bez ludzi
+    /// stoi, a linia z połową załogi robi połowę szarży; jakość obsady to osobna sprawa
+    /// i liczy ją `Shift::skill` (M7b).
+    ///
+    /// Promile, a nie procenty: przy dziesięciu tysiącach firm różnica między 995
+    /// a 1000 to jest różnica, której nie chcemy zgubić na zaokrągleniu w każdej
+    /// minucie każdej linii.
+    pub labor_pct: u16,
     reasons: Vec<(SimMinute, DecisionReason)>,
 }
 
 impl PlantSite {
+    /// Obsada kompletna — wartość neutralna dla przepustowości.
+    pub const FULL_LABOR: u16 = 1000;
+
     #[must_use]
     pub fn new(site: SiteId, owner: magnat_core::FirmId, dock: Dock) -> PlantSite {
         PlantSite {
@@ -125,6 +140,9 @@ impl PlantSite {
             losses: [0; magnat_core::LOSS_KIND_COUNT],
             shortage: Vec::new(),
             mining: None,
+            // Zakład bez przypisanej firmy pracuje pełną parą — inaczej każdy test M6
+            // musiałby zakładać firmę, żeby cokolwiek wyprodukować.
+            labor_pct: PlantSite::FULL_LABOR,
             reasons: Vec::new(),
         }
     }
@@ -263,6 +281,8 @@ impl HashState for PlantSite {
             }
             None => h.write_u32(u32::MAX),
         }
+        // Pokrycie etatowe jest stanem: zmienia to, ile zakład wyprodukuje.
+        h.write_u16(self.labor_pct);
         h.write_u32(self.reasons.len() as u32);
         for (at, r) in &self.reasons {
             at.hash_state(h);

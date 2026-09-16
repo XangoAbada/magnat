@@ -1,0 +1,52 @@
+// Typy zakładów — usługi dla ludności (M7, PRD §7.2).
+//
+// Restauracja ma najwyższą gęstość obsady w całym katalogu (~29 na 1000 m²), bo kelner
+// obsługuje stolik, a nie metry. Hotel przeciwnie — pokój stoi pusty i nic nie kosztuje
+// poza sprzątaniem, więc gęstość spada do kilkunastu.
+//
+// Hotel jest jedynym wpisem z rolą kierowniczą spoza handlu: recepcją i administracją
+// rządzi `office_manager`, bo hotel rozlicza się z dob, a nie z paragonów.
+(
+    schema_version: 1,
+    site_types: [
+        (
+            key: "restaurant",
+            category: ConsumerServices,
+            staffing: [
+                ( role: "waiter", per_10000m2: 140, min: 2 ),
+                ( role: "cook", per_10000m2: 100, min: 2 ),
+                ( role: "cashier", per_10000m2: 30, min: 1 ),
+                ( role: "cleaner", per_10000m2: 20, min: 1 ),
+                ( role: "shop_manager", per_site: 1, managerial: true ),
+            ],
+            capex: ( build: 95000000, equip_per_100m2: 7200000 ),
+            fixed_cost: ( rent_per_m2: 5400, admin: 340000 ),
+        ),
+        (
+            key: "service_point",
+            category: ConsumerServices,
+            staffing: [
+                ( role: "service_technician", per_10000m2: 140, min: 1 ),
+                ( role: "sales_assistant", per_10000m2: 50, min: 1 ),
+                ( role: "cashier", per_10000m2: 30, min: 1 ),
+                ( role: "shop_manager", per_site: 1, managerial: true ),
+            ],
+            capex: ( build: 45000000, equip_per_100m2: 4400000 ),
+            fixed_cost: ( rent_per_m2: 4800, admin: 190000 ),
+        ),
+        (
+            key: "hotel",
+            category: ConsumerServices,
+            staffing: [
+                ( role: "hotel_attendant", per_10000m2: 80, min: 4 ),
+                ( role: "cleaner", per_10000m2: 30, min: 2 ),
+                ( role: "cook", per_10000m2: 20, min: 1 ),
+                ( role: "waiter", per_10000m2: 10, min: 1 ),
+                ( role: "security_guard", per_site: 2 ),
+                ( role: "office_manager", per_site: 1, managerial: true ),
+            ],
+            capex: ( build: 480000000, equip_per_100m2: 8500000 ),
+            fixed_cost: ( rent_per_m2: 3600, admin: 1400000 ),
+        ),
+    ],
+)

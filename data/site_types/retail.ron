@@ -1,0 +1,140 @@
+// Typy zakładów — handel detaliczny (M7, PRD §7.2).
+//
+// Tu obsada jest najgęstsza w całym katalogu: kasa musi być obsadzona, kiedy sklep jest otwarty,
+// niezależnie od tego, czy ktoś przy niej stoi. Stąd `per_10000m2` rzędu 10–25 i niezerowe `min`
+// nawet przy `corner_shop` — sklep bez kasjera jest zamknięty, a nie tani.
+//
+// `shop_manager` jest `per_site`, bo kierownik jest jeden na sklep — poza `hypermarket`
+// i `market_hall`, gdzie zmianowość wymusza dwóch.
+//
+// Czynsz jest tu najwyższy w katalogu (2400–6800 gr/m²) i to on, nie płace, decyduje o tym,
+// że mały sklep w centrum przegrywa z dyskontem przy obwodnicy.
+(
+    schema_version: 1,
+    site_types: [
+        (
+            key: "corner_shop",
+            category: Retail,
+            staffing: [
+                ( role: "cashier", per_10000m2: 120, min: 1 ),
+                ( role: "stocker", per_10000m2: 60, min: 1 ),
+                ( role: "shop_manager", per_site: 1, managerial: true ),
+            ],
+            capex: ( build: 38000000, equip_per_100m2: 2800000 ),
+            fixed_cost: ( rent_per_m2: 5200, admin: 180000 ),
+        ),
+        (
+            key: "supermarket",
+            category: Retail,
+            staffing: [
+                ( role: "cashier", per_10000m2: 90, min: 2 ),
+                ( role: "stocker", per_10000m2: 50, min: 1 ),
+                ( role: "shop_manager", per_site: 1, managerial: true ),
+            ],
+            capex: ( build: 185000000, equip_per_100m2: 4200000 ),
+            fixed_cost: ( rent_per_m2: 3400, admin: 850000 ),
+        ),
+        (
+            key: "discount_store",
+            category: Retail,
+            staffing: [
+                ( role: "cashier", per_10000m2: 70, min: 2 ),
+                ( role: "stocker", per_10000m2: 40, min: 1 ),
+                ( role: "shop_manager", per_site: 1, managerial: true ),
+            ],
+            capex: ( build: 140000000, equip_per_100m2: 3400000 ),
+            fixed_cost: ( rent_per_m2: 2800, admin: 620000 ),
+        ),
+        (
+            key: "hypermarket",
+            category: Retail,
+            staffing: [
+                ( role: "cashier", per_10000m2: 80, min: 4 ),
+                ( role: "stocker", per_10000m2: 40, min: 2 ),
+                ( role: "sales_assistant", per_10000m2: 10, min: 2 ),
+                ( role: "accountant", per_site: 1 ),
+                ( role: "security_guard", per_site: 3 ),
+                ( role: "cleaner", per_site: 3 ),
+                ( role: "shop_manager", per_site: 2, managerial: true ),
+            ],
+            capex: ( build: 520000000, equip_per_100m2: 4800000 ),
+            fixed_cost: ( rent_per_m2: 2600, admin: 2400000 ),
+        ),
+        (
+            key: "petrol_station",
+            category: Retail,
+            staffing: [
+                ( role: "cashier", per_10000m2: 50, min: 2 ),
+                ( role: "service_technician", per_10000m2: 10, min: 1 ),
+                ( role: "stocker", per_10000m2: 10, min: 1 ),
+                ( role: "shop_manager", per_site: 1, managerial: true ),
+            ],
+            capex: ( build: 320000000, equip_per_100m2: 9500000 ),
+            fixed_cost: ( rent_per_m2: 3000, admin: 480000 ),
+        ),
+        (
+            key: "pharmacy",
+            category: Retail,
+            staffing: [
+                ( role: "pharmacist", per_10000m2: 140, min: 2 ),
+                ( role: "cashier", per_10000m2: 60, min: 1 ),
+                ( role: "stocker", per_10000m2: 40, min: 1 ),
+                ( role: "shop_manager", per_site: 1, managerial: true ),
+            ],
+            capex: ( build: 65000000, equip_per_100m2: 6500000 ),
+            fixed_cost: ( rent_per_m2: 6200, admin: 260000 ),
+        ),
+        (
+            key: "bakery_shop",
+            category: Retail,
+            staffing: [
+                ( role: "cashier", per_10000m2: 160, min: 1 ),
+                ( role: "baker", per_10000m2: 80, min: 1 ),
+                ( role: "stocker", per_10000m2: 20, min: 1 ),
+                ( role: "shop_manager", per_site: 1, managerial: true ),
+            ],
+            capex: ( build: 48000000, equip_per_100m2: 5500000 ),
+            fixed_cost: ( rent_per_m2: 5600, admin: 200000 ),
+        ),
+        (
+            key: "specialty_shop",
+            category: Retail,
+            staffing: [
+                ( role: "sales_assistant", per_10000m2: 150, min: 1 ),
+                ( role: "cashier", per_10000m2: 40, min: 1 ),
+                ( role: "stocker", per_10000m2: 20, min: 1 ),
+                ( role: "shop_manager", per_site: 1, managerial: true ),
+            ],
+            capex: ( build: 42000000, equip_per_100m2: 3600000 ),
+            fixed_cost: ( rent_per_m2: 6800, admin: 220000 ),
+        ),
+        (
+            key: "market_hall",
+            category: Retail,
+            staffing: [
+                ( role: "sales_assistant", per_10000m2: 60, min: 4 ),
+                ( role: "cashier", per_10000m2: 20, min: 2 ),
+                ( role: "stocker", per_10000m2: 20, min: 2 ),
+                ( role: "cleaner", per_site: 2 ),
+                ( role: "security_guard", per_site: 2 ),
+                ( role: "shop_manager", per_site: 2, managerial: true ),
+            ],
+            capex: ( build: 260000000, equip_per_100m2: 2600000 ),
+            fixed_cost: ( rent_per_m2: 2400, admin: 900000 ),
+        ),
+        (
+            key: "car_dealer",
+            category: Retail,
+            staffing: [
+                ( role: "sales_assistant", per_10000m2: 40, min: 2 ),
+                ( role: "mechanic", per_10000m2: 20, min: 2 ),
+                ( role: "service_technician", per_10000m2: 10, min: 1 ),
+                ( role: "cashier", per_10000m2: 10, min: 1 ),
+                ( role: "accountant", per_site: 1 ),
+                ( role: "shop_manager", per_site: 1, managerial: true ),
+            ],
+            capex: ( build: 240000000, equip_per_100m2: 5200000 ),
+            fixed_cost: ( rent_per_m2: 3200, admin: 780000 ),
+        ),
+    ],
+)

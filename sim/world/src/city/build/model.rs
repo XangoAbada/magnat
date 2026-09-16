@@ -304,7 +304,14 @@ pub struct JobTable {
     pub roles: Vec<JobRole>,
 }
 
-pub const JOBS_SCHEMA_VERSION: u32 = 1;
+/// Wersja schematu `data/jobs/roles.ron`.
+///
+/// Podniesiona z 1 do 2 w M7a: rekord roli dostał `weights` (wagi produktywności
+/// per zawód, `D16` rozstrzygnięte jako rozszerzenie schematu). M2 tego pola nie
+/// czyta — czyta je `magnat_firms::RoleTable`, drugi widok na ten sam plik.
+/// Wersję trzymają obaj czytelnicy i **musi** się zgadzać u obu, inaczej dopisanie
+/// pola po jednej stronie przeszłoby niezauważone po drugiej.
+pub const JOBS_SCHEMA_VERSION: u32 = 2;
 
 impl JobTable {
     pub fn load() -> Result<JobTable, crate::city::zoning::EpochError> {

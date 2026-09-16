@@ -7,7 +7,7 @@ Dokument nadrzędny: `00-konwencje-i-kontrakty.md` — pieniądz `Money(i64)`, d
 wyjaśnialność §7, szablon §8, kalendarz §4a. Ten plan **nie redefiniuje** niczego z dokumentu 00.
 
 Rozstrzygnięcia koordynatora wbudowane w ten plan: **K-1** (kalendarz 12 × 30 = 360 dni),
-**K-4** (`StreamId` 240–259), **K-7** (`Offer.price_basis`: brutto w detalu, netto w hurcie —
+**K-4** (`StreamId` 220–239 — `AS-1`), **K-7** (`Offer.price_basis`: brutto w detalu, netto w hurcie —
 marże zawsze na netto), **K-9** (związki i strajki w M10; M7 dostarcza dane, indywidualne
 negocjacje płacowe zostają w M7), **K-10** (upadłość w całości u M7; M8 jest tylko wierzycielem),
 **K-11** (`sim/policy` na własność M7, język reguł autorstwa M9),
@@ -131,7 +131,7 @@ dopiero po ostatniej podfazie; podfaza zamyka się własnym kryterium ze swojego
 
 | Podfaza | WP | §5 | Wynik do pokazania | Dokument |
 |---|---|---|---|---|
-| **M7a — Firma jako dane** | WP1, WP2, WP3 | 5.1, 5.2, 5.3 | 10 000 firm w świecie, każda z przypisanymi trzema slotami decyzyjnymi; dodanie typu zakładu nie dotyka kodu. | `M7a-firma-jako-dane.md` |
+| **M7a — Firma jako dane** ✅ | WP1, WP2, WP3 | 5.1, 5.2, 5.3 | 10 000 firm w świecie, każda z przypisanymi trzema slotami decyzyjnymi; dodanie typu zakładu nie dotyka kodu. | `M7a-firma-jako-dane.md` |
 | **M7b — Rynek pracy** | WP4, WP5, WP6 | 5.5 | Pensje emergentne: niedobór roli podnosi ofertę bez żadnej tabeli płac w kodzie. | `M7b-rynek-pracy.md` |
 | **M7c — Polityki i menedżerowie** | WP6b, WP7 | 5.4, 5.11 | Reguła gracza i polityka firmy AI wykonują się tym samym kodem; różnica leży w jakości menedżera. | `M7c-polityki-i-menedzerowie.md` |
 | **M7d — Finanse i upadłość** | WP8, WP9 | 5.12, 5.13 | Firma bierze kredyt, przestaje go obsługiwać, bankrutuje, a wierzyciele są zaspokajani w udokumentowanej kolejności. | `M7d-finanse-i-upadlosc.md` |
@@ -183,8 +183,9 @@ i `RoleStats` w `sim/economy::labor` (D2) — obie listy niżej.
 **Funkcje:**
 
 ```rust
-firms::hr::effective_labor(..) -> Qty                   // -> M6: wykonanie receptury
-firms::hr::loss_multiplier(site) -> Milli               // -> M6: straty magazynowe i produkcyjne
+firms::hr::effective_labor(..) -> Qty                   // -> M6: praca zakładu w MILIETATACH (AS-2)
+firms::hr::loss_multiplier(ManagementQuality) -> i32    // -> M6: straty, w tysięcznych (AS-3)
+firms::Site::labor_pct(..) -> u16                       // -> M6: pokrycie etatowe w promilach (K-44)
 firms::labor_policy::score_application(..) -> i32       // decyzja FIRMY o kandydacie
 firms::labor_policy::wage_escalation_step(..) -> Money  // decyzja FIRMY o podbiciu stawki
 firms::finance::request_loan(firm, kind, amount) -> Result<LoanId, CreditDenial>
@@ -255,7 +256,7 @@ wstrzymania zakładu (ten sam, którego M7 używa w `BankruptcyStage::Filed`).
 
 | Z fazy | Co |
 |---|---|
-| M0 `core`/`ecs`/`jobs` | `Money`, `SimMinute`, `Tick`, `Qty`, `Q`, `Mood`, identyfikatory, `StreamId` (zakres M7: 240–259), kalendarz 12 × 30 dni = 360 (K-1), bufory komend, fork-join, hash stanu |
+| M0 `core`/`ecs`/`jobs` | `Money`, `SimMinute`, `Tick`, `Qty`, `Q`, `Mood`, identyfikatory, `StreamId` (zakres M7: **220–239**, `K-4`), kalendarz 12 × 30 dni = 360 (K-1), bufory komend, fork-join, hash stanu |
 | M1/M2 `sim/world` | parcele, budynki, dzielnice, strefowanie (gdzie wolno postawić zakład) |
 | M3 `sim/agents` | `CitizenPersonality`, umiejętności, energia/nastrój/zdrowie, graf relacji, pamięć, DES, hooki `job_search` i `entrepreneurship` |
 | M4 `engine/nav` | tabele czasów dojazdu per dzielnica × godzina — **do decyzji kandydata**, nie firmy |
@@ -510,3 +511,20 @@ Zrównoleglalne: WP2, WP8, WP10, WP16. WP6b blokowane przez AST od M9 (D17), WP1
 kontrakt `sim/macro` od M10 (dostarczony).
 WP17 rośnie razem z pozostałymi, nie na końcu — testy 7.1, 7.2 i 7.3 powstają odpowiednio razem
 z WP5, WP9 i WP10, bo napisane po fakcie już niczego nie złapią.
+
+---
+
+## Zmiany wpisane po M7a
+
+Poprawki dokumentu **fazy** naniesione w trakcie podfazy M7a (`K-18`). Korekty samej
+podfazy są w tabeli „Zmiany wpisane po M7a" w `M7a-firma-jako-dane.md`.
+Gwiazdka = zmiana zakresu albo kryterium.
+
+| # | Co | Dlaczego |
+|---|---|---|
+| `AS-1` | **Blok `StreamId` fazy M7 poprawiony z 240–259 na 220–239** — w §1 i w §6 | `K-4` przypisuje 220–239 fazie M7, a 240–259 fazie M8; dokument fazy podawał cudzy blok. Wartości `StreamId` są wieczne, więc pomyłka wykryta po pierwszym losowaniu kosztowałaby każdy świat wygenerowany wcześniej. M7a nie zajęła żadnego numeru, więc poprawka jest jeszcze darmowa |
+| `AS-2` | **`effective_labor` dostaje jednostkę w kontrakcie §6: milietat** (1000 = jeden pełny etat o sprawności odniesienia) | §6 obiecywał M6 „jedną liczbę" typu `Qty`, ale `Qty` to milisztuki — bez podanej jednostki M6 nie miał czym jej pomnożyć, a kryterium „wynik proporcjonalny do `effective_labor`" nie było mierzalne. To jest przypadek (3) z `K-18`: kryterium niemierzalne |
+| `AS-3` | **`loss_multiplier` bierze `ManagementQuality`, nie `site`, i zwraca `i32` w tysięcznych, nie `Milli`** | Typ `Milli` w projekcie nie istnieje, a mnożnik strat zależy wyłącznie od jakości zarządzania — podanie mu zakładu sugerowałoby, że czyta coś jeszcze. Przypadek (2) z `K-18`: API z przykładu nie istnieje albo nazywa się inaczej |
+| `AS-4`* | **Do §6 „Dostarczam" dochodzi `Site::labor_pct`**, a do macierzy własności w 00 §1 — rozszerzanie `sim/supply` przez M7 (`K-44`) | Kontrakt z M6 brzmiał „jedna funkcja `effective_labor`", ale M6 nie miał gdzie jej wyniku przyłożyć: przepustowość linii nie zależała od pracy w żaden sposób. Brakującym ogniwem jest pole `PlantSite::labor_pct` i normalizacja pracy zakładu do jego etatów — bez niej §7.5 PRD („menedżer ma realny wpływ") nie ma jak zadziałać |
+| `AS-5` | **Decyzje otwarte fazy zamknięte w M7a:** `D1` (właściciel relacji pracownik ↔ firma — potwierdzony podziałem, który już istniał w kodzie M3), `D12` (`sim/firms` rozszerzany, nie przepisywany — z zastrzeżeniem, że crate'u nie było wcale, a szkicem okazały się `Shop` w M5 i `PlantSite` w M6, oba zostają na miejscu), `D15` (dyrektor nieobowiązkowy — `Option<CitizenId>`), `D16` (rozszerzenie schematu `data/jobs/`, `K-43`) | Wszystkie cztery były potrzebne do zamknięcia WP1–WP3 i wszystkie dało się rozstrzygnąć tym, co pokazał kod, a nie negocjacją. `D13` (gdzie liczone są straty modyfikowane przez menedżera) zostaje otwarta z adresem **M7c**, bo dopiero tam menedżer przestaje być wartością neutralną |
+| `AS-6` | **Obietnica z §1 „miasto 150 tys. startuje z ~6–10 tys. firm AI" jest dziś niespełniona i dostaje adres**: w mieście 4 km staje 215 firm, proporcjonalnie rząd 800 przy 150 tys. Adres: **M7f** (`AT-1` w dokumencie M7a) | Lepiej zapisać rozbieżność teraz, niż odkryć ją przy domykaniu fazy. Liczba firm wynika z tego, ile zakładów stawia Etap 7 generatora — to nie jest brak w warstwie firm, ale artefakt fazy stoi na tej liczbie i ktoś musi ją domknąć |

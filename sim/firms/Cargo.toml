@@ -1,0 +1,34 @@
+[package]
+name = "magnat-firms"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+# Testy jednostkowe nie są benchmarkami — patrz komentarz w `engine/ecs/Cargo.toml`.
+[lib]
+bench = false
+
+[dependencies]
+magnat-core = { workspace = true }
+magnat-ecs = { workspace = true }
+# Katalog towarów i receptur — walidator typów zakładów sprawdza, czy receptura
+# archetypu istnieje. `sim/supply` zależy wyłącznie od `core` i `ecs`, więc nie
+# wnosi tu ciężaru; zależność w drugą stronę nie istnieje i istnieć nie może.
+magnat-supply = { workspace = true }
+# Mieszkaniec jako pracownik: `Vitals`, `Skills`, komponent `Employment` (link D1).
+magnat-agents = { workspace = true }
+serde = { workspace = true }
+ron = { workspace = true }
+smallvec = { workspace = true }
+
+[dev-dependencies]
+# Hash stanu świata mierzy się jego jedynym wejściem (`world_state_hash`),
+# a nie kopią funkcji haszującej w teście.
+magnat-io = { workspace = true }
+proptest = { workspace = true }
+criterion = { workspace = true }
+
+[lints]
+workspace = true
