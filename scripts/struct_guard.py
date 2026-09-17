@@ -108,7 +108,14 @@ REJESTR = {
     # wariantów nie rozgałęził się na dwa klucze lokalizacji, a `SiteOpened` mimo
     # trzech wartości `Trend` ma **jedno** ramię — kierunek wchodzi podstawieniem
     # do zdania, a nie wyborem klucza.
-    ("engine/ui/src/inspect/reason.rs", "fn", 660): 37,
+    # 730 po M8a: siedem ramion bloku M8 (600–606), po jednym na wariant. Przyrost
+    # +70 wobec prognozy „~20 na podfazę" i powód jest ten sam, co przy M7d: żadne
+    # z siedmiu ramion nie rozgałęziło się na drugi klucz lokalizacji, ale **każde
+    # ma po trzy podstawienia** (danina, kwota, stawka/powód/kierunek), a formatowanie
+    # trzech argumentów to dziesięć linii na ramię, nie pięć. Siedem danin nie robi
+    # siedmiu zdań o naliczeniu — robi jedno zdanie z siedmioma podstawieniami,
+    # i to jest właśnie ten podział, który utrzymuje przyrost liniowym.
+    ("engine/ui/src/inspect/reason.rs", "fn", 730): 37,
     # 269 po M7d: jedna linia za `finance: bf.finance` w budowie `BankParams`.
     ("sim/economy/src/data.rs", "fn", 269): 38,
 }

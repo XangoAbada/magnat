@@ -17,6 +17,9 @@ magnat-economy = { workspace = true }
 # Karta firmy i panel ludzi (M7f WP16). Interfejs czyta **migawkę**
 # (`FirmPanelSnapshot`), a nie rejestr — zależność jest jednokierunkowa.
 magnat-firms = { workspace = true }
+# Zakładka danin w karcie firmy (M8a WP2). `sim/firms` nie widzi miasta i widzieć
+# nie może — kartę składa więc ten, kto widzi obie strony, czyli prezentacja.
+magnat-city = { workspace = true }
 # Panel łańcucha dostaw (WP13) czyta `SupplyGraphView` i `BatchTrace` — dane,
 # nie stan: obie struktury są oderwane od świata i wolno je trzymać przez klatkę.
 magnat-supply = { workspace = true }

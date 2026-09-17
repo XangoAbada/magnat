@@ -1,0 +1,101 @@
+// Kodeks podatkowy miasta (M8a §5.1, PRD §6.8).
+//
+// Siedem danin i ani jednej więcej — kolejność `TaxKind` w `engine/core` jest
+// kontraktem zapisu gry, ten plik tylko nadaje im stawki.
+//
+// **Wszystko w punktach bazowych albo w groszach, zero floatów** (M8a §5.0):
+// wynik naliczenia ma być identyczny bitowo na każdej platformie, a zaokrąglenie
+// jawne, bo test T1 domyka się do zera groszy.
+//
+// **Stawka jest polityką, nie projektem.** Ten plik zmienia się uchwałą rady (M8e)
+// i przebiegiem balansatora, a nie rekompilacją — dlatego katalog `data/city/`
+// stoi obok `data/economy/` (M5) i `data/tuning/` (kalibracja), a nie w środku
+// któregoś z nich. Zmiana stawki nigdy nie działa wstecz: `effective_from` niesie
+// `TaxCode`, nie ten plik.
+//
+// Klasa VAT przypisuje się przez **domenę klucza towaru**, tak samo jak klasa
+// taryfowa w `data/trade/tariffs.ron` (`AD-12`). Domen jest dwanaście i lista jest
+// zamknięta, więc każdy towar ma klasę z definicji i nowy towar nie może jej zgubić
+// przez przeoczenie w danych; pokrycia pilnuje walidator przy ładowaniu.
+//
+// Akcyza idzie **po kluczu towaru**, a nie po domenie: obłożone są trzy wyroby
+// z dwóch domen (`fuel_*`, `food_beer`, `cons_cigarettes`), a domena `food` jako
+// całość akcyzy nie ma. Stawka jest kwotowa (grosze za kilogram), nie procentowa —
+// to jest cała różnica między akcyzą a VAT-em i ona ma być widoczna w danych.
+//
+// Akcyzy od energii tu nie ma i w M8a nie będzie: energia elektryczna nie przechodzi
+// przez rozliczenie B2B, tylko przez taryfę sieci przesyłowej — czyli przez M8b.
+(
+    schema_version: 1,
+
+    // ── CIT ──────────────────────────────────────────────────────────────────────
+    // Podatek od dochodu rocznego zakładu, ze stratą rozliczaną w przód.
+    cit_bp: 1900,
+    // Ile lat wolno odliczać stratę. 0 = strata przepada z końcem roku.
+    loss_carry_years: 5,
+
+    // ── PIT ──────────────────────────────────────────────────────────────────────
+    // Skala progresywna od dochodu rocznego, pobierana narastająco przy każdej
+    // wypłacie — dzięki temu suma zaliczek równa się podatkowi rocznemu co do grosza.
+    // Ostatni próg ma `upper: 0` i znaczy „bez górnej granicy".
+    pit_free_allowance: 3_000_000,
+    pit_brackets: [
+        (upper: 12_000_000, bp: 1200),
+        (upper:          0, bp: 3200),
+    ],
+
+    // ── VAT ──────────────────────────────────────────────────────────────────────
+    // Stawka doliczana do ceny netto sklepu. `K-7`: cena w ofercie detalicznej jest
+    // brutto, więc podwyżka tej liczby uderza w popyt natychmiast.
+    vat_classes: [
+        (key: "standard", domains: ["cons", "chem", "mat", "part", "pack", "fuel"], bp: 2300),
+        (key: "reduced",  domains: ["food", "agri", "feed"],                        bp:  500),
+        (key: "utility",  domains: ["util", "waste"],                               bp:  800),
+        (key: "exempt",   domains: ["raw"],                                         bp:    0),
+    ],
+
+    // ── Podatek od nieruchomości ─────────────────────────────────────────────────
+    // Podstawą jest wartość katastralna parceli (`land_value_per_m2 * area_m2`),
+    // zamrażana 1 stycznia roku podatkowego (`D12`). Rozliczenie miesięczne metodą
+    // różnicy skumulowanej, więc dwanaście rat sumuje się dokładnie do rocznej kwoty.
+    property_bp_per_year: 25,
+
+    // ── Akcyza ───────────────────────────────────────────────────────────────────
+    // Grosze za kilogram wyrobu przechodzącego przez rozliczenie hurtowe.
+    excise: [
+        (good: "fuel_petrol_95",   per_kg: 210),
+        (good: "fuel_diesel_b7",   per_kg: 190),
+        (good: "fuel_heating_oil", per_kg:  60),
+        (good: "fuel_lpg",         per_kg: 120),
+        (good: "food_beer",        per_kg:  90),
+        (good: "cons_cigarettes",  per_kg: 9000),
+    ],
+
+    // ── Koncesje ─────────────────────────────────────────────────────────────────
+    // Opłata roczna za prawo prowadzenia działalności reglamentowanej, po kluczu
+    // rodzaju zakładu z `data/site_types/`. Płatna z góry, w pierwszej dobie roku.
+    licenses: [
+        (site_type: "petrol_station",     fee_per_year: 1_400_000),
+        (site_type: "refinery",           fee_per_year: 9_000_000),
+        (site_type: "brewery",            fee_per_year: 3_200_000),
+        (site_type: "cigarette_factory",  fee_per_year: 6_500_000),
+        (site_type: "restaurant",         fee_per_year:   550_000),
+        (site_type: "bank_branch",        fee_per_year: 2_100_000),
+        (site_type: "freight_depot",      fee_per_year:   780_000),
+        (site_type: "pharmacy",           fee_per_year:   900_000),
+    ],
+
+    // ── Cykl należności ──────────────────────────────────────────────────────────
+    // Dzień miesiąca, w którym przypada termin zapłaty danin rozliczanych miesięcznie.
+    vat_due_day: 20,
+    pit_due_day: 20,
+    property_due_day: 15,
+    excise_due_day: 25,
+    // Miesiąc roku następnego, w którym przypada termin CIT (3 = marzec).
+    cit_due_month: 3,
+    // Odsetki od zaległości, rocznie. Naliczane dobowo od kwoty głównej.
+    late_interest_bp_per_year: 1450,
+    // Po ilu dobach po terminie należność się przedawnia i jest umarzana.
+    // 1800 dób = 5 lat kalendarza 360-dniowego.
+    time_bar_days: 1800,
+)

@@ -370,7 +370,17 @@ pub fn pay_incomes(world: &mut World, market: &Market, t: Tick) -> (u64, Money) 
         .collect();
     let mut ile = 0u64;
     let mut suma = Money::ZERO;
-    for (e, kwota) in plan {
+    for (e, brutto) in plan {
+        // Zaliczka PIT potrącana **u źródła** (hak M8, do M8 zero). Gospodarstwo
+        // dostaje netto, bo z tego, co dostanie, zaraz planuje koperty — potrącenie
+        // doliczone później znaczyłoby, że planer dzieli dochód, którego nie ma.
+        // Potrącony pieniądz zostaje u pracodawcy; przekazuje go miastu system
+        // `city.Tax`, razem z deklaracją miesięczną.
+        let zaliczka = market.withhold(e.index(), brutto);
+        let kwota = Money(brutto.get() - zaliczka.get());
+        if kwota.get() <= 0 {
+            continue;
+        }
         let memo = TxMemo::new(
             TxKind::Wage {
                 site: magnat_core::SiteId(e),
@@ -439,7 +449,7 @@ fn settle_one(world: &mut World, market: &Market, it: &PurchaseIntent, t: Tick) 
         market.return_goods(it);
         return false;
     }
-    let memo = TxMemo::new(
+    let mut memo = TxMemo::new(
         TxKind::RetailSale {
             offer: it.offer,
             good: it.good,
@@ -448,6 +458,10 @@ fn settle_one(world: &mut World, market: &Market, it: &PurchaseIntent, t: Tick) 
         },
         it.reason,
     );
+    // VAT wyłuskuje się **z ceny, którą mieszkaniec właśnie zapłacił** (`K-7`),
+    // a nie dolicza do niej: cena półkowa jest brutto, więc podatek już w niej siedzi.
+    // Do M8 `NoTax` zwraca zero i to pole nic nie zmienia.
+    memo.tax = market.vat_on_gross(it.good, it.agreed_price);
     let ok = world
         .get_resource_mut::<Books>()
         .map(|b| b.household_pay(account, it.agreed_price, memo, t).is_ok())

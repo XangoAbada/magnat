@@ -207,7 +207,7 @@ pub fn run(a: &M7MiastoArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
 }
 
 /// Pasmo z argumentu `min:max` w promilach.
-fn pasmo(s: &str) -> Option<(u16, u16)> {
+pub(crate) fn pasmo(s: &str) -> Option<(u16, u16)> {
     let (a, b) = s.split_once(':')?;
     Some((a.trim().parse().ok()?, b.trim().parse().ok()?))
 }
@@ -221,7 +221,7 @@ fn pasmo(s: &str) -> Option<(u16, u16)> {
 /// firm, a siedziała w rejestrach ruchu (M4), które nie mają jeszcze kont i przez to
 /// same z siebie „tworzą" pieniądz — dokładnie tak samo, jak w `m5shop` na tym samym
 /// horyzoncie. Rozbicie odpowiada na to pytanie w jednym spojrzeniu.
-fn pieniadz(world: &magnat_ecs::World) -> [i64; 5] {
+pub(crate) fn pieniadz(world: &magnat_ecs::World) -> [i64; 5] {
     let ksiegi = world
         .get_resource::<Books>()
         .map_or(0, |b| b.total_balance().get());
@@ -245,7 +245,7 @@ fn pieniadz(world: &magnat_ecs::World) -> [i64; 5] {
 }
 
 /// Suma składników — to ona ma być stała po odjęciu emisji.
-fn suma(p: [i64; 5]) -> i64 {
+pub(crate) fn suma(p: [i64; 5]) -> i64 {
     p.iter().sum()
 }
 

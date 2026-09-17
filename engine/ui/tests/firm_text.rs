@@ -9,6 +9,7 @@
 //! to zostało prawdą — porównuje wydruk zakładki „Kurs" z listą liczb, które
 //! **wolno** w niej stanąć, i nie przepuszcza żadnej innej.
 
+use magnat_city::{ChargeState, FiscalPeriod, TaxCharge, TaxChargeId, TaxPayer};
 use magnat_core::{
     CitizenId, DecisionReason, DistrictId, Entity, FirmStrategy, JobRoleId, Money, SimMinute,
     SiteId, Tick, Trend,
@@ -104,11 +105,97 @@ fn migawka() -> FirmPanelSnapshot {
     }
 }
 
+/// Trzy obciążenia zakładu, po jednym na stan, którego gracz może dożyć.
+fn obciazenia() -> Vec<TaxCharge> {
+    let site = TaxPayer::Site(SiteId(e(1 << 24)));
+    let wzor = TaxCharge {
+        id: TaxChargeId(0),
+        payer: site,
+        kind: magnat_core::TaxKind::Vat,
+        period: FiscalPeriod::Month(1, 3),
+        base: Money(1_240_000),
+        base_mass: magnat_core::Mass(0),
+        rate_snapshot: 500,
+        amount: Money(62_000),
+        assessed_at: Tick(129_600),
+        due_at: Tick(158_400),
+        state: ChargeState::Settled { at: Tick(158_400) },
+    };
+    vec![
+        wzor,
+        TaxCharge {
+            id: TaxChargeId(1),
+            kind: magnat_core::TaxKind::Property,
+            period: FiscalPeriod::Month(1, 3),
+            base: Money(23_000_000),
+            rate_snapshot: 25,
+            amount: Money(4_792),
+            assessed_at: Tick(129_600),
+            state: ChargeState::Overdue {
+                since: Tick(150_000),
+                interest: Money(41),
+            },
+            ..wzor
+        },
+        TaxCharge {
+            id: TaxChargeId(2),
+            kind: magnat_core::TaxKind::License,
+            period: FiscalPeriod::Year(1),
+            base: Money(1_400_000),
+            rate_snapshot: 0,
+            amount: Money(1_400_000),
+            assessed_at: Tick(0),
+            state: ChargeState::Abated {
+                at: Tick(160_000),
+                why: magnat_core::AbateReason::Council,
+            },
+            ..wzor
+        },
+    ]
+}
+
+/// **Kryterium ukończenia WP2 fazy M8a**: obciążenie widoczne w karcie inspekcji
+/// firmy **z nazwą, stawką i podstawą**. Nie „z kwotą" — kwota bez podstawy
+/// i stawki nie odpowiada na pytanie, które gracz zadaje, otwierając tę zakładkę.
+#[test]
+fn zakladka_danin_pokazuje_podstawe_i_stawke() {
+    let c = Catalog::load().expect("data/locale/");
+    let karta =
+        FirmCard::build(&c, Locale::Pl, &migawka()).with_taxes(&c, Locale::Pl, &obciazenia());
+    let t = karta.render_tab(&c, Locale::Pl, FirmTab::Taxes);
+    // Nazwa daniny, podstawa i stawka — każda z trzech należności.
+    assert!(t.contains("VAT"), "{t}");
+    assert!(
+        t.contains("12400.00"),
+        "podstawa VAT-u nie widać:
+{t}"
+    );
+    assert!(
+        t.contains("5 %"),
+        "stawki VAT-u nie widać:
+{t}"
+    );
+    assert!(t.contains("podatek od nieruchomości"), "{t}");
+    assert!(
+        t.contains("0,25 %"),
+        "stawka ułamkowa zaokrąglona do zera:
+{t}"
+    );
+    // Stan mówi, co się z należnością stało — łącznie z odsetkami i umorzeniem.
+    assert!(t.contains("zapłacone") && t.contains("zaległe"), "{t}");
+    assert!(t.contains("umorzone") && t.contains("uchwała rady"), "{t}");
+    // Karta bez obciążeń mówi „brak danych", a nie udaje zera.
+    let pusta = FirmCard::build(&c, Locale::Pl, &migawka());
+    assert!(pusta
+        .render_tab(&c, Locale::Pl, FirmTab::Taxes)
+        .contains("brak danych"));
+}
+
 #[test]
 fn karta_sklada_sie_w_obu_jezykach() {
     let c = Catalog::load().expect("data/locale/");
     for l in Locale::ALL {
-        let karta = FirmCard::build(&c, l, &migawka());
+        let karta = FirmCard::build(&c, l, &migawka()).with_taxes(&c, l, &obciazenia());
         let t = karta.render_text(&c, l);
         assert!(!t.is_empty());
         // Nierozwinięty klucz zostawia w tekście nawias klamrowy albo własną nazwę.

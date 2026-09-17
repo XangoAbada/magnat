@@ -106,6 +106,7 @@ impl Market {
             customers: ShopCustomers::default(),
             sold_qty: 0,
             revenue: Money::ZERO,
+            accrued: crate::shop::TaxAccrual::default(),
             pricing: osobowosc,
             controllers: BTreeMap::new(),
             observed: CompetitorSnapshot::new(osobowosc.delay_days),

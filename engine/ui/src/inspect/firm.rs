@@ -17,6 +17,7 @@
 
 use crate::inspect::reason;
 use crate::loc::{Catalog, Locale};
+use magnat_city::{ChargeState, FiscalPeriod, TaxCharge};
 use magnat_firms::panel::{EmployeeRow, FirmPanelSnapshot, OutlookRow, SiteRow};
 use magnat_firms::StrAction;
 
@@ -39,14 +40,17 @@ pub enum FirmTab {
     Course,
     /// Decyzje: oś ostatnich powodów w języku gracza.
     Decisions,
+    /// Daniny: co miasto naliczyło, od czego i czy zapłacone (M8a WP2).
+    Taxes,
 }
 
 impl FirmTab {
-    pub const ALL: [FirmTab; 4] = [
+    pub const ALL: [FirmTab; 5] = [
         FirmTab::Sites,
         FirmTab::People,
         FirmTab::Course,
         FirmTab::Decisions,
+        FirmTab::Taxes,
     ];
 
     #[must_use]
@@ -56,6 +60,7 @@ impl FirmTab {
             FirmTab::People => "ui.firm.tab.people",
             FirmTab::Course => "ui.firm.tab.course",
             FirmTab::Decisions => "ui.firm.tab.decisions",
+            FirmTab::Taxes => "ui.firm.tab.taxes",
         };
         c.fmt_key(l, klucz, &[])
     }
@@ -69,6 +74,7 @@ pub struct FirmCard {
     people: Vec<String>,
     course: Vec<String>,
     decisions: Vec<String>,
+    taxes: Vec<String>,
 }
 
 impl FirmCard {
@@ -81,7 +87,24 @@ impl FirmCard {
             people: ludzie(c, l, s),
             course: kurs(c, l, s),
             decisions: decyzje(c, l, s),
+            taxes: Vec::new(),
         }
+    }
+
+    /// Dokłada zakładkę danin.
+    ///
+    /// Osobnym wywołaniem, a nie polem `FirmPanelSnapshot`, bo migawkę składa
+    /// `sim/firms`, a ten crate **nie widzi miasta** i widzieć nie może —
+    /// zależność idzie `city → economy → firms` i odwrócenie jej zamknęłoby cykl.
+    /// Kartę składa więc ten, kto widzi obie strony, czyli warstwa prezentacji.
+    ///
+    /// Zakład bez ani jednego obciążenia zostawia zakładkę pustą, a pusta zakładka
+    /// mówi „brak danych" — i to jest właściwa odpowiedź, bo firma, której miasto
+    /// jeszcze nic nie naliczyło, różni się od firmy, która wszystko zapłaciła.
+    #[must_use]
+    pub fn with_taxes(mut self, c: &Catalog, l: Locale, charges: &[TaxCharge]) -> FirmCard {
+        self.taxes = daniny(c, l, charges);
+        self
     }
 
     /// Nagłówek wspólny dla zakładek.
@@ -115,6 +138,7 @@ impl FirmCard {
             FirmTab::People => &self.people,
             FirmTab::Course => &self.course,
             FirmTab::Decisions => &self.decisions,
+            FirmTab::Taxes => &self.taxes,
         };
         let mut s = format!("{}:\n", tab.label(c, l));
         if wiersze.is_empty() {
@@ -327,4 +351,70 @@ fn styl(c: &Catalog, l: Locale, s: magnat_firms::ManagerStyle) -> String {
         magnat_firms::ManagerStyle::Dealmaker => "ui.manager.Dealmaker",
     };
     c.fmt_key(l, klucz, &[])
+}
+
+/// Ile obciążeń pokazuje karta. Najnowsze, bo rejestr trzyma wszystko od początku
+/// świata, a gracz pyta „co mi właśnie naliczyli", a nie „co mi naliczyli trzy lata
+/// temu" — na to drugie odpowiada Kronika (M9).
+const RECENT_CHARGES: usize = 12;
+
+/// Wiersze zakładki danin: nazwa, okres, podstawa, stawka, kwota i stan.
+///
+/// **Podstawa jest w wierszu obowiązkowo** i to jest cała różnica między kartą
+/// a paragonem: „VAT 620 zł" nie odpowiada na pytanie gracza, a „VAT od obrotu
+/// 12 400 zł po 5 % to 620 zł" odpowiada. Stawka idzie z **migawki należności**,
+/// nie z aktualnego kodeksu — obciążenie sprzed pół roku ma tłumaczyć kwotę,
+/// która wtedy powstała, a nie kwotę, która powstałaby dziś.
+fn daniny(c: &Catalog, l: Locale, charges: &[TaxCharge]) -> Vec<String> {
+    let mut wiersze: Vec<&TaxCharge> = charges.iter().collect();
+    // Malejąco po chwili naliczenia, remis po identyfikatorze — ten sam rejestr
+    // daje ten sam porządek w obu przebiegach (00 §3.2).
+    wiersze.sort_by_key(|t| (std::cmp::Reverse(t.assessed_at.get()), t.id.0));
+    wiersze
+        .into_iter()
+        .take(RECENT_CHARGES)
+        .map(|t| {
+            c.fmt_key(
+                l,
+                "ui.firm.tax_row",
+                &[
+                    ("danina", &reason::tax_kind(c, l, t.kind)),
+                    ("okres", &okres(c, l, t.period)),
+                    ("podstawa", &crate::zlotowki(t.base)),
+                    ("stawka", &reason::procent(t.rate_snapshot)),
+                    ("kwota", &crate::zlotowki(t.amount)),
+                    ("stan", &stan(c, l, t.state)),
+                ],
+            )
+        })
+        .collect()
+}
+
+fn okres(c: &Catalog, l: Locale, p: FiscalPeriod) -> String {
+    match p {
+        FiscalPeriod::Day(d) => c.fmt_key(l, "ui.tax.period.day", &[("doba", &d.to_string())]),
+        FiscalPeriod::Month(y, m) => c.fmt_key(
+            l,
+            "ui.tax.period.month",
+            &[("rok", &y.to_string()), ("miesiac", &m.to_string())],
+        ),
+        FiscalPeriod::Year(y) => c.fmt_key(l, "ui.tax.period.year", &[("rok", &y.to_string())]),
+    }
+}
+
+fn stan(c: &Catalog, l: Locale, s: ChargeState) -> String {
+    match s {
+        ChargeState::Assessed => c.fmt_key(l, "ui.tax.state.assessed", &[]),
+        ChargeState::Settled { .. } => c.fmt_key(l, "ui.tax.state.settled", &[]),
+        ChargeState::Overdue { interest, .. } => c.fmt_key(
+            l,
+            "ui.tax.state.overdue",
+            &[("odsetki", &crate::zlotowki(interest))],
+        ),
+        ChargeState::Abated { why, .. } => c.fmt_key(
+            l,
+            "ui.tax.state.abated",
+            &[("powod", &reason::abate_reason(c, l, why))],
+        ),
+    }
 }

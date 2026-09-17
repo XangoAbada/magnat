@@ -114,3 +114,16 @@ pub enum Remedy {
 firmy z M7). Obniża podstawę VAT/CIT/PIT i **podnosi hazard kontroli skarbowej** przez sondę
 `DeclaredVsExpectedGapBps`. Kontrola używa **tego samego mechanizmu hazardu co zdarzenia**
 (WP4) — nie budujemy drugiego losowania.
+
+
+---
+
+## Zmiany wpisane po M8a
+
+Zgodnie z `K-18`.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| | **`Remedy::BackTax` ma gotowe wejście i nie tworzy „nowego `TaxCharge`" ręcznie.** Domiar to należność jak każda inna: `magnat_city::ChargeRegistry::accrue(TaxPayer::Site(site), kind, okres, podstawa, masa, stawka_bp, kwota, teraz, termin)`. Odsetki liczy `late_interest(kwota, bp_rocznie, doby)` na kalendarzu 360-dniowym, a rejestr sam pilnuje, że domiar wchodzi do domknięcia `Σ Assessed = Σ Settled + Σ Overdue + Σ Abated` | Przypadek (2) z `K-18`: API, którego podfaza używa w przykładzie, istnieje i nazywa się inaczej |
+| | **Umorzenie po nieskutecznej egzekucji też ma wejście: `magnat_city::abate_bankrupt(city, payer, tick)`.** Zamyka wszystkie otwarte należności płatnika powodem `AbateReason::Bankruptcy` i utrzymuje domknięcie. Odpowiada przy okazji na pytanie, które §5.3 zostawiało otwarte: **nikt nie zdejmuje z budżetu należności firmy, która upadła** — przesuwa ją do czwartego stanu, żeby różnica między „zapłacono" a „odpisano" była widoczna w raporcie | To jest ta sama reguła, którą `K-10` ustala dla postępowania: M8 jest wierzycielem, nie organem egzekucyjnym. Miasto zamyka swoją stronę księgi i nic poza tym |
+| | **Podstawy VAT/CIT/PIT obniżanej przez `UnreportedShareBps` nie ma gdzie wpiąć „u siebie".** Wszystkie trzy naliczają się w `sim/city::assess` z faktów, które wystawia gospodarka: VAT z kolejki `Market::take_tax_accrued`, PIT z licznika `Withholding`, CIT z `Market::closed_result`. Szara strefa musi więc obniżyć **fakt**, a nie naliczenie — czyli zmniejszyć to, co zakład zgłasza, zanim danina powstanie. Inaczej powstałyby dwie prawdy o obrocie: jedna w księdze zakładu i druga w rejestrze miasta | Przypadek (5) z `K-18`. Obniżanie kwoty **po** naliczeniu dałoby rejestr, którego nie da się uzgodnić z księgą płatnika — a to jest dokładnie ta para liczb, którą test T1 porównuje |

@@ -104,6 +104,7 @@ mod lifecycle;
 mod price_day;
 mod readout;
 mod restock;
+mod tax;
 
 /// Zaklepana transakcja: półka już zdjęta, pieniądz jeszcze nie.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -324,6 +325,10 @@ pub(crate) struct MarketInner {
     rest_of_world: AccountId,
     /// Hak podatkowy (`K-7`). W M5 `NoTax`; M8 wstawia `CityTaxEngine`.
     pub(crate) tax: Box<dyn TaxEngine>,
+    /// Daniny naliczone na rozliczeniu hurtowym, czekające na odebranie przez
+    /// miasto. `BTreeMap`, więc kolejność idzie po `SiteId`, a nie po kolejności
+    /// dostaw (00 §3.2).
+    pub(crate) b2b_outbox: BTreeMap<SiteId, crate::shop::B2bTax>,
     seed: u64,
     tick: Tick,
     stats: MarketStats,
@@ -385,6 +390,7 @@ impl Market {
             committed: BTreeMap::new(),
             rest_of_world,
             tax: Box::new(NoTax),
+            b2b_outbox: BTreeMap::new(),
             seed,
             tick: Tick(0),
             stats: MarketStats::default(),
@@ -676,6 +682,14 @@ impl HashState for Market {
         h.write_u32(m.budgets.len() as u32);
         for b in &m.budgets {
             b.hash_state(h);
+        }
+        // Cło i akcyza naliczone, a jeszcze nieodebrane przez miasto, **są stanem**:
+        // między odprawą a deklaracją są jedynym śladem po pieniądzu, który należy
+        // się budżetowi. Tak samo jak intencje zakupowe wyżej.
+        h.write_u32(m.b2b_outbox.len() as u32);
+        for (site, t) in &m.b2b_outbox {
+            site.entity().hash_state(h);
+            t.hash_state(h);
         }
         m.loans.hash_state(h);
         h.write_u8(u8::from(m.bank.is_some()));

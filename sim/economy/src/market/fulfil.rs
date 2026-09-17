@@ -65,12 +65,26 @@ impl Market {
         let Some(i) = m.by_site.get(&intent.site).copied() else {
             return;
         };
+        // VAT wyłuskany z ceny brutto (`K-7`). Do M8 zawsze zero.
+        let vat = m.tax.vat_on_gross(intent.good, intent.agreed_price);
+        // Akcyza liczy się od **masy**, nie od ceny, więc potrzebuje katalogu.
+        // Sprzedaż wyrobu nieobłożonego nie płaci za ten mechanizm nic poza
+        // odczytem zera z tablicy stawek.
+        let masa = m.chain.cat.good(intent.good).mass_of_units(intent.qty);
+        let akcyza = m.tax.excise_on(intent.good, masa);
+        let netto = Money(intent.agreed_price.get() - vat.get());
         let s = &mut m.shops[i as usize];
         s.sold_qty = s.sold_qty.saturating_add(intent.qty.get());
-        s.revenue = s
-            .revenue
-            .checked_add(intent.agreed_price)
-            .unwrap_or(s.revenue);
+        // **Utarg jest netto.** VAT przechodzi przez kasę sklepu, ale nigdy nie jest
+        // jego przychodem — gdyby był, marża każdego sklepu skakałaby o stawkę
+        // podatku przy pierwszej uchwale rady i nikt by nie wiedział dlaczego.
+        s.revenue = s.revenue.checked_add(netto).unwrap_or(s.revenue);
+        s.accrued.vat = Money(s.accrued.vat.get() + vat.get());
+        s.accrued.vat_base = Money(s.accrued.vat_base.get() + netto.get());
+        if akcyza.get() != 0 {
+            s.accrued.excise = Money(s.accrued.excise.get() + akcyza.get());
+            s.accrued.excise_mass = magnat_core::Mass(s.accrued.excise_mass.0 + masa.0);
+        }
         // Sprzedaż w księdze: przychód po jednej stronie, koszt własny po drugiej —
         // **jednym** zapisem, żeby marża nie dała się policzyć z połowy zdarzenia.
         let _ = ledger::post(
@@ -86,6 +100,28 @@ impl Market {
                 ],
             ),
         );
+        // Daniny od tej sprzedaży — **osobnym zapisem**, bo `JournalEntry` mieści
+        // cztery linie, a sprzedaż z podatkiem ma ich więcej. Zapis jest zbilansowany
+        // sam w sobie, więc nie ma stanu pośredniego, w którym księga się nie zgadza.
+        //
+        // VAT i akcyza wchodzą tu **różnymi stronami i to nie jest niedopatrzenie**:
+        // VAT schodzi z przychodu (sklep go tylko przenosi), akcyza jest kosztem
+        // sklepu (płaci ją z własnej marży, a odzyska dopiero ceną, i to nie od razu).
+        // Po obu zapisach `Revenue` stoi netto, a `TaxPayable` niesie dług wobec miasta.
+        if vat.get() != 0 || akcyza.get() != 0 {
+            let _ = ledger::post(
+                &mut s.ledger,
+                JournalEntry::new(
+                    intent.arrived,
+                    intent.reason,
+                    &[
+                        (LedgerAccount::Revenue, vat),
+                        (LedgerAccount::TaxExpense, akcyza),
+                        (LedgerAccount::TaxPayable, Money(-vat.get() - akcyza.get())),
+                    ],
+                ),
+            );
+        }
         if let Some(pc) = s.controllers.get_mut(&intent.good) {
             pc.sold_today = Qty(pc.sold_today.get().saturating_add(intent.qty.get()));
         }

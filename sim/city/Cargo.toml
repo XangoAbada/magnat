@@ -1,0 +1,32 @@
+[package]
+name = "magnat-city"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+# Testy jednostkowe nie są benchmarkami — patrz komentarz w `engine/ecs/Cargo.toml`.
+[lib]
+bench = false
+
+[dependencies]
+magnat-core = { workspace = true }
+magnat-ecs = { workspace = true }
+# Pieniądz rusza się **wyłącznie** przez `Books::transfer` (M5). Miasto jest zwykłym
+# posiadaczem konta (`AccountOwner::City`), a nie wyjątkiem od niezmiennika podaży.
+# Stąd też bierze się kierunek zależności: `city → economy`, nigdy odwrotnie —
+# `CityTaxEngine` wypełnia hak `TaxEngine`, który M5 zostawił u siebie.
+magnat-economy = { workspace = true }
+# Rejestr firm i zakładów: podstawa CIT, koncesji i pokrycia listą płac.
+magnat-firms = { workspace = true }
+# Katalog towarów (klucz towaru → klasa VAT i stawka akcyzy) oraz rozliczenia B2B.
+magnat-supply = { workspace = true }
+serde = { workspace = true }
+ron = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
+
+[lints]
+workspace = true

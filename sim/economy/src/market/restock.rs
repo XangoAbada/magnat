@@ -369,6 +369,27 @@ impl Market {
             if kwota.get() <= 0 {
                 continue;
             }
+            // Daniny hurtowe do kolejki miasta (M8a WP2).
+            //
+            // **Cło** zapisujemy jako fakt, nie jako przelew: pieniądz wyszedł już
+            // z konta importera razem z zapłatą za towar (`payable() = net + duty`),
+            // więc miasto zabierze go z kanału importowego, a nie drugi raz od firmy.
+            //
+            // **Akcyza** jest odwrotnie: nikt jej jeszcze nie zapłacił. Nalicza się
+            // w chwili, w której wyrób obłożony zmienia właściciela w hurcie, i staje
+            // się zobowiązaniem kupującego do najbliższej deklaracji. Dlatego idzie
+            // tędy, a nie ceną: podwyżka akcyzy ma podnieść cenę **emergentnie**,
+            // przez politykę marżową firmy, a nie przez zadanie jej z zewnątrz (T7).
+            let akcyza = m.tax.excise_on(s.good, s.mass);
+            if s.duty.get() != 0 || akcyza.get() != 0 {
+                let e = m.b2b_outbox.entry(s.deliver_to).or_default();
+                e.customs_value = Money(e.customs_value.get() + s.net.get());
+                e.duty = Money(e.duty.get() + s.duty.get());
+                if akcyza.get() != 0 {
+                    e.excise = Money(e.excise.get() + akcyza.get());
+                    e.excise_mass = magnat_core::Mass(e.excise_mass.0 + s.mass.0);
+                }
+            }
             // Kupującym jest sklep **albo zakład produkcyjny** (`AP-2`). Do M6d była
             // to wyłącznie pierwsza możliwość, więc dostawa mąki do piekarni nie miała
             // konta, z którego zapłacić — rozliczenie było po cichu pomijane, towar

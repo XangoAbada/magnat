@@ -116,6 +116,37 @@ pub fn reaction_kind(c: &Catalog, l: Locale, r: ReactionKind) -> String {
     c.fmt_key(l, &format!("ui.reaction.{}", r.name()), &[])
 }
 
+/// Nazwa daniny publicznej (M8a §5.1).
+#[must_use]
+pub fn tax_kind(c: &Catalog, l: Locale, k: magnat_core::TaxKind) -> String {
+    c.fmt_key(l, &format!("ui.tax.{}", k.name()), &[])
+}
+
+/// Nazwa kierunku wydatku publicznego (M8a WP1).
+#[must_use]
+pub fn spend_category(c: &Catalog, l: Locale, s: magnat_core::SpendCategory) -> String {
+    c.fmt_key(l, &format!("ui.spend.{}", s.name()), &[])
+}
+
+/// Dlaczego należność umorzono (M8a WP2).
+#[must_use]
+pub fn abate_reason(c: &Catalog, l: Locale, a: magnat_core::AbateReason) -> String {
+    c.fmt_key(l, &format!("ui.abate.{}", a.name()), &[])
+}
+
+/// Punkty bazowe jako procent z dwoma miejscami — bez floata, bo stawka podatkowa
+/// jest liczbą całkowitą i zaokrąglenie jej do „19 %" gubiłoby 19,5 %.
+#[must_use]
+pub fn procent(bp: u32) -> String {
+    let calosc = bp / 100;
+    let reszta = bp % 100;
+    if reszta == 0 {
+        format!("{calosc} %")
+    } else {
+        format!("{calosc},{reszta:02} %")
+    }
+}
+
 /// Miesiące jako odmieniony liczebnik.
 #[must_use]
 pub fn months(c: &Catalog, l: Locale, n: u32) -> String {
@@ -854,6 +885,76 @@ pub fn describe(c: &Catalog, l: Locale, r: DecisionReason) -> String {
                 ("zaklady", &u32::from(sites).to_string()),
             ],
         ),
+        DecisionReason::TaxAssessed {
+            kind,
+            rate_bp,
+            amount,
+        } => c.fmt_key(
+            l,
+            "ui.reason.TaxAssessed",
+            &[
+                ("danina", &tax_kind(c, l, kind)),
+                ("kwota", &crate::zlotowki(amount)),
+                ("stawka", &procent(u32::from(rate_bp))),
+            ],
+        ),
+        DecisionReason::TaxSettled { kind, amount } => c.fmt_key(
+            l,
+            "ui.reason.TaxSettled",
+            &[
+                ("danina", &tax_kind(c, l, kind)),
+                ("kwota", &crate::zlotowki(amount)),
+            ],
+        ),
+        DecisionReason::TaxOverdue {
+            kind,
+            days: dni,
+            amount,
+        } => c.fmt_key(
+            l,
+            "ui.reason.TaxOverdue",
+            &[
+                ("danina", &tax_kind(c, l, kind)),
+                ("kwota", &crate::zlotowki(amount)),
+                ("dni", &days(c, l, u32::from(dni))),
+            ],
+        ),
+        DecisionReason::TaxAbated { kind, why, amount } => c.fmt_key(
+            l,
+            "ui.reason.TaxAbated",
+            &[
+                ("danina", &tax_kind(c, l, kind)),
+                ("kwota", &crate::zlotowki(amount)),
+                ("powod", &abate_reason(c, l, why)),
+            ],
+        ),
+        DecisionReason::PublicSpend { category, amount } => c.fmt_key(
+            l,
+            "ui.reason.PublicSpend",
+            &[
+                ("kierunek", &spend_category(c, l, category)),
+                ("kwota", &crate::zlotowki(amount)),
+            ],
+        ),
+        DecisionReason::MunicipalBondIssued {
+            coupon_bp,
+            principal,
+        } => c.fmt_key(
+            l,
+            "ui.reason.MunicipalBondIssued",
+            &[
+                ("kwota", &crate::zlotowki(principal)),
+                ("kupon", &procent(u32::from(coupon_bp))),
+            ],
+        ),
+        DecisionReason::BudgetDeficitClosed { gap, cut_bp } => c.fmt_key(
+            l,
+            "ui.reason.BudgetDeficitClosed",
+            &[
+                ("luka", &crate::zlotowki(gap)),
+                ("ciecie", &procent(u32::from(cut_bp))),
+            ],
+        ),
     }
 }
 
@@ -1225,6 +1326,37 @@ mod tests {
                 capital: Money(54_000_000),
                 sites: 3,
             },
+            DecisionReason::TaxAssessed {
+                kind: magnat_core::TaxKind::Vat,
+                rate_bp: 2300,
+                amount: Money(412_900),
+            },
+            DecisionReason::TaxSettled {
+                kind: magnat_core::TaxKind::Cit,
+                amount: Money(1_140_000),
+            },
+            DecisionReason::TaxOverdue {
+                kind: magnat_core::TaxKind::Property,
+                days: 41,
+                amount: Money(19_200),
+            },
+            DecisionReason::TaxAbated {
+                kind: magnat_core::TaxKind::Pit,
+                why: magnat_core::AbateReason::TimeBarred,
+                amount: Money(8_400),
+            },
+            DecisionReason::PublicSpend {
+                category: magnat_core::SpendCategory::Education,
+                amount: Money(22_000_000),
+            },
+            DecisionReason::MunicipalBondIssued {
+                coupon_bp: 650,
+                principal: Money(80_000_000),
+            },
+            DecisionReason::BudgetDeficitClosed {
+                gap: Money(4_500_000),
+                cut_bp: 1250,
+            },
         ]
     }
 
@@ -1263,7 +1395,11 @@ mod tests {
         // wchodzi **podstawieniem** do jednego zdania, a nie wyborem klucza — i to
         // jest właściwy podział: „w górę" i „w dół" to ta sama decyzja o innym znaku,
         // a nie dwie różne decyzje. Razem 67.
-        assert_eq!(wszystkie().len(), 67);
+        // Po M8a siedem powodów miasta (600..=606), po jednym wpisie: danina,
+        // kierunek wydatku i przyczyna umorzenia wchodzą **podstawieniem**, tak samo
+        // jak `Trend` wyżej — siedem danin nie robi siedmiu zdań o naliczeniu, tylko
+        // jedno zdanie z siedmioma podstawieniami. Razem 74.
+        assert_eq!(wszystkie().len(), 74);
     }
 
     #[test]
@@ -1320,6 +1456,15 @@ mod tests {
             }
             for r in ReactionKind::ALL {
                 assert!(!reaction_kind(&c, l, *r).is_empty());
+            }
+            for k in magnat_core::TaxKind::ALL {
+                assert!(!tax_kind(&c, l, *k).is_empty());
+            }
+            for s in magnat_core::SpendCategory::ALL {
+                assert!(!spend_category(&c, l, *s).is_empty());
+            }
+            for a in magnat_core::AbateReason::ALL {
+                assert!(!abate_reason(&c, l, *a).is_empty());
             }
         }
     }

@@ -15,13 +15,15 @@
 //!   z liniami, licznikami, rampą i zapasem startowym (`AO-3`),
 //! - [`firms`] — most „miasto Etapu 7 → firmy M7" (`AR-16`),
 //! - [`labor`] — miasto z firmami i wpiętym rynkiem pracy (M7b): scenariusz `m7labor`
-//!   i test integracyjny `labor_city.rs` stawiają **ten sam** świat.
+//!   i test integracyjny `labor_city.rs` stawiają **ten sam** świat,
+//! - [`city`] — strona publiczna: budżet, kodeks podatkowy i kataster (M8a).
 //!
 //! Scenariusze (`m3day`, `m5shop`, `nav`, …) zostają modułami **binarki**: mają CLI,
 //! raport i kod wyjścia, czyli wszystko to, czego biblioteka nie powinna nieść.
 
 #![forbid(unsafe_code)]
 
+pub mod city;
 pub mod firms;
 pub mod full;
 pub mod labor;

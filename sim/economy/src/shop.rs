@@ -314,6 +314,8 @@ pub struct Shop {
     /// Szybki podgląd obrotu dla scenariusza. **Liczbą w panelu jest `Revenue`
     /// z [`Ledger`]**, nie to pole — księga jest źródłem prawdy o wyniku (§5.8).
     pub revenue: Money,
+    /// Daniny naliczone od sprzedaży i jeszcze nieodprowadzone do miasta (M8a WP2).
+    pub accrued: TaxAccrual,
     // ── M5c ──
     /// Osobowość cenowa firmy: czułości i widełki marży (§5.6).
     pub pricing: FirmPricing,
@@ -345,6 +347,65 @@ pub struct Shop {
     pub closed: bool,
 }
 
+/// Kolejka danin zakładu do najbliższej deklaracji (M8a WP2).
+///
+/// **Kolejka, nie saldo.** Zeruje ją `Market::take_tax_accrued` przy miesięcznej
+/// deklaracji. Saldem jest konto `TaxPayable` w księdze zakładu — tam siedzą
+/// **wszystkie** daniny razem, więc deklaracja VAT nie ma jak wyczytać z niego
+/// swojej części i musi mieć własny licznik.
+///
+/// Do M8 wszystkie trzy liczby są zerami, bo `NoTax` nie nalicza niczego.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub struct TaxAccrual {
+    /// VAT wyłuskany z ceny brutto sprzedaży detalicznej.
+    pub vat: Money,
+    /// Obrót netto objęty tym podatkiem — podstawa, nie kwota. Bez niej deklaracja
+    /// miesięczna niosłaby kwotę bez stawki, a karta inspekcji nie miałaby czym
+    /// odpowiedzieć na „dlaczego tyle".
+    pub vat_base: Money,
+    /// Akcyza od wyrobów obłożonych, naliczona kwotowo od masy.
+    pub excise: Money,
+    /// Masa wyrobów obłożonych akcyzą — podstawa, nie kwota. Bez niej karta
+    /// inspekcji pokazałaby kwotę, której nie da się wytłumaczyć.
+    pub excise_mass: magnat_core::Mass,
+}
+
+impl HashState for TaxAccrual {
+    fn hash_state(&self, h: &mut StateHasher) {
+        h.write_i64(self.vat.get());
+        h.write_i64(self.vat_base.get());
+        h.write_i64(self.excise.get());
+        h.write_i64(self.excise_mass.0);
+    }
+}
+
+/// Daniny naliczone na rozliczeniu hurtowym jednego zakładu (M8a WP2).
+///
+/// Osobna struktura od [`TaxAccrual`], bo w hurcie **nie ma VAT-u**: cena B2B jest
+/// netto (`K-7`), a podatek od wartości dodanej rozlicza się dopiero na końcu
+/// łańcucha. Wspólna struktura z dwoma martwymi polami po każdej stronie byłaby
+/// gorsza od dwóch — a przy okazji sugerowałaby, że hurt VAT-u nie płaci przez
+/// przeoczenie, a nie z definicji.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub struct B2bTax {
+    /// Wartość celna towaru wprowadzonego na obszar miasta.
+    pub customs_value: Money,
+    /// Cło już zapłacone przy odprawie — liczy je `sim/supply` (`K-36`).
+    pub duty: Money,
+    /// Akcyza od wyrobu obłożonego, naliczona kwotowo od masy.
+    pub excise: Money,
+    pub excise_mass: magnat_core::Mass,
+}
+
+impl HashState for B2bTax {
+    fn hash_state(&self, h: &mut StateHasher) {
+        h.write_i64(self.customs_value.get());
+        h.write_i64(self.duty.get());
+        h.write_i64(self.excise.get());
+        h.write_i64(self.excise_mass.0);
+    }
+}
+
 impl HashState for Shop {
     fn hash_state(&self, h: &mut StateHasher) {
         self.site.entity().hash_state(h);
@@ -363,6 +424,7 @@ impl HashState for Shop {
         }
         h.write_i64(self.sold_qty);
         self.revenue.hash_state(h);
+        self.accrued.hash_state(h);
         // M5c: stan cenowy i księgowy jest **stanem trwałym**, więc wchodzi do hasha
         // (00 §3.6). Poziom śledzenia i pierścień dziennika — nie (`U-22`).
         h.write_u32(self.controllers.len() as u32);

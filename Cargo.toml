@@ -12,6 +12,7 @@ members = [
     "engine/ui",
     "engine/voxel",
     "sim/agents",
+    "sim/city",
     "sim/economy",
     "sim/firms",
     "sim/macro",
@@ -45,6 +46,7 @@ magnat-render = { path = "engine/render" }
 magnat-spatial = { path = "engine/spatial" }
 magnat-ui = { path = "engine/ui" }
 magnat-agents = { path = "sim/agents" }
+magnat-city = { path = "sim/city" }
 magnat-economy = { path = "sim/economy" }
 magnat-firms = { path = "sim/firms" }
 magnat-macro = { path = "sim/macro" }

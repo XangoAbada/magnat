@@ -142,3 +142,17 @@ kasa w sklepie nie działa. **To M7 decyduje, co firma z tym zrobi** — M8 tylk
 jako zwykłą transakcję (M5), z pełnym śladem w księdze odbiorcy. Miasto może ograniczyć
 taryfę przez `Policy::TariffCap` — z emergentnym skutkiem (operator tnie konserwację →
 rośnie sonda `MaintenanceBacklogDays` → rośnie hazard awarii; to pętla, nie skrypt).
+
+
+---
+
+## Zmiany wpisane po M8a
+
+Zgodnie z `K-18`. Wpisane jest **tylko to, co wiadomo na pewno** po domknięciu M8a.
+Gwiazdka = zmiana zakresu albo kryterium.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| ★ | **`UtilityKind` z §5.4 nie powstaje — rodzajem mediów jest `UtilityService` i on już jest w `engine/core`.** Nazwa `UtilityKind` jest **zajęta** i znaczy co innego: to wymiar oceny w funkcji użyteczności zakupu (`Price`, `Quality`, `Distance`, `Time`, `Variety`, `Brand`, `Habit`, `Convenience`, `Risk`), wniesiony przez M5. Media nazywają się `UtilityService` i mają siedem wariantów: `Electricity`, `Water`, `Sewage`, `Gas`, `Heat`, `Waste`, `Internet` — czyli `Power` to `Electricity`, `Telecom` to `Internet`, a `Waste` dochodzi. Enum siedzi w `core::vocab` od M5 i jest ładunkiem `TxKind::Utility`, więc **już dziś** niesie każdą fakturę za media w księgach zakładu | Przypadek (1) i (2) z `K-18` naraz. Drugi enum o tej samej treści rozjechałby się przy pierwszej zmianie, a pierwsza zmiana jest tu pewna, bo to M8b dokłada sieci. Do wykrycia było przy pierwszym `use magnat_core::UtilityKind` — czyli po napisaniu połowy solvera |
+| ★ | **Akcyza od energii należy do tej podfazy i jest jedyną, która ma w tej grze wolumen.** M8a wpięła akcyzę w dwa prawdziwe punkty (sprzedaż detaliczna, rozliczenie hurtowe) i zmierzyła, że **nie ma czego obłożyć**: paliwo kupują pojazdy przez `FuelLedger` (M4), który nie ma konta w księgach; piwo stoi na półce, ale przegrywa z sokiem w rangach substytutu `data/economy/retail.ron`; papierosów nie ma w asortymencie detalicznym. `ExciseClass::Energy` z PRD §6.8 przechodzi dokładnie przez to, co ta podfaza buduje — rachunek za media, wystawiany co miesiąc każdemu zakładowi. Stawka dopisuje się do `data/city/tax.ron` (sekcja `excise`), naliczenie idzie tam, gdzie `absorb_utility_bills` księguje fakturę | `R2` („martwe hazardy") zastosowane do daniny: danina, której nikt nigdy nie naliczył, przechodzi **każdy** test domknięcia i w raporcie wygląda tak samo jak danina, której nikt nie zapłacił |
+| | **Miasto jest zasobem świata (`magnat_city::City`), nie encją.** `Policy::TariffCap` i cała reszta polityki taryfowej wpina się przez `world.get_resource::<City>()`; rejestr należności (`ChargeRegistry`) i budżet (`CityBudget`) są jego polami. Wejście dla operatora sieci: `ChargeRegistry::accrue(payer, kind, period, base, mass, rate_bp, amount, at, due_at)` — jedyna droga, którą danina powstaje | Rozstrzygnięcie `D4` fazy zamknięte w M8a odwrotnie do propozycji (`CA-10`); §5.4 nie odwołuje się do tego wprost, ale pierwszy kod M8b, który zechce naliczyć opłatę, odwoła się na pewno |

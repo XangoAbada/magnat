@@ -40,6 +40,9 @@ magnat-economy = { workspace = true }
 # z tablicą publiczną cen (M7e WP10, `AZ-1`).
 magnat-policy = { workspace = true }
 magnat-firms = { workspace = true }
+# Strona publiczna miasta: budżet, kodeks podatkowy, kataster (M8a). Most stoi
+# osobno od `full::setup`, bo włączenie danin zmienia świat bramek G1–G9.
+magnat-city = { workspace = true }
 # Model makro i tier strategiczny (M7f WP13). Stoi nad gospodarką w grafie
 # zależności, więc most pełnego miasta jest pierwszym miejscem, które widzi oba.
 magnat-macro = { workspace = true }

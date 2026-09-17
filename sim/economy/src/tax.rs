@@ -24,6 +24,39 @@ pub trait TaxEngine: Send + Sync {
     /// Odwrotność — sprowadza obserwowaną cenę konkurenta do podstawy netto,
     /// zanim wejdzie do `adj_comp`.
     fn net_from_gross(&self, good: GoodId, gross: Money) -> Money;
+
+    /// Część podatkowa kwoty brutto — to, co wpisuje się do `TxMemo.tax`
+    /// i co sklep jest winien miastu za tę transakcję.
+    ///
+    /// Domyślnie wyprowadzona z [`TaxEngine::net_from_gross`], bo to ta sama liczba
+    /// widziana z drugiej strony; implementacja nadpisuje ją tylko wtedy, gdy umie
+    /// policzyć ją taniej.
+    fn vat_on_gross(&self, good: GoodId, gross: Money) -> Money {
+        Money(gross.get() - self.net_from_gross(good, gross).get())
+    }
+
+    /// Akcyza od masy wyrobu obłożonego. **Stawka kwotowa**, nie procentowa —
+    /// i to jest cała różnica między akcyzą a VAT-em: podwyżka uderza w tani wyrób
+    /// mocniej niż w drogi, a cenę podnosi dopiero polityka marżowa sklepu.
+    ///
+    /// Hak M8, domyślnie zero.
+    fn excise_on(&self, _good: GoodId, _mass: magnat_core::Mass) -> Money {
+        Money::ZERO
+    }
+
+    /// Potrącenie u źródła przy wypłacie, po indeksie encji gospodarstwa.
+    ///
+    /// **Hak M8, domyślnie zero.** Stoi w tym samym miejscu co przeliczenie ceny
+    /// i z tego samego powodu: gospodarstwo ma dostać netto **w chwili wypłaty**,
+    /// bo z tego, co dostanie, zaraz planuje koperty (`plan_budget`). Potrącenie
+    /// doliczone później znaczyłoby, że planer dzieli dochód, którego nie ma.
+    ///
+    /// Zwrócona kwota może być **ujemna** — to nadpłata z poprzednich miesięcy,
+    /// oddawana razem z wypłatą. Wołający dodaje ją do kwoty netto, a nie przycina
+    /// do zera; przycięcie rozjechałoby sumę zaliczek z podatkiem rocznym.
+    fn withhold(&self, _household_index: u32, _gross: Money) -> Money {
+        Money::ZERO
+    }
 }
 
 /// Jedyna implementacja w M5: mnożnik 1 w obie strony.

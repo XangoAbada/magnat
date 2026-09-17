@@ -151,6 +151,20 @@ jobs:
             --citizens 3000 --hash-every 1440 --threads 1 --out m5_t1.hashes
           cargo run --release -q -p magnat-headless -- m5shop --size 4km --days 6 \
             --citizens 3000 --hash-every 1440 --threads 8 --expect m5_t1.hashes
+      - name: M8a — budżet miasta domyka się do grosza (T1, WP1/WP2)
+        run: cargo test --release -p magnat-headless --test city_tax -- --include-ignored
+      - name: M8a — determinizm miasta z podatkami
+        # Dwa przebiegi tego samego drzewa, jak przy `m5shop` wyżej i z tego samego
+        # powodu: hash zmienia się przy każdym dopisaniu stanu, więc złoty plik
+        # w repozytorium byłby zobowiązaniem do nieruszania niczego, a nie bramką.
+        #
+        # 35 dób, bo pierwsza deklaracja miesięczna wypada trzydziestego pierwszego:
+        # krótszy przebieg porównywałby hashe świata, w którym miasto niczego jeszcze
+        # nie naliczyło.
+        shell: bash
+        run: |
+          cargo run --release -q -p magnat-headless -- m8miasto --size 4km --days 35             --citizens 3000 --hash-every 1440 --threads 1 --out m8_t1.hashes
+          cargo run --release -q -p magnat-headless -- m8miasto --size 4km --days 35             --citizens 3000 --hash-every 1440 --threads 8 --expect m8_t1.hashes
       - name: M4 — dowód spójności mikro ↔ mezo (A1–A5, M4d/WP9)
         run: cargo test --release -p magnat-world --test lod -- --include-ignored
       - name: M4 — diagram IDM zgadza się z tabelą VDF (miernik dryfu R2)

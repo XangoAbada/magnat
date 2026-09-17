@@ -124,8 +124,8 @@ pub use pricing::{
     ObservedElasticity, PriceController, PriceExperiment, PricePolicy, PricingCtx,
 };
 pub use shop::{
-    AssortmentPolicy, LostSale, LostSaleHistogram, LostSaleTracking, ReorderPolicy, Shelf,
-    ShelfLine, Shop, ShopCustomers, ShopInventory, ShopLostSales, LOST_SALE_RING,
+    AssortmentPolicy, B2bTax, LostSale, LostSaleHistogram, LostSaleTracking, ReorderPolicy, Shelf,
+    ShelfLine, Shop, ShopCustomers, ShopInventory, ShopLostSales, TaxAccrual, LOST_SALE_RING,
 };
 pub use supply::{
     line_total, Delivery, GoodSpec, GoodTable, OrderId, PurchaseQuote, SupplyError, Wholesale,

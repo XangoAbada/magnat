@@ -28,10 +28,10 @@ use crate::ids::{FirmId, SiteId};
 use crate::time::MinuteOfDay;
 use crate::types::{DistrictId, GoodId, JobRoleId, Money, PolicyId, Q};
 use crate::vocab::{
-    ActionKind, BankruptcyTrigger, ClaimPriority, CommitmentKind, DeprivationEffect, FirmStrategy,
-    FixedCost, LeaveCause, LifeEventKind, LineStopCause, LoanKind, MigrationKind, NeedKind,
-    PlaceRef, PriceDriver, ReactionKind, RejectCause, RejectCredit, ShortageStageKind, StockCat,
-    TraitId, TransportMode, Trend, UtilityKind, WageCause,
+    AbateReason, ActionKind, BankruptcyTrigger, ClaimPriority, CommitmentKind, DeprivationEffect,
+    FirmStrategy, FixedCost, LeaveCause, LifeEventKind, LineStopCause, LoanKind, MigrationKind,
+    NeedKind, PlaceRef, PriceDriver, ReactionKind, RejectCause, RejectCredit, ShortageStageKind,
+    SpendCategory, StockCat, TaxKind, TraitId, TransportMode, Trend, UtilityKind, WageCause,
 };
 use serde::{Deserialize, Serialize};
 
@@ -489,6 +489,51 @@ pub enum DecisionReason {
     /// pieniądza pękłby i nikt nie wiedziałby dlaczego (`D10`).
     ChainEntered { capital: Money, sites: u8 } = 519,
     // 520–599 zarezerwowane dla M7.
+
+    // ── M8: miasto jako aktor (600–699) ──────────────────────────────────────────
+    /// Miasto naliczyło daninę (M8a WP2, PRD §6.8).
+    ///
+    /// Powód niesie **stawkę użytą w chwili naliczenia**, a nie aktualną: stawka
+    /// zmienia się uchwałą i nigdy wstecz (`effective_from`), więc karta inspekcji
+    /// pokazana pół roku później ma tłumaczyć kwotę, która wtedy powstała. Bez tego
+    /// pola „dlaczego tyle" nie da się odpowiedzieć inaczej niż przeliczeniem, które
+    /// da inny wynik.
+    TaxAssessed {
+        kind: TaxKind,
+        rate_bp: u16,
+        amount: Money,
+    } = 600,
+    /// Należność zapłacona — pieniądz przeszedł od płatnika do budżetu miasta.
+    TaxSettled { kind: TaxKind, amount: Money } = 601,
+    /// Termin minął, a należność stoi. `days` liczy doby od terminu płatności,
+    /// `amount` to kwota główna bez odsetek — odsetki rosną co dobę i mają własny
+    /// wiersz w rejestrze, więc powtarzanie ich tutaj dałoby dwie prawdy o jednej
+    /// liczbie.
+    TaxOverdue {
+        kind: TaxKind,
+        days: u16,
+        amount: Money,
+    } = 602,
+    /// Należność umorzona: przestała być wymagalna, choć nikt jej nie zapłacił.
+    /// To jest czwarty stan cyklu życia i wchodzi do domknięcia `Assessed =
+    /// Settled + Overdue + Abated` (test T1) — pominięcie go znaczyłoby, że
+    /// upadłość firmy gubi budżetowi pieniądze bez śladu.
+    TaxAbated {
+        kind: TaxKind,
+        why: AbateReason,
+        amount: Money,
+    } = 603,
+    /// Miasto wydało pieniądze (M8a WP1).
+    PublicSpend {
+        category: SpendCategory,
+        amount: Money,
+    } = 604,
+    /// Miasto wyemitowało obligację, bo deficytu nie dało się zamknąć cięciem.
+    MunicipalBondIssued { coupon_bp: u16, principal: Money } = 605,
+    /// Domknięcie deficytu cięciem wydatków: `gap` to luka, `cut_bp` — o ile
+    /// promili przycięto plan wydatków bieżących.
+    BudgetDeficitClosed { gap: Money, cut_bp: u16 } = 606,
+    // 607–699 zarezerwowane dla M8.
     // ... kolejne fazy dopisują własne bloki na końcu pliku
 }
 
@@ -565,6 +610,13 @@ impl DecisionReason {
             DecisionReason::VoluntaryClosure { .. } => 517,
             DecisionReason::FirmFounded { .. } => 518,
             DecisionReason::ChainEntered { .. } => 519,
+            DecisionReason::TaxAssessed { .. } => 600,
+            DecisionReason::TaxSettled { .. } => 601,
+            DecisionReason::TaxOverdue { .. } => 602,
+            DecisionReason::TaxAbated { .. } => 603,
+            DecisionReason::PublicSpend { .. } => 604,
+            DecisionReason::MunicipalBondIssued { .. } => 605,
+            DecisionReason::BudgetDeficitClosed { .. } => 606,
         }
     }
 }
@@ -702,6 +754,24 @@ mod tests {
         let numery: Vec<u16> = wszystkie.iter().map(|r| r.discriminant()).collect();
         assert_eq!(numery[0], 0);
         assert_eq!(numery[1..], (100..=119).collect::<Vec<u16>>()[..]);
+        // Blok M8 (600–699) — otwarty w M8a, wartości wieczne.
+        assert_eq!(
+            DecisionReason::TaxAssessed {
+                kind: TaxKind::Vat,
+                rate_bp: 2300,
+                amount: Money(1)
+            }
+            .discriminant(),
+            600
+        );
+        assert_eq!(
+            DecisionReason::BudgetDeficitClosed {
+                gap: Money(1),
+                cut_bp: 100
+            }
+            .discriminant(),
+            606
+        );
     }
 
     #[test]

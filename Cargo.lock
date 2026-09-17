@@ -1456,6 +1456,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "magnat-city"
+version = "0.1.0"
+dependencies = [
+ "magnat-core",
+ "magnat-economy",
+ "magnat-ecs",
+ "magnat-firms",
+ "magnat-supply",
+ "proptest",
+ "ron",
+ "serde",
+]
+
+[[package]]
 name = "magnat-core"
 version = "0.1.0"
 dependencies = [
@@ -1531,6 +1545,7 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "magnat-agents",
+ "magnat-city",
  "magnat-core",
  "magnat-devtools",
  "magnat-economy",
@@ -1678,6 +1693,7 @@ version = "0.1.0"
 dependencies = [
  "egui",
  "magnat-agents",
+ "magnat-city",
  "magnat-core",
  "magnat-economy",
  "magnat-ecs",

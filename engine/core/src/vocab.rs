@@ -704,6 +704,60 @@ vocab_enum! {
 }
 
 vocab_enum! {
+    /// Rodzaj daniny publicznej (M8a §5.1, PRD §6.8). Siedem danin i ani jednej więcej.
+    ///
+    /// W `core`, bo jest **ładunkiem** `DecisionReason::Tax*`, a ładunek centralnego
+    /// enuma nie może pochodzić z crate'u, który od `core` zależy — ta sama reguła,
+    /// która wypchnęła tu `PriceDriver` (`K-30`) i `WageCause` (`K-45`). Drugi czytelnik
+    /// znany z nazwy i numeru fazy: M5 (`ChargeKind` w dzienniku transakcji niesie
+    /// ten indeks) i M7 (wierzyciel podatkowy w postępowaniu upadłościowym, `K-10`).
+    ///
+    /// **Słownik jest płaski.** Plan fazy zapisywał `Excise(ExciseClass)`,
+    /// `Duty(TariffClass)` i `License(LicenseClass)`; klasa idzie **osobnym polem**
+    /// należności, bo `vocab_enum!` daje słownik, a nie enum z ładunkiem — i tak jest
+    /// lepiej, bo histogram wpływów ma liczyć daniny, a nie pary (danina, klasa).
+    ///
+    /// Kolejność wariantów jest kontraktem podwójnie: `as_index()` indeksuje
+    /// `CityBudget.revenue_ytd`, a ten sam indeks jedzie do `TxKind::TaxPayment`.
+    TaxKind {
+        Cit, Pit, Vat, Property, Excise, Duty, License,
+    }
+}
+
+/// Liczba danin — rozmiar tablicy wpływów budżetu miasta. Kolejność `TaxKind`
+/// jest kontraktem tej tablicy.
+pub const TAX_KIND_COUNT: usize = TaxKind::ALL.len();
+
+vocab_enum! {
+    /// Kierunek wydatku publicznego (M8a §5.1). Ładunek `DecisionReason::PublicSpend`
+    /// i indeks `CityBudget.spend_ytd`; ten sam indeks jedzie do `ProgramId`
+    /// w `TxKind::PublicSpend`, więc kolejność jest kontraktem zapisu gry.
+    ///
+    /// W `core` z tego samego powodu co [`TaxKind`]: ładunek centralnego enuma.
+    /// Drugi czytelnik znany z nazwy i numeru fazy to M9 (panel „Miasto").
+    SpendCategory {
+        Education, Health, Police, Fire, Waste, Parks, Administration,
+        TransitSubsidy, RoadMaintenance, CapitalInvestment, Subsidies, DebtService,
+    }
+}
+
+/// Liczba kierunków wydatku — rozmiar tablicy wydatków budżetu miasta.
+pub const SPEND_CATEGORY_COUNT: usize = SpendCategory::ALL.len();
+
+vocab_enum! {
+    /// Dlaczego należność podatkowa przestała być wymagalna bez zapłaty (M8a §5.1).
+    ///
+    /// Ładunek `DecisionReason::TaxAbated`, ta sama reguła co przy [`TaxKind`].
+    /// `Bankruptcy` zamyka należność, której postępowanie upadłościowe M7 nie
+    /// zaspokoiło w całości (`K-10`, `ClaimPriority::Public`); `Council` to uchwała
+    /// rady (M8e); `TimeBarred` — przedawnienie po okresie z `TaxCode`;
+    /// `PayerGone` — płatnik przestał istnieć, a nie było z czego egzekwować.
+    AbateReason {
+        Bankruptcy, Council, TimeBarred, PayerGone,
+    }
+}
+
+vocab_enum! {
     /// Biom. Konsument poza M1: M2 (strefowanie i zieleń), M5/M6 (rolnictwo i leśnictwo),
     /// M8 (zdarzenia pogodowe zależne od pokrycia terenu).
     Biome {
@@ -845,6 +899,17 @@ mod tests {
         assert_eq!(TraitId::ALL.len(), 8);
         assert_eq!(TraitId::Ambition.as_index(), 0);
         assert_eq!(TraitId::Conscientiousness.as_index(), 7);
+        // M8a: `as_index()` indeksuje `CityBudget.revenue_ytd` i `spend_ytd`, a ten sam
+        // indeks jedzie do `ChargeKind`/`ProgramId` w dzienniku transakcji M5 — czyli
+        // do zapisu gry. Przestawienie wariantu przepisuje cudzą historię budżetu.
+        assert_eq!(TAX_KIND_COUNT, 7);
+        assert_eq!(TaxKind::Cit.as_index(), 0);
+        assert_eq!(TaxKind::Vat.as_index(), 2);
+        assert_eq!(TaxKind::License.as_index(), 6);
+        assert_eq!(SPEND_CATEGORY_COUNT, 12);
+        assert_eq!(SpendCategory::Education.as_index(), 0);
+        assert_eq!(SpendCategory::DebtService.as_index(), 11);
+        assert_eq!(AbateReason::Bankruptcy.as_index(), 0);
     }
 
     #[test]
