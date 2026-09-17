@@ -1,0 +1,104 @@
+// Władza miejska i wybory (M8e §5.2, §5.7, PRD §10.1, §10.2).
+//
+// **W `data/city/`, a nie w `data/tuning/`** (`K-56`): długość kadencji, widełki
+// stawek i liczba mandatów zmieniają to, czego gracz może się po mieście spodziewać
+// — są kształtem modelu, a nie jego kalibracją. Progi histerezy stoją tu obok nich
+// z rozmysłu: rozdzielenie jednej mechaniki na dwa pliki kosztowałoby więcej, niż daje.
+//
+// Zero floatów, jak w całej fazie: wszystko w punktach bazowych, groszach,
+// miesiącach albo dobach.
+(
+    schema_version: 1,
+
+    // ── kadencja i tryb uchwalania ───────────────────────────────────────────────
+    // Cztery lata gry po dwanaście miesięcy (`K-1`).
+    term_months: 48,
+    // Vacatio legis. Sześćdziesiąt dób, bo gracz ma mieć dwa miesiące na reakcję
+    // na podwyżkę VAT-u, a nie dowiedzieć się o niej z rachunku.
+    vacatio_legis_days: 60,
+
+    // ── histereza: trzy zabezpieczenia przed oscylacją (T5) ──────────────────────
+    // Ile miesięcy nacisk musi się utrzymać w tę samą stronę. Jeden zły miesiąc
+    // nie jest sygnałem — CIT przychodzi raz w roku, więc styczeń zawsze wygląda
+    // lepiej niż luty.
+    hysteresis_months: 3,
+    // Karencja tej samej daniny.
+    min_months_between_changes: 12,
+    // Karencja zwrotu kierunku. **To jest dosłowna treść testu T5** i dlatego
+    // nie jest progiem miękkim: zmiana przed upływem tego czasu odpada z menu.
+    min_months_for_reversal: 24,
+    // Krok zmiany stawki: jeden punkt procentowy.
+    tax_step_bp: 100,
+
+    // Widełki stawek. Poza nimi uchwała nie ma dokąd pójść — miasto nie znosi
+    // daniny i nie podnosi jej do poziomu, przy którym gospodarka staje.
+    // Każda z siedmiu musi tu być: danina bez widełek dałaby stawkę przyciętą
+    // do zera, czyli daninę cicho zniesioną uchwałą, której nikt nie podjął.
+    rate_bands: [
+        (kind: Cit,      min_bp: 900,  max_bp: 3400),
+        (kind: Pit,      min_bp: 900,  max_bp: 4000),
+        (kind: Vat,      min_bp: 1200, max_bp: 2700),
+        (kind: Property, min_bp: 10,   max_bp: 200),
+        (kind: Excise,   min_bp: 0,    max_bp: 10000),
+        // Cło i koncesje mają widełki, ale burmistrz po nie nie sięga przy
+        // domykaniu miesiąca (patrz `zbierz_podatki`): pierwsze jest polityką
+        // handlową, drugie opłatą za wpis do rejestru.
+        (kind: Duty,     min_bp: 0,    max_bp: 5000),
+        (kind: License,  min_bp: 0,    max_bp: 10000),
+    ],
+
+    // ── progi sygnałów ───────────────────────────────────────────────────────────
+    // Cięcie planu wydatków, powyżej którego miesiąc uchodzi za deficytowy.
+    deficit_cut_bp: 500,
+    // Zapas ponad rezerwę (w miesiącach planu), powyżej którego jest nadwyżka.
+    surplus_months: 2,
+    // Zadłużenie do wpływów rocznych, powyżej którego wydatków się nie podnosi.
+    // Sufit emisji stoi w `budget.ron` na 20 000 bp; alarm zapala się wcześniej,
+    // bo miasto, które dowiaduje się o problemie na suficie, nie ma już wyjścia.
+    debt_alarm_bp: 12000,
+    // Poniżej tej punktacji burmistrz nie robi nic. Bezczynność jest decyzją
+    // i musi być osiągalna — miasto zmieniające coś co miesiąc jest nie do czytania.
+    action_threshold: 1200,
+
+    // ── poparcie ─────────────────────────────────────────────────────────────────
+    // Wagi w punktach bazowych poparcia. Usługi ważą najwięcej, bo są jedyną
+    // rzeczą, którą mieszkaniec widzi w **swojej** dzielnicy — reszta jest wspólna
+    // dla całego miasta i nie różnicuje obwodów (test wrażliwości T6).
+    approval_w_services: 3000,
+    approval_w_tax: 1500,
+    approval_w_mood: 800,
+    approval_w_unemployment: 1200,
+    // Ile promili celu wchodzi co miesiąc. 1500 bp znaczy, że poparcie dochodzi
+    // do nowego poziomu w około dwa lata — czyli w połowie kadencji.
+    approval_inertia_bp: 1500,
+
+    // ── wybory ───────────────────────────────────────────────────────────────────
+    candidates: 4,
+    council_seats: 15,
+    // Frekwencja. Baza plus dodatki: status (0..100), wiek (lata ponad 18)
+    // i nastrój. Widełki 3500–7500 bp są kryterium akceptacyjnym z testu T6,
+    // więc przycięcie jest tu jawne, a nie wynikowe.
+    turnout_base_bp: 3800,
+    turnout_status_bp: 22,
+    turnout_age_bp: 25,
+    turnout_mood_bp: 4,
+    turnout_min_bp: 3500,
+    turnout_max_bp: 7500,
+    // Temperatura wyboru kandydata. Wyżej = rozkład bardziej wyrównany.
+    vote_temperature_bp: 2500,
+    // Zasięg medialny: ile punktów bazowych użyteczności daje złotówka kampanii
+    // przypadająca na jednego wyborcę dzielnicy. Do M10 to jest cały model mediów
+    // (`D7`) — M10 podmienia go na zasięg realnych tytułów bez zmiany sygnatury.
+    media_reach_bp_per_zl: 60,
+    // Łapówka działa mocniej niż darowizna i to jest jej cała atrakcyjność —
+    // razem z hazardem skandalu, który rośnie od jej istnienia.
+    illegal_reach_mul_bp: 25000,
+
+    // ── przetargi ────────────────────────────────────────────────────────────────
+    // Rozrzut oferty wokół kosztu: ile komu zależy na tym zleceniu.
+    bid_noise_bp: 1500,
+    // Jaka część planu wydatków na odpady idzie do przetargu. Reszta zostaje
+    // w mieście — bo miasto, które odda całą usługę, nie ma czym jej odebrać,
+    // gdy przetarg nie zostanie rozstrzygnięty.
+    tender_waste_bp: 7000,
+)

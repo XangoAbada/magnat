@@ -20,6 +20,7 @@ use magnat_ecs::{System, SystemCtx, SystemDesc, SystemId, World};
 use crate::assess;
 use crate::budget;
 use crate::city::City;
+use crate::rule;
 use crate::settle;
 use crate::step;
 
@@ -129,8 +130,14 @@ impl CitySystem {
         if settle::is_month_start(t) {
             let wplywy = std::mem::replace(&mut city.month_revenue, Money::ZERO);
             let polityka = city.policy.clone();
+            // Udziały po uchwałach rady i rezerwa na umowy z przetargów (M8e):
+            // usługa kupiona na zewnątrz ma jedną cenę, a nie dwie.
+            let plan = budget::SpendPlan {
+                shares: rule::shares(city, t),
+                contracted: rule::contracted(city, t),
+            };
             if let Some(books) = ctx.world_mut().get_resource_mut::<Books>() {
-                budget::close_month(&mut city.budget, &polityka, books, rest, wplywy, t);
+                budget::close_month(&mut city.budget, &polityka, &plan, books, rest, wplywy, t);
             }
             if settle::is_year_start(t) {
                 budget::close_year(&mut city.budget);
@@ -140,10 +147,24 @@ impl CitySystem {
         // 6. Usługi publiczne, urzędy i egzekucja (M8d). **Po** budżecie, bo jakość
         //    placówki stoi na planie wydatków, a plan liczy się z okna dwunastu
         //    miesięcy, które właśnie zamknięcie miesiąca uzupełniło.
+        // 6a. Skutki obowiązujących uchwał (M8e) — **przed** urzędami, bo próg
+        //     płacy minimalnej i limit emisji obowiązują inspekcję tego samego
+        //     dnia, w którym weszły w życie, a nie od następnego miesiąca.
+        rule::nalozenie(city, market, ctx.world_mut(), t);
+
         let mut powody = step::dobowy(city, market, ctx.world_mut(), t);
         if settle::is_month_start(t) {
             powody.extend(step::miesieczny(city, market, ctx.world_mut(), t));
         }
+
+        // 7. Władza (M8e). **Po** usługach, bo burmistrz ocenia miasto takie,
+        //    jakie właśnie zobaczył: poparcie stoi na pokryciu usługami, które
+        //    krok miesięczny przed chwilą przeliczył.
+        powody.extend(rule::dobowy(city, market, ctx.world_mut(), t));
+        if settle::is_month_start(t) {
+            powody.extend(rule::miesieczny(city, market, ctx.world_mut(), t));
+        }
+
         for (site, powod) in powody {
             market.log_firm_decision(site, powod);
         }

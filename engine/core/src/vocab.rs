@@ -852,6 +852,62 @@ vocab_enum! {
 }
 
 vocab_enum! {
+    /// Rodzaj uchwały rady miasta (M8e §5.2, PRD §10.1).
+    ///
+    /// Ładunek `DecisionReason::{PolicyEnacted, TaxRateChanged}`, więc w `core`
+    /// z tego samego powodu co [`TaxKind`]: ładunek centralnego enuma nie może
+    /// pochodzić z crate'u, który od `core` zależy. Sam `Policy` — z kwotami,
+    /// progami i godzinami otwarcia — zostaje w `sim/city`, bo to nie jest słownik.
+    /// Ta sama korekta co przy [`RemedyKind`] i `BankruptcyTrigger` (`K-48`).
+    ///
+    /// Kolejność wariantów jest kontraktem, bo `as_index()` indeksuje histogram
+    /// uchwał w karcie rady.
+    ///
+    /// **Siedem wariantów, bo siedem ma dziś czytelnika**, a lista nieobecnych jest
+    /// dłuższa i każda nieobecność ma powód: strefowania nie ma, bo strefa jest
+    /// wejściem generatora miasta i po Etapie 7 nikt jej nie czyta; opłaty
+    /// parkingowej — bo cennik siedzi za `&mut` w routerze podróży; ograniczenia
+    /// ruchowego — bo maska krawędzi nie ma jak dojść do routera z tej samej
+    /// przyczyny. Dotacja nie jest osobnym wariantem, tylko udziałem
+    /// `SpendCategory::Subsidies` w planie wydatków, czyli `SpendShare`.
+    /// Wariant, którego skutku nikt nie widzi, przechodzi każdy test i wygląda
+    /// tak samo jak wariant działający (`R2`).
+    PolicyKind {
+        TaxRate, SpendShare, MinWage, EmissionLimit, TariffCap,
+        AgencyStaffing, TradingHours,
+    }
+}
+
+/// Liczba rodzajów uchwały — szerokość tablicy histerezy burmistrza.
+pub const POLICY_KIND_COUNT: usize = PolicyKind::ALL.len();
+
+vocab_enum! {
+    /// Przedmiot przetargu miejskiego (M8e §5.2, PRD §10.3).
+    ///
+    /// Ładunek `DecisionReason::{TenderPublished, TenderAwarded}`; identyfikator
+    /// przedmiotu (dzielnica, linia) idzie **osobnym polem** — ta sama korekta
+    /// co przy [`RemedyKind`].
+    TenderKind {
+        WasteCollection, RoadMaintenance, TransitLine, Construction,
+    }
+}
+
+vocab_enum! {
+    /// Co przeważyło w głosie wyborcy (M8e §5.7, PRD §10.2).
+    ///
+    /// Ładunek `DecisionReason::VoteCast`. Wyjaśnialność z §7 dokumentu 00 dotyczy
+    /// także wyborcy: „głosowała na Nowaka" bez powodu jest liczbą w tabeli, a nie
+    /// odpowiedzią. Wariant niesie **największy** składnik użyteczności kandydata,
+    /// a nie całą jej rozpiskę — rozpiska jest w panelu wyborów.
+    ///
+    /// Kolejność jest kontraktem, bo `as_index()` indeksuje histogram motywów
+    /// w karcie rady.
+    VoteDriver {
+        Taxes, Services, Mood, Media, Ties, Habit,
+    }
+}
+
+vocab_enum! {
     /// Biom. Konsument poza M1: M2 (strefowanie i zieleń), M5/M6 (rolnictwo i leśnictwo),
     /// M8 (zdarzenia pogodowe zależne od pokrycia terenu).
     Biome {

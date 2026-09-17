@@ -226,6 +226,18 @@ pub enum TxKind {
         investor: ExternalInvestorId,
         inflow: bool,
     },
+    /// Wpłata na kampanię kandydata w wyborach miejskich (M8e WP10, `K-66`).
+    ///
+    /// Odbiorcą jest **reszta świata**, bo kampania kupuje czas w mediach, a media
+    /// są firmami dopiero w M10. Nadawca jest prawdziwy i to on jest treścią tego
+    /// wariantu: wpłata zmniejsza gotówkę firmy, więc poparcie kandydata ma cenę,
+    /// a nie jest deklaracją w tabeli. `illegal` rozstrzyga, czy to darowizna,
+    /// czy łapówka — i to jedno pole niesie całe ryzyko, bo od niego rośnie hazard
+    /// zdarzenia `political/scandal`.
+    CampaignDonation {
+        candidate: u8,
+        illegal: bool,
+    },
 }
 
 /// Opis zapisu podawany przez wołającego. `tax` jest **wyłącznie VAT-em**

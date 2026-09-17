@@ -138,7 +138,26 @@ REJESTR = {
     # miały ramiona w `describe` od M8c, ale nie miały wpisu na liście testu
     # `kazdy_powod_ma_tekst_w_obu_jezykach`, więc przez całą podfazę nikt nie
     # sprawdził, czy ich zdanie składa się w obu językach.
-    ("engine/ui/src/inspect/reason.rs", "fn", 855): 37,
+    # 972 po M8e: siedem ramion władzy i wyborów (616–622), +117 — i **drugi
+    # w kolejności przyrost całego bloku M8**, z powodu, który wraca po raz trzeci.
+    # Trzy z siedmiu ramion rozgałęziają się na dwa klucze lokalizacji, bo niosą
+    # zdania o przeciwnym znaczeniu: podwyżka stawki i obniżka („budżet rozjechał
+    # się z celem" wobec „budżet ma zapas"), przetarg rozstrzygnięty i przetarg
+    # bez ofert, wybory utrzymujące burmistrza i wybory zmieniające władzę.
+    # W każdym z tych trzech wspólne zdanie z podstawieniem byłoby zdaniem
+    # mówiącym mniej niż liczba, którą niesie.
+    #
+    # **Plik przekracza po M8e również próg pliku (1329 > 1200) i to jest pierwsze
+    # takie przekroczenie.** Odpowiedź jest ta sama i ten sam adres: pozycja 37
+    # rejestru długu w `R1-refaktor-po-M5.md`. Podziału nie robi się teraz, bo
+    # podział, który tu pomaga, to **nie** rozcięcie pliku na dwa — plik ma jeden
+    # temat (powód → zdanie) i rozcięcie go dałoby dwa pliki o jednym temacie.
+    # Pomaga dopiero `K-58` (R2e): rozbicie `DecisionReason` na trzy enumy po
+    # aktorze rozcina razem z nim ten `match`, bo to jest ten sam podział widziany
+    # z drugiej strony. Do tego czasu funkcja rośnie liniowo z liczbą wariantów
+    # i jest to wzrost, który da się przewidzieć co do rzędu wielkości.
+    ("engine/ui/src/inspect/reason.rs", "fn", 972): 37,
+    ("engine/ui/src/inspect/reason.rs", "plik", 1329): 37,
     # 269 po M7d: jedna linia za `finance: bf.finance` w budowie `BankParams`.
     ("sim/economy/src/data.rs", "fn", 269): 38,
 }

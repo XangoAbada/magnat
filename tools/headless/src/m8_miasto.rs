@@ -153,6 +153,14 @@ pub fn run(a: &M8MiastoArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
         uslugi.services, uslugi.live_kinds, uslugi.offices, uslugi.staff, uslugi.emission_limit_g_per_min
     );
 
+    // Władza. Po usługach, bo poparcie stoi na pokryciu usługami, a po mieście,
+    // bo uchwała zmienia stawki w kodeksie (M8e).
+    let wladza = city_bridge::setup_government(&mut world, &city, a.seed)?;
+    eprintln!(
+        "władza miejska: {} dzielnic, burmistrz {}, rada {} mandatów, kadencja {} miesięcy",
+        wladza.districts, wladza.mayor_axis, wladza.council_seats, wladza.term_months
+    );
+
     // Sieci przesyłowe. Po zakładach, bo moc przyłączeniowa bierze się z linii
     // produkcyjnych, i po mieście, bo akcyza od energii nalicza się na rachunku.
     let sieci = grid_bridge::setup(&mut world, &city)?;
@@ -472,6 +480,160 @@ fn raport_uslug(miasto: &City, world: &magnat_ecs::World) {
     }
 }
 
+/// Sekcja „władza i wybory" raportu (M8e).
+///
+/// Zwraca `false`, gdy bramka podfazy się nie zamknęła. Bramka jest jedna i pyta
+/// o **martwy mechanizm**, tak samo jak bramka kategorii zdarzeń: przebieg dłuższy
+/// niż kadencja ma pokazać przynajmniej jedne wybory i przynajmniej jedną uchwałę.
+/// Burmistrz, który przez dwadzieścia lat nie podjął ani jednej decyzji, przechodzi
+/// każdy test i w raporcie wygląda tak samo jak burmistrz ostrożny (`R2`).
+fn raport_wladzy(miasto: &City, dob: u32) -> bool {
+    use magnat_core::PolicyKind;
+    let gov = &miasto.gov;
+    if !gov.is_active() {
+        return true;
+    }
+    println!("── władza i wybory ───────────────────────────────────");
+    println!(
+        "burmistrz {} (mandat #{}), rada {} mandatów, poparcie {} %, miesiąc kadencji {}",
+        gov.mayor_pref.dominant().name(),
+        if gov.mayor == magnat_city::Government::NO_MAYOR {
+            "—".to_string()
+        } else {
+            gov.mayor.to_string()
+        },
+        gov.council.len(),
+        gov.approval_mean_bp() / 100,
+        gov.month
+    );
+    let s = gov.signals;
+    println!(
+        "sygnały: saldo {} bp, dług {} % wpływów rocznych, luka w usługach {} %, bezrobocie {} ‰, szara strefa {} %, emisje {} % limitu",
+        s.fiscal_bp,
+        s.debt_bp / 100,
+        s.service_gap_bp / 100,
+        s.unemployment_permille,
+        s.shadow_bp / 100,
+        s.emission_bp / 100
+    );
+
+    // Poparcie per dzielnica — najlepsza i najgorsza. To jest liczba, na której
+    // stoi zdanie z §1 dokumentu fazy („przegrana w tym obwodzie").
+    if !gov.approval_bps_by_district.is_empty() {
+        let naj = gov.approval_bps_by_district.iter().max().unwrap_or(&0);
+        let min = gov.approval_bps_by_district.iter().min().unwrap_or(&0);
+        println!(
+            "poparcie w obwodach: od {} % do {} % (rozpiętość {} pkt proc.)",
+            min / 100,
+            naj / 100,
+            (naj - min) / 100
+        );
+    }
+
+    let uchwal: u32 = gov.enacted.iter().sum();
+    print!("uchwały: {uchwal} razem");
+    for k in PolicyKind::ALL {
+        let ile = gov.enacted[k.as_index()];
+        if ile > 0 {
+            print!(", {} ×{ile}", k.name());
+        }
+    }
+    println!();
+    println!(
+        "stawki dziś: CIT {} bp, PIT {} bp, VAT {} bp, nieruchomości {} bp, akcyza ×{} bp",
+        miasto.code.rate_of(magnat_core::TaxKind::Cit),
+        miasto.code.rate_of(magnat_core::TaxKind::Pit),
+        miasto.code.rate_of(magnat_core::TaxKind::Vat),
+        miasto.code.rate_of(magnat_core::TaxKind::Property),
+        miasto.code.rate_of(magnat_core::TaxKind::Excise)
+    );
+
+    let rozstrzygniete = miasto
+        .tenders
+        .all()
+        .iter()
+        .filter(|x| x.outcome.is_some())
+        .count();
+    let umowy: i64 = miasto
+        .tenders
+        .all()
+        .iter()
+        .filter_map(|x| x.outcome.as_ref())
+        .map(|o| o.price.get())
+        .sum();
+    println!(
+        "przetargi: {} ogłoszonych, {rozstrzygniete} rozstrzygniętych, umowy na {} zł miesięcznie",
+        miasto.tenders.len(),
+        umowy / 100
+    );
+
+    let mut wyborow = 0;
+    if let Some(e) = &miasto.election {
+        wyborow = 1;
+        if let Some(r) = &e.result {
+            println!(
+                "wybory: frekwencja {} %, {} kandydatów, zwycięzca {} % głosów, {}",
+                r.turnout_bp / 100,
+                e.candidates.len(),
+                r.winner_bp / 100,
+                if r.incumbent_won {
+                    "burmistrz utrzymał urząd"
+                } else {
+                    "miasto ma nowego burmistrza"
+                }
+            );
+            // Rozpiętość wyniku zwycięzcy po obwodach: to jest dokładnie ta liczba,
+            // o którą chodzi w demie fazy — spadek poparcia w dzielnicy z awarią.
+            let mut naj = 0u32;
+            let mut min = 10_000u32;
+            for d in &r.per_district {
+                if d.voted == 0 {
+                    continue;
+                }
+                let u = d.share_bp(usize::from(r.mayor));
+                naj = naj.max(u);
+                min = min.min(u);
+            }
+            if naj > 0 {
+                println!("  wynik zwycięzcy po obwodach: od {} % do {} %", min / 100, naj / 100);
+            }
+        } else {
+            println!("wybory: kampania trwa, {} kandydatów", e.candidates.len());
+        }
+    }
+
+    // „Dlaczego" — ostatnie decyzje władzy. Bez tego uchwały są liczbą w tabeli,
+    // a bramka 5 fazy żąda powodu widocznego w inspektorze.
+    let cat = magnat_ui::Catalog::load().ok();
+    if let Some(c) = &cat {
+        println!("ostatnie decyzje władzy:");
+        for (tick, powod) in miasto.reasons.iter().rev().take(6) {
+            println!(
+                "  doba {:>5}  {}",
+                tick.get() / 1_440,
+                magnat_ui::inspect::reason::describe(c, magnat_ui::Locale::Pl, *powod)
+            );
+        }
+    }
+
+    // Bramka: przebieg dłuższy niż kadencja ma pokazać wybory i uchwały.
+    let kadencja_dob = u32::try_from(gov.term_ticks / 1_440).unwrap_or(u32::MAX);
+    if dob < kadencja_dob + 60 {
+        println!("(przebieg krótszy niż kadencja — bramka władzy nie obowiązuje)");
+        return true;
+    }
+    if uchwal == 0 {
+        println!("BRAMKA: burmistrz nie podjął ani jednej decyzji przez całą kadencję");
+        return false;
+    }
+    if wyborow == 0 {
+        println!("BRAMKA: minęła kadencja, a wybory się nie odbyły");
+        return false;
+    }
+    println!("bramka M8e: władza rządzi i wybory się odbyły — zielona");
+    true
+}
+
 fn raport(
     a: &M8MiastoArgs,
     miasto: &City,
@@ -571,6 +733,7 @@ fn raport(
 
     ok &= raport_zdarzen(world, a.days);
     raport_uslug(miasto, world);
+    ok &= raport_wladzy(miasto, a.days);
 
     if zywe < a.expect_taxes {
         println!(

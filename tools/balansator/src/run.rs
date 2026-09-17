@@ -443,7 +443,11 @@ fn jest_decyzja(kind: &magnat_economy::TxKind) -> bool {
         | K::LoanDraw { .. }
         | K::TaxPayment { .. }
         | K::PublicSpend { .. }
-        | K::ExternalCapital { .. } => true,
+        | K::ExternalCapital { .. }
+        // Wpłata na kampanię jest wyborem w najczystszej postaci: firma nie musi
+        // jej robić, nikt jej do tego nie zobowiązał, a decyduje o niej rachunek
+        // „czy ten kandydat mi się opłaci" (M8e).
+        | K::CampaignDonation { .. } => true,
         // Zobowiązanie: umowa, harmonogram albo warunek początkowy świata.
         K::Wage { .. }
         | K::Rent { .. }

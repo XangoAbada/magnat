@@ -244,6 +244,7 @@ mod tests {
             late_interest_bp_per_year: 1450,
             time_bar_days: 1800,
             effective_from: magnat_core::Tick(0),
+            excise_scale_bp: 10_000,
         }
     }
 

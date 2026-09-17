@@ -160,6 +160,19 @@ jobs:
         # (szkoła, opieka zdrowotna, policja) mają testy jednostkowe w `sim/agents`
         # i `sim/economy`, więc chodzą w zwykłym `cargo test`.
         run: cargo test --release -p magnat-headless --test enforcement -- --include-ignored
+      - name: M8e — władza rządzi, wybory się odbywają, uchwała dochodzi do półki (T5/T6, WP9–WP11)
+        # Trzy testy z jednego pliku i wszystkie trzy są kryterium zamknięcia podfazy.
+        # Histereza stawek (T5) i determinizm wyborów (T6) mają testy jednostkowe
+        # w `sim/city` i chodzą w zwykłym `cargo test`; tutaj sprawdza się to,
+        # czego one sprawdzić nie mogą — że łańcuch domyka się w gospodarce:
+        # uchwała wchodzi w życie, `Market` dostaje nowy silnik podatkowy, cena
+        # na półce liczy się po nowemu, a rejestr należności dalej domyka się
+        # do zera groszy.
+        #
+        # Kadencję test skraca w `GovTuning` do dwóch miesięcy, bo cztery lata
+        # gry to ~1400 dób. Długość kadencji jest **daną** (`K-56`), a nie
+        # własnością kodu, który tu mierzymy.
+        run: cargo test --release -p magnat-headless --test government -- --include-ignored
       - name: M8a/M8c — determinizm miasta z podatkami, pogodą i zdarzeniami
         # Dwa przebiegi tego samego drzewa, jak przy `m5shop` wyżej i z tego samego
         # powodu: hash zmienia się przy każdym dopisaniu stanu, więc złoty plik

@@ -123,6 +123,8 @@ pub struct Enforcement {
     /// na minutę. Liczona raz, przy stawianiu miasta, z odniesienia w
     /// `data/tuning/supply.ron` — żeby próg nie miał drugiego źródła (`K-35`).
     emission_limit_g_per_min: i64,
+    /// Płaca minimalna z uchwały rady (M8e, `CH-5`). `None` = nieuchwalona.
+    min_wage: Option<Money>,
 }
 
 impl Default for Enforcement {
@@ -150,12 +152,42 @@ impl Enforcement {
             cases: Vec::new(),
             next: 1,
             emission_limit_g_per_min,
+            min_wage: None,
         }
     }
 
     #[must_use]
     pub fn agencies(&self) -> &[Agency; AGENCY_KIND_COUNT] {
         &self.agencies
+    }
+
+    /// Próg emisji pyłu, powyżej którego ochrona środowiska otwiera sprawę.
+    #[must_use]
+    pub fn emission_limit_g_per_min(&self) -> i64 {
+        self.emission_limit_g_per_min
+    }
+
+    /// Zaostrzenie albo poluzowanie progu emisji uchwałą rady (M8e).
+    ///
+    /// Uchwała **zastępuje** próg policzony przy stawianiu miasta, a nie dokłada
+    /// się do niego: dwa progi emisji naraz znaczyłyby, że nie wiadomo, który
+    /// obowiązuje, a limit jest liczbą, którą gracz ma znać.
+    pub fn set_emission_limit(&mut self, g_per_min: i64) {
+        self.emission_limit_g_per_min = g_per_min.max(0);
+    }
+
+    /// Płaca minimalna uchwalona przez radę, w groszach miesięcznie (`CH-5`).
+    ///
+    /// `None` znaczy „nie uchwalono" i wtedy inspekcja pracy stoi na dolnych
+    /// widełkach roli z `data/jobs/roles.ron`, tak jak od M8d. Uchwała **podmienia
+    /// próg, nie mechanizm**: sprawa, dowody, kara i wpis do budżetu są na miejscu.
+    #[must_use]
+    pub fn min_wage(&self) -> Option<Money> {
+        self.min_wage
+    }
+
+    pub fn set_min_wage(&mut self, m: Money) {
+        self.min_wage = if m.get() > 0 { Some(m) } else { None };
     }
 
     pub fn set_inspectors(&mut self, kind: AgencyKind, n: u32) {
@@ -205,7 +237,11 @@ impl Enforcement {
         otwarte < self.agencies[agency.as_index()].inspectors as usize
     }
 
-    fn otworz(
+    /// Otwarcie sprawy. Publiczne od M8e, bo drugim wołającym jest wpłata poza
+    /// rejestrem wpłat kampanijnych (`rule::finansuj_kampanie`) — a `K-11` mówi,
+    /// co sądzimy o drugiej ścieżce do tego samego skutku. Limit spraw na urząd,
+    /// odsiewanie powtórek i dowody działają tak samo dla obu wołających.
+    pub fn otworz(
         &mut self,
         agency: AgencyKind,
         site: SiteId,
@@ -354,15 +390,22 @@ fn inspekcja_pracy(
     p: &crate::tuning::AgencyParams,
     t: Tick,
 ) -> Vec<(SiteId, DecisionReason)> {
+    // Uchwała rady o płacy minimalnej **podmienia próg, nie mechanizm** (`CH-5`):
+    // sprawa, dowody, kara i wpis do budżetu są na miejscu od M8d. Bez uchwały
+    // progiem zostaje ułamek dolnych widełek roli, tak jak było.
+    let ustawowa = city.enforcement.min_wage();
     let mut out = Vec::new();
     for (id, site) in firms.sites() {
         let mut ponizej = 0u32;
         let mut umow = 0u32;
         for poz in &site.positions {
-            let dol = poz.wage_band.0.get();
+            let prog = ustawowa.map_or_else(
+                || poz.wage_band.0.get() * i64::from(p.wage_floor_bp) / 10_000,
+                |m| m.get(),
+            );
             for e in &poz.filled {
                 umow += 1;
-                if e.wage_month.get() * 10_000 < dol * i64::from(p.wage_floor_bp) {
+                if e.wage_month.get() < prog {
                     ponizej += 1;
                 }
             }
@@ -385,7 +428,7 @@ fn inspekcja_pracy(
 
 /// Ochrona środowiska: pył z komina ponad normę.
 fn ochrona_srodowiska(city: &mut City, t: Tick) -> Vec<(SiteId, DecisionReason)> {
-    let limit = city.enforcement.emission_limit_g_per_min;
+    let limit = city.enforcement.emission_limit_g_per_min();
     if limit <= 0 {
         return Vec::new();
     }

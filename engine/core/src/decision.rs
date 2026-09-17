@@ -30,10 +30,10 @@ use crate::types::{DistrictId, EventId, GoodId, JobRoleId, Money, PolicyId, Q};
 use crate::vocab::{
     AbateReason, ActionKind, AgencyKind, BankruptcyTrigger, ClaimPriority, CommitmentKind,
     DeprivationEffect, EventCategory, FirmStrategy, FixedCost, LeaveCause, LifeEventKind,
-    LineStopCause, LoanKind, MigrationKind, NeedKind, PermitKind, PlaceRef, PriceDriver,
-    ReactionKind, RejectCause, RejectCredit, RemedyKind, ServiceKind, ShortageStageKind,
-    SpendCategory, StockCat, TaxKind, TraitId, TransportMode, Trend, UtilityKind, UtilityService,
-    WageCause,
+    LineStopCause, LoanKind, MigrationKind, NeedKind, PermitKind, PlaceRef, PolicyKind,
+    PriceDriver, ReactionKind, RejectCause, RejectCredit, RemedyKind, ServiceKind,
+    ShortageStageKind, SpendCategory, StockCat, TaxKind, TenderKind, TraitId, TransportMode,
+    Trend, UtilityKind, UtilityService, VoteDriver, WageCause,
 };
 use serde::{Deserialize, Serialize};
 
@@ -637,7 +637,87 @@ pub enum DecisionReason {
         share_bp: u16,
         last_result: Money,
     } = 615,
-    // 616–699 zarezerwowane dla M8.
+    /// Rada uchwaliła regulację (M8e WP9, PRD §10.1).
+    ///
+    /// `for_bp` to poparcie w radzie w punktach bazowych, a `delay_days` — vacatio
+    /// legis, czyli ile dób minie od uchwalenia do wejścia w życie. Obie liczby są
+    /// treścią, a nie ozdobą: uchwała przegłosowana 5100 do 4900 i uchwała
+    /// jednomyślna to dwie różne sytuacje polityczne, a regulacja wchodząca
+    /// jutro i za kwartał to dwie różne sytuacje gospodarcze.
+    PolicyEnacted {
+        kind: PolicyKind,
+        for_bp: u16,
+        delay_days: u16,
+    } = 616,
+    /// Burmistrz ruszył stawkę daniny (M8e WP9, PRD §10.1, §6.8).
+    ///
+    /// Osobny powód od [`DecisionReason::PolicyEnacted`], mimo że stawka jest
+    /// uchwałą jak każda inna, bo niesie **kierunek i odchylenie od celu**, czyli
+    /// to, czego pilnuje test T5. `gap_bp` jest odchyleniem salda budżetu od celu
+    /// w chwili decyzji — z dodatnim znakiem, gdy miasto ma nadwyżkę.
+    TaxRateChanged {
+        kind: TaxKind,
+        from_bp: u16,
+        to_bp: u16,
+        gap_bp: i16,
+    } = 617,
+    /// Miasto ogłosiło przetarg (M8e WP9, PRD §10.3).
+    ///
+    /// `subject_id` niesie dzielnicę albo linię — słownik jest płaski, a identyfikator
+    /// idzie osobnym polem, ta sama korekta co przy `RemedyKind` (`K-64`).
+    TenderPublished {
+        subject: TenderKind,
+        subject_id: u16,
+        budget: Money,
+    } = 618,
+    /// Przetarg rozstrzygnięty (M8e WP9).
+    ///
+    /// `score_bp` jest punktacją zwycięzcy, a `runner_up_bp` — drugiego w kolejności.
+    /// Przetarg wygrany o włos i wygrany bezkonkurencyjnie to dwie różne odpowiedzi
+    /// na pytanie „dlaczego nie ja", a to jest pytanie, które gracz zada (PRD §14.1).
+    /// `bids` równe zero znaczy przetarg nierozstrzygnięty — miasto robi wtedy usługę
+    /// samo i płaci za nią plan, a nie ofertę.
+    TenderAwarded {
+        subject: TenderKind,
+        price: Money,
+        score_bp: u16,
+        runner_up_bp: u16,
+        bids: u8,
+    } = 619,
+    /// Wybory rozstrzygnięte (M8e WP10, PRD §10.2).
+    ///
+    /// `turnout_bp` to frekwencja, `winner_bp` — wynik zwycięzcy, `incumbent` mówi,
+    /// czy wygrał urzędujący burmistrz. Trzecia liczba jest tu dlatego, że cały
+    /// mechanizm z §1 dokumentu fazy („spadek poparcia → przegrana w tym obwodzie")
+    /// jest nieczytelny bez odpowiedzi, czy władza się w ogóle zmieniła.
+    ElectionHeld {
+        turnout_bp: u16,
+        winner_bp: u16,
+        incumbent: bool,
+    } = 620,
+    /// Mieszkaniec zagłosował (M8e WP10, PRD §10.2, §14.1).
+    ///
+    /// Powód wyborcy, nie powód komisji: `driver` niesie **największy** składnik
+    /// użyteczności kandydata, `margin_bp` — o ile wyprzedził drugiego w rankingu
+    /// tego wyborcy. Głos oddany z przewagą 20 bp i z przewagą 4000 bp to dwie
+    /// różne odpowiedzi na pytanie, czy kampania miała sens.
+    VoteCast {
+        candidate: u8,
+        driver: VoteDriver,
+        margin_bp: u16,
+    } = 621,
+    /// Ktoś dołożył się do kampanii kandydata (M8e WP10, PRD §10.2).
+    ///
+    /// `illegal` rozstrzyga, czy to darowizna, czy łapówka — i to jedno pole niesie
+    /// całe ryzyko: wsparcie nielegalne podnosi sondę hazardu skandalu, a ujawnienie
+    /// uderza w kandydata **i** we wspierającego. Fundator jedzie osobno, bo jest
+    /// podmiotem, a nie słownikiem (`K-62`).
+    CampaignBacked {
+        candidate: u8,
+        amount: Money,
+        illegal: bool,
+    } = 622,
+    // 623–699 zarezerwowane dla M8.
     // ... kolejne fazy dopisują własne bloki na końcu pliku
 }
 
@@ -730,6 +810,13 @@ impl DecisionReason {
             DecisionReason::CaseOpened { .. } => 613,
             DecisionReason::RemedyImposed { .. } => 614,
             DecisionReason::ShadowShareSet { .. } => 615,
+            DecisionReason::PolicyEnacted { .. } => 616,
+            DecisionReason::TaxRateChanged { .. } => 617,
+            DecisionReason::TenderPublished { .. } => 618,
+            DecisionReason::TenderAwarded { .. } => 619,
+            DecisionReason::ElectionHeld { .. } => 620,
+            DecisionReason::VoteCast { .. } => 621,
+            DecisionReason::CampaignBacked { .. } => 622,
         }
     }
 }

@@ -17,9 +17,18 @@ use crate::budget::{BudgetPolicy, CityBudget};
 use crate::charge::ChargeRegistry;
 use crate::code::{TaxCode, VatTable};
 use crate::engine::{CityTaxEngine, Withholding};
+use crate::election::Election;
+use crate::gov::Government;
 use crate::law::Enforcement;
 use crate::permits::PermitRegistry;
+use crate::policy::PolicySet;
 use crate::services::{DistrictPopulation, PublicServices};
+use crate::tender::TenderRegistry;
+
+/// Ile powodów decyzji władzy trzyma pierścień. Ta sama liczba i ten sam powód
+/// co przy `Market::budget_log` (M5) i `Events::reasons` (M8c): decyzja rady
+/// zapada raz w miesiącu, więc 256 wpisów to dwadzieścia lat gry.
+pub const CITY_LOG_RING: usize = 256;
 
 /// Wpis katastru: zakład i wartość katastralna parceli, na której stoi.
 ///
@@ -69,6 +78,27 @@ pub struct City {
     pub emissions: Vec<(SiteId, magnat_core::FirmId, i64)>,
     /// Ludność per dzielnica — wejście miesięcznego przeliczenia jakości.
     pub district_population: DistrictPopulation,
+    // ── M8e ──
+    /// Burmistrz, rada, poparcie i histereza decyzji (WP9).
+    pub gov: Government,
+    /// Uchwały: pełna historia, nie tylko obowiązujące (WP9).
+    pub policies: PolicySet,
+    /// Trwające wybory albo ich brak (WP10). Jedne naraz — `K-62` mówi, że wybory
+    /// są zakładką karty rady, a nie osobnym podmiotem.
+    pub election: Option<Election>,
+    /// Przetargi i umowy na usługi kupowane na zewnątrz (WP9).
+    pub tenders: TenderRegistry,
+    /// Taryfa operatora sprzed pierwszego sufitu, per `UtilityService`.
+    ///
+    /// Bez niej uchwała o suficie taryfy byłaby nieodwracalna: `sunset` zdejmowałby
+    /// uchwałę, a cena zostawałaby na zawsze przycięta — czyli pole `sunset`
+    /// byłoby polem bez skutku (`R2`).
+    pub tariff_base: BTreeMap<u8, Money>,
+    /// Powody decyzji władzy — treść zakładki „Dlaczego" karty rady.
+    ///
+    /// Pierścień, a nie pełna historia: uchwały jest garść na rok, ale powód
+    /// wyborów, przetargu i wpłaty kampanijnej jedzie tą samą drogą.
+    pub reasons: Vec<(Tick, magnat_core::DecisionReason)>,
 }
 
 /// Kalibracja M8d albo jej brak.
@@ -122,7 +152,32 @@ impl City {
             enforcement: Enforcement::default(),
             emissions: Vec::new(),
             district_population: DistrictPopulation::default(),
+            gov: Government::new(crate::gov::Preference::default(), 0, None),
+            policies: PolicySet::new(),
+            election: None,
+            tenders: TenderRegistry::new(),
+            tariff_base: BTreeMap::new(),
+            reasons: Vec::new(),
         }
+    }
+
+    /// Zapisuje powód decyzji władzy. Pierścień nadpisuje najstarszy wpis —
+    /// karta rady pokazuje ostatnie [`CITY_LOG_RING`], a nie wszystko od zera świata.
+    pub fn log_reason(&mut self, t: Tick, reason: magnat_core::DecisionReason) {
+        if self.reasons.len() >= CITY_LOG_RING {
+            self.reasons.remove(0);
+        }
+        self.reasons.push((t, reason));
+    }
+
+    /// Stawki siedmiu danin tak, jak widzi je uchwała rady.
+    #[must_use]
+    pub fn rates(&self) -> [u32; magnat_core::TAX_KIND_COUNT] {
+        let mut out = [0u32; magnat_core::TAX_KIND_COUNT];
+        for k in magnat_core::TaxKind::ALL {
+            out[k.as_index()] = self.code.rate_of(*k);
+        }
+        out
     }
 
     /// Silnik podatkowy do wstawienia w rynek (`Market::set_tax_engine`).
@@ -199,6 +254,26 @@ impl HashState for City {
         self.services.hash_state(h);
         self.permits.hash_state(h);
         self.enforcement.hash_state(h);
+        // M8e: władza, uchwały, wybory i przetargi zmieniają wynik gry, więc są
+        // stanem. Pierścień powodów **nie wchodzi** — tak samo jak `budget_log`
+        // w `Market` i `reasons` w `Events`: to jest wyjaśnienie decyzji,
+        // a nie sama decyzja, i nadpisuje się niezależnie od niej.
+        self.gov.hash_state(h);
+        self.policies.hash_state(h);
+        match &self.election {
+            None => h.write_u8(0),
+            Some(e) => {
+                h.write_u8(1);
+                e.hash_state(h);
+            }
+        }
+        self.tenders.hash_state(h);
+        // Stawki wchodzą do hasza **od M8e**, bo od M8e zmienia je uchwała:
+        // dwa przebiegi, w których rada postanowiła co innego, są dwoma różnymi
+        // światami, a milczenie hasza o tym znaczyłoby, że nie są.
+        for k in magnat_core::TaxKind::ALL {
+            h.write_u32(self.code.rate_of(*k));
+        }
     }
 }
 

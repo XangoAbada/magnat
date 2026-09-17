@@ -113,13 +113,16 @@ pub fn miesieczny(
 
     // 2. Jakość placówek i pokrycie obwodowe.
     let miesiac = magnat_core::SimCalendar::new(t).month_of_year();
+    // Udziały planu **po uchwałach rady** (M8e) — ta sama tablica, którą dostał
+    // przed chwilą `budget::close_month`. Bez władzy są to udziały z danych.
+    let udzialy = crate::rule::shares(city, t);
     let mut powody = services::update_quality(
         &mut city.services,
         &city.budget,
-        &city.policy,
         &city.district_population,
         &tuning,
         miesiac,
+        &udzialy,
     );
     services::publish_coverage(&mut city.services, &tuning);
 

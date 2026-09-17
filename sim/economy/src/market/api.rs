@@ -299,6 +299,24 @@ impl Market {
 
     /// Konto reszty świata — druga strona zakupów u dostawcy i wypłat dochodu.
     #[must_use]
+    /// Przestawia godziny handlu wszystkim sklepom dzielnicy (uchwała rady, M8e).
+    ///
+    /// Zwraca liczbę sklepów, których to dotknęło — zero znaczy „uchwała o dzielnicy
+    /// bez sklepów", a to jest odpowiedź, nie awaria. Godziny są `OpenHours`, czyli
+    /// tym samym typem, którym posługują się mieszkaniec i rampa magazynu (`K-34`):
+    /// uchwała ma zmieniać to, co widać w sklepie, a nie drugą reprezentację obok.
+    pub fn set_trading_hours(&self, district: u16, hours: magnat_agents::OpenHours) -> usize {
+        let mut m = self.lock();
+        let mut ile = 0;
+        for s in &mut m.shops {
+            if s.district == district {
+                s.hours = hours;
+                ile += 1;
+            }
+        }
+        ile
+    }
+
     pub fn rest_of_world(&self) -> AccountId {
         self.lock().rest_of_world
     }

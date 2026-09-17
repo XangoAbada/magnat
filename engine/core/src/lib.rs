@@ -59,11 +59,13 @@ pub use vocab::{
     ClaimPriority,
     CommitmentKind, DeprivationEffect, EventCategory, FirmStrategy, FixedCost, GateKind,
     LeaveCause, LifeEventKind, LineStopCause, LoanKind, LossKind, MigrationKind, NeedKind,
-    PermitKind, PlaceKind, PlaceRef, PriceBasis, PriceDriver, ReactionKind, RejectCause,
+    PermitKind, PlaceKind, PlaceRef, PolicyKind, PriceBasis, PriceDriver, ReactionKind,
+    RejectCause,
     RejectCredit, RemedyKind, ResourceKind, RoadClass, Season, ServiceKind, ShortageStageKind,
-    SpendCategory, StockCat, TaxKind, TraitId, TransportMode, Trend, UtilityKind, UtilityService,
-    WageCause, WorldCoord, AGENCY_KIND_COUNT, CLAIM_PRIORITY_COUNT, FIXED_COST_COUNT,
-    LOSS_KIND_COUNT, NEED_COUNT, REJECT_CAUSE_COUNT, SERVICE_KIND_COUNT, SPEND_CATEGORY_COUNT,
-    STOCK_CAT_COUNT, TAX_KIND_COUNT, UTILITY_KIND_COUNT,
+    SpendCategory, StockCat, TaxKind, TenderKind, TraitId, TransportMode, Trend, UtilityKind,
+    UtilityService, VoteDriver, WageCause, WorldCoord, AGENCY_KIND_COUNT, CLAIM_PRIORITY_COUNT,
+    FIXED_COST_COUNT, LOSS_KIND_COUNT, NEED_COUNT, POLICY_KIND_COUNT, REJECT_CAUSE_COUNT,
+    SERVICE_KIND_COUNT, SPEND_CATEGORY_COUNT, STOCK_CAT_COUNT, TAX_KIND_COUNT,
+    UTILITY_KIND_COUNT,
 };
 pub use weather::{weather_at, Weather};

@@ -1106,7 +1106,142 @@ pub fn describe(c: &Catalog, l: Locale, r: DecisionReason) -> String {
                 ("wynik", &crate::zlotowki(last_result)),
             ],
         ),
+        DecisionReason::PolicyEnacted {
+            kind,
+            for_bp,
+            delay_days,
+        } => c.fmt_key(
+            l,
+            "ui.reason.PolicyEnacted",
+            &[
+                ("uchwala", &policy_kind(c, l, kind)),
+                ("poparcie", &procent(u32::from(for_bp))),
+                ("dni", &days(c, l, u32::from(delay_days))),
+            ],
+        ),
+        DecisionReason::TaxRateChanged {
+            kind,
+            from_bp,
+            to_bp,
+            gap_bp,
+        } => c.fmt_key(
+            l,
+            if to_bp > from_bp {
+                "ui.reason.TaxRateUp"
+            } else {
+                "ui.reason.TaxRateDown"
+            },
+            &[
+                ("danina", &tax_kind(c, l, kind)),
+                ("z", &procent(u32::from(from_bp))),
+                ("na", &procent(u32::from(to_bp))),
+                ("luka", &format!("{gap_bp}")),
+            ],
+        ),
+        DecisionReason::TenderPublished {
+            subject,
+            subject_id,
+            budget,
+        } => c.fmt_key(
+            l,
+            "ui.reason.TenderPublished",
+            &[
+                ("przedmiot", &tender_kind(c, l, subject)),
+                ("numer", &format!("{subject_id}")),
+                ("budzet", &crate::zlotowki(budget)),
+            ],
+        ),
+        DecisionReason::TenderAwarded {
+            subject,
+            price,
+            score_bp,
+            runner_up_bp,
+            bids,
+        } => {
+            if bids == 0 {
+                c.fmt_key(
+                    l,
+                    "ui.reason.TenderNoBids",
+                    &[("przedmiot", &tender_kind(c, l, subject))],
+                )
+            } else {
+                c.fmt_key(
+                    l,
+                    "ui.reason.TenderAwarded",
+                    &[
+                        ("przedmiot", &tender_kind(c, l, subject)),
+                        ("cena", &crate::zlotowki(price)),
+                        ("punkty", &procent(u32::from(score_bp))),
+                        ("drugi", &procent(u32::from(runner_up_bp))),
+                        ("oferty", &format!("{bids}")),
+                    ],
+                )
+            }
+        }
+        DecisionReason::ElectionHeld {
+            turnout_bp,
+            winner_bp,
+            incumbent,
+        } => c.fmt_key(
+            l,
+            if incumbent {
+                "ui.reason.ElectionHeldIncumbent"
+            } else {
+                "ui.reason.ElectionHeldChange"
+            },
+            &[
+                ("frekwencja", &procent(u32::from(turnout_bp))),
+                ("wynik", &procent(u32::from(winner_bp))),
+            ],
+        ),
+        DecisionReason::VoteCast {
+            candidate,
+            driver,
+            margin_bp,
+        } => c.fmt_key(
+            l,
+            "ui.reason.VoteCast",
+            &[
+                ("kandydat", &format!("{}", candidate + 1)),
+                ("motyw", &vote_driver(c, l, driver)),
+                ("przewaga", &procent(u32::from(margin_bp))),
+            ],
+        ),
+        DecisionReason::CampaignBacked {
+            candidate,
+            amount,
+            illegal,
+        } => c.fmt_key(
+            l,
+            if illegal {
+                "ui.reason.CampaignBackedIllegal"
+            } else {
+                "ui.reason.CampaignBacked"
+            },
+            &[
+                ("kandydat", &format!("{}", candidate + 1)),
+                ("kwota", &crate::zlotowki(amount)),
+            ],
+        ),
     }
+}
+
+/// Rodzaj uchwały rady jako nazwa (M8e).
+#[must_use]
+pub fn policy_kind(c: &Catalog, l: Locale, k: magnat_core::PolicyKind) -> String {
+    c.fmt_key(l, &format!("ui.policy.{}", k.name()), &[])
+}
+
+/// Przedmiot przetargu jako nazwa (M8e).
+#[must_use]
+pub fn tender_kind(c: &Catalog, l: Locale, k: magnat_core::TenderKind) -> String {
+    c.fmt_key(l, &format!("ui.tender.{}", k.name()), &[])
+}
+
+/// Motyw głosu wyborcy jako nazwa (M8e).
+#[must_use]
+pub fn vote_driver(c: &Catalog, l: Locale, k: magnat_core::VoteDriver) -> String {
+    c.fmt_key(l, &format!("ui.vote.{}", k.name()), &[])
 }
 
 /// Rodzaj usługi publicznej jako nazwa (M8d).
@@ -1712,6 +1847,15 @@ mod tests {
             }
             for k in magnat_core::PermitKind::ALL {
                 assert!(!permit_kind(&c, l, *k).is_empty());
+            }
+            for k in magnat_core::PolicyKind::ALL {
+                assert!(!policy_kind(&c, l, *k).is_empty());
+            }
+            for k in magnat_core::TenderKind::ALL {
+                assert!(!tender_kind(&c, l, *k).is_empty());
+            }
+            for k in magnat_core::VoteDriver::ALL {
+                assert!(!vote_driver(&c, l, *k).is_empty());
             }
         }
     }

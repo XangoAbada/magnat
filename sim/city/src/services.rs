@@ -27,10 +27,10 @@
 
 use magnat_core::{
     DecisionReason, DistrictId, HashState, Money, ServiceCoverage, ServiceKind, SiteId,
-    SpendCategory, StateHasher, Q, SERVICE_KIND_COUNT,
+    SpendCategory, StateHasher, Q, SERVICE_KIND_COUNT, SPEND_CATEGORY_COUNT,
 };
 
-use crate::budget::{BudgetPolicy, CityBudget};
+use crate::budget::CityBudget;
 use crate::tuning::CityTuning;
 
 /// Placówka publiczna (M8d §5.3).
@@ -200,12 +200,23 @@ impl DistrictPopulation {
 pub fn update_quality(
     services: &mut PublicServices,
     budget: &CityBudget,
-    policy: &BudgetPolicy,
     pop: &DistrictPopulation,
     tuning: &CityTuning,
     month_of_year: u8,
+    shares: &[u32; SPEND_CATEGORY_COUNT],
 ) -> Vec<(SiteId, DecisionReason)> {
-    let plan = budget.plan_base_month();
+    // **Plan po cięciu, nie plan** (`CH-4`). Do M8e jakość placówki liczyła się
+    // z planu wydatków, a plan jest deklaracją: miasto, które musiało przyciąć
+    // wydatki o trzydzieści procent, miało w tej liczbie szkoły tak samo dobre
+    // jak miasto z nadwyżką. Łańcuch „deficyt → cięcie → gorsza szkoła → niższe
+    // poparcie → przegrane wybory" z §1 dokumentu fazy stoi na tej jednej korekcie.
+    let plan = Money(
+        budget.plan_base_month().get()
+            - budget
+                .plan_base_month()
+                .mul_ratio(i64::from(budget.cut_bp.min(10_000)), 10_000)
+                .get(),
+    );
     // Ile pieniędzy przypada na rodzaj usługi w tym miesiącu i jak dzieli się to
     // między placówki: **proporcjonalnie do pojemności**, bo szpital na tysiąc łóżek
     // kosztuje więcej niż przychodnia na dwadzieścia. Podział po równo zagłodziłby
@@ -214,7 +225,10 @@ pub fn update_quality(
     for s in services.all() {
         pojemnosc[s.kind.as_index()] += u64::from(s.capacity.max(1));
     }
-    let udzialy = policy.shares();
+    // Udziały przychodzą **z zewnątrz**, już po nałożeniu uchwał rady, i to jest
+    // ta sama tablica, którą dostaje `budget::close_month` (`Policy::SpendShare`).
+    // Druga droga do jednej z tych dwóch liczb byłaby drogą do jakości za darmo.
+    let udzialy = shares;
     let mut pula = [0i64; SERVICE_KIND_COUNT];
     for k in ServiceKind::ALL {
         // Udział kierunku wydatku dzieli się jeszcze między rodzaje usług,
@@ -422,7 +436,8 @@ mod tests {
         s.all_mut()[1].staff = 0;
         let budzet = CityBudget::new(magnat_economy::AccountId(0));
         let pop = DistrictPopulation(vec![1000, 1000]);
-        update_quality(&mut s, &budzet, &BudgetPolicy::default(), &pop, &t, 2);
+        let udzialy = crate::budget::BudgetPolicy::default().shares();
+        update_quality(&mut s, &budzet, &pop, &t, 2, &udzialy);
         assert!(
             s.all()[0].quality.get() > s.all()[1].quality.get(),
             "obsadzona {} vs pusta {}",

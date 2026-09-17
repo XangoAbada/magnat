@@ -140,13 +140,22 @@ fn domiar_trafia_do_budzetu_bez_naruszenia_t1() {
         .expect("Σ sald == podaż pieniądza");
 
     // 4. Złapany przestaje ukrywać — inaczej kara byłaby podatkiem, a nie karą.
+    //
+    // **Kryterium mierzy skutek kary, a nie stan po kolejnych miesiącach**, i to
+    // jest korekta wpisana w M8e: domiar zeruje udział ukrywany, ale zakład pod
+    // presją zaczyna go odbudowywać co miesiąc (`update_shadow_share`) — to jest
+    // zamierzone i jest treścią `R10` („albo wszyscy oszukują, albo nikt").
+    // Pierwsza wersja testu żądała dokładnego zera na **końcu** przebiegu, czyli
+    // pytała „i nigdy więcej nie ukrywał", a to jest inne pytanie. Przechodziła,
+    // dopóki żaden złapany zakład nie wpadł w kłopoty; od M8e jakość placówek
+    // liczy się z planu **po cięciu** (`CH-4`), więc wpadają.
     let market = app.world.resource::<Market>();
     for c in &sprawy {
         if c.remedy.is_some() {
-            assert_eq!(
-                market.unreported_bps_of(c.subject),
-                0,
-                "zakład po domiarze dalej ukrywa obrót"
+            let teraz = market.unreported_bps_of(c.subject);
+            assert!(
+                teraz < 3_000,
+                "zakład po domiarze wrócił do poziomu sprzed kontroli: {teraz} bp"
             );
         }
     }

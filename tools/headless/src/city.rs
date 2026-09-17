@@ -262,3 +262,68 @@ fn dzielnica_budynku(city: &CityData, building: u32) -> u16 {
         .and_then(|b| city.parcels.parcels.get(b.parcel.0.index() as usize))
         .map_or(0, |p| p.district.0)
 }
+
+/// Co most postawił po stronie władzy.
+pub struct GovSetup {
+    pub districts: usize,
+    /// Oś dominująca burmistrza startowego — nazwa do raportu.
+    pub mayor_axis: &'static str,
+    pub council_seats: u8,
+    pub term_months: u32,
+}
+
+/// Dokłada do stojącego miasta władzę: burmistrza, radę i kalendarz kadencji (M8e).
+///
+/// Osobne wywołanie od [`setup`] i [`setup_services`] z tego samego powodu co tamte:
+/// inna warstwa i inny warunek wejścia. Władza potrzebuje **dzielnic** (poparcie
+/// liczy się per obwód) i **usług** (poparcie stoi na ich pokryciu), więc stoi
+/// po obu — postawiona wcześniej mierzyłaby pokrycie, którego jeszcze nie ma.
+///
+/// Burmistrz startowy **nie pochodzi z wyborów** i nie udaje, że pochodzi:
+/// pierwsza kadencja zaczyna się w dobie zero z programem wyprowadzonym z ziarna
+/// świata, a pierwsze prawdziwe wybory wypadają po `term_months`. Inaczej trzeba by
+/// przeprowadzić wybory na mieście, które nie przeżyło jeszcze ani jednej doby,
+/// a wyborca bez przeżytego miesiąca nie ma czego ocenić.
+///
+/// # Errors
+/// Zwraca błąd, gdy nie da się wczytać `data/city/government.ron` albo gdy miasto
+/// nie stoi jeszcze w świecie.
+pub fn setup_government(
+    world: &mut World,
+    city_data: &CityData,
+    seed: u64,
+) -> Result<GovSetup, Box<dyn Error>> {
+    let tuning = magnat_city::GovTuning::load_default()?;
+    let dzielnic = city_data.districts.districts.len().max(1);
+    let seats = tuning.council_seats;
+    let months = tuning.term_months;
+
+    // Program burmistrza startowego z ziarna świata: ten sam seed daje to samo
+    // miasto **i tego samego burmistrza**, więc przebieg jest odtwarzalny bez
+    // dodatkowego parametru scenariusza.
+    let mut r = magnat_core::rng(
+        seed,
+        magnat_core::StreamId::Election,
+        0,
+        magnat_core::Tick(0),
+    );
+    let pref = magnat_city::Preference {
+        growth_bps: r.next_u32() % 4_000 + 500,
+        social_bps: r.next_u32() % 4_000 + 500,
+        green_bps: r.next_u32() % 4_000 + 500,
+        populist_bps: r.next_u32() % 4_000 + 500,
+    }
+    .normalized();
+    let os = pref.dominant().name();
+
+    let Some(miasto) = world.get_resource_mut::<City>() else {
+        return Err("świat bez miasta — `city::setup` musi stać przed władzą".into());
+    };
+    miasto.gov = magnat_city::Government::new(pref, dzielnic, Some(tuning));
+    Ok(GovSetup {
+        districts: dzielnic,
+        mayor_axis: os,
+        council_seats: seats,
+        term_months: months,
+    })
+}

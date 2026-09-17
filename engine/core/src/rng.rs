@@ -215,10 +215,32 @@ pub enum StreamId {
     /// zaślepce `weather_at`, bo niosą go zapisy sprzed M8; ten losuje odchyłkę
     /// procesu wieloskalowego, który zna normy klimatyczne dzielnicy.
     Weather = 244,
-    // 240 i 245–247, 249–259 zarezerwowane dla M8 zgodnie z przydziałem w M8a §5.0:
-    // 240 `EventHazard` (nie powstanie — patrz `EventRoll`), 245 `Election`,
-    // 246 `Audit`, 247 `PermitProcessing`, 249 `CityPolicy`, 250 `TenderScoring`,
-    // 251 `Demography`.
+    /// Wszystko, co losuje się przy wyborach (M8e §5.7): kto staje do wyborów,
+    /// czy wyborca w ogóle poszedł głosować i na kogo oddał głos.
+    /// Klucz: indeks encji mieszkańca (albo kandydata) i tick dnia wyborów.
+    ///
+    /// **Jeden strumień na trzy losowania, a nie trzy**, bo klucz i tak je rozdziela,
+    /// a wartości `StreamId` są wieczne — trzy numery zajęte na jedną mechanikę to
+    /// trzy numery, których nie odda już żadna faza. Rzut rozstrzyga **próg**:
+    /// frekwencja i preferencja są funkcjami stanu wyborcy, a strumień mówi tylko,
+    /// po której stronie progu wypadł ten konkretny człowiek.
+    Election = 245,
+    /// Szum oferty w przetargu miejskim (M8e §5.2). Klucz: klucz firmy i tick ogłoszenia.
+    ///
+    /// Losowany jest **rozrzut wokół kosztu**, a nie sam koszt: cenę oferty liczy
+    /// firma ze swojego rachunku, a strumień dokłada to, czego rachunek nie wie —
+    /// ile komu zależy na tym zleceniu.
+    TenderScoring = 250,
+    // 240, 246–247, 249 i 251–259 zarezerwowane dla M8 zgodnie z przydziałem
+    // w M8a §5.0: 240 `EventHazard` (nie powstanie — patrz `EventRoll`),
+    // 246 `Audit`, 247 `PermitProcessing`, 249 `CityPolicy`, 251 `Demography`.
+    //
+    // **249 `CityPolicy` zostaje niezajęty po M8e i to jest odpowiedź, nie luka.**
+    // Decyzja burmistrza jest funkcją stanu miasta i wag jego preferencji: menu
+    // działań punktuje się arytmetyką całkowitą, a remis rozstrzyga kolejność
+    // `PolicyKind`. Strumień „na wybór działania" opisywałby losowość, której ta
+    // faza świadomie nie ma — burmistrz rzucający kostką nie dałby się przewidzieć
+    // graczowi, a §1 dokumentu fazy obiecuje drugiego gracza, nie ruletkę.
 }
 
 /// Encja zastępcza dla losowania bez encji (zdarzenie globalne, generator świata).

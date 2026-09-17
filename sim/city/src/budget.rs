@@ -233,6 +233,18 @@ impl CityBudget {
     }
 }
 
+/// Plan wydatków miesiąca: udziały po uchwałach rady i to, co już jest zakontraktowane.
+///
+/// Dwie tablice w jednej strukturze, bo zawsze chodzą razem i zawsze pochodzą
+/// z jednego miejsca ([`crate::rule::shares`] i [`crate::rule::contracted`]).
+/// Osobne argumenty znaczyłyby, że da się podać jedną bez drugiej — a wtedy
+/// miasto albo wydaje plan sprzed uchwały, albo płaci za odbiór odpadów dwa razy.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct SpendPlan {
+    pub shares: [u32; SPEND_CATEGORY_COUNT],
+    pub contracted: [Money; SPEND_CATEGORY_COUNT],
+}
+
 /// Wynik domknięcia miesiąca budżetowego — to, co idzie do dziennika i do inspektora.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub struct BudgetMonth {
@@ -252,6 +264,7 @@ pub struct BudgetMonth {
 pub fn close_month(
     budget: &mut CityBudget,
     policy: &BudgetPolicy,
+    plan: &SpendPlan,
     books: &mut Books,
     rest: AccountId,
     month_revenue: Money,
@@ -267,7 +280,11 @@ pub fn close_month(
     rap.debt_service = obsluz_dlug(budget, books, rest, t);
 
     let podstawa = budget.plan_base_month();
-    let udzialy = policy.shares();
+    // Udziały przychodzą po nałożeniu uchwał rady (`Policy::SpendShare`), a nie
+    // wprost z `data/city/budget.ron`: ten plik daje wartość startową, z którą
+    // miasto rusza, zanim ktokolwiek zacznie rządzić.
+    let udzialy = plan.shares;
+    let zakontraktowane = plan.contracted;
     let plan: i64 = udzialy
         .iter()
         .map(|bp| podstawa.mul_ratio(i64::from(*bp), 10_000).get())
@@ -301,7 +318,12 @@ pub fn close_month(
         };
         let pelna = podstawa.mul_ratio(i64::from(*bp), 10_000);
         let po_cieciu = Money(pelna.get() - pelna.mul_ratio(i64::from(cut_bp), 10_000).get());
-        let kwota = Money(po_cieciu.get().min(dostepne - rap.spent.get()).max(0));
+        // **Rezerwa na umowy z przetargów.** Usługa kupiona na zewnątrz jest
+        // płacona osobnym przelewem, na konto wykonawcy — więc gdyby plan szedł
+        // w całości, miasto zapłaciłoby za odbiór odpadów dwa razy: raz
+        // „reszcie świata" z planu, raz firmie z umowy.
+        let po_umowach = Money((po_cieciu.get() - zakontraktowane[i].get()).max(0));
+        let kwota = Money(po_umowach.get().min(dostepne - rap.spent.get()).max(0));
         if kwota.get() <= 0 {
             continue;
         }

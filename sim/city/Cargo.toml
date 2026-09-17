@@ -27,6 +27,11 @@ magnat-events = { workspace = true }
 magnat-firms = { workspace = true }
 # Katalog towarów (klucz towaru → klasa VAT i stawka akcyzy) oraz rozliczenia B2B.
 magnat-supply = { workspace = true }
+# Sieci przesyłowe: uchwała o suficie taryfy przestawia cenę operatora u niego
+# (M8e, `CD-5`). Kierunek `city → traffic` jest jednostronny i bezpieczny —
+# `sim/traffic` nie wie o mieście i wiedzieć nie musi; to ten sam wzorzec,
+# którym `sim/events` nakłada parametry na pola właścicieli (`CE-4`).
+magnat-traffic = { workspace = true }
 serde = { workspace = true }
 ron = { workspace = true }
 

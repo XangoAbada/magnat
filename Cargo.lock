@@ -1466,6 +1466,7 @@ dependencies = [
  "magnat-events",
  "magnat-firms",
  "magnat-supply",
+ "magnat-traffic",
  "proptest",
  "ron",
  "serde",

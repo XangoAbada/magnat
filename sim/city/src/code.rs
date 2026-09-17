@@ -9,7 +9,7 @@
 //! naliczenie ma dawać ten sam grosz na każdej platformie, więc nie przechodzi
 //! nawet przez `det_math`.
 
-use magnat_core::{GoodId, Money, Tick, UtilityService};
+use magnat_core::{GoodId, Money, TaxKind, Tick, UtilityService};
 use magnat_supply::Catalog;
 use serde::{Deserialize, Serialize};
 
@@ -98,6 +98,23 @@ pub struct TaxCode {
     /// od zera świata.
     #[serde(default)]
     pub effective_from: Tick,
+    /// Mnożnik wszystkich stawek akcyzy w punktach bazowych; 10 000 = tyle,
+    /// ile stoi w danych (M8e).
+    ///
+    /// Akcyza jest **kwotowa**, więc nie ma stawki procentowej, którą uchwała
+    /// mogłaby podnieść — a mimo to jest daniną, po którą rada sięga (podwyżka
+    /// akcyzy paliwowej jest klasycznym ruchem ekologicznego burmistrza). Mnożnik
+    /// jest jedyną postacią, w jakiej „stawka akcyzy" daje się wyrazić jedną
+    /// liczbą, i dlatego to on, a nie przepisane kwoty, jedzie w `Policy::TaxRate`.
+    /// Kwoty w `excise` zostają przez to **zawsze takie, jak w pliku**, więc
+    /// wielokrotna zmiana stawki nie kumuluje błędu zaokrąglenia.
+    #[serde(default = "domyslna_skala")]
+    pub excise_scale_bp: u32,
+}
+
+/// 10 000 bp = stawki dokładnie takie, jak zapisano w `data/city/tax.ron`.
+fn domyslna_skala() -> u32 {
+    10_000
 }
 
 #[derive(Debug)]
@@ -172,6 +189,7 @@ impl TaxCode {
             late_interest_bp_per_year: 0,
             time_bar_days: u32::MAX,
             effective_from: Tick(0),
+            excise_scale_bp: 10_000,
         }
     }
 
@@ -244,7 +262,11 @@ impl TaxCode {
             let Some(g) = cat.goods.iter().find(|g| &*g.key == r.good.as_str()) else {
                 return Err(TaxCodeError::UnknownExciseGood(r.good.clone()));
             };
-            excise[g.id.0 as usize] = r.per_kg;
+            // Mnożnik uchwały nakłada się **tutaj**, a nie na kwoty w pliku:
+            // dzięki temu dziesiąta zmiana stawki liczy się od danych, a nie
+            // od dziewiątego zaokrąglenia.
+            excise[g.id.0 as usize] =
+                r.per_kg * i64::from(self.excise_scale_bp) / 10_000;
         }
         for r in &self.excise_energy {
             if !UtilityService::ALL.iter().any(|s| s.name() == r.service) {
@@ -264,8 +286,66 @@ impl TaxCode {
             self.excise_energy
                 .iter()
                 .find(|r| r.service == service.name())
-                .map_or(0, |r| r.per_unit),
+                .map_or(0, |r| r.per_unit * i64::from(self.excise_scale_bp) / 10_000),
         )
+    }
+
+    /// Stawka daniny w jednej liczbie — tak, jak widzi ją uchwała rady (M8e).
+    ///
+    /// `Duty` i `License` zwracają zero i **nie są tu pomyłką**: stawki celne stoją
+    /// w `data/trade/tariffs.ron` (`K-37`), a opłata koncesyjna jest kwotą za rok,
+    /// nie procentem. Burmistrz po żadną z nich nie sięga przy domykaniu miesiąca
+    /// i menu decyzyjne obie pomija jawnie.
+    #[must_use]
+    pub fn rate_of(&self, kind: TaxKind) -> u32 {
+        match kind {
+            TaxKind::Cit => self.cit_bp,
+            TaxKind::Pit => self.pit_brackets.iter().map(|b| b.bp).max().unwrap_or(0),
+            TaxKind::Vat => self.standard_vat_bp(),
+            TaxKind::Property => self.property_bp_per_year,
+            TaxKind::Excise => self.excise_scale_bp,
+            TaxKind::Duty | TaxKind::License => 0,
+        }
+    }
+
+    /// Kodeks po uchwale zmieniającej stawkę jednej daniny (M8e).
+    ///
+    /// **Podwyżka VAT-u rusza wyłącznie klasy stojące dziś na stawce podstawowej**,
+    /// a nie wszystkie: stawka obniżona na żywność jest osobną decyzją polityczną
+    /// i przesuwanie jej „przy okazji" byłoby uchwałą, której nikt nie podjął.
+    /// Ta sama reguła w PIT: przesuwa się **wszystkie** progi o różnicę, bo skala
+    /// jest jedną decyzją i spłaszczanie jej przez podwyżkę górnego progu też
+    /// byłoby ruchem obok uchwały.
+    ///
+    /// `effective_from` nadaje wołający, bo to on wie, kiedy uchwała wchodzi
+    /// w życie. Należności naliczone wcześniej nie drgną — `TaxCharge` niesie
+    /// stawkę w migawce.
+    #[must_use]
+    pub fn with_rate(&self, kind: TaxKind, bps: u32, effective_from: Tick) -> TaxCode {
+        let mut out = self.clone();
+        out.effective_from = effective_from;
+        match kind {
+            TaxKind::Cit => out.cit_bp = bps,
+            TaxKind::Pit => {
+                let gora = self.rate_of(TaxKind::Pit);
+                let delta = i64::from(bps) - i64::from(gora);
+                for b in &mut out.pit_brackets {
+                    b.bp = u32::try_from((i64::from(b.bp) + delta).max(0)).unwrap_or(0);
+                }
+            }
+            TaxKind::Vat => {
+                let podstawowa = self.standard_vat_bp();
+                for c in &mut out.vat_classes {
+                    if c.bp == podstawowa {
+                        c.bp = bps;
+                    }
+                }
+            }
+            TaxKind::Property => out.property_bp_per_year = bps,
+            TaxKind::Excise => out.excise_scale_bp = bps,
+            TaxKind::Duty | TaxKind::License => {}
+        }
+        out
     }
 
     /// Ile mediów jest w tym mieście obłożonych akcyzą. Zero znaczy, że ścieżka
