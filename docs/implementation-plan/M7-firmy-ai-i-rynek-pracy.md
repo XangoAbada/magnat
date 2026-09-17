@@ -134,8 +134,8 @@ dopiero po ostatniej podfazie; podfaza zamyka się własnym kryterium ze swojego
 | **M7a — Firma jako dane** ✅ | WP1, WP2, WP3 | 5.1, 5.2, 5.3 | 10 000 firm w świecie, każda z przypisanymi trzema slotami decyzyjnymi; dodanie typu zakładu nie dotyka kodu. | `M7a-firma-jako-dane.md` |
 | **M7b — Rynek pracy** ✅ | WP4, WP5, WP6 | 5.5 | Pensje emergentne: niedobór roli podnosi ofertę bez żadnej tabeli płac w kodzie. | `M7b-rynek-pracy.md` |
 | **M7c — Polityki i menedżerowie** ✅ | WP6b, WP7 | 5.4, 5.11 | Reguła gracza i polityka firmy AI wykonują się tym samym kodem; różnica leży w jakości menedżera. | `M7c-polityki-i-menedzerowie.md` |
-| **M7d — Finanse i upadłość** | WP8, WP9 | 5.12, 5.13 | Firma bierze kredyt, przestaje go obsługiwać, bankrutuje, a wierzyciele są zaspokajani w udokumentowanej kolejności. | `M7d-finanse-i-upadlosc.md` |
-| **M7e — AI firm** | WP10, WP11, WP12, WP12b, WP14 | 5.6, 5.7, 5.8, 5.9, 5.15 | Konkurencja reaguje na gracza: otwarcie sklepu obok zmienia ceny i asortyment sąsiadów w mierzalny sposób. | `M7e-ai-firm.md` |
+| **M7d — Finanse i upadłość** ✅ | WP8, WP9 | 5.12, 5.13 | Firma bierze kredyt, przestaje go obsługiwać, bankrutuje, a wierzyciele są zaspokajani w udokumentowanej kolejności. | `M7d-finanse-i-upadlosc.md` |
+| **M7e — AI firm** ✅ | WP10, WP11, WP12, WP12b, WP14 | 5.6, 5.7, 5.8, 5.9, 5.15 | Konkurencja reaguje na gracza: otwarcie sklepu obok zmienia ceny i asortyment sąsiadów w mierzalny sposób. | `M7e-ai-firm.md` |
 | **M7f — Makro i domknięcie** | WP13, WP15, WP16, WP17 | 5.10, 5.14, 5.16 | Pełny artefakt fazy z §1 dokumentu fazy: konkurencja reaguje na gracza, pensje emergentne. | `M7f-makro-i-domkniecie.md` |
 
 ---
@@ -517,6 +517,25 @@ Zrównoleglalne: WP2, WP8, WP10, WP16. WP6b blokowane przez AST od M9 (D17), WP1
 kontrakt `sim/macro` od M10 (dostarczony).
 WP17 rośnie razem z pozostałymi, nie na końcu — testy 7.1, 7.2 i 7.3 powstają odpowiednio razem
 z WP5, WP9 i WP10, bo napisane po fakcie już niczego nie złapią.
+
+---
+
+## Zmiany wpisane po M7e
+
+Poprawki dokumentu **fazy** naniesione w trakcie podfazy M7e (`K-18`). Korekty samej
+podfazy są w tabeli „Zmiany wpisane po M7e" w `M7e-ai-firm.md`.
+Gwiazdka = zmiana zakresu albo kryterium.
+
+| # | Co | Dlaczego |
+|---|---|---|
+| `BD-1`* | **§6 „Dostarczam" zmienia adres widoku i tablicy: `FirmView` zostaje w `sim/firms`, ale jako struktura faktów; `PublicMarketBoard` przenosi się do `sim/economy`.** Podpisy mają dziś postać `Market::refresh_board(&mut PublicMarketBoard, Tick)`, `Market::run_firm_ai(&mut Firms, &PublicMarketBoard, &PolicyCatalog, &BTreeMap<SiteId, Money>, &[(Tier, Vec<FirmKey>)], Tick) -> FirmAiDay`, `firms::ai::{decide_operational, decide_tactical, decide_reaction}` | `sim/firms` nie widzi `sim/economy` i widzieć nie może. Wychodzi z tego gwarancja mocniejsza, niż §5.8 obiecywał: asymetrii informacji pilnuje **graf crate'ów**, a nie lint. Szczegóły: `BC-1`, `BC-2` |
+| `BD-2`* | **`ai::apply_decision(cmds, firm, Decided<T>)` z §6 nie powstaje pod tym adresem.** Wykonanie akcji mieszka w `sim/economy::ai_run::apply` (`Market::wykonaj_*`), bo półkę, zapas i rejestr firm ma `sim/economy` | Przypadek (2) z `K-18`: API z przykładu nie istnieje i nazywa się inaczej. Gwarancja, o którą chodziło („jedyna droga wykonania"), zostaje bez zmian — każda wykonana akcja zapisuje powód do dziennika firmy w tym samym miejscu, w którym zmienia świat |
+| `BD-3`* | **§7.6 dostaje pomiar: `ai::operational` **51,6 ns** na firmę, `ai::tactical` **21,3 ns** — wobec celów 5 µs i 200 µs.** Benchmark `sim/firms/benches/firms_bench.rs`, linia bazowa w `benches/baseline.json`, w bramce CI od M7e | Cel z §7.6 był deklaracją bez liczby. Zapas jest stukrotny, więc **wąskim gardłem tieru operacyjnego nie jest decyzja, tylko zbieranie faktów** (`ai_run::facts::zbierz` sięga po magazyn i tablicę) — i to tam należy szukać, gdyby budżet doby kiedyś przestał się spinać |
+| `BD-4`* | **Kryterium §7.3 jest spełnione dwoma testami, a jego wariant negatywny okazał się trudniejszy od dodatniego.** `firma_ai_nie_widzi_ukrytych_danych_gracza` mutuje koszt własny i gotówkę; `ale_widzi_cene_polkowa_gracza` mutuje cenę półkową i **musi** zmienić decyzję | Trudność ma przyczynę wartą zapisania: **ogranicznik marży sprzęga dane ukryte z jawnymi**. Cena przycięta do widełek kosztu **zależy od kosztu**, więc obniżenie kosztu gracza przecieka na półkę i test asymetrii zaczyna mierzyć coś innego, niż deklaruje. Test przypina cenę gracza na sztywno i **sprawdza, że ogranicznik jej nie ruszył** — bez tej asercji przechodziłby z fałszywego powodu |
+| `BD-5` | **Decyzje otwarte zamknięte w M7e: `D8` (progi klas strategicznych) — przez niebudowanie.** Klas S1/S2/S3 nie ma, bo nie ma rolloutu makro; tier kwartalny M7e to reakcja na **zmierzoną** utratę udziału, która makra nie potrzebuje. Próg wejdzie razem z WP13 i wtedy będzie co kalibrować. `D14` (widoczność `MacroState` dla gracza) zostaje otwarta z adresem **M9** — bez makra nie ma czego pokazywać | Ta sama droga, którą M7c zamknął `D18`: rozstrzygnięcie przez niebudowanie jest rozstrzygnięciem, jeśli się je zapisze |
+| `BD-6`* | **`PayrollOutbox` nadal nie ma konsumenta — adres przesuwa się z M7e na M7f.** Powód jest ten sam co przy `BB-7` i nie zniknął: przychód w `SitePnlMonth` ma **tylko zakład handlowy** (`BC-8`), a zakład produkcyjny nie ma księgi. Wypłata realnej listy płac z konta zakładu produkcyjnego, na które nic nie wpływa, wywróciłaby saldo każdej firmy przemysłowej w pierwszym miesiącu | To jest trzecie przesunięcie tego samego długu (M7b → M7d → M7e → M7f) i warto nazwać, co go faktycznie blokuje, zamiast przesuwać dalej w ciemno: **brakuje przypisania utargu hurtowego do zakładu**, czyli pola `seller_site` w `supply::Settlement`. Dopóki go nie ma, zakład produkcyjny jest dla rachunku wyniku niewidzialny — i to, a nie lista płac, jest rzeczą do zrobienia |
+| `BD-7` | **Trzy pozycje z M7b i M7c zostają otwarte z adresami:** reputacja pracodawcy w scoringu kandydata (`AW-6`) — **M10**, bo jej nośnikiem jest marka; metryka `MachineUtilization` (`AZ-3`) — **M7f**; dziedzina `Hr` w walidatorze polityk (`AX-6`, M9d) — **M7f**, bo wykonawcy akcji `Hire`/`RaiseWage` M7e nie napisał | Tier operacyjny nie dostał akcji kadrowych z rozmysłu (`BC-3`): publikacja ofert i licytacja dzieją się same od M7b. Wykonawca polityki kadrowej to jednak **inna** rzecz niż decyzja tieru — gracz ma móc napisać regułę „podnieś stawkę spawaczom o 5 %", a tego nadal nie wykonuje nikt |
+| `BD-8` | **`FirmMemory` i siła polecenia nie powstały** (zapowiedź z tabeli M7b). `Application` nadal nie ma pola `referral`, a `score_application` członu `history` | Pamięć firmy o kandydacie potrzebuje pisarza, a jedynym sensownym pisarzem jest odrzucona aplikacja — czyli mechanizm, którego M7e nie dotknął. Graf relacji należy do M10. Pole bez pisarza jest kosztem razy liczba aplikacji i zerem wartości (`AR-6`); adres: **M10** |
 
 ---
 

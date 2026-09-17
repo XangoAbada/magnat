@@ -15,9 +15,36 @@
 //! sprawą przeglądu kodu — cały moduł jest całkowitoliczbowy i pilnuje tego
 //! test statyczny (P9).
 //!
-//! Sloty na przyszłość: `wage_bid` wypełnia M7, `throughput` M6. Nie ma ich tutaj
-//! jako zaślepek, bo zaślepka z jedną implementacją to koszt bez konsumenta —
-//! są w kontrakcie §6 dokumentu fazy i wchodzą razem ze swoim wołającym.
+//! # Jądro jest regułą, a nie jednym plikiem (M7e WP12b)
+//!
+//! Plan M7e wymieniał `wage_bid` i `throughput` jako funkcje **do przeniesienia tutaj**.
+//! Przenieść ich nie można i nie jest to kwestia wygody: stawkę licytacji liczy
+//! `sim/firms`, przerób `sim/supply`, a **oba te crate'y stoją w grafie zależności
+//! przed tym** (`economy → firms`, `economy → supply`). Zależność w drugą stronę
+//! zamknęłaby cykl, którego Cargo nie zbuduje.
+//!
+//! Rozstrzygnięcie: jądro jest **zbiorem funkcji czystych o jawnych wejściach, z jednym
+//! adresem**, a nie jednym plikiem. Implementacja mieszka w crate'cie, który ma dane;
+//! adres nadaje ten moduł reeksportem. Dla `sim/macro` (M10) różnicy nie ma — woła
+//! `kernel::wage_bid` i `kernel::throughput` i dostaje dokładnie ten kod, który liczy
+//! mezo. Rozjazd dwóch implementacji jest niemożliwy, bo implementacja jest jedna.
+//!
+//! Tutaj mieszkają te funkcje jądra, których dane należą do `sim/economy`: składanie
+//! ceny, wycena zapasu, zapis księgowy i rata annuitetowa.
+
+/// Kolejna stawka w ofercie pracy — funkcja czysta niedoboru, agresji i sufitu marży
+/// (M7 §5.5, §5.15). Implementacja: `magnat_firms::labor_policy::next_bid`.
+///
+/// Reeksport, a nie kopia: reguła „ile firma dokłada" jest **decyzją firmy** (`D19`)
+/// i mieszka tam, gdzie widełki stanowiska. Tutaj jest jej adres dla modelu makro.
+pub use magnat_firms::next_bid as wage_bid;
+
+/// Przerób szarży z nominału linii, dławienia wsadem i pokrycia etatowego
+/// (M7 §7.4, §5.15). Implementacja: `magnat_supply::kernel::throughput`.
+///
+/// Reeksport z tego samego powodu co [`wage_bid`]: liczbę zna magazyn i linia,
+/// a `sim/supply` jest crate'em liściastym i o gospodarce nie wie nic.
+pub use magnat_supply::kernel::throughput;
 
 use magnat_core::{Money, Qty};
 

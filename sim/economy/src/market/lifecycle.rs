@@ -114,6 +114,7 @@ impl Market {
             depreciation_monthly: Money::ZERO,
             loan: None,
             opened: t,
+            closed: false,
         };
 
         for i in wybor {
@@ -370,3 +371,49 @@ impl Market {
 /// **odmawia przyjecia** takiej partii (`Store::put`). Stacja paliw dostanie wlasna
 /// maske razem z wlasnym archetypem — to jest decyzja M7, nie M6.
 const HAZARD_SKLEPU: u8 = 0;
+
+impl Market {
+    /// Zamyka zakład handlowy: półka schodzi, oferty znikają z areny, koszty stałe
+    /// przestają się naliczać (M7e WP12, WP15).
+    ///
+    /// Odwrotność [`Market::open_shop`] i dlatego stoi obok niej. **Rekord sklepu
+    /// zostaje** razem z księgą: historia wyniku jest tym, z czego panel tłumaczy
+    /// graczowi, dlaczego zakład padł, a usunięcie go z wektora przesunęłoby indeksy
+    /// wszystkich pozostałych — czyli `by_site` każdego innego sklepu w mieście.
+    ///
+    /// Zwraca `false`, gdy takiego zakładu nie ma albo jest już zamknięty; zamknięcie
+    /// jest **idempotentne**, bo decyzja taktyczna i upadłość mogą trafić w ten sam
+    /// zakład w tej samej dobie.
+    pub fn close_shop(&self, site: SiteId) -> bool {
+        let mut m = self.lock();
+        let Some(i) = m.by_site.get(&site).copied().map(|i| i as usize) else {
+            return false;
+        };
+        if m.shops[i].closed {
+            return false;
+        }
+        let linie = std::mem::take(&mut m.shops[i].shelf.lines);
+        for l in linie {
+            if let Some(cat) = m.goods.spec(l.good).map(|s| CategoryId::Stock(s.cat)) {
+                m.index.mark_dirty(cat);
+            }
+            m.offers.remove(l.offer);
+        }
+        m.shops[i].inventory.reorder.clear();
+        m.shops[i].assortment = AssortmentPolicy::Manual { goods: Vec::new() };
+        m.shops[i].closed = true;
+        true
+    }
+
+    /// Czy zakład handlowy jest zamknięty. `false` także dla zakładu, którego rynek
+    /// w ogóle nie zna — pytanie brzmi „czy przestał sprzedawać", a zakład
+    /// produkcyjny nigdy nie zaczął.
+    #[must_use]
+    pub fn is_shop_closed(&self, site: SiteId) -> bool {
+        let m = self.lock();
+        m.by_site
+            .get(&site)
+            .copied()
+            .is_some_and(|i| m.shops[i as usize].closed)
+    }
+}

@@ -20,7 +20,7 @@
 //! Determinizm na tym nie cierpi: kolejność zakładów w pętli produkcji jest ustalona,
 //! więc kolejność wydobycia też.
 
-use magnat_core::{DepositId, HashState, Mass, Money, Q, StateHasher};
+use magnat_core::{DepositId, HashState, Mass, Money, StateHasher, Q};
 
 /// Bilans złoża — jedyne, czego M6 od M1 potrzebuje (`K-13`).
 ///
@@ -158,12 +158,10 @@ pub fn cbrt_permille(remaining: Mass, initial: Mass) -> i64 {
 /// `round(1000 * cbrt(i/64))` dla `i` od 0 do 63. Wartość dla pełnego złoża (1000)
 /// zwracana jest gałęzią wyżej, bo `i == 64` nie mieści się w tablicy.
 const CBRT_LUT: [i64; 64] = [
-    0, 250, 315, 361, 397, 427, 454, 478, 500, 520, 539, 556,
-    572, 588, 603, 617, 630, 643, 655, 667, 679, 690, 701, 711,
-    721, 731, 741, 750, 759, 768, 777, 785, 794, 802, 810, 818,
-    825, 833, 840, 848, 855, 862, 869, 876, 883, 889, 896, 902,
-    909, 915, 921, 927, 933, 939, 945, 951, 956, 962, 968, 973,
-    979, 984, 989, 995,
+    0, 250, 315, 361, 397, 427, 454, 478, 500, 520, 539, 556, 572, 588, 603, 617, 630, 643, 655,
+    667, 679, 690, 701, 711, 721, 731, 741, 750, 759, 768, 777, 785, 794, 802, 810, 818, 825, 833,
+    840, 848, 855, 862, 869, 876, 883, 889, 896, 902, 909, 915, 921, 927, 933, 939, 945, 951, 956,
+    962, 968, 973, 979, 984, 989, 995,
 ];
 
 #[cfg(test)]

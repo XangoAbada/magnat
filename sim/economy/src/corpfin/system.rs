@@ -48,7 +48,7 @@ impl InsolvencySystem {
         InsolvencySystem {
             desc: SystemDesc::new("economy.Insolvency", Cadence::EveryDay)
                 .exclusive()
-                .after(SystemId::from_name("economy.Labor")),
+                .after_if_present(SystemId::from_name("economy.Labor")),
             payouts: Vec::new(),
         }
     }
@@ -226,7 +226,7 @@ fn posuwaj_postepowania(
 /// pominięcie tej pętli znaczyłoby pieniądz zgubiony między księgami a światem.
 /// Mieszkaniec bez gospodarstwa nie istnieje, więc wypłata trafia do gospodarstwa,
 /// w którym mieszka — tak samo jak pensja w `pay_incomes`.
-fn wyplac_sektorowi(world: &mut World, payouts: &[SectorPayout]) {
+pub(crate) fn wyplac_sektorowi(world: &mut World, payouts: &[SectorPayout]) {
     for p in payouts {
         let Some(hh) = gospodarstwo(world, p.to) else {
             continue;

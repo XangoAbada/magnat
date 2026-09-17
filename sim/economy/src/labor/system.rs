@@ -92,7 +92,7 @@ impl LaborSystem {
         LaborSystem {
             desc: SystemDesc::new("economy.Labor", Cadence::EveryDay)
                 .exclusive()
-                .after(SystemId::from_name("firms.Firm")),
+                .after_if_present(SystemId::from_name("firms.Firm")),
         }
     }
 }

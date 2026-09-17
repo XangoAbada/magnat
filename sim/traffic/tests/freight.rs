@@ -11,9 +11,7 @@ use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 use std::sync::Arc;
 
-use magnat_core::{
-    BodyType, Entity, Mass, Money, SimMinute, SiteId, Volume, WorldCoord,
-};
+use magnat_core::{BodyType, Entity, Mass, Money, SimMinute, SiteId, Volume, WorldCoord};
 use magnat_nav::{EdgeSpec, Modality, NavGraphs, NavRouter, RoadGraphBuilder};
 use magnat_supply::transport::{consolidate, ConsolidationLimits};
 use magnat_supply::{StorageClass, VehicleRequirements};
@@ -153,7 +151,12 @@ fn trasa_towarowa_ma_prawdziwe_kilometry() {
     let m = miasto();
     let q = m
         .freight
-        .quote(m.producent, m.sklepy[0], Mass(1_200_000), &wymagania(Mass(1_200_000)))
+        .quote(
+            m.producent,
+            m.sklepy[0],
+            Mass(1_200_000),
+            &wymagania(Mass(1_200_000)),
+        )
         .expect("trasa istnieje");
     // Manhattan z (0,0) do (7,7) po siatce 200 m to 2 800 m; router nie ma krótszej drogi.
     assert_eq!(
@@ -194,7 +197,10 @@ fn ladunek_wiekszy_od_pojazdu_kosztuje_tyle_ile_kursow() {
         b.cost.0,
         a.cost.0
     );
-    assert_eq!(b.distance_m, a.distance_m, "dystans jednego kursu bez zmian");
+    assert_eq!(
+        b.distance_m, a.distance_m,
+        "dystans jednego kursu bez zmian"
+    );
 }
 
 /// `dc_beats_direct` (§7.7): dziesięć sklepów zaopatrywanych przez centrum
@@ -204,11 +210,9 @@ fn ladunek_wiekszy_od_pojazdu_kosztuje_tyle_ile_kursow() {
 /// dziesięć razy) i ze stawki za kilometr **pojazdu**, a nie za tonokilometr.
 #[test]
 fn dc_beats_direct() {
-    use magnat_supply::store::WarehouseRole;
-    use magnat_supply::{
-        Carrier, StorageClass, Store, Transport, TransportRequest,
-    };
     use magnat_core::DecisionReason;
+    use magnat_supply::store::WarehouseRole;
+    use magnat_supply::{Carrier, StorageClass, Store, Transport, TransportRequest};
     let m = miasto();
     let cat = magnat_supply::load_default("contemporary").expect("katalog z data/");
     let chleb = cat.good_id("food_bread_wheat").expect("food_bread_wheat");
@@ -352,8 +356,8 @@ fn dc_beats_direct() {
         trasy.iter().any(|r| r.stops.len() > 1),
         "konsolidacja nie połączyła ani jednej pary sklepów"
     );
-    let koszt_b: i64 = t_b.get(dowoz).expect("dowóz").price.0
-        + trasy.iter().map(|r| r.cost.0).sum::<i64>();
+    let koszt_b: i64 =
+        t_b.get(dowoz).expect("dowóz").price.0 + trasy.iter().map(|r| r.cost.0).sum::<i64>();
 
     assert!(
         koszt_b < koszt_a,

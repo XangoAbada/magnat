@@ -280,12 +280,7 @@ impl Market {
                     .iter()
                     .map(|l| l.good)
                     .chain(s.observed.entries().iter().map(|e| e.good))
-                    .map(|g| {
-                        (
-                            g,
-                            m.goods.key_of(g).unwrap_or_default().to_string(),
-                        )
-                    })
+                    .map(|g| (g, m.goods.key_of(g).unwrap_or_default().to_string()))
                     .collect();
                 k.sort_by_key(|(g, _)| g.0);
                 k.dedup_by_key(|(g, _)| g.0);

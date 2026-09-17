@@ -24,8 +24,8 @@ use super::line::{BreakCause, Charge, LineState, ProductionLine};
 use super::PlantSite;
 use crate::batch::{BatchFlags, BatchOrigin};
 use crate::catalog::{Catalog, OutputKind, Recipe, RecipeSource};
-use crate::mining::Deposits;
 use crate::cost::allocate_cost;
+use crate::mining::Deposits;
 use crate::store::BatchDraft;
 use crate::store::MassIn;
 use crate::tuning::{Tuning, WattMinutes};
@@ -319,12 +319,11 @@ fn sprobuj_start(
     // Dwa niezależne ograniczniki szarży i **oba** muszą się zmieścić: wsad mówi,
     // ile jest z czego robić, obsada — ile jest komu. Mnożenie, a nie minimum:
     // zakład z połową ludzi i połową mąki robi ćwierć szarży, bo brakuje mu obu rzeczy.
-    let wsad = Mass(
-        i64::try_from(
-            i128::from(l.charge_mass(r.duration_minutes, pct).0) * i128::from(zaklad.labor_pct)
-                / i128::from(PlantSite::FULL_LABOR),
-        )
-        .unwrap_or(i64::MAX),
+    let wsad = crate::kernel::throughput(
+        l.nominal_throughput,
+        r.duration_minutes,
+        pct,
+        zaklad.labor_pct,
     );
     if wsad.0 <= 0 || r.batch_mass.0 <= 0 {
         l.state = LineState::Idle;

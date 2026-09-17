@@ -280,6 +280,49 @@ fn ograniczenie_do_nieistniejacego_systemu_jest_bledem() {
 }
 
 #[test]
+fn ograniczenie_warunkowe_milczy_gdy_celu_nie_ma_i_dziala_gdy_jest() {
+    // `K-51`: scenariusz stawia **wycinek** symulacji, więc system, którego kolejność
+    // ma znaczenie tylko wobec systemu opcjonalnego, musi mieć czym to wyrazić.
+    // Bez tego `after` wywraca połowę scenariuszy, a jego brak oddaje kolejność
+    // hashowi nazwy — czyli przypadkowi, przed którym broni `K-42`.
+    struct Pusty(SystemDesc);
+    impl System for Pusty {
+        fn desc(&self) -> &SystemDesc {
+            &self.0
+        }
+        fn run(&mut self, _ctx: &mut SystemCtx<'_>) {}
+    }
+    let b = SystemId::from_name("test.b");
+
+    // Bez celu: buduje się, i to jest cała różnica wobec `after`.
+    let mut sam = ScheduleBuilder::new();
+    sam.add(Pusty(
+        SystemDesc::new("test.a", Cadence::EveryMinute).after_if_present(b),
+    ));
+    let sam = sam.build().expect("brak celu nie jest błędem");
+
+    // Z celem: krawędź powstaje, więc odcisk grafu jest inny niż bez niej.
+    let mut para = ScheduleBuilder::new();
+    para.add(Pusty(
+        SystemDesc::new("test.a", Cadence::EveryMinute).after_if_present(b),
+    ));
+    para.add(Pusty(SystemDesc::new("test.b", Cadence::EveryMinute)));
+    let para = para.build().expect("krawędź warunkowa nie tworzy cyklu");
+
+    let mut luzno = ScheduleBuilder::new();
+    luzno.add(Pusty(SystemDesc::new("test.a", Cadence::EveryMinute)));
+    luzno.add(Pusty(SystemDesc::new("test.b", Cadence::EveryMinute)));
+    let luzno = luzno.build().expect("dwa niezależne systemy");
+
+    assert_ne!(
+        para.fingerprint(),
+        luzno.fingerprint(),
+        "ograniczenie warunkowe nie zbudowało krawędzi mimo obecnego celu"
+    );
+    let _ = sam.fingerprint();
+}
+
+#[test]
 fn duplikat_identyfikatora_systemu_jest_bledem() {
     struct Pusty(SystemDesc);
     impl System for Pusty {

@@ -22,8 +22,8 @@
 //! powodów naraz i nie mówi, z którego.
 
 use magnat_core::{
-    DepositId, Energy, Entity, FirmId, GoodId, HashState, Mass, Money, OpenHours, Q, SimMinute,
-    SiteId, StateHasher, UtilityService, Volume,
+    DepositId, Energy, Entity, FirmId, GoodId, HashState, Mass, Money, OpenHours, SimMinute,
+    SiteId, StateHasher, UtilityService, Volume, Q,
 };
 use magnat_supply::batch::TraceKind;
 use magnat_supply::catalog::load_default;
@@ -295,16 +295,11 @@ impl Lancuch {
 
     /// Pierwsza partia śledzona w slocie — punkt wejścia panelu „śledź partię".
     fn sledzona_w(&self, slot: SlotId, good: GoodId) -> Option<BatchId> {
-        self.store
-            .slot(slot)?
-            .batches()
-            .iter()
-            .copied()
-            .find(|b| {
-                self.store.batch(*b).is_some_and(|x| {
-                    x.good == good && x.flags.has(BatchFlags::TRACED)
-                })
-            })
+        self.store.slot(slot)?.batches().iter().copied().find(|b| {
+            self.store
+                .batch(*b)
+                .is_some_and(|x| x.good == good && x.flags.has(BatchFlags::TRACED))
+        })
     }
 
     fn bilans(&self, klucze: &[&str]) {

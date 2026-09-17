@@ -12,6 +12,12 @@
 //! `agents.DayLoop`, bo to on ustawia rynkowi bieżący tick i sprząta po poprzedniej
 //! minucie. Dzięki temu `fulfil` wołany w tej samej minucie widzi właściwy czas
 //! i pustą listę rezerwacji budżetu, a intencje z minuty `t−1` są już rozliczone.
+//!
+//! **Od M7e stoi też po `firms.Firm`**, i to też jest kontrakt (`K-42`): tamten
+//! system przydziela sloty decyzyjne i zostawia je w skrzynce, a ten je wykonuje.
+//! Odwrotna kolejność znaczyłaby, że firma decyduje w minucie następnej po tej,
+//! w której wypadł jej slot — czyli że rozkład obciążenia z §5.6 przestaje opisywać
+//! to, co się faktycznie dzieje.
 
 use magnat_agents::{Household, Population};
 use magnat_core::{
@@ -40,6 +46,7 @@ impl MarketSystem {
         MarketSystem {
             desc: SystemDesc::new("economy.Market", Cadence::EveryMinute)
                 .exclusive()
+                .after_if_present(SystemId::from_name("firms.Firm"))
                 .before(SystemId::from_name("agents.DayLoop")),
             intents: Vec::new(),
             households: Vec::new(),
@@ -93,6 +100,12 @@ impl System for MarketSystem {
         // 1. Rozliczenie intencji z poprzedniej minuty.
         settle_transactions(ctx.world_mut(), &market, t, &mut self.intents);
 
+        // 1a. Decyzje firm AI, którym w tej minucie wypadł slot (M7e WP11–WP14).
+        //     Przed dobą sklepu, bo tier operacyjny ustawia **cel** marży i zapasu,
+        //     a `reprice_all` i `reorder_and_receive` je wykonują — odwrotna
+        //     kolejność znaczyłaby, że decyzja firmy działa dopiero nazajutrz.
+        run_firm_ai(ctx.world_mut(), &market, t);
+
         let cal = SimCalendar::new(t);
         if cal.is_hour_boundary() {
             // 1a. Polityki o kadencji godzinowej (M9d §5.6). Dobowe wykonują się
@@ -133,6 +146,11 @@ impl System for MarketSystem {
             // Odpis terminu robi magazyn (`Store::spoil`, kadencja minutowa łańcucha)
             // i oddaje listę; tutaj zostaje samo księgowanie tego, co zeszło ze slotów
             // tego sklepu. Do M6c była to własna pętla po liniach zapasu.
+            // 4a. Tablica publiczna cen (M7e WP10) — **przed** przeceną, bo zapisuje
+            //     stan, na którym doba się zaczyna. Zapis po przecenie znaczyłby,
+            //     że firma o opóźnieniu jednej doby widzi dzisiejszą cenę rywala,
+            //     czyli że asymetria informacji ma dziurę wielkości jednego kroku.
+            refresh_board(ctx.world_mut(), &market, t);
             market.observe_competitors(t);
             // 4a. Polityki zdelegowanych zakładów (M7c WP7) — **między obserwacją
             //     a przeceną**. Reguła czyta świeży obraz konkurencji i ustawia
@@ -160,10 +178,11 @@ impl System for MarketSystem {
                 .world_mut()
                 .get_resource_mut::<CorpFinance>()
                 .map(std::mem::take);
+            let mut wyniki: Vec<(magnat_core::SiteId, u32, Money, Money)> = Vec::new();
             if let Some(books) = ctx.world_mut().get_resource_mut::<Books>() {
                 match fin.as_mut() {
                     Some(f) => {
-                        market.close_month(books, f, t);
+                        wyniki = market.close_month_with(books, f, t).1;
                     }
                     // Świat bez finansów firm to scenariusz sprzed M7d (albo test
                     // samego detalu). Miesiąc domyka się wtedy na rejestrze na jedną
@@ -172,8 +191,16 @@ impl System for MarketSystem {
                     // drugą, nietestowaną ścieżką księgowania.
                     None => {
                         let mut pusty = CorpFinance::default();
-                        market.close_month(books, &mut pusty, t);
+                        wyniki = market.close_month_with(books, &mut pusty, t).1;
                     }
+                }
+            }
+            // Utarg i koszt własny do rachunku wyniku zakładu (M7e). **Drugi pisarz
+            // jednego wpisu**: koszty zna lista płac w dniu wypłaty, przychód — księga
+            // przy domknięciu okresu, a to nie jest ta sama doba.
+            if let Some(firms) = ctx.world_mut().get_resource_mut::<magnat_firms::Firms>() {
+                for (site, miesiac, utarg, koszt) in wyniki {
+                    firms.post_revenue(site, miesiac, utarg, koszt);
                 }
             }
             if let (Some(f), Some(slot)) = (fin, ctx.world_mut().get_resource_mut::<CorpFinance>())
@@ -520,4 +547,149 @@ fn run_policies(world: &mut World, market: &Market, t: Tick) {
     };
     market.run_policies(&mut firms, &salda, t);
     *world.resource_mut::<magnat_firms::Firms>() = firms;
+}
+
+/// Dobowy zapis tablicy publicznej cen (M7e WP10).
+fn refresh_board(world: &mut World, market: &Market, t: Tick) {
+    let Some(mut board) = world
+        .get_resource_mut::<crate::board::PublicMarketBoard>()
+        .map(std::mem::take)
+    else {
+        return;
+    };
+    market.refresh_board(&mut board, t);
+    *world.resource_mut::<crate::board::PublicMarketBoard>() = board;
+}
+
+/// Minuta AI firm: wykonanie decyzji, którym `firms.Firm` przydzielił slot (M7e).
+///
+/// Rejestr firm **wyjmuje się** ze świata na czas kroku — ten sam wzorzec co przy
+/// `run_policies` i z tego samego powodu: salda prowadzi `Books`, a dwóch pożyczek
+/// `&mut World` naraz nie ma.
+fn run_firm_ai(world: &mut World, market: &Market, t: Tick) {
+    let Some(due) = world
+        .get_resource_mut::<magnat_firms::DecisionOutbox>()
+        .map(magnat_firms::DecisionOutbox::take)
+        .filter(|d| d.iter().any(|(_, k)| !k.is_empty()))
+    else {
+        return;
+    };
+    let Some(board) = world
+        .get_resource::<crate::board::PublicMarketBoard>()
+        .cloned()
+    else {
+        return;
+    };
+    let Some(catalog) = world
+        .get_resource::<magnat_policy::PolicyCatalog>()
+        .cloned()
+    else {
+        return;
+    };
+    let konta = market.shop_accounts();
+    let salda: std::collections::BTreeMap<magnat_core::SiteId, Money> = world
+        .get_resource::<Books>()
+        .map(|b| {
+            konta
+                .iter()
+                .filter_map(|(site, acc)| b.balance(*acc).map(|m| (*site, m)))
+                .collect()
+        })
+        .unwrap_or_default();
+    let Some(mut firms) = world
+        .get_resource_mut::<magnat_firms::Firms>()
+        .map(std::mem::take)
+    else {
+        return;
+    };
+    let dzien = market.run_firm_ai(&mut firms, &board, &catalog, &salda, &due, t);
+    *world.resource_mut::<magnat_firms::Firms>() = firms;
+    for site in dzien.to_close {
+        close_site(world, market, site, t);
+    }
+}
+
+/// Domknięcie zamknięcia zakładu (M7e WP12).
+///
+/// Decyzję podjął tier taktyczny, ale jej wykonanie dotyka trzech rzeczy, których
+/// rynek nie widzi: umów (komponent `Employment` mieszkańca), puli wakatów miasta
+/// i odpraw. Idzie przez [`crate::labor::hr::dismiss_all`], czyli przez tę samą
+/// jedyną drogę wyjścia z etatu, którą chodzi upadłość — inaczej niezmiennik
+/// „każdy `Employment` zakończony dokładnie raz" miałby drugą, nietestowaną ścieżkę.
+///
+/// **Odprawa jest tu wypłacana, a nie naliczana**, i to jest cała różnica wobec
+/// upadłości: firma zamykająca nierentowny zakład nadal istnieje i nadal ma konto.
+/// Gdy na nim nie starcza, kwota zostaje zaległością — ta sama gałąź, którą
+/// `close_month` obsługuje niezapłacony czynsz.
+fn close_site(world: &mut World, market: &Market, site: magnat_core::SiteId, t: Tick) {
+    let Some(mut firms) = world
+        .get_resource_mut::<magnat_firms::Firms>()
+        .map(std::mem::take)
+    else {
+        return;
+    };
+    let Some(hr) = world
+        .get_resource::<crate::labor::LaborHandle>()
+        .and_then(crate::labor::LaborHandle::get)
+        .map(crate::labor::LaborMarket::hr_tuning)
+    else {
+        *world.resource_mut::<magnat_firms::Firms>() = firms;
+        return;
+    };
+    let firma = firms.site(site).map(|s| s.firm);
+    let odprawy = {
+        let mut people = crate::labor::system::WorldWorkforce::new(world);
+        crate::labor::hr::dismiss_all(
+            &hr,
+            &mut firms,
+            &mut people,
+            site,
+            magnat_core::SimMinute(t.get()),
+        )
+    };
+    firms.close_site(site);
+    *world.resource_mut::<magnat_firms::Firms>() = firms;
+    market.close_shop(site);
+    let Some(konto) = market.shop_account(site) else {
+        return;
+    };
+    let mut wyplaty: Vec<crate::corpfin::SectorPayout> = Vec::new();
+    for (c, odprawa) in odprawy {
+        if odprawa.get() <= 0 {
+            continue;
+        }
+        let memo = TxMemo::new(
+            TxKind::Wage { site },
+            DecisionReason::JobLeft {
+                role: magnat_core::JobRoleId(0),
+                cause: magnat_core::LeaveCause::Redundancy,
+                tenure_days: 0,
+            },
+        );
+        let zaplacone = world
+            .get_resource_mut::<Books>()
+            .is_some_and(|b| b.household_receive(konto, odprawa, memo, t).is_ok());
+        if zaplacone {
+            wyplaty.push(crate::corpfin::SectorPayout {
+                to: c,
+                amount: odprawa,
+                reason: memo.reason,
+            });
+            continue;
+        }
+        // Zakład, którego nie stać na odprawę, zostawia po sobie dług — ta sama
+        // gałąź, którą `close_month` obsługuje niezapłacony czynsz (M7d `BA-5`).
+        if let (Some(f), Some(fin)) = (firma, world.get_resource_mut::<CorpFinance>()) {
+            fin.arrears_mut().accrue(
+                crate::books::AccountOwner::Firm(magnat_firms::firm_id(f)),
+                crate::books::AccountOwner::Citizen(c),
+                odprawa,
+                crate::corpfin::ClaimOrigin::Severance,
+                t,
+            );
+        }
+    }
+    // Druga połowa kanału `household_sector_out`: kwota zeszła z ksiąg, więc musi
+    // wejść do gospodarstwa — inaczej pieniądz ginie między księgą a światem.
+    crate::corpfin::system::wyplac_sektorowi(world, &wyplaty);
 }

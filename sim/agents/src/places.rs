@@ -16,8 +16,8 @@ use crate::components::{Employment, Identity, Needs, Personality, Residence, Vit
 use crate::needs::NeedTable;
 use crate::store::Knowledge;
 use magnat_core::{
-    BuildingId, CitizenId, DecisionReason, Entity, HouseholdId, MinuteOfDay, Money,
-    NeedKind, PlaceKind, PlaceRef, SimMinute, SiteId, TransportMode, WorldCoord, Q,
+    BuildingId, CitizenId, DecisionReason, Entity, HouseholdId, MinuteOfDay, Money, NeedKind,
+    PlaceKind, PlaceRef, SimMinute, SiteId, TransportMode, WorldCoord, Q,
 };
 use magnat_sim_snapshot::PedestrianRecord;
 use magnat_spatial::{Aabb2, CategoryGrid, GridSpec, Vec2};
@@ -826,8 +826,8 @@ impl PlaceProvider for EmptyPlaces {
 
 #[cfg(test)]
 mod tests {
-    use magnat_core::DayOfWeek;
     use super::*;
+    use magnat_core::DayOfWeek;
 
     #[test]
     fn godziny_otwarcia_zawijaja_sie_przez_polnoc() {

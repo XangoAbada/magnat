@@ -14,9 +14,7 @@
 use std::sync::Arc;
 
 use magnat_agents::{AgentSources, NeedTable, PlaceTable, TravelOracle};
-use magnat_core::{
-    DecisionReason, Entity, FirmId, Mass, Money, PlaceKind, Qty, SiteId, Tick,
-};
+use magnat_core::{DecisionReason, Entity, FirmId, Mass, Money, PlaceKind, Qty, SiteId, Tick};
 use magnat_economy::{
     AccountId, AccountKind, AccountOwner, Books, EconomyData, GoodTable, HouseholdMonthReport,
     Market, ShopSeed, TxKind, TxMemo,
@@ -324,14 +322,18 @@ pub fn setup(
     // Zakłady produkcyjne — **po** sklepach, bo obie ścieżki chodzą po tej samej liście
     // `city.sites.sites` i muszą się na niej nie przeciąć, a `to_sklep` jest jedynym
     // rozstrzygnięciem, które je rozdziela.
-    let plants = if std::env::var_os("MAGNAT_NO_PLANTS").is_some() { Default::default() } else { crate::plants::obsadz_zaklady(
-        city,
-        &chain,
-        &market,
-        &mut books,
-        rest,
-        &crate::plants::InitialStock::load_default()?,
-    ) };
+    let plants = if std::env::var_os("MAGNAT_NO_PLANTS").is_some() {
+        Default::default()
+    } else {
+        crate::plants::obsadz_zaklady(
+            city,
+            &chain,
+            &market,
+            &mut books,
+            rest,
+            &crate::plants::InitialStock::load_default()?,
+        )
+    };
 
     // Bank miasta (M5d §5.10, decyzja otwarta nr 7): `FirmId`, konto i kapitał,
     // a jego „AI" to `assess_credit`. Identyfikator poza przestrzenią firm miasta,
@@ -364,6 +366,15 @@ pub fn setup(
     // transport i rynek B2B w tej kolejności, arena partii w kolejności indeksów
     // (`K-16`). Cztery osobne zasoby rozbiłyby krok, który i tak dotyka ich wszystkich.
     world.register_resource_hash::<ChainHandle>();
+
+    // Tablica publiczna cen i katalog presetów polityk (M7e WP10, `AZ-1`).
+    // Tablica wchodzi do hasha, katalog nie — jest danymi z `data/policies/`,
+    // tak samo jak tabela ról.
+    magnat_economy::register_firm_ai(
+        world,
+        magnat_economy::PublicMarketBoard::new(),
+        magnat_policy::PolicyCatalog::load_default()?,
+    );
 
     // **To jest cała podmiana z `Z-1`**: rynek zamiast atrapy miejsc z M3.
     *world.resource_mut::<AgentSources>() = AgentSources::new(Box::new(market.clone()), travel);

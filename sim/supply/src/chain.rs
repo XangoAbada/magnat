@@ -23,7 +23,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use magnat_core::{HashState, SimMinute, SiteId, StateHasher};
 
-use crate::b2b::{Settlement, B2b};
+use crate::b2b::{B2b, Settlement};
 use crate::catalog::Catalog;
 use crate::inventory::{InventoryRule, PreferredSource};
 use crate::mining::{Deposits, NoDeposits};
@@ -159,9 +159,14 @@ impl Chain {
             now,
         );
 
-        let mut rozliczenia =
-            self.b2b
-                .resolve_due(cat, &mut self.store, &mut self.transport, oracle, tuning, now);
+        let mut rozliczenia = self.b2b.resolve_due(
+            cat,
+            &mut self.store,
+            &mut self.transport,
+            oracle,
+            tuning,
+            now,
+        );
         rozliczenia.append(&mut self.b2b.run_contracts(
             cat,
             &mut self.store,
@@ -190,7 +195,7 @@ impl Chain {
         let scalone = self.store.coalesce_phase((now.0 % 1_440) as u32);
         if now.0.is_multiple_of(1_440) {
             self.b2b.reindex(cat, &self.plant);
-            self.b2b.roll_day(tuning);
+            self.b2b.roll_day(tuning, now);
             self.b2b.absorb_exports(&mut self.store);
             self.transport.prune();
         }

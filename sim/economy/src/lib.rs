@@ -43,6 +43,8 @@
 
 #![forbid(unsafe_code)]
 
+pub mod ai_run;
+pub mod board;
 pub mod books;
 pub mod budget;
 pub mod chain_supply;
@@ -64,6 +66,8 @@ pub mod supply;
 pub mod systems;
 pub mod tax;
 
+pub use ai_run::{register_firm_ai, FirmAiDay};
+pub use board::{ObservedPrice, PublicMarketBoard, WINDOW_DAYS};
 pub use books::{
     Account, AccountId, AccountKind, AccountOwner, Books, ChargeKind, ExternalInvestorId, LoanId,
     MoneySupplyLedger, ProgramId, SupplierRef, Transaction, TxError, TxId, TxJournal, TxKind,
@@ -91,7 +95,7 @@ pub use data::{
 };
 pub use kernel::{
     annuity_payment, clamp_to_margin, ledger_post, monthly_interest, next_price, next_price_full,
-    take_cogs, LedgerError, PriceBreakdown, PriceInput, StockValue, BP,
+    take_cogs, throughput, wage_bid, LedgerError, PriceBreakdown, PriceInput, StockValue, BP,
 };
 pub use labor::{
     register_labor, Application, JobIndex, JobOffer, JobOfferId, LaborDay, LaborHandle,

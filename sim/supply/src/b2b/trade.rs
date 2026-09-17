@@ -378,7 +378,9 @@ impl B2b {
             // Szok podaży mnoży cenę świata zewnętrznego — i tylko ją. Elastyczność
             // wolumenowa i cło liczą się **od** niej, bo tak samo zachowuje się
             // prawdziwy: drożeje towar, a nie stawka celna.
-            let cena = tg.import_price().mul_ratio(i64::from(self.supply_shock(good)), 10_000);
+            let cena = tg
+                .import_price()
+                .mul_ratio(i64::from(self.supply_shock(good)), 10_000);
             let netto = Money((i128::from(cena.0) * i128::from(mass.0) / 1_000_000) as i64);
             let lead = n.lead_minutes(&t.trade, self.world_seed, now);
             let q = ImportQuote {

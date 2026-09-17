@@ -73,6 +73,71 @@
                 cooldown_h: 12,
             ),
         ),
+        // Kurs jakościowy (M7e `AZ-1`). Firma, której cechy każą stać przy górnej
+        // krawędzi widełek, **nie ściga się ceną**: trzyma marżę i schodzi z niej
+        // tylko wtedy, gdy towar zalega. Odwrotność dyskontu i dlatego stoi obok
+        // niego — dwa zakłady o tym samym koszcie mają się różnić tym, co robią,
+        // gdy obok otworzy się tańszy.
+        (
+            key: "retail_premium",
+            policy: (
+                id: (0),
+                name: "Nisza jakościowa",
+                domain: Pricing,
+                rules: [
+                    (
+                        when: Cmp(
+                            lhs: Metric(StockDays(This)),
+                            op: Gt,
+                            rhs: Lit(Days(21)),
+                        ),
+                        then: [Markdown(good: This, bp: (1000))],
+                        note: "zalega trzy tygodnie — schodzimy o dziesięć procent",
+                    ),
+                ],
+                fallback: Some(SetMargin(good: This, bp: (4000))),
+                cadence: Daily,
+                cooldown_h: 24,
+            ),
+        ),
+        // Kurs ostrożny (M7e `AZ-1`). Marża docelowa w środku widełek i jeden
+        // ogranicznik: nie schodzić poniżej kosztu powiększonego o dziesięć procent.
+        //
+        // To jest preset **domyślny** — dostaje go firma, która nie zdecydowała się
+        // ani na tanio, ani na drogo. Nie jest pusty i nie może być: zdelegowany
+        // zakład z polityką pustą to dokładnie stan, który M7e miał usunąć.
+        (
+            key: "retail_steady",
+            policy: (
+                id: (0),
+                name: "Kurs stały",
+                domain: Pricing,
+                rules: [
+                    (
+                        when: Always,
+                        then: [
+                            SetMargin(good: This, bp: (2500)),
+                            ClampPrice(
+                                good: This,
+                                min: Convert(to: GrossRetail, of: Bin(
+                                    lhs: Metric(UnitCost(This)),
+                                    op: Pct,
+                                    rhs: Lit(Bp((11000))),
+                                )),
+                                max: Convert(to: GrossRetail, of: Bin(
+                                    lhs: Metric(UnitCost(This)),
+                                    op: Pct,
+                                    rhs: Lit(Bp((18000))),
+                                )),
+                            ),
+                        ],
+                        note: "marża w środku widełek, cena nie schodzi pod koszt",
+                    ),
+                ],
+                cadence: Daily,
+                cooldown_h: 24,
+            ),
+        ),
         // Zapas min–max. To jest preset, który odpowiada na kryterium WP7: zakład
         // zdelegowany menedżerowi ma **nie pustoszeć** przez rok gry bez gracza.
         //

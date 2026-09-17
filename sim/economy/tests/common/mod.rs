@@ -101,8 +101,21 @@ pub struct Bench {
 }
 
 /// Świat testowy: dom w (0,0) i sklepy w podanych punktach, każdy z kontem i kapitałem.
+///
+/// Każdy sklep dostaje **własną dzielnicę** — tak jest wygodniej w testach, które
+/// mierzą koncentrację. Test, który potrzebuje sąsiadów w jednej dzielnicy (tablica
+/// publiczna cen M7e), woła [`bench_w_dzielnicy`].
 #[must_use]
 pub fn bench(seed: u64, pos: &[Vec2]) -> Bench {
+    bench_w_dzielnicy(seed, pos, None)
+}
+
+/// To samo, co [`bench`], ale wszystkie sklepy stoją w **jednej** dzielnicy.
+///
+/// Osobny podpis, a nie parametr tamtego, bo tamten ma kilkunastu wołających
+/// i żaden z nich o dzielnicę nie pyta.
+#[must_use]
+pub fn bench_w_dzielnicy(seed: u64, pos: &[Vec2], dzielnica: Option<u16>) -> Bench {
     let data = EconomyData::load_default().expect("data/economy/");
     let katalog = goods(&data);
     let needs = Arc::new(NeedTable::load_default().expect("data/needs/"));
@@ -134,8 +147,16 @@ pub fn bench(seed: u64, pos: &[Vec2]) -> Bench {
     );
     books.endow(rest, Money(1_000_000_000), Tick(0)).unwrap();
 
-    let market = Market::new(spec(), seed, data, katalog, lancuch_testowy(),
-        needs.clone(), places, rest);
+    let market = Market::new(
+        spec(),
+        seed,
+        data,
+        katalog,
+        lancuch_testowy(),
+        needs.clone(),
+        places,
+        rest,
+    );
     for (i, p) in pos.iter().enumerate() {
         let firm = FirmId(ent(200 + i as u32));
         let acc = books.open_account(
@@ -161,7 +182,7 @@ pub fn bench(seed: u64, pos: &[Vec2]) -> Bench {
                 kind: PlaceKind::Grocery,
                 shelf_slots: 4,
                 capacity_m3: 200,
-                district: i as u16,
+                district: dzielnica.unwrap_or(i as u16),
             },
             acc,
             Tick(0),
@@ -354,12 +375,10 @@ pub fn view(k: &[Knowledge]) -> KnowledgeView<'_> {
 /// test warstwy detalicznej nie ma się wywracać na kolejce na granicy; od badania
 /// kolejki jest `import_not_free` po stronie `sim/supply`.
 pub fn lancuch_testowy() -> magnat_supply::ChainHandle {
-    let cat = std::sync::Arc::new(
-        magnat_supply::load_default("contemporary").expect("katalog z data/"),
-    );
-    let tuning = std::sync::Arc::new(
-        magnat_supply::Tuning::load_default().expect("data/tuning/supply.ron"),
-    );
+    let cat =
+        std::sync::Arc::new(magnat_supply::load_default("contemporary").expect("katalog z data/"));
+    let tuning =
+        std::sync::Arc::new(magnat_supply::Tuning::load_default().expect("data/tuning/supply.ron"));
     let oracle: std::sync::Arc<dyn magnat_supply::FreightOracle> =
         std::sync::Arc::new(magnat_supply::FlatRateFreight {
             km: 5,

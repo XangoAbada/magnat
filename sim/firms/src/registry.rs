@@ -254,14 +254,93 @@ impl Firms {
                 if kadry.get() != 0 {
                     run.hr_costs.push((key, id, kadry));
                 }
+                // Przychód i koszt własny dopisuje później księga sklepu
+                // (`Firms::post_revenue`), bo zna je dopiero przy domknięciu okresu.
                 site.pnl.push(SitePnlMonth {
                     month: miesiac,
+                    revenue: magnat_core::Money::ZERO,
+                    cogs: magnat_core::Money::ZERO,
                     labor: magnat_core::Money(labor.saturating_add(kadry.get())),
                     fixed: site.fixed_cost_month,
                 });
             }
         }
         run
+    }
+
+    /// Dopisuje przychód i koszt własny do rachunku wyniku zakładu (M7e).
+    ///
+    /// Aktualizuje wpis tego miesiąca, jeśli lista płac już go założyła, albo zakłada
+    /// go sama. Dwa pisarze jednego wpisu, bo koszty zna lista płac w dniu wypłaty,
+    /// a przychód — księga sklepu przy domknięciu okresu, i te dwie chwile nie są
+    /// tą samą dobą. Trzecim pisarzem nie zostanie nikt: wpis jest **sumą miesiąca**,
+    /// nie dziennikiem, więc dopisywanie do niego w środku miesiąca byłoby
+    /// przepisywaniem księgi po raz drugi.
+    pub fn post_revenue(
+        &mut self,
+        site: SiteId,
+        month: u32,
+        revenue: magnat_core::Money,
+        cogs: magnat_core::Money,
+    ) -> bool {
+        let Some(s) = self.sites.get_mut(&site) else {
+            return false;
+        };
+        if let Some(wpis) = s.pnl.iter_mut().find(|p| p.month == month) {
+            wpis.revenue = revenue;
+            wpis.cogs = cogs;
+            return true;
+        }
+        s.pnl.push(SitePnlMonth {
+            month,
+            revenue,
+            cogs,
+            labor: magnat_core::Money::ZERO,
+            fixed: s.fixed_cost_month,
+        });
+        true
+    }
+
+    /// Nadaje firmie cechy: z dyrektora, jeśli firma go ma, z klucza — jeśli nie
+    /// (M7e §5.7).
+    ///
+    /// Woła się przy stawianiu miasta i przy zmianie dyrektora. `director_facts`
+    /// zwraca cechy i pozycję mieszkańca; `None` znaczy „tego człowieka już nie ma"
+    /// i firma wraca wtedy do cech wylosowanych — zarząd tymczasowy z `D15` nie jest
+    /// firmą bez charakteru, tylko firmą o charakterze nie swoim.
+    pub fn refresh_personalities(
+        &mut self,
+        world_seed: u64,
+        director_facts: impl Fn(CitizenId) -> Option<(magnat_agents::Personality, magnat_core::Q)>,
+    ) {
+        for (key, f) in &mut self.firms {
+            let cechy = f.director.and_then(&director_facts).map_or_else(
+                || crate::personality::FirmPersonality::draw(world_seed, *key),
+                |(p, status)| crate::personality::personality_from_director(&p, status),
+            );
+            f.set_personality(cechy);
+        }
+    }
+
+    /// Zamyka zakład: zwalnia załogę i zdejmuje go z listy zakładów firmy (M7e WP12).
+    ///
+    /// Zwraca listę zwolnionych razem z ich rolami — etaty trzeba domknąć po stronie
+    /// mieszkańca i po stronie puli wakatów miasta, a tego `sim/firms` nie widzi
+    /// i widzieć nie może. Zakład znika z rejestru; jego fizyka (linie, magazyn,
+    /// półka) należy do M6 i M5 i to one decydują, co z nią zrobić.
+    pub fn close_site(&mut self, site: SiteId) -> Vec<(CitizenId, magnat_core::JobRoleId)> {
+        let Some(s) = self.sites.remove(&site) else {
+            return Vec::new();
+        };
+        if let Some(f) = self.firms.get_mut(&s.firm) {
+            f.sites.retain(|id| *id != site);
+        }
+        // Kolejność: po stanowiskach w porządku `JobRoleId`, wewnątrz po obsadzeniu —
+        // ta sama, po której idzie lista płac, bo wchodzi do hasha stanu.
+        s.positions
+            .iter()
+            .flat_map(|p| p.filled.iter().map(move |e| (e.citizen, p.role)))
+            .collect()
     }
 
     /// Dopisuje powód decyzji do dziennika firmy (dokument 00 §7).

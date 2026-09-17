@@ -6,8 +6,8 @@
 //! w karcie inspekcji.
 
 use magnat_core::{
-    DecisionReason, Energy, Entity, FirmId, Mass, Money, OpenHours, Q, ShortageStageKind,
-    SimMinute, SiteId, UtilityService, Volume,
+    DecisionReason, Energy, Entity, FirmId, Mass, Money, OpenHours, ShortageStageKind, SimMinute,
+    SiteId, UtilityService, Volume, Q,
 };
 use magnat_supply::plant::{Dock, PlantSite};
 use magnat_supply::store::{BatchDraft, MassIn, WarehouseRole};
@@ -242,11 +242,7 @@ fn dostawa_zdejmuje_ze_wszystkich_szczebli_naraz() {
         p.godzina(h * 60);
     }
     assert_ne!(p.stopien(), ShortageStageKind::Ok, "zapas zdążył zejść");
-    let obnizenie = p
-        .plant
-        .get(p.site)
-        .expect("zakład")
-        .throttle_pct(p.maka);
+    let obnizenie = p.plant.get(p.site).expect("zakład").throttle_pct(p.maka);
     assert!(obnizenie < 100, "obniżona produkcja: {obnizenie}%");
 
     // Przyjeżdża ciężarówka z mąką.
@@ -271,7 +267,11 @@ fn dostawa_zdejmuje_ze_wszystkich_szczebli_naraz() {
         .expect("dostawa");
 
     p.godzina(40 * 60);
-    assert_eq!(p.stopien(), ShortageStageKind::Ok, "jedna dostawa, jeden skok w dół");
+    assert_eq!(
+        p.stopien(),
+        ShortageStageKind::Ok,
+        "jedna dostawa, jeden skok w dół"
+    );
     assert_eq!(
         p.plant.get(p.site).expect("zakład").throttle_pct(p.maka),
         100,

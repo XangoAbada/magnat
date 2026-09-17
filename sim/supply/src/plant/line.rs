@@ -260,13 +260,23 @@ impl ProductionLine {
         }
     }
 
-    /// Masa wsadu jednej szarży przy danym czasie trwania i obniżeniu produkcji.
+    /// Masa wsadu jednej szarży przy danym czasie trwania i obniżeniu produkcji,
+    /// **bez** uwzględnienia obsady.
+    ///
     /// `throttle_pct` pochodzi z kaskady niedoboru (§5.7) i jest jedynym miejscem,
     /// w którym niedobór zmienia **wielkość** szarży, a nie samą decyzję o jej starcie.
+    ///
+    /// Liczy to samo co [`crate::kernel::throughput`] przy pełnej obsadzie i liczy
+    /// to **tym samym kodem** — od M7e wzór stoi w jądrze, bo woła go także model
+    /// makro (M10), który linii produkcyjnej nie widzi.
     #[must_use]
     pub fn charge_mass(&self, duration_minutes: u32, throttle_pct: u8) -> Mass {
-        let pelna = i128::from(self.nominal_throughput.0) * i128::from(duration_minutes) / 60;
-        Mass((pelna * i128::from(throttle_pct) / 100) as i64)
+        crate::kernel::throughput(
+            self.nominal_throughput,
+            duration_minutes,
+            throttle_pct,
+            crate::kernel::FULL_LABOR,
+        )
     }
 }
 

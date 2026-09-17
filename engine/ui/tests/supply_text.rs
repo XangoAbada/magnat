@@ -61,18 +61,53 @@ fn slad_chleba() -> BatchTrace {
         stages: vec![
             etap(30 * 1440, Some(POLE), TraceKind::Produced, 664, 64, 52),
             etap(31 * 1440, Some(POLE), TraceKind::Departed, 664, 64, 53),
-            etap(31 * 1440 + 45, Some(ELEWATOR), TraceKind::Unloaded, 664, 64, 53),
+            etap(
+                31 * 1440 + 45,
+                Some(ELEWATOR),
+                TraceKind::Unloaded,
+                664,
+                64,
+                53,
+            ),
             etap(35 * 1440, Some(ELEWATOR), TraceKind::Departed, 649, 64, 54),
             etap(35 * 1440 + 50, Some(MLYN), TraceKind::Unloaded, 649, 64, 54),
             etap(36 * 1440, Some(MLYN), TraceKind::Consumed, 649, 64, 54),
             etap(36 * 1440 + 40, Some(MLYN), TraceKind::Produced, 505, 67, 63),
             etap(39 * 1440, Some(MLYN), TraceKind::Departed, 505, 67, 64),
-            etap(39 * 1440 + 22, Some(PIEKARNIA), TraceKind::Unloaded, 505, 67, 64),
+            etap(
+                39 * 1440 + 22,
+                Some(PIEKARNIA),
+                TraceKind::Unloaded,
+                505,
+                67,
+                64,
+            ),
             etap(40 * 1440, Some(PIEKARNIA), TraceKind::Consumed, 505, 67, 64),
-            etap(40 * 1440 + 190, Some(PIEKARNIA), TraceKind::Produced, 800, 72, 112),
+            etap(
+                40 * 1440 + 190,
+                Some(PIEKARNIA),
+                TraceKind::Produced,
+                800,
+                72,
+                112,
+            ),
             etap(40 * 1440 + 280, None, TraceKind::Departed, 800, 72, 145),
-            etap(41 * 1440 - 60, Some(SKLEP), TraceKind::Unloaded, 800, 72, 154),
-            etap(41 * 1440 - 30, Some(SKLEP), TraceKind::Shelved, 800, 72, 154),
+            etap(
+                41 * 1440 - 60,
+                Some(SKLEP),
+                TraceKind::Unloaded,
+                800,
+                72,
+                154,
+            ),
+            etap(
+                41 * 1440 - 30,
+                Some(SKLEP),
+                TraceKind::Shelved,
+                800,
+                72,
+                154,
+            ),
         ],
         origin: TraceOrigin::InitialStock,
         depth: 3,
@@ -154,7 +189,10 @@ fn slad_prowadzi_od_pola_do_polki() {
         );
     }
     assert!(s.contains("wytworzono"), "brak etapu wytworzenia:\n{s}");
-    assert!(s.contains("wyłożono na półkę"), "brak wyłożenia na półkę:\n{s}");
+    assert!(
+        s.contains("wyłożono na półkę"),
+        "brak wyłożenia na półkę:\n{s}"
+    );
     assert!(
         s.contains("koszt narastający"),
         "oś czasu bez kosztu narastającego nie jest panelem z §14.4:\n{s}"
@@ -198,7 +236,10 @@ fn urwany_slad_mowi_dlaczego() {
         (TraceOrigin::Imported, "import"),
         (TraceOrigin::InitialStock, "zapas"),
         (TraceOrigin::NotTraced, "nie była śledzona"),
-        (TraceOrigin::Deposit(magnat_core::DepositId(17)), "złoże nr 17"),
+        (
+            TraceOrigin::Deposit(magnat_core::DepositId(17)),
+            "złoże nr 17",
+        ),
     ] {
         t.origin = o;
         let s = karta(Locale::Pl, Some(&t));

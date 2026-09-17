@@ -18,12 +18,35 @@ impl Market {
     /// (`*Payable`). Koszt firmy jest ten sam, bo koszt powstaje w chwili, w której
     /// się należy, a nie w chwili zapłaty; zmienia się druga strona zapisu.
     pub fn close_month(&self, books: &mut Books, fin: &mut CorpFinance, t: Tick) -> Money {
+        self.close_month_with(books, fin, t).0
+    }
+
+    /// To samo, co [`Market::close_month`], plus **rachunek wyniku zakładu**: utarg
+    /// i koszt własny miesiąca dla każdego sklepu (M7e).
+    ///
+    /// Osobny podpis, a nie zmiana tamtego, bo tamten ma czternastu wołających
+    /// w testach i scenariuszach, a ten dokłada wyłącznie drugi wynik. Liczby idą
+    /// wprost z domknięcia okresu księgowego — `SitePnlMonth` nie liczy utargu
+    /// drugi raz i nie ma jak rozjechać się z RZiS.
+    pub fn close_month_with(
+        &self,
+        books: &mut Books,
+        fin: &mut CorpFinance,
+        t: Tick,
+    ) -> (Money, Vec<(SiteId, u32, Money, Money)>) {
         let mut m = self.lock();
         let rest = m.rest_of_world;
         let koszty = m.data.costs;
         let miesiac = u32::try_from(t.get() / magnat_core::time::MINUTES_PER_MONTH).unwrap_or(0);
         let mut suma = Money::ZERO;
+        let mut wyniki: Vec<(SiteId, u32, Money, Money)> = Vec::new();
         for i in 0..m.shops.len() {
+            // Zamknięty zakład nie wynajmuje lokalu, nie zużywa prądu i nikomu
+            // nie płaci — a jego księga zostaje, bo to z niej panel tłumaczy,
+            // dlaczego padł (M7e WP12).
+            if m.shops[i].closed {
+                continue;
+            }
             let (site, konto, slots) =
                 (m.shops[i].site, m.shops[i].account, m.shops[i].shelf.slots);
             let (czynsz, media, place) = koszty.monthly(slots);
@@ -107,14 +130,21 @@ impl Market {
             // zgadzać z przepływami (korekta wpisana do M5d po M5c).
             suma = Money(suma.get() + m.service_working_capital(i, books, fin, t).get());
             m.maybe_borrow_working_capital(i, books, t);
-            let _ = ledger::close_period(
+            if let Ok(zamkniecie) = ledger::close_period(
                 &mut m.shops[i].ledger,
                 miesiac,
                 t,
                 DecisionReason::Unspecified,
-            );
+            ) {
+                wyniki.push((
+                    m.shops[i].site,
+                    miesiac,
+                    zamkniecie.statement.revenue,
+                    zamkniecie.statement.cogs,
+                ));
+            }
         }
-        suma
+        (suma, wyniki)
     }
 }
 

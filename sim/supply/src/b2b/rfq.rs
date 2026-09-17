@@ -235,6 +235,7 @@ pub fn collect_quotes(
     store: &Store,
     plant: &Plant,
     index: &SellerIndex,
+    exclusives: &crate::b2b::Exclusives,
     oracle: &dyn FreightOracle,
     t: &B2bTuning,
     world_seed: u64,
@@ -246,6 +247,13 @@ pub fn collect_quotes(
             break;
         }
         if sprzedawca == rfq.deliver_to {
+            continue;
+        }
+        // Wyłączność cudzego kontraktu (M7e WP14): ten zakład sprzedaje dziś komu
+        // innemu. Nie jest to odmowa — pytający po prostu tego dostawcy nie widzi,
+        // tak samo jak nie widzi zakładu z pustą wystawką.
+        let wylacznosc = exclusives.holder(sprzedawca, rfq.good, rfq.opened_at);
+        if wylacznosc.is_some_and(|l| l.holder != rfq.buyer) {
             continue;
         }
         let Some(p) = plant.get(sprzedawca) else {
@@ -260,7 +268,17 @@ pub fn collect_quotes(
             // przy planowaniu (§6.2), więc dostawca po prostu nie startuje w przetargu.
             continue;
         };
-        let cena = z_narzutem(koszt, sprzedawca, rfq.opened_at, t, world_seed);
+        // Cena wyłączności: kto zabezpieczył sobie dostawcę, płaci mu premię.
+        // Bez niej wyłączność byłaby darmowa, a reakcja na rywala ma boleć (`R12`).
+        let cena = match wylacznosc {
+            Some(l) => Money(
+                z_narzutem(koszt, sprzedawca, rfq.opened_at, t, world_seed)
+                    .0
+                    .saturating_mul(i64::from(10_000 + l.premium_bp))
+                    / 10_000,
+            ),
+            None => z_narzutem(koszt, sprzedawca, rfq.opened_at, t, world_seed),
+        };
         let id = QuoteId(*next_quote);
         *next_quote += 1;
         rfq.quotes.push(Quote {
@@ -481,6 +499,7 @@ impl B2b {
             store,
             plant,
             &self.sellers,
+            &self.exclusives,
             oracle,
             &t.b2b,
             self.world_seed,

@@ -97,10 +97,7 @@ impl Market {
             let Some(i) = m.by_site.get(&d.site).copied() else {
                 continue;
             };
-            let (account, backroom) = (
-                m.shops[i as usize].account,
-                m.shops[i as usize].backroom,
-            );
+            let (account, backroom) = (m.shops[i as usize].account, m.shops[i as usize].backroom);
             let kat = m.goods.spec(d.good).map_or(StockCat::Other, |s| s.cat);
             if books
                 .transfer(

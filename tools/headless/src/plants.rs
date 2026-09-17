@@ -25,8 +25,8 @@
 use std::collections::BTreeMap;
 
 use magnat_core::{
-    DecisionReason, Energy, Entity, FirmId, GoodId, Mass, Money, OpenHours, PlaceKind, Q, RecipeId,
-    SimMinute, SiteId, UtilityService, Volume,
+    DecisionReason, Energy, Entity, FirmId, GoodId, Mass, Money, OpenHours, PlaceKind, RecipeId,
+    SimMinute, SiteId, UtilityService, Volume, Q,
 };
 use magnat_economy::{AccountId, AccountKind, AccountOwner, Books, Market, TxKind, TxMemo};
 use magnat_supply::{

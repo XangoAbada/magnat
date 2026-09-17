@@ -8,8 +8,8 @@
 //! koncentracja 82 %, głębokość 1 800 m, receptura `oil_well`.
 
 use magnat_core::{
-    DepositId, Energy, Entity, FirmId, GoodId, Mass, Money, OpenHours, Q, SimMinute, SiteId,
-    UtilityService, Volume,
+    DepositId, Energy, Entity, FirmId, GoodId, Mass, Money, OpenHours, SimMinute, SiteId,
+    UtilityService, Volume, Q,
 };
 use magnat_supply::catalog::load_default;
 use magnat_supply::plant::{advance_production, Dock, PlantSite, ProductionCtx};
@@ -173,7 +173,12 @@ impl Szyb {
     }
 
     fn koszt_tony(&self) -> i64 {
-        let m = self.plant.get(self.site).expect("szyb").mining.expect("złoże");
+        let m = self
+            .plant
+            .get(self.site)
+            .expect("szyb")
+            .mining
+            .expect("złoże");
         m.cost_per_tonne(
             Money(self.tuning.mining.base_gr_per_tonne),
             self.zloze.remaining(DepositId(0)),
@@ -225,7 +230,10 @@ fn prop_deposit_monotone() {
         poprzedni_koszt = koszt;
         poprzednia_konc = konc;
     }
-    assert!(poprzednie < s.zloze.initial(DepositId(0)).0, "nic nie wydobyto");
+    assert!(
+        poprzednie < s.zloze.initial(DepositId(0)).0,
+        "nic nie wydobyto"
+    );
 }
 
 /// Wydobyta masa i masa w zbiorniku to **ta sama** liczba: szyb nie tworzy ropy
@@ -240,7 +248,8 @@ fn co_zeszlo_ze_zloza_stoi_w_zbiorniku() {
     let w_zbiorniku = s.store.stock_of(s.zbiornik, s.ropa).0;
     assert!(ze_zloza > 0, "nic nie wydobyto");
     assert_eq!(
-        ze_zloza, w_zbiorniku,
+        ze_zloza,
+        w_zbiorniku,
         "różnica {} g między złożem a zbiornikiem",
         ze_zloza - w_zbiorniku
     );
@@ -343,7 +352,9 @@ fn wyczerpane_zloze_kaskaduje_do_rafinerii() {
             });
         }
         let mut linia = ProductionLine::new(
-            s.cat.machine_class_id("refinery_cdu").expect("klasa maszyny"),
+            s.cat
+                .machine_class_id("refinery_cdu")
+                .expect("klasa maszyny"),
             Mass(12_000_000), // 12 t/h — instalacja ciągła z §7.2
             Energy(4_200_000),
             s.cat.good_id("part_pump_seal").expect("part_pump_seal"),

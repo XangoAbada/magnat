@@ -36,6 +36,9 @@ serde = { workspace = true }
 magnat-nav = { workspace = true }
 magnat-world = { workspace = true }
 magnat-economy = { workspace = true }
+# Katalog presetów polityk — most stawiający miasto wpina go do świata razem
+# z tablicą publiczną cen (M7e WP10, `AZ-1`).
+magnat-policy = { workspace = true }
 magnat-firms = { workspace = true }
 # Most stawia łańcuch dostaw razem z rynkiem: od WP11 (M6d) półka bierze towar
 # z magazynu M6, więc scenariusz, klient i balansator muszą go dostać zbudowanego.

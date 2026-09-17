@@ -42,6 +42,9 @@ pub struct SystemDesc {
     /// z konfliktu dostępów (np. „naliczanie odsetek przed rozliczeniem dnia").
     pub after: Vec<SystemId>,
     pub before: Vec<SystemId>,
+    /// Ograniczenia **warunkowe**: obowiązują, jeśli wskazany system stoi w tym
+    /// harmonogramie, i milczą, jeśli go nie ma (`K-51`).
+    pub after_if_present: Vec<SystemId>,
 }
 
 impl SystemDesc {
@@ -54,6 +57,7 @@ impl SystemDesc {
             access: Access::new(),
             after: Vec::new(),
             before: Vec::new(),
+            after_if_present: Vec::new(),
         }
     }
 
@@ -108,6 +112,26 @@ impl SystemDesc {
         self.before.push(other);
         self
     }
+
+    /// „Po tamtym, **jeśli tamten tu jest**" (`K-51`).
+    ///
+    /// [`SystemDesc::after`] wymaga, żeby wskazany system stał w tym samym
+    /// harmonogramie — i słusznie, bo literówka w nazwie jest wtedy błędem budowy,
+    /// a nie po cichu zignorowaną krawędzią. Ale scenariusz stawia **wycinek**
+    /// symulacji: `m5shop` buduje rynek bez rejestru firm, `m7labor` rejestr bez
+    /// rynku, a klient graficzny jedno i drugie. System, którego kolejność ma
+    /// znaczenie tylko wobec systemu **opcjonalnego**, nie ma czym tego wyrazić
+    /// przez `after` — i albo wywraca połowę scenariuszy, albo oddaje kolejność
+    /// hashowi nazwy, czyli przypadkowi, przed którym broni `K-42`.
+    ///
+    /// Różnica wobec `after` jest jedna i jest cała: **brak celu nie jest błędem**.
+    /// Cel obecny daje dokładnie tę samą krawędź, z tym samym pierwszeństwem nad
+    /// krawędzią wyprowadzoną z konfliktu dostępów.
+    #[must_use]
+    pub fn after_if_present(mut self, other: SystemId) -> SystemDesc {
+        self.after_if_present.push(other);
+        self
+    }
 }
 
 /// Krawędzie z jawnych `before`/`after`. Wyniesione z [`ScheduleBuilder::build`],
@@ -136,6 +160,12 @@ fn krawedzie_jawne(
                 });
             };
             jawne.push((i, j));
+        }
+        // Warunkowe: cel nieobecny to **brak krawędzi**, nie błąd (`K-51`).
+        for target in &desc.after_if_present {
+            if let Some(j) = index_of(*target) {
+                jawne.push((j, i));
+            }
         }
     }
     Ok(jawne)

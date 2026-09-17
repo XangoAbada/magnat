@@ -138,6 +138,80 @@ impl HashState for SpotWindow {
 /// Jeden zasób, nie cztery, z tego samego powodu, dla którego partie i sloty poszły do
 /// jednego [`Store`] (`AD-7`): rozstrzygnięcie zapytania podpisuje kontrakt i wystawia
 /// zlecenie transportowe w jednym kroku, a `World::resource_mut` pożycza cały świat.
+/// Wyłączności dostawców — legalny kontrakt, nie zmowa (M7e WP14, PRD §7.9).
+///
+/// Firma, która traci udział w rynku, może **zabezpieczyć sobie dostawcę**: przez
+/// umówiony okres ten zakład sprzedaje jej towar wyłącznie jej, a ona płaci za to
+/// premię ponad cenę rynkową. Rywal nie dostaje odmowy z powietrza — po prostu
+/// przestaje widzieć tego dostawcę w zapytaniu ofertowym, tak jak nie widzi zakładu,
+/// który akurat nic nie ma na wystawce.
+///
+/// **To jest wyłączność, nie kartel.** Kartel to zmowa **między** sprzedawcami co do
+/// ceny i należy do M8 razem z UOKiK (M7 §2, „nie wchodzi"). Tutaj strony są dwie
+/// i obie na tym coś tracą: kupujący płaci premię, sprzedawca traci resztę rynku.
+///
+/// `BTreeMap`, bo po tej kolejności idzie hash stanu (00 §3.2).
+#[derive(Clone, PartialEq, Eq, Debug, Default)]
+pub struct Exclusives {
+    locks: BTreeMap<(u32, u16), Lock>,
+}
+
+/// Jedna wyłączność: kto ją ma, do kiedy i za ile.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Lock {
+    pub holder: FirmId,
+    pub until: SimMinute,
+    /// Premia ponad cenę rynkową, w punktach bazowych — cena wyłączności.
+    pub premium_bp: u16,
+}
+
+impl Exclusives {
+    /// Zawiera wyłączność na parę (zakład dostawcy, towar). Nadpisuje poprzednią:
+    /// druga umowa na tę samą wystawkę znaczy, że pierwsza została odkupiona.
+    pub fn lock(&mut self, seller: SiteId, good: GoodId, l: Lock) {
+        self.locks.insert((seller.entity().index(), good.get()), l);
+    }
+
+    /// Kto ma wyłączność na tę wystawkę w tej chwili. `None` znaczy „wolny rynek",
+    /// także dla umowy, której termin minął — wygasła wyłączność nikogo nie wiąże.
+    #[must_use]
+    pub fn holder(&self, seller: SiteId, good: GoodId, now: SimMinute) -> Option<Lock> {
+        self.locks
+            .get(&(seller.entity().index(), good.get()))
+            .copied()
+            .filter(|l| now.0 < l.until.0)
+    }
+
+    /// Sprząta umowy, którym minął termin. Woła się raz na dobę — bez tego mapa
+    /// rośnie przez całą grę o każdą kampanię, która kiedykolwiek się odbyła.
+    pub fn expire(&mut self, now: SimMinute) {
+        self.locks.retain(|_, l| now.0 < l.until.0);
+    }
+
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.locks.len()
+    }
+
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.locks.is_empty()
+    }
+}
+
+impl HashState for Exclusives {
+    fn hash_state(&self, h: &mut StateHasher) {
+        h.write_u32(self.locks.len() as u32);
+        for ((s, g), l) in &self.locks {
+            h.write_u32(*s);
+            h.write_u16(*g);
+            l.holder.0.hash_state(h);
+            h.write_u64(l.until.0);
+            h.write_u16(l.premium_bp);
+        }
+    }
+}
+
 pub struct B2b {
     rfqs: BTreeMap<u32, Rfq>,
     contracts: BTreeMap<u32, SupplyContract>,
@@ -153,6 +227,8 @@ pub struct B2b {
     next_quote: u32,
     next_contract: u32,
     world_seed: u64,
+    /// Wyłączności dostawców (M7e WP14).
+    exclusives: Exclusives,
 }
 
 impl B2b {
@@ -167,6 +243,7 @@ impl B2b {
             spot: vec![SpotWindow::default(); goods],
             shock_bp: vec![10_000; goods],
             tariffs,
+            exclusives: Exclusives::default(),
             next_rfq: 1,
             next_quote: 1,
             next_contract: 1,
@@ -259,6 +336,18 @@ impl B2b {
         self.sellers.sellers_of(good)
     }
 
+    /// Rejestr wyłączności — odczyt dla panelu i dla testów.
+    #[must_use]
+    pub fn exclusives(&self) -> &Exclusives {
+        &self.exclusives
+    }
+
+    /// Rejestr wyłączności do zapisu. Jedynym pisarzem jest reakcja firmy na wejście
+    /// rywala (M7e WP14); M8 dołoży drugiego, kiedy UOKiK zacznie je unieważniać.
+    pub fn exclusives_mut(&mut self) -> &mut Exclusives {
+        &mut self.exclusives
+    }
+
     /// Średnia cena spot z ostatnich siedmiu dób — `index_now` dla cennika indeksowanego.
     #[must_use]
     pub fn spot_index(&self, good: GoodId) -> Option<Money> {
@@ -266,10 +355,11 @@ impl B2b {
     }
 
     /// Koniec doby: okno cen przesuwa się, węzły odzyskują przepustowość.
-    pub fn roll_day(&mut self, t: &Tuning) {
+    pub fn roll_day(&mut self, t: &Tuning, now: SimMinute) {
         for w in &mut self.spot {
             w.roll_day();
         }
+        self.exclusives.expire(now);
         for n in &mut self.nodes {
             n.roll_day(&t.trade);
         }
@@ -390,5 +480,8 @@ impl HashState for B2b {
         for w in &self.spot {
             w.hash_state(h);
         }
+        // Wyłączność zmienia to, kto kogo widzi w przetargu — czyli stan gospodarki,
+        // a nie szczegół wykonania (M7e WP14).
+        self.exclusives.hash_state(h);
     }
 }

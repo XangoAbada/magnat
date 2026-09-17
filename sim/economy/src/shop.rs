@@ -10,8 +10,8 @@ use std::collections::BTreeMap;
 
 use magnat_agents::{SocialClass, SOCIAL_CLASS_COUNT};
 use magnat_core::{
-    FirmId, GoodId, HashState, Money, Qty, RejectCause, SiteId, StateHasher, Tick,
-    UtilityKind, REJECT_CAUSE_COUNT, UTILITY_KIND_COUNT,
+    FirmId, GoodId, HashState, Money, Qty, RejectCause, SiteId, StateHasher, Tick, UtilityKind,
+    REJECT_CAUSE_COUNT, UTILITY_KIND_COUNT,
 };
 
 use crate::ledger::Ledger;
@@ -336,6 +336,13 @@ pub struct Shop {
     pub loan: Option<crate::books::LoanId>,
     /// Tick otwarcia zakładu — staż działalności w ocenie zdolności kredytowej.
     pub opened: magnat_core::Tick,
+    /// Zakład zamknięty decyzją taktyczną albo upadłością (M7e WP12).
+    ///
+    /// Rekord **zostaje** razem z księgą: historia wyniku jest tym, z czego panel M9
+    /// tłumaczy graczowi, dlaczego zakład padł, a usunięcie sklepu z wektora
+    /// przesunęłoby indeksy wszystkich pozostałych. Zamknięty sklep nie ma półki,
+    /// nie zamawia i nie płaci czynszu — bo go nie wynajmuje.
+    pub closed: bool,
 }
 
 impl HashState for Shop {
@@ -369,6 +376,7 @@ impl HashState for Shop {
         // M5d: kredyt obrotowy jest stanem zakładu — rata wchodzi do wyniku miesiąca.
         h.write_u32(self.loan.map_or(u32::MAX, |l| l.0));
         h.write_u64(self.opened.get());
+        h.write_u8(u8::from(self.closed));
     }
 }
 

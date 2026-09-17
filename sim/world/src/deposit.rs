@@ -304,7 +304,11 @@ impl DepositLedger {
     #[must_use]
     pub fn from_rows(rows: impl IntoIterator<Item = (DepositId, Mass, Mass)>) -> DepositLedger {
         let rows: Vec<_> = rows.into_iter().collect();
-        let n = rows.iter().map(|(id, _, _)| id.0 as usize + 1).max().unwrap_or(0);
+        let n = rows
+            .iter()
+            .map(|(id, _, _)| id.0 as usize + 1)
+            .max()
+            .unwrap_or(0);
         let mut at_start = vec![Mass::ZERO; n];
         let mut reserves = vec![Mass::ZERO; n];
         for (id, start, res) in rows {
@@ -367,7 +371,10 @@ impl magnat_supply::Deposits for DepositLedger {
     }
 
     fn initial(&self, id: DepositId) -> Mass {
-        self.reserves.get(id.0 as usize).copied().unwrap_or(Mass::ZERO)
+        self.reserves
+            .get(id.0 as usize)
+            .copied()
+            .unwrap_or(Mass::ZERO)
     }
 
     fn extract(&self, id: DepositId, want: Mass) -> Mass {

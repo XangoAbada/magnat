@@ -546,9 +546,8 @@ impl B2b {
                         now,
                     )
                     .is_ok();
-                let cena = Money(
-                    (i128::from(d.unit_price.0) * i128::from(masa.0) / 1_000_000) as i64,
-                );
+                let cena =
+                    Money((i128::from(d.unit_price.0) * i128::from(masa.0) / 1_000_000) as i64);
                 if wyslane {
                     // Zmiana właściciela przeszacowuje koszt własny na cenę zapłaconą
                     // (`AP-7`) — tak samo jak przy sprzedaży spotowej.

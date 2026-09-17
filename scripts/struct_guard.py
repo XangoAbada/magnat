@@ -102,7 +102,8 @@ REJESTR = {
     # więc funkcja rośnie dalej, a adres podziału przesuwa się na osobną zmianę.
     # 566 po M7d: siedem ramion bloku finansowego (505–510, przy czym
     # `BankruptcyOpened` ma dwa — brak płynności mierzy się dobami, ujemny kapitał nie).
-    ("engine/ui/src/inspect/reason.rs", "fn", 566): 37,
+    # 618 po M7e: pięć ramion AI firm (511–515).
+    ("engine/ui/src/inspect/reason.rs", "fn", 618): 37,
     # 269 po M7d: jedna linia za `finance: bf.finance` w budowie `BankParams`.
     ("sim/economy/src/data.rs", "fn", 269): 38,
 }

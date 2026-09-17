@@ -434,11 +434,7 @@ impl Transport {
         let wagi: Vec<u64> = run
             .stops
             .iter()
-            .map(|id| {
-                self.orders
-                    .get(&id.0)
-                    .map_or(0, |o| o.mass.0.max(0) as u64)
-            })
+            .map(|id| self.orders.get(&id.0).map_or(0, |o| o.mass.0.max(0) as u64))
             .collect();
         if wagi.is_empty() {
             return Err(TransportError::UnknownOrder);

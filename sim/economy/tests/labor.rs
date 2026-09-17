@@ -859,7 +859,11 @@ fn upadlosc_konczy_kazda_umowe_dokladnie_raz() {
 
     for i in 0..5u32 {
         let c = people.dodaj(i, Some(SPAWACZ), 60, 0);
-        let (rola, gdzie) = if i < 3 { (SPAWACZ, site) } else { (SPAWACZ, obok) };
+        let (rola, gdzie) = if i < 3 {
+            (SPAWACZ, site)
+        } else {
+            (SPAWACZ, obok)
+        };
         people.hire(c, gdzie, rola, ShiftKind::Day, Money(500_000));
         firms
             .site_mut(gdzie)
@@ -890,8 +894,16 @@ fn upadlosc_konczy_kazda_umowe_dokladnie_raz() {
         SimMinute(400 * 1440),
     );
 
-    assert_eq!(odprawy.len(), 3, "odprawa dla każdego z załogi, i tylko dla niej");
-    assert_eq!(people.releases - przed, 3, "etat wraca do puli dokładnie raz");
+    assert_eq!(
+        odprawy.len(),
+        3,
+        "odprawa dla każdego z załogi, i tylko dla niej"
+    );
+    assert_eq!(
+        people.releases - przed,
+        3,
+        "etat wraca do puli dokładnie raz"
+    );
     let kto: Vec<CitizenId> = odprawy.iter().map(|(c, _)| *c).collect();
     let mut unikaty = kto.clone();
     unikaty.sort_unstable();

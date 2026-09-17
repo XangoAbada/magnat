@@ -10,7 +10,7 @@
 //! teleportowała" zadaje wyłącznie ten test. Księga po stronie testu nie może też
 //! skłamać razem z kodem, który sprawdza.
 
-use magnat_core::{Entity, FirmId, GoodId, Mass, Money, Q, SimMinute, SiteId, Volume};
+use magnat_core::{Entity, FirmId, GoodId, Mass, Money, SimMinute, SiteId, Volume, Q};
 use magnat_supply::batch::{BatchId, BatchLocation, TransportOrderId};
 use magnat_supply::store::{BatchDraft, MassIn, WarehouseRole};
 use magnat_supply::transport::{
@@ -173,7 +173,9 @@ fn sprawdz(
     zlecenie: Option<TransportOrderId>,
 ) -> Result<(), TestCaseError> {
     for b in store.all_handles() {
-        let Some(teraz) = gdzie(store, b) else { continue };
+        let Some(teraz) = gdzie(store, b) else {
+            continue;
+        };
         let Some(wczesniej) = przed.get(&b.to_bits()).copied() else {
             // Nowa partia (podział ładunku) — musi się pojawić w drodze albo w slocie,
             // ale nie w innym zakładzie niż ten, który ją wypuścił.
@@ -215,7 +217,12 @@ fn trasa_niewykonalna_konczy_sie_przy_planowaniu() {
         blocked: vec![(a.entity().index(), b.entity().index())],
     };
     assert!(oracle
-        .quote(a, b, Mass(1_000_000), &VehicleRequirements::for_good(&w.cat, w.towar, Mass(1)))
+        .quote(
+            a,
+            b,
+            Mass(1_000_000),
+            &VehicleRequirements::for_good(&w.cat, w.towar, Mass(1))
+        )
         .is_none());
 
     let id = w.transport.order(
@@ -276,7 +283,13 @@ fn wykrywacz_lapie_teleportacje() {
     // ale bez żadnego zlecenia w księdze — czyli dokładnie to, czego test ma pilnować.
     let ladunek = w
         .store
-        .load(slot_a, w.towar, Mass(2_000_000), Q::MIN, TransportOrderId(42))
+        .load(
+            slot_a,
+            w.towar,
+            Mass(2_000_000),
+            Q::MIN,
+            TransportOrderId(42),
+        )
         .expect("załadunek");
     w.store
         .unload(&w.cat, TransportOrderId(42), &ladunek, slot_b)

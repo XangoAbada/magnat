@@ -13,9 +13,7 @@
 //! | `prop_dock_capacity` | rampa jest realnym wąskim gardłem, a nie licznikiem |
 //! | `prop_contract_penalty` | kara naliczona równa się zapłaconej |
 
-use magnat_core::{
-    Entity, FirmId, Mass, Money, OpenHours, Q, SimMinute, SiteId, Volume,
-};
+use magnat_core::{Entity, FirmId, Mass, Money, OpenHours, SimMinute, SiteId, Volume, Q};
 use magnat_supply::batch::TransportOrderId;
 use magnat_supply::catalog::load_default;
 use magnat_supply::plant::{Dock, VehicleArrivedAtSite};

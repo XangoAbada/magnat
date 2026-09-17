@@ -25,6 +25,7 @@ pub mod catalog;
 pub mod chain;
 pub mod cost;
 pub mod inventory;
+pub mod kernel;
 pub mod mining;
 pub mod plant;
 pub mod shortage;
@@ -36,10 +37,10 @@ pub mod tuning;
 
 pub use b2b::{
     gate_allows, B2b, ContractDelivery, ContractError, ContractPricing, DeliverySchedule,
-    ImportQuote, Penalty, PendingImport, Quote, QuoteId, Rfq, RfqDraft, RfqOutcome, SellerIndex,
-    SellerRef, Settlement, SupplyContract, SupplyContractDraft, TariffClass, TariffError,
-    TariffTable, TradeError, TradeGood, TradeNode, TradeNodeId, WhoTransports,
-    TARIFFS_SCHEMA_VERSION,
+    Exclusives, ImportQuote, Lock, Penalty, PendingImport, Quote, QuoteId, Rfq, RfqDraft,
+    RfqOutcome, SellerIndex, SellerRef, Settlement, SupplyContract, SupplyContractDraft,
+    TariffClass, TariffError, TariffTable, TradeError, TradeGood, TradeNode, TradeNodeId,
+    WhoTransports, TARIFFS_SCHEMA_VERSION,
 };
 pub use batch::{
     Batch, BatchEvent, BatchFlags, BatchId, BatchLedger, BatchLocation, BatchOrigin, BrandId,
@@ -53,15 +54,11 @@ pub use catalog::{
     RECIPES_SCHEMA_VERSION,
 };
 pub use chain::{Chain, ChainHandle, ChainTick};
-pub use systems::ChainSystem;
-pub use trace::{
-    batches_in_role, supply_graph, trace_batch, BatchTrace, SupplyCoverage, SupplyEdge,
-    SupplyGraphView, TraceOrigin, TraceStage,
-};
 pub use cost::{allocate_cost, disposal_cost, waste_mass};
 pub use inventory::{
     InventoryPolicy, InventoryRule, MinMaxParams, PreferredSource, ReplenishRequest, Review,
 };
+pub use kernel::throughput;
 pub use mining::{Deposits, MiningSite, NoDeposits};
 pub use plant::{
     advance_production, BreakCause, Charge, Dock, EmissionTotals, LineState, PlannedRun, Plant,
@@ -72,6 +69,11 @@ pub use shortage::{RfqId, ShortageAction, ShortageStage, ShortageState};
 pub use store::{
     BatchDraft, BatchSlice, MassIn, Reservation, ShelfState, Spoiled, StorageSlot, Store,
     StoreError, WarehouseRole, BATCH_HARD_LIMIT, BATCH_SOFT_LIMIT,
+};
+pub use systems::ChainSystem;
+pub use trace::{
+    batches_in_role, supply_graph, trace_batch, BatchTrace, SupplyCoverage, SupplyEdge,
+    SupplyGraphView, TraceOrigin, TraceStage,
 };
 pub use transport::{
     body_for_storage, consolidate, BodyType, Carrier, ConsolidationLimits, FailReason,

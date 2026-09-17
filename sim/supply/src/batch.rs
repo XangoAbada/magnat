@@ -17,8 +17,8 @@
 //!    z M0 **nigdy** nie kompaktuje, więc warunek jest spełniony konstrukcyjnie.
 
 use magnat_core::{
-    ArenaHandle, DepositId, FirmId, GoodId, HashState, LossKind, Mass, Money, RecipeId,
-    SimMinute, SiteId, StateHasher, Volume, Q,
+    ArenaHandle, DepositId, FirmId, GoodId, HashState, LossKind, Mass, Money, RecipeId, SimMinute,
+    SiteId, StateHasher, Volume, Q,
 };
 
 /// Uchwyt partii. `{ index: u32, generation: NonZeroU32 }`, 8 bajtów.
@@ -33,7 +33,6 @@ pub type CoalesceKey = (u16, u8, u16, u32, u32);
 /// kiedy M10 powstanie, przenosi go do siebie razem z pamięcią marki u agentów.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct BrandId(pub u16);
-
 
 /// Linia produkcyjna (M6b). Tutaj wyłącznie jako miejsce, w którym partia może stać.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]

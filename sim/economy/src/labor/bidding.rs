@@ -11,21 +11,45 @@ use magnat_firms::{next_bid, Firms};
 use super::offer::{JobOffer, JobOfferId};
 use super::{LaborDay, LaborMarket, Workforce};
 
-/// Agresja licytacyjna zakładu, 0..=100 — **decyzja menedżera** (M7c, `AV-6`).
+/// Agresja licytacyjna zakładu, 0..=100 (M7c, `AV-6`).
 ///
 /// Do M7c była stałą zerową i całe miasto licytowało tak samo. Od M7c wychodzi ze
-/// stylu kierowania: handlowiec podbija szybko, biurokrata w ogóle. Zakład bez
-/// menedżera zostaje przy zerze i to nadal jest właściwy stan przejściowy —
-/// osobowość dyrektora, która nada agresję **każdej** firmie, powstaje w M7e.
+/// stylu kierowania, a **od M7e — z osobowości firmy**, gdy menedżera nie ma.
+/// Kolejność jest treścią, nie wygodą: zakładem kieruje ten, kto go prowadzi, więc
+/// menedżer nadpisuje dyrektora. Zakład firmy, której nikt nie zna, licytuje jej
+/// charakterem, a nie zerem.
 fn aggression(firms: &Firms, site: magnat_core::SiteId) -> u8 {
+    if let Some(s) = firms.style_of(site) {
+        return magnat_firms::ManagerStyle::aggression(s);
+    }
     firms
-        .style_of(site)
-        .map_or(0, magnat_firms::ManagerStyle::aggression)
+        .site(site)
+        .and_then(|s| firms.get(s.firm))
+        .map_or(0, |f| f.personality.aggression_bp())
 }
 
-/// Zapas marży, o który firma wolno przekracza kraniec widełek. Hak zerowy do M7e —
-/// `SitePnlMonth` nie ma jeszcze przychodu, więc marży nie ma z czego policzyć (`AR-7`).
-const MARGIN_HEADROOM_BP: i32 = 0;
+/// Zapas marży, o który firma wolno przekracza kraniec widełek (M7e, `AU-4`).
+///
+/// **Tu kończy się hak zerowy z M7b.** Do M7e `SitePnlMonth` nie miał przychodu,
+/// więc marży nie było z czego policzyć i sufitem licytacji był sam kraniec widełek
+/// roli — czyli „ile ta praca jest warta w tej dzielnicy". Od M7e zakład z księgą
+/// mówi też, **na ile go stać**: zarabiający dobrze wolno przepłacić, zakład na
+/// granicy nie może.
+///
+/// Zakład bez pomiaru (produkcyjny, świeżo otwarty) zostaje przy zerze i to nadal
+/// jest właściwy stan: brak księgi nie jest zerową marżą.
+///
+/// Zakres jest przycięty do ±2000 bp, a nie do pełnego ±5000, na które pozwala
+/// `wage_ceiling`. Powód jest ten sam, dla którego cierpliwość nie rozciąga progu
+/// zamknięcia zakładu: sufit płacowy jest **jedynym** hamulcem spirali (`R1`),
+/// więc marża może go przesunąć, ale nie może go znieść.
+fn margin_headroom_bp(firms: &Firms, site: magnat_core::SiteId) -> i32 {
+    firms
+        .site(site)
+        .and_then(|s| s.pnl.last())
+        .and_then(magnat_firms::SitePnlMonth::margin_bp)
+        .map_or(0, |m| m.clamp(-2_000, 2_000))
+}
 
 /// Wygaszenie ofert przeterminowanych i podbicie tych, które wiszą bez kandydata (WP5).
 pub(super) fn expire_and_escalate(
@@ -64,7 +88,7 @@ pub(super) fn expire_and_escalate(
             o.band,
             niedobor,
             aggression(firms, o.site),
-            MARGIN_HEADROOM_BP,
+            margin_headroom_bp(firms, o.site),
             &m.tuning.wage,
         );
         podbicia.push((id, bid, o.days_open));
@@ -228,12 +252,30 @@ pub(super) fn headhunt(
             {
                 continue;
             }
-            let Some((c, _, obecna)) = zatrudnieni
-                .iter()
-                .copied()
+            // Kampania przeciągania (M7e WP14) celuje w **konkretnego** rywala
+            // i płaci za to więcej. Bez kampanii firma bierze pierwszego z brzegu
+            // i to jest zwykły headhunting z M7b.
+            let kampania = firms.get(firma).and_then(|f| f.campaign).filter(|k| {
+                k.kind == magnat_core::ReactionKind::Poach
+                    && k.role == role
+                    && k.active(Tick(now.0))
+            });
+            let wolny = |c: &magnat_core::CitizenId, f: &magnat_firms::FirmKey| {
+                *f != firma && !m.index.is_targeted(*c) && !juz.contains(c)
+            };
+            // Kampania celuje w **zakład** rywala (`K-46`), a załoga jest tu spisana
+            // po firmach — firmę zakładu odczytuje się z rejestru, nigdy odwrotnie.
+            let cel_firmy = kampania.and_then(|k| firms.site(k.target).map(|s| s.firm));
+            let Some((c, _, obecna)) = cel_firmy
+                .and_then(|cel| {
+                    zatrudnieni
+                        .iter()
+                        .copied()
+                        .find(|(c, f, _)| *f == cel && wolny(c, f))
+                })
                 // Nie podbieramy własnym ludziom i nie wysyłamy drugiej oferty
                 // do kogoś, kto dziś już jedną dostał.
-                .find(|(c, f, _)| *f != firma && !m.index.is_targeted(*c) && !juz.contains(c))
+                .or_else(|| zatrudnieni.iter().copied().find(|(c, f, _)| wolny(c, f)))
             else {
                 continue;
             };
@@ -254,11 +296,14 @@ pub(super) fn headhunt(
             } else {
                 premia
             };
+            // Nadpłata kampanii dokłada się do premii, a nie ją zastępuje: firma,
+            // która ogłosiła przeciąganie, płaci **ponad** to, co i tak by zapłaciła.
+            let premia = premia.saturating_add(kampania.map_or(0, |k| i32::from(k.depth_bp)));
             let proponowana =
                 Money(obecna.get().saturating_mul(i64::from(10_000 + premia)) / 10_000);
             // Sufit widełek obowiązuje także tutaj: przeciąganie nie jest wyjątkiem
             // od rentowności, tylko innym sposobem jej wydania.
-            let sufit = magnat_firms::wage_ceiling(band, MARGIN_HEADROOM_BP);
+            let sufit = magnat_firms::wage_ceiling(band, margin_headroom_bp(firms, site));
             if proponowana.get() > sufit.get() {
                 continue;
             }

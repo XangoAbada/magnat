@@ -15,7 +15,7 @@
 //!    razem z kosztem własnym wyliczonym z partii, a nie ze średniej z katalogu.
 //! 3. [`Store::shelf_state`] niczego nie rusza — to odczyt dla oferty i dla panelu.
 
-use magnat_core::{GoodId, Mass, Money, Q, SimMinute, Volume};
+use magnat_core::{GoodId, Mass, Money, SimMinute, Volume, Q};
 
 use super::{wstaw_fefo, BatchSlice, SlotId, Store, WarehouseRole};
 use crate::batch::{BatchFlags, BatchId, BatchLocation, BrandId};
@@ -134,7 +134,9 @@ impl Store {
         debug_assert!(self
             .slot(backroom)
             .is_some_and(|s| s.role == WarehouseRole::Backroom));
-        debug_assert!(self.slot(shelf).is_some_and(|s| s.role == WarehouseRole::Shelf));
+        debug_assert!(self
+            .slot(shelf)
+            .is_some_and(|s| s.role == WarehouseRole::Shelf));
         self.move_within_site(cat, backroom, shelf, good, mass)
     }
 

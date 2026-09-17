@@ -10,7 +10,7 @@
 //! który tego pilnuje, ma pękać przy tym dopisaniu — w tej samej zmianie, która je
 //! wnosi, a nie pół roku później przy profilowaniu.
 
-use magnat_core::{Entity, FirmId, Mass, Money, Q, SimMinute, SiteId, Volume};
+use magnat_core::{Entity, FirmId, Mass, Money, SimMinute, SiteId, Volume, Q};
 use magnat_supply::catalog::load_default;
 use magnat_supply::store::{BatchDraft, MassIn, WarehouseRole};
 use magnat_supply::{Batch, BatchFlags, BatchOrigin, StorageClass, Store, BATCH_SOFT_LIMIT};
@@ -95,7 +95,11 @@ fn scalanie_rozklada_sie_na_dobe() {
     assert_eq!(przed, 60, "trzy sloty po dwadzieścia partii");
 
     // Minuta, która nie jest fazą żadnego z trzech slotów: nic się nie dzieje.
-    assert_eq!(store.coalesce_phase(7), 0, "obca faza nie rusza żadnego slotu");
+    assert_eq!(
+        store.coalesce_phase(7),
+        0,
+        "obca faza nie rusza żadnego slotu"
+    );
     assert_eq!(store.live_batches(), przed);
 
     let mut scalone = 0;

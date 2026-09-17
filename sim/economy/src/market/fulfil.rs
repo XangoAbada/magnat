@@ -629,7 +629,6 @@ fn who_key(req: &FulfilRequest) -> u32 {
     req.citizen.entity().index()
 }
 
-
 /// Co zapytanie o kandydatów wie o kupującym i o jego zasięgu.
 ///
 /// Struktura zamiast ośmiu argumentów: `candidates` przekroczyło twardy próg długości

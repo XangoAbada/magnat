@@ -98,7 +98,9 @@ pub fn consolidate(
             minut_wprost: q.minutes,
         });
     }
-    let Some(depot) = depot else { return Vec::new() };
+    let Some(depot) = depot else {
+        return Vec::new();
+    };
     punkty.sort_unstable_by_key(|p| p.order.0);
 
     // Każdy punkt zaczyna jako własna trasa. Scalanie idzie po oszczędnościach

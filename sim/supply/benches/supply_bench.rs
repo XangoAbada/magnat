@@ -28,7 +28,7 @@ use std::num::NonZeroU32;
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use magnat_core::{
-    Energy, Entity, FirmId, GoodId, Mass, Money, OpenHours, Q, SimMinute, SiteId, Volume,
+    Energy, Entity, FirmId, GoodId, Mass, Money, OpenHours, SimMinute, SiteId, Volume, Q,
 };
 use magnat_supply::batch::TransportOrderId;
 use magnat_supply::catalog::load_default;
@@ -138,14 +138,7 @@ fn production(c: &mut Criterion) {
                 deposits: &NoDeposits,
             };
             for s in &sites {
-                advance_production(
-                    &ctx,
-                    &mut store,
-                    &mut plant,
-                    *s,
-                    SimMinute(minuta),
-                    1,
-                );
+                advance_production(&ctx, &mut store, &mut plant, *s, SimMinute(minuta), 1);
             }
             minuta += 1;
             black_box(store.live_batches())
@@ -302,7 +295,11 @@ fn replenish(c: &mut Criterion) {
             if minuta.is_multiple_of(60) {
                 minuta += 1;
             }
-            black_box(chain.step_hour(&cat, &tuning, &oracle, SimMinute(minuta)).len())
+            black_box(
+                chain
+                    .step_hour(&cat, &tuning, &oracle, SimMinute(minuta))
+                    .len(),
+            )
         });
     });
 }

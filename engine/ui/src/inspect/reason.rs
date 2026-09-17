@@ -9,9 +9,9 @@ use crate::loc::{Catalog, Locale};
 use magnat_agents::SocialClass;
 use magnat_core::{
     ActionKind, ActivityKind, BankruptcyTrigger, ClaimPriority, CommitmentKind, DecisionReason,
-    DeprivationEffect, FixedCost, LeaveCause, LifeEventKind, LineStopCause, LoanKind, MigrationKind,
-    Money, NeedKind, PriceDriver, RejectCause, RejectCredit, ShortageStageKind, StockCat, TraitId,
-    TransportMode, UtilityKind, WageCause,
+    DeprivationEffect, FirmStrategy, FixedCost, LeaveCause, LifeEventKind, LineStopCause, LoanKind,
+    MigrationKind, Money, NeedKind, PriceDriver, ReactionKind, RejectCause, RejectCredit,
+    ShortageStageKind, StockCat, TraitId, TransportMode, UtilityKind, WageCause,
 };
 
 /// Nazwa potrzeby w języku gracza.
@@ -102,6 +102,18 @@ pub fn bankruptcy_trigger(c: &Catalog, l: Locale, b: BankruptcyTrigger) -> Strin
 #[must_use]
 pub fn claim_priority(c: &Catalog, l: Locale, p: ClaimPriority) -> String {
     c.fmt_key(l, &format!("ui.claim_priority.{}", p.name()), &[])
+}
+
+/// Nazwa kursu, na którym stoi firma (M7e §5.7).
+#[must_use]
+pub fn firm_strategy(c: &Catalog, l: Locale, s: FirmStrategy) -> String {
+    c.fmt_key(l, &format!("ui.strategy.{}", s.name()), &[])
+}
+
+/// Nazwa odpowiedzi konkurencyjnej (M7e WP14).
+#[must_use]
+pub fn reaction_kind(c: &Catalog, l: Locale, r: ReactionKind) -> String {
+    c.fmt_key(l, &format!("ui.reaction.{}", r.name()), &[])
 }
 
 /// Miesiące jako odmieniony liczebnik.
@@ -699,10 +711,7 @@ pub fn describe(c: &Catalog, l: Locale, r: DecisionReason) -> String {
             "ui.reason.LeaseSigned",
             &[("okres", &months(c, l, u32::from(m)))],
         ),
-        DecisionReason::ReceivablesFactored {
-            count,
-            discount_bp,
-        } => c.fmt_key(
+        DecisionReason::ReceivablesFactored { count, discount_bp } => c.fmt_key(
             l,
             "ui.reason.ReceivablesFactored",
             &[
@@ -737,15 +746,70 @@ pub fn describe(c: &Catalog, l: Locale, r: DecisionReason) -> String {
             "ui.reason.BankruptcyOpened",
             &[("powod", &bankruptcy_trigger(c, l, trigger))],
         ),
-        DecisionReason::ClaimSettled {
-            priority,
-            ratio_bp,
-        } => c.fmt_key(
+        DecisionReason::ClaimSettled { priority, ratio_bp } => c.fmt_key(
             l,
             "ui.reason.ClaimSettled",
             &[
                 ("grupa", &claim_priority(c, l, priority)),
                 ("stopien", &procent_bp(i32::from(ratio_bp))),
+            ],
+        ),
+        // ── M7e: AI firm ─────────────────────────────────────────────────────────
+        // Towar znowu jest w ładunku, a nie w zdaniu — z tego samego powodu co w M6:
+        // `GoodId` rozwiązuje katalog z `sim/supply`, którego `engine/ui` nie widzi.
+        DecisionReason::MarginTargetSet {
+            good: _,
+            margin_bp,
+            prev_bp,
+        } => c.fmt_key(
+            l,
+            "ui.reason.MarginTargetSet",
+            &[
+                ("cel", &procent_bp(margin_bp)),
+                ("poprzednio", &procent_bp(prev_bp)),
+            ],
+        ),
+        DecisionReason::RestockTargetSet {
+            good: _,
+            days: d,
+            prev,
+        } => c.fmt_key(
+            l,
+            "ui.reason.RestockTargetSet",
+            &[
+                ("cel", &days(c, l, u32::from(d))),
+                ("poprzednio", &days(c, l, u32::from(prev))),
+            ],
+        ),
+        DecisionReason::SiteClosed {
+            months: m,
+            margin_bp,
+        } => c.fmt_key(
+            l,
+            "ui.reason.SiteClosed",
+            &[
+                ("okres", &months(c, l, u32::from(m))),
+                ("marza", &procent_bp(margin_bp)),
+            ],
+        ),
+        DecisionReason::StrategySet { strategy, prev } => c.fmt_key(
+            l,
+            "ui.reason.StrategySet",
+            &[
+                ("kurs", &firm_strategy(c, l, strategy)),
+                ("poprzednio", &firm_strategy(c, l, prev)),
+            ],
+        ),
+        DecisionReason::CompetitiveResponse {
+            kind,
+            target: _,
+            depth_bp,
+        } => c.fmt_key(
+            l,
+            "ui.reason.CompetitiveResponse",
+            &[
+                ("odpowiedz", &reaction_kind(c, l, kind)),
+                ("koszt", &procent_bp(i32::from(depth_bp))),
             ],
         ),
     }
@@ -1068,6 +1132,32 @@ mod tests {
                 priority: ClaimPriority::Wages,
                 ratio_bp: 10_000,
             },
+            DecisionReason::MarginTargetSet {
+                good: magnat_core::GoodId(3),
+                margin_bp: 1_800,
+                prev_bp: 2_500,
+            },
+            DecisionReason::RestockTargetSet {
+                good: magnat_core::GoodId(3),
+                days: 10,
+                prev: 6,
+            },
+            DecisionReason::SiteClosed {
+                months: 3,
+                margin_bp: -820,
+            },
+            DecisionReason::StrategySet {
+                strategy: FirmStrategy::Discount,
+                prev: FirmStrategy::Cautious,
+            },
+            DecisionReason::CompetitiveResponse {
+                kind: ReactionKind::PriceWar,
+                target: magnat_core::SiteId(magnat_core::Entity::new(
+                    11,
+                    std::num::NonZeroU32::MIN,
+                )),
+                depth_bp: 1_200,
+            },
         ]
     }
 
@@ -1099,7 +1189,9 @@ mod tests {
         // Po M7d blok finansowy (505..=510) i **siódmy wpis**: `BankruptcyOpened`
         // stoi dwa razy, bo brak płynności mierzy się dobami, a ujemny kapitał nie —
         // i to są dwa różne zdania o firmie, więc i dwa klucze. Razem 58.
-        assert_eq!(wszystkie().len(), 58);
+        // Po M7e pięć powodów AI firm (511..=515), po jednym wpisie — żaden z nich
+        // nie rozgałęzia się na dwa klucze lokalizacji. Razem 63.
+        assert_eq!(wszystkie().len(), 63);
     }
 
     #[test]
@@ -1150,6 +1242,12 @@ mod tests {
             }
             for p in ClaimPriority::ALL {
                 assert!(!claim_priority(&c, l, *p).is_empty());
+            }
+            for s in FirmStrategy::ALL {
+                assert!(!firm_strategy(&c, l, *s).is_empty());
+            }
+            for r in ReactionKind::ALL {
+                assert!(!reaction_kind(&c, l, *r).is_empty());
             }
         }
     }

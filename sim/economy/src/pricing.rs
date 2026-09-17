@@ -246,6 +246,15 @@ pub struct PriceController {
     /// cenowy potrzebuje wyłącznie doby bieżącej i poprzedniej — to jest cała
     /// różnica i cały powód, dla którego to pole istnieje osobno.
     pub week: [i32; 7],
+    /// Obrót **poprzedniego** tygodnia, przepisywany na granicy tygodnia (M7e WP14).
+    ///
+    /// Jedna liczba, nie drugi pierścień: utrata udziału mierzy się porównaniem
+    /// „siedem ostatnich dób wobec siedmiu poprzednich", a to wystarcza do progu
+    /// dwudziestu procent i kosztuje osiem bajtów na parę (zakład, towar) zamiast
+    /// pięćdziesięciu sześciu. Zero znaczy „jeszcze nie było tygodnia", a nie
+    /// „nic nie sprzedano" — i tę różnicę czyta `GoodFacts::sales_drop_bp`,
+    /// zwracając wtedy „nie ma z czym porównać".
+    pub prev_7d: i32,
     /// `None` = firma jeszcze nigdy nie eksperymentowała. Odróżnione od `Tick(0)`,
     /// bo inaczej żaden sklep nie ruszyłby eksperymentu przez pierwsze 30 dni świata
     /// — a to jest dokładnie okres, w którym balansator mierzy rozbieg.
@@ -265,6 +274,7 @@ impl PriceController {
             sold_today: Qty::ZERO,
             sold_yesterday: Qty::ZERO,
             week: [0; 7],
+            prev_7d: 0,
             last_experiment: None,
         }
     }
@@ -312,6 +322,12 @@ pub fn reprice(pc: &mut PriceController, ctx: &PricingCtx<'_>, t: Tick) -> Optio
     // Panel czyta z tego `turnover_7d` (§5.12) — eksperyment cenowy nadal patrzy
     // wyłącznie na dobę bieżącą i poprzednią.
     let doba = (t.get() / magnat_core::time::MINUTES_PER_DAY) as usize;
+    // Granica tygodnia: zanim najstarsza doba zostanie nadpisana, tydzień, który
+    // się właśnie skończył, przechodzi do odniesienia. Bez tego porównanie
+    // „ten tydzień wobec poprzedniego" nie miałoby drugiego składnika (WP14).
+    if doba.is_multiple_of(7) {
+        pc.prev_7d = i32::try_from(pc.turnover_7d().get()).unwrap_or(i32::MAX);
+    }
     pc.week[doba % 7] = i32::try_from(pc.sold_today.get()).unwrap_or(i32::MAX);
     pc.sold_today = Qty::ZERO;
 
@@ -366,6 +382,7 @@ pub fn preview_price(policy: PricePolicy, pc: &PriceController, ctx: &PricingCtx
         sold_today: pc.sold_today,
         sold_yesterday: pc.sold_yesterday,
         week: pc.week,
+        prev_7d: pc.prev_7d,
         last_experiment: pc.last_experiment,
     };
     let adj_spoil = ctx.days_to_expiry.map_or(0, |d| {
@@ -665,6 +682,7 @@ impl HashState for PriceController {
         for v in self.week {
             h.write_i64(i64::from(v));
         }
+        h.write_i64(i64::from(self.prev_7d));
         match self.last_experiment {
             Some(l) => {
                 h.write_u8(1);

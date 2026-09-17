@@ -9,8 +9,8 @@
 //! jedynym miejscem, w którym liczby z planu spotykają się z kodem.
 
 use magnat_core::{
-    Energy, Entity, FirmId, GoodId, LossKind, Mass, Money, OpenHours, Q, SimMinute, SiteId,
-    UtilityService, Volume,
+    Energy, Entity, FirmId, GoodId, LossKind, Mass, Money, OpenHours, SimMinute, SiteId,
+    UtilityService, Volume, Q,
 };
 use magnat_supply::catalog::load_default;
 use magnat_supply::plant::{advance_production, Dock, PlantSite, ProductionCtx};
@@ -66,7 +66,9 @@ impl Mlyn {
 
         let zboze = cat.good_id("raw_wheat").expect("raw_wheat");
         let maka = cat.good_id("food_flour_t550").expect("food_flour_t550");
-        let przemial = cat.recipe_id("milling_wheat_t550").expect("milling_wheat_t550");
+        let przemial = cat
+            .recipe_id("milling_wheat_t550")
+            .expect("milling_wheat_t550");
         let czesc = cat.good_id("part_bearing_6204").expect("part_bearing_6204");
 
         store
@@ -203,7 +205,10 @@ fn linia_bez_pradu_stoi() {
         .expect("licznik prądu")
         .cut_off = false;
     m.biegnij(13 * 60, 60);
-    assert!(m.store.total_stock(m.maka).0 > z_pradem.0, "po powrocie prądu mieli dalej");
+    assert!(
+        m.store.total_stock(m.maka).0 > z_pradem.0,
+        "po powrocie prądu mieli dalej"
+    );
 }
 
 /// Kryterium WP4, zdanie drugie: **awaria wymaga części z magazynu.** To jest cały powód,
@@ -482,10 +487,7 @@ fn przeglad_zdarza_sie_raz_na_okres_a_nie_w_kolko() {
 fn obsada_zakladu_jest_drugim_ogranicznikiem_szarzy() {
     let zmiel = |labor: u16| -> i64 {
         let mut m = Mlyn::nowy(50_000);
-        m.plant
-            .get_mut(m.site)
-            .expect("zakład")
-            .labor_pct = labor;
+        m.plant.get_mut(m.site).expect("zakład").labor_pct = labor;
         // Osiem godzin zmiany dziennej, ta sama doba, ten sam wsad.
         m.biegnij(8 * 60, 480).produced.0
     };

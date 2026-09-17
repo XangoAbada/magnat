@@ -23,7 +23,7 @@
 //! podmianę — `AC-1` wiąże z nią bramkę **G4** balansatora, a balansator nie ma prawa
 //! wiedzieć, która faza akurat stoi pod spodem.
 
-use magnat_core::{FirmId, GoodId, Money, Q, Qty, SimMinute, SiteId, Tick};
+use magnat_core::{FirmId, GoodId, Money, Qty, SimMinute, SiteId, Tick, Q};
 use magnat_supply::{ChainHandle, RfqDraft, WhoTransports};
 
 use crate::supply::{Delivery, GoodTable, OrderId, PurchaseQuote, SupplyError, Wholesale};
@@ -102,9 +102,10 @@ impl Wholesale for ChainSupply {
             // Termin dostawy jest **szacunkiem**, a nie obietnicą: rozstrzyga go rynek,
             // a ten może nie znaleźć dostawcy. `PurchaseQuote::delivery_at` służy M5
             // wyłącznie do wyceny terminu ważności zapasu.
-            delivery_at: Tick(t.get().saturating_add(u64::from(
-                self.chain.tuning.b2b.rfq_window_minutes + 120,
-            ))),
+            delivery_at: Tick(
+                t.get()
+                    .saturating_add(u64::from(self.chain.tuning.b2b.rfq_window_minutes + 120)),
+            ),
             quality: Q::new(60),
             shelf_life,
         })
@@ -154,10 +155,7 @@ impl Wholesale for ChainSupply {
         // chleba, sprowadza go zza granicy; kiedy stanie pierwsza piekarnia, wygra
         // ceną, bo transport zza granicy kosztuje i kolejka na bramie rośnie.
         if ch.b2b.sellers_of(q.good).is_empty() {
-            let Some(oferta) = ch
-                .b2b
-                .import_quote(&cat, q.good, mass, &tuning, now)
-            else {
+            let Some(oferta) = ch.b2b.import_quote(&cat, q.good, mass, &tuning, now) else {
                 return Err(SupplyError::NoSuchGood);
             };
             return match ch.b2b.place_import(oferta, buyer, site, slot) {

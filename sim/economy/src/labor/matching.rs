@@ -34,16 +34,20 @@ fn requirements(m: &LaborMarket, role: JobRoleId, managerial: bool) -> SkillReq 
     }
 }
 
-/// Wagi wyboru kandydata — **decyzja menedżera zakładu** (M7c, `AV-6`).
+/// Wagi wyboru kandydata (M7c, `AV-6`).
 ///
-/// Zakład bez menedżera wybiera neutralnie i to jest stan przejściowy do M7e, kiedy
-/// osobowość dyrektora nada wagi także firmom bez delegacji. Do M7c wagi były stałą
-/// `HiringPolicy::NEUTRAL` w całym mieście, więc nadzorca i handlowiec zatrudniali
-/// tak samo.
+/// Do M7c wagi były stałą `HiringPolicy::NEUTRAL` w całym mieście, więc nadzorca
+/// i handlowiec zatrudniali tak samo. Od M7c wychodzą ze stylu menedżera, a **od M7e
+/// — z osobowości firmy**, gdy menedżera nie ma. Ta sama kolejność co przy agresji
+/// licytacyjnej i z tego samego powodu: zakładem kieruje ten, kto go prowadzi.
 fn wagi_wyboru(firms: &Firms, site: magnat_core::SiteId) -> HiringPolicy {
+    if let Some(s) = firms.style_of(site) {
+        return magnat_firms::ManagerStyle::hiring(s);
+    }
     firms
-        .style_of(site)
-        .map_or(HiringPolicy::NEUTRAL, magnat_firms::ManagerStyle::hiring)
+        .site(site)
+        .and_then(|s| firms.get(s.firm))
+        .map_or(HiringPolicy::NEUTRAL, |f| f.personality.hiring())
 }
 
 /// Wystawia ofertę na każdy wakat, który jeszcze jej nie ma (WP4).

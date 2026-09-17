@@ -20,27 +20,71 @@ use crate::ring::Ring;
 
 /// Rachunek wyniku zakładu za jeden miesiąc — wejście decyzji taktycznej (M7e §5.9).
 ///
-/// W M7a ma dwie pozycje, bo dwie ma pisarza: koszt pracy liczy lista płac, koszt stały
-/// katalog typów zakładów. Przychody i koszt własny dokłada M7e, kiedy zacznie je czytać —
-/// pola bez pisarza byłyby zerami udającymi pomiar.
+/// M7a miał dwie pozycje, bo dwie miały pisarza: koszt pracy liczy lista płac, koszt
+/// stały katalog typów zakładów. **M7e dokłada przychód i koszt własny** — bez nich
+/// nie ma marży, a bez marży sufit licytacji o pracownika zostaje przy krańcu widełek
+/// roli i firma nie licytuje „na tyle, na ile ją stać", tylko „na tyle, ile ta praca
+/// jest tu warta" (`AU-4`, `AV-2`).
+///
+/// **Pisarzem przychodu jest księga sklepu**, domykana raz w miesiącu razem z okresem
+/// (`Market::close_month`). Zakład produkcyjny księgi nie ma i dlatego ma tu zero —
+/// rozliczenie B2B niesie sprzedawcę jako `FirmId`, a nie `SiteId`, więc przypisanie
+/// utargu hurtowego do konkretnej linii wymagałoby nowego pola w `supply::Settlement`.
+/// Zero jest tu **brakiem pomiaru, a nie pomiarem zera**, i [`SitePnlMonth::margin_bp`]
+/// mówi to wprost, zwracając `None`.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub struct SitePnlMonth {
     /// Numer miesiąca od startu świata.
     pub month: u32,
+    /// Utarg netto miesiąca. Zero znaczy „nie wiem", nie „nic nie sprzedał".
+    pub revenue: Money,
+    /// Koszt własny sprzedanego towaru.
+    pub cogs: Money,
     pub labor: Money,
     pub fixed: Money,
 }
 
 impl SitePnlMonth {
+    /// Koszty **operacyjne** zakładu: praca i koszt stały. Bez kosztu własnego —
+    /// ten jest po stronie towaru, nie zakładu, i odejmuje się go od utargu osobno.
     #[must_use]
     pub fn cost(&self) -> Money {
         Money(self.labor.get().saturating_add(self.fixed.get()))
+    }
+
+    /// Wynik miesiąca: utarg minus koszt własny minus koszty operacyjne.
+    #[must_use]
+    pub fn result(&self) -> Money {
+        Money(
+            self.revenue
+                .get()
+                .saturating_sub(self.cogs.get())
+                .saturating_sub(self.cost().get()),
+        )
+    }
+
+    /// Marża zakładu w punktach bazowych utargu. `None` znaczy **„nie ma z czego
+    /// policzyć"** — zakład bez księgi albo miesiąc bez sprzedaży.
+    ///
+    /// Rozróżnienie jest konieczne, bo konsument (sufit licytacji, decyzja taktyczna)
+    /// ma na `None` zachować się jak przed M7e, a nie uznać zakład za nierentowny.
+    /// Zero utargu i marża −100% to dwa różne zdania o zakładzie.
+    #[must_use]
+    pub fn margin_bp(&self) -> Option<i32> {
+        let utarg = self.revenue.get();
+        if utarg <= 0 {
+            return None;
+        }
+        let bp = self.result().get().saturating_mul(10_000) / utarg;
+        Some(bp.clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32)
     }
 }
 
 impl HashState for SitePnlMonth {
     fn hash_state(&self, h: &mut StateHasher) {
         h.write_u32(self.month);
+        self.revenue.hash_state(h);
+        self.cogs.hash_state(h);
         self.labor.hash_state(h);
         self.fixed.hash_state(h);
     }

@@ -175,7 +175,14 @@ pub enum StreamId {
     /// i różnicy płacy wobec mediany zawodu; strumień rozstrzyga **czy dziś**, a nie
     /// **czy w ogóle** — inaczej cała załoga o tym samym nastroju odchodziłaby naraz.
     LaborQuit = 221,
-    // 222–239 zarezerwowane dla M7. Rezerwa dalsza 1220–1239.
+    /// Osobowość firmy bez dyrektora-mieszkańca (M7e §5.7). Klucz: klucz firmy,
+    /// tick zero — losowanie jest **jednorazowe i stałe przez życie firmy**, bo
+    /// osobowość, która drga z doby na dobę, nie jest osobowością.
+    ///
+    /// Firma z dyrektorem strumienia nie dotyka: jej cechy są funkcją czystą cech
+    /// mieszkańca, więc zmiana dyrektora zmienia firmę — o to chodzi w §12.1.
+    FirmPersonality = 222,
+    // 223–239 zarezerwowane dla M7. Rezerwa dalsza 1220–1239.
 }
 
 /// Encja zastępcza dla losowania bez encji (zdarzenie globalne, generator świata).
@@ -414,5 +421,6 @@ mod tests {
         assert_eq!(StreamId::SupplyImportLead as u16, 206);
         assert_eq!(StreamId::LaborSearch as u16, 220);
         assert_eq!(StreamId::LaborQuit as u16, 221);
+        assert_eq!(StreamId::FirmPersonality as u16, 222);
     }
 }

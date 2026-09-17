@@ -98,10 +98,8 @@ fn zamowienie_u_dostawcy_kosztuje_i_dociera_po_czasie() {
     let mut w = magnat_ecs::World::new(1);
     w.insert_resource(std::mem::replace(&mut b.books, Books::new()));
 
-    b.market.reorder_and_receive(
-        w.get_resource_mut::<Books>().unwrap(),
-        Tick(0),
-    );
+    b.market
+        .reorder_and_receive(w.get_resource_mut::<Books>().unwrap(), Tick(0));
     // Zamówienie samo w sobie nie kosztuje: na tym etapie istnieje wyłącznie
     // zapytanie ofertowe.
     assert_eq!(b.market.backroom_qty(site, g), Some(Qty::ZERO));

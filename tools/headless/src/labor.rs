@@ -65,10 +65,16 @@ pub fn setup(
         .collect();
     let types = SiteTypeCatalog::load_default(&roles, &goods, &archetypy)?;
 
-    let (firmy, report) = firms::zbuduj_firmy(&city, &mut world, &types);
+    let (mut firmy, report) = firms::zbuduj_firmy(&city, &mut world, &types);
     let slots = firmy.sites().map(|(_, s)| s.required_slots()).sum();
+    // Osobowość firm (M7e §5.7). Firmy zastane w mieście nie mają dyrektora-mieszkańca
+    // (`Owner::External`), więc cechy biorą się z klucza i ziarna świata — funkcja
+    // czysta, jak wszystko w tym module. Dyrektorów dokłada M7f razem z zakładaniem
+    // firm przez mieszkańców, a wtedy ta sama funkcja policzy je z jego cech.
+    firmy.refresh_personalities(seed, |_| None);
     magnat_firms::systems::register_firms(&mut world, firmy);
     world.insert_resource(magnat_firms::systems::PayrollOutbox::default());
+    world.insert_resource(magnat_firms::systems::DecisionOutbox::default());
     register_labor(
         &mut world,
         LaborMarket::new(LaborTuning::load_default()?, roles),

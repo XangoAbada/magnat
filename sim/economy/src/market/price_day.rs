@@ -254,7 +254,8 @@ impl Market {
         let i = m.by_site.get(&site).copied()?;
         let shop = &m.shops[i as usize];
         let pc = shop.controllers.get(&good)?;
-        let ilosc = m.backroom_units(i as usize, good).get() + m.shelf_units(i as usize, good).get();
+        let ilosc =
+            m.backroom_units(i as usize, good).get() + m.shelf_units(i as usize, good).get();
         let unit_cost = m.unit_cost(i as usize, good);
         let cel = shop
             .inventory

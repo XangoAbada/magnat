@@ -429,7 +429,7 @@ fn kary_umowne_naliczone_rownaja_sie_zaplaconym() {
             &m.oracle,
             SimMinute(d * 1_440),
         );
-        m.b2b.roll_day(&m.tuning);
+        m.b2b.roll_day(&m.tuning, SimMinute(0));
     }
 
     let c = m.b2b.contract(id).expect("kontrakt");

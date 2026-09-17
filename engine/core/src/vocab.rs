@@ -656,6 +656,38 @@ vocab_enum! {
 }
 
 vocab_enum! {
+    /// Strategia firmy — kurs, na którym stoi tier taktyczny (M7e §5.7, PRD §12.1).
+    ///
+    /// W `core`, bo jest **ładunkiem** `DecisionReason::StrategySet`, a ładunek
+    /// centralnego enuma nie może pochodzić z crate'u, który od `core` zależy —
+    /// ta sama reguła, która wypchnęła tu `WageCause` (`K-45`) i `ActionKind` (`K-47`).
+    /// Drugi czytelnik znany z nazwy i numeru fazy: M10 (marka i R&D czytają kurs
+    /// firmy, zanim zaproponują wydatek).
+    ///
+    /// Kolejność wariantów jest kontraktem: `as_index()` indeksuje zarówno histogram
+    /// strategii w panelu, jak i tablicę presetów polityk w `data/policies/`.
+    FirmStrategy {
+        Cautious, Discount, NicheQuality, AggressiveExpansion, Innovative, Consolidator,
+    }
+}
+
+vocab_enum! {
+    /// Czym firma odpowiedziała na utratę udziału w rynku (M7e WP14, PRD §12.2).
+    ///
+    /// Ładunek `DecisionReason::CompetitiveResponse`, ta sama reguła co przy
+    /// [`FirmStrategy`]. Trzy warianty, bo trzy są legalne: kartel i zmowa cenowa
+    /// są przestępstwem i należą do M8, a nie do repertuaru firmy AI.
+    ///
+    /// - `PriceWar` — zejście z ceną poniżej własnej marży docelowej, płacone z gotówki.
+    /// - `SupplierLock` — kontrakt na wyłączność z dostawcą, opłacony premią.
+    /// - `Poach` — oferta bezpośrednia do pracowników rywala na rolach, których
+    ///   mu najbardziej brakuje.
+    ReactionKind {
+        PriceWar, SupplierLock, Poach,
+    }
+}
+
+vocab_enum! {
     /// Biom. Konsument poza M1: M2 (strefowanie i zieleń), M5/M6 (rolnictwo i leśnictwo),
     /// M8 (zdarzenia pogodowe zależne od pokrycia terenu).
     Biome {

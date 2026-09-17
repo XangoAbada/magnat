@@ -259,6 +259,22 @@ Wartości są przypisane na stałe i nigdy nie zmieniają numeru (dokument 00 §
 
 ---
 
+## Zmiany wpisane po M7e
+
+Poprawki wpisane przez podfazę **M7e** (`K-18`).
+Gwiazdka = zmiana zakresu albo kryterium.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| ★ | **Tabela strumieni RNG wyżej podaje cudzy blok i nieaktualne nazwy.** Fazie M7 przysługuje **220–239**, nie 240–259 (`K-4`, `AS-1`); 240–259 należy do M8. Zajęte po M7e: `LaborSearch = 220`, `LaborQuit = 221`, `FirmPersonality = 222`. Wolne dla M7f: **223–239**. Z nazw w tabeli `FirmPricing` jest już zajęta przez M5 (`StreamId::FirmPricing = 186`) i drugiej nie będzie; `FirmHiring`, `FirmTurnover` i `FirmManager` nie powstały, bo M7b i M7c nie potrzebowały losowania tam, gdzie tabela je przewidywała | Wartości `StreamId` są wieczne, więc tabela podająca cudzy blok jest miną: pierwsze losowanie pod numerem 244 unieważniłoby każdy świat, który M8 wygeneruje. Przypadek (1) z `K-18` — kontrakt, na którym podfaza stoi, wygląda inaczej, niż ona zakłada |
+| ★ | **`StrAction` powstaje dopiero tutaj i M7e go nie zostawił.** M7e wnosi `firms::ai::reaction::Campaign` — trzy odpowiedzi konkurencyjne z kosztem i terminem ważności, wyzwalane **zmierzoną** utratą udziału, bez rolloutu makro. WP13 dokłada enum `StrAction` razem z `decide_strategic` i `RankedVariants` | Sześć z ośmiu wariantów `StrAction` (`OpenSite`, `Restructure`, `RequestVoluntaryClosure`, `SwitchStrategy`, `KeepCourse`) nie ma w M7e ani wykonawcy, ani pytania, na które odpowiadają. Enum z dwoma żywymi wariantami i sześcioma zaślepkami byłby abstrakcją bez drugiego konsumenta (`BC-6`) |
+| ★ | **WP17 dostaje zadanie, którego §1 fazy wymaga, a którego nikt jeszcze nie ma: scenariusz stawiający `Firms` i `Market` naraz.** Dziś `m5shop` i balansator budują rynek **bez** rejestru firm, a `m7labor` rejestr **bez** rynku — więc ani polityki (M7c), ani AI firm (M7e) nie wykonują się w żadnym przebiegu headless, tylko w testach | To jest ta sama obserwacja co trzeci wiersz tabeli „po M7b", ale z ceną nazwaną wprost: zszycie zmienia świat, na którym stoją **skalibrowane bramki G1–G9**, więc razem z nim trzeba przemierzyć bramki. To jest praca WP17, a nie dopisanie linijki do `retail::setup` |
+| ★ | **`PayrollOutbox` czeka na M7f po raz trzeci, ale blokada jest już nazwana.** Nie brakuje konsumenta — brakuje **przypisania utargu hurtowego do zakładu**: `supply::Settlement` niesie sprzedawcę jako `FirmId`, nie `SiteId`, więc `SitePnlMonth.revenue` ma dziś tylko zakład handlowy (`BC-8`) | Wypłata realnej listy płac z konta zakładu produkcyjnego, na które nic nie wpływa, wywraca saldo każdej firmy przemysłowej w pierwszym miesiącu. Kolejność jest więc wymuszona: najpierw utarg zakładu, potem lista płac. Pole po stronie M6 albo — jeśli M7f go nie ruszy — adres **M8**, gdzie tego samego przypisania potrzebuje podatek od zakładu |
+| | **Dwa domknięcia drobne dla WP16:** metryka `MachineUtilization` w ewaluatorze polityk nadal zwraca „nie wiem" (`AZ-3`), a dziedzina `Hr` w walidatorze polityk nadal jest zablokowana (`AX-6`, M9d), bo wykonawcy akcji `Hire`/`RaiseWage` M7e nie napisał | Tier operacyjny nie dostał akcji kadrowych z rozmysłu — publikacja ofert i licytacja dzieją się same od M7b (`BC-3`). Ale wykonawca **polityki** kadrowej to inna rzecz niż decyzja tieru: gracz ma móc napisać regułę „podnieś stawkę spawaczom o 5 %", a tego nadal nie wykonuje nikt |
+| | **`FirmView` jest gotowym wejściem dla tieru strategicznego i nie wymaga przebudowy.** Niesie `SiteFacts` (wynik, obsada, delegacja), `GoodFacts` (cena własna, cena rywala z opóźnieniem, zapas, sprzedaż dwóch tygodni), gotówkę, cechy i kurs. WP13 dokłada do niego **jedno** pole: wynik `what_if` w postaci uporządkowania wariantów | Widok jest strukturą faktów, nie zbiorem referencji (`BC-1`), więc dołożenie pola jest dopisaniem liczby w `ai_run::facts::zbierz`, a nie zmianą kształtu. Ograniczenie zostaje wiążące: **wolno dopisać tylko to, co firma widzi** — margines błędu makro jest własnością firmy, ranking wariantów też, cudzy koszt nie |
+
+---
+
 ---
 
 ## Zmiany wpisane po M7b

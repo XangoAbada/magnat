@@ -47,6 +47,15 @@ impl<T, const N: usize> Ring<T, N> {
         b.iter().chain(a.iter())
     }
 
+    /// Ta sama kolejność co [`Ring::iter`], z prawem zapisu. Potrzebne tam, gdzie
+    /// wpis domyka się w dwóch krokach — rachunek wyniku zakładu dostaje koszty
+    /// przy liście płac, a przychód dopiero przy domknięciu okresu księgowego.
+    pub fn iter_mut(&mut self) -> impl DoubleEndedIterator<Item = &mut T> {
+        let split = self.head.min(self.items.len());
+        let (a, b) = self.items.split_at_mut(split);
+        b.iter_mut().chain(a.iter_mut())
+    }
+
     #[must_use]
     pub fn len(&self) -> usize {
         self.items.len()

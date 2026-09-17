@@ -12,7 +12,9 @@
 //! dokłada M7d, osobowość i strategia M7e, polityka M7c.
 
 use magnat_core::hash::{HashState, StateHasher};
-use magnat_core::{CitizenId, DecisionReason, DistrictId, GoodId, SimMinute, SiteId, Tick};
+use magnat_core::{
+    CitizenId, DecisionReason, DistrictId, FirmStrategy, GoodId, SimMinute, SiteId, Tick,
+};
 use smallvec::SmallVec;
 
 use crate::key::FirmKey;
@@ -119,6 +121,16 @@ pub struct Firm {
     /// decyzja asortymentowa M7e; tu jest wynikiem tego, co firma odziedziczyła.
     pub products: SmallVec<[GoodId; 16]>,
     pub status: FirmStatus,
+    /// Cechy firmy (M7e §5.7). Wywiedzione z dyrektora-mieszkańca, jeśli jest;
+    /// wylosowane z klucza firmy, jeśli go nie ma. Jedno i drugie jest funkcją
+    /// czystą, więc pole jest **pamięcią wyniku**, a nie drugą prawdą.
+    pub personality: crate::personality::FirmPersonality,
+    /// Kurs, na którym firma stoi. Wychodzi z cech, a przestawia go tier taktyczny —
+    /// dlatego jest polem, a nie funkcją: gracz ma widzieć, że firma zmieniła zdanie.
+    pub strategy: FirmStrategy,
+    /// Odpowiedź konkurencyjna w toku (M7e WP14). Jedna na firmę i z terminem
+    /// ważności — po nim firma wraca do swojego kursu sama.
+    pub campaign: Option<crate::ai::Campaign>,
     pub log: DecisionLog,
 }
 
@@ -141,6 +153,9 @@ impl Firm {
             sites: SmallVec::new(),
             products: SmallVec::new(),
             status: FirmStatus::Active,
+            personality: crate::personality::FirmPersonality::NEUTRAL,
+            strategy: FirmStrategy::Cautious,
+            campaign: None,
             log: DecisionLog::new(),
         }
     }
@@ -175,6 +190,16 @@ impl Firm {
     pub fn log_decision(&mut self, tick: Tick, reason: DecisionReason) {
         self.log.push(LoggedDecision { tick, reason });
     }
+
+    /// Nadaje firmie cechy i kurs (M7e §5.7).
+    ///
+    /// Jedyna droga zmiany osobowości — razem z nią przestawia się kurs, bo kurs
+    /// bez cech byłby deklaracją, a nie decyzją. Tier taktyczny może potem przestawić
+    /// **sam kurs**; cechy zmieniają się wyłącznie ze zmianą dyrektora.
+    pub fn set_personality(&mut self, p: crate::personality::FirmPersonality) {
+        self.personality = p;
+        self.strategy = p.strategy();
+    }
 }
 
 impl HashState for Firm {
@@ -198,6 +223,15 @@ impl HashState for Firm {
             g.hash_state(h);
         }
         self.status.hash_state(h);
+        self.personality.hash_state(h);
+        h.write_u8(self.strategy.as_index() as u8);
+        match &self.campaign {
+            None => h.write_u8(0),
+            Some(c) => {
+                h.write_u8(1);
+                c.hash_state(h);
+            }
+        }
         self.log.hash_state(h);
     }
 }

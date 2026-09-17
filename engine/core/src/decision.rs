@@ -28,10 +28,10 @@ use crate::ids::{FirmId, SiteId};
 use crate::time::MinuteOfDay;
 use crate::types::{GoodId, JobRoleId, PolicyId, Q};
 use crate::vocab::{
-    ActionKind, BankruptcyTrigger, ClaimPriority, CommitmentKind, DeprivationEffect, FixedCost,
-    LeaveCause, LifeEventKind, LineStopCause, LoanKind, MigrationKind, NeedKind, PlaceRef,
-    PriceDriver, RejectCause, RejectCredit, ShortageStageKind, StockCat, TraitId, TransportMode,
-    UtilityKind, WageCause,
+    ActionKind, BankruptcyTrigger, ClaimPriority, CommitmentKind, DeprivationEffect, FirmStrategy,
+    FixedCost, LeaveCause, LifeEventKind, LineStopCause, LoanKind, MigrationKind, NeedKind,
+    PlaceRef, PriceDriver, ReactionKind, RejectCause, RejectCredit, ShortageStageKind, StockCat,
+    TraitId, TransportMode, UtilityKind, WageCause,
 };
 use serde::{Deserialize, Serialize};
 
@@ -370,27 +370,18 @@ pub enum DecisionReason {
     /// i nie daje aktywa: rzecz należy do leasingodawcy aż do wykupu i w upadłości
     /// do masy nie wchodzi. To jest różnica, którą karta inspekcji ma pokazać, zanim
     /// gracz policzy na nią majątek firmy.
-    LeaseSigned {
-        site: SiteId,
-        months: u16,
-    } = 506,
+    LeaseSigned { site: SiteId, months: u16 } = 506,
     /// Firma sprzedała należności z dyskontem (M7d WP8, faktoring).
     ///
     /// `count` to liczba sprzedanych pozycji, `discount_bp` — marża faktora.
     /// Dla obserwatora jest to typowy sygnał kłopotów z płynnością i dlatego ma
     /// własny wariant: „wzięli kredyt" i „sprzedali należności" to dwie różne
     /// diagnozy tej samej firmy.
-    ReceivablesFactored {
-        count: u16,
-        discount_bp: u16,
-    } = 507,
+    ReceivablesFactored { count: u16, discount_bp: u16 } = 507,
     /// Firma wypuściła obligacje (M7d WP8). `coupon_bp` to kupon roczny,
     /// `months` — czas do wykupu. Nabywcami są mieszkańcy z oszczędnościami
     /// i inne firmy; rynek wtórny należy do M10.
-    BondIssued {
-        coupon_bp: u16,
-        months: u16,
-    } = 508,
+    BondIssued { coupon_bp: u16, months: u16 } = 508,
     /// Otwarto postępowanie upadłościowe (M7d WP9, `K-10`).
     ///
     /// `days` ma znaczenie tylko przy `BankruptcyTrigger::Illiquid` (ile dób firma
@@ -411,7 +402,59 @@ pub enum DecisionReason {
         priority: ClaimPriority,
         ratio_bp: u16,
     } = 510,
-    // 511–599 zarezerwowane dla M7.
+    /// Tier operacyjny ustawił cel marży na towarze (M7e WP11, PRD §12.3).
+    ///
+    /// Nie mylić z `Repricing` (M5c): tamten mówi, **która korekta przeważyła**
+    /// przy składaniu dzisiejszej ceny, ten — że firma zmieniła cel, wokół którego
+    /// cena się składa. Pierwsze zdarza się codziennie, drugie raz na kilka tygodni,
+    /// i gracz pyta o nie osobno („czemu dziś taniej" vs. „czemu on zszedł z marży").
+    MarginTargetSet {
+        good: GoodId,
+        margin_bp: i32,
+        prev_bp: i32,
+    } = 511,
+    /// Tier operacyjny ustawił cel zapasu na towarze, w dobach sprzedaży (M7e WP11).
+    ///
+    /// `days` to pokrycie, do którego firma chce zamawiać; `prev` — poprzednie.
+    /// Zapas jest drugą dźwignią tieru operacyjnego obok ceny i musi mieć własny
+    /// powód, bo „stoi pusty" i „stoi pełny" to dwa różne błędy tej samej firmy.
+    RestockTargetSet { good: GoodId, days: u16, prev: u16 } = 512,
+    /// Tier taktyczny zamknął zakład (M7e WP12, PRD §12.3).
+    ///
+    /// `months` to długość nieprzerwanej straty, `margin_bp` — marża ostatniego
+    /// miesiąca (ujemna). Dwie liczby zamiast jednej z tego samego powodu co przy
+    /// `Hired`: pytanie gracza brzmi „dlaczego **ten**", a odpowiedź „bo od trzech
+    /// miesięcy traci 8%" niesie i skalę, i czas.
+    SiteClosed { months: u8, margin_bp: i32 } = 513,
+    /// Tier taktyczny zmienił kurs firmy i przypiął do niego preset polityki
+    /// (M7e WP12, PRD §12.1).
+    ///
+    /// **To jest źródło polityk firm AI.** Do M7e menedżer dostawał delegację
+    /// z polityką pustą, bo zestaw reguł miał generować tier taktyczny, a tieru
+    /// nie było (`AZ-1`). Reguła gracza i reguła stąd wykonują się tym samym
+    /// ewaluatorem — różnica jest w tym, kto ją napisał (`K-11`).
+    StrategySet {
+        strategy: FirmStrategy,
+        prev: FirmStrategy,
+    } = 514,
+    /// Firma odpowiedziała na utratę udziału w rynku (M7e WP14, PRD §12.2).
+    ///
+    /// `target` to **zakład** rywala, nie jego firma — także wtedy, gdy rywalem jest
+    /// gracz. Zakład, bo to on jest widoczny z ulicy i to jego cena stoi w tablicy
+    /// publicznej; firmę znajdzie się z niego jednym odczytem rejestru, a w drugą
+    /// stronę nie da się wcale (`K-46`: `FirmId` sklepu pochodzi z generatora miasta,
+    /// `FirmKey` z rejestru firm, i nie są tą samą liczbą).
+    ///
+    /// `depth_bp` znaczy co innego w każdym wariancie `kind` i to jest zamierzone:
+    /// przy wojnie cenowej to zejście z ceny, przy wyłączności premia dla dostawcy,
+    /// przy przeciąganiu ludzi — nadpłata ponad stawkę rywala. Jedna liczba, bo we
+    /// wszystkich trzech odpowiada na to samo pytanie gracza: „ile go to kosztuje".
+    CompetitiveResponse {
+        kind: ReactionKind,
+        target: SiteId,
+        depth_bp: u16,
+    } = 515,
+    // 516–599 zarezerwowane dla M7.
     // ... kolejne fazy dopisują własne bloki na końcu pliku
 }
 
@@ -479,6 +522,11 @@ impl DecisionReason {
             DecisionReason::BondIssued { .. } => 508,
             DecisionReason::BankruptcyOpened { .. } => 509,
             DecisionReason::ClaimSettled { .. } => 510,
+            DecisionReason::MarginTargetSet { .. } => 511,
+            DecisionReason::RestockTargetSet { .. } => 512,
+            DecisionReason::SiteClosed { .. } => 513,
+            DecisionReason::StrategySet { .. } => 514,
+            DecisionReason::CompetitiveResponse { .. } => 515,
         }
     }
 }

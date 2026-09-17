@@ -225,8 +225,16 @@ fn bench_doba_sklepu(c: &mut Criterion) {
     books
         .endow(rest, Money(1_000_000_000_000), Tick(0))
         .unwrap();
-    let market = Market::new(city_spec(), 7, data, goods, lancuch_testowy(),
-        needs, places, rest);
+    let market = Market::new(
+        city_spec(),
+        7,
+        data,
+        goods,
+        lancuch_testowy(),
+        needs,
+        places,
+        rest,
+    );
     for (i, s) in sites.iter().enumerate() {
         let firm = FirmId(Entity::new(i as u32, NonZeroU32::MIN));
         let acc = books.open_account(
@@ -347,8 +355,16 @@ fn bench_decyzja_zakupowa(c: &mut Criterion) {
     books
         .endow(rest, Money(1_000_000_000_000), Tick(0))
         .unwrap();
-    let market = Market::new(city_spec(), 7, data, goods, lancuch_testowy(),
-        needs, places, rest);
+    let market = Market::new(
+        city_spec(),
+        7,
+        data,
+        goods,
+        lancuch_testowy(),
+        needs,
+        places,
+        rest,
+    );
     for (i, s) in sites.iter().enumerate() {
         let firm = FirmId(Entity::new(i as u32, NonZeroU32::MIN));
         let acc = books.open_account(
@@ -440,12 +456,10 @@ criterion_main!(benches);
 /// test warstwy detalicznej nie ma się wywracać na kolejce na granicy; od badania
 /// kolejki jest `import_not_free` po stronie `sim/supply`.
 fn lancuch_testowy() -> magnat_supply::ChainHandle {
-    let cat = std::sync::Arc::new(
-        magnat_supply::load_default("contemporary").expect("katalog z data/"),
-    );
-    let tuning = std::sync::Arc::new(
-        magnat_supply::Tuning::load_default().expect("data/tuning/supply.ron"),
-    );
+    let cat =
+        std::sync::Arc::new(magnat_supply::load_default("contemporary").expect("katalog z data/"));
+    let tuning =
+        std::sync::Arc::new(magnat_supply::Tuning::load_default().expect("data/tuning/supply.ron"));
     let oracle: std::sync::Arc<dyn magnat_supply::FreightOracle> =
         std::sync::Arc::new(magnat_supply::FlatRateFreight {
             km: 5,

@@ -226,7 +226,10 @@ mod tests {
         let (cat, mut s, slot) = magazyn();
         s.put(&cat, slot, draft(CHLEB, 5000, 700, 0), MassIn::Produced)
             .expect("wstawienie");
-        assert!(s.spoil(SimMinute(1439)).is_empty(), "przed datą nic nie znika");
+        assert!(
+            s.spoil(SimMinute(1439)).is_empty(),
+            "przed datą nic nie znika"
+        );
         assert_eq!(s.spoil(SimMinute(1440)).len(), 1, "w dacie partia schodzi");
         assert_eq!(s.total_stock(CHLEB), Mass::ZERO);
         assert_eq!(s.losses(CHLEB, LossKind::Expired), Mass(5000));

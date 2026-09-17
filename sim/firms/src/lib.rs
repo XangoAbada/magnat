@@ -17,18 +17,24 @@
 
 #![forbid(unsafe_code)]
 
+pub mod ai;
 pub mod catalog;
 pub mod firm;
 pub mod hr;
 pub mod key;
 pub mod labor_policy;
 pub mod manager;
+pub mod personality;
 pub mod registry;
 pub mod registry_managers;
 pub mod ring;
 pub mod site;
 pub mod systems;
+pub mod view;
 
+pub use ai::{
+    decide_operational, decide_reaction, decide_tactical, Campaign, Decided, OpsAction, TacAction,
+};
 pub use catalog::{SiteType, SiteTypeCatalog, SiteTypeCategory, SiteTypeId, Staffing};
 pub use firm::{DecisionLog, Firm, FirmStatus, LoggedDecision, Owner, OwnerShare};
 pub use hr::employment::{payday, BenefitSet, Employment, PayrollItem, PayrollRun, Position};
@@ -47,6 +53,9 @@ pub use labor_policy::{
 pub use manager::{
     management_quality, replacement_quality, Autonomy, Manager, ManagerStyle, SiteDelegation,
 };
+pub use personality::{personality_from_director, FirmPersonality};
 pub use registry::Firms;
 pub use ring::Ring;
 pub use site::{Site, SitePlacement, SitePnlMonth};
+pub use systems::{register_firms, DecisionOutbox, FirmSystem, PayrollOutbox};
+pub use view::{CityFacts, FirmView, GoodFacts, SiteFacts};

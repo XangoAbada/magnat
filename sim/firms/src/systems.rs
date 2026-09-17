@@ -43,6 +43,25 @@ impl Default for FirmSystem {
     }
 }
 
+/// Firmy, którym w tej minucie wypadł slot decyzyjny (M7e WP11).
+///
+/// Skrzynka z tego samego powodu co [`PayrollOutbox`]: decyzje wykonuje
+/// `sim/economy`, bo tam są półki, księgi i tablica publiczna, a `Firms::schedule`
+/// **musi** mieć dokładnie jednego wołającego — to on zdejmuje firmy z kolejki
+/// przepełnienia, a kolejka wchodzi do hasha stanu (`R4`). Dwóch wołających
+/// znaczyłoby, że część decyzji przepada bez śladu.
+#[derive(Default)]
+pub struct DecisionOutbox {
+    pub due: Vec<(crate::key::Tier, Vec<crate::key::FirmKey>)>,
+}
+
+impl DecisionOutbox {
+    /// Zabiera to, co czeka, zostawiając skrzynkę pustą.
+    pub fn take(&mut self) -> Vec<(crate::key::Tier, Vec<crate::key::FirmKey>)> {
+        std::mem::take(&mut self.due)
+    }
+}
+
 /// Wypłaty czekające na zaksięgowanie przez `sim/economy`.
 ///
 /// Skrzynka, a nie wywołanie: gdyby `sim/firms` sięgnął po `Books`, zależność
@@ -73,9 +92,19 @@ impl System for FirmSystem {
         };
         // Sloty przydzielamy co minutę: poziom operacyjny ma minutę doby, a taktyczny
         // i strategiczny wpadają tylko na pełnej godzinie — funkcja `due` to rozstrzyga.
-        let _sloty = firms.schedule(cal);
-        // Decyzje wykonują podfazy M7b–M7e; M7a dowodzi wyłącznie, że przydział
-        // slotów jest deterministyczny.
+        let sloty = firms.schedule(cal);
+        // Decyzje wykonuje `sim/economy::ai_run` (M7e): tam są półki, księgi
+        // i tablica publiczna. Tutaj zostaje sam przydział — i to on jest
+        // deterministyczny, czego dowodzi test `scheduling.rs`.
+        let cos_do_zrobienia = sloty.iter().any(|(_, k)| !k.is_empty());
+        if cos_do_zrobienia {
+            if let Some(out) = world.get_resource_mut::<DecisionOutbox>() {
+                out.due = sloty;
+            }
+        }
+        let Some(firms) = world.get_resource_mut::<Firms>() else {
+            return;
+        };
         let wyplaty = if cal.minute_of_day() == 0 {
             firms.run_payroll(cal)
         } else {

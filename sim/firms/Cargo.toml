@@ -37,3 +37,9 @@ criterion = { workspace = true }
 
 [lints]
 workspace = true
+
+# Budżet decyzji firmy (M7e WP11, §7.6). Czas mierzy się **wyłącznie** tutaj —
+# w symulacji budżet jest liczbą firm na tick (§5.6, 00 §3.5).
+[[bench]]
+name = "firms_bench"
+harness = false

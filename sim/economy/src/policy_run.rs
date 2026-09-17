@@ -623,6 +623,14 @@ impl Market {
         s.controllers.get(&good).map(|pc| pc.policy)
     }
 
+    /// Cena półkowa towaru w zakładzie, brutto. Odczyt dla testów i dla panelu.
+    #[must_use]
+    pub fn shelf_price(&self, site: SiteId, good: GoodId) -> Option<Money> {
+        let m = self.lock();
+        let s = &m.shops[*m.by_site.get(&site)? as usize];
+        s.controllers.get(&good).map(|pc| pc.current)
+    }
+
     /// Podgląd obrazu konkurencji — wyłącznie do testów i do panelu.
     #[must_use]
     pub fn competitor_entry(&self, site: SiteId, good: GoodId) -> Option<(Money, Money, u32)> {
@@ -642,6 +650,17 @@ impl Market {
     pub fn shop_accounts(&self) -> Vec<(SiteId, crate::books::AccountId)> {
         let m = self.lock();
         m.shops.iter().map(|s| (s.site, s.account)).collect()
+    }
+
+    /// Rachunek bieżący jednego zakładu handlowego. `None` dla zakładu, którego
+    /// rynek detaliczny nie zna — zakład produkcyjny ma konto w `plants`.
+    #[must_use]
+    pub fn shop_account(&self, site: SiteId) -> Option<crate::books::AccountId> {
+        let m = self.lock();
+        m.by_site
+            .get(&site)
+            .copied()
+            .map(|i| m.shops[i as usize].account)
     }
 }
 
