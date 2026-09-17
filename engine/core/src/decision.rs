@@ -28,11 +28,12 @@ use crate::ids::{FirmId, SiteId};
 use crate::time::MinuteOfDay;
 use crate::types::{DistrictId, EventId, GoodId, JobRoleId, Money, PolicyId, Q};
 use crate::vocab::{
-    AbateReason, ActionKind, BankruptcyTrigger, ClaimPriority, CommitmentKind, DeprivationEffect,
-    EventCategory, FirmStrategy, FixedCost, LeaveCause, LifeEventKind, LineStopCause, LoanKind,
-    MigrationKind, NeedKind, PlaceRef, PriceDriver, ReactionKind, RejectCause, RejectCredit,
-    ShortageStageKind, SpendCategory, StockCat, TaxKind, TraitId, TransportMode, Trend,
-    UtilityKind, UtilityService, WageCause,
+    AbateReason, ActionKind, AgencyKind, BankruptcyTrigger, ClaimPriority, CommitmentKind,
+    DeprivationEffect, EventCategory, FirmStrategy, FixedCost, LeaveCause, LifeEventKind,
+    LineStopCause, LoanKind, MigrationKind, NeedKind, PermitKind, PlaceRef, PriceDriver,
+    ReactionKind, RejectCause, RejectCredit, RemedyKind, ServiceKind, ShortageStageKind,
+    SpendCategory, StockCat, TaxKind, TraitId, TransportMode, Trend, UtilityKind, UtilityService,
+    WageCause,
 };
 use serde::{Deserialize, Serialize};
 
@@ -581,7 +582,62 @@ pub enum DecisionReason {
         category: EventCategory,
         days: u16,
     } = 610,
-    // 611–699 zarezerwowane dla M8.
+    /// Jakość placówki publicznej po miesięcznym przeliczeniu (M8d WP7, PRD §10.3).
+    ///
+    /// Trzy liczby obok wyniku, bo „szkoła ma 41 punktów" nie jest odpowiedzią na
+    /// pytanie gracza „dlaczego moje dziecko nie umie czytać". `funding_bp` mówi,
+    /// ile miasto daje na ucznia wobec normy, `staff_bp` — jaka część etatów jest
+    /// obsadzona, `load_bp` — ilu uczniów przypada na miejsce. Placówka niedofinansowana
+    /// i placówka przepełniona schodzą do tej samej jakości z dwóch różnych powodów,
+    /// a naprawia się je dwoma różnymi decyzjami.
+    ServiceQuality {
+        kind: ServiceKind,
+        district: DistrictId,
+        quality: Q,
+        funding_bp: u16,
+        staff_bp: u16,
+        load_bp: u16,
+    } = 611,
+    /// Urząd wydał pozwolenie (M8d WP7, M8e §5.2).
+    ///
+    /// `waited_days` jest **wynikiem**, a nie parametrem: czas oczekiwania bierze się
+    /// z obsady urzędu, długości kolejki i dni wolnych (`K-15`). To jest cała treść
+    /// tego powodu — pozwolenie wydane w trzy doby i w sześćdziesiąt jest tą samą
+    /// decyzją urzędu i różni się wyłącznie tym, ile kosztowało czasu.
+    PermitIssued {
+        kind: PermitKind,
+        waited_days: u16,
+    } = 612,
+    /// Urząd otworzył sprawę przeciwko zakładowi (M8d WP8, PRD §10.4).
+    ///
+    /// `evidence` to materiał dowodowy w chwili otwarcia, nie w chwili rozstrzygnięcia:
+    /// sprawa rośnie w czasie i to jest jej istota. Otwarcie sprawy samo w sobie nie
+    /// jest karą i nie musi się nią skończyć.
+    CaseOpened {
+        agency: AgencyKind,
+        evidence: Q,
+    } = 613,
+    /// Urząd nałożył środek zaradczy (M8d WP8).
+    ///
+    /// `amount` jest kwotą tam, gdzie środek ma kwotę (grzywna, domiar), i zerem tam,
+    /// gdzie jej nie ma (zamknięcie, cofnięcie koncesji, przymusowy podział) — bo
+    /// wtedy dolegliwością jest czas albo majątek, a nie pieniądz, i udawanie kwoty
+    /// zafałszowałoby histogram kar.
+    RemedyImposed {
+        agency: AgencyKind,
+        remedy: RemedyKind,
+        amount: Money,
+    } = 614,
+    /// Zakład zmienił udział obrotu poza deklaracją (M8d WP8, PRD §10.4).
+    ///
+    /// Szara strefa nie jest cechą charakteru, tylko **odpowiedzią na przyciśnięcie**:
+    /// zakład pod kreską ukrywa więcej, zakład z marżą wraca do deklarowania. Dlatego
+    /// powód niesie obie liczby — nowy udział i wynik miesiąca, który go wywołał.
+    ShadowShareSet {
+        share_bp: u16,
+        last_result: Money,
+    } = 615,
+    // 616–699 zarezerwowane dla M8.
     // ... kolejne fazy dopisują własne bloki na końcu pliku
 }
 
@@ -669,6 +725,11 @@ impl DecisionReason {
             DecisionReason::GridTripped { .. } => 608,
             DecisionReason::EventStarted { .. } => 609,
             DecisionReason::EventEnded { .. } => 610,
+            DecisionReason::ServiceQuality { .. } => 611,
+            DecisionReason::PermitIssued { .. } => 612,
+            DecisionReason::CaseOpened { .. } => 613,
+            DecisionReason::RemedyImposed { .. } => 614,
+            DecisionReason::ShadowShareSet { .. } => 615,
         }
     }
 }

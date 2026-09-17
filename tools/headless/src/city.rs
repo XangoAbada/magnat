@@ -140,3 +140,125 @@ pub fn cadastre_from_city(city: &CityData) -> Vec<CadastreEntry> {
     out.sort_by_key(|c| c.site.0.index());
     out
 }
+
+// ── M8d: usługi publiczne, urzędy i egzekucja ────────────────────────────────────
+
+/// Co most postawił po stronie usług — liczby do raportu scenariusza.
+pub struct ServicesSetup {
+    pub services: usize,
+    pub offices: usize,
+    pub staff: u32,
+    /// Ile rodzajów usługi ma w tym mieście choć jedną placówkę. Mniej niż osiem
+    /// znaczy, że któryś rodzaj jest martwy — i to jest informacja do raportu,
+    /// a nie stan do przemilczenia (`R2`).
+    pub live_kinds: usize,
+    pub emission_limit_g_per_min: i64,
+}
+
+/// Odwzorowanie archetypu budynku publicznego na rodzaj usługi.
+///
+/// Tabela jest **tutaj**, a nie w danych, z tego samego powodu co odwzorowanie
+/// usługi na kierunek wydatku: przychodnia zapisana jako szkoła nie byłaby innym
+/// balansem, tylko innym modelem. `None` znaczy „to nie jest usługa publiczna",
+/// i tak jest dla działki ogrodniczej — budynek istnieje, usługi nie ma.
+#[must_use]
+fn rodzaj_uslugi(key: &str) -> Option<magnat_core::ServiceKind> {
+    use magnat_core::ServiceKind as S;
+    Some(match key {
+        "school" | "kindergarten" | "library" => S::School,
+        "clinic" => S::Clinic,
+        "hospital" => S::Hospital,
+        "police_station" => S::Police,
+        "fire_station" => S::Fire,
+        "town_hall" | "public_office" => S::Office,
+        "museum" | "park_service" | "sports_ground" => S::Park,
+        _ => return None,
+    })
+}
+
+/// Dokłada do stojącego miasta usługi publiczne, urzędy i egzekucję (M8d).
+///
+/// Osobne wywołanie od [`setup`], a nie jego część, bo to jest **inna warstwa
+/// i inny warunek wejścia**: podatki potrzebują rynku, a usługi — populacji
+/// (obsada placówek to komponent `Employment` mieszkańców) i kalibracji
+/// z `data/tuning/city.ron`.
+///
+/// # Errors
+/// Zwraca błąd, gdy nie da się wczytać `data/tuning/city.ron` albo
+/// `data/tuning/supply.ron` (próg emisji ma jedno źródło, `K-35`).
+pub fn setup_services(
+    world: &mut World,
+    city_data: &CityData,
+) -> Result<ServicesSetup, Box<dyn Error>> {
+    let tuning = magnat_city::CityTuning::load_default()?;
+    let supply = magnat_supply::Tuning::load_default()?;
+    let limit =
+        supply.emission_ref_pm_g_per_min * i64::from(tuning.agencies.emission_permille) / 1_000;
+
+    let dzielnic = city_data.districts.districts.len().max(1);
+    let mut placowki: Vec<magnat_city::PublicService> = Vec::new();
+    for (i, s) in city_data.sites.sites.iter().enumerate() {
+        let arch = city_data.site_catalog.get(s.archetype);
+        let Some(kind) = rodzaj_uslugi(arch.key()) else {
+            continue;
+        };
+        let etaty = s.workplaces.end.saturating_sub(s.workplaces.start);
+        placowki.push(magnat_city::PublicService {
+            kind,
+            site: crate::plants::site_id(i),
+            district: magnat_core::DistrictId(dzielnica_budynku(city_data, s.building.0.index())),
+            // Pojemność bierze się z normatywu „jedna placówka na tylu mieszkańców"
+            // z `data/buildings/public.ron` — czyli z liczby, którą generator już
+            // miał, żeby wiedzieć, ile ich postawić. Druga liczba obok tamtej
+            // rozjechałaby się przy pierwszej zmianie normatywu.
+            capacity: arch.spec.per_pop.unwrap_or(2_000),
+            staff_target: etaty,
+            staff: 0,
+            funding_per_month: Money::ZERO,
+            condition: magnat_core::Q::new(80),
+            quality: magnat_core::Q::MIN,
+            utilization_bps: 0,
+            served: 0,
+        });
+    }
+    placowki.sort_by_key(|p| p.site.0.index());
+
+    let urzedy: Vec<magnat_city::PermitOffice> = placowki
+        .iter()
+        .filter(|p| p.kind == magnat_core::ServiceKind::Office)
+        .map(|p| magnat_city::PermitOffice::new(p.site, p.district))
+        .collect();
+
+    let mut zywe = [false; magnat_core::SERVICE_KIND_COUNT];
+    for p in &placowki {
+        zywe[p.kind.as_index()] = true;
+    }
+    let raport = ServicesSetup {
+        services: placowki.len(),
+        offices: urzedy.len(),
+        staff: placowki.iter().map(|p| p.staff_target).sum(),
+        live_kinds: zywe.iter().filter(|b| **b).count(),
+        emission_limit_g_per_min: limit,
+    };
+
+    let Some(miasto) = world.get_resource_mut::<City>() else {
+        return Err("świat bez miasta — `city::setup` musi stać przed usługami".into());
+    };
+    miasto.services = magnat_city::PublicServices::new(placowki, dzielnic);
+    miasto.permits = magnat_city::PermitRegistry::new(urzedy);
+    // Inspektorów przepisuje co miesiąc krok miasta z obsady urzędów; jeden na start,
+    // żeby pierwsza doba nie była dobą bez żadnego urzędu.
+    miasto.enforcement = magnat_city::Enforcement::new(1, limit);
+    miasto.tuning = Arc::new(magnat_city::TuningRef(Some(tuning)));
+    magnat_city::step::register_coverage(world, dzielnic);
+    Ok(raport)
+}
+
+/// Dzielnica budynku — przez parcelę, bo indeksu przestrzennego dzielnic nie ma.
+fn dzielnica_budynku(city: &CityData, building: u32) -> u16 {
+    city.buildings
+        .buildings
+        .get(building as usize)
+        .and_then(|b| city.parcels.parcels.get(b.parcel.0.index() as usize))
+        .map_or(0, |p| p.district.0)
+}

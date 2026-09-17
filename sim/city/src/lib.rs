@@ -28,7 +28,12 @@ pub mod city;
 pub mod code;
 pub mod engine;
 pub mod settle;
+pub mod law;
+pub mod permits;
+pub mod services;
+pub mod step;
 pub mod systems;
+pub mod tuning;
 pub mod world;
 
 pub use budget::{close_month, close_year, BudgetMonth, BudgetPolicy, CityBudget, MunicipalBond};
@@ -39,9 +44,17 @@ pub use calc::{
 pub use charge::{
     ChargeRegistry, ChargeState, ChargeTotals, FiscalPeriod, TaxCharge, TaxChargeId, TaxPayer,
 };
-pub use city::{CadastreEntry, City};
+pub use city::{CadastreEntry, City, TuningRef};
+pub use law::{Agency, Case, CaseId, Enforcement, Remedy};
 pub use code::{TaxCode, TaxCodeError, VatTable, TAX_SCHEMA_VERSION};
 pub use engine::{CityTaxEngine, Withholding};
 pub use settle::{abate_bankrupt, age_overdue, settle_due, SettleReport};
+pub use permits::{
+    process_queue, Applicant, Permit, PermitId, PermitOffice, PermitRegistry, PermitStatus,
+};
+pub use services::{
+    publish_coverage, update_quality, DistrictPopulation, PublicService, PublicServices,
+};
 pub use systems::{register_city, CitySystem};
+pub use tuning::{CityTuning, TuningError, CITY_TUNING_SCHEMA_VERSION};
 pub use world::licenses_from_catalog;

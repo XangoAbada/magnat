@@ -590,6 +590,15 @@ impl Lifecycle {
     pub const FLAG_PREGNANT: u16 = 1 << 1;
     pub const FLAG_ILL: u16 = 1 << 2;
     pub const FLAG_RETIRED: u16 = 1 << 3;
+
+    /// Czy mieszkaniec jest dziś na zwolnieniu. Do M8d flagę czytała wyłącznie
+    /// demografia, która ją stawia; od M8d czyta ją też rynek pracy — chory nie
+    /// wlicza się do pokrycia etatowego zakładu (`K-44`).
+    #[inline]
+    #[must_use]
+    pub const fn is_ill(&self) -> bool {
+        self.flags & Lifecycle::FLAG_ILL != 0
+    }
 }
 
 // ── hash stanu (00 §3.6) ────────────────────────────────────────────────────────

@@ -876,58 +876,6 @@ impl System for ReplanCooldownSystem {
     }
 }
 
-/// Ile shardów ma doba tygodniowa: system dotyka 1/7 populacji na dobę.
-pub const WEEK_SHARDS: u32 = 7;
-
-/// Wzrost umiejętności przez pracę i zanik przez nieużywanie (§5.12).
-pub struct SkillDriftSystem {
-    desc: SystemDesc,
-}
-
-impl SkillDriftSystem {
-    #[must_use]
-    pub fn new(world: &World) -> SkillDriftSystem {
-        SkillDriftSystem {
-            desc: SystemDesc::new("agents.SkillDrift", Cadence::EveryDay).with_query::<(
-                Entity,
-                &Employment,
-                &mut Skills,
-            ), ()>(world),
-        }
-    }
-}
-
-impl System for SkillDriftSystem {
-    fn desc(&self) -> &SystemDesc {
-        &self.desc
-    }
-
-    fn run(&mut self, ctx: &mut SystemCtx<'_>) {
-        let doba = ctx.tick.0 / 1440;
-        let shard = (doba % u64::from(WEEK_SHARDS)) as u32;
-        let pool = ctx.pool;
-        ctx.query::<(Entity, &Employment, &mut Skills), ()>()
-            .par_for_each(pool, |(e, emp, skills)| {
-                if e.index() % WEEK_SHARDS != shard {
-                    return;
-                }
-                for s in &mut skills.0 {
-                    if s.role == Skills::ROLE_NONE {
-                        continue;
-                    }
-                    // Tydzień pracy w roli podnosi ją o punkt; tydzień bez niej
-                    // odbiera tyle, ile mówi `decay` (setne punktu na dobę × 7).
-                    if emp.has_job() && emp.role == s.role {
-                        s.level = s.level.saturating_add(1).min(100);
-                    } else {
-                        let ubytek = (u32::from(s.decay) * 7 / 100).max(1) as u8;
-                        s.level = s.level.saturating_sub(ubytek);
-                    }
-                }
-            });
-    }
-}
-
 /// Zużycie zapasów gospodarstwa — jeden dzień zapasu na dobę (§5.12).
 /// M5 zastąpi to realną konsumpcją towarów z partiami.
 pub struct HouseholdStockSystem {

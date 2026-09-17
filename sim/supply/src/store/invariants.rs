@@ -85,4 +85,15 @@ impl Store {
     pub fn losses(&self, good: GoodId, kind: LossKind) -> Mass {
         Mass(self.mass[good.0 as usize].losses[kind.as_index()])
     }
+
+    /// Wartość wszystkiego, co magazyn dotąd odpisał.
+    ///
+    /// Licznik narastający, więc wołający liczy **różnicę** wokół swojej operacji —
+    /// tak robi `Market::shrinkage` (M8d). Zwracanie kosztu z `write_off` byłoby
+    /// czystsze i wymagałoby zmiany podpisu, którego używa produkcja; różnica dwóch
+    /// odczytów daje to samo i nie rusza cudzego wołania.
+    #[must_use]
+    pub fn write_offs_total(&self) -> Money {
+        self.write_offs
+    }
 }

@@ -225,6 +225,10 @@ impl Workforce for WorldWorkforce<'_> {
             .has_job()
             .then(|| (site_id(emp.site), JobRoleId(emp.role)));
         let best_role = self.world.get::<Skills>(c.0).and_then(najlepszy_zawod);
+        let chory = self
+            .world
+            .get::<magnat_agents::Lifecycle>(c.0)
+            .is_some_and(magnat_agents::Lifecycle::is_ill);
         Some(PersonFacts {
             vitals,
             district,
@@ -232,6 +236,7 @@ impl Workforce for WorldWorkforce<'_> {
             loyalty: osobowosc.get(TraitId::Loyalty),
             job,
             best_role,
+            on_sick_leave: chory,
         })
     }
 

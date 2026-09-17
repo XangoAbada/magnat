@@ -144,6 +144,15 @@ pub fn run(a: &M8MiastoArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
         publiczne.excise_services
     );
 
+    // Usługi publiczne, urzędy i egzekucja (M8d). Po mieście, bo placówka jest
+    // finansowana z budżetu, i po populacji, bo jej obsada to komponent
+    // `Employment` mieszkańców, a nie liczba wpisana w dane.
+    let uslugi = city_bridge::setup_services(&mut world, &city)?;
+    eprintln!(
+        "usługi publiczne: {} placówek ({} rodzajów z 8 ma choć jedną), {} urzędów, {} etatów w normatywie; próg emisji {} g pyłu/min",
+        uslugi.services, uslugi.live_kinds, uslugi.offices, uslugi.staff, uslugi.emission_limit_g_per_min
+    );
+
     // Sieci przesyłowe. Po zakładach, bo moc przyłączeniowa bierze się z linii
     // produkcyjnych, i po mieście, bo akcyza od energii nalicza się na rachunku.
     let sieci = grid_bridge::setup(&mut world, &city)?;
@@ -356,6 +365,113 @@ fn raport_zdarzen(world: &magnat_ecs::World, dob: u32) -> bool {
 }
 
 /// Zwraca `false`, gdy którakolwiek bramka scenariusza się nie zamknęła.
+/// Sekcja „usługi publiczne i urzędy" raportu (M8d).
+///
+/// Odpowiada na trzy pytania i tylko na te trzy: czy placówki mają obsadę, czy
+/// kolejka urzędu się rusza i czy urzędy kontrolne cokolwiek robią. Każde z nich
+/// jest pytaniem o **martwy mechanizm** — placówka bez obsady, urząd bez wniosku
+/// i urząd kontrolny bez sprawy przechodzą każdy test i w raporcie wyglądają
+/// tak samo jak działające (`R2`).
+fn raport_uslug(miasto: &City, world: &magnat_ecs::World) {
+    use magnat_core::{AgencyKind, ServiceKind};
+    if miasto.services.is_empty() {
+        return;
+    }
+    println!("── usługi publiczne ──────────────────────────────────");
+    for k in ServiceKind::ALL {
+        let ile = miasto.services.count_of(*k);
+        if ile == 0 {
+            println!("{:<9} — brak placówek w tym mieście", k.name());
+            continue;
+        }
+        let swoje: Vec<&magnat_city::PublicService> = miasto
+            .services
+            .all()
+            .iter()
+            .filter(|s| s.kind == *k)
+            .collect();
+        let jakosc: u32 = swoje.iter().map(|s| u32::from(s.quality.get())).sum::<u32>() / ile;
+        let etaty: u32 = swoje.iter().map(|s| s.staff_target).sum();
+        let obsada: u32 = swoje.iter().map(|s| s.staff).sum();
+        let obciazenie: u32 =
+            swoje.iter().map(|s| s.utilization_bps).sum::<u32>() / ile;
+        println!(
+            "{:<9} {ile:>3} placówek, jakość {jakosc:>3}, obsada {obsada}/{etaty}, obłożenie {} %, pokrycie miasta {}",
+            k.name(),
+            obciazenie / 100,
+            miasto.services.coverage().city_mean(*k).get()
+        );
+    }
+
+    println!("── urząd i egzekucja ─────────────────────────────────");
+    println!(
+        "pozwolenia: {} wydanych, {} w kolejce, {} wygasłych, mediana oczekiwania {}",
+        miasto.permits.issued(),
+        miasto.permits.open_count(),
+        miasto.permits.expired(),
+        miasto
+            .permits
+            .median_wait_days()
+            .map_or("— (żadnego nie wydano)".to_string(), |d| format!("{d} dób"))
+    );
+    for k in AgencyKind::ALL {
+        let a = miasto.enforcement.agencies()[k.as_index()];
+        println!(
+            "{:<16} {} inspektorów, spraw otwartych {}, zamkniętych {}",
+            k.name(),
+            a.inspectors,
+            a.opened - a.closed,
+            a.closed
+        );
+    }
+    let domiary: i64 = miasto
+        .enforcement
+        .cases()
+        .iter()
+        .filter_map(|c| c.remedy)
+        .map(|r| r.amount().get())
+        .sum();
+    println!("kary i domiary razem: {} zł", domiary / 100);
+
+    // Szara strefa i emisje: dwie liczby, których brak wygląda tak samo jak zero.
+    // `R10` mówi „cel 5–20 % firm", a emisje są jedynym wejściem ochrony środowiska.
+    if let Some(m) = world.get_resource::<magnat_economy::Market>() {
+        let (ile, sredni) = m.shadow_stats();
+        println!(
+            "szara strefa: {ile} zakładów ukrywa część obrotu, średnio {} %",
+            sredni / 100
+        );
+    }
+    let max_pyl = miasto.emissions.iter().map(|(_, _, g)| *g).max().unwrap_or(0);
+    println!(
+        "emisje: {} zakładów z niezerowym pyłem, najbrudniejszy {max_pyl} g/min",
+        miasto.emissions.len()
+    );
+
+    // Diagnostyka kontroli skarbowej: „dlaczego jeszcze nie" dla **tej jednej**
+    // definicji. Stoi osobno od listy pięciu najbliższych, bo to jest definicja,
+    // od której zależy kryterium ukończenia WP8 — a definicja odsiana bramką
+    // nie pojawia się w tamtej liście wcale i wygląda tak samo jak definicja
+    // o niskim hazardzie (`R2`).
+    if let Some(ev) = world.get_resource::<magnat_events::Events>() {
+        if let Some((i, _)) = ev
+            .catalog()
+            .defs
+            .iter()
+            .enumerate()
+            .find(|(_, d)| d.key == "political/tax_audit")
+        {
+            match ev.diagnosis(u16::try_from(i).unwrap_or(0)) {
+                Some(d) => println!(
+                    "kontrola skarbowa: {} kandydatów, {} odsianych bramką, hazard {} ppm, {} wystąpień",
+                    d.candidates, d.gated_out, d.best_ppm, d.fired
+                ),
+                None => println!("kontrola skarbowa: definicja nigdy nie była oceniana"),
+            }
+        }
+    }
+}
+
 fn raport(
     a: &M8MiastoArgs,
     miasto: &City,
@@ -454,6 +570,7 @@ fn raport(
     }
 
     ok &= raport_zdarzen(world, a.days);
+    raport_uslug(miasto, world);
 
     if zywe < a.expect_taxes {
         println!(

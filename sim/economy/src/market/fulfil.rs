@@ -65,14 +65,30 @@ impl Market {
         let Some(i) = m.by_site.get(&intent.site).copied() else {
             return;
         };
+        // **Szara strefa zdejmuje część utargu, zanim danina powstanie** (M8d WP8).
+        // Nie po naliczeniu — po naliczeniu rejestr miasta rozjechałby się z księgą
+        // płatnika, a to jest ta para liczb, którą porównuje test T1.
+        let szara = m.shops[i as usize].unreported_bps;
+        let ukryte = if szara == 0 {
+            Money::ZERO
+        } else {
+            Money(intent.agreed_price.get() * i64::from(szara) / 10_000)
+        };
+        let jawne = Money(intent.agreed_price.get() - ukryte.get());
         // VAT wyłuskany z ceny brutto (`K-7`). Do M8 zawsze zero.
-        let vat = m.tax.vat_on_gross(intent.good, intent.agreed_price);
+        let vat = m.tax.vat_on_gross(intent.good, jawne);
         // Akcyza liczy się od **masy**, nie od ceny, więc potrzebuje katalogu.
         // Sprzedaż wyrobu nieobłożonego nie płaci za ten mechanizm nic poza
         // odczytem zera z tablicy stawek.
-        let masa = m.chain.cat.good(intent.good).mass_of_units(intent.qty);
+        let masa_calosc = m.chain.cat.good(intent.good).mass_of_units(intent.qty);
+        // Akcyza jest od masy, więc szara strefa ukrywa **masę**, nie cenę.
+        let masa = if szara == 0 {
+            masa_calosc
+        } else {
+            magnat_core::Mass(masa_calosc.0 - masa_calosc.0 * i64::from(szara) / 10_000)
+        };
         let akcyza = m.tax.excise_on(intent.good, masa);
-        let netto = Money(intent.agreed_price.get() - vat.get());
+        let netto = Money(jawne.get() - vat.get());
         let s = &mut m.shops[i as usize];
         s.sold_qty = s.sold_qty.saturating_add(intent.qty.get());
         // **Utarg jest netto.** VAT przechodzi przez kasę sklepu, ale nigdy nie jest
@@ -108,16 +124,25 @@ impl Market {
         // VAT schodzi z przychodu (sklep go tylko przenosi), akcyza jest kosztem
         // sklepu (płaci ją z własnej marży, a odzyska dopiero ceną, i to nie od razu).
         // Po obu zapisach `Revenue` stoi netto, a `TaxPayable` niesie dług wobec miasta.
-        if vat.get() != 0 || akcyza.get() != 0 {
+        //
+        // **Utarg ukryty schodzi tym samym zapisem, ale na kapitał właściciela.**
+        // Gotówka wpłynęła w całości i `BankCurrent` musi ją widzieć — inaczej księga
+        // zakładu rozjechałaby się z rachunkiem w `Books`, a to jest pierwszy
+        // niezmiennik, który M5 postawił. To jest **przeksięgowanie, nie wypłata**:
+        // pieniądz zostaje na koncie, ale przestaje być przychodem i staje się
+        // kapitałem, więc `Revenue` i podstawa CIT-u spadają razem z podstawą VAT-u.
+        // Tyle właśnie znaczy „obniża fakt, a nie naliczenie".
+        if vat.get() != 0 || akcyza.get() != 0 || ukryte.get() != 0 {
             let _ = ledger::post(
                 &mut s.ledger,
                 JournalEntry::new(
                     intent.arrived,
                     intent.reason,
                     &[
-                        (LedgerAccount::Revenue, vat),
+                        (LedgerAccount::Revenue, Money(vat.get() + ukryte.get())),
                         (LedgerAccount::TaxExpense, akcyza),
                         (LedgerAccount::TaxPayable, Money(-vat.get() - akcyza.get())),
+                        (LedgerAccount::Equity, Money(-ukryte.get())),
                     ],
                 ),
             );

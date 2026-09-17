@@ -17,7 +17,12 @@ magnat-ecs = { workspace = true }
 # posiadaczem konta (`AccountOwner::City`), a nie wyjątkiem od niezmiennika podaży.
 # Stąd też bierze się kierunek zależności: `city → economy`, nigdy odwrotnie —
 # `CityTaxEngine` wypełnia hak `TaxEngine`, który M5 zostawił u siebie.
+# Obsada placowek publicznych: komponent `Employment` mieszkanca (M8d WP7).
+magnat-agents = { workspace = true }
 magnat-economy = { workspace = true }
+# Kontrola skarbowa jest **zdarzeniem**, a nie drugim losowaniem (`CF-1`):
+# miasto czyta rejestr zdarzen i otwiera sprawe, a hazard liczy `sim/events`.
+magnat-events = { workspace = true }
 # Rejestr firm i zakładów: podstawa CIT, koncesji i pokrycia listą płac.
 magnat-firms = { workspace = true }
 # Katalog towarów (klucz towaru → klasa VAT i stawka akcyzy) oraz rozliczenia B2B.

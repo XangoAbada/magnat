@@ -37,6 +37,13 @@ pub fn labor_coverage(
             let pct = site.labor_pct(roles, &|c: CitizenId| {
                 let f = people.facts(c)?;
                 let (_, role) = f.job?;
+                // **Zwolnienie lekarskie zabiera cały etat, a nie jego część** (M8d WP7).
+                // Człowiek na zwolnieniu nie jest słabszym pracownikiem — nie ma go
+                // w pracy. Osłabienie niesie już `Vitals.health` i to są dwie różne
+                // rzeczy: przychodnia skraca nieobecność, a nie poprawia formę.
+                if f.on_sick_leave {
+                    return None;
+                }
                 Some((f.vitals, people.skill_in(c, role)))
             });
             (id, pct)

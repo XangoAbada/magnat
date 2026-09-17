@@ -62,6 +62,13 @@ pub struct PersonFacts {
     /// Zawód, w którym kandydat jest najlepszy — w nim szuka pracy najpierw.
     /// `None` znaczy „nie umie jeszcze nic", czyli absolwent.
     pub best_role: Option<JobRoleId>,
+    /// Czy mieszkaniec jest **dziś na zwolnieniu** (M8d WP7, `Lifecycle::FLAG_ILL`).
+    ///
+    /// Do M8d chorobę widziało wyłącznie `Vitals.health`, czyli forma — a chory
+    /// pracownik dalej stał przy maszynie, tylko słabiej. Absencja jest czym innym
+    /// niż osłabienie i to ona jest kanałem skutku szpitala z §5.3: przychodnia
+    /// skraca zwolnienie, a nie leczy formę.
+    pub on_sick_leave: bool,
 }
 
 impl PersonFacts {

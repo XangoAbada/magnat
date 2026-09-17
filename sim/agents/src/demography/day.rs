@@ -140,6 +140,38 @@ fn hazardy(world: &mut World, day: u64, hooks: &mut dyn InheritanceHook, raport:
             ));
         }
 
+        // 2a. Cykl szkolny. **Dziecko urodzone w grze nie dostawało flagi ucznia**
+        //     i nie dostawało jej nigdy: `FLAG_PUPIL` stawiał wyłącznie napływ
+        //     migracyjny, w chwili przyjazdu (pozycja 1 wykazu `R2`). Bez tego
+        //     szkoła — cokolwiek by robiła — nie miała kogo uczyć poza rocznikami
+        //     zasiedlenia świata, a po jednym pokoleniu nie uczyła nikogo.
+        //
+        //     Zapis i wypis idą tym samym progiem co reszta cyklu życia: na
+        //     najbliższej dobie shardu po przekroczeniu wieku, tak samo jak
+        //     emerytura wyżej. Uczeń nie dostaje przy tym etatu w szkole — miejsce
+        //     w placówce rozdaje pula wakatów (`Vacancies`), a pojemność obwodu
+        //     liczy M8d z normatywu; flaga mówi „chodzi do szkoły", a nie „pracuje".
+        let w_szkole = world
+            .get::<Employment>(e)
+            .is_some_and(|x| x.flags & Employment::FLAG_PUPIL != 0);
+        // Etat wygrywa z wiekiem. Przy dzisiejszych danych (`school_end == work_start`)
+        // te dwa stany się nie stykają, ale `labour_force.min` jest niższe od obu,
+        // więc pracujący nastolatek jest możliwy — a oznaczony jako uczeń zniknąłby
+        // z liczby pracujących w gospodarstwie, nie oddając przy tym etatu.
+        let pracuje = world.get::<Employment>(e).is_some_and(Employment::has_job);
+        let wiek_szkolny = !pracuje
+            && wiek >= i32::from(ages.school_start)
+            && wiek < i32::from(ages.school_end);
+        if wiek_szkolny != w_szkole {
+            if let Some(emp) = world.get_mut::<Employment>(e) {
+                if wiek_szkolny {
+                    emp.flags |= Employment::FLAG_PUPIL;
+                } else {
+                    emp.flags &= !Employment::FLAG_PUPIL;
+                }
+            }
+        }
+
         // 3. Choroba. C-9: choroba **obniża `Health`** zamiast dokładać flagę do
         // `PlanCtx` — wyzwalacz „chory → wizyta u lekarza" w planerze już czyta
         // `Needs[Health] < 30`, więc nie trzeba niczego podłączać.
@@ -196,10 +228,28 @@ fn zachoruj(world: &mut World, e: Entity, day: u64, tabela: &DemographyTable, r:
         + r.gen_range_u32(u32::from(
             f.illness_health_drop.max - f.illness_health_drop.min + 1,
         )) as u8;
-    let dni = u64::from(
+    let losowe = u64::from(
         f.illness_days.min
             + r.gen_range_u32(u32::from(f.illness_days.max - f.illness_days.min + 1)) as u8,
     );
+    // **Opieka zdrowotna skraca zwolnienie, a nie leczy formę** (M8d WP7, PRD §10.3).
+    // Szpital i przychodnia są tym samym kanałem skutku i bierze się z nich lepszą
+    // liczbę: przychodnia w dzielnicy załatwia zwykłą infekcję, szpital resztę.
+    // Pełne pokrycie skraca chorobę o połowę, zerowe nie zmienia nic — liniowo, bo
+    // krzywa bez danych, które by ją uzasadniły, jest ozdobą.
+    //
+    // Świat bez miasta jako aktora nie ma tej tablicy i choruje tak jak przed M8d.
+    let opieka = world.get_resource::<magnat_core::ServiceCoverage>().map_or(0, |c| {
+        let d = world
+            .get::<crate::Residence>(e)
+            .map_or(magnat_core::DistrictId(0), |r| {
+                magnat_core::DistrictId(r.district)
+            });
+        c.at(d, magnat_core::ServiceKind::Hospital)
+            .get()
+            .max(c.at(d, magnat_core::ServiceKind::Clinic).get())
+    });
+    let dni = (losowe * u64::from(200 - u16::from(opieka)) / 200).max(1);
     if let Some(n) = world.get_mut::<Needs>(e) {
         let teraz = n.get(NeedKind::Health);
         n.set(NeedKind::Health, teraz.saturating_sub(spadek));

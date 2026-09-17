@@ -108,6 +108,7 @@ impl Workforce for TestPeople {
                 .iter()
                 .max_by_key(|(_, lvl)| **lvl)
                 .map(|(r, _)| *r),
+            on_sick_leave: false,
         })
     }
 

@@ -22,7 +22,21 @@ impl Market {
         let chain = m.chain.clone();
         let mut ch = chain.lock();
         let cat = chain.cat.clone();
+        let teraz = m.tick;
         for i in 0..m.shops.len() {
+            // Zakład zawieszony decyzją urzędu (`Remedy::Closure`, M8d WP8) nie wykłada
+            // i nie ma czego sprzedać. Oferty schodzą do zera, więc mieszkaniec go nie
+            // widzi — kara jest utratą obrotu, a nie napisem na drzwiach.
+            if m.shops[i].suspended_until.get() > teraz.get() {
+                let puste: Vec<crate::offer::OfferId> =
+                    m.shops[i].shelf.lines.iter().map(|l| l.offer).collect();
+                for offer in puste {
+                    if let Some(o) = m.offers.get_mut(offer) {
+                        o.available = Qty::ZERO;
+                    }
+                }
+                continue;
+            }
             let (backroom, shelf_slot) = (m.shops[i].backroom, m.shops[i].shelf_slot);
             let plan: Vec<(GoodId, Mass)> = m.shops[i]
                 .shelf
@@ -272,6 +286,9 @@ impl Market {
             m.stats.write_offs += 1;
             m.stats.write_off_value = Money(m.stats.write_off_value.get() + odpis.get());
             m.stats.expired_qty += masa;
+            // Kartoteka sanitarna zakładu (M8d WP8) — magazyn liczy straty per towar,
+            // więc „ile ten sklep wyrzucił" nie ma gdzie indziej miejsca.
+            m.shops[i].expired_mass = magnat_core::Mass(m.shops[i].expired_mass.0 + masa);
             razem = Money(razem.get() + odpis.get());
         }
         razem

@@ -98,6 +98,8 @@ const REORDER_POINT_MULTIPLE: i64 = 3;
 
 mod api;
 mod close;
+mod enforce;
+pub use enforce::SiteEnforcementRow;
 mod fulfil;
 mod household;
 mod lifecycle;

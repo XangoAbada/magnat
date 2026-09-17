@@ -73,6 +73,12 @@ pub enum Probe {
     /// Luka płacowa: o ile promili płaca firmy odstaje **w dół** od mediany
     /// przyjętej w zawodzie i dzielnicy. Zero znaczy „płaci jak rynek".
     FirmWageGapPermille,
+    /// Udział obrotu firmy **poza deklaracją**, w punktach bazowych (M8d WP8).
+    ///
+    /// Największy z udziałów jej zakładów, a nie średnia: kontrola skarbowa
+    /// przychodzi po firmie, w której coś nie gra, a nie po firmie, której średnia
+    /// wygląda spokojnie. Zero znaczy „deklaruje wszystko".
+    FirmUnreportedBps,
     // ── miasto (WP6) ────────────────────────────────────────────────────────
     /// Stopa bezrobocia w promilach.
     UnemploymentPermille,

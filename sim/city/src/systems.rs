@@ -21,6 +21,7 @@ use crate::assess;
 use crate::budget;
 use crate::city::City;
 use crate::settle;
+use crate::step;
 
 /// Wpina miasto w świat razem z jego hakiem podatkowym.
 ///
@@ -134,6 +135,17 @@ impl CitySystem {
             if settle::is_year_start(t) {
                 budget::close_year(&mut city.budget);
             }
+        }
+
+        // 6. Usługi publiczne, urzędy i egzekucja (M8d). **Po** budżecie, bo jakość
+        //    placówki stoi na planie wydatków, a plan liczy się z okna dwunastu
+        //    miesięcy, które właśnie zamknięcie miesiąca uzupełniło.
+        let mut powody = step::dobowy(city, market, ctx.world_mut(), t);
+        if settle::is_month_start(t) {
+            powody.extend(step::miesieczny(city, market, ctx.world_mut(), t));
+        }
+        for (site, powod) in powody {
+            market.log_firm_decision(site, powod);
         }
     }
 

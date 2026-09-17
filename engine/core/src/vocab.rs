@@ -783,6 +783,75 @@ vocab_enum! {
 }
 
 vocab_enum! {
+    /// Rodzaj usługi publicznej (M8d §5.3, PRD §10.3).
+    ///
+    /// W `core`, a nie w `sim/city`, bo czyta go **więcej niż jedna faza** (`K-8`)
+    /// i to nie hipotetycznie: M3 przy rozwoju dziecka i długości choroby, M5 przy
+    /// stratach inwentaryzacyjnych sklepu, M8 przy jakości placówki. Żadna z tych
+    /// faz nie może zależeć od `sim/city` — zależność idzie w drugą stronę.
+    ///
+    /// Kolejność wariantów jest kontraktem, bo `as_index()` indeksuje wiersz
+    /// [`ServiceCoverage`], czyli pokrycie obwodowe per dzielnica.
+    ///
+    /// `School` obejmuje przedszkole, szkołę i bibliotekę; `Clinic` przychodnię,
+    /// `Hospital` szpital. Rozróżnienie przychodni od szpitala zostaje, bo jedna
+    /// stoi w co drugiej dzielnicy, a drugi jeden na całe miasto — i to jest różnica
+    /// w zasięgu, nie w nazwie.
+    ServiceKind {
+        School, Clinic, Hospital, Police, Fire, Waste, Park, Office,
+    }
+}
+
+/// Liczba rodzajów usługi publicznej — szerokość wiersza [`ServiceCoverage`].
+pub const SERVICE_KIND_COUNT: usize = ServiceKind::ALL.len();
+
+vocab_enum! {
+    /// Urząd kontrolny (M8d §5.3, PRD §10.4).
+    ///
+    /// Ładunek `DecisionReason::{CaseOpened, RemedyImposed}`, więc w `core` z tego
+    /// samego powodu co [`TaxKind`]: ładunek centralnego enuma nie może pochodzić
+    /// z crate'u, który od `core` zależy. Drugi czytelnik znany z nazwy i numeru
+    /// fazy: M7 (ryzyko kontroli w decyzji firmy) i M9 (karta sprawy).
+    ///
+    /// Kolejność jest kontraktem, bo `as_index()` indeksuje histogram spraw
+    /// per urząd w panelu miasta.
+    AgencyKind {
+        Antitrust, LaborInspection, Sanitary, Environment, TaxOffice,
+    }
+}
+
+/// Liczba urzędów kontrolnych.
+pub const AGENCY_KIND_COUNT: usize = AgencyKind::ALL.len();
+
+vocab_enum! {
+    /// Rodzaj środka zaradczego nałożonego przez urząd (M8d §5.3).
+    ///
+    /// **Słownik jest płaski, a kwota i termin idą osobnymi polami** — ta sama
+    /// korekta co przy [`TaxKind`] i `BankruptcyTrigger` (`K-48`): `vocab_enum!`
+    /// daje słownik, a nie enum z ładunkiem, a histogram środków ma liczyć środki,
+    /// a nie pary (środek, kwota). Wariant z ładunkiem mieszka w `sim/city::Remedy`.
+    ///
+    /// **Cztery warianty, bo cztery ktoś nakłada.** Cofnięcie koncesji wyglądało na
+    /// oczywisty piąty i nie ma go tu z rozmysłu: żaden urząd nie ma dziś przesłanki,
+    /// która by je uzasadniała, a wariant, którego nic nie ustawia, przechodzi każdy
+    /// test i w histogramie wygląda tak samo jak wariant działający (`R2`).
+    RemedyKind {
+        Fine, Closure, ForcedDivestiture, BackTax,
+    }
+}
+
+vocab_enum! {
+    /// Rodzaj pozwolenia wydawanego przez urząd (M8d WP7, M8e §5.2).
+    ///
+    /// Ładunek `DecisionReason::PermitIssued`. Kolejność wariantów jest kontraktem,
+    /// bo `as_index()` indeksuje koszt wniosku w jednostkach przerobu urzędu.
+    PermitKind {
+        Build, ChangeOfUse, Demolition, EnvClearance, AlcoholLicense,
+        FoodService, RoadAccess, OversizeTransport,
+    }
+}
+
+vocab_enum! {
     /// Biom. Konsument poza M1: M2 (strefowanie i zieleń), M5/M6 (rolnictwo i leśnictwo),
     /// M8 (zdarzenia pogodowe zależne od pokrycia terenu).
     Biome {

@@ -28,6 +28,7 @@ pub mod ids;
 pub mod money;
 pub mod rng;
 pub mod schema;
+pub mod service;
 pub mod time;
 pub mod types;
 pub mod vocab;
@@ -47,19 +48,22 @@ pub use ids::{
 pub use money::split_proportional;
 pub use rng::{mix64, rng, Rng, StreamId, NO_ENTITY};
 pub use schema::ComponentSchemaId;
+pub use service::ServiceCoverage;
 pub use time::{Cadence, DayOfWeek, MinuteOfDay, OpenHours, SimCalendar, SimClock, SimSpeed};
 pub use types::{
     DepositId, DistrictId, Energy, EventId, GoodId, JobRoleId, Mass, Money, Mood, NeedCategoryId,
     PolicyId, Qty, RecipeId, SimInstant, SimMinute, TariffClassId, Tick, Volume, Q,
 };
 pub use vocab::{
-    AbateReason, ActionKind, ActivityKind, BankruptcyTrigger, Biome, BodyType, ClaimPriority,
+    AbateReason, ActionKind, ActivityKind, AgencyKind, BankruptcyTrigger, Biome, BodyType,
+    ClaimPriority,
     CommitmentKind, DeprivationEffect, EventCategory, FirmStrategy, FixedCost, GateKind,
     LeaveCause, LifeEventKind, LineStopCause, LoanKind, LossKind, MigrationKind, NeedKind,
-    PlaceKind, PlaceRef, PriceBasis, PriceDriver, ReactionKind, RejectCause, RejectCredit,
-    ResourceKind, RoadClass, Season, ShortageStageKind, SpendCategory, StockCat, TaxKind, TraitId,
-    TransportMode, Trend, UtilityKind, UtilityService, WageCause, WorldCoord, CLAIM_PRIORITY_COUNT,
-    FIXED_COST_COUNT, LOSS_KIND_COUNT, NEED_COUNT, REJECT_CAUSE_COUNT, SPEND_CATEGORY_COUNT,
+    PermitKind, PlaceKind, PlaceRef, PriceBasis, PriceDriver, ReactionKind, RejectCause,
+    RejectCredit, RemedyKind, ResourceKind, RoadClass, Season, ServiceKind, ShortageStageKind,
+    SpendCategory, StockCat, TaxKind, TraitId, TransportMode, Trend, UtilityKind, UtilityService,
+    WageCause, WorldCoord, AGENCY_KIND_COUNT, CLAIM_PRIORITY_COUNT, FIXED_COST_COUNT,
+    LOSS_KIND_COUNT, NEED_COUNT, REJECT_CAUSE_COUNT, SERVICE_KIND_COUNT, SPEND_CATEGORY_COUNT,
     STOCK_CAT_COUNT, TAX_KIND_COUNT, UTILITY_KIND_COUNT,
 };
 pub use weather::{weather_at, Weather};

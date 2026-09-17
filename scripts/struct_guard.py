@@ -125,7 +125,20 @@ REJESTR = {
     # `EventEnded` też trzy i trzynaście — a kategorii jest sześć i wchodzą
     # jednym `{kategoria}`, tak samo jak siedem danin w M8a i siedem mediów w M8b.
     # Blok M8 ma po M8c zajęte 600–610 i trzy podfazy przed sobą.
-    ("engine/ui/src/inspect/reason.rs", "fn", 780): 37,
+    # 855 po M8d, +75 — i to jest **największy przyrost w całym bloku M8**,
+    # z dwóch powodów naraz. Pierwszy: `ServiceQuality` ma **sześć** podstawień
+    # (usługa, dzielnica, jakość, pieniądze, obsada, obłożenie), bo jakość placówki
+    # bez rozbicia na czynniki jest liczbą bez odpowiedzi na „dlaczego tyle" —
+    # to samo rozstrzygnięcie, które w M8c dało kartę zdarzenia z czynnikami
+    # hazardu zamiast wyniku. Drugi: `RemedyImposed` jest **pierwszym ramieniem
+    # bloku M8, które rozgałęzia się na dwa klucze lokalizacji** — kara z kwotą
+    # i kara bez kwoty to dwa różne zdania, bo „0 zł" przy zawieszeniu działalności
+    # mówiłoby graczowi, że nic go to nie kosztowało.
+    # Przy okazji doszły dwa ramiona **zaległe z M8c**: `EventStarted` i `EventEnded`
+    # miały ramiona w `describe` od M8c, ale nie miały wpisu na liście testu
+    # `kazdy_powod_ma_tekst_w_obu_jezykach`, więc przez całą podfazę nikt nie
+    # sprawdził, czy ich zdanie składa się w obu językach.
+    ("engine/ui/src/inspect/reason.rs", "fn", 855): 37,
     # 269 po M7d: jedna linia za `finance: bf.finance` w budowie `BankParams`.
     ("sim/economy/src/data.rs", "fn", 269): 38,
 }

@@ -345,6 +345,31 @@ pub struct Shop {
     /// przesunęłoby indeksy wszystkich pozostałych. Zamknięty sklep nie ma półki,
     /// nie zamawia i nie płaci czynszu — bo go nie wynajmuje.
     pub closed: bool,
+    // ── M8d ──
+    /// Udział obrotu **poza deklaracją**, w punktach bazowych (M8d WP8, PRD §10.4).
+    ///
+    /// Szara strefa obniża **fakt, a nie naliczenie**: ta część utargu nie wchodzi
+    /// do [`TaxAccrual`] i nie staje się przychodem w księdze — idzie prosto do
+    /// kapitału właściciela. Inaczej powstałyby dwie prawdy o obrocie, jedna
+    /// w księdze zakładu i druga w rejestrze miasta, a to jest dokładnie ta para
+    /// liczb, którą porównuje test T1.
+    ///
+    /// Zero znaczy „deklaruję wszystko" i jest stanem domyślnym — zakład zaczyna
+    /// uczciwie i schodzi w szarą strefę dopiero pod presją wyniku.
+    pub unreported_bps: u16,
+    /// Do kiedy zakład jest zamknięty decyzją urzędu (`Remedy::Closure`).
+    ///
+    /// Osobne pole od `closed`, bo to są dwie różne rzeczy: `closed` jest końcem
+    /// zakładu, a to jest przerwą w jego działaniu. Zakład otwiera się z powrotem
+    /// sam, gdy tick minie — bez tego sanepid zamykałby restauracje na zawsze.
+    pub suspended_until: magnat_core::Tick,
+    /// Masa odpisana z powodu przekroczonego terminu, narastająco (M8d WP8).
+    ///
+    /// Licznik, nie stan: to jest materiał dowodowy sprawy sanitarnej. Sklep, który
+    /// przez rok wyrzucił tonę zepsutego nabiału, ma inną kartotekę niż sklep, który
+    /// wyrzucił kilogram — i bez tej liczby inspekcja nie miałaby czego zobaczyć,
+    /// bo magazyn liczy straty per **towar**, a nie per slot.
+    pub expired_mass: magnat_core::Mass,
 }
 
 /// Kolejka danin zakładu do najbliższej deklaracji (M8a WP2).
@@ -439,6 +464,10 @@ impl HashState for Shop {
         h.write_u32(self.loan.map_or(u32::MAX, |l| l.0));
         h.write_u64(self.opened.get());
         h.write_u8(u8::from(self.closed));
+        // M8d: oba pola zmieniają wynik zakładu i wpływy miasta, więc są stanem.
+        h.write_u16(self.unreported_bps);
+        h.write_u64(self.suspended_until.get());
+        h.write_i64(self.expired_mass.0);
     }
 }
 

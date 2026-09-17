@@ -16,6 +16,54 @@
     schema_version: 1,
 
     events: [
+        // Kontrola skarbowa (M8d WP8, PRD §10.4).
+        //
+        // To jest zdarzenie, a nie system, i to jest wykonanie `CF-1`: mechanizm
+        // hazardu stoi w `sim/events` od M8c i drugiego losowania nie budujemy.
+        // Sonda jest jedna i mówi wszystko — im więcej firma ukrywa, tym częściej
+        // ktoś do niej zagląda. Przy zerowym udziale hazard schodzi do dziesiątej
+        // części stawki bazowej i kontrola praktycznie nie przychodzi; przy 30 %
+        // obrotu poza deklaracją mediana czasu do kontroli schodzi poniżej trzech
+        // lat gry, co jest kryterium ukończenia WP8.
+        //
+        // Skutek w `SimParam` jest **drobny i prawdziwy**: kontrola wstrzymuje
+        // pracę zakładu na te dwa tygodnie w kilku procentach. Dolegliwością nie
+        // jest ten mnożnik, tylko domiar — a domiar liczy `sim/city`, bo daniny
+        // nie są parametrem symulacji (T7: zdarzenia nie zadają cen ani kwot).
+        (
+            key: "political/tax_audit",
+            category: Political,
+            scope: Firm,
+            trigger: (
+                base_ppm: 900,
+                // Wiek, a nie obsada. `MinFirmHeadcount(1)` odsiewał dwie trzecie
+                // firm miasta — ale mierzył przy tym **znaną fikcję**: po M7f stoi
+                // w mieście kilkanaście tysięcy nieobsadzonych etatów, więc „firma
+                // bez pracownika" nie znaczy „firma bez działalności". Miesiąc od
+                // założenia znaczy za to dokładnie to, co ma znaczyć: firma, która
+                // nie domknęła jeszcze miesiąca, nie ma czego ukryć.
+                gate: [MinFirmAgeDays(30)],
+                factors: [
+                    (probe: FirmUnreportedBps, curve: ([(0, 1000), (500, 4000), (1500, 12000), (3000, 30000), (5000, 45000)])),
+                ],
+            ),
+            severity: (min_bps: 2000, max_bps: 8000, from: Some((FirmUnreportedBps, 0, 5000))),
+            duration: FixedDays(14),
+            effects: [
+                SiteOutput(mul_bps: 9600, filter: Any),
+            ],
+            // **Bez przerwy między kontrolami i to jest świadome.** `cooldown_days`
+            // liczy się **per definicja**, a nie per firma (`Events::in_cooldown`
+            // patrzy na `last_end_day` definicji), więc 240 dób przerwy znaczyłoby
+            // „całe miasto ma spokój przez dwa trzecie roku, bo jedna firma dostała
+            // kontrolę". Pomiar: 3 kontrole na 200 dób przy hazardzie 1 404 ppm
+            // i 213 kandydatach, czyli dwudziesta część tego, co mówił hazard.
+            // Powtórce u tej samej firmy zapobiega `Events::busy(def, scope)`.
+            cooldown_days: 0,
+            max_concurrent: 12,
+            chronicle: "event.political.tax_audit",
+        ),
+
         (
             key: "political/tariff_hike",
             category: Political,

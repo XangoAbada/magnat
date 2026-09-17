@@ -1,0 +1,146 @@
+// Kalibracja usług publicznych, urzędów i egzekucji (M8d WP7/WP8, `K-35`).
+//
+// Ten plik niesie liczby, **które wolno przestawić bez zmiany znaczenia modelu** —
+// i to jest cała różnica wobec `data/city/tax.ron`. Tam siedzi stawka VAT-u, która
+// zmienia cenę widzianą przez gracza, czyli kształt. Tutaj siedzi próg, przy którym
+// urząd otwiera sprawę, i tempo, w jakim uczy szkoła: przestawienie zmienia balans,
+// a nie to, czym gra jest.
+//
+// Wszystko całkowitoliczbowe. Jakość, pokrycie i dowody są w skali `Q` (0..=100),
+// udziały i stawki w punktach bazowych (10 000 = 100 %).
+(
+    schema_version: 1,
+
+    // ── jakość placówki (WP7) ────────────────────────────────────────────────────
+    //
+    // Jakość jest **emergentna**: cztery czynniki, cztery wagi, suma 100. Nie ma
+    // pola „jakość szkoły" w danych i nie będzie — placówka jest tak dobra, jak
+    // dobre są pieniądze, obsada, budynek i to, ilu ludzi na nią przypada.
+    quality: (
+        w_funding: 40,
+        w_staff: 35,
+        w_condition: 15,
+        w_load: 10,
+        // Ile groszy miesięcznie na obsługiwaną osobę znaczy „pełne finansowanie".
+        // Poniżej tego `funding_bp` spada proporcjonalnie, powyżej stoi na 10 000 —
+        // miasto, które daje dwa razy więcej, nie ma dwa razy lepszych szkół.
+        funding_ref_gr_per_capita: [
+            (kind: School,   gr: 5200),
+            (kind: Clinic,   gr: 2600),
+            (kind: Hospital, gr: 4100),
+            (kind: Police,   gr: 1900),
+            (kind: Fire,     gr: 1100),
+            (kind: Waste,    gr: 1400),
+            (kind: Park,     gr:  700),
+            (kind: Office,   gr: 1600),
+        ],
+        // Stan budynku: ubytek na rok gry i to, ile wraca przy pełnym finansowaniu.
+        // Przy `funding_bp == 10 000` netto wychodzi zero, przy połowie — punkt na rok.
+        condition_decay_per_year: 2,
+        condition_repair_per_year: 2,
+        // Przeciążenie: ilu ludzi ponad pojemność zeruje składnik obłożenia.
+        // 20 000 bp = dwukrotność pojemności.
+        load_zero_bp: 20000,
+    ),
+
+    // Zanik pokrycia poza dzielnicą placówki, w punktach bazowych (WP7).
+    //
+    // `ponytail:` sufit nazwany — zasięg jest dziś **dwustopniowy** (swoja dzielnica
+    // albo reszta miasta), bo `sim/city` nie widzi czasów przejazdu: `TravelOracle`
+    // należy do M4 i mieszka po stronie mostu. Zanik po czasie przejazdu między
+    // centroidami dzielnic z §5.3 wchodzi wtedy, gdy most poda macierz — do tego
+    // czasu szpital miejski dociera wszędzie po połowie, a szkoła obwodowa prawie
+    // wcale, i to jest rozróżnienie, które w tej skali robi robotę.
+    spillover_bp: [
+        (kind: School,   bp: 1500),
+        (kind: Clinic,   bp: 3000),
+        (kind: Hospital, bp: 6000),
+        (kind: Police,   bp: 4000),
+        (kind: Fire,     bp: 5000),
+        (kind: Waste,    bp: 2000),
+        (kind: Park,     bp: 2500),
+        (kind: Office,   bp: 8000),
+    ],
+
+    // ── urząd jako kolejka (WP7) ─────────────────────────────────────────────────
+    //
+    // Czas wydania pozwolenia **nie jest parametrem** — wynika z obsady i kolejki.
+    // Tutaj stoi wyłącznie przerób jednego urzędnika i koszt wniosku w tych samych
+    // jednostkach, więc podwojenie obsady podwaja przerób. To jest kryterium WP7.
+    permits: (
+        units_per_clerk_day: 3,
+        // Koszt wniosku w jednostkach przerobu, po `PermitKind` (kolejność enuma).
+        // Ocena środowiskowa kosztuje pięć razy tyle co przebudowa — i dlatego
+        // stoi w kolejce pięć razy dłużej.
+        cost_units: [2, 1, 1, 5, 2, 2, 1, 1],
+        // Opłata za wniosek, w groszach, po `PermitKind`.
+        fee_gr: [120000, 60000, 45000, 380000, 240000, 180000, 55000, 90000],
+        // Ile dób wniosek może czekać, zanim wygaśnie. Rok gry — wniosek, który
+        // leży dłużej niż rok, jest historią urzędu, a nie sprawą w toku.
+        expire_days: 360,
+    ),
+
+    // ── szara strefa (WP8, ryzyko `R10`) ─────────────────────────────────────────
+    //
+    // Zakład pod kreską ukrywa więcej, zakład z marżą wraca do deklarowania.
+    // Ulga jest mniejsza od kroku z rozmysłu: wyjść z szarej strefy jest trudniej
+    // niż w nią wejść, bo wychodzenie znaczy zapłacić to, czego się nie płaciło.
+    shadow: (
+        step_bp: 600,
+        relief_bp: 250,
+        ceiling_bp: 4500,
+        // Jak głęboka strata liczy się jako przyciśnięcie: udział w utargu
+        // miesiąca. Bez tego progu **każdy** zakład, który zamknął miesiąc choćby
+        // złotówkę pod kreską, schodził w szarą strefę — pomiar po 200 dobach gry
+        // dał 70 zakładów na 70 przy średnim udziale 31 %, czyli dokładnie to,
+        // przed czym broni ryzyko `R10` („albo wszyscy oszukują, albo nikt").
+        distress_bp: 300,
+    ),
+
+    // ── urzędy i kary (WP8) ──────────────────────────────────────────────────────
+    //
+    // Każdy urząd ma próg, powyżej którego otwiera sprawę, tempo zbierania dowodów
+    // i stawkę kary. Sprawa nie jest karą: zamyka się dopiero, gdy dowody sięgną
+    // `evidence_to_close`, a zakład ma przez ten czas szansę przestać.
+    agencies: (
+        evidence_to_close: 70,
+        // Ile punktów `Q` dowodów przybywa na dobę na jednego inspektora sprawy.
+        evidence_per_inspector_day: 4,
+        // Sprawa bez rozstrzygnięcia po tylu dobach umarza się sama.
+        case_expire_days: 180,
+        // Kara jako udział w podstawie (obrocie zadeklarowanym, domiarze, karze
+        // ryczałtowej) — w punktach bazowych.
+        fine_bp: 500,
+        // Domiar: mnożnik sankcyjny do zaległości i odsetki ustawowe już są
+        // w `data/city/tax.ron`, więc tu stoi wyłącznie mnożnik.
+        back_tax_penalty_bp: 3000,
+        // Sanepid: masa odpisana z powodu terminu, powyżej której otwiera sprawę
+        // (gramy, narastająco **od ostatniej kontroli** — kartoteka zeruje się
+        // razem z zamknięciem sprawy). 1,2 tony: przy 400 kg pomiar po 120 dobach
+        // gry dał 54 zawieszenia na 60 sklepów, czyli każdy sklep stał zamknięty
+        // mniej więcej co czwarty miesiąc — sanepid był wtedy najaktywniejszym
+        // urzędem w mieście, a kontrola skarbowa marginesem.
+        sanitary_expired_g: 1200000,
+        // Zawieszenie działalności po sprawie sanitarnej, w dobach.
+        sanitary_closure_days: 14,
+        // Inspekcja pracy: umowa poniżej tego ułamka dolnych widełek roli
+        // (w punktach bazowych) jest naruszeniem. 9 000 bp = 90 % dolnej granicy
+        // przedziału, w którym firmy w ogóle licytują o pracownika. Sprawa
+        // otwiera się dopiero, gdy dotyczy **ponad połowy** umów zakładu — jedna
+        // umowa poniżej widełek jest wyjątkiem, połowa jest polityką firmy.
+        wage_floor_bp: 9000,
+        // Antymonopol: udział firmy w obrocie zadeklarowanym miasta, powyżej
+        // którego otwiera się sprawa o pozycję dominującą.
+        antitrust_share_bp: 3500,
+        // Ochrona środowiska: emisja zakładu ponad normę odniesienia, w promilach
+        // skali `EMISSION_REF_PM_G_PER_MIN` z `data/tuning/supply.ron`.
+        emission_permille: 1200,
+    ),
+
+    // Bazowa stawka ubytków inwentaryzacyjnych miesiąca przy **zerowym** pokryciu
+    // policyjnym, w punktach bazowych zapasu (WP7, kanał „posterunek → straty").
+    //
+    // 180 bp miesięcznie to ~2,2 % zapasu rocznie — górny koniec tego, co handel
+    // detaliczny raportuje jako shrinkage. Pełne pokrycie zdejmuje to do zera.
+    shrinkage_base_bp: 180,
+)

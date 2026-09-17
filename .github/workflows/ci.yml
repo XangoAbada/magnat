@@ -153,6 +153,13 @@ jobs:
             --citizens 3000 --hash-every 1440 --threads 8 --expect m5_t1.hashes
       - name: M8a — budżet miasta domyka się do grosza (T1, WP1/WP2)
         run: cargo test --release -p magnat-headless --test city_tax -- --include-ignored
+      - name: M8d — domiar w budżecie i usługi z obsadą (T4, WP7/WP8)
+        # Dwa testy z jednego pliku i oba są kryterium zamknięcia podfazy:
+        # „domiar trafia do budżetu bez naruszenia T1" oraz „placówka ma prawdziwych
+        # ludzi na etatach, a urząd wydaje pozwolenia". Pozostałe trzy kanały skutków
+        # (szkoła, opieka zdrowotna, policja) mają testy jednostkowe w `sim/agents`
+        # i `sim/economy`, więc chodzą w zwykłym `cargo test`.
+        run: cargo test --release -p magnat-headless --test enforcement -- --include-ignored
       - name: M8a/M8c — determinizm miasta z podatkami, pogodą i zdarzeniami
         # Dwa przebiegi tego samego drzewa, jak przy `m5shop` wyżej i z tego samego
         # powodu: hash zmienia się przy każdym dopisaniu stanu, więc złoty plik

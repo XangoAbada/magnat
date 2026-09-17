@@ -120,6 +120,7 @@ impl<'a> ProbeWorld<'a> {
             }),
             Probe::FirmMoraleQ => self.morale(scope),
             Probe::FirmWageGapPermille => self.luka_placowa(scope),
+            Probe::FirmUnreportedBps => self.szara_strefa(scope),
 
             Probe::UnemploymentPermille => i64::from(self.ev.indicators().unemployment_permille),
             Probe::CpiYoyBp => i64::from(self.ev.indicators().cpi_yoy_bp),
@@ -228,6 +229,26 @@ impl<'a> ProbeWorld<'a> {
         }
     }
 
+    /// Największy udział obrotu poza deklaracją wśród zakładów firmy (M8d WP8).
+    ///
+    /// Czyta go z rynku, bo tam mieszka zakład handlowy i tam ląduje decyzja
+    /// o ukryciu utargu. Świat bez rynku — scenariusz sprzed M5 — daje zero
+    /// i kontrola nigdy nie przychodzi, co jest poprawną odpowiedzią, a nie awarią.
+    fn szara_strefa(&self, scope: ScopeInstance) -> i64 {
+        let (ScopeInstance::Firm(k), Some(firms)) = (scope, self.firms()) else {
+            return 0;
+        };
+        let Some(market) = self.world.get_resource::<magnat_economy::Market>() else {
+            return 0;
+        };
+        let Some(f) = firms.get(k) else { return 0 };
+        f.sites
+            .iter()
+            .map(|s| i64::from(market.unreported_bps_of(*s)))
+            .max()
+            .unwrap_or(0)
+    }
+
     /// O ile promili firma płaci **poniżej** mediany zawartych umów w zawodzie
     /// i dzielnicy. Zero znaczy „płaci jak rynek albo lepiej".
     ///
@@ -278,22 +299,31 @@ enum Miara {
 
 /// Czy wartość sondy zależy od instancji zakresu. Miejskie wskaźniki nie zależą,
 /// więc liczą się raz na wszystkie definicje i wszystkie instancje.
+///
+/// **Lista wymienia sondy niezależne od zakresu, a nie zależne — i to jest korekta
+/// po M8d, nie kosmetyka.** Do M8d było odwrotnie i kosztowało to jeden dzień:
+/// `FirmUnreportedBps` nie trafiła na listę zależnych, więc cache zapamiętał
+/// wartość **pierwszej** ocenianej firmy pod kluczem zakresu zero i oddawał ją
+/// wszystkim pozostałym. Kontrola skarbowa nie zachodziła ani razu, a hazard
+/// wyglądał na poprawnie policzony — bo był, tylko nie dla tej firmy.
+///
+/// Kierunek pomyłki ma się różnić: sonda dopisana i **pominięta** na tej liście
+/// liczy się teraz osobno dla każdej instancji, czyli kosztuje, ale nie kłamie.
+/// Lista niezależnych jest przy tym zbiorem zamkniętym — pogoda, kalendarz
+/// i wskaźniki miasta — a zbiór zależnych rośnie z każdą fazą.
 fn scope_dependent(p: Probe) -> bool {
-    matches!(
+    !matches!(
         p,
-        Probe::GridLoadFactorBps
-            | Probe::GridReserveMarginBps
-            | Probe::GridUnserved
-            | Probe::SourceAgeDays
-            | Probe::SourceMaintenanceOverdueDays
-            | Probe::SourceConditionQ
-            | Probe::SiteConditionQ
-            | Probe::SiteMaintenanceOverdueDays
-            | Probe::SiteLaborPct
-            | Probe::FirmHeadcount
-            | Probe::FirmAgeDays
-            | Probe::FirmMoraleQ
-            | Probe::FirmWageGapPermille
+        Probe::AirTempDc
+            | Probe::PrecipDeficit30dChm
+            | Probe::PrecipDeficit90dChm
+            | Probe::SnowCoverMm
+            | Probe::WindKmh
+            | Probe::HeatingDegreeDc
+            | Probe::SeasonIndex
+            | Probe::UnemploymentPermille
+            | Probe::CpiYoyBp
+            | Probe::MoodMean
     )
 }
 

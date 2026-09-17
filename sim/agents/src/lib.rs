@@ -51,6 +51,7 @@ pub mod planner;
 pub mod social;
 pub mod society;
 pub mod store;
+pub mod school;
 pub mod systems;
 pub mod worldparams;
 
@@ -110,9 +111,9 @@ pub use store::{
     Knowledge, KnowledgeKind, KnowledgeSlab, PlanSlab, PlanSlot, Relation, RelationKind,
     RelationSlab, Slab, SlabRef, SLAB_CLASSES, SLAB_MAX,
 };
+pub use school::{skill_drift_day, SkillDriftSystem, WEEK_SHARDS};
 pub use systems::{
     bootstrap_day, micro_count, register_day, set_lod, AgentSources, CitizenSnapshot,
-    DayLoopSystem, DayStats, HouseholdStockSystem, ReplanCooldownSystem, SkillDriftSystem,
-    SocietySystem, Sources, Trace, TraceEntry, TravelMicroSystem, MAX_TASK_TRAVEL_MIN, MAX_WATCHED,
-    TRACE_LEN, WEEK_SHARDS,
+    DayLoopSystem, DayStats, HouseholdStockSystem, ReplanCooldownSystem, SocietySystem, Sources,
+    Trace, TraceEntry, TravelMicroSystem, MAX_TASK_TRAVEL_MIN, MAX_WATCHED, TRACE_LEN,
 };

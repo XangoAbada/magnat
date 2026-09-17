@@ -1459,9 +1459,11 @@ dependencies = [
 name = "magnat-city"
 version = "0.1.0"
 dependencies = [
+ "magnat-agents",
  "magnat-core",
  "magnat-economy",
  "magnat-ecs",
+ "magnat-events",
  "magnat-firms",
  "magnat-supply",
  "proptest",

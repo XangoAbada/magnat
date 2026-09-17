@@ -109,7 +109,7 @@ pub use ledger::{
 };
 pub use market::{
     Bank, HouseholdMonth, HouseholdMonthReport, Market, MarketStats, PurchaseIntent, ShelfSnapshot,
-    ShopSeed,
+    ShopSeed, SiteEnforcementRow,
 };
 pub use offer::{
     price_stats, query_offers, CategoryId, Offer, OfferId, OfferIndex, PriceBasis, PriceStats,

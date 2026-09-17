@@ -205,6 +205,16 @@ impl TaxCode {
         Ok(())
     }
 
+    /// Stawka podstawowa VAT — najwyższa z klas w kodeksie.
+    ///
+    /// Tego używa kontrola skarbowa przy domiarze (M8d WP8): nie ma jak odtworzyć,
+    /// które towary zakład schował, więc fiskus przyjmuje stawkę podstawową.
+    /// To nie jest uproszczenie modelu, tylko reguła, którą stosuje urząd.
+    #[must_use]
+    pub fn standard_vat_bp(&self) -> u32 {
+        self.vat_classes.iter().map(|c| c.bp).max().unwrap_or(0)
+    }
+
     /// Stawka VAT towaru po domenie jego klucza. `None` znaczy „domena bez klasy",
     /// czyli błąd danych — walidator [`TaxCode::resolve`] nie przepuszcza takiego
     /// katalogu dalej, więc w symulacji ten wariant nie występuje.

@@ -1031,7 +1031,106 @@ pub fn describe(c: &Catalog, l: Locale, r: DecisionReason) -> String {
                 ("numer", &event.0.to_string()),
             ],
         ),
+        DecisionReason::ServiceQuality {
+            kind,
+            district,
+            quality,
+            funding_bp,
+            staff_bp,
+            load_bp,
+        } => c.fmt_key(
+            l,
+            "ui.reason.ServiceQuality",
+            &[
+                ("usluga", &service_kind(c, l, kind)),
+                ("dzielnica", &district.0.to_string()),
+                ("jakosc", &quality.get().to_string()),
+                ("pieniadze", &procent(u32::from(funding_bp))),
+                ("obsada", &procent(u32::from(staff_bp))),
+                ("obciazenie", &procent(u32::from(load_bp))),
+            ],
+        ),
+        DecisionReason::PermitIssued { kind, waited_days } => c.fmt_key(
+            l,
+            "ui.reason.PermitIssued",
+            &[
+                ("pozwolenie", &permit_kind(c, l, kind)),
+                ("dni", &days_txt(c, l, u32::from(waited_days))),
+            ],
+        ),
+        DecisionReason::CaseOpened { agency, evidence } => c.fmt_key(
+            l,
+            "ui.reason.CaseOpened",
+            &[
+                ("urzad", &agency_kind(c, l, agency)),
+                ("dowody", &evidence.get().to_string()),
+            ],
+        ),
+        // Dwa klucze, bo to są dwa różne zdania: kara z kwotą i kara bez kwoty.
+        // Środek, którego dolegliwością jest czas albo majątek, ma kwotę zerową —
+        // wpisanie tam „0 zł" mówiłoby graczowi, że nic go to nie kosztowało.
+        DecisionReason::RemedyImposed {
+            agency,
+            remedy,
+            amount,
+        } => {
+            if amount.get() > 0 {
+                c.fmt_key(
+                    l,
+                    "ui.reason.RemedyImposed",
+                    &[
+                        ("urzad", &agency_kind(c, l, agency)),
+                        ("srodek", &remedy_kind(c, l, remedy)),
+                        ("kwota", &crate::zlotowki(amount)),
+                    ],
+                )
+            } else {
+                c.fmt_key(
+                    l,
+                    "ui.reason.RemedyImposedNoAmount",
+                    &[
+                        ("urzad", &agency_kind(c, l, agency)),
+                        ("srodek", &remedy_kind(c, l, remedy)),
+                    ],
+                )
+            }
+        }
+        DecisionReason::ShadowShareSet {
+            share_bp,
+            last_result,
+        } => c.fmt_key(
+            l,
+            "ui.reason.ShadowShareSet",
+            &[
+                ("udzial", &procent(u32::from(share_bp))),
+                ("wynik", &crate::zlotowki(last_result)),
+            ],
+        ),
     }
+}
+
+/// Rodzaj usługi publicznej jako nazwa (M8d).
+#[must_use]
+pub fn service_kind(c: &Catalog, l: Locale, k: magnat_core::ServiceKind) -> String {
+    c.fmt_key(l, &format!("ui.service.{}", k.name()), &[])
+}
+
+/// Urząd kontrolny jako nazwa (M8d).
+#[must_use]
+pub fn agency_kind(c: &Catalog, l: Locale, k: magnat_core::AgencyKind) -> String {
+    c.fmt_key(l, &format!("ui.agency.{}", k.name()), &[])
+}
+
+/// Środek zaradczy jako nazwa (M8d).
+#[must_use]
+pub fn remedy_kind(c: &Catalog, l: Locale, k: magnat_core::RemedyKind) -> String {
+    c.fmt_key(l, &format!("ui.remedy.{}", k.name()), &[])
+}
+
+/// Rodzaj pozwolenia jako nazwa (M8d).
+#[must_use]
+pub fn permit_kind(c: &Catalog, l: Locale, k: magnat_core::PermitKind) -> String {
+    c.fmt_key(l, &format!("ui.permit.{}", k.name()), &[])
 }
 
 /// Kierunek prognozy jako słowo. **Jedyna** rzecz, którą model makro mówi graczowi
@@ -1442,6 +1541,47 @@ mod tests {
                 service: magnat_core::UtilityService::Electricity,
                 repair_minutes: 195,
             },
+            DecisionReason::EventStarted {
+                event: magnat_core::EventId(7),
+                category: magnat_core::EventCategory::Natural,
+                severity_bps: 4200,
+            },
+            DecisionReason::EventEnded {
+                event: magnat_core::EventId(7),
+                category: magnat_core::EventCategory::Natural,
+                days: 23,
+            },
+            DecisionReason::ServiceQuality {
+                kind: magnat_core::ServiceKind::School,
+                district: magnat_core::DistrictId(3),
+                quality: Q::new(62),
+                funding_bp: 7400,
+                staff_bp: 8800,
+                load_bp: 11_200,
+            },
+            DecisionReason::PermitIssued {
+                kind: magnat_core::PermitKind::Build,
+                waited_days: 31,
+            },
+            DecisionReason::CaseOpened {
+                agency: magnat_core::AgencyKind::TaxOffice,
+                evidence: Q::new(20),
+            },
+            DecisionReason::RemedyImposed {
+                agency: magnat_core::AgencyKind::TaxOffice,
+                remedy: magnat_core::RemedyKind::BackTax,
+                amount: Money(1_240_000),
+            },
+            // Ósmy wpis dwukrotny: środek bez kwoty wybiera inny klucz.
+            DecisionReason::RemedyImposed {
+                agency: magnat_core::AgencyKind::Sanitary,
+                remedy: magnat_core::RemedyKind::Closure,
+                amount: Money::ZERO,
+            },
+            DecisionReason::ShadowShareSet {
+                share_bp: 1800,
+                last_result: Money(-420_000),
+            },
         ]
     }
 
@@ -1487,7 +1627,14 @@ mod tests {
         // Po M8b dwa powody sieci przesyłowej (607, 608), po jednym wpisie: rodzaj
         // medium wchodzi podstawieniem, więc siedem sieci nie robi czternastu zdań.
         // Razem 76.
-        assert_eq!(wszystkie().len(), 76);
+        // **Po M8c powinno być 78 i nie było** — `EventStarted` i `EventEnded`
+        // (609, 610) miały ramiona w `describe`, ale nie miały wpisu tutaj, więc
+        // przez całą podfazę nikt nie sprawdził, czy ich zdanie składa się w obu
+        // językach. Uzupełnione w M8d, razem z własnym blokiem.
+        // Po M8d pięć powodów usług, urzędów i egzekucji (611..=615) plus **ósmy
+        // wpis dwukrotny**: `RemedyImposed` stoi dwa razy, bo kara z kwotą i kara
+        // bez kwoty wybierają inne klucze lokalizacji. Razem 78 + 6 = 84.
+        assert_eq!(wszystkie().len(), 84);
     }
 
     #[test]
@@ -1553,6 +1700,18 @@ mod tests {
             }
             for a in magnat_core::AbateReason::ALL {
                 assert!(!abate_reason(&c, l, *a).is_empty());
+            }
+            for k in magnat_core::ServiceKind::ALL {
+                assert!(!service_kind(&c, l, *k).is_empty());
+            }
+            for a in magnat_core::AgencyKind::ALL {
+                assert!(!agency_kind(&c, l, *a).is_empty());
+            }
+            for r in magnat_core::RemedyKind::ALL {
+                assert!(!remedy_kind(&c, l, *r).is_empty());
+            }
+            for k in magnat_core::PermitKind::ALL {
+                assert!(!permit_kind(&c, l, *k).is_empty());
             }
         }
     }

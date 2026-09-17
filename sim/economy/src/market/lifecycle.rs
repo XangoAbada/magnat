@@ -116,6 +116,9 @@ impl Market {
             loan: None,
             opened: t,
             closed: false,
+            unreported_bps: 0,
+            suspended_until: magnat_core::Tick(0),
+            expired_mass: magnat_core::Mass::ZERO,
         };
 
         for i in wybor {

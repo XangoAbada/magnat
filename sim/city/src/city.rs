@@ -17,6 +17,9 @@ use crate::budget::{BudgetPolicy, CityBudget};
 use crate::charge::ChargeRegistry;
 use crate::code::{TaxCode, VatTable};
 use crate::engine::{CityTaxEngine, Withholding};
+use crate::law::Enforcement;
+use crate::permits::PermitRegistry;
+use crate::services::{DistrictPopulation, PublicServices};
 
 /// Wpis katastru: zakład i wartość katastralna parceli, na której stoi.
 ///
@@ -49,7 +52,33 @@ pub struct City {
     /// Ostatni rok, za który naliczono CIT i koncesje. Bez tego dwa domknięcia
     /// w tym samym styczniu naliczyłyby daninę dwa razy.
     pub last_year_assessed: u16,
+    // ── M8d ──
+    /// Kalibracja usług, urzędów i egzekucji (`data/tuning/city.ron`).
+    pub tuning: Arc<TuningRef>,
+    /// Placówki publiczne i pokrycie obwodowe (WP7).
+    pub services: PublicServices,
+    /// Wnioski o pozwolenie i urzędy, które je przerabiają (WP7).
+    pub permits: PermitRegistry,
+    /// Urzędy kontrolne i sprawy (WP8).
+    pub enforcement: Enforcement,
+    /// Emisja pyłu zakładów, odświeżana raz na dobę przez system miasta.
+    ///
+    /// Migawka, a nie źródło: pył liczy `sim/supply`, a miasto tylko na niego
+    /// patrzy. Kopia istnieje, bo krok urzędów nie ma jak trzymać `ChainHandle`
+    /// naraz z `&mut City` — zasób jest na czas kroku wyjęty ze świata.
+    pub emissions: Vec<(SiteId, magnat_core::FirmId, i64)>,
+    /// Ludność per dzielnica — wejście miesięcznego przeliczenia jakości.
+    pub district_population: DistrictPopulation,
 }
+
+/// Kalibracja M8d albo jej brak.
+///
+/// `Option` w środku, a nie `Option<Arc<…>>` na zewnątrz, żeby `City::default()`
+/// (świat sprzed M8d) nie musiał czytać pliku, a kod usług miał jedno pytanie
+/// zamiast dwóch. Brak kalibracji znaczy „miasto nie prowadzi usług" i jest
+/// poprawnym stanem scenariusza sprzed tej podfazy.
+#[derive(Debug, Default)]
+pub struct TuningRef(pub Option<crate::tuning::CityTuning>);
 
 impl Default for City {
     /// Miasto bez kodeksu i bez konta — stan, w którym nic się nie nalicza.
@@ -87,6 +116,12 @@ impl City {
             loss_carry: BTreeMap::new(),
             month_revenue: Money::ZERO,
             last_year_assessed: u16::MAX,
+            tuning: Arc::new(TuningRef(None)),
+            services: PublicServices::default(),
+            permits: PermitRegistry::default(),
+            enforcement: Enforcement::default(),
+            emissions: Vec::new(),
+            district_population: DistrictPopulation::default(),
         }
     }
 
@@ -158,6 +193,12 @@ impl HashState for City {
         }
         h.write_i64(self.month_revenue.get());
         h.write_u16(self.last_year_assessed);
+        // M8d: jakość placówek, kolejka urzędu i sprawy zmieniają się w trakcie
+        // i zmieniają wynik gry, więc są stanem. Kalibracja i migawka emisji —
+        // nie: pierwsza jest daną z `data/`, druga kopią cudzego pola.
+        self.services.hash_state(h);
+        self.permits.hash_state(h);
+        self.enforcement.hash_state(h);
     }
 }
 
