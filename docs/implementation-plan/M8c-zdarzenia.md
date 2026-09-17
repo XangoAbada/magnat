@@ -281,3 +281,14 @@ pub struct DemographyParams {                  // wyliczane, stosuje je M3
 Cykl koniunkturalny **nie jest symulowany** — jest mierzony. `MacroIndicators` to odczyt stanu,
 który zdarzenia zewnętrzne wzmacniają przez sondy (`CreditGrowthBps`, `MarketHeatBps`).
 Model makro należy do M10.
+
+## Zmiany wpisane po decyzji właściciela produktu (2026-09-17)
+
+Zgodnie z `K-18`. Gwiazdka = zmiana zakresu albo kryterium. Wymaganie: **każdy obiekt
+w świecie jest klikalny i ma kartę inspekcji z zakładkami, a każda nazwa w karcie jest
+odnośnikiem**. Konsekwencja dla tej podfazy jest jedna i mała, ale nie było jej nigdzie.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| ★ | **`WorldEvent` wchodzi do `Subject` jako `Subject::Event(EventId)`** (`M9c` §5.7, `K-62`). Karta zdarzenia: co, gdzie, od kiedy, jak długo jeszcze, kogo dotyka — z odnośnikami do dotkniętych dzielnic, zakładów i mieszkańców. `ChronicleTemplate` w `EventDef` zostaje tym, czym jest: wpisem do kroniki, nie kartą | Przyczyna, dla której gracz pyta „dlaczego" o zdarzenie, jest dokładnie ta sama co przy sklepie: powód jest w `HazardFactor` i `Probe`, tylko nie miał gdzie się pokazać. `WorldEvent` ma już `id: EventId` (§5.x), więc kosztem jest wariant enuma i układ jednej zakładki |
+| | **Wpis w kronice niesie `Subject`, nie sam tekst** — kliknięcie w wiersz kroniki otwiera kartę tego, czego wpis dotyczy | `ui-design.md` §4 żąda tego od alertu („kliknięcie otwiera podmiot"), a kronika jest tym samym strumieniem, tylko starszym. Jeśli `ChronicleEntry` powstaje tu bez pola na podmiot, M9 będzie go parsował z tekstu |

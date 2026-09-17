@@ -23,7 +23,7 @@ Postać gracza i warianty startu, karta inspekcji w pełnej postaci z wyczerpuj�
 | WP | Nazwa | Zależy od | Opis | Kryterium ukończenia |
 |---|---|---|---|---|
 | **WP4** | Postać gracza i start | WP2 | `PlayerCharacter`, `PlayerAutonomy`, `StartVariant` jako filtr+łatka na populacji, ekran wyboru postaci, przypięcie do LOD Mikro | Da się wybrać mieszkańca, zobaczyć jego rodzinę/pracę/znajomych i przeżyć dzień; 5 wariantów startu działa |
-| **WP5** | Karta inspekcji w pełnej postaci | WP3, WP4 | `InspectionCard`, wyczerpujący render `DecisionReason`, `LostSale` (bufor cykliczny + histogram dobowy), głębokie linki między kartami | Odpowiedź na „dlaczego Anna nie kupiła u mnie?" w PL i EN, z nazwanym konkurentem i klikalnym odnośnikiem |
+| **WP5** | Karta inspekcji w pełnej postaci | WP3, WP4 | `InspectionCard` z nagłówkiem i `CardTab` (układ zakładek per typ encji — tabela w §5.7), wyczerpujący render `DecisionReason`, `LostSale` (bufor cykliczny + histogram dobowy), odnośnik przy **każdej** nazwie podmiotu, `InspectionNav` ze stosem wstecz/dalej | Odpowiedź na „dlaczego Anna nie kupiła u mnie?" w PL i EN, z nazwanym konkurentem i klikalnym odnośnikiem; **z karty mieszkanki da się dojść kliknięciami do jej domu, pracodawcy, męża i samochodu, i wrócić do niej przyciskiem wstecz**; test przechodzi każdy wariant `Subject` i sprawdza, że cel nieistniejący renderuje się bez odnośnika |
 | **WP7** | Nakładki danych i filtry | WP3, WP6 | `OverlaySpec`, `EntityFilter`, legenda, przełącznik warstw, filtry „tylko moi klienci / moi pracownicy / cysterny z paliwem" | 9 nakładek z §14.2 działa (bez `BrandAwareness` — zarezerwowana dla M10) |
 
 ---
@@ -101,10 +101,23 @@ także przy 10× i 50×. To kontrakt do M3/M4 (§6, „konsumuję").
 ### 5.7 Karta inspekcji i „dlaczego Anna nie kupiła u mnie?"
 
 ```rust
-pub struct InspectionCard { pub subject: Subject, pub sections: Vec<CardSection> }
+pub struct InspectionCard {
+    pub subject: Subject,
+    pub header:  Vec<Span>,          // tożsamość — zawsze widoczna, nigdy w zakładce
+    pub tabs:    Vec<CardTab>,       // pusta zakładka jest pomijana, nie wyszarzana
+}
+pub struct CardTab { pub title: LocKey, pub sections: Vec<CardSection> }
+
+/// `Subject` mieszka w `engine/core`, nie tutaj (`K-62`) — niesie go `DecisionReason`.
 pub enum Subject { Citizen(CitizenId), Household(HouseholdId), Firm(FirmId), Site(SiteId),
                    Building(BuildingId), Parcel(ParcelId), Vehicle(VehicleId), Batch(BatchId),
-                   Offer(OfferId), Contract(ContractId), District(DistrictId) }
+                   Offer(OfferId), Contract(ContractId), District(DistrictId),
+                   // encje miejskie — dostarcza M8c/M8d/M8e (§6 tamtych dokumentów)
+                   Government, Tender(TenderId), Case(CaseId),
+                   Event(EventId), Permit(PermitId) }
+// Usługa publiczna NIE ma tu wariantu: `PublicService.site` jest `SiteId` (M8d §5.3),
+// więc szkoła i przychodnia otwierają się jako `Site` z innym układem zakładek.
+// Wybory też nie: `Election` jest jedna naraz i jest zakładką w karcie `Government`.
 pub enum CardSection {
     State(Vec<(LocKey, Value)>),
     History(SeriesKey),
@@ -118,6 +131,59 @@ pub struct DecisionRecord {
     pub alternatives: SmallVec<[Alternative; 3]>,   // co odrzucone i o ile przegrało
 }
 ```
+
+#### Zakładki, nie sekcje jedna pod drugą
+
+Decyzja właściciela produktu z 2026-09-17: **tożsamość w nagłówku, reszta w zakładkach**.
+`docs/ui-design.md` §4 zapisuje to jako komponent, tutaj jest konsekwencja dla kodu.
+Zakładki są stałe per typ encji — gracz, który nauczył się, że „Dlaczego" jest ostatnie
+u mieszkanki, ma je znaleźć na tym samym miejscu u firmy.
+
+| Encja | Zakładki |
+|---|---|
+| Mieszkaniec | Stan (potrzeby, gotówka, zdrowie) · Dzień (plan vs realizacja) · Rodzina (gospodarstwo, krewni, znajomi) · Majątek (mieszkanie, pojazdy, konta) · Praca (zakład, stanowisko, płaca, historia) · Dlaczego (`DecisionReason`) |
+| Gospodarstwo | Skład · Budżet · Majątek · Mieszkanie · Dlaczego |
+| Budynek | Kondygnacje · **Lokatorzy** (gospodarstwa) i **najemcy** (zakłady) · Stan techniczny · Media · Własność |
+| Pojazd | Stan (przebieg, zużycie, paliwo) · Właściciel · Użycie (trasy, kierowca) · Koszty |
+| Firma | Pulpit · Właściciele · Zakłady · Pracownicy · Finanse · Kontrakty · Dlaczego |
+| Zakład | Półki/Produkcja · Klienci · Załoga · Dostawy · Konkurencja · Dlaczego |
+| Parcela | Teren · Zabudowa · Strefa i prawo · Wartość |
+| Dzielnica | Ludzie · Gospodarka · Usługi · Wartości gruntu |
+
+| Rada miasta (`Government`) | Skład · Polityka i podatki · Budżet · **Wybory** (kandydaci, sondaże, wynik) · Przetargi · Dlaczego |
+
+Zakładka bez treści znika: pojazd nieużywany od roku nie ma „Użycia", a pusta zakładka jest
+gorsza od jej braku, bo obiecuje treść. Reszta encji (`Batch`, `Offer`, `Contract`, `Tender`,
+`Case`, `Event`, `Permit`) ma jedną zakładkę i zachowuje się jak dzisiejsza karta.
+
+Szkoła, przychodnia i posterunek to `Site` — ta sama karta co sklep, inny układ zakładek
+(Obsada · Zasięg · Finansowanie · Jakość zamiast Półki · Klienci · Konkurencja). Nie ma
+powodu robić dla nich osobnego wariantu `Subject`, skoro `PublicService` i tak trzyma `SiteId`.
+
+#### Każda nazwa jest odnośnikiem
+
+Reguła jest prosta i nie ma wyjątków: **jeśli karta wymienia podmiot, który ma własną kartę,
+to jest to odnośnik**. Adres mieszkania w karcie Anny prowadzi do budynku, nazwa pracodawcy
+do zakładu, nazwisko męża do jego karty, konkurent z powodu decyzji do jego zakładu.
+Technicznie niesie to `Span { link: Option<Subject> }` z `M9b` §5.8 — więc `CardSection`
+przestaje być jedynym miejscem, gdzie link może się pojawić, a `Relations` zostaje dla
+powiązań wymienianych **z nazwy** („żona", „właściciel", „dostawca").
+
+```rust
+pub struct InspectionNav {
+    pub current: Subject,
+    back:    ArrayDeque<Subject, 32>,   // najstarsze wypada
+    forward: ArrayDeque<Subject, 32>,   // czyszczone przy nowym skoku
+}
+```
+`ViewCommand` (`M9a` §5.5) dostaje `NavigateBack` i `NavigateForward`. Bez tego karta
+z kilkunastoma odnośnikami jest pułapką: trzy skoki i gracz nie ma jak wrócić do pytania,
+które zadawał. Stos jest stanem widoku — nie wchodzi do zapisu świata ani do hasha.
+
+**Cel, który przestał istnieć** (firma upadła, mieszkaniec zmarł, partia została sprzedana),
+renderuje się jako nazwa bez odnośnika plus jedno zdanie, co się stało — `Subject::resolve`
+zwraca `Option`, a `None` nie jest błędem, tylko normalnym stanem świata, który się zmienia.
+Odnośnik prowadzący w pustkę jest gorszy od jego braku.
 
 Render: `fn render_reason(&DecisionReason, &Locale) -> Vec<Span>` — **jedno ramię `match` na
 wariant**, bez `_ =>`. `DecisionReason` to jeden centralny enum w `engine/core` i **nie może być
@@ -213,3 +279,17 @@ pauzowanie z definicji nie może zmienić wyniku symulacji.
 Przy `X50` (tryb makro, ruch w mezo): panele przechodzą na odświeżanie `EveryHour`, `GanttView`
 i tryb śledzenia są wyłączone (albo wymuszają Mikro na jednej encji, co jest kosztem zgłoszonym
 graczowi). Bez tego UI staje się wąskim gardłem trybu 50×.
+
+---
+
+## Zmiany wpisane po decyzji właściciela produktu (2026-09-17)
+
+Zgodnie z `K-18`. Gwiazdka = zmiana zakresu albo kryterium.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| Z-1 ★ | **Karta ma nagłówek i zakładki, nie listę sekcji** (§5.7). Układ zakładek jest stały per typ encji i wypisany w tabeli | `docs/ui-design.md` §4 projektował kartę na sekcje jedna pod drugą — to działa dla mieszkanki z czterema polami i przestaje działać dla firmy z sześcioma obszarami. Wymaganie właściciela produktu: zakładki jako komponent UI. Widget `TabStrip` dostarcza `M9b` (Z-8 tamtego dokumentu) |
+| Z-2 ★ | **Odnośnikiem jest każda nazwa podmiotu, nie tylko `Relations` i powód** | Pierwotny plan obiecywał „głębokie linki między kartami", ale nie powiedział gdzie — a jedyny nośnik (`CardSection::Relations`) unosiłby wyłącznie powiązania wymienione z nazwy. Adres w polu „mieszka" też ma być odnośnikiem, a to jest `State`, nie `Relations` |
+| Z-3 ★ | **`InspectionNav` — stos wstecz/dalej po 32 pozycje; `ViewCommand` dostaje `NavigateBack`/`NavigateForward`** | Nie było tego w żadnym dokumencie planu. Przy karcie, w której wszystko jest linkiem, brak powrotu zamienia nawigację w błądzenie: trzy skoki i gracz zgubił pytanie, od którego zaczął |
+| Z-4 | **`Subject` rośnie o pięć encji miejskich** (`Government`, `Tender`, `Case`, `Event`, `Permit`; usługa publiczna jedzie jako `Site`, wybory jako zakładka rady) i przenosi się do `engine/core` (`K-62`) | M8c/M8d/M8e produkują te byty i zapisują dla nich `DecisionReason`, ale żaden nie miał jak trafić do inspekcji — lista `Subject` kończyła się na `District`. Rada, przetarg i sprawa urzędowa to rzeczy, o które gracz będzie pytał „dlaczego", a bramka 5 wymaga odpowiedzi |
+| Z-5 | **Cel, który przestał istnieć, renderuje się jako nazwa bez odnośnika plus powod** | `Subject::resolve` zwraca `Option` i `None` nie jest błędem — firmy upadają, ludzie umierają, partie się zużywają. Bez tej reguły pierwsza karta sprzed roku prowadzi w pustkę albo w panikę |

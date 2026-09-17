@@ -132,7 +132,9 @@ listy wymaga dopisania go tutaj, nie wymyślenia go lokalnie.
 | Pole liczbowe | Jednostka w polu, nie w etykiecie; walidacja przy każdej zmianie; wartość spoza zakresu podświetla `danger` i mówi, jaki zakres obowiązuje |
 | Przełącznik / wybór | Do pięciu wariantów — segmenty w rzędzie; powyżej — lista rozwijana z filtrem |
 | Tabela (`Table<T>`) | Nagłówek przyklejony, sortowanie kliknięciem, filtr w nagłówku kolumny, wirtualizacja; kolumny liczbowe do prawej, tekstowe do lewej |
-| Karta inspekcji | Stała kolejność sekcji: tożsamość → stan → historia → **powody** (`DecisionReason`). Powód jest tekstem z parametrami i klikalnym odnośnikiem do podmiotu, o którym mówi |
+| Karta inspekcji | Nagłówek z tożsamością **zawsze widoczny**, reszta w zakładkach o stałej kolejności: stan → historia → powiązania → **powody** (`DecisionReason`). Zakładka pusta dla danej encji jest ukryta, nie wyszarzona. Każda nazwa innego podmiotu w karcie jest odnośnikiem |
+| Zakładki | Rząd etykiet nad treścią; wybrana ma pełny kontrast, reszta `text.dim`. Do siedmiu zakładek w rzędzie — powyżej dziel panel, nie zwijaj etykiet. Wybór przeżywa przebudowę drzewa i zmianę zaznaczenia na encję **tego samego typu**; przy zmianie typu wraca na pierwszą. Sterowanie klawiaturą: strzałki lewo/prawo w obrębie rzędu |
+| Odnośnik | Nazwa innego podmiotu (mieszkaniec, firma, zakład, budynek, pojazd, parcela, dzielnica) jest klikalna i otwiera jego kartę. Wygląd: kolor `accent`, podkreślenie dopiero pod kursorem — tekst karty ma zostać czytelny, gdy odnośników jest kilkanaście. Odnośnik do celu, który już nie istnieje (firma upadła, mieszkaniec zmarł), pokazuje nazwę bez odnośnika i powiada, co się stało — nigdy nie prowadzi w pustkę. Nawigacja ma **wstecz** i **dalej** (myszka: przyciski boczne, klawiatura: Alt+strzałki) |
 | Wykres (`Series`) | Oś czasu w kalendarzu 12 × 30 (`K-1`); poziom mip dobrany do szerokości; maksimum 2000 odcinków niezależnie od zakresu; bez animacji przy zmianie zakresu |
 | Pasek czasu | Data, zegar, cztery prędkości (pauza / 1× / 3× / 10×). Jedyny element UI zawsze widoczny w rozgrywce |
 | Alert | Jedna linia: waga (`warn`/`danger`), czego dotyczy, co z tym zrobić. Kliknięcie otwiera podmiot. Alert bez możliwej akcji jest wpisem kroniki, nie alertem |
@@ -158,9 +160,9 @@ wciśnięty (`accent` 25%) → wyłączony (`text.disabled`, brak hovera) → fo
 │               │                                             │                │
 │  Pulpit       │        nakładka danych + legenda            │  Anna Kowalska │
 │  Sklep        │        w prawym dolnym rogu                 │  32 l., kasjer │
-│  Finanse      │                                             │  ▸ potrzeby    │
-│  Ludzie       │                                             │  ▸ dzień       │
-│  …            │                                             │  ▸ dlaczego…   │
+│  Finanse      │                                             │ [stan][dzień]  │
+│  Ludzie       │                                             │ [rodzina][…]   │
+│  …            │                                             │  Głód   ███░░  │
 │               │                                             │                │
 ├───────────────┴─────────────────────────────────────────────┴────────────────┤
 │ ⚠ Brak mleka w „Kiosk nr 2" od 2 dni — zamów albo zmień dostawcę    [pokaż]  │  ← pas alertów (maks. 3)
@@ -175,6 +177,12 @@ Reguły układu:
   decyzja w ≤ 12 interakcjach i ≤ 3 panelach).
 - Dok prawy należy do **inspekcji** (to, co gracz kliknął), lewy do **paneli biznesowych** (to, co
   gracz prowadzi). Ta różnica jest stała — zamiana miejscami psuje nawyk.
+- **Dok prawy ma jedną kartę i historię**, nie stos okien. Odnośnik podmienia zawartość doku
+  i odkłada poprzednią kartę na stos wstecz (32 pozycje, najstarsze wypadają). Bez tego karta
+  z kilkunastoma odnośnikami jest ślepą uliczką: gracz skacze od Anny do konkurenta, do jego
+  dostawcy — i nie ma jak wrócić do pytania, które zadawał.
+- **Każdy obiekt widoczny w świecie jest klikalny** — mieszkaniec, budynek, pojazd, zakład,
+  parcela. Obiekt narysowany, którego nie da się kliknąć, jest dekoracją, a ta łamie zasadę z §1.
 - Układ jest preferencją widoku: zapisuje się w profilu gracza, nie w zapisie świata (M9b §5.8).
 
 ---

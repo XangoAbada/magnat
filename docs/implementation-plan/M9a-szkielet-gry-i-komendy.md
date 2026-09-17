@@ -238,6 +238,8 @@ pub enum ViewCommand {
     TableSort { table: WidgetId, col: ColumnId, dir: SortDir },
     TableFilter { table: WidgetId, expr: ConditionExpr },
     SaveGame { slot: u8 }, OpenInspection(Subject),
+    NavigateBack, NavigateForward,           // stos kart inspekcji, M9c §5.7
+    SelectCardTab { subject: Subject, tab: u8 },
 }
 ```
 
@@ -358,3 +360,14 @@ z poziomu gry, nie z wiersza poleceń") oraz stan kodu po M3d.
 | Z-2 ★ | **`GameState` przebudowany:** `MainMenu` → `Shell(ShellScreen)`, `Loading { progress: u8 }` → `Generating(WorldGenJob)` + `WorldReady { preview }` | `u8` postępu nie ma jak powiedzieć, **co** się dzieje ani pozwolić anulować, a generacja 16 km to kilkanaście sekund. Podgląd świata przed grą jest osobnym stanem, bo gracz może go odrzucić i wrócić do kreatora |
 | Z-3 ★ | **`PlayerCommand::StartGame` niesie `WorldGenParams`, nie `seed: u64`** | Rozmiar, region, epoka, profil i trudność zmieniają świat tak samo jak ziarno. Replay z samym ziarnem odtwarzałby inne miasto — a to jest kontrakt determinizmu z §7, nie szczegół |
 | Z-4 | **`sim/world::generate` dostaje obserwatora postępu i flagę anulowania** (wołane między passami). Robi to WP13, bo M1 jest zamknięty, a M9 rozszerza wszystkie `sim/*` | `PASSES` mają nazwy i czasy, ale raportują je dopiero po zakończeniu. Ekran ładowania potrzebuje ich w trakcie — inaczej pokazuje animowany pasek, czyli kłamstwo |
+
+---
+
+## Zmiany wpisane po decyzji właściciela produktu (2026-09-17)
+
+Zgodnie z `K-18`.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| | **`ViewCommand` dostaje `NavigateBack`, `NavigateForward` i `SelectCardTab`** (§5.5) | Karta inspekcji przechodzi na zakładki i odnośniki (`M9c` §5.7). Skok po odnośniku i powrót są zmianą **widoku**, nie stanu świata — więc idą tym strumieniem, nie `PlayerCommand`, i nie wchodzą do hasha. Wchodzą za to do dziennika widoku, a to jest realna wartość przy zgłoszeniu błędu: „kliknąłem w to, potem w to, potem się wywaliło" jest odtwarzalne |
+| | **`Subject` w tych wariantach pochodzi z `engine/core` (`K-62`), nie z `engine/ui`** | `ViewCommand` już miał `SelectEntity(Subject)` i `OpenInspection(Subject)`, więc ta zmiana nic tu nie łamie — przenosi tylko miejsce, w którym typ jest zdefiniowany. Warto to odnotować, bo `game/` importowałby go inaczej |

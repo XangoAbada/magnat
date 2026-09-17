@@ -22,7 +22,7 @@ Rdzeń `engine/ui`: drzewo retained, `measure/arrange/paint/event`, dirty-flaggi
 
 | WP | Nazwa | Zależy od | Opis | Kryterium ukończenia |
 |---|---|---|---|---|
-| **WP3** | Rdzeń `engine/ui` | WP1 | `Widget`, drzewo retained, `measure/arrange/paint/event`, dirty-flagging przez `DataVersion`, `Layout` z dokowaniem, skalowanie DPI, atlas fontów, i18n PL/EN z pluralizacją, listy rysowania | Panel testowy: brak zmian danych → 0 alokacji i 0 ms przebudowy; pseudo-lokalizacja ×1,4 nie rozwala układu |
+| **WP3** | Rdzeń `engine/ui` | WP1 | `Widget`, drzewo retained, `measure/arrange/paint/event`, dirty-flagging przez `DataVersion`, `Layout` z dokowaniem, skalowanie DPI, atlas fontów, i18n PL/EN z pluralizacją, listy rysowania, **`Span`/`Rich` z polem `link`** i **`TabStrip`** | Panel testowy: brak zmian danych → 0 alokacji i 0 ms przebudowy; pseudo-lokalizacja ×1,4 nie rozwala układu; **`Rich` składa się w `String` bajt w bajt zgodny ze złotym wydrukiem sprzed zmiany — test porównujący starą i nową ścieżkę dla trzech istniejących kart** |
 | **WP6** | `Table<T>`, wykresy, mapy cieplne mini | WP3 | Wirtualizowana tabela na 100k wierszy z sortowaniem/filtrem poza klatką, `Series` z piramidą mip (dzień/dekada/miesiąc/kwartał, kalendarz 12 × 30 wg K-1), miniatura mapy cieplnej | Budżety z §7 spełnione w criterion |
 | **WP14** | Ekrany powłoki i motyw | WP3, WP13 (M9a) | Menu główne, kreator świata (`NewGameParams`), ekran generacji z postępem i anulowaniem, podgląd świata, lista slotów, ustawienia, menu pauzy; `data/ui/theme.ron` z tokenami z `docs/ui-design.md` | Świeża instalacja: od uruchomienia `magnat` **bez argumentów** do grającego świata w ≤ 6 interakcjach, wszystko klawiaturą; zmiana języka i `ui_scale` działa bez restartu; pseudo-lokalizacja ×1,4 i skale 0,75–3,0 nie rozwalają żadnego ekranu; test rysuje każdy ekran w CI bez GPU |
 
@@ -110,7 +110,31 @@ lat przestępnych ani miesięcy o różnej długości, więc arytmetyka osi czas
 Pozostałe widgety: `GraphView` (układ warstwowy Sugiyama — łańcuch dostaw to przepływ, więc
 warstwy są naturalne; liczony w jobie, cache'owany po hashu topologii), `GanttView` (wiersze =
 maszyny/pojazdy, wirtualizacja po oknie czasu), `HeatmapThumb` (tekstura 256×256 z pola
-skalarnego nakładki, odświeżana `EveryHour`), `RuleEditorView`.
+skalarnego nakładki, odświeżana `EveryHour`), `RuleEditorView`. **`TabStrip`** — rząd
+zakładek nad treścią (≤ 7, stan wyboru trzymany przy `WidgetId`, więc przeżywa przebudowę
+drzewa); żąda go karta inspekcji z `M9c` §5.7 i trzy istniejące karty (`ShopTab`, `SupplyTab`,
+`FirmTab`), które dziś mają po własnej pętli `selectable_label` w `engine/ui/src/widgets.rs`.
+
+#### Tekst, który da się kliknąć (`Span`)
+
+```rust
+pub struct Span { pub text: String, pub style: SpanStyle, pub link: Option<Subject> }
+pub enum SpanStyle { Normal, Emphasis, Number, Link }
+pub type Rich = Vec<Span>;
+```
+
+**To jest jedyna zmiana w M9b, która odwraca istniejącą decyzję, i dlatego stoi tutaj, a nie
+w M9c.** Dziś `InspectorPanel::build` zwraca `String` (Z-3 niżej), a `render_tab` kart sklepu,
+zakładu i firmy — też `String`. W `String` nie da się zakotwiczyć celu kliknięcia, więc
+„klikalny odnośnik do podmiotu" z `docs/ui-design.md` §4 nie ma na czym stanąć. Podmiana
+zwracanego typu na `Rich` **nie psuje złotego testu wydruku**, który był powodem tamtej decyzji:
+`Rich` składa się z powrotem w `String` przez `spans.iter().map(|s| &s.text).collect()`, więc
+test porównuje dokładnie ten sam napis co dziś, a link dochodzi obok niego, nie zamiast niego.
+Konwersja jest jedną funkcją w `engine/ui` i to ona, a nie widget, jest wejściem złotego testu.
+
+`Subject` w polu `link` pochodzi z `engine/core` (`K-62`), nie z `engine/ui` — inaczej
+`DecisionReason` nie mógłby nieść celu odnośnika, a to on jest głównym źródłem linków
+w karcie („wybrała »Dobry Koszyk«" musi wskazywać na ten zakład).
 
 **DPI:** jedna skala `ui_scale ∈ [0,75; 3,0]`, wszystkie rozmiary w pikselach logicznych,
 przyciąganie do siatki pikseli fizycznych przy rysowaniu, font rastrowany per skala do atlasu.
@@ -173,3 +197,16 @@ Zgodnie z `K-18`. To są rzeczy, o których M9 wie **na pewno** po zamknięciu M
 | Z-4 | **Zaznaczenie mieszkańca włącza bufor śledzenia** (`Trace::watch`, najwyżej ośmiu naraz — decyzja 9.16) | Bez tego karta pokazuje sam plan, bez realizacji. M9 musi o tym pamiętać przy każdym nowym sposobie otwierania karty (wyszukiwarka, lista, skok po relacji) |
 | Z-5 ★ | **Nowy pakiet WP14 — ekrany powłoki i motyw** (§5.14), zależny od WP3 i od WP13 z `M9a`. Kryterium: od `magnat` bez argumentów do grającego świata w ≤ 6 interakcjach, wszystko klawiaturą | PRD §14.7 i decyzja właściciela produktu z 2026-09-14. Przy okazji rozwiązuje problem kolejności: WP3 dostaje pierwszego konsumenta, który nie wymaga snapshotu ani wirtualizacji, więc rdzeń UI da się sprawdzić, zanim powstanie pierwszy panel biznesowy |
 | Z-6 | **Tokeny wyglądu są danymi w `data/ui/theme.ron`**, a język wizualny (paleta, typografia, siatka, komponenty, dostępność) mieszka w `docs/ui-design.md` — wiążąco dla każdej fazy dokładającej UI | Bez tego dwanaście faz dokładających panele wyprodukuje dwanaście wyglądów, a motyw jasny i tryb wysokiego kontrastu (M12) będą przeglądem wszystkich paneli zamiast podmianą pliku |
+
+## Zmiany wpisane po decyzji właściciela produktu (2026-09-17)
+
+Zgodnie z `K-18`. Gwiazdka = zmiana zakresu albo kryterium. Źródłem jest wymaganie produktowe:
+każdy obiekt widoczny w świecie ma być klikalny, a każda informacja w karcie — odnośnikiem
+do podmiotu, o którym mówi. Przegląd dwudziestu dokumentów planu pokazał, że trzy z pięciu
+potrzebnych rzeczy nie mają właściciela.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| Z-7 ★ | **`Span`/`Rich` wchodzą do WP3** (§5.8). `InspectorPanel::build` i `render_tab` kart przestają zwracać `String`, a zaczynają `Rich` | Z-3 poniżej ustalił `String` i to była słuszna decyzja przy jednym konsumencie — ale w `String` nie da się zakotwiczyć celu kliknięcia, więc „klikalny odnośnik" z `ui-design.md` §4 nie miał na czym stanąć. Złoty test nie traci nic: `Rich` składa się z powrotem w ten sam napis |
+| Z-8 ★ | **`TabStrip` wchodzi do listy widgetów WP3** | Zakładki istnieją w kodzie trzy razy (`ShopTab`, `SupplyTab`, `FirmTab`), za każdym razem jako własna pętla `selectable_label`, a `widgets.rs:247` mówi wprost „osobnej abstrakcji zakładek nie ma i nie jest potrzebna". Przy czwartym konsumencie (karta inspekcji, `M9c` §5.7) to przestaje być prawdą — i to jest moment, w którym YAGNI każe abstrakcję zrobić, a nie wcześniej |
+| Z-9 | **`Subject` musi mieszkać w `engine/core`, nie w `engine/ui`** (`K-62` w dokumencie 00) | `DecisionReason` jest w `core` i bez `#[non_exhaustive]` (`K-12`). Jeśli cel odnośnika ma jechać w ładunku powodu — a to jest główne źródło linków w karcie — to `Subject` musi być widoczny tam, gdzie powstaje powód, czyli w `sim/*`. Inaczej każda faza dopisująca wariant powodu musiałaby zależeć od `engine/ui` |
