@@ -23,6 +23,7 @@
 #![forbid(unsafe_code)]
 
 pub mod firms;
+pub mod full;
 pub mod labor;
 pub mod plants;
 pub mod population;

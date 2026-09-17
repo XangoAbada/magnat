@@ -123,6 +123,35 @@ impl Market {
         }
     }
 
+    /// Wykonanie decyzji kwartalnej (M7f WP13).
+    ///
+    /// Żadna z tych akcji nie daje się wykonać tutaj w całości i to nie jest brak:
+    /// otwarcie zakładu stawia budynek, zamknięcie rozwiązuje umowy, zwinięcie firmy
+    /// wyprzedaje majątek — wszystkie trzy dotykają świata, którego rynek nie widzi.
+    /// Wychodzą więc listą, tak samo jak `to_close` tieru taktycznego (`AI-1`).
+    /// Powód zapisuje się **tutaj**, w chwili decyzji, a nie u wykonawcy — inaczej
+    /// decyzja odrzucona przez wykonawcę zniknęłaby bez śladu w dzienniku firmy.
+    pub(super) fn wykonaj_str(
+        &self,
+        firms: &mut Firms,
+        key: FirmKey,
+        akcja: &Decided<magnat_firms::StrAction>,
+        t: Tick,
+        d: &mut FirmAiDay,
+    ) {
+        match *akcja.action() {
+            magnat_firms::StrAction::KeepCourse => return,
+            magnat_firms::StrAction::OpenSite {
+                district,
+                slots,
+                capex,
+            } => d.to_open.push((key, district, slots, capex)),
+            magnat_firms::StrAction::CloseSite { site, .. } => d.to_close.push(site),
+            magnat_firms::StrAction::RequestVoluntaryClosure => d.to_wind_down.push(key),
+        }
+        firms.log(key, t, akcja.reason());
+    }
+
     pub(super) fn wykonaj_reakcje(
         &self,
         firms: &mut Firms,

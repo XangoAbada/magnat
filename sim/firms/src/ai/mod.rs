@@ -22,17 +22,19 @@
 //!
 //! - **operacyjny**, raz na dobę: cena i zapas ([`ops`]);
 //! - **taktyczny**, raz na miesiąc: rentowność zakładów, kurs firmy, polityki ([`tactical`]);
-//! - **strategiczny**, raz na kwartał: reakcja na wejście rywala ([`reaction`]).
-//!   Pełne „co jeśli" z rolloutem makro to WP13, czyli M7f — tu jest ta część tieru
-//!   strategicznego, która makra **nie potrzebuje**, bo wyzwala ją zmierzona utrata
-//!   udziału, a nie prognoza.
+//! - **strategiczny**, raz na kwartał: reakcja na wejście rywala ([`reaction`])
+//!   oraz wybór wariantu rozwoju ([`strategic`]). Reakcja makra **nie potrzebuje** —
+//!   wyzwala ją zmierzona utrata udziału. Wybór wariantu potrzebuje, ale dostaje
+//!   go już przeliczonego: `Outlook` w widoku niesie ranking, nie prognozę.
 
 pub mod ops;
 pub mod reaction;
+pub mod strategic;
 pub mod tactical;
 
 pub use ops::{decide_operational, OpsAction};
 pub use reaction::{decide_reaction, Campaign};
+pub use strategic::{decide_strategic, propose_variants, Outlook, StrAction, StrategicOutlooks};
 pub use tactical::{decide_tactical, TacAction};
 
 /// Decyzja z powodem — ten sam typ, którym posługuje się ewaluator polityk (`K-11`).

@@ -63,6 +63,14 @@ pub struct Firms {
     counter: KeyCounter,
     scheduler: Scheduler,
     slot_index: SlotIndex,
+    /// Ile powodów decyzji zapisano od początku przebiegu.
+    ///
+    /// **Poza hashem stanu** i to jest świadome: dziennik firmy jest pierścieniem
+    /// trzydziestu dwóch wpisów i on wchodzi do hasha, a to jest licznik obok niego.
+    /// Wskaźnik wyjaśnialności z §7.8 (licznik decyzji == licznik powodów) potrzebuje
+    /// **sumy od początku**, a suma z pierścienia jest nie do odczytania: trzydziesta
+    /// trzecia decyzja nadpisuje pierwszą.
+    reasons_logged: u64,
 }
 
 impl Default for Firms {
@@ -74,6 +82,7 @@ impl Default for Firms {
             counter: KeyCounter::default(),
             scheduler: Scheduler::new(),
             slot_index: SlotIndex::new(),
+            reasons_logged: 0,
         }
     }
 }
@@ -347,7 +356,14 @@ impl Firms {
     pub fn log(&mut self, key: FirmKey, tick: Tick, reason: DecisionReason) {
         if let Some(f) = self.firms.get_mut(&key) {
             f.log_decision(tick, reason);
+            self.reasons_logged += 1;
         }
+    }
+
+    /// Ile powodów zapisano od początku przebiegu — prawa strona równania z §7.8.
+    #[must_use]
+    pub fn reasons_logged(&self) -> u64 {
+        self.reasons_logged
     }
 
     /// Ilu ludzi pracuje w mieście — wejście metryk balansatora.

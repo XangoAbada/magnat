@@ -48,6 +48,28 @@ pub const G5_DEFERRAL_MAX_PERMILLE: i32 = 250;
 pub const G5_STOCKOUT_MAX_PERMILLE: i32 = 150;
 /// G6: HHI × 10 000 — 6 000 to 0,6 z tabeli.
 pub const G6_HHI_MAX: i32 = 6_000;
+/// G10: o ile promili liczba firm może odejść od wartości startowej (§7.10: ±40 %).
+///
+/// To jest **kryterium ukończenia WP15** wyrażone liczbą: „liczba firm nie eksploduje
+/// ani nie wymiera". Pasmo jest szerokie z rozmysłu — miasto ma prawo się przebudować
+/// przez rok, nie ma prawa zniknąć ani spuchnąć dwukrotnie.
+pub const G10_FIRM_BAND_PERMILLE: i64 = 400;
+/// G11: pasmo bezrobocia w promilach siły roboczej (§7.10: 3–12 %).
+pub const G11_UNEMPLOYMENT: (u16, u16) = (30, 120);
+/// G11: ile ostatnich dób przebiegu wyznacza stopę bezrobocia.
+///
+/// **Ogon, a nie całość po rozbiegu** — i to jest wniosek z pomiaru, nie ostrożność.
+/// Siła robocza w przebiegu **rośnie**: miasto startuje z obsadą z generacji, a ludzi
+/// dokłada migracja, więc przez pierwsze miesiące prawie każdy, kto już wszedł na
+/// rynek, pracuje. Zmierzone na czterech ziarnach: mediana od 60. doby daje
+/// 2,0–3,3 %, mediana ostatnich trzydziestu dób z tych samych przebiegów — 6,4–10,9 %.
+/// Pierwsza liczba mówi, jak szybko miasto się zaludnia; druga o gospodarce.
+///
+/// To jest ten sam wybór, którym G4 wyznacza „nowy poziom" ceny po szoku
+/// (`G4_TAIL_DAYS`) i z tego samego powodu.
+pub const G11_TAIL_DAYS: usize = 30;
+/// G11: krótszy przebieg nie ma ogona, który cokolwiek znaczy.
+pub const G11_MIN_DAYS: u16 = 90;
 
 /// Profil bramek. `ci` pomija G4 i G6, bo obie wymagają scenariusza szokowego
 /// i długiego przebiegu — na PR nie ma na to budżetu czasu (§7.4).
@@ -62,7 +84,10 @@ impl Profile {
     pub fn includes(self, gate: &str) -> bool {
         match self {
             Profile::Nightly => true,
-            Profile::Ci => !matches!(gate, "G4" | "G6"),
+            // G11 wymaga przebiegu dłuższego niż ten z PR (`G11_MIN_DAYS`), bo
+            // krótszy nie ma ogona, w którym miasto jest już zaludnione — tak samo
+            // jak G4 i G6 mierzyłyby szum przy krótkim przebiegu.
+            Profile::Ci => !matches!(gate, "G4" | "G6" | "G11"),
         }
     }
 }
@@ -296,9 +321,21 @@ pub fn unikalne(runs: &[RunFile]) -> Vec<&RunFile> {
 #[must_use]
 pub fn evaluate(runs: &[RunFile], profile: Profile, min_margin_bp: i32) -> Vec<GateOutcome> {
     let u = unikalne(runs);
-    let n = u.len() as u64;
     let mut out = Vec::new();
+    detal(&u, profile, min_margin_bp, &mut out);
+    rzetelnosc(runs, &u, &mut out);
+    firmy(&u, &mut out);
+    out.retain(|g| profile.includes(g.gate));
+    out
+}
 
+/// G1–G6: czy gospodarka detaliczna trzyma się w ryzach.
+///
+/// Sześć pytań o **ceny i rynek**: czy stoją, czy nie uciekają w górę, czy nie
+/// spadają spiralą, czy reagują na szok, czy rynek żyje i czy nie zrósł się
+/// w monopol.
+fn detal(u: &[&RunFile], profile: Profile, min_margin_bp: i32, out: &mut Vec<GateOutcome>) {
+    let n = u.len() as u64;
     // ── G1 ──────────────────────────────────────────────────────────────────────
     let zielone = u
         .iter()
@@ -320,7 +357,7 @@ pub fn evaluate(runs: &[RunFile], profile: Profile, min_margin_bp: i32) -> Vec<G
     });
 
     // ── G2 ──────────────────────────────────────────────────────────────────────
-    let czerwone = czerwone_ziarna(&u, |r| {
+    let czerwone = czerwone_ziarna(u, |r| {
         let mom: Vec<Option<i32>> = miesiace(r).into_iter().map(|(_, d)| d.cpi_mom_bp).collect();
         let cpi: Vec<(u32, i32)> = r
             .days_data
@@ -339,7 +376,7 @@ pub fn evaluate(runs: &[RunFile], profile: Profile, min_margin_bp: i32) -> Vec<G
     });
 
     // ── G3 ──────────────────────────────────────────────────────────────────────
-    let czerwone = czerwone_ziarna(&u, |r| {
+    let czerwone = czerwone_ziarna(u, |r| {
         let cpi: Vec<i32> = miesiace(r)
             .into_iter()
             .map(|(_, d)| d.cpi_index_bp)
@@ -358,11 +395,11 @@ pub fn evaluate(runs: &[RunFile], profile: Profile, min_margin_bp: i32) -> Vec<G
 
     // ── G4 ──────────────────────────────────────────────────────────────────────
     if profile.includes("G4") {
-        out.push(g4_gate(&u));
+        out.push(g4_gate(u));
     }
 
     // ── G5 ──────────────────────────────────────────────────────────────────────
-    let czerwone = czerwone_ziarna(&u, |r| g5_series(&r.days_data));
+    let czerwone = czerwone_ziarna(u, |r| g5_series(&r.days_data));
     let odlozenia: Vec<i32> = u
         .iter()
         .flat_map(|r| r.days_data.iter().map(|d| d.deferral_permille))
@@ -404,9 +441,21 @@ pub fn evaluate(runs: &[RunFile], profile: Profile, min_margin_bp: i32) -> Vec<G
             advisory: false,
         });
     }
+}
 
+/// G7–G9: czy przebieg w ogóle wolno czytać.
+///
+/// Trzy pytania nie o gospodarkę, tylko o **rzetelność pomiaru**: czy pieniądz się
+/// zgadza, czy dwa przebiegi tego samego ziarna są identyczne i czy każda decyzja
+/// ma powód. Czerwień którejkolwiek z nich unieważnia pozostałe bramki — dlatego
+/// stoją osobno, a nie dlatego, że plik był długi.
+///
+/// `runs` obok `u`, bo G8 porównuje **bliźniaki**, czyli dokładnie te przebiegi,
+/// które `unikalne` odsiewa.
+fn rzetelnosc(runs: &[RunFile], u: &[&RunFile], out: &mut Vec<GateOutcome>) {
+    let n = u.len() as u64;
     // ── G7 ──────────────────────────────────────────────────────────────────────
-    let czerwone = czerwone_ziarna(&u, |r| r.conservation_ok);
+    let czerwone = czerwone_ziarna(u, |r| r.conservation_ok);
     out.push(GateOutcome {
         gate: "G7",
         name: "Zachowanie pieniadza",
@@ -449,9 +498,154 @@ pub fn evaluate(runs: &[RunFile], profile: Profile, min_margin_bp: i32) -> Vec<G
         threshold: "0",
         advisory: false,
     });
+}
 
-    out.retain(|g| profile.includes(g.gate));
-    out
+/// G10–G11: czy warstwa firm nie wywraca miasta (M7f WP17).
+///
+/// Dwa pytania o **populację firm i rynek pracy**: czy firm nie przybywa ani nie
+/// ubywa bez opamiętania i czy bezrobocie stoi w paśmie z §7.10.
+fn firmy(u: &[&RunFile], out: &mut Vec<GateOutcome>) {
+    // ── G10 ─────────────────────────────────────────────────────────────────────
+    //
+    // Populacja firm. Mierzona wobec **pierwszej doby przebiegu**, a nie wobec
+    // liczby z planu: ile firm postawi generator, zależy od wielkości miasta,
+    // a bramka ma mówić o gospodarce, nie o rozmiarze mapy.
+    let czerwone = czerwone_ziarna(u, |r| {
+        let Some(start) = r.days_data.first().map(|d| i64::from(d.firms)) else {
+            return true;
+        };
+        if start == 0 {
+            // Przebieg bez rejestru firm — bramka nie ma czego mierzyć i **nie
+            // udaje, że zmierzyła**. Zielona, bo czerwień znaczyłaby „gospodarka
+            // się zawaliła", a tu nie ma gospodarki firm w ogóle.
+            return true;
+        }
+        r.days_data.iter().all(|d| {
+            let teraz = i64::from(d.firms);
+            (teraz - start).abs() * 1_000 <= start * G10_FIRM_BAND_PERMILLE
+        })
+    });
+    out.push(GateOutcome {
+        gate: "G10",
+        name: "Populacja firm w pasmie",
+        pass: czerwone.is_empty(),
+        value: format!(
+            "{} ziaren czerwonych {czerwone:?}; start/koniec: {}",
+            czerwone.len(),
+            u.iter()
+                .map(|r| format!(
+                    "{}→{}",
+                    r.days_data.first().map_or(0, |d| d.firms),
+                    r.days_data.last().map_or(0, |d| d.firms)
+                ))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+        threshold: "liczba firm w ±40 % wartości startowej",
+        advisory: false,
+    });
+
+    // ── G11 ─────────────────────────────────────────────────────────────────────
+    //
+    // **Mianownik decyduje, czy ta bramka w ogóle coś mierzy.** Miasto, w którym
+    // wakatów jest więcej niż ludzi w sile roboczej, nie może mieć trzyprocentowego
+    // bezrobocia — każdy zdolny do pracy ma gdzie pójść i stopa schodzi do tarcia
+    // wyszukiwania. Pomiar mówi wtedy o gęstości etatów, którą postawił generator
+    // miasta, a nie o gospodarce. Dlatego bramka jest w takim przebiegu **doradcza**,
+    // a nie czerwona: czerwień znaczyłaby „gospodarka jest zepsuta", a zepsuty jest
+    // dobór liczby mieszkańców do liczby etatów (`AT-1`, `AT-4`).
+    //
+    // To jest ta sama droga, którą G4 jest doradcza bez przebiegu szokowego.
+    let ciasne: Vec<&&RunFile> = u
+        .iter()
+        .filter(|r| r.days >= G11_MIN_DAYS && rynek_pracy_moze_byc_ciasny(r))
+        .collect();
+    let czerwone: Vec<u64> = ciasne
+        .iter()
+        .filter(|r| !g11_seed(r))
+        .map(|r| r.seed)
+        .collect();
+    out.push(GateOutcome {
+        gate: "G11",
+        name: "Bezrobocie w pasmie",
+        pass: !ciasne.is_empty() && czerwone.is_empty(),
+        advisory: ciasne.is_empty(),
+        value: if ciasne.is_empty() {
+            format!(
+                "brak przebiegu, w którym rynek pracy może być ciasny (wakaty/siła robocza: {})",
+                u.iter()
+                    .map(|r| {
+                        let d = r.days_data.last();
+                        format!(
+                            "{}/{}",
+                            d.map_or(0, |x| x.vacancies),
+                            d.map_or(0, |x| x.labour_force)
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+        } else {
+            format!(
+                "{} ziaren czerwonych {czerwone:?}; mediany: {}",
+                czerwone.len(),
+                ciasne
+                    .iter()
+                    .map(|r| {
+                        let m = mediana_u16(&ogon(r));
+                        format!("{},{}%", m / 10, m % 10)
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+        },
+        threshold:
+            "mediana bezrobocia z ostatnich 30 dób ∈ ⟨3 %, 12 %⟩, gdy wakatów ≤ siły roboczej",
+    });
+}
+
+/// Czy w tym przebiegu rynek pracy może się w ogóle zacisnąć.
+///
+/// Kryterium jest jedno i twarde: wakatów **nie więcej** niż ludzi w sile roboczej,
+/// mierzone na końcu przebiegu. Powyżej tego progu każdy chętny ma gdzie pójść
+/// i stopa bezrobocia mierzy tarcie wyszukiwania, a nie gospodarkę.
+fn rynek_pracy_moze_byc_ciasny(r: &RunFile) -> bool {
+    r.days_data
+        .last()
+        .is_some_and(|d| d.labour_force > 0 && d.vacancies <= d.labour_force)
+}
+
+/// Bezrobocie z ogona przebiegu — patrz [`G11_TAIL_DAYS`].
+fn ogon(r: &RunFile) -> Vec<u16> {
+    let v: Vec<u16> = r
+        .days_data
+        .iter()
+        .map(|d| d.unemployment_permille)
+        .collect();
+    v.iter()
+        .skip(v.len().saturating_sub(G11_TAIL_DAYS))
+        .copied()
+        .collect()
+}
+
+fn g11_seed(r: &RunFile) -> bool {
+    let v = ogon(r);
+    if v.is_empty() {
+        return true;
+    }
+    let m = mediana_u16(&v);
+    m >= G11_UNEMPLOYMENT.0 && m <= G11_UNEMPLOYMENT.1
+}
+
+/// Mediana ciągu promili. Pusty ciąg daje zero — i to jest właściwa odpowiedź,
+/// bo wołający sprawdza pustkę przed wywołaniem.
+fn mediana_u16(v: &[u16]) -> u16 {
+    if v.is_empty() {
+        return 0;
+    }
+    let mut s = v.to_vec();
+    s.sort_unstable();
+    s[s.len() / 2]
 }
 
 /// Ziarna, dla których predykat „jest zielone" nie wyszedł.
@@ -549,6 +743,17 @@ mod tests {
             loans: 0,
             credit_outstanding_gr: 0,
             money_supply_gr: 0,
+            // Warstwa firm zerami: testy G1–G9 budują szereg cen i CPI, a bramki
+            // firmowe mają własne dane i własne testy. Zero w `labour_force` znaczy
+            // przy okazji „nie ma czego mierzyć" dla G11 — czyli dokładnie to, czym
+            // ten wzorzec jest.
+            firms: 0,
+            firm_sites: 0,
+            unemployment_permille: 0,
+            labour_force: 0,
+            vacancies: 0,
+            firms_founded: 0,
+            firms_gone: 0,
         }
     }
 

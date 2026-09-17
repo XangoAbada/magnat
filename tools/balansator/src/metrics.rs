@@ -90,6 +90,36 @@ pub struct DayMetrics {
     pub loans: u32,
     pub credit_outstanding_gr: i64,
     pub money_supply_gr: i64,
+    // ── warstwa firm (M7f WP17) ───────────────────────────────────────────────
+    //
+    // `serde(default)` we wszystkich pięciu, bo pliki przebiegów sprzed M7f mają
+    // zostać czytelne — `SCHEMA_VERSION` rośnie dopiero wtedy, gdy zmienia się
+    // **znaczenie** pola, a nie wtedy, gdy dochodzi nowe.
+    /// Ile firm stoi w mieście tej doby — mianownik pasma z §7.10.
+    #[serde(default)]
+    pub firms: u32,
+    /// Ile zakładów mają te firmy razem.
+    #[serde(default)]
+    pub firm_sites: u32,
+    /// Bezrobocie w promilach siły roboczej.
+    #[serde(default)]
+    pub unemployment_permille: u16,
+    /// Siła robocza: zatrudnieni plus bezrobotni.
+    #[serde(default)]
+    pub labour_force: u32,
+    /// Nieobsadzone etaty w mieście.
+    ///
+    /// Mianownik bramki G11 i **powód, dla którego ona istnieje osobno od samego
+    /// bezrobocia**: miasto, w którym etatów jest więcej niż ludzi, nie może mieć
+    /// trzyprocentowego bezrobocia i pomiar niczego by o gospodarce nie powiedział.
+    #[serde(default)]
+    pub vacancies: u32,
+    /// Firmy założone przez mieszkańców **od początku przebiegu**.
+    #[serde(default)]
+    pub firms_founded: u32,
+    /// Firmy, które zniknęły — zwinięte dobrowolnie plus postępowania upadłościowe.
+    #[serde(default)]
+    pub firms_gone: u32,
 }
 
 /// Rozkład ceny jednego towaru po wszystkich ofertach miasta w danej dobie.

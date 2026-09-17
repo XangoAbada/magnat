@@ -22,8 +22,8 @@ use magnat_agents::{
 use magnat_core::{DecisionReason, Tick};
 use magnat_economy::{Books, CompetitorRef, Market, MarketStats, MarketSystem, PricePolicy, TxId};
 use magnat_ecs::{App, ScheduleBuilder};
+use magnat_headless::full;
 use magnat_headless::population::{swiat_agentow, zaludnij, zbuduj_miasto};
-use magnat_headless::retail;
 use magnat_io::world_state_hash;
 use magnat_jobs::JobPool;
 use magnat_traffic::TrafficSystem;
@@ -113,7 +113,11 @@ pub fn single(cfg: &RunCfg, seed: u64) -> Result<RunFile, String> {
     let mut world = swiat_agentow(seed).map_err(opis)?;
     register_day(&mut world);
     let zaludnione = zaludnij(&mut world, &city, cfg.citizens, SWAPS).map_err(opis)?;
-    let r = retail::setup(
+    // **Pełne miasto, nie wycinek** (M7f WP17). Do M7f balansator mierzył świat
+    // bez rejestru firm, więc bramki G1–G9 opisywały gospodarkę, w której nikt nie
+    // zatrudniał, nie płacił i nie bankrutował. Od tej chwili mierzą to samo miasto,
+    // które widzi gracz — i to jest jedyny stan, w którym bramka cokolwiek obiecuje.
+    let f = full::setup(
         &mut world,
         &city,
         zaludnione.places.clone(),
@@ -123,6 +127,7 @@ pub fn single(cfg: &RunCfg, seed: u64) -> Result<RunFile, String> {
         &pool,
     )
     .map_err(opis)?;
+    let r = f.retail;
     let market = r.market.clone();
     if r.shops == 0 {
         return Err(format!("ziarno {seed}: miasto bez ani jednego sklepu"));
@@ -137,7 +142,11 @@ pub fn single(cfg: &RunCfg, seed: u64) -> Result<RunFile, String> {
     let mut builder = ScheduleBuilder::new();
     builder
         .add(magnat_supply::ChainSystem::new())
+        .add(magnat_firms::systems::FirmSystem::new())
         .add(MarketSystem::new(&world))
+        .add(magnat_economy::labor::LaborSystem::new())
+        .add(magnat_economy::corpfin::system::InsolvencySystem::new())
+        .add(magnat_macro::MacroSystem::new())
         .add(DayLoopSystem::new(&world))
         .add(ReplanCooldownSystem::new(&world))
         .add(NeedDecaySystem::new(&world))
@@ -301,6 +310,15 @@ impl Probka {
 
         let books = app.world.resource::<Books>();
         self.policz_powody(books);
+        let zycie = app
+            .world
+            .get_resource::<magnat_economy::firmlife::FirmLifeLog>()
+            .copied()
+            .unwrap_or_default();
+        let zamkniete = app
+            .world
+            .get_resource::<magnat_economy::corpfin::CorpFinance>()
+            .map_or(0, |f| u32::try_from(f.case_count()).unwrap_or(u32::MAX));
 
         let m = DayMetrics {
             day,
@@ -339,6 +357,34 @@ impl Probka {
             loans: u32::try_from(market.loan_count()).unwrap_or(u32::MAX),
             credit_outstanding_gr: market.credit_outstanding().get(),
             money_supply_gr: books.supply().total().get(),
+            firms: app
+                .world
+                .get_resource::<magnat_firms::Firms>()
+                .map_or(0, |f| u32::try_from(f.len()).unwrap_or(u32::MAX)),
+            firm_sites: app
+                .world
+                .get_resource::<magnat_firms::Firms>()
+                .map_or(0, |f| u32::try_from(f.site_count()).unwrap_or(u32::MAX)),
+            unemployment_permille: app
+                .world
+                .get_resource::<magnat_economy::labor::LaborHandle>()
+                .and_then(magnat_economy::labor::LaborHandle::get)
+                .map_or(0, |m| m.last_day().unemployment_permille()),
+            labour_force: app
+                .world
+                .get_resource::<magnat_economy::labor::LaborHandle>()
+                .and_then(magnat_economy::labor::LaborHandle::get)
+                .map_or(0, |m| m.last_day().labour_force),
+            vacancies: app
+                .world
+                .get_resource::<magnat_economy::labor::LaborHandle>()
+                .and_then(magnat_economy::labor::LaborHandle::get)
+                .map_or(0, |m| m.last_day().vacancies),
+            firms_founded: zycie.total.founded,
+            // Zniknięcia liczą się **razem**: dla pasma liczby firm nie ma różnicy,
+            // czy właściciel zwinął interes sam, czy zrobił to syndyk. Rozróżnienie
+            // jest w raporcie scenariusza, bo tam odpowiada na inne pytanie.
+            firms_gone: zycie.total.wound_down + zamkniete,
         };
         self.poprzednie = s;
         m

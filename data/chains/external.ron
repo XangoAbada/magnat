@@ -1,0 +1,57 @@
+// Sieci zewnętrzne wchodzące do miasta (M7f WP15, PRD §12.4).
+//
+// Sieć nie jest lepszą firmą — jest firmą z **kapitałem spoza miasta**. To jest cała
+// różnica i cała jej przewaga: wchodzi tam, gdzie miejscowych nie stać na otwarcie
+// drugiego sklepu, i wchodzi od razu kilkoma naraz.
+//
+// Progi opisują to, co widać z ulicy: ilu ludzi w dzielnicy mieszka, ile mają
+// pieniędzy i ilu konkurentów już tam stoi. `max_competitors` jest górnym progiem
+// z rozmysłu — sieć nie wchodzi tam, gdzie handel jest już nasycony, bo nie miałaby
+// czym wygrać poza ceną, a wojna cenowa kosztuje ją tyle samo co wszystkich.
+//
+// `capital_per_site` jest **punktem emisji pieniądza** (`D10`): kwota przechodzi
+// przez `Books::inject_external_capital` i wchodzi do pozycji `external_capital_in`
+// rejestru podaży. Bez tego globalny test zachowania pieniądza pękłby na sumie.
+//
+// Kolejność wpisów jest kontraktem zapisu gry: indeks wiersza jest
+// `ExternalInvestorId` w dzienniku transakcji. Dopisywać wolno wyłącznie na końcu.
+//
+// Kwoty w groszach.
+(
+    schema_version: 1,
+    chains: [
+        // Dyskont: wchodzi do gęstych i niezamożnych dzielnic, w których handel
+        // już jest, ale jest rozdrobniony. Trzy sklepy naraz, bo jego przewagą
+        // jest skala zakupów, a nie pojedynczy lokal.
+        (
+            key: "discount_chain",
+            min_population: 2500,
+            min_median_wealth: 150000,
+            min_competitors: 2,
+            max_competitors: 14,
+            capital_per_site: 18000000,
+            sites: 3,
+        ),
+        // Sieć convenience: mniejsza bariera wejścia, wchodzi wcześniej i pojedynczo.
+        (
+            key: "convenience_chain",
+            min_population: 1200,
+            min_median_wealth: 90000,
+            min_competitors: 1,
+            max_competitors: 8,
+            capital_per_site: 7000000,
+            sites: 2,
+        ),
+        // Sieć premium: wchodzi wyłącznie tam, gdzie jest po co — wysoki majątek
+        // mediany gospodarstwa i mało konkurencji w tym segmencie.
+        (
+            key: "premium_chain",
+            min_population: 1800,
+            min_median_wealth: 900000,
+            min_competitors: 1,
+            max_competitors: 6,
+            capital_per_site: 42000000,
+            sites: 1,
+        ),
+    ],
+)

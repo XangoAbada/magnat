@@ -31,7 +31,10 @@ use std::collections::BTreeMap;
 use magnat_core::{Money, SiteId, Tick};
 use magnat_ecs::World;
 use magnat_firms::view::{CityFacts, FirmView, GoodFacts, SiteFacts};
-use magnat_firms::{decide_operational, decide_reaction, decide_tactical, FirmKey, Firms};
+use magnat_firms::{
+    decide_operational, decide_reaction, decide_strategic, decide_tactical, FirmKey, Firms,
+    StrategicOutlooks,
+};
 use magnat_policy::PolicyCatalog;
 
 use crate::board::PublicMarketBoard;
@@ -56,9 +59,33 @@ pub struct FirmAiDay {
     pub strategy_changes: u32,
     pub policies_adopted: u32,
     pub campaigns_started: u32,
-    /// Zakłady, które tier taktyczny postanowił zamknąć. Domyka je wołający —
-    /// rozwiązanie umów dotyka komponentów mieszkańców, a rynek ich nie widzi.
+    /// Zakłady, które tier taktyczny albo strategiczny postanowił zamknąć. Domyka
+    /// je wołający — rozwiązanie umów dotyka komponentów mieszkańców, a rynek ich
+    /// nie widzi.
     pub to_close: Vec<SiteId>,
+    /// Zakłady, które tier strategiczny postanowił **otworzyć** (M7f WP13).
+    /// Ta sama granica co przy `to_close` i z tego samego powodu: otwarcie stawia
+    /// budynek i obsadza stanowiska, a rynek nie widzi ani parceli, ani mieszkańców.
+    pub to_open: Vec<(FirmKey, magnat_core::DistrictId, u32, Money)>,
+    /// Firmy, których właściciel postanowił zwinąć interes dobrowolnie (M7f WP15).
+    pub to_wind_down: Vec<FirmKey>,
+}
+
+/// Wszystko, co firma AI czyta i czego nie zmienia.
+///
+/// Struktura, a nie cztery argumenty: po dołożeniu uporządkowań wariantów (M7f WP13)
+/// lista wejść przekroczyła próg czytelności, a każde z nich jest **odczytem**
+/// o tym samym czasie życia — więc jedna nazwa zamiast czterech pozycji, których
+/// kolejność trzeba pamiętać.
+pub struct AiInputs<'a> {
+    /// Tablica publiczna cen z opóźnieniem (§5.8).
+    pub board: &'a PublicMarketBoard,
+    /// Presety polityk z `data/policies/`.
+    pub catalog: &'a PolicyCatalog,
+    /// Uporządkowania wariantów z modelu makro (M7f WP13); puste, gdy makra nie ma.
+    pub outlooks: &'a StrategicOutlooks,
+    /// Salda rachunków zakładów — `Books` i rejestr firm nie dają się pożyczyć naraz.
+    pub cash: &'a BTreeMap<SiteId, Money>,
 }
 
 /// Wpina tablicę publiczną i katalog presetów do świata (M7e WP10).
@@ -81,12 +108,16 @@ impl Market {
     pub fn run_firm_ai(
         &self,
         firms: &mut Firms,
-        board: &PublicMarketBoard,
-        catalog: &PolicyCatalog,
-        cash: &BTreeMap<SiteId, Money>,
+        inputs: &AiInputs<'_>,
         due: &[(magnat_firms::Tier, Vec<FirmKey>)],
         t: Tick,
     ) -> FirmAiDay {
+        let AiInputs {
+            board,
+            catalog,
+            outlooks,
+            cash,
+        } = inputs;
         let mut d = FirmAiDay::default();
         let mut sites: Vec<SiteFacts> = Vec::new();
         let mut goods: Vec<GoodFacts> = Vec::new();
@@ -112,6 +143,7 @@ impl Market {
                     sites: &sites,
                     goods: &goods,
                     city: CityFacts::default(),
+                    outlook: outlooks.get(*key),
                 };
                 match tier {
                     magnat_firms::Tier::Operational => {
@@ -129,8 +161,16 @@ impl Market {
                     magnat_firms::Tier::Strategic => {
                         d.firms_strategic += 1;
                         let trwa = firma.campaign;
+                        // Kwartał niesie dwie niezależne decyzje i obie mogą paść
+                        // w tej samej dobie: reakcja odpowiada na **zmierzoną**
+                        // utratę udziału, wybór wariantu — na porównanie prognoz.
+                        // Rozdzielenie ich na dwa tiery znaczyłoby, że firma
+                        // odpowiada rywalowi w innym kwartale, niż planuje rozwój.
                         if let Some(akcja) = decide_reaction(&v, trwa) {
                             self.wykonaj_reakcje(firms, *key, &akcja, t, &mut d);
+                        }
+                        if let Some(akcja) = decide_strategic(&v) {
+                            self.wykonaj_str(firms, *key, &akcja, t, &mut d);
                         }
                     }
                 }

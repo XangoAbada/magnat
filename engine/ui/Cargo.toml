@@ -14,6 +14,9 @@ magnat-traffic = { workspace = true }
 # Panel sklepu (M5e/WP12) czyta `ShopPanelSnapshot` — jedyne wejście interfejsu
 # do gospodarki. Zależność idzie tylko w tę stronę: `sim/economy` nie widzi UI.
 magnat-economy = { workspace = true }
+# Karta firmy i panel ludzi (M7f WP16). Interfejs czyta **migawkę**
+# (`FirmPanelSnapshot`), a nie rejestr — zależność jest jednokierunkowa.
+magnat-firms = { workspace = true }
 # Panel łańcucha dostaw (WP13) czyta `SupplyGraphView` i `BatchTrace` — dane,
 # nie stan: obie struktury są oderwane od świata i wolno je trzymać przez klatkę.
 magnat-supply = { workspace = true }

@@ -227,12 +227,27 @@ fn posuwaj_postepowania(
 /// Mieszkaniec bez gospodarstwa nie istnieje, więc wypłata trafia do gospodarstwa,
 /// w którym mieszka — tak samo jak pensja w `pay_incomes`.
 pub(crate) fn wyplac_sektorowi(world: &mut World, payouts: &[SectorPayout]) {
+    // Wypłaty, dla których nie ma gospodarstwa. **Nie wolno ich po cichu pominąć**
+    // i to jest poprawka wpisana po M7f, kiedy `InsolvencySystem` po raz pierwszy
+    // stanął w przebiegu: kwota zeszła już z ksiąg kanałem `household_sector_out`,
+    // więc `continue` znaczyłby pieniądz zgubiony **między** księgami a światem —
+    // dokładnie w miejscu, którego suma nie pokazuje, bo obie strony są poza nią.
+    //
+    // Wierzyciel bez gospodarstwa zdarza się, gdy postępowanie trwa dłużej niż jego
+    // uczestnik: pracownik upadłej firmy może w tym czasie umrzeć albo wyprowadzić
+    // się z miasta. Adresem takiego pieniądza jest `Population::escheat` — pozycja,
+    // która istnieje dokładnie po to („majątek po zmarłym bez spadkobierców") i którą
+    // liczy `society::total_money`.
+    let mut bez_adresu = 0i64;
     for p in payouts {
-        let Some(hh) = gospodarstwo(world, p.to) else {
-            continue;
-        };
-        if let Some(h) = world.get_mut::<Household>(hh) {
-            h.bank = Money(h.bank.get().saturating_add(p.amount.get()));
+        match gospodarstwo(world, p.to).and_then(|hh| world.get_mut::<Household>(hh)) {
+            Some(h) => h.bank = Money(h.bank.get().saturating_add(p.amount.get())),
+            None => bez_adresu = bez_adresu.saturating_add(p.amount.get()),
+        }
+    }
+    if bez_adresu > 0 {
+        if let Some(pop) = world.get_resource_mut::<magnat_agents::Population>() {
+            pop.escheat = Money(pop.escheat.get().saturating_add(bez_adresu));
         }
     }
 }

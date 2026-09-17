@@ -1,0 +1,37 @@
+[package]
+name = "magnat-macro"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+# Testy jednostkowe nie są benchmarkami — patrz komentarz w `engine/ecs/Cargo.toml`.
+[lib]
+bench = false
+
+[dependencies]
+magnat-core = { workspace = true }
+magnat-ecs = { workspace = true }
+# Jądro ekonomii (`K-50`). To jest **powód**, dla którego ten crate stoi na samej
+# górze grafu: `sim/macro` nie ma własnej logiki ekonomicznej i każdą cenę, płacę,
+# przepustowość i księgowanie bierze z `sim/economy::kernel`. Zależność w drugą
+# stronę nie istnieje i istnieć nie może — zamknęłaby cykl.
+magnat-economy = { workspace = true }
+# Rejestr firm: makro **nie agreguje firm** (`D21`), więc `MacroFirm` powstaje
+# z `Firms` i zachowuje `FirmKey`.
+magnat-firms = { workspace = true }
+# Mieszkańcy jako komórki: `Residence`, `Employment`, `Skills`, `Household`.
+magnat-agents = { workspace = true }
+# Katalog towarów — jednostka natywna `MacroStock` pochodzi z `data/goods/`.
+magnat-supply = { workspace = true }
+smallvec = { workspace = true }
+
+[dev-dependencies]
+magnat-io = { workspace = true }
+# Test modelu buduje `MacroState` ręcznie, więc potrzebuje `SmallVec` tak samo
+# jak sam model — pole `suppliers` jest jego częścią, nie ozdobą.
+smallvec = { workspace = true }
+
+[lints]
+workspace = true

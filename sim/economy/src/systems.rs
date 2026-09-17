@@ -602,10 +602,32 @@ fn run_firm_ai(world: &mut World, market: &Market, t: Tick) {
     else {
         return;
     };
-    let dzien = market.run_firm_ai(&mut firms, &board, &catalog, &salda, &due, t);
+    let widoki = world
+        .get_resource::<magnat_firms::StrategicOutlooks>()
+        .cloned()
+        .unwrap_or_default();
+    let dzien = market.run_firm_ai(
+        &mut firms,
+        &crate::ai_run::AiInputs {
+            board: &board,
+            catalog: &catalog,
+            outlooks: &widoki,
+            cash: &salda,
+        },
+        &due,
+        t,
+    );
     *world.resource_mut::<magnat_firms::Firms>() = firms;
-    for site in dzien.to_close {
-        close_site(world, market, site, t);
+    for site in &dzien.to_close {
+        close_site(world, market, *site, t);
+    }
+    // Powstawanie, ekspansja i zwijanie firm (M7f WP15). Stoi tutaj, a nie we własnym
+    // systemie, bo jedynym wejściem są listy, które właśnie wróciły z decyzji firm —
+    // osobny system musiałby je przenieść przez świat i wtedy `to_open` byłoby
+    // wykonywane dobę później niż zapisany powód.
+    let zycie = crate::firmlife::step_day(world, market, &dzien, t);
+    if let Some(l) = world.get_resource_mut::<crate::firmlife::FirmLifeLog>() {
+        l.record(&dzien, zycie);
     }
 }
 
@@ -621,7 +643,7 @@ fn run_firm_ai(world: &mut World, market: &Market, t: Tick) {
 /// upadłości: firma zamykająca nierentowny zakład nadal istnieje i nadal ma konto.
 /// Gdy na nim nie starcza, kwota zostaje zaległością — ta sama gałąź, którą
 /// `close_month` obsługuje niezapłacony czynsz.
-fn close_site(world: &mut World, market: &Market, site: magnat_core::SiteId, t: Tick) {
+pub(crate) fn close_site(world: &mut World, market: &Market, site: magnat_core::SiteId, t: Tick) {
     let Some(mut firms) = world
         .get_resource_mut::<magnat_firms::Firms>()
         .map(std::mem::take)

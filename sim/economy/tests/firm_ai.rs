@@ -14,9 +14,11 @@ use magnat_core::{
     DecisionReason, DistrictId, FirmStrategy, GoodId, Money, Qty, ReactionKind, SimMinute, SiteId,
     Tick, Q,
 };
+use magnat_economy::ai_run::AiInputs;
 use magnat_economy::{Market, PricePolicy, PublicMarketBoard};
 use magnat_firms::{
-    Firm, FirmKey, FirmPersonality, Firms, Owner, Ring, Site, SitePnlMonth, SiteTypeId, Tier,
+    Firm, FirmKey, FirmPersonality, Firms, Owner, Ring, Site, SitePnlMonth, SiteTypeId,
+    StrategicOutlooks, Tier,
 };
 use magnat_policy::PolicyCatalog;
 use magnat_spatial::Vec2;
@@ -109,7 +111,17 @@ fn doba(
 ) -> magnat_economy::FirmAiDay {
     m.refresh_board(board, t);
     m.observe_competitors(t);
-    let d = m.run_firm_ai(f, board, &katalog(), cash, due, t);
+    let d = m.run_firm_ai(
+        f,
+        &AiInputs {
+            board,
+            catalog: &katalog(),
+            outlooks: &StrategicOutlooks::new(),
+            cash,
+        },
+        due,
+        t,
+    );
     m.reprice_all(t);
     d
 }
@@ -447,9 +459,17 @@ fn utrata_udzialu_wyzwala_odpowiedz_z_zapisanym_powodem() {
         (Tier::Strategic, vec![klucz]),
     ];
     let cash = salda(&b);
-    let d = b
-        .market
-        .run_firm_ai(&mut f, &board, &katalog(), &cash, &due, Tick(8 * DOBA));
+    let d = b.market.run_firm_ai(
+        &mut f,
+        &AiInputs {
+            board: &board,
+            catalog: &katalog(),
+            outlooks: &StrategicOutlooks::new(),
+            cash: &cash,
+        },
+        &due,
+        Tick(8 * DOBA),
+    );
 
     assert_eq!(d.campaigns_started, 1, "firma nie odpowiedziała na rywala");
     let kampania = f.get(klucz).and_then(|x| x.campaign).expect("kampania");
@@ -474,8 +494,16 @@ fn utrata_udzialu_wyzwala_odpowiedz_z_zapisanym_powodem() {
 
     // Powtarzalność: ten sam stan daje tę samą decyzję, a firma prowadząca kampanię
     // nie zaczyna drugiej.
-    let d2 = b
-        .market
-        .run_firm_ai(&mut f, &board, &katalog(), &cash, &due, Tick(9 * DOBA));
+    let d2 = b.market.run_firm_ai(
+        &mut f,
+        &AiInputs {
+            board: &board,
+            catalog: &katalog(),
+            outlooks: &StrategicOutlooks::new(),
+            cash: &cash,
+        },
+        &due,
+        Tick(9 * DOBA),
+    );
     assert_eq!(d2.campaigns_started, 0, "firma zaczęła drugą kampanię");
 }

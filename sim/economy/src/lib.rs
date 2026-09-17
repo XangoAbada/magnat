@@ -53,6 +53,7 @@ pub mod corpfin;
 pub mod cpi;
 pub mod credit;
 pub mod data;
+pub mod firmlife;
 pub mod kernel;
 pub mod labor;
 pub mod ledger;
@@ -107,7 +108,8 @@ pub use ledger::{
     IncomeStatement, JournalEntry, Ledger, LedgerAccount, PeriodClose, LEDGER_ACCOUNT_COUNT,
 };
 pub use market::{
-    Bank, HouseholdMonth, HouseholdMonthReport, Market, MarketStats, PurchaseIntent, ShopSeed,
+    Bank, HouseholdMonth, HouseholdMonthReport, Market, MarketStats, PurchaseIntent, ShelfSnapshot,
+    ShopSeed,
 };
 pub use offer::{
     price_stats, query_offers, CategoryId, Offer, OfferId, OfferIndex, PriceBasis, PriceStats,

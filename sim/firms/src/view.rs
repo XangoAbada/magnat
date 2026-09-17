@@ -140,6 +140,13 @@ pub struct FirmView<'a> {
     pub sites: &'a [SiteFacts],
     pub goods: &'a [GoodFacts],
     pub city: CityFacts,
+    /// Uporządkowanie wariantów strategii z ostatniego „co jeśli" (M7f WP13).
+    ///
+    /// **Jedyne pole widoku pochodzące spoza mezo** i jedyne, które niesie wynik
+    /// prognozy. Niesie go jako ranking, kierunek i margines — nigdy jako kwotę,
+    /// bo kwoty w nim nie ma (`Outlook` jej nie ma czym wyrazić). `None` znaczy
+    /// „model jeszcze nic nie policzył", a nie „bez zmian".
+    pub outlook: Option<&'a crate::ai::strategic::Outlook>,
 }
 
 impl FirmView<'_> {

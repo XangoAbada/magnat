@@ -1444,9 +1444,11 @@ dependencies = [
  "magnat-core",
  "magnat-economy",
  "magnat-ecs",
+ "magnat-firms",
  "magnat-headless",
  "magnat-io",
  "magnat-jobs",
+ "magnat-macro",
  "magnat-supply",
  "magnat-traffic",
  "ron",
@@ -1536,6 +1538,7 @@ dependencies = [
  "magnat-firms",
  "magnat-io",
  "magnat-jobs",
+ "magnat-macro",
  "magnat-nav",
  "magnat-policy",
  "magnat-spatial",
@@ -1567,6 +1570,20 @@ version = "0.1.0"
 dependencies = [
  "parking_lot",
  "rayon",
+]
+
+[[package]]
+name = "magnat-macro"
+version = "0.1.0"
+dependencies = [
+ "magnat-agents",
+ "magnat-core",
+ "magnat-economy",
+ "magnat-ecs",
+ "magnat-firms",
+ "magnat-io",
+ "magnat-supply",
+ "smallvec",
 ]
 
 [[package]]
@@ -1664,6 +1681,7 @@ dependencies = [
  "magnat-core",
  "magnat-economy",
  "magnat-ecs",
+ "magnat-firms",
  "magnat-nav",
  "magnat-supply",
  "magnat-traffic",

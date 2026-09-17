@@ -26,12 +26,12 @@
 
 use crate::ids::{FirmId, SiteId};
 use crate::time::MinuteOfDay;
-use crate::types::{GoodId, JobRoleId, PolicyId, Q};
+use crate::types::{DistrictId, GoodId, JobRoleId, Money, PolicyId, Q};
 use crate::vocab::{
     ActionKind, BankruptcyTrigger, ClaimPriority, CommitmentKind, DeprivationEffect, FirmStrategy,
     FixedCost, LeaveCause, LifeEventKind, LineStopCause, LoanKind, MigrationKind, NeedKind,
     PlaceRef, PriceDriver, ReactionKind, RejectCause, RejectCredit, ShortageStageKind, StockCat,
-    TraitId, TransportMode, UtilityKind, WageCause,
+    TraitId, TransportMode, Trend, UtilityKind, WageCause,
 };
 use serde::{Deserialize, Serialize};
 
@@ -454,7 +454,41 @@ pub enum DecisionReason {
         target: SiteId,
         depth_bp: u16,
     } = 515,
-    // 516–599 zarezerwowane dla M7.
+    /// Tier strategiczny otwiera zakład (M7f WP13, PRD §12.3).
+    ///
+    /// **Nie ma tu kwoty i nie będzie.** Decyzja stoi na porównaniu wariantów
+    /// w modelu makro, a ten deklaruje własny błąd 3–12 % — kwota z niego byłaby
+    /// fałszywą precyzją, w którą gracz uwierzy i na której zbuduje plan (`R15`).
+    /// Dlatego powód niesie **to, z czego konkurent wybierał**: ile wariantów
+    /// porównał, jak szeroki był margines i w którą stronę szedł wynik. Gracz widzi,
+    /// że rywal wybrał A nad B i o ile pewnie, a nie że „wyliczył 240 tys.".
+    SiteOpened {
+        district: DistrictId,
+        variants: u8,
+        margin_bp: u16,
+        trend: Trend,
+    } = 516,
+    /// Właściciel zamyka firmę dobrowolnie (M7f WP15, PRD §12.4).
+    ///
+    /// Osobny powód od `BankruptcyOpened`: to nie jest upadłość, tylko wyjście
+    /// przed nią. Firma wyprzedaje majątek bez syndyka, spłaca zobowiązania i wraca
+    /// na rynek pracy — tańsze dla niej i dla symulacji. `months` mówi, jak długo
+    /// trwała strata, `cash` — ile zostało w kasie, kiedy właściciel się poddał.
+    VoluntaryClosure { months: u8, cash: Money } = 517,
+    /// Mieszkaniec zakłada firmę (M7f WP15, PRD §5.6).
+    ///
+    /// `score` to wynik `founding_score` w setnych, `capital` — kapitał, który
+    /// wniósł. Obie liczby są **z jego własnych oszczędności i zdolności kredytowej**,
+    /// a nie z prognozy: nisza jest wykryta w okolicy, którą zna (§5.7), a nie
+    /// przez wyrocznię globalną.
+    FirmFounded { score: u16, capital: Money } = 518,
+    /// Sieć zewnętrzna wchodzi do miasta (M7f WP15, PRD §12.4).
+    ///
+    /// `capital` jest **zarejestrowanym punktem emisji pieniądza** — przechodzi
+    /// przez `Books::inject_external_capital`, inaczej globalny test zachowania
+    /// pieniądza pękłby i nikt nie wiedziałby dlaczego (`D10`).
+    ChainEntered { capital: Money, sites: u8 } = 519,
+    // 520–599 zarezerwowane dla M7.
     // ... kolejne fazy dopisują własne bloki na końcu pliku
 }
 
@@ -527,6 +561,10 @@ impl DecisionReason {
             DecisionReason::SiteClosed { .. } => 513,
             DecisionReason::StrategySet { .. } => 514,
             DecisionReason::CompetitiveResponse { .. } => 515,
+            DecisionReason::SiteOpened { .. } => 516,
+            DecisionReason::VoluntaryClosure { .. } => 517,
+            DecisionReason::FirmFounded { .. } => 518,
+            DecisionReason::ChainEntered { .. } => 519,
         }
     }
 }

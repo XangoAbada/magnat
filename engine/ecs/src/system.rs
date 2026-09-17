@@ -45,6 +45,8 @@ pub struct SystemDesc {
     /// Ograniczenia **warunkowe**: obowiązują, jeśli wskazany system stoi w tym
     /// harmonogramie, i milczą, jeśli go nie ma (`K-51`).
     pub after_if_present: Vec<SystemId>,
+    /// System otwierający tick — patrz [`SystemDesc::opens_tick`].
+    pub opens_tick: bool,
 }
 
 impl SystemDesc {
@@ -58,6 +60,7 @@ impl SystemDesc {
             after: Vec::new(),
             before: Vec::new(),
             after_if_present: Vec::new(),
+            opens_tick: false,
         }
     }
 
@@ -130,6 +133,36 @@ impl SystemDesc {
     #[must_use]
     pub fn after_if_present(mut self, other: SystemId) -> SystemDesc {
         self.after_if_present.push(other);
+        self
+    }
+
+    /// System, który **otwiera tick**: w kolejności kanonicznej staje przed
+    /// wszystkimi, które go nie otwierają (`K-53`).
+    ///
+    /// # Po co, skoro jest `before`
+    ///
+    /// Bo `before` rozstrzyga **parę**, a tu chodzi o pozycję wobec wszystkich.
+    /// Kolejność kanoniczna to sortowanie po `SystemId`, czyli po **hashu nazwy**,
+    /// i to z niej biorą kierunek krawędzie konfliktu dostępów. Dla systemów
+    /// wyłącznych (`K-21`) konflikt zachodzi z każdym, więc taki system dostaje
+    /// krawędź od każdego, kto w hashu wypadł przed nim. Jeden jawny `before`
+    /// odwraca jedną z nich i domyka cykl przez pozostałe — a cykl ma wtedy długość
+    /// pięciu systemów i wygląda na błąd deklaracji, którym nie jest.
+    ///
+    /// Tak właśnie pękł pierwszy scenariusz stawiający `firms.Firm` obok pełnego
+    /// zestawu systemów mieszkańca (M7f WP17): `economy.Market → economy.Insolvency
+    /// → agents.DayLoop → traffic.Mezo → agents.Society → firms.Firm → …`. Deklaracja
+    /// „firmy otwierają minutę" jest jednym zdaniem i nie wymienia ani jednego
+    /// cudzego systemu — a to jest istotne, bo `sim/firms` nie wie o istnieniu ruchu
+    /// i nie ma powodu, żeby wiedział.
+    ///
+    /// Determinizm nie zmienia się w niczym: w obrębie obu grup kolejność nadal
+    /// rozstrzyga `SystemId`, a `Schedule::fingerprint` liczy się z krawędzi
+    /// wynikowych. Dwa systemy otwierające tick są dopuszczalne i uszeregują się
+    /// między sobą kanonicznie.
+    #[must_use]
+    pub fn opens_tick(mut self) -> SystemDesc {
+        self.opens_tick = true;
         self
     }
 }
@@ -353,7 +386,8 @@ impl ScheduleBuilder {
 
     /// Buduje DAG wg algorytmu z M0 §5.7. To jest kontrakt, nie implementacja
     /// do wyboru:
-    /// 1. kolejność kanoniczna = sortowanie po `SystemId`,
+    /// 1. kolejność kanoniczna = sortowanie po `(nie otwiera ticku, SystemId)` —
+    ///    systemy z [`SystemDesc::opens_tick`] idą pierwsze (`K-53`),
     /// 2. krawędź dla każdej pary konfliktującej `(i, j)`, `i < j` — zawsze „w przód",
     ///    więc graf konfliktów jest acykliczny **z konstrukcji**,
     /// 3. krawędzie z `after`/`before` — dopiero tu możliwy jest cykl,
@@ -361,8 +395,10 @@ impl ScheduleBuilder {
     /// 5. wykonanie poziomami na `JobPool`.
     pub fn build(self) -> Result<Schedule, ScheduleError> {
         let mut systems = self.systems;
-        // 1. Kolejność kanoniczna.
-        systems.sort_by_key(|s| s.desc().id);
+        // 1. Kolejność kanoniczna. `opens_tick` jest **tylko** kluczem sortowania:
+        // w obrębie każdej z dwóch grup rozstrzyga `SystemId`, więc determinizm
+        // kolejności zostaje bez zmian (`K-53`).
+        systems.sort_by_key(|s| (!s.desc().opens_tick, s.desc().id));
 
         for para in systems.windows(2) {
             if para[0].desc().id == para[1].desc().id {

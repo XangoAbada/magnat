@@ -67,6 +67,7 @@ fn widok<'a>(sites: &'a [SiteFacts], goods: &'a [GoodFacts]) -> FirmView<'a> {
         sites,
         goods,
         city: CityFacts::default(),
+        outlook: None,
     }
 }
 

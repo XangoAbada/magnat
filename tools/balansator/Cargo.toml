@@ -23,6 +23,8 @@ magnat-jobs = { workspace = true }
 magnat-io = { workspace = true }
 magnat-agents = { workspace = true }
 magnat-economy = { workspace = true }
+magnat-macro = { workspace = true }
+magnat-firms = { workspace = true }
 magnat-traffic = { workspace = true }
 magnat-headless = { workspace = true }
 magnat-supply = { workspace = true }

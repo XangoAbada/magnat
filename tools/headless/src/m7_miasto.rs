@@ -1,0 +1,401 @@
+//! Scenariusz `m7-miasto` — **artefakt fazy M7** (§1 dokumentu fazy).
+//!
+//! Pierwszy przebieg, w którym **wszystko biegnie razem**: doba mieszkańca, ruch,
+//! produkcja, detal, rynek pracy, firmy AI, ich finanse, cykl życia i model makro.
+//! Do M7f takiego przebiegu nie było: `m5shop` stawiał rynek bez rejestru firm,
+//! `m7labor` rejestr bez rynku — więc polityki (M7c) i AI firm (M7e) wykonywały się
+//! wyłącznie w testach.
+//!
+//! Runner mierzy i wypisuje pięć rzeczy, na których stoi §1:
+//! 1. **firmy** — ile ich jest, ile powstało, ile zniknęło, ile sieci weszło;
+//! 2. **rynek pracy** — bezrobocie, rotacja, podwyżki, wakaty;
+//! 3. **decyzje AI** — ile firm decydowało na każdym poziomie i co z tego wyszło;
+//! 4. **pieniądz** — suma świata przed i po, z rozbiciem na kanały emisji;
+//! 5. **wyjaśnialność** — licznik wykonanych akcji wobec licznika zapisanych powodów.
+//!
+//! Determinizm sprawdza się tak samo jak w `m5shop`: ciąg hashy co `hash-every`
+//! ticków, `--out` zapisuje, `--expect` porównuje.
+
+use std::process::ExitCode;
+
+use clap::Args;
+use magnat_agents::{
+    bootstrap_day, register_day, society, DayLoopSystem, DayStats, DeprivationEffectsSystem,
+    HouseholdStockSystem, NeedDecaySystem, NoInheritance, Population, ReplanCooldownSystem,
+    SkillDriftSystem, SocietySystem,
+};
+use magnat_economy::corpfin::system::InsolvencySystem;
+use magnat_economy::firmlife::FirmLifeLog;
+use magnat_economy::labor::{LaborHandle, LaborSystem};
+use magnat_economy::{Books, MarketSystem};
+use magnat_ecs::{App, ScheduleBuilder};
+use magnat_firms::{Firms, StrategicOutlooks};
+use magnat_headless::full;
+use magnat_headless::population::{swiat_agentow, zaludnij, zbuduj_miasto};
+use magnat_io::world_state_hash;
+use magnat_jobs::JobPool;
+use magnat_macro::MacroSystem;
+use magnat_traffic::TrafficSystem;
+
+#[derive(Args, Debug)]
+pub struct M7MiastoArgs {
+    #[arg(long, default_value_t = 1)]
+    pub seed: u64,
+
+    /// `4km` | `8km` | `12km` | `16km`.
+    #[arg(long, default_value = "4km")]
+    pub size: String,
+
+    #[arg(long, default_value = "lowland")]
+    pub region: String,
+
+    #[arg(long, default_value = "1990")]
+    pub epoch: String,
+
+    #[arg(long, default_value = "mixed")]
+    pub profile: String,
+
+    #[arg(long, default_value_t = 0)]
+    pub threads: usize,
+
+    /// Ile dób gry przebiec. Artefakt fazy mówi o pięciu latach (1800 dób);
+    /// wartością domyślną jest trzydzieści, bo scenariusz uruchamiany odruchowo ma
+    /// zdążyć coś pokazać, a pięć lat pełnego miasta liczy się w minutach.
+    #[arg(long, default_value_t = 30)]
+    pub days: u32,
+
+    /// Docelowa liczba mieszkańców; 0 = z pojemności miasta.
+    #[arg(long, default_value_t = 0)]
+    pub citizens: u32,
+
+    /// Co ile ticków liczyć hash stanu; 0 = nie liczyć.
+    #[arg(long, default_value_t = 43_200)]
+    pub hash_every: u64,
+
+    /// Zapis ciągu hashy: „<tick> <hash>" po jednym w linii.
+    #[arg(long)]
+    pub out: Option<std::path::PathBuf>,
+
+    /// Porównanie z zapisanym ciągiem; różnica → kod wyjścia 1 i wskazanie ticku.
+    #[arg(long)]
+    pub expect: Option<std::path::PathBuf>,
+
+    /// Pasmo bezrobocia w promilach, `min:max`. Poza pasmem → kod wyjścia 1.
+    /// Domyślne 30:120 to pasmo z §7.10 („bezrobocie 3–12 %").
+    #[arg(long, default_value = "30:120")]
+    pub expect_unemployment: String,
+}
+
+pub fn run(a: &M7MiastoArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
+    let pool = JobPool::new(a.threads);
+    let start = std::time::Instant::now();
+    let city = zbuduj_miasto(a.seed, &a.size, &a.region, &a.epoch, &a.profile, &pool)?;
+    eprintln!("miasto {:.1} s", start.elapsed().as_secs_f64());
+
+    let mut world = swiat_agentow(a.seed)?;
+    register_day(&mut world);
+    let zaludnione = zaludnij(&mut world, &city, a.citizens, 200_000)?;
+    eprintln!(
+        "{} mieszkańców, {} gospodarstw",
+        society::population(&world),
+        society::households(&world)
+    );
+
+    let f = full::setup(
+        &mut world,
+        &city,
+        zaludnione.places.clone(),
+        zaludnione.travel_oracle(),
+        &zaludnione.traffic,
+        a.seed,
+        &pool,
+    )?;
+    let market = f.retail.market.clone();
+    eprintln!(
+        "gospodarka: {} sklepów, {} zakładów produkcyjnych; firmy: {} z {} zakładami, {} etatów, {} sieci w katalogu",
+        f.retail.shops, f.retail.plants.sites, f.firms.firms, f.firms.sites, f.slots, f.chains
+    );
+    if f.firms.firms == 0 || f.retail.shops == 0 {
+        eprintln!("BRAK FIRM ALBO SKLEPÓW — scenariusz nie ma czego pokazać");
+        return Ok(ExitCode::FAILURE);
+    }
+
+    bootstrap_day(&mut world, 0);
+    let mut builder = ScheduleBuilder::new();
+    builder
+        .add(magnat_supply::ChainSystem::new())
+        .add(magnat_firms::systems::FirmSystem::new())
+        .add(MarketSystem::new(&world))
+        .add(LaborSystem::new())
+        .add(InsolvencySystem::new())
+        .add(MacroSystem::new())
+        .add(DayLoopSystem::new(&world))
+        .add(ReplanCooldownSystem::new(&world))
+        .add(NeedDecaySystem::new(&world))
+        .add(DeprivationEffectsSystem::new(&world))
+        .add(SkillDriftSystem::new(&world))
+        .add(HouseholdStockSystem::new(&world))
+        .add(SocietySystem::new(Box::new(NoInheritance)))
+        .add(TrafficSystem::new(&world));
+    let schedule = builder.build()?;
+    eprintln!(
+        "harmonogram: {} systemów w {} etapach, odcisk {:#018x}",
+        schedule.system_count(),
+        schedule.stage_count(),
+        schedule.fingerprint()
+    );
+
+    let mut app = App::new(world, schedule, a.threads);
+    let firm_start = app.world.resource::<Firms>().len();
+    let pieniadz_start = pieniadz(&app.world);
+
+    let ticki = u64::from(a.days) * 1440;
+    let bieg = std::time::Instant::now();
+    let mut hashe: Vec<(u64, String)> = Vec::new();
+    for t in 1..=ticki {
+        app.tick();
+        if a.hash_every > 0 && t.is_multiple_of(a.hash_every) {
+            hashe.push((t, world_state_hash(&app.world).to_string()));
+        }
+    }
+    let czas = bieg.elapsed().as_secs_f64();
+
+    raport(a, &app.world, &market, czas, firm_start, pieniadz_start);
+    let bezrobocie = app
+        .world
+        .get_resource::<LaborHandle>()
+        .and_then(LaborHandle::get)
+        .map_or(0, |m| m.last_day().unemployment_permille());
+
+    let mut kod = ExitCode::SUCCESS;
+    if let Some(p) = &a.out {
+        std::fs::write(
+            p,
+            hashe
+                .iter()
+                .map(|(t, h)| format!("{t} {h}\n"))
+                .collect::<String>(),
+        )?;
+    }
+    if let Some(p) = &a.expect {
+        let oczekiwane = std::fs::read_to_string(p)?;
+        for (i, (linia, (t, h))) in oczekiwane.lines().zip(hashe.iter()).enumerate() {
+            let mut cz = linia.split_whitespace();
+            let (tt, hh) = (cz.next().unwrap_or(""), cz.next().unwrap_or(""));
+            if tt != t.to_string() || hh != h {
+                eprintln!("ROZJAZD w linii {i}: oczekiwano `{linia}`, jest `{t} {h}`");
+                kod = ExitCode::FAILURE;
+                break;
+            }
+        }
+    }
+    if let Some((min, max)) = pasmo(&a.expect_unemployment) {
+        if bezrobocie < min || bezrobocie > max {
+            eprintln!(
+                "BRAMKA: bezrobocie {},{:01} % poza pasmem {},{:01}–{},{:01} %",
+                bezrobocie / 10,
+                bezrobocie % 10,
+                min / 10,
+                min % 10,
+                max / 10,
+                max % 10
+            );
+            kod = ExitCode::FAILURE;
+        }
+    }
+    Ok(kod)
+}
+
+/// Pasmo z argumentu `min:max` w promilach.
+fn pasmo(s: &str) -> Option<(u16, u16)> {
+    let (a, b) = s.split_once(':')?;
+    Some((a.trim().parse().ok()?, b.trim().parse().ok()?))
+}
+
+/// Suma pieniądza w świecie, **w rozbiciu na składniki**. Ta sama definicja co
+/// w `m5shop` i z tego samego powodu: dwie definicje sumy pieniądza znaczyłyby dwa
+/// różne zdania o tym, czy się zgadza.
+///
+/// Rozbicie, a nie jedna liczba, bo jedna liczba nie mówi, **gdzie** się rozjechało.
+/// Pierwszy przebieg WP17 pokazał to dosłownie: różnica wyglądała na ubytek warstwy
+/// firm, a siedziała w rejestrach ruchu (M4), które nie mają jeszcze kont i przez to
+/// same z siebie „tworzą" pieniądz — dokładnie tak samo, jak w `m5shop` na tym samym
+/// horyzoncie. Rozbicie odpowiada na to pytanie w jednym spojrzeniu.
+fn pieniadz(world: &magnat_ecs::World) -> [i64; 5] {
+    let ksiegi = world
+        .get_resource::<Books>()
+        .map_or(0, |b| b.total_balance().get());
+    let (ludzie, poza) = match world.get_resource::<Population>() {
+        Some(p) => {
+            let poza = p.escheat.get() + p.emigrated.get();
+            (society::total_money(world) - poza, poza)
+        }
+        None => (0, 0),
+    };
+    let paliwo = world
+        .get_resource::<magnat_traffic::FuelLedger>()
+        .map_or(0, |l| l.revenue.get());
+    let przewoz = world
+        .get_resource::<magnat_traffic::FareLedger>()
+        .map_or(0, |l| {
+            l.transit_revenue.get() + l.parking_revenue.get() - l.transit_fuel_cost.get()
+                + l.taxi_revenue.get()
+        });
+    [ksiegi, ludzie, poza, paliwo, przewoz]
+}
+
+/// Suma składników — to ona ma być stała po odjęciu emisji.
+fn suma(p: [i64; 5]) -> i64 {
+    p.iter().sum()
+}
+
+#[allow(clippy::too_many_lines)]
+fn raport(
+    a: &M7MiastoArgs,
+    world: &magnat_ecs::World,
+    market: &magnat_economy::Market,
+    czas: f64,
+    firm_start: usize,
+    pieniadz_start: [i64; 5],
+) {
+    let firms = world.resource::<Firms>();
+    let zycie = world
+        .get_resource::<FirmLifeLog>()
+        .copied()
+        .unwrap_or_default();
+    let dzien = world.resource::<DayStats>();
+
+    println!("── przebieg ──────────────────────────────────────────");
+    println!(
+        "{} dób gry w {:.1} s ({:.2} s/dobę), {} zdarzeń doby, {} wizyt, {} odmów",
+        a.days,
+        czas,
+        czas / f64::from(a.days.max(1)),
+        dzien.events,
+        dzien.fulfilled,
+        dzien.refused
+    );
+
+    println!("── firmy ─────────────────────────────────────────────");
+    println!(
+        "start {firm_start}, koniec {} ({:+}), zakładów {}",
+        firms.len(),
+        firms.len() as i64 - firm_start as i64,
+        firms.site_count()
+    );
+    let upadlosci = world
+        .get_resource::<magnat_economy::corpfin::CorpFinance>()
+        .map_or(0, magnat_economy::corpfin::CorpFinance::case_count);
+    println!(
+        "powstało {}, zwinięto dobrowolnie {}, postępowań upadłościowych {upadlosci}, zakładów otwartych {}, wejść sieci {}",
+        zycie.total.founded, zycie.total.wound_down, zycie.total.opened, zycie.total.chain_entries
+    );
+    println!(
+        "kapitał założycieli {} zł, kapitał zewnętrzny {} zł (punkt emisji, D10)",
+        zycie.total.capital_own.get() / 100,
+        zycie.total.capital_in.get() / 100
+    );
+
+    println!("── rynek pracy ───────────────────────────────────────");
+    if let Some(m) = world
+        .get_resource::<LaborHandle>()
+        .and_then(LaborHandle::get)
+    {
+        let d = m.last_day();
+        println!(
+            "zatrudnionych {}, siła robocza {}, bezrobocie {},{:01} %",
+            d.employed,
+            d.labour_force,
+            d.unemployment_permille() / 10,
+            d.unemployment_permille() % 10
+        );
+        println!(
+            "ostatnia doba: {} zatrudnień, {} odejść, {} zwolnień, {} podwyżek, {} ofert zamrożonych na suficie, {} wakatów",
+            d.hires, d.quits, d.dismissals, d.raises, d.frozen, d.vacancies
+        );
+    }
+
+    println!("── decyzje AI firm ───────────────────────────────────");
+    println!(
+        "firmo-decyzji: operacyjnych {}, taktycznych {}, kwartalnych {}",
+        zycie.ai.ops_firms, zycie.ai.tactical_firms, zycie.ai.strategic_firms
+    );
+    println!(
+        "akcje: {} celów marży, {} celów zapasu, {} zmian kursu, {} presetów, {} kampanii, {} zamknięć zakładu",
+        zycie.ai.margin_moves,
+        zycie.ai.restock_moves,
+        zycie.ai.strategy_changes,
+        zycie.ai.policies_adopted,
+        zycie.ai.campaigns_started,
+        zycie.ai.sites_closed
+    );
+    let widoki = world
+        .get_resource::<StrategicOutlooks>()
+        .map_or(0, StrategicOutlooks::len);
+    println!("uporządkowań wariantów w tablicy: {widoki} (model makro, horyzont kwartału)");
+
+    println!("── pieniądz ──────────────────────────────────────────");
+    let books = world.resource::<Books>();
+    let teraz = pieniadz(world);
+    let emisja = books.supply();
+    println!(
+        "P1 (księgi): {}",
+        match books.check_conservation() {
+            Ok(()) => "OK".to_string(),
+            Err((suma, podaz)) => format!("ROZJAZD suma={suma:?} podaż={podaz:?}"),
+        }
+    );
+    println!(
+        "kanał sektora gospodarstw: +{} zł / −{} zł",
+        emisja.household_sector_in.get() / 100,
+        emisja.household_sector_out.get() / 100
+    );
+    let kredyt = emisja.credit_created.get() - emisja.credit_repaid.get();
+    let zewnetrzny = emisja.external_capital_in.get() - emisja.external_capital_out.get();
+    println!(
+        "suma świata: start {} zł, koniec {} zł, różnica {} gr\n\
+         \u{20} z tego kredyt netto {} gr, kapitał zewnętrzny {} gr, poza tym {} gr",
+        suma(pieniadz_start) / 100,
+        suma(teraz) / 100,
+        suma(teraz) - suma(pieniadz_start),
+        kredyt,
+        zewnetrzny,
+        suma(teraz) - suma(pieniadz_start) - kredyt - zewnetrzny
+    );
+    for (nazwa, i) in [
+        ("księgi", 0),
+        ("ludzie", 1),
+        ("spadki + emigracja", 2),
+        ("obrót stacji (M4, bez konta)", 3),
+        ("przewoźnicy i taryfy (M4, bez konta)", 4),
+    ] {
+        println!(
+            "  {nazwa}: {} zł → {} zł ({:+} gr)",
+            pieniadz_start[i] / 100,
+            teraz[i] / 100,
+            teraz[i] - pieniadz_start[i]
+        );
+    }
+
+    println!("── wyjaśnialność (§7.8) ──────────────────────────────");
+    let akcje = zycie.ai.actions();
+    let powody = firms.reasons_logged();
+    println!(
+        "akcje AI {akcje}, powody zapisane {powody} — {}",
+        if powody >= akcje {
+            "OK (każda akcja ma powód)"
+        } else {
+            "ROZJAZD: akcja bez powodu"
+        }
+    );
+
+    println!("── rynek detaliczny ──────────────────────────────────");
+    let s = market.stats();
+    println!(
+        "transakcje {}, obrót {} zł, {} przecen, {} odpisów",
+        s.purchases,
+        s.revenue.get() / 100,
+        s.reprices,
+        s.write_offs
+    );
+}

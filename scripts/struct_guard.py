@@ -103,7 +103,12 @@ REJESTR = {
     # 566 po M7d: siedem ramion bloku finansowego (505–510, przy czym
     # `BankruptcyOpened` ma dwa — brak płynności mierzy się dobami, ujemny kapitał nie).
     # 618 po M7e: pięć ramion AI firm (511–515).
-    ("engine/ui/src/inspect/reason.rs", "fn", 618): 37,
+    # 660 po M7f: cztery ramiona cyklu życia firm (516–519). Przyrost +42 jest
+    # najmniejszy w całym bloku M7 i ma powód wart zapisania: żaden z czterech
+    # wariantów nie rozgałęził się na dwa klucze lokalizacji, a `SiteOpened` mimo
+    # trzech wartości `Trend` ma **jedno** ramię — kierunek wchodzi podstawieniem
+    # do zdania, a nie wyborem klucza.
+    ("engine/ui/src/inspect/reason.rs", "fn", 660): 37,
     # 269 po M7d: jedna linia za `finance: bf.finance` w budowie `BankParams`.
     ("sim/economy/src/data.rs", "fn", 269): 38,
 }

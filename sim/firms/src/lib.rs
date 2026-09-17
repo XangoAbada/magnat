@@ -24,6 +24,7 @@ pub mod hr;
 pub mod key;
 pub mod labor_policy;
 pub mod manager;
+pub mod panel;
 pub mod personality;
 pub mod registry;
 pub mod registry_managers;
@@ -33,7 +34,8 @@ pub mod systems;
 pub mod view;
 
 pub use ai::{
-    decide_operational, decide_reaction, decide_tactical, Campaign, Decided, OpsAction, TacAction,
+    decide_operational, decide_reaction, decide_strategic, decide_tactical, propose_variants,
+    Campaign, Decided, OpsAction, Outlook, StrAction, StrategicOutlooks, TacAction,
 };
 pub use catalog::{SiteType, SiteTypeCatalog, SiteTypeCategory, SiteTypeId, Staffing};
 pub use firm::{DecisionLog, Firm, FirmStatus, LoggedDecision, Owner, OwnerShare};
@@ -53,6 +55,7 @@ pub use labor_policy::{
 pub use manager::{
     management_quality, replacement_quality, Autonomy, Manager, ManagerStyle, SiteDelegation,
 };
+pub use panel::{firm_panel, EmployeeRow, FirmPanelSnapshot, ManagerRow, OutlookRow, SiteRow};
 pub use personality::{personality_from_director, FirmPersonality};
 pub use registry::Firms;
 pub use ring::Ring;

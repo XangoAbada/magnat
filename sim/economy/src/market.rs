@@ -686,3 +686,20 @@ impl HashState for Market {
         m.cpi.hash_state(h);
     }
 }
+
+/// Jedna linia półki w zdjęciu miasta dla modelu makro (M7f WP13).
+///
+/// Struktura faktów, nie referencji — ten sam wybór co przy `FirmView` (`BC-1`)
+/// i z tego samego powodu: konsument stoi poza zamkiem rynku i nie ma prawa
+/// trzymać wskaźnika do jego wnętrza przez cały krok.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ShelfSnapshot {
+    pub site: SiteId,
+    pub firm: FirmId,
+    pub district: DistrictId,
+    pub good: GoodId,
+    /// Cena **netto** (`K-7`): makro liczy marże, a marża zawsze stoi na netto.
+    pub price_net: Money,
+    /// Półka i zaplecze razem — dla doby makro to jeden zapas.
+    pub qty: Qty,
+}

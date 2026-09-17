@@ -46,8 +46,18 @@ pub use magnat_firms::next_bid as wage_bid;
 /// a `sim/supply` jest crate'em liściastym i o gospodarce nie wie nic.
 pub use magnat_supply::kernel::throughput;
 
-use magnat_core::{Money, Qty};
+/// Podział popytu między oferty w proporcji `exp(u/T)` (§6.4, §5.15).
+/// Implementacja: `core::det_math::softmax` — ta sama, z której `choose_offer`
+/// losuje wybór pojedynczego kupującego.
+///
+/// **To jest cała różnica mezo vs. makro** (M10a §5.1): mezo losuje z tego rozkładu
+/// jeden sklep dla jednego agenta, makro stosuje go jako wagi i dzieli popyt komórki
+/// proporcjonalnie. Wzór jest jeden i dlatego dwa poziomy nie mogą się rozjechać.
+pub use magnat_core::det_math::softmax as softmax_shares;
 
+use magnat_core::{Money, Qty, Q};
+
+use crate::data::UtilityWeights;
 use crate::ledger::{LedgerAccount, LEDGER_ACCOUNT_COUNT};
 
 /// Jeden punkt bazowy to 1/10 000, czyli 0,01 %. Cała arytmetyka cenowa liczy w tej
@@ -479,4 +489,68 @@ mod tests {
         assert_eq!(acc[LedgerAccount::Revenue.as_index()], Money(-100));
         assert_eq!(acc.iter().map(|m| m.get()).sum::<i64>(), 0);
     }
+}
+
+// ── użyteczność zakupu (§6.4, `D20`) ─────────────────────────────────────────────
+
+/// Wejście oceny oferty — **same liczby**, bez oferty, sklepu i mieszkańca.
+///
+/// Powód, dla którego ta struktura w ogóle powstała, jest w `D20`: `purchase_score`
+/// miał wejść do jądra „razem ze swoim wołającym", a wołający pojawił się w M7f —
+/// faza 4 kroku makro dzieli popyt komórki między firmy tym samym wzorem, którym
+/// mieszkaniec wybiera sklep. `Candidate` się do tego nie nadaje, bo niesie `OfferId`,
+/// czyli uchwyt do areny, której makro nie ma i mieć nie powinno.
+#[derive(Clone, Copy, Debug)]
+pub struct ScoreInput {
+    /// Kwota, którą kupujący wyjmie z portfela za całą ilość (`K-7`).
+    pub price_total: Money,
+    /// Mianownik członów ceny i odległości — budżet odniesienia albo koperta.
+    pub budget_ref: Money,
+    /// Pieniężny koszt dojazdu razem z wyceną czasu.
+    pub travel_cost: Money,
+    pub quality: Q,
+    pub status: Q,
+    /// Człon lojalności, −1..=1: ocena z pamięci przeskalowana wagą wizyty.
+    pub loyalty: f64,
+    /// Człon nowości, 0..=1: zero dla miejsca odwiedzonego.
+    pub novelty: f64,
+    /// Człon marki, 0..=1. W M7 zawsze zero — afinitety wnosi M10 (§7.6).
+    pub brand: f64,
+}
+
+/// Ocena jednej oferty (§6.4). `noise` przychodzi z zewnątrz, bo musi być **stały
+/// dla trójki (kupujący, oferta, decyzja)**.
+///
+/// Zero zmian zachowania wobec `choice::utility_of_offer`, która od M7f jest cienkim
+/// opakowaniem na tę funkcję: te same człony, ta sama kolejność sumowania, ten sam
+/// mianownik. Kolejność ma tu znaczenie, bo suma `f64` nie jest łączna (00 §2).
+#[must_use]
+pub fn purchase_score(i: &ScoreInput, w: &UtilityWeights, noise: f64) -> f64 {
+    let budget = i.budget_ref.get().max(1) as f64;
+    w.price * cost_term(i.price_total.get() as f64 / budget)
+        + w.quality * f64::from(i.quality.get()) / 100.0
+        + w.brand * i.brand
+        + w.dist * cost_term(i.travel_cost.get() as f64 / budget)
+        + w.loyalty * i.loyalty
+        + w.status * status_fit(i.quality, i.status)
+        + w.novelty * i.novelty
+        + noise
+}
+
+/// `f(x) = -ln(1 + x)` dla `x >= 0` (§5.4) — wspólny człon ceny i odległości.
+#[must_use]
+pub fn cost_term(x: f64) -> f64 {
+    -magnat_core::det_math::ln1p(x.max(0.0))
+}
+
+/// Ćwiartka skali 0..100 — tier statusu i jakości (0..4).
+fn tier(v: u8) -> i32 {
+    i32::from(v) * 5 / 101
+}
+
+/// Dopasowanie jakości do statusu: elita nie kupuje najtańszego, a gospodarstwo
+/// o niskim statusie nie kupuje luksusu — nawet gdy je stać (§5.4).
+#[must_use]
+pub fn status_fit(quality: Q, status: Q) -> f64 {
+    1.0 - f64::from((tier(quality.get()) - tier(status.get())).abs()) / 4.0
 }

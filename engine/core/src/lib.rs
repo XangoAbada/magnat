@@ -57,7 +57,7 @@ pub use vocab::{
     DeprivationEffect, FirmStrategy, FixedCost, GateKind, LeaveCause, LifeEventKind, LineStopCause,
     LoanKind, LossKind, MigrationKind, NeedKind, PlaceKind, PlaceRef, PriceBasis, PriceDriver,
     ReactionKind, RejectCause, RejectCredit, ResourceKind, RoadClass, ShortageStageKind, StockCat,
-    TraitId, TransportMode, UtilityKind, UtilityService, WageCause, WorldCoord,
+    TraitId, TransportMode, Trend, UtilityKind, UtilityService, WageCause, WorldCoord,
     CLAIM_PRIORITY_COUNT, FIXED_COST_COUNT, LOSS_KIND_COUNT, NEED_COUNT, REJECT_CAUSE_COUNT,
     STOCK_CAT_COUNT, UTILITY_KIND_COUNT,
 };

@@ -72,22 +72,10 @@ pub struct BuyerState {
 /// Jedna funkcja dla ceny **i** odległości, bo obie są wyrażone jako ułamek budżetu
 /// i przez to porównywalne. `f(0) = 0`, malejąca, o malejącej wrażliwości: kto już
 /// wydał pół budżetu, nie rozróżnia drobnych różnic.
-#[must_use]
-pub fn cost_term(x: f64) -> f64 {
-    -det_math::ln1p(x.max(0.0))
-}
-
-/// Ćwiartka skali 0..100 — tier statusu i jakości (0..4).
-fn tier(v: u8) -> i32 {
-    i32::from(v) * 5 / 101
-}
-
-/// Dopasowanie jakości do statusu: elita nie kupuje najtańszego, a gospodarstwo
-/// o niskim statusie nie kupuje luksusu — nawet gdy je stać (§5.4).
-#[must_use]
-pub fn status_fit(quality: Q, status: Q) -> f64 {
-    1.0 - f64::from((tier(quality.get()) - tier(status.get())).abs()) / 4.0
-}
+///
+/// Od M7f mieszka w jądrze (`D20`), bo liczy ją także krok makro; tutaj zostaje
+/// nazwa, pod którą chodzi po M5.
+pub use crate::kernel::{cost_term, status_fit};
 
 /// Wagi członów wyprowadzone z osobowości i statusu, znormalizowane do `Σ|w| = 1`.
 ///
@@ -126,7 +114,15 @@ pub fn weights_for(
 /// dałaby inny wynik.
 #[must_use]
 pub fn utility_of_offer(c: &Candidate, w: &UtilityWeights, st: &BuyerState, noise: f64) -> f64 {
-    let budget = st.budget_ref.get().max(1) as f64;
+    crate::kernel::purchase_score(&score_input(c, st), w, noise)
+}
+
+/// Zamiana oferty i kupującego na same liczby, których chce jądro.
+///
+/// To jest cała treść wydzielenia z `D20`: człony liczy `kernel::purchase_score`,
+/// a tutaj zostaje wiedza o tym, czym jest oferta, pamięć miejsca i wartość czasu —
+/// czyli rzeczy, których model makro nie ma i mieć nie powinien.
+fn score_input(c: &Candidate, st: &BuyerState) -> crate::kernel::ScoreInput {
     let travel = c
         .travel_money
         .get()
@@ -139,15 +135,23 @@ pub fn utility_of_offer(c: &Candidate, w: &UtilityWeights, st: &BuyerState, nois
         Some(r) => (f64::from(r) - 50.0) / 50.0 * if c.visited { 0.75 } else { 0.25 },
         None => 0.0,
     };
-    let novelty = if c.visited { 0.0 } else { 1.0 };
-    w.price * cost_term(c.price_total.get() as f64 / budget)
-        + w.quality * f64::from(c.quality.get()) / 100.0
-        + w.brand * 0.0
-        + w.dist * cost_term(travel as f64 / budget)
-        + w.loyalty * loyalty
-        + w.status * status_fit(c.quality, st.status)
-        + w.novelty * novelty * (f64::from(st.openness.get()) / 100.0)
-        + noise
+    let novelty = if c.visited {
+        0.0
+    } else {
+        f64::from(st.openness.get()) / 100.0
+    };
+    crate::kernel::ScoreInput {
+        price_total: c.price_total,
+        budget_ref: st.budget_ref,
+        travel_cost: Money(travel),
+        quality: c.quality,
+        status: st.status,
+        loyalty,
+        // M5: afinitet marki ≡ 0. Człon istnieje, żeby M10 dopisał wartość,
+        // a nie strukturę.
+        brand: 0.0,
+        novelty,
+    }
 }
 
 /// Który człon przeważył — ładunek `DecisionReason::ShopChosen` (PRD §14.1).

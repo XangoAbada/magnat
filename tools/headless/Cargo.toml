@@ -40,6 +40,9 @@ magnat-economy = { workspace = true }
 # z tablicą publiczną cen (M7e WP10, `AZ-1`).
 magnat-policy = { workspace = true }
 magnat-firms = { workspace = true }
+# Model makro i tier strategiczny (M7f WP13). Stoi nad gospodarką w grafie
+# zależności, więc most pełnego miasta jest pierwszym miejscem, które widzi oba.
+magnat-macro = { workspace = true }
 # Most stawia łańcuch dostaw razem z rynkiem: od WP11 (M6d) półka bierze towar
 # z magazynu M6, więc scenariusz, klient i balansator muszą go dostać zbudowanego.
 magnat-supply = { workspace = true }

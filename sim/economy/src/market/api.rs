@@ -159,6 +159,72 @@ impl Market {
         self.lock().plants.len()
     }
 
+    /// Nasiona wszystkich stojących sklepów — wejście powstawania firm (M7f WP15).
+    ///
+    /// Nowa firma nie stawia budynku: wchodzi do dzielnicy, w której ktoś już handluje,
+    /// i otwiera **taki sam lokal**. To jest `ponytail:` z nazwanym sufitem — wybór
+    /// parceli, powierzchni i budowa należą do rynku nieruchomości, czyli do M10
+    /// (§6.7 PRD; M7 §2 mówi wprost, że M7 „tylko kupuje/najmuje parcele istniejącym
+    /// API", a takiego API jeszcze nie ma). Konsekwencja jest jawna: miasto nie rośnie
+    /// przestrzennie od powstawania firm, tylko gęstnieje.
+    #[must_use]
+    pub fn shop_seeds(&self) -> Vec<ShopSeed> {
+        let m = self.lock();
+        m.shops
+            .iter()
+            .filter(|s| !s.closed)
+            .map(|s| ShopSeed {
+                site: s.site,
+                firm: s.firm,
+                pos: s.pos,
+                kind: s.kind,
+                shelf_slots: s.shelf.lines.len().max(1) as u16,
+                capacity_m3: s.inventory.capacity_m3,
+                district: s.district,
+            })
+            .collect()
+    }
+
+    /// Zdjęcie półek miasta — jedno wejście `sim/macro::lift()` (M7f WP13).
+    ///
+    /// Osobny odczyt zamiast otwierania wnętrza rynku, z tego samego powodu, dla
+    /// którego `refresh_board` nie wystawia `MarketInner`: zamek jest granicą i
+    /// makro nie ma prawa go otwierać. Zwraca **cenę netto** (`K-7` — makro liczy
+    /// marże, więc podstawa musi być jedna) i sztuki razem z zapleczem, bo z punktu
+    /// widzenia dobowego kroku makro półka i magazyn sklepu to jeden zapas.
+    ///
+    /// Sklep zamknięty nie wchodzi: dla modelu nie istnieje, tak samo jak nie
+    /// istnieje dla tablicy publicznej.
+    #[must_use]
+    pub fn shelf_snapshot(&self) -> Vec<ShelfSnapshot> {
+        let m = self.lock();
+        let mut out: Vec<ShelfSnapshot> = Vec::new();
+        for (i, shop) in m.shops.iter().enumerate() {
+            if shop.closed {
+                continue;
+            }
+            for linia in &shop.shelf.lines {
+                let Some(pc) = shop.controllers.get(&linia.good) else {
+                    continue;
+                };
+                let qty =
+                    Qty(m.shelf_units(i, linia.good).get() + m.backroom_units(i, linia.good).get());
+                out.push(ShelfSnapshot {
+                    site: shop.site,
+                    firm: shop.firm,
+                    district: DistrictId(shop.district),
+                    good: linia.good,
+                    price_net: m.tax.net_from_gross(linia.good, pc.current),
+                    qty,
+                });
+            }
+        }
+        // Kolejność wchodzi do stanu makro, a kolejność sklepów w wektorze jest
+        // kolejnością zakładania — sortowanie po kluczu zdejmuje z niej tę zależność.
+        out.sort_unstable_by_key(|s| (s.site.0.to_bits(), s.good.0));
+        out
+    }
+
     // ── odczyty dla finansów firmy (M7d) ─────────────────────────────────────────
     //
     // Wszystkie pięć czyta to, co w rynku już leży, i żaden niczego nie liczy od nowa.

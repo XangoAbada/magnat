@@ -222,6 +222,7 @@ mod tests {
             sites,
             goods,
             city: CityFacts::default(),
+            outlook: None,
         }
     }
 

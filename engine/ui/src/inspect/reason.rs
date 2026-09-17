@@ -812,7 +812,56 @@ pub fn describe(c: &Catalog, l: Locale, r: DecisionReason) -> String {
                 ("koszt", &procent_bp(i32::from(depth_bp))),
             ],
         ),
+        // **Tu nie ma kwoty i nie może jej być** (§5.10, `R15`). Decyzja stoi na
+        // porównaniu wariantów w modelu makro, a ten deklaruje własny błąd 3–12 %.
+        // Gracz dostaje więc to, co model faktycznie wie: z ilu wariantów rywal
+        // wybierał, jak szeroki był margines i w którą stronę szedł wynik.
+        DecisionReason::SiteOpened {
+            district: _,
+            variants,
+            margin_bp,
+            trend: kierunek,
+        } => c.fmt_key(
+            l,
+            "ui.reason.SiteOpened",
+            &[
+                ("warianty", &u32::from(variants).to_string()),
+                ("margines", &procent_bp(i32::from(margin_bp))),
+                ("kierunek", &trend(c, l, kierunek)),
+            ],
+        ),
+        DecisionReason::VoluntaryClosure { months: m, cash } => c.fmt_key(
+            l,
+            "ui.reason.VoluntaryClosure",
+            &[
+                ("okres", &months(c, l, u32::from(m))),
+                ("kasa", &crate::zlotowki(cash)),
+            ],
+        ),
+        DecisionReason::FirmFounded { score, capital } => c.fmt_key(
+            l,
+            "ui.reason.FirmFounded",
+            &[
+                ("ocena", &u32::from(score).to_string()),
+                ("kapital", &crate::zlotowki(capital)),
+            ],
+        ),
+        DecisionReason::ChainEntered { capital, sites } => c.fmt_key(
+            l,
+            "ui.reason.ChainEntered",
+            &[
+                ("kapital", &crate::zlotowki(capital)),
+                ("zaklady", &u32::from(sites).to_string()),
+            ],
+        ),
     }
+}
+
+/// Kierunek prognozy jako słowo. **Jedyna** rzecz, którą model makro mówi graczowi
+/// o wielkości — czyli nic o wielkości, tylko o znaku (`Trend`, `K-52`).
+#[must_use]
+pub fn trend(c: &Catalog, l: Locale, t: magnat_core::Trend) -> String {
+    c.fmt_key(l, &format!("ui.trend.{}", t.name()), &[])
 }
 
 /// Wynik drugiego kandydata albo informacja, że drugiego nie było.
@@ -1158,6 +1207,24 @@ mod tests {
                 )),
                 depth_bp: 1_200,
             },
+            DecisionReason::SiteOpened {
+                district: magnat_core::DistrictId(3),
+                variants: 4,
+                margin_bp: 620,
+                trend: magnat_core::Trend::Up,
+            },
+            DecisionReason::VoluntaryClosure {
+                months: 7,
+                cash: Money(12_400),
+            },
+            DecisionReason::FirmFounded {
+                score: 74,
+                capital: Money(1_800_000),
+            },
+            DecisionReason::ChainEntered {
+                capital: Money(54_000_000),
+                sites: 3,
+            },
         ]
     }
 
@@ -1191,7 +1258,12 @@ mod tests {
         // i to są dwa różne zdania o firmie, więc i dwa klucze. Razem 58.
         // Po M7e pięć powodów AI firm (511..=515), po jednym wpisie — żaden z nich
         // nie rozgałęzia się na dwa klucze lokalizacji. Razem 63.
-        assert_eq!(wszystkie().len(), 63);
+        // Po M7f cztery powody cyklu życia firm (516..=519), po jednym wpisie.
+        // `SiteOpened` nie rozgałęzia się mimo trzech wariantów `Trend`, bo kierunek
+        // wchodzi **podstawieniem** do jednego zdania, a nie wyborem klucza — i to
+        // jest właściwy podział: „w górę" i „w dół" to ta sama decyzja o innym znaku,
+        // a nie dwie różne decyzje. Razem 67.
+        assert_eq!(wszystkie().len(), 67);
     }
 
     #[test]

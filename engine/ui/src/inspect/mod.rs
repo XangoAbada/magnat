@@ -6,6 +6,7 @@
 //! może zmienić styl bez dotykania treści.
 
 pub mod citizen;
+pub mod firm;
 pub mod reason;
 pub mod shop;
 pub mod supply;

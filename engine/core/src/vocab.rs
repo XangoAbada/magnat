@@ -688,6 +688,22 @@ vocab_enum! {
 }
 
 vocab_enum! {
+    /// Kierunek zmiany — **bez wielkości** (M7f §5.10, `K-52`).
+    ///
+    /// W `core`, bo ma trzech czytelników znanych z nazwy i numeru fazy: `sim/macro`
+    /// (M10) go produkuje, `sim/firms` (M7) czyta go w tierze strategicznym, a M9
+    /// rysuje z niego strzałkę w karcie firmy. Duplikat rozjechałby się przy pierwszej
+    /// zmianie, a tu chodzi o jedyną rzecz, którą prognozie makro wolno powiedzieć
+    /// graczowi: „w górę", „bez zmian", „w dół". Kwota z modelu makro nie trafia
+    /// do UI **nigdy** (`R15`), więc `Trend` jest całym słownikiem tej odpowiedzi.
+    ///
+    /// Kolejność wariantów jest kontraktem, bo `as_index()` indeksuje ikonę strzałki.
+    Trend {
+        Up, Flat, Down,
+    }
+}
+
+vocab_enum! {
     /// Biom. Konsument poza M1: M2 (strefowanie i zieleń), M5/M6 (rolnictwo i leśnictwo),
     /// M8 (zdarzenia pogodowe zależne od pokrycia terenu).
     Biome {

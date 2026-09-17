@@ -29,10 +29,15 @@ impl FirmSystem {
     #[must_use]
     pub fn new() -> FirmSystem {
         FirmSystem {
-            // Wyłączny (`K-21`): krok jest funkcją nad całym rejestrem firm i nie da
-            // się go opisać zbiorem komponentów. Determinizm jest wtedy trywialny —
-            // system wyłączny nie ma z kim się ścigać.
-            desc: SystemDesc::new("firms.Firm", Cadence::EveryMinute).exclusive(),
+            // Wyłączny (`K-21`): krok jest funkcją nad całym rejestrem firm.
+            // **Otwiera tick** (`K-53`): rozdaje sloty decyzyjne i odkłada listę
+            // płac, a wszyscy pozostali czytają to, co po nim zostało. Bez tej
+            // deklaracji kierunek wobec każdego innego systemu wyłącznego brałby się
+            // z hasha nazwy, a jedyne jawne ograniczenie, jakie ktoś wobec firm
+            // zgłasza (`economy.Market.after_if_present`), domykało wtedy cykl.
+            desc: SystemDesc::new("firms.Firm", Cadence::EveryMinute)
+                .exclusive()
+                .opens_tick(),
         }
     }
 }
