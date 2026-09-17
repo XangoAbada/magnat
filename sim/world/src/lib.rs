@@ -79,7 +79,9 @@ pub use params::{
     Difficulty, EconomyProfile, Epoch, ParamError, Region, WorldGenParams, WorldSize,
     CLIMATE_CELL_M, WORK_CELL_M,
 };
-pub use pipeline::{generate, GenCtx, GenPass, WorldGenReport, WorldStats, PASSES};
+pub use pipeline::{
+    generate, generate_observed, GenCtx, GenPass, WorldGenReport, WorldStats, PASSES,
+};
 pub use population::{
     generate_population, home_place, site_place, Populated, PopulationError, PopulationParams,
     PopulationReport, COMMUTE_BINS, SITE_KEY_BASE,

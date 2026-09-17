@@ -4,8 +4,9 @@ Symulator miasta i gospodarki. Własny silnik w Rust — ECS, generacja świata,
 Deterministyczny: ten sam seed daje ten sam świat i ten sam przebieg, niezależnie od liczby wątków
 i platformy.
 
-Stan: **M8c zamknięte** (miasto, ludzie, ruch, gospodarka, łańcuch dostaw, firmy AI, podatki,
-sieci przesyłowe i zdarzenia świata). Szczegóły postępu:
+Stan: **M8 zamknięte, M9a zamknięte** (miasto, ludzie, ruch, gospodarka, łańcuch dostaw, firmy AI,
+podatki, sieci przesyłowe, zdarzenia świata — oraz sesja gry z dziennikiem wejść i odtworzeniem).
+Szczegóły postępu:
 [`docs/implementation-plan/00-postep.md`](docs/implementation-plan/00-postep.md).
 
 ## Wymagania
@@ -74,6 +75,14 @@ cargo run --release -p magnat-headless -- verify --seed 1 --threads 1,8
 # podgląd pola generatora jako PNG (height | water | biome | temp | precip | fertility)
 cargo run --release -p magnat-headless -- preview --field biome --max-px 1024
 
+# sesja gry z pliku parametrów — bez ani jednego argumentu opisującego świat
+cargo run --release -p magnat-headless -- new-game --from params.ron --days 2 \
+    --price 250 --record sesja.log.ron --out sesja.hashes
+
+# to samo jeszcze raz, z nagranego dziennika — ten sam łańcuch hashy co do bitu
+cargo run --release -p magnat-headless -- new-game --replay sesja.log.ron --days 2 \
+    --expect sesja.hashes
+
 # bez podpolecenia: przebieg ticków świata syntetycznego (tryb M0)
 cargo run --release -p magnat-headless -- --seed 42 --entities 100000 --ticks 20000 \
     --hash-every 1000 --threads 8 --out run.hashes
@@ -110,9 +119,13 @@ FPS mierzy się osobno, na maszynie z GPU: `cargo run --release -p magnat -- --b
 ## Układ repozytorium
 
 ```
-engine/     core ecs jobs io devtools render voxel   — silnik, bez wiedzy o domenie
-sim/        world snapshot                           — świat i jego migawka dla renderera
-tools/      magnat (podgląd) · headless (runner)
+engine/     core ecs jobs io devtools render voxel ui nav spatial
+                                                    — silnik, bez wiedzy o domenie
+sim/        world agents traffic economy supply firms policy city events macro snapshot
+                                                    — świat i jego migawka dla renderera
+game/       sesja, komendy gracza, dziennik replayu, powłoka — i **jedyne** miejsce,
+            w którym świat wstaje (`game::world::stand_up`, K-68)
+tools/      magnat (klient) · headless (scenariusze) · balansator · goods-graph
 data/       climate geology materials                — dane wejściowe, RON
 docs/implementation-plan/                            — plan faz M0…M12
 benches/    baseline.json                            — linia bazowa benchmarków

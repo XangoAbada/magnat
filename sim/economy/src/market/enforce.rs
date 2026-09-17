@@ -152,8 +152,11 @@ impl Market {
             // Pokrycie 100 zdejmuje kradzież do zera, pokrycie 0 zostawia stawkę
             // bazową. Liniowo, bo krzywa bez danych, które by ją uzasadniły, jest
             // ozdobą — a stawkę bazową stroi balansator (`data/tuning/city.ron`).
-            let bezpieczenstwo =
-                u32::from(coverage.at(DistrictId(m.shops[i].district), ServiceKind::Police).get());
+            let bezpieczenstwo = u32::from(
+                coverage
+                    .at(DistrictId(m.shops[i].district), ServiceKind::Police)
+                    .get(),
+            );
             let bp = base_bp * (100 - bezpieczenstwo.min(100)) / 100;
             if bp == 0 {
                 continue;

@@ -3,9 +3,16 @@
 //!
 //! Wystawienie targetu bibliotecznego jest wykonaniem **decyzji otwartej nr 10**
 //! dokumentu fazy M5: balansator (`tools/balansator`, WP13) ma uruchamiać przebiegi
-//! jako funkcje, a nie parsować polski raport z wyjścia procesu. Przy okazji
-//! rozwiązuje to `AB-1`: klient graficzny stawia **tę samą** gospodarkę co scenariusz
-//! `m5shop`, zamiast przepisywać ją u siebie.
+//! jako funkcje, a nie parsować polski raport z wyjścia procesu.
+//!
+//! # Gdzie są mosty (zmiana z M9a)
+//!
+//! Do M8e mieszkały tutaj i to było odwrócenie zależności: narzędzie testowe było
+//! właścicielem drogi, którą powstaje świat, a gra tej drogi nie miała wcale.
+//! Od M9a mosty są w `magnat-game` ([`magnat_game::world`]), a ten moduł
+//! **reeksportuje je pod starymi nazwami** — scenariusze, testy integracyjne
+//! i balansator nie drgnęły, a `magnat_headless::retail::setup` dalej znaczy to,
+//! co znaczyło.
 //!
 //! Wystawione jest dokładnie to, co ma więcej niż jednego konsumenta:
 //! - [`population`] — budowa miasta M2 i Etap 8 (`zbuduj_miasto`, `swiat_agentow`,
@@ -23,12 +30,6 @@
 
 #![forbid(unsafe_code)]
 
-pub mod city;
-pub mod events;
-pub mod firms;
-pub mod full;
-pub mod grid;
-pub mod labor;
-pub mod plants;
+pub use magnat_game::world::{city, events, firms, full, grid, labor, plants, retail};
+
 pub mod population;
-pub mod retail;

@@ -257,7 +257,11 @@ fn uchwala_o_stawce_dochodzi_do_ceny_na_polce() {
     assert!(
         miasto
             .policies
-            .current(PolicyKind::TaxRate, TaxKind::Vat.as_index() as u32, app.world.tick)
+            .current(
+                PolicyKind::TaxRate,
+                TaxKind::Vat.as_index() as u32,
+                app.world.tick
+            )
             .is_some(),
         "uchwała nie obowiązuje"
     );

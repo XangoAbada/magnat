@@ -23,6 +23,9 @@ default = []
 chaos = []
 
 [dependencies]
+# Gra. Mosty stawiające świat wyprowadziły się tu w M9a — scenariusz jest
+# od tej chwili konsumentem gry, a nie jej właścicielem.
+magnat-game = { workspace = true }
 magnat-core = { workspace = true }
 magnat-ecs = { workspace = true }
 magnat-jobs = { workspace = true }

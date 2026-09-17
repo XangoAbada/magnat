@@ -113,7 +113,7 @@ fn wycinek_miasta(chain: &ChainHandle, city: &CityData) -> Vec<SiteRef> {
     let mut out = Vec::new();
     let c = chain.lock();
     for (i, s) in city.sites.sites.iter().enumerate() {
-        let site: SiteId = crate::plants::site_id(i);
+        let site: SiteId = crate::world::plants::site_id(i);
         let dzielnica = city
             .parcels
             .parcels

@@ -508,9 +508,7 @@ pub fn approval_step(prev_bp: u32, inp: ApprovalInput, t: &GovTuning) -> u32 {
 /// od nieruchomości płaci zakład, nie mieszkaniec.
 #[must_use]
 pub fn tax_burden_bp(rates: &[u32; TAX_KIND_COUNT]) -> u32 {
-    rates[TaxKind::Vat.as_index()]
-        + rates[TaxKind::Cit.as_index()]
-        + rates[TaxKind::Pit.as_index()]
+    rates[TaxKind::Vat.as_index()] + rates[TaxKind::Cit.as_index()] + rates[TaxKind::Pit.as_index()]
 }
 
 /// Obsada urzędów wynikająca z obowiązujących uchwał (`CH-6`).
@@ -576,7 +574,10 @@ mod tests {
         };
         let a = approval_step(5_000, dobre, &t);
         let b = approval_step(5_000, zle, &t);
-        assert!(a > b, "lepsze usługi mają dawać wyższe poparcie: {a} vs {b}");
+        assert!(
+            a > b,
+            "lepsze usługi mają dawać wyższe poparcie: {a} vs {b}"
+        );
         // Bezwładność: jeden miesiąc nie przenosi poparcia na cel.
         assert!(a < 9_000, "poparcie przeskoczyło na cel w jednym miesiącu");
     }

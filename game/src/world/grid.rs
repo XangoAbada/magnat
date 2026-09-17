@@ -75,7 +75,7 @@ pub fn setup(world: &mut World, city: &CityData) -> Result<GridSetup, Box<dyn Er
     {
         let c = chain.lock();
         for (i, s) in city.sites.sites.iter().enumerate() {
-            let site = crate::plants::site_id(i);
+            let site = crate::world::plants::site_id(i);
             let Some(z) = c.plant.get(site) else { continue };
             let dzielnica = city
                 .parcels
@@ -405,7 +405,7 @@ fn wytworcy_mediow(
     let mut out = std::collections::BTreeMap::new();
     let c = chain.lock();
     for i in 0..city.sites.sites.len() {
-        let site = crate::plants::site_id(i);
+        let site = crate::world::plants::site_id(i);
         let Some(z) = c.plant.get(site) else { continue };
         for l in &z.lines {
             let Some(r) = l.recipe else { continue };

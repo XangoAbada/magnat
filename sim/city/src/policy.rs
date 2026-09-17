@@ -282,7 +282,11 @@ mod tests {
         ));
         // Przed wejściem drugiej obowiązuje pierwsza.
         assert!(matches!(
-            set.current(PolicyKind::TaxRate, TaxKind::Vat.as_index() as u32, Tick(500)),
+            set.current(
+                PolicyKind::TaxRate,
+                TaxKind::Vat.as_index() as u32,
+                Tick(500)
+            ),
             Some(Policy::TaxRate { bps: 2_300, .. })
         ));
         // Po wejściu drugiej — tylko druga, mimo że obie są w historii.

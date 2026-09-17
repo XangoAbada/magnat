@@ -15,6 +15,7 @@ mod m5shop;
 mod m7_miasto;
 mod m7labor;
 mod m8_miasto;
+mod m9session;
 mod nav;
 mod testworld;
 mod worldgen;
@@ -124,6 +125,8 @@ enum Command {
     M7miasto(m7_miasto::M7MiastoArgs),
     /// Wynik podfazy M8a: budżet miasta, siedem danin i cykl życia należności.
     M8miasto(m8_miasto::M8MiastoArgs),
+    /// **Wynik podfazy M9a**: sesja gry z pliku parametrów, dziennik wejść i replay.
+    NewGame(m9session::M9SessionArgs),
 }
 
 fn uruchom() -> Result<std::process::ExitCode, Box<dyn std::error::Error>> {
@@ -143,6 +146,7 @@ fn uruchom() -> Result<std::process::ExitCode, Box<dyn std::error::Error>> {
         Some(Command::M7labor(a)) => return m7labor::run(a),
         Some(Command::M7miasto(a)) => return m7_miasto::run(a),
         Some(Command::M8miasto(a)) => return m8_miasto::run(a),
+        Some(Command::NewGame(a)) => return m9session::run(a),
         None => {}
     }
 

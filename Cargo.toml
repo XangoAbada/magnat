@@ -11,6 +11,7 @@ members = [
     "engine/spatial",
     "engine/ui",
     "engine/voxel",
+    "game",
     "sim/agents",
     "sim/city",
     "sim/economy",
@@ -58,6 +59,10 @@ magnat-supply = { path = "sim/supply" }
 magnat-traffic = { path = "sim/traffic" }
 magnat-voxel = { path = "engine/voxel" }
 magnat-world = { path = "sim/world" }
+# Crate gry (M9): sesja, komendy gracza, dziennik replayu i **jedyna droga
+# do stojącego świata** — mosty „Etap 7 → gospodarka" wyprowadziły się tu
+# z `tools/headless` przy starcie M9a.
+magnat-game = { path = "game" }
 # Klient i balansator stawiają **tę samą** gospodarkę co scenariusz `m5shop`
 # (`AB-1`), a most „zakłady Etapu 7 → rynek" mieszka w bibliotece headlessa
 # (decyzja otwarta nr 10 fazy M5). Zależność idzie wyłącznie od narzędzi do niej.

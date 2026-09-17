@@ -46,11 +46,18 @@ pub enum Remedy {
     Fine(Money),
     /// Zawieszenie działalności do ticku. Zakład wraca sam — sanepid zamykający
     /// restaurację na zawsze byłby karą śmierci za brudną lodówkę.
-    Closure { until: Tick },
+    Closure {
+        until: Tick,
+    },
     /// Przymusowy podział: firma schodzi poniżej progu, oddając zakład.
-    ForcedDivestiture { share_bps: u32 },
+    ForcedDivestiture {
+        share_bps: u32,
+    },
     /// Domiar z odsetkami — należność jak każda inna (`CB-3`).
-    BackTax { amount: Money, interest: Money },
+    BackTax {
+        amount: Money,
+        interest: Money,
+    },
 }
 
 impl Remedy {
@@ -318,9 +325,9 @@ pub fn step_day(
         if r.closed || r.unreported_bps == 0 {
             continue;
         }
-        if let Some(powod) = city
-            .enforcement
-            .otworz(AgencyKind::TaxOffice, r.site, r.firm, Q::new(20), t)
+        if let Some(powod) =
+            city.enforcement
+                .otworz(AgencyKind::TaxOffice, r.site, r.firm, Q::new(20), t)
         {
             powody.push((r.site, powod));
         }
@@ -475,10 +482,8 @@ fn prowadz_sprawy(
         przyrost[i] = if spraw[i] == 0 {
             0
         } else {
-            u8::try_from(
-                u32::from(p.evidence_per_inspector_day) * inspektorzy / spraw[i].max(1),
-            )
-            .unwrap_or(u8::MAX)
+            u8::try_from(u32::from(p.evidence_per_inspector_day) * inspektorzy / spraw[i].max(1))
+                .unwrap_or(u8::MAX)
         };
     }
 
@@ -622,9 +627,8 @@ fn naloz_srodek(
         }
         AgencyKind::LaborInspection | AgencyKind::Environment => {
             let podstawa = market.declared_revenue_recent(site, 12);
-            let kwota = Money(
-                (podstawa.get().saturating_mul(i64::from(p.fine_bp)) / 10_000).max(50_000),
-            );
+            let kwota =
+                Money((podstawa.get().saturating_mul(i64::from(p.fine_bp)) / 10_000).max(50_000));
             city.charges.accrue(
                 TaxPayer::Site(site),
                 TaxKind::License,

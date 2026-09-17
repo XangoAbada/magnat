@@ -116,6 +116,16 @@ impl Market {
         self.lock().goods.id_of_key(key)
     }
 
+    /// Klucz tekstowy towaru — droga powrotna do [`Market::good_of_key`].
+    ///
+    /// Potrzebna komendom gracza (M9a): w dzienniku wejść towar jedzie **kluczem,
+    /// nie indeksem**, bo `GoodId` nadaje się przy ładowaniu katalogu i przesuwa
+    /// przy każdym nowym towarze (00 §5).
+    #[must_use]
+    pub fn good_key(&self, good: GoodId) -> Option<String> {
+        self.lock().goods.key_of(good).map(ToString::to_string)
+    }
+
     /// Pozycja zakładu w metrach — klient potrzebuje jej, żeby zamienić kliknięcie
     /// w teren na sklep, bo bufor identyfikatorów renderera niesie tylko pieszych.
     #[must_use]

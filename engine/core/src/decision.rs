@@ -32,8 +32,8 @@ use crate::vocab::{
     DeprivationEffect, EventCategory, FirmStrategy, FixedCost, LeaveCause, LifeEventKind,
     LineStopCause, LoanKind, MigrationKind, NeedKind, PermitKind, PlaceRef, PolicyKind,
     PriceDriver, ReactionKind, RejectCause, RejectCredit, RemedyKind, ServiceKind,
-    ShortageStageKind, SpendCategory, StockCat, TaxKind, TenderKind, TraitId, TransportMode,
-    Trend, UtilityKind, UtilityService, VoteDriver, WageCause,
+    ShortageStageKind, SpendCategory, StockCat, TaxKind, TenderKind, TraitId, TransportMode, Trend,
+    UtilityKind, UtilityService, VoteDriver, WageCause,
 };
 use serde::{Deserialize, Serialize};
 
@@ -604,19 +604,13 @@ pub enum DecisionReason {
     /// z obsady urzędu, długości kolejki i dni wolnych (`K-15`). To jest cała treść
     /// tego powodu — pozwolenie wydane w trzy doby i w sześćdziesiąt jest tą samą
     /// decyzją urzędu i różni się wyłącznie tym, ile kosztowało czasu.
-    PermitIssued {
-        kind: PermitKind,
-        waited_days: u16,
-    } = 612,
+    PermitIssued { kind: PermitKind, waited_days: u16 } = 612,
     /// Urząd otworzył sprawę przeciwko zakładowi (M8d WP8, PRD §10.4).
     ///
     /// `evidence` to materiał dowodowy w chwili otwarcia, nie w chwili rozstrzygnięcia:
     /// sprawa rośnie w czasie i to jest jej istota. Otwarcie sprawy samo w sobie nie
     /// jest karą i nie musi się nią skończyć.
-    CaseOpened {
-        agency: AgencyKind,
-        evidence: Q,
-    } = 613,
+    CaseOpened { agency: AgencyKind, evidence: Q } = 613,
     /// Urząd nałożył środek zaradczy (M8d WP8).
     ///
     /// `amount` jest kwotą tam, gdzie środek ma kwotę (grzywna, domiar), i zerem tam,
@@ -633,10 +627,7 @@ pub enum DecisionReason {
     /// Szara strefa nie jest cechą charakteru, tylko **odpowiedzią na przyciśnięcie**:
     /// zakład pod kreską ukrywa więcej, zakład z marżą wraca do deklarowania. Dlatego
     /// powód niesie obie liczby — nowy udział i wynik miesiąca, który go wywołał.
-    ShadowShareSet {
-        share_bp: u16,
-        last_result: Money,
-    } = 615,
+    ShadowShareSet { share_bp: u16, last_result: Money } = 615,
     /// Rada uchwaliła regulację (M8e WP9, PRD §10.1).
     ///
     /// `for_bp` to poparcie w radzie w punktach bazowych, a `delay_days` — vacatio

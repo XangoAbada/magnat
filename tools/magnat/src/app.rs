@@ -63,6 +63,9 @@ pub(crate) struct App {
     /// `--no-citizens` i dopóki okno nie powstało — Etap 8 potrzebuje miasta,
     /// a `egui` potrzebuje okna.
     pub(crate) citizens: Option<citizens::Citizens>,
+    /// Teren i miasto, dopóki nie przejmie ich sesja gry. `take()` przy otwarciu
+    /// okna — świat ma jednego właściciela, a od M9a jest nim `game::Session`.
+    pub(crate) built: Option<magnat_game::BuiltCity>,
     pub(crate) bez_ludzi: bool,
     /// `--no-economy`: świat bez rynku, czyli zachowanie sprzed M5 (`AB-2`).
     pub(crate) bez_gospodarki: bool,
@@ -156,12 +159,12 @@ impl ApplicationHandler for App {
         // Etap 8 **po** otwarciu okna, bo `egui_winit` potrzebuje uchwytu okna, a nie
         // dlatego, że zaludnienie zależy od GPU — nie zależy. Gracz widzi w tym czasie
         // pusty ekran i raport w konsoli; przy metropolii to kilkadziesiąt sekund.
-        if let (Some(city), false) = (self.city.clone(), self.bez_ludzi) {
+        if let (Some(built), false) = (self.built.take(), self.bez_ludzi) {
             let start = Instant::now();
             eprintln!("Etap 8: zaludnianie miasta");
             match citizens::Citizens::new(
-                self.params.seed,
-                city.as_ref(),
+                self.params,
+                built,
                 window.as_ref(),
                 self.jezyk,
                 self.watki,

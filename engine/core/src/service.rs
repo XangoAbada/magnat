@@ -50,10 +50,11 @@ impl ServiceCoverage {
     /// miasta jako aktora ma pokrycie zerowe, a nie panikę.
     #[must_use]
     pub fn at(&self, district: DistrictId, kind: ServiceKind) -> Q {
-        Q::new(self
-            .rows
-            .get(district.0 as usize)
-            .map_or(0, |r| r[kind.as_index()]))
+        Q::new(
+            self.rows
+                .get(district.0 as usize)
+                .map_or(0, |r| r[kind.as_index()]),
+        )
     }
 
     pub fn set(&mut self, district: DistrictId, kind: ServiceKind, q: Q) {

@@ -131,7 +131,7 @@ pub fn cadastre_from_city(city: &CityData) -> Vec<CadastreEntry> {
             continue;
         }
         out.push(CadastreEntry {
-            site: crate::plants::site_id(i),
+            site: crate::world::plants::site_id(i),
             value: wartosc,
         });
     }
@@ -205,7 +205,7 @@ pub fn setup_services(
         let etaty = s.workplaces.end.saturating_sub(s.workplaces.start);
         placowki.push(magnat_city::PublicService {
             kind,
-            site: crate::plants::site_id(i),
+            site: crate::world::plants::site_id(i),
             district: magnat_core::DistrictId(dzielnica_budynku(city_data, s.building.0.index())),
             // Pojemność bierze się z normatywu „jedna placówka na tylu mieszkańców"
             // z `data/buildings/public.ron` — czyli z liczby, którą generator już

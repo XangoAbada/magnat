@@ -12,11 +12,16 @@
 //! Właścicielem tego modułu jest M3 (szkielet `engine/ui`); M9 rozszerza go o panele
 //! biznesowe i edytor reguł, M12 o pełną lokalizację i modding.
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 /// Język interfejsu. Rozszerzanie listy należy do M12 — tu są dwa, bo dwa są w danych.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Default)]
+///
+/// Serializowalny od M9a: język siedzi w profilu gracza (`game::shell::Settings`),
+/// czyli w pliku obok zapisu, a nie w zapisie świata.
+#[derive(
+    Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Default, Serialize, Deserialize,
+)]
 pub enum Locale {
     #[default]
     Pl,

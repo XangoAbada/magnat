@@ -9,16 +9,17 @@
 //! tamten puszcza na nim dobę.
 
 use clap::Args;
-use magnat_agents::{register, society, DemographyTable, NeedTable, Population};
-use magnat_ecs::World;
+use magnat_agents::{society, Population};
 use magnat_jobs::JobPool;
-use magnat_voxel::MaterialRegistry;
-use magnat_world::{
-    generate, generate_city, generate_population, CityData, CityPlan, Difficulty, Populated,
-    PopulationParams, PopulationReport, Terrain, WorldGenParams,
-};
+use magnat_world::PopulationReport;
 use std::process::ExitCode;
-use std::sync::Arc;
+
+/// Mosty budowy świata mieszkają od M9a w `magnat-game` (`world::population`).
+/// Reeksport, a nie przeprowadzka nazw: `crate::population::zbuduj_miasto`
+/// jest cytowane w scenariuszach, testach i w kliencie graficznym.
+pub use magnat_game::world::population::{
+    swiat_agentow, zaludnij, zbuduj_miasto, zbuduj_miasto_z_klimatem,
+};
 
 #[derive(Args, Debug, Clone)]
 pub struct PopulationArgs {
@@ -63,85 +64,6 @@ fn parse_seed(s: &str) -> Result<u64, Box<dyn std::error::Error>> {
             None => t.replace('_', "").parse::<u64>()?,
         },
     )
-}
-
-/// Buduje miasto M2 dla podanych parametrów. Wydzielone, bo używa go też `m3day`.
-pub fn zbuduj_miasto(
-    seed: u64,
-    size: &str,
-    region: &str,
-    epoch: &str,
-    profile: &str,
-    pool: &JobPool,
-) -> Result<CityData, Box<dyn std::error::Error>> {
-    Ok(zbuduj_miasto_z_klimatem(seed, size, region, epoch, profile, pool)?.0)
-}
-
-/// To samo co [`zbuduj_miasto`], plus **normy klimatyczne środka miasta**.
-///
-/// Osobna funkcja, a nie zmieniona sygnatura tamtej: normy potrzebuje jeden
-/// konsument (pogoda M8c), a pozostałych pięciu wywołań nie ma powodu przepisywać.
-///
-/// Normy są kopiowane z komórki klimatu pod środkiem miasta i to jest cała
-/// ich droga do `sim/events`. Kopia, a nie zapytanie: `ClimateCell` ma 48 bajtów,
-/// nie zmienia się nigdy, a zapytanie wymagałoby trzymania całego terenu przy życiu
-/// przez cały przebieg — czyli gigabajtów pod jedną tablicę dwunastu liczb.
-///
-/// # Errors
-/// Jak [`zbuduj_miasto`].
-pub fn zbuduj_miasto_z_klimatem(
-    seed: u64,
-    size: &str,
-    region: &str,
-    epoch: &str,
-    profile: &str,
-    pool: &JobPool,
-) -> Result<(CityData, magnat_world::ClimateCell), Box<dyn std::error::Error>> {
-    let params = WorldGenParams {
-        seed,
-        size: size.parse()?,
-        region: region.parse()?,
-        epoch: epoch.parse()?,
-        profile: profile.parse()?,
-        difficulty: Difficulty::Normal,
-    };
-    params.validate()?;
-    let (data, _) = generate(params, pool)?;
-    let reg = Arc::new(MaterialRegistry::load_dir(&magnat_world::data_path(
-        "materials",
-    ))?);
-    let terrain = Terrain::new(data, reg);
-    let plan = CityPlan::from_world(&params);
-    let city = generate_city(&plan, &terrain, terrain.materials(), pool)?;
-    let klimat = {
-        use magnat_world::TerrainQuery;
-        *terrain.climate_at(city.center.x as i32, city.center.y as i32)
-    };
-    Ok((city, klimat))
-}
-
-/// Świat ECS z zarejestrowaną warstwą M3a i M3c, gotowy do zaludnienia.
-pub fn swiat_agentow(seed: u64) -> Result<World, Box<dyn std::error::Error>> {
-    let mut world = World::new(seed);
-    register(&mut world, NeedTable::load_default()?);
-    society::register_society(&mut world, DemographyTable::load_default()?);
-    Ok(world)
-}
-
-/// Zaludnia świat i zwraca most do `sim/agents`.
-pub fn zaludnij(
-    world: &mut World,
-    city: &CityData,
-    citizens: u32,
-    swaps: u32,
-) -> Result<Populated, Box<dyn std::error::Error>> {
-    let p = PopulationParams {
-        target_population: (citizens > 0).then_some(citizens),
-        unemployment_target_permille: None,
-        commute_median_min: None,
-        commute_swaps: Some(swaps),
-    };
-    Ok(generate_population(world, city, &p)?)
 }
 
 /// Wartość krytyczna χ² dla 21 stopni swobody przy p = 0,001 (korekta H-22).

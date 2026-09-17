@@ -18,9 +18,7 @@
 
 use std::collections::BTreeMap;
 
-use magnat_core::{
-    DecisionReason, DistrictId, Money, SiteId, StateHasher, TenderKind, Tick, Q,
-};
+use magnat_core::{DecisionReason, DistrictId, Money, SiteId, StateHasher, TenderKind, Tick, Q};
 use magnat_firms::FirmKey;
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
@@ -154,7 +152,10 @@ impl TenderRegistry {
     }
 
     /// Wszystkie obowiązujące umowy — treść zakładki „Przetargi" karty rady.
-    pub fn contracts_in_force(&self, t: Tick) -> impl Iterator<Item = (TenderSubject, &ServiceContract)> {
+    pub fn contracts_in_force(
+        &self,
+        t: Tick,
+    ) -> impl Iterator<Item = (TenderSubject, &ServiceContract)> {
         self.contracts.iter().filter_map(move |((k, id), c)| {
             if c.until.0 <= t.0 {
                 return None;
@@ -422,7 +423,11 @@ mod tests {
         assert!(r.submit_bid(id, oferta(2, 700_000, 80, 10, true), Tick(1)));
         let powody = r.close_due(24, Tick(14 * 1_440));
         assert_eq!(powody.len(), 1);
-        let o = r.get(id).expect("przetarg").outcome.expect("rozstrzygnięcie");
+        let o = r
+            .get(id)
+            .expect("przetarg")
+            .outcome
+            .expect("rozstrzygnięcie");
         assert_eq!(o.winner, FirmKey(2));
         assert!(o.score_bp > o.runner_up_bp);
         assert!(o.runner_up_bp > 0, "przegrany ma mieć punktację, nie zero");

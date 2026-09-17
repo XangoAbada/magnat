@@ -168,7 +168,10 @@ fn placowki_maja_obsade_jakosc_i_pokrycie() {
     // ludzi na etatach** i emergentną jakość, a pokrycie dociera do dzielnic.
     let app = miasto(35, 2_000, 0);
     let m = app.world.resource::<City>();
-    assert!(!m.services.is_empty(), "most nie postawił ani jednej placówki");
+    assert!(
+        !m.services.is_empty(),
+        "most nie postawił ani jednej placówki"
+    );
 
     let z_obsada = m.services.all().iter().filter(|s| s.staff > 0).count();
     assert!(
@@ -191,7 +194,10 @@ fn placowki_maja_obsade_jakosc_i_pokrycie() {
     );
 
     // Urząd wydaje pozwolenia, a czas oczekiwania jest wynikiem, nie parametrem.
-    assert!(m.permits.issued() > 0, "urząd nie wydał ani jednego pozwolenia");
+    assert!(
+        m.permits.issued() > 0,
+        "urząd nie wydał ani jednego pozwolenia"
+    );
     assert!(m.permits.median_wait_days().is_some());
     // Opłaty za wnioski wpłynęły do miasta jako danina `License`.
     assert!(m.budget.revenue_life[TaxKind::License.as_index()].get() >= 0);

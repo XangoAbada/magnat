@@ -293,3 +293,16 @@ Zgodnie z `K-18`. Gwiazdka = zmiana zakresu albo kryterium.
 | Z-3 ★ | **`InspectionNav` — stos wstecz/dalej po 32 pozycje; `ViewCommand` dostaje `NavigateBack`/`NavigateForward`** | Nie było tego w żadnym dokumencie planu. Przy karcie, w której wszystko jest linkiem, brak powrotu zamienia nawigację w błądzenie: trzy skoki i gracz zgubił pytanie, od którego zaczął |
 | Z-4 | **`Subject` rośnie o pięć encji miejskich** (`Government`, `Tender`, `Case`, `Event`, `Permit`; usługa publiczna jedzie jako `Site`, wybory jako zakładka rady) i przenosi się do `engine/core` (`K-62`) | M8c/M8d/M8e produkują te byty i zapisują dla nich `DecisionReason`, ale żaden nie miał jak trafić do inspekcji — lista `Subject` kończyła się na `District`. Rada, przetarg i sprawa urzędowa to rzeczy, o które gracz będzie pytał „dlaczego", a bramka 5 wymaga odpowiedzi |
 | Z-5 | **Cel, który przestał istnieć, renderuje się jako nazwa bez odnośnika plus powod** | `Subject::resolve` zwraca `Option` i `None` nie jest błędem — firmy upadają, ludzie umierają, partie się zużywają. Bez tej reguły pierwsza karta sprzed roku prowadzi w pustkę albo w panikę |
+
+---
+
+## Zmiany wpisane po M9a
+
+Zgodnie z `K-18`. Pełne uzasadnienia — tabela `DA-n` w `M9a-szkielet-gry-i-komendy.md`.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| DC-1 ★ | **Komendy postaci wchodzą razem z WP4, a nie są zastane.** `PlayerCommand` ma po M9a dwa warianty (`StartGame`, `SetPrice`); `ApplyForJob`, `AcceptJobOffer`, `RentHome`, `SetOwnShift` i reszta listy z `M9a` §5.5 dokłada się **na końcu enuma**, każdy ze swoim wykonawcą | Wariant bez wykonawcy przechodzi każdy test i wygląda tak samo jak działający (`K-67`). Kolejność wariantów jest kontraktem dziennika wejść, więc dopisywać wolno wyłącznie na końcu |
+| DC-2 ★ | **Własność zakładu nie jest jeszcze sprawdzana w `precheck`** — `CommandError` nie ma wariantu `SiteNotOwned`, bo do WP4 nie ma czyjej własności sprawdzać. Wnosi go WP4 razem z `PlayerCharacter` | Sprawdzenie własności wobec nieistniejącej postaci byłoby gałęzią zawsze prawdziwą, czyli zaślepką udającą regułę |
+| DC-3 | **`StartVariant` mieszka dziś w `game::shell`**, bo niesie go koperta `StartGame` od M9a (format koperty ma być stabilny). WP4 przenosi go do `game::player` razem z resztą postaci; `pub use` zostawia stary adres | Pole w kopercie dopisane po nagraniu pierwszych dzienników unieważniłoby je — dlatego wartość jedzie od początku, choć skutku nabiera dopiero tutaj |
+| DC-4 | **Dane do karty i nakładek są w `Session`:** `session.market` (rynek, półki, utracone sprzedaże), `session.built.city` (miasto, parcele, zakłady), `session.built.terrain` (teren). `Selection` w `engine/ui` nadal ma trzy warianty i nadal nie ma `Subject` (`K-62`) — to zadanie WP5 | Zapisane, żeby WP5 nie zaczął od szukania, którędy dane docierają do panelu |

@@ -111,7 +111,10 @@ fn szkola_uczy_szybciej_przy_pelnym_finansowaniu() {
     przebieg(&mut polowa, DOB);
 
     let (a, b) = (mediana_ucznia(&mut pelne), mediana_ucznia(&mut polowa));
-    assert!(a > 0 && b > 0, "w mieście nie ma ani jednego ucznia: {a} / {b}");
+    assert!(
+        a > 0 && b > 0,
+        "w mieście nie ma ani jednego ucznia: {a} / {b}"
+    );
     assert!(
         i32::from(a) - i32::from(b) >= 8,
         "pełne pokrycie {a}, połowiczne {b} — różnica {} pkt, a miała być ≥ 8",
@@ -141,7 +144,10 @@ fn opieka_zdrowotna_skraca_zwolnienia() {
     przebieg(&mut bez, DOB);
 
     let (a, b) = (chorych(&mut z_opieka), chorych(&mut bez));
-    assert!(b > 0, "w przebiegu bez opieki nikt nie choruje — sonda martwa");
+    assert!(
+        b > 0,
+        "w przebiegu bez opieki nikt nie choruje — sonda martwa"
+    );
     assert!(
         a * 100 <= b * 85,
         "z opieką {a} chorych, bez {b} — spadek {} %, a miał być ≥ 15 %",

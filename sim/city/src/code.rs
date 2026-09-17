@@ -265,8 +265,7 @@ impl TaxCode {
             // Mnożnik uchwały nakłada się **tutaj**, a nie na kwoty w pliku:
             // dzięki temu dziesiąta zmiana stawki liczy się od danych, a nie
             // od dziewiątego zaokrąglenia.
-            excise[g.id.0 as usize] =
-                r.per_kg * i64::from(self.excise_scale_bp) / 10_000;
+            excise[g.id.0 as usize] = r.per_kg * i64::from(self.excise_scale_bp) / 10_000;
         }
         for r in &self.excise_energy {
             if !UtilityService::ALL.iter().any(|s| s.name() == r.service) {

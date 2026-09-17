@@ -159,9 +159,8 @@ fn hazardy(world: &mut World, day: u64, hooks: &mut dyn InheritanceHook, raport:
         // więc pracujący nastolatek jest możliwy — a oznaczony jako uczeń zniknąłby
         // z liczby pracujących w gospodarstwie, nie oddając przy tym etatu.
         let pracuje = world.get::<Employment>(e).is_some_and(Employment::has_job);
-        let wiek_szkolny = !pracuje
-            && wiek >= i32::from(ages.school_start)
-            && wiek < i32::from(ages.school_end);
+        let wiek_szkolny =
+            !pracuje && wiek >= i32::from(ages.school_start) && wiek < i32::from(ages.school_end);
         if wiek_szkolny != w_szkole {
             if let Some(emp) = world.get_mut::<Employment>(e) {
                 if wiek_szkolny {
@@ -239,16 +238,18 @@ fn zachoruj(world: &mut World, e: Entity, day: u64, tabela: &DemographyTable, r:
     // krzywa bez danych, które by ją uzasadniły, jest ozdobą.
     //
     // Świat bez miasta jako aktora nie ma tej tablicy i choruje tak jak przed M8d.
-    let opieka = world.get_resource::<magnat_core::ServiceCoverage>().map_or(0, |c| {
-        let d = world
-            .get::<crate::Residence>(e)
-            .map_or(magnat_core::DistrictId(0), |r| {
-                magnat_core::DistrictId(r.district)
-            });
-        c.at(d, magnat_core::ServiceKind::Hospital)
-            .get()
-            .max(c.at(d, magnat_core::ServiceKind::Clinic).get())
-    });
+    let opieka = world
+        .get_resource::<magnat_core::ServiceCoverage>()
+        .map_or(0, |c| {
+            let d = world
+                .get::<crate::Residence>(e)
+                .map_or(magnat_core::DistrictId(0), |r| {
+                    magnat_core::DistrictId(r.district)
+                });
+            c.at(d, magnat_core::ServiceKind::Hospital)
+                .get()
+                .max(c.at(d, magnat_core::ServiceKind::Clinic).get())
+        });
     let dni = (losowe * u64::from(200 - u16::from(opieka)) / 200).max(1);
     if let Some(n) = world.get_mut::<Needs>(e) {
         let teraz = n.get(NeedKind::Health);

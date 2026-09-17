@@ -26,7 +26,7 @@ use crate::preview::startowa_kamera;
 use clap::Parser;
 use magnat_core::SimMinute;
 use magnat_voxel::{EditIndex, MaterialRegistry};
-use magnat_world::{generate, generate_city, CityPlan, Difficulty, WorldGenParams};
+use magnat_world::{generate, Difficulty, WorldGenParams};
 use std::sync::Arc;
 use std::time::Instant;
 use winit::event_loop::{ControlFlow, EventLoop};
@@ -53,38 +53,48 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         params.region.key()
     );
     let start = Instant::now();
-    let (data, report) = generate(params, &pool)?;
-    for line in report.lines() {
-        eprintln!("{line}");
-    }
-    eprintln!("razem {:.1} s", start.elapsed().as_secs_f64());
-
     let materials = Arc::new(MaterialRegistry::load_dir(&magnat_world::data_path(
         "materials",
     ))?);
-    let terrain = Arc::new(magnat_world::Terrain::new(data, materials.clone()));
 
     // Miasto (M2d, WP12b). Bez tego kroku klient pokazuje krajobraz M1 — i dokładnie
     // tak zachowuje się `--no-city`.
-    let (city, edits, centrum) = if args.no_city {
-        (None, Arc::new(EditIndex::default()), None)
+    //
+    // Świat stawia **`game/`**, nie klient (M9a): `zbuduj_z_params` jest tą samą
+    // funkcją, którą woła przebieg bezgłowy, więc `magnat --seed 7` i
+    // `headless new-game --from params.ron` dają ten sam świat co do bitu.
+    let (terrain, built, edits, centrum) = if args.no_city {
+        let (data, report) = generate(params, &pool)?;
+        for line in report.lines() {
+            eprintln!("{line}");
+        }
+        let t = Arc::new(magnat_world::Terrain::new(data, materials.clone()));
+        (t, None, Arc::new(EditIndex::default()), None)
     } else {
-        let plan = CityPlan::from_world(&params);
-        let start = Instant::now();
-        let city = generate_city(&plan, terrain.as_ref(), &materials, &pool)?;
-        for line in city.report.lines() {
+        let b = magnat_game::world::population::zbuduj_z_params(
+            params,
+            &pool,
+            &magnat_game::GenWatch::none(),
+        )?
+        .ok_or("generacja anulowana")?;
+        for line in b.report.lines() {
+            eprintln!("{line}");
+        }
+        for line in b.city.report.lines() {
             eprintln!("{line}");
         }
         eprintln!(
-            "miasto {:.2} s · {} komend voxelowych w {} wpisach indeksu",
-            start.elapsed().as_secs_f64(),
-            city.edits.commands().len(),
-            city.edits.entries()
+            "{} komend voxelowych w {} wpisach indeksu",
+            b.city.edits.commands().len(),
+            b.city.edits.entries()
         );
-        let c = city.center;
-        let edits = Arc::new(city.edits.clone());
-        (Some(Arc::new(city)), edits, Some((c.x as i32, c.y as i32)))
+        let c = b.city.center;
+        let edits = Arc::new(b.city.edits.clone());
+        let t = b.terrain.clone();
+        (t, Some(b), edits, Some((c.x as i32, c.y as i32)))
     };
+    eprintln!("razem {:.1} s", start.elapsed().as_secs_f64());
+    let city = built.as_ref().map(|b| b.city.clone());
 
     // Inspekcja punktu bez otwierania okna — ta sama karta co po kliknięciu prawym.
     if let Some(punkt) = args.inspect.as_deref() {
@@ -105,6 +115,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     event_loop.set_control_flow(ControlFlow::Poll);
     let mut app = App {
         terrain,
+        built,
         materials,
         params,
         window: None,

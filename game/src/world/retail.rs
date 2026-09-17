@@ -43,7 +43,7 @@ pub const EMISJA: i64 = 10_000_000_000;
 /// idzie na zapas startowy i wypłaty, a zaniżenie kosztowałoby drugi taki błąd.
 #[must_use]
 pub fn emisja(sites: usize) -> Money {
-    Money(EMISJA.saturating_add(sites as i64 * crate::plants::KAPITAL_ZAKLADU))
+    Money(EMISJA.saturating_add(sites as i64 * crate::world::plants::KAPITAL_ZAKLADU))
 }
 
 /// Kapitał obrotowy sklepu. `ponytail:` stała zamiast modelu kapitału — sufit
@@ -101,7 +101,7 @@ fn zbuduj_lancuch(
     // odległości centrum dystrybucyjne wygrywa albo przegrywa z arytmetyki,
     // a nie z geografii. Brama graniczna dostaje pozycję razem z zakładami, bo
     // inaczej trasa do niej nie istnieje i import przestaje być wykonalny.
-    let mut rampy = crate::plants::rampy(city);
+    let mut rampy = crate::world::plants::rampy(city);
     let brama = SiteId(Entity::new(SITE_BRAMY, std::num::NonZeroU32::MIN));
     rampy.insert(brama, brama_pos(city));
     let oracle: Arc<dyn FreightOracle> = Arc::new(magnat_traffic::freight::RoadFreight::new(
@@ -142,7 +142,7 @@ pub struct Retail {
     pub market: Market,
     pub shops: usize,
     /// Zakłady produkcyjne Etapu 7 postawione jako `PlantSite` (`AO-3`).
-    pub plants: crate::plants::PlantsReport,
+    pub plants: crate::world::plants::PlantsReport,
     /// Ile gospodarstw dostało pierwszą wypłatę i na jaką sumę.
     pub incomes: (u64, Money),
     /// Pierwsze rozliczenie miesiąca gospodarstw — koperty, koszty stałe, kredyty.
@@ -325,13 +325,13 @@ pub fn setup(
     let plants = if std::env::var_os("MAGNAT_NO_PLANTS").is_some() {
         Default::default()
     } else {
-        crate::plants::obsadz_zaklady(
+        crate::world::plants::obsadz_zaklady(
             city,
             &chain,
             &market,
             &mut books,
             rest,
-            &crate::plants::InitialStock::load_default()?,
+            &crate::world::plants::InitialStock::load_default()?,
         )
     };
 

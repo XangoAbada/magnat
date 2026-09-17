@@ -44,7 +44,9 @@ pub enum Applicant {
 pub enum PermitStatus {
     Queued,
     UnderReview,
-    Approved { at: Tick },
+    Approved {
+        at: Tick,
+    },
     /// Wniosek leżał dłużej niż rok gry i przestał być sprawą w toku.
     Expired,
 }
@@ -409,7 +411,12 @@ mod tests {
             biuro.open_days = dni_robocze;
             let mut reg = PermitRegistry::new(vec![biuro]);
             for i in 0..60 {
-                reg.file(Applicant::Site(site(200 + i)), PermitKind::Build, &t, Tick(0));
+                reg.file(
+                    Applicant::Site(site(200 + i)),
+                    PermitKind::Build,
+                    &t,
+                    Tick(0),
+                );
             }
             for d in 0..90 {
                 process_queue(&mut reg, &t, DayOfWeek::from_day_index(d), Tick(d * 1_440));

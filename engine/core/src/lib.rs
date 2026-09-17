@@ -56,16 +56,14 @@ pub use types::{
 };
 pub use vocab::{
     AbateReason, ActionKind, ActivityKind, AgencyKind, BankruptcyTrigger, Biome, BodyType,
-    ClaimPriority,
-    CommitmentKind, DeprivationEffect, EventCategory, FirmStrategy, FixedCost, GateKind,
-    LeaveCause, LifeEventKind, LineStopCause, LoanKind, LossKind, MigrationKind, NeedKind,
-    PermitKind, PlaceKind, PlaceRef, PolicyKind, PriceBasis, PriceDriver, ReactionKind,
-    RejectCause,
-    RejectCredit, RemedyKind, ResourceKind, RoadClass, Season, ServiceKind, ShortageStageKind,
-    SpendCategory, StockCat, TaxKind, TenderKind, TraitId, TransportMode, Trend, UtilityKind,
-    UtilityService, VoteDriver, WageCause, WorldCoord, AGENCY_KIND_COUNT, CLAIM_PRIORITY_COUNT,
-    FIXED_COST_COUNT, LOSS_KIND_COUNT, NEED_COUNT, POLICY_KIND_COUNT, REJECT_CAUSE_COUNT,
-    SERVICE_KIND_COUNT, SPEND_CATEGORY_COUNT, STOCK_CAT_COUNT, TAX_KIND_COUNT,
+    ClaimPriority, CommitmentKind, DeprivationEffect, EventCategory, FirmStrategy, FixedCost,
+    GateKind, LeaveCause, LifeEventKind, LineStopCause, LoanKind, LossKind, MigrationKind,
+    NeedKind, PermitKind, PlaceKind, PlaceRef, PolicyKind, PriceBasis, PriceDriver, ReactionKind,
+    RejectCause, RejectCredit, RemedyKind, ResourceKind, RoadClass, Season, ServiceKind,
+    ShortageStageKind, SpendCategory, StockCat, TaxKind, TenderKind, TraitId, TransportMode, Trend,
+    UtilityKind, UtilityService, VoteDriver, WageCause, WorldCoord, AGENCY_KIND_COUNT,
+    CLAIM_PRIORITY_COUNT, FIXED_COST_COUNT, LOSS_KIND_COUNT, NEED_COUNT, POLICY_KIND_COUNT,
+    REJECT_CAUSE_COUNT, SERVICE_KIND_COUNT, SPEND_CATEGORY_COUNT, STOCK_CAT_COUNT, TAX_KIND_COUNT,
     UTILITY_KIND_COUNT,
 };
 pub use weather::{weather_at, Weather};

@@ -39,7 +39,7 @@ use serde::Deserialize;
 
 /// Kapitał obrotowy zakładu produkcyjnego.
 ///
-/// `ponytail:` stała, tak samo jak [`crate::retail::KAPITAL_SKLEPU`] — sufit nazwany:
+/// `ponytail:` stała, tak samo jak [`crate::world::retail::KAPITAL_SKLEPU`] — sufit nazwany:
 /// zakład, któremu zabraknie, po prostu przestaje płacić i rośnie mu zobowiązanie.
 /// Kapitał założycielski wnosi M7 razem z zakładaniem firm.
 pub const KAPITAL_ZAKLADU: i64 = 120_000_000;
@@ -96,7 +96,7 @@ pub struct PlantsReport {
     pub stock_value: Money,
 }
 
-/// Czy ten archetyp jest sklepem — stawia go [`crate::retail::obsadz_sklepy`]
+/// Czy ten archetyp jest sklepem — stawia go [`crate::world::retail::obsadz_sklepy`]
 /// i drugi raz go tu nie stawiamy.
 fn to_sklep(kind: Option<PlaceKind>) -> bool {
     matches!(

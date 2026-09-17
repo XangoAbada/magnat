@@ -26,8 +26,8 @@ use magnat_core::{
     rng, AgencyKind, DecisionReason, DistrictId, Money, PolicyKind, ServiceKind, SiteId,
     SpendCategory, StreamId, TaxKind, TenderKind, Tick, Q, SPEND_CATEGORY_COUNT,
 };
-use magnat_ecs::World;
 use magnat_economy::Market;
+use magnat_ecs::World;
 
 use crate::city::City;
 use crate::gov::{self, ApprovalInput, Signals};
@@ -86,15 +86,9 @@ pub fn miesieczny(
     let limit = city.enforcement.emission_limit_g_per_min();
     let tun_present = city.gov.tuning.is_some();
     if tun_present {
-        if let Some(rec) = crate::mayor::decide_month(
-            &mut city.gov,
-            &city.policies,
-            &rates,
-            &baza,
-            limit,
-            sig,
-            t,
-        ) {
+        if let Some(rec) =
+            crate::mayor::decide_month(&mut city.gov, &city.policies, &rates, &baza, limit, sig, t)
+        {
             let powod = rec.reason;
             let for_bp = rec.vote.for_bp;
             let kind = rec.policy.kind();
@@ -142,7 +136,8 @@ pub fn nalozenie(city: &mut City, market: &Market, world: &mut World, t: Tick) {
     let mut kodeks = None;
     for k in TaxKind::ALL {
         let Some(Policy::TaxRate { bps, .. }) =
-            city.policies.current(PolicyKind::TaxRate, k.as_index() as u32, t)
+            city.policies
+                .current(PolicyKind::TaxRate, k.as_index() as u32, t)
         else {
             continue;
         };
@@ -205,21 +200,19 @@ pub fn nalozenie(city: &mut City, market: &Market, world: &mut World, t: Tick) {
     // **Sufit jest odwracalny**, więc miasto zapamiętuje taryfę sprzed pierwszej
     // uchwały: uchwała, która wygasła, ma przestać obowiązywać, a nie zostawić
     // po sobie cenę na zawsze. Bez tego `sunset` byłby polem bez skutku.
-    let capy: Vec<(magnat_core::UtilityService, Option<Money>)> =
-        magnat_core::UtilityService::ALL
-            .iter()
-            .map(|u| {
-                let sufit = match city.policies.current(
-                    PolicyKind::TariffCap,
-                    u.as_index() as u32,
-                    t,
-                ) {
-                    Some(Policy::TariffCap { max_per_unit, .. }) => Some(*max_per_unit),
-                    _ => None,
-                };
-                (*u, sufit)
-            })
-            .collect();
+    let capy: Vec<(magnat_core::UtilityService, Option<Money>)> = magnat_core::UtilityService::ALL
+        .iter()
+        .map(|u| {
+            let sufit = match city
+                .policies
+                .current(PolicyKind::TariffCap, u.as_index() as u32, t)
+            {
+                Some(Policy::TariffCap { max_per_unit, .. }) => Some(*max_per_unit),
+                _ => None,
+            };
+            (*u, sufit)
+        })
+        .collect();
     if let Some(grids) = world.get_resource_mut::<magnat_traffic::utility::UtilityGrids>() {
         for (usluga, sufit) in capy {
             let Some(net) = grids.net_mut(usluga) else {
@@ -302,9 +295,7 @@ fn sygnaly(city: &City, market: &Market, world: &World) -> Signals {
 
     let (unemployment_permille, _) = world
         .get_resource::<magnat_events::Events>()
-        .map_or((0, 0), |e| {
-            (e.indicators().unemployment_permille, 0u32)
-        });
+        .map_or((0, 0), |e| (e.indicators().unemployment_permille, 0u32));
 
     // Emisje wobec obowiązującego limitu: 10 000 znaczy „najbrudniejszy zakład
     // stoi dokładnie na limicie", zero — „limit jest daleko i nic nie znaczy".
@@ -384,7 +375,8 @@ fn ogloz_przetargi(city: &mut City, t: Tick) {
         return;
     }
     let plan = city.budget.plan_base_month().get();
-    let na_odpady = plan * i64::from(city.policy.shares()[magnat_core::SpendCategory::Waste.as_index()])
+    let na_odpady = plan
+        * i64::from(city.policy.shares()[magnat_core::SpendCategory::Waste.as_index()])
         / 10_000;
     let budzet = Money(na_odpady * udzial / 10_000 / dzielnic as i64);
     if budzet.get() <= 0 {
@@ -396,13 +388,10 @@ fn ogloz_przetargi(city: &mut City, t: Tick) {
             kind: TenderKind::WasteCollection,
             id: d as u16,
         };
-        if let Some((_, powod)) = city.tenders.publish(
-            subject,
-            budzet,
-            BidCriteria::default(),
-            BID_DAYS,
-            t,
-        ) {
+        if let Some((_, powod)) =
+            city.tenders
+                .publish(subject, budzet, BidCriteria::default(), BID_DAYS, t)
+        {
             wpisy.push(powod);
         }
     }
@@ -444,9 +433,7 @@ fn zbierz_oferty(
         .tenders
         .all()
         .iter()
-        .filter(|x| {
-            x.outcome.is_none() && !x.closed && x.bid_deadline.0 == t.0 + 1_440
-        })
+        .filter(|x| x.outcome.is_none() && !x.closed && x.bid_deadline.0 == t.0 + 1_440)
         .map(|x| (x.id, x.subject, x.budget))
         .collect();
     if otwarte.is_empty() {
@@ -516,10 +503,9 @@ fn zbierz_oferty(
 /// a nie ze stałej — `bid_noise_bp` w `data/city/government.ron` istnieje po to,
 /// żeby balansator mógł nim ruszyć bez rekompilacji.
 fn szum_bp(city: &City) -> u16 {
-    city.gov
-        .tuning
-        .as_ref()
-        .map_or(1_500, |t| u16::try_from(t.bid_noise_bp.max(1)).unwrap_or(1_500))
+    city.gov.tuning.as_ref().map_or(1_500, |t| {
+        u16::try_from(t.bid_noise_bp.max(1)).unwrap_or(1_500)
+    })
 }
 
 /// Zapłata za obowiązujące umowy. Pieniądz idzie z konta miasta na konto zakładu,

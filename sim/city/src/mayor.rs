@@ -268,8 +268,8 @@ fn zbierz_wydatki(
     // Luka w usługach: podnosi się udział tego kierunku, który obsługuje rodzaj
     // usługi o najgorszym pokryciu.
     if sig.service_gap_bp > 2_000 && sig.fiscal_bp >= 0 && !zadluzone {
-        let kind = ServiceKind::from_index(usize::from(sig.worst_service))
-            .unwrap_or(ServiceKind::School);
+        let kind =
+            ServiceKind::from_index(usize::from(sig.worst_service)).unwrap_or(ServiceKind::School);
         let kat = crate::services::PublicService::spend_category(kind);
         let i = kat.as_index();
         menu.push(Kandydat {
@@ -522,5 +522,4 @@ mod tests {
             }
         }
     }
-
 }

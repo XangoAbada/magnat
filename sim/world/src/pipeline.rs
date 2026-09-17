@@ -212,18 +212,43 @@ pub fn generate(
     params: WorldGenParams,
     pool: &JobPool,
 ) -> Result<(WorldData, WorldGenReport), ParamError> {
+    let out = generate_observed(params, pool, &mut |_, _| true)?;
+    Ok(out.expect("obserwator, który nigdy nie przerywa, nie może anulować generacji"))
+}
+
+/// Generacja z raportowaniem postępu i możliwością przerwania (M9a, WP13).
+///
+/// `on_pass` woła się **po** każdym passie z jego indeksem (0-based) i nazwą
+/// z [`PASSES`]; zwrócone `false` przerywa potok, a funkcja oddaje `Ok(None)`.
+/// Anulowanie jest normalnym wynikiem, nie błędem — gracz, który wyszedł z ekranu
+/// ładowania, nie zrobił nic złego.
+///
+/// Ziarnistość „między passami" jest świadoma: pass trwa od ułamka sekundy do
+/// ~2 s, a przerywanie w środku erozji wymagałoby wstrzykiwania sprawdzeń do pętli
+/// liczących i kosztowałoby więcej, niż jest warte (M9a §5.13).
+///
+/// # Errors
+/// [`ParamError`] z walidacji parametrów — jak [`generate`].
+pub fn generate_observed(
+    params: WorldGenParams,
+    pool: &JobPool,
+    on_pass: &mut dyn FnMut(usize, &'static str) -> bool,
+) -> Result<Option<(WorldData, WorldGenReport)>, ParamError> {
     params.validate()?;
     let mut ctx = GenCtx::new(params, pool);
     let mut report = WorldGenReport::default();
 
     let t_total = Instant::now();
-    for pass in PASSES {
+    for (i, pass) in PASSES.iter().enumerate() {
         let t = Instant::now();
         (pass.run)(&mut ctx);
         report.timings.push(PassTiming {
             name: pass.name,
             millis: t.elapsed().as_secs_f64() * 1000.0,
         });
+        if !on_pass(i, pass.name) {
+            return Ok(None);
+        }
     }
     report.total_millis = t_total.elapsed().as_secs_f64() * 1000.0;
 
@@ -232,7 +257,7 @@ pub fn generate(
     report.terrain_hash = h.finish();
     report.stats = collect_stats(&ctx.world);
 
-    Ok((ctx.world, report))
+    Ok(Some((ctx.world, report)))
 }
 
 fn collect_stats(w: &WorldData) -> WorldStats {

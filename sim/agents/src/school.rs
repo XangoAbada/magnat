@@ -98,8 +98,7 @@ fn krok_umiejetnosci(
                 .get()
         });
         if jakosc > 0 {
-            let co_ile =
-                (SkillDriftSystem::SCHOOL_WEEKS_PER_POINT / u32::from(jakosc)).max(1);
+            let co_ile = (SkillDriftSystem::SCHOOL_WEEKS_PER_POINT / u32::from(jakosc)).max(1);
             if tydzien.is_multiple_of(u64::from(co_ile)) {
                 skills.0[0].level = skills.0[0].level.saturating_add(1).min(100);
             }

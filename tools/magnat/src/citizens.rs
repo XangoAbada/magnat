@@ -25,22 +25,17 @@
 //! ani o minutę, bo warstwa Mikro nie ma prawa zapisu do stanu (00 §4) i `AgentSources`
 //! świadomie nie wchodzi do hasha stanu (bramka 2 fazy M3).
 
-use magnat_agents::{
-    bootstrap_day, register, register_day, society, AgentSources, DayLoopSystem, DemographyTable,
-    DeprivationEffectsSystem, HouseholdStockSystem, InfinitePlaces, NeedDecaySystem, NeedTable,
-    NoInheritance, Population, ReplanCooldownSystem, SkillDriftSystem, SocietySystem, Trace,
-    TravelMicroSystem,
-};
+use magnat_agents::{AgentSources, Population, Trace};
 use magnat_core::{SimSpeed, Tick};
-use magnat_economy::{LostSaleTracking, Market, MarketSystem, ShopPanelSnapshot};
-use magnat_ecs::{App, ScheduleBuilder, World};
+use magnat_economy::{LostSaleTracking, ShopPanelSnapshot};
+use magnat_game::shell::{NewGameParams, ScenarioId, StartVariant};
+use magnat_game::world::{BuiltCity, SessionOpts};
+use magnat_game::Session;
 use magnat_jobs::JobPool;
 use magnat_sim_snapshot::PedestrianRecord;
-use magnat_traffic::{TrafficSystem, VehicleWearSystem};
 use magnat_ui::{CitizenPanel, Locale, Selection, UiContext};
 use magnat_ui::{ShopTab, ShopView};
-use magnat_world::{generate_population, CityData, PopulationParams};
-use std::sync::Arc;
+use magnat_world::WorldGenParams;
 use winit::window::Window;
 
 /// Promień okna warstwy Mikro w metrach.
@@ -58,7 +53,9 @@ const MICRO_RADIUS_M: u32 = 900;
 const SWAPS: u32 = 50_000;
 
 pub struct Citizens {
-    app: App,
+    /// Sesja gry. Klient **nie stawia świata u siebie** — od M9a robi to `game/`,
+    /// tą samą funkcją, którą woła przebieg bezgłowy (`stand_up`).
+    session: Session,
     ui: UiContext,
     panel: CitizenPanel,
     egui_ctx: egui::Context,
@@ -72,10 +69,6 @@ pub struct Citizens {
     /// Czy panel jest widoczny. Karta bez zaznaczenia pokazuje komunikat, więc panel
     /// da się otworzyć, zanim gracz w kogokolwiek kliknie.
     pokaz_karte: bool,
-    ludzi: usize,
-    /// Rynek, jeśli gospodarka jest włączona. `Market` jest `Clone` i wewnętrznie
-    /// współdzielony, więc klient trzyma go **obok** świata i czyta bez `&World`.
-    market: Option<Market>,
     /// Migawka otwartego sklepu. **Podwójne buforowanie w wersji, która tu wystarcza**:
     /// panel czyta zawsze poprzednią migawkę, a nowa powstaje raz na godzinę gry.
     /// Nie ma tu wyścigu do rozwiązania — symulacja i render chodzą w jednym wątku
@@ -87,107 +80,59 @@ pub struct Citizens {
 }
 
 impl Citizens {
-    /// Zaludnia miasto i stawia harmonogram. Zwraca też, ile to trwało — start
-    /// metropolii to kilkadziesiąt sekund i gracz ma prawo wiedzieć, na co czeka.
+    /// Zaludnia miasto i stawia harmonogram — przez `game::Session`, czyli tą samą
+    /// drogą co przebieg bezgłowy.
+    ///
+    /// **To jest wykonanie kryterium „jedna droga do świata" (M9 §7).** Do M8e klient
+    /// składał świat u siebie i składał go inaczej: bez firm, bez strony publicznej,
+    /// bez sieci i bez zdarzeń. Okno pokazywało więc inne miasto niż to, które mierzył
+    /// scenariusz — a różnicy nie widział nikt, bo nikt nie porównywał.
+    ///
+    /// # Errors
+    /// Jak [`Session::begin`].
     pub fn new(
-        seed: u64,
-        city: &CityData,
+        params: WorldGenParams,
+        built: BuiltCity,
         window: &Window,
         locale: Locale,
         threads: usize,
         economy: bool,
     ) -> Result<Citizens, Box<dyn std::error::Error>> {
-        let mut world = World::new(seed);
-        register(&mut world, NeedTable::load_default()?);
-        society::register_society(&mut world, DemographyTable::load_default()?);
-        register_day(&mut world);
-
-        let zaludnione = generate_population(
-            &mut world,
-            city,
-            &PopulationParams {
-                target_population: None,
-                unemployment_target_permille: None,
-                commute_median_min: None,
-                commute_swaps: Some(SWAPS),
+        let start = std::time::Instant::now();
+        let session = Session::begin(
+            built,
+            NewGameParams {
+                world: params,
+                scenario: ScenarioId::SANDBOX,
+                variant: StartVariant::default(),
+                opts: SessionOpts {
+                    citizens: 0,
+                    commute_swaps: SWAPS,
+                    economy,
+                    // W oknie warstwa Mikro jest zawsze: bez niej nie ma czego rysować.
+                    micro: true,
+                },
             },
+            &JobPool::new(threads),
         )?;
-        for l in zaludnione.report.lines() {
-            eprintln!("{l}");
-        }
-
-        let oracle = zaludnione.travel_oracle();
-        oracle.set_micro_window(None, 0);
-
-        // ── gospodarka w oknie (M5e/WP12, `AB-1`) ────────────────────────────────
-        //
-        // Do M5d klient wstawiał tu atrapę `InfinitePlaces` z M3, więc **cała faza M5
-        // była niewidoczna w oknie z miastem**: mieszkańcy „chodzili po zakupy" do
-        // miejsca, które zawsze miało wszystko i nic nie kosztowało. Most
-        // `retail::setup` stawia dokładnie tę samą gospodarkę co scenariusz `m5shop`
-        // i podmienia `Sources.places` na rynek (`Z-1`).
-        //
-        // `--no-economy` wraca do zachowania M3 i jest **udokumentowaną drogą
-        // wyjścia** z kosztu klatki przy `X10` (`AB-2`): zakup to dwa wywołania
-        // routera M4, więc doba z gospodarką kosztuje wielokrotnie więcej niż bez.
-        let market = if economy {
-            let r = magnat_headless::retail::setup(
-                &mut world,
-                city,
-                zaludnione.places.clone(),
-                oracle,
-                &zaludnione.traffic,
-                seed,
-                &JobPool::new(threads),
-            )?;
-            eprintln!(
-                "gospodarka: {} sklepów, {} ofert, wypłata startowa {} zł dla {} gospodarstw",
-                r.shops,
-                r.market.offer_count(),
-                r.incomes.1.get() / 100,
-                r.incomes.0
-            );
-            Some(r.market)
-        } else {
-            let tabela = Arc::new(NeedTable::load_default()?);
-            *world.resource_mut::<AgentSources>() = AgentSources::new(
-                Box::new(InfinitePlaces::new(zaludnione.places.clone(), tabela)),
-                oracle,
-            );
+        let r = session.report;
+        eprintln!(
+            "świat gotowy w {:.1} s: {} mieszkańców w {} gospodarstwach, {} sklepów, {} zakładów, {} firm, {} sieci",
+            start.elapsed().as_secs_f64(),
+            r.citizens,
+            r.households,
+            r.shops,
+            r.plants,
+            r.firms,
+            r.grids
+        );
+        if !economy {
             eprintln!("gospodarka wyłączona (--no-economy): miejsca z atrapy M3");
-            None
-        };
-
-        let zasiane = bootstrap_day(&mut world, 0);
-        eprintln!("kolejka zasiana: {zasiane} mieszkańców");
-
-        let mut builder = ScheduleBuilder::new();
-        // `MarketSystem` **przed** pętlą doby — kolejność jest kontraktem
-        // `sim/economy` (ustawia rynkowi tick i rozlicza intencje z minuty `t−1`),
-        // a nie preferencją klienta.
-        if market.is_some() {
-            builder.add(magnat_supply::ChainSystem::new());
-            builder.add(MarketSystem::new(&world));
         }
-        builder
-            .add(DayLoopSystem::new(&world))
-            .add(ReplanCooldownSystem::new(&world))
-            .add(NeedDecaySystem::new(&world))
-            .add(DeprivationEffectsSystem::new(&world))
-            .add(SkillDriftSystem::new(&world))
-            .add(HouseholdStockSystem::new(&world))
-            .add(SocietySystem::new(Box::new(NoInheritance)))
-            // Warstwa mezo musi tu być, i to nie dla widoku. Zlecenie przejazdu
-            // zebrane przez `begin_trip` wykonuje **tylko** ten system; bez niego
-            // kierowca zgłasza podróż, której nikt nie realizuje, nie dostaje
-            // `Arrive` i stoi do końca sesji — a jego auto zostaje zajęte na zawsze.
-            .add(TrafficSystem::new(&world))
-            .add(VehicleWearSystem::new(&world))
-            // W oknie warstwa Mikro jest zawsze: bez niej nie ma czego rysować.
-            .add(TravelMicroSystem::new(&world));
-        let schedule = builder.build()?;
-        let ludzi = society::population(&world);
-        let app = App::new(world, schedule, threads);
+        eprintln!(
+            "harmonogram: {} systemów w {} etapach, odcisk {:#018x}",
+            r.systems, r.stages, r.schedule_fingerprint
+        );
 
         let egui_ctx = egui::Context::default();
         let egui_state = egui_winit::State::new(
@@ -201,18 +146,19 @@ impl Citizens {
 
         Ok(Citizens {
             ui: UiContext::new(locale, Tick(0))?,
-            panel: CitizenPanel { day: 0, seed },
-            market,
+            panel: CitizenPanel {
+                day: 0,
+                seed: params.seed,
+            },
             sklep: None,
             zakladka: ShopTab::default(),
             pokaz_sklep: false,
-            app,
+            session,
             egui_ctx,
             egui_state,
             peds: Vec::new(),
             dzien: 0,
             pokaz_karte: false,
-            ludzi,
         })
     }
 
@@ -223,7 +169,7 @@ impl Citizens {
     #[must_use]
     pub fn card_text(&mut self) -> String {
         use magnat_ui::InspectorPanel;
-        self.panel.build(&self.ui, &self.app.world)
+        self.panel.build(&self.ui, &self.session.app.world)
     }
 
     #[must_use]
@@ -233,7 +179,8 @@ impl Citizens {
 
     #[must_use]
     pub fn micro_len(&self) -> usize {
-        self.app
+        self.session
+            .app
             .world
             .resource::<AgentSources>()
             .get()
@@ -242,7 +189,7 @@ impl Citizens {
 
     #[must_use]
     pub fn population(&self) -> usize {
-        self.ludzi
+        self.session.report.citizens
     }
 
     pub fn set_speed(&mut self, s: SimSpeed) {
@@ -275,12 +222,12 @@ impl Citizens {
     /// w chwili, gdy **zaczyna** podróż, a kto wyszedł o 7:40, ten o 8:15 jest już
     /// w drodze i drugiej szansy nie dostanie.
     pub fn warm_up(&mut self, minut: u32, kamera: glam::DVec3) {
-        if let Some(z) = self.app.world.resource::<AgentSources>().get() {
+        if let Some(z) = self.session.app.world.resource::<AgentSources>().get() {
             z.travel
                 .set_micro_window(Some((kamera.x as i32, kamera.y as i32)), MICRO_RADIUS_M);
         }
         for _ in 0..minut {
-            self.app.tick();
+            self.session.step(1, 0);
         }
         let t = Tick(u64::from(minut));
         self.ui.time = magnat_ui::TimeControlsWidget::new(t);
@@ -293,7 +240,7 @@ impl Citizens {
     pub fn advance(&mut self, dt_ms: u32) -> Tick {
         let minut = self.ui.time.advance(dt_ms);
         for _ in 0..minut {
-            self.app.tick();
+            self.session.step(1, 0);
         }
         let t = self.ui.time.clock().tick();
         self.dzien = t.0 / 1440;
@@ -309,7 +256,7 @@ impl Citizens {
         if !self.pokaz_sklep {
             return;
         }
-        let (Some(m), Some(stary)) = (self.market.as_ref(), self.sklep.as_ref()) else {
+        let (Some(m), Some(stary)) = (self.session.market.as_ref(), self.sklep.as_ref()) else {
             return;
         };
         if !wymus && t.get() / 60 == stary.at.get() / 60 {
@@ -333,7 +280,7 @@ impl Citizens {
     /// pokazuje kartę parceli. Kiedy `engine/render` dostanie budynki w buforze ID,
     /// to wywołanie zamieni się na odczyt `SiteId` i nic poza nim się nie zmieni.
     pub fn select_shop(&mut self, x: f32, y: f32, promien_m: f32) -> bool {
-        let Some(m) = self.market.as_ref() else {
+        let Some(m) = self.session.market.as_ref() else {
             return false;
         };
         let cel = magnat_spatial::Vec2::new(x, y);
@@ -358,7 +305,7 @@ impl Citizens {
     }
     /// Ustawia okno warstwy Mikro na kadr i przepisuje pieszych dla renderera.
     pub fn pedestrians(&mut self, eye: glam::DVec3) -> &[PedestrianRecord] {
-        let Some(z) = self.app.world.resource::<AgentSources>().get() else {
+        let Some(z) = self.session.app.world.resource::<AgentSources>().get() else {
             self.peds.clear();
             return &self.peds;
         };
@@ -389,12 +336,14 @@ impl Citizens {
         let bok = u32::from(magnat_world::city::overlay::OVERLAY_CELL_M);
         let dim = (map_size_m / bok).max(1);
         let oracle = self
+            .session
             .app
             .world
             .resource::<magnat_traffic::TrafficServices>()
             .oracle
             .clone();
         let surowe = self
+            .session
             .app
             .world
             .resource::<magnat_traffic::TrafficOverlay>()
@@ -428,8 +377,14 @@ impl Citizens {
     }
 
     pub fn select(&mut self, entity_index: u32) -> bool {
-        let lista =
-            magnat_ui::ListPicker::new(self.app.world.resource::<Population>().citizens().to_vec());
+        let lista = magnat_ui::ListPicker::new(
+            self.session
+                .app
+                .world
+                .resource::<Population>()
+                .citizens()
+                .to_vec(),
+        );
         match lista.by_entity_index(entity_index) {
             Selection::Citizen(c) => {
                 // Dwa bufory śledzenia, bo dwie różne rzeczy: `Trace` zbiera zdarzenia
@@ -438,8 +393,13 @@ impl Citizens {
                 // (jak jechał i dlaczego tak). Bez tego drugiego `TripLedger.entries`
                 // jest puste dla **każdego** mieszkańca, a karta podróży nie ma z czego
                 // policzyć rozbioru czasu (`N-6`).
-                self.app.world.resource_mut::<Trace>().watch(entity_index);
-                self.app
+                self.session
+                    .app
+                    .world
+                    .resource_mut::<Trace>()
+                    .watch(entity_index);
+                self.session
+                    .app
                     .world
                     .resource::<magnat_traffic::TrafficServices>()
                     .oracle
@@ -461,7 +421,7 @@ impl Citizens {
         let zegar = self.ui.time;
         let model = self
             .pokaz_karte
-            .then(|| self.panel.model(&self.ui, &self.app.world))
+            .then(|| self.panel.model(&self.ui, &self.session.app.world))
             .flatten();
         let mut wybor = None;
         let mut zamknij = false;

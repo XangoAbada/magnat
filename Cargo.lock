@@ -1408,6 +1408,7 @@ dependencies = [
  "magnat-devtools",
  "magnat-economy",
  "magnat-ecs",
+ "magnat-game",
  "magnat-headless",
  "magnat-jobs",
  "magnat-render",
@@ -1558,6 +1559,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "magnat-game"
+version = "0.1.0"
+dependencies = [
+ "magnat-agents",
+ "magnat-city",
+ "magnat-core",
+ "magnat-economy",
+ "magnat-ecs",
+ "magnat-events",
+ "magnat-firms",
+ "magnat-io",
+ "magnat-jobs",
+ "magnat-macro",
+ "magnat-policy",
+ "magnat-spatial",
+ "magnat-supply",
+ "magnat-traffic",
+ "magnat-ui",
+ "magnat-voxel",
+ "magnat-world",
+ "ron",
+ "serde",
+]
+
+[[package]]
 name = "magnat-headless"
 version = "0.1.0"
 dependencies = [
@@ -1570,6 +1596,7 @@ dependencies = [
  "magnat-ecs",
  "magnat-events",
  "magnat-firms",
+ "magnat-game",
  "magnat-io",
  "magnat-jobs",
  "magnat-macro",

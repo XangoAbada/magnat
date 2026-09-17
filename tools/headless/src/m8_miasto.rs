@@ -398,11 +398,14 @@ fn raport_uslug(miasto: &City, world: &magnat_ecs::World) {
             .iter()
             .filter(|s| s.kind == *k)
             .collect();
-        let jakosc: u32 = swoje.iter().map(|s| u32::from(s.quality.get())).sum::<u32>() / ile;
+        let jakosc: u32 = swoje
+            .iter()
+            .map(|s| u32::from(s.quality.get()))
+            .sum::<u32>()
+            / ile;
         let etaty: u32 = swoje.iter().map(|s| s.staff_target).sum();
         let obsada: u32 = swoje.iter().map(|s| s.staff).sum();
-        let obciazenie: u32 =
-            swoje.iter().map(|s| s.utilization_bps).sum::<u32>() / ile;
+        let obciazenie: u32 = swoje.iter().map(|s| s.utilization_bps).sum::<u32>() / ile;
         println!(
             "{:<9} {ile:>3} placówek, jakość {jakosc:>3}, obsada {obsada}/{etaty}, obłożenie {} %, pokrycie miasta {}",
             k.name(),
@@ -420,7 +423,9 @@ fn raport_uslug(miasto: &City, world: &magnat_ecs::World) {
         miasto
             .permits
             .median_wait_days()
-            .map_or("— (żadnego nie wydano)".to_string(), |d| format!("{d} dób"))
+            .map_or("— (żadnego nie wydano)".to_string(), |d| format!(
+                "{d} dób"
+            ))
     );
     for k in AgencyKind::ALL {
         let a = miasto.enforcement.agencies()[k.as_index()];
@@ -450,7 +455,12 @@ fn raport_uslug(miasto: &City, world: &magnat_ecs::World) {
             sredni / 100
         );
     }
-    let max_pyl = miasto.emissions.iter().map(|(_, _, g)| *g).max().unwrap_or(0);
+    let max_pyl = miasto
+        .emissions
+        .iter()
+        .map(|(_, _, g)| *g)
+        .max()
+        .unwrap_or(0);
     println!(
         "emisje: {} zakładów z niezerowym pyłem, najbrudniejszy {max_pyl} g/min",
         miasto.emissions.len()
@@ -595,7 +605,11 @@ fn raport_wladzy(miasto: &City, dob: u32) -> bool {
                 min = min.min(u);
             }
             if naj > 0 {
-                println!("  wynik zwycięzcy po obwodach: od {} % do {} %", min / 100, naj / 100);
+                println!(
+                    "  wynik zwycięzcy po obwodach: od {} % do {} %",
+                    min / 100,
+                    naj / 100
+                );
             }
         } else {
             println!("wybory: kampania trwa, {} kandydatów", e.candidates.len());

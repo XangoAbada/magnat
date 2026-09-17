@@ -18,7 +18,7 @@ use magnat_jobs::JobPool;
 use magnat_world::CityData;
 use std::collections::BTreeMap;
 
-use crate::{firms, population};
+use crate::world::{firms, population};
 
 /// Miasto gotowe do przebiegu rynku pracy.
 pub struct LaborCity {

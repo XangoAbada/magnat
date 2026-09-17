@@ -92,8 +92,8 @@ impl Candidate {
             return 0;
         }
         let legalne = self.funding.get() - self.illegal_funding.get();
-        let wazone = legalne
-            + self.illegal_funding.get() * i64::from(t.illegal_reach_mul_bp) / 10_000;
+        let wazone =
+            legalne + self.illegal_funding.get() * i64::from(t.illegal_reach_mul_bp) / 10_000;
         // **Mnożenie przed dzieleniem.** Odwrotna kolejność zerowała zasięg skokowo
         // przy dzielnicy większej niż kampania w złotówkach — a to jest każda
         // dzielnica poza najmniejszą. Grosze × przelicznik mieszczą się w `i64`
@@ -322,8 +322,7 @@ fn utility(
     skladniki[VoteDriver::Services.as_index()] = if c.incumbent { odchylka } else { -odchylka / 2 };
 
     // Nastrój: zły nastrój jest głosem przeciwko władzy, dobry — za nią.
-    skladniki[VoteDriver::Mood.as_index()] =
-        i64::from(v.mood) * if c.incumbent { 20 } else { -12 };
+    skladniki[VoteDriver::Mood.as_index()] = i64::from(v.mood) * if c.incumbent { 20 } else { -12 };
     // Bezrobotny liczy na zmianę mocniej niż pracujący.
     if !v.employed && !c.incumbent {
         skladniki[VoteDriver::Mood.as_index()] += 600;
@@ -341,8 +340,11 @@ fn utility(
     // Przyzwyczajenie: urzędujący burmistrz startuje z przewagi status quo,
     // a pierwszy na liście z tego, że jest pierwszy. Obie przewagi są małe
     // i obie są prawdziwe.
-    skladniki[VoteDriver::Habit.as_index()] =
-        if c.incumbent { 500 } else { 200 - 40 * idx as i64 };
+    skladniki[VoteDriver::Habit.as_index()] = if c.incumbent {
+        500
+    } else {
+        200 - 40 * idx as i64
+    };
 
     let suma: i64 = skladniki.iter().sum();
     // Motyw = największy **dodatni** składnik. Gdy wszystkie są ujemne, głos padł
@@ -511,10 +513,7 @@ pub fn mandaty(glosy: &[u32], miejsca: u8) -> Vec<(u8, u8)> {
         return Vec::new();
     }
     let m = u64::from(miejsca);
-    let mut pelne: Vec<u64> = glosy
-        .iter()
-        .map(|g| u64::from(*g) * m / suma)
-        .collect();
+    let mut pelne: Vec<u64> = glosy.iter().map(|g| u64::from(*g) * m / suma).collect();
     let rozdane: u64 = pelne.iter().sum();
     let mut reszty: Vec<(u64, usize)> = glosy
         .iter()
@@ -741,7 +740,10 @@ mod tests {
         // Dzielnica nietknięta ma zostać nietknięta — inaczej test mierzyłby szum.
         let inna_przed = ra.per_district[4].share_bp(0);
         let inna_po = rb.per_district[4].share_bp(0);
-        assert!(inna_przed.abs_diff(inna_po) < 300, "{inna_przed} vs {inna_po}");
+        assert!(
+            inna_przed.abs_diff(inna_po) < 300,
+            "{inna_przed} vs {inna_po}"
+        );
     }
 
     /// T6, trzecia część: frekwencja w widełkach i rosnąca ze statusem i wiekiem.

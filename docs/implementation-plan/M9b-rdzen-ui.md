@@ -210,3 +210,16 @@ potrzebnych rzeczy nie mają właściciela.
 | Z-7 ★ | **`Span`/`Rich` wchodzą do WP3** (§5.8). `InspectorPanel::build` i `render_tab` kart przestają zwracać `String`, a zaczynają `Rich` | Z-3 poniżej ustalił `String` i to była słuszna decyzja przy jednym konsumencie — ale w `String` nie da się zakotwiczyć celu kliknięcia, więc „klikalny odnośnik" z `ui-design.md` §4 nie miał na czym stanąć. Złoty test nie traci nic: `Rich` składa się z powrotem w ten sam napis |
 | Z-8 ★ | **`TabStrip` wchodzi do listy widgetów WP3** | Zakładki istnieją w kodzie trzy razy (`ShopTab`, `SupplyTab`, `FirmTab`), za każdym razem jako własna pętla `selectable_label`, a `widgets.rs:247` mówi wprost „osobnej abstrakcji zakładek nie ma i nie jest potrzebna". Przy czwartym konsumencie (karta inspekcji, `M9c` §5.7) to przestaje być prawdą — i to jest moment, w którym YAGNI każe abstrakcję zrobić, a nie wcześniej |
 | Z-9 | **`Subject` musi mieszkać w `engine/core`, nie w `engine/ui`** (`K-62` w dokumencie 00) | `DecisionReason` jest w `core` i bez `#[non_exhaustive]` (`K-12`). Jeśli cel odnośnika ma jechać w ładunku powodu — a to jest główne źródło linków w karcie — to `Subject` musi być widoczny tam, gdzie powstaje powód, czyli w `sim/*`. Inaczej każda faza dopisująca wariant powodu musiałaby zależeć od `engine/ui` |
+
+---
+
+## Zmiany wpisane po M9a
+
+Zgodnie z `K-18`. Pełne uzasadnienia — tabela `DA-n` w `M9a-szkielet-gry-i-komendy.md`.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| DB-1 ★ | **WP3 buduje migawkę dla paneli od zera.** `Snapshot`, o którym §6 dokumentu fazy mówi „konsumuję od M0", **nie istnieje**: `magnat-sim-snapshot` niesie POD-y renderu (piesi, światła), a nie stan dla paneli. Szwem, w który migawka wejdzie, jest `game::CommandView` — funkcja walidująca komendę nie zagląda do `&World`, więc podmiana źródła jej nie dotknie | Przypadek (5) z `K-18`: pakiet obiecuje coś, czego żaden inny pakiet nie jest właścicielem. Bez tego wpisu WP3 zacząłby od szukania typu, którego nie ma |
+| DB-2 | **Ekrany WP14 stoją na gotowych typach z `game::shell`:** `ShellScreen` (pięć wariantów), `NewGameParams` (czwarte pole `opts`), `WorldGenJob` (postęp 13 kroków, `cancel`, `join`), `WorldPreview` (miniatura 512×512 RGBA + pojemność miasta), `Settings` (język, `ui_scale`, zapis strumienia widoku, RON obok zapisu). `GameState` ma dziś cztery warianty — `CharacterSelect` dokłada `M9c` | Logika powłoki jest zamknięta i przetestowana bez GPU; WP14 dokłada rysowanie, a nie model |
+| DB-3 | **Ekran slotów: nagłówek jest tani, wczytanie nie.** `save::list_slots` czyta wyłącznie `slot-N.meta.ron` (kilkaset bajtów), ale „Wczytaj" przewija dziennik wejść, więc kosztuje tyle, ile kosztowała rozgrywka. Migawka stanu należy do M12 (`DA-7`) | Ekran ma to **pokazać**, a nie udawać: pasek „odtwarzam dzień 128 z 360" jest prawdą, a kręciołek nie |
+| DB-4 | `magnat_ui::Locale` jest od M9a `Serialize`/`Deserialize` — profil gracza to plik RON | Zmiana języka bez restartu (kryterium §7 fazy) wymaga, żeby język dało się zapisać poza światem |

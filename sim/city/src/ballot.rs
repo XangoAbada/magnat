@@ -10,8 +10,8 @@
 //! niej wejście ze świata i zapisuje wynik do zasobu miasta.
 
 use magnat_core::{DecisionReason, DistrictId, Money, SiteId, Tick, Q};
-use magnat_ecs::World;
 use magnat_economy::Market;
+use magnat_ecs::World;
 
 use crate::city::City;
 use crate::election::{self, Backer, Election, Legality, VoterView};
@@ -38,10 +38,7 @@ pub fn cykl(
     // „czy są jakieś wybory". Pierwsza wersja pytała o to drugie i przeprowadzała
     // wybory **co dobę** od pierwszego rozstrzygnięcia: zasób był `Some`, termin
     // miniony, więc warunek wejścia był spełniony zawsze.
-    let trwa_kampania = city
-        .election
-        .as_ref()
-        .is_some_and(|e| e.result.is_none());
+    let trwa_kampania = city.election.as_ref().is_some_and(|e| e.result.is_none());
     if !trwa_kampania {
         if !city.gov.term_over(Tick(t.0 + kampania)) {
             return;
@@ -50,7 +47,8 @@ pub fn cykl(
         if wyborcy.is_empty() {
             return;
         }
-        let kandydaci = election::nominate(&city.gov, &wyborcy, &tun, crate::rule::seed_of(world), t);
+        let kandydaci =
+            election::nominate(&city.gov, &wyborcy, &tun, crate::rule::seed_of(world), t);
         if kandydaci.len() < 2 {
             return;
         }
@@ -232,7 +230,10 @@ fn finansuj_kampanie(
         }
         powody.push((site, powod));
         if nielegalnie {
-            nielegalni.push((site, market.firm_of(site).unwrap_or(magnat_core::FirmId(site.0))));
+            nielegalni.push((
+                site,
+                market.firm_of(site).unwrap_or(magnat_core::FirmId(site.0)),
+            ));
         }
     }
 

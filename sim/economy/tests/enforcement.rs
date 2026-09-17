@@ -10,7 +10,9 @@
 
 mod common;
 
-use magnat_core::{DistrictId, LossKind, Money, Qty, ServiceCoverage, ServiceKind, StockCat, Tick, Q};
+use magnat_core::{
+    DistrictId, LossKind, Money, Qty, ServiceCoverage, ServiceKind, StockCat, Tick, Q,
+};
 use magnat_economy::{EconomyData, LedgerAccount, PurchaseIntent};
 use magnat_spatial::Vec2;
 
@@ -53,9 +55,7 @@ fn posterunek_obniza_ubytki_i_widac_to_w_rachunku_wynikow() {
     let z_policja = sklep(1, 400);
 
     let (n_bez, straty_bez) = bez.market.shrinkage(&pokrycie(0), 180, Tick(1_440));
-    let (n_z, straty_z) = z_policja
-        .market
-        .shrinkage(&pokrycie(80), 180, Tick(1_440));
+    let (n_z, straty_z) = z_policja.market.shrinkage(&pokrycie(80), 180, Tick(1_440));
 
     assert_eq!(n_bez, 1, "sklep bez policji nie stracił nic");
     assert!(
@@ -195,6 +195,9 @@ fn zakres_szarej_strefy_odpowiada_na_wynik_miesiaca() {
     // liczbą z danych. Zakład bez ani jednego domkniętego miesiąca nie decyduje
     // o niczym — i to jest właściwa odpowiedź, a nie zero.
     let b = sklep(4, 100);
-    assert!(b.market.update_shadow_share(600, 250, 4_500, 300).is_empty());
+    assert!(b
+        .market
+        .update_shadow_share(600, 250, 4_500, 300)
+        .is_empty());
     assert_eq!(b.market.shadow_stats(), (0, 0));
 }

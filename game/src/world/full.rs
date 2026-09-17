@@ -16,7 +16,7 @@
 //! # Czego tu nie ma
 //!
 //! Nie ma własnej gospodarki. Wszystko, co dotyczy rynku i łańcuchu dostaw,
-//! przychodzi z [`crate::retail::setup`] bez zmian; ten moduł dokłada **warstwę
+//! przychodzi z [`crate::world::retail::setup`] bez zmian; ten moduł dokłada **warstwę
 //! zarządczą** i zegar makro.
 
 use std::error::Error;
@@ -31,7 +31,7 @@ use magnat_jobs::JobPool;
 use magnat_traffic::TrafficOracle;
 use magnat_world::CityData;
 
-use crate::{firms, retail};
+use crate::world::{firms, retail};
 
 /// Miasto z pełną gospodarką i pełną warstwą firm.
 pub struct FullCity {

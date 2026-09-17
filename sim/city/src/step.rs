@@ -7,8 +7,8 @@
 //! broni reguła przeglądu strukturalnego.
 
 use magnat_core::{DayOfWeek, DecisionReason, PermitKind, ServiceCoverage, SiteId, Tick};
-use magnat_ecs::World;
 use magnat_economy::Market;
+use magnat_ecs::World;
 
 use crate::city::City;
 use crate::permits::Applicant;
@@ -229,7 +229,10 @@ fn zloz_wnioski_nowych_zakladow(
         else {
             break; // miasto bez urzędu — nie ma komu rozpatrzyć
         };
-        let oplata = city.permits.get(id).map_or(magnat_core::Money::ZERO, |p| p.fee);
+        let oplata = city
+            .permits
+            .get(id)
+            .map_or(magnat_core::Money::ZERO, |p| p.fee);
         if oplata.get() > 0 {
             city.charges.accrue(
                 crate::charge::TaxPayer::Site(site),
@@ -290,8 +293,7 @@ fn policz_obsade_i_ludnosc(city: &mut City, world: &mut World) {
 
 /// Obsada urzędów pozwoleń i inspektorów — z placówek, nie z drugiej listy.
 fn przepisz_obsade_urzedow(city: &mut City) {
-    let mut po_zakladzie: std::collections::BTreeMap<u64, u32> =
-        std::collections::BTreeMap::new();
+    let mut po_zakladzie: std::collections::BTreeMap<u64, u32> = std::collections::BTreeMap::new();
     for s in city.services.all() {
         if s.kind == magnat_core::ServiceKind::Office {
             po_zakladzie.insert(s.site.0.to_bits(), s.staff);

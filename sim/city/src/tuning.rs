@@ -19,9 +19,15 @@ pub const CITY_TUNING_SCHEMA_VERSION: u32 = 1;
 pub enum TuningError {
     Io(String),
     Parse(String),
-    Schema { found: u32, want: u32 },
+    Schema {
+        found: u32,
+        want: u32,
+    },
     /// Rodzaj usługi bez wpisu w tabeli — nazwa mówi, w której.
-    Missing { table: &'static str, kind: &'static str },
+    Missing {
+        table: &'static str,
+        kind: &'static str,
+    },
     /// Wagi jakości nie sumują się do stu.
     BadWeights(u32),
 }
@@ -32,13 +38,19 @@ impl std::fmt::Display for TuningError {
             TuningError::Io(e) => write!(f, "tuning/city.ron: {e}"),
             TuningError::Parse(e) => write!(f, "tuning/city.ron: {e}"),
             TuningError::Schema { found, want } => {
-                write!(f, "tuning/city.ron: schema_version {found}, oczekiwano {want}")
+                write!(
+                    f,
+                    "tuning/city.ron: schema_version {found}, oczekiwano {want}"
+                )
             }
             TuningError::Missing { table, kind } => {
                 write!(f, "tuning/city.ron: brak wpisu `{kind}` w tabeli `{table}`")
             }
             TuningError::BadWeights(s) => {
-                write!(f, "tuning/city.ron: wagi jakości sumują się do {s}, a mają do 100")
+                write!(
+                    f,
+                    "tuning/city.ron: wagi jakości sumują się do {s}, a mają do 100"
+                )
             }
         }
     }

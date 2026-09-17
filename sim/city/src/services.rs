@@ -386,9 +386,7 @@ pub fn publish_coverage(services: &mut PublicServices, tuning: &CityTuning) {
                     (u32::from(najlepsze[k.as_index()]) * bp / 10_000) as u8
                 }
             };
-            services
-                .coverage
-                .set(DistrictId(d as u16), *k, Q::new(q));
+            services.coverage.set(DistrictId(d as u16), *k, Q::new(q));
         }
     }
 }
@@ -421,7 +419,10 @@ mod tests {
         let mut s = PublicServices::new(vec![placowka(ServiceKind::School, 0, 1)], 3);
         s.all_mut()[0].quality = Q::new(80);
         publish_coverage(&mut s, &t);
-        assert_eq!(s.coverage().at(DistrictId(0), ServiceKind::School).get(), 80);
+        assert_eq!(
+            s.coverage().at(DistrictId(0), ServiceKind::School).get(),
+            80
+        );
         let obok = s.coverage().at(DistrictId(1), ServiceKind::School).get();
         assert!(obok > 0 && obok < 80, "zanik poza dzielnicą: {obok}");
     }
@@ -430,7 +431,10 @@ mod tests {
     fn brak_obsady_scina_jakosc() {
         let t = CityTuning::load_default().expect("tuning");
         let mut s = PublicServices::new(
-            vec![placowka(ServiceKind::School, 0, 1), placowka(ServiceKind::School, 1, 2)],
+            vec![
+                placowka(ServiceKind::School, 0, 1),
+                placowka(ServiceKind::School, 1, 2),
+            ],
             2,
         );
         s.all_mut()[1].staff = 0;

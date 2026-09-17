@@ -1,0 +1,39 @@
+[package]
+name = "magnat-game"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "magnat_game"
+path = "src/lib.rs"
+# Testy jednostkowe nie są benchmarkami — patrz komentarz w `engine/ecs/Cargo.toml`.
+bench = false
+
+[dependencies]
+magnat-core = { workspace = true }
+magnat-ecs = { workspace = true }
+magnat-jobs = { workspace = true }
+magnat-io = { workspace = true }
+# Lokalizacja: `Settings` trzyma język gracza, a `Locale` mieszka w `engine/ui`
+# od M3d. Crate jest bez GPU, więc zależność nie wnosi `wgpu` (bramka R-5).
+magnat-ui = { workspace = true }
+magnat-world = { workspace = true }
+magnat-voxel = { workspace = true }
+magnat-agents = { workspace = true }
+magnat-traffic = { workspace = true }
+magnat-economy = { workspace = true }
+magnat-supply = { workspace = true }
+magnat-firms = { workspace = true }
+magnat-policy = { workspace = true }
+magnat-macro = { workspace = true }
+magnat-city = { workspace = true }
+magnat-events = { workspace = true }
+magnat-spatial = { workspace = true }
+ron = { workspace = true }
+serde = { workspace = true }
+
+[lints]
+workspace = true

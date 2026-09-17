@@ -195,6 +195,25 @@ jobs:
         run: |
           cargo run --release -q -p magnat-headless -- m8miasto --size 4km --days 51             --citizens 3000 --hash-every 1440 --threads 1 --out m8_t1.hashes
           cargo run --release -q -p magnat-headless -- m8miasto --size 4km --days 51             --citizens 3000 --hash-every 1440 --threads 8 --expect m8_t1.hashes
+      - name: M9a — sesja gry, dziennik wejść i odtworzenie
+        # Kryterium WP2: nagrana sesja odtworzona daje ten sam łańcuch hashy stanu,
+        # a komendy odrzucone odrzucają się identycznie. Świat opisuje **plik
+        # parametrów**, nie argumenty — to jest zarazem kryterium WP13 („bez ani
+        # jednego argumentu opisującego świat").
+        shell: bash
+        run: |
+          cat > m9params.ron <<'RON'
+          (
+              world: (seed: 7, size: Small4km, epoch: Y1990, profile: Mixed, region: Lowland, difficulty: Normal),
+              scenario: (0),
+              variant: Worker,
+              opts: (citizens: 2000, commute_swaps: 20000, economy: true, micro: false),
+          )
+          RON
+          cargo run --release -q -p magnat-headless -- new-game --from m9params.ron --days 2               --hash-every 720 --price 250 --threads 1 --record m9.log.ron --out m9.hashes
+          cargo run --release -q -p magnat-headless -- new-game --replay m9.log.ron --days 2               --hash-every 720 --threads 8 --expect m9.hashes
+      - name: M9a — sesja, sloty i anulowanie generacji
+        run: cargo test --release -p magnat-game -- --include-ignored
       - name: M4 — dowód spójności mikro ↔ mezo (A1–A5, M4d/WP9)
         run: cargo test --release -p magnat-world --test lod -- --include-ignored
       - name: M4 — diagram IDM zgadza się z tabelą VDF (miernik dryfu R2)

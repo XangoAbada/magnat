@@ -104,7 +104,7 @@ pub fn zbuduj_firmy(
         // używa klucza przesuniętego o `SITE_KEY_BASE`. `Site.id` musi być tym drugim:
         // inaczej firma i jej zakład produkcyjny są dla kodu dwoma różnymi miejscami,
         // a rynek pracy nie ma jak dopisać pokrycia etatowego do właściwej linii.
-        let id = crate::plants::site_id(i);
+        let id = crate::world::plants::site_id(i);
         let id_swiata = site_id_swiata(i as u32);
         let widelki = widelki_zakladu(city, s);
         let mut site = Site::from_type(
