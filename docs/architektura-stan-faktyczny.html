@@ -1,0 +1,2344 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Magnat — Anatomia Silnika</title>
+<style>
+:root{
+  --bg:#0e1117; --bg2:#151a23; --bg3:#1b222d; --line:#2a3340; --line2:#3a4656;
+  --fg:#dfe6ef; --fg2:#9dabbd; --fg3:#6b7a8d;
+  --amber:#e8a33d; --cyan:#4cc9d9; --green:#5fc98a; --red:#e4675f; --violet:#a98cf0; --blue:#6b9ef0;
+  --mono:ui-monospace,"SF Mono","Cascadia Mono","JetBrains Mono",Consolas,monospace;
+  --sans:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+  --r:8px; --gut:16px;
+}
+:root:not([data-theme="dark"]){}
+@media (prefers-color-scheme: light){
+  :root:not([data-theme="dark"]){
+    --bg:#fbfbf9; --bg2:#f3f3ef; --bg3:#eaeae5; --line:#dcdcd4; --line2:#c4c4ba;
+    --fg:#1c2128; --fg2:#525c6a; --fg3:#7d8794;
+    --amber:#a8690b; --cyan:#0d7a8a; --green:#1f7a4a; --red:#b0382f; --violet:#6842b8; --blue:#2c5fb8;
+  }
+}
+:root[data-theme="light"]{
+  --bg:#fbfbf9; --bg2:#f3f3ef; --bg3:#eaeae5; --line:#dcdcd4; --line2:#c4c4ba;
+  --fg:#1c2128; --fg2:#525c6a; --fg3:#7d8794;
+  --amber:#a8690b; --cyan:#0d7a8a; --green:#1f7a4a; --red:#b0382f; --violet:#6842b8; --blue:#2c5fb8;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth; scroll-padding-top:70px}
+body{
+  margin:0; background:var(--bg); color:var(--fg);
+  font-family:var(--sans); font-size:15.5px; line-height:1.65;
+  -webkit-font-smoothing:antialiased;
+}
+a{color:var(--cyan); text-decoration:none; border-bottom:1px solid color-mix(in srgb,var(--cyan) 30%,transparent)}
+a:hover{border-bottom-color:var(--cyan)}
+code,kbd{font-family:var(--mono); font-size:.87em}
+code{background:var(--bg3); padding:.1em .38em; border-radius:4px; color:var(--amber); white-space:nowrap}
+h1,h2,h3,h4{line-height:1.25; font-weight:650; letter-spacing:-.015em}
+h2{font-size:1.75rem; margin:3.5rem 0 1rem; padding-bottom:.5rem; border-bottom:1px solid var(--line)}
+h3{font-size:1.2rem; margin:2.2rem 0 .7rem; color:var(--fg)}
+h4{font-size:1rem; margin:1.5rem 0 .5rem; color:var(--fg2); text-transform:uppercase; letter-spacing:.06em; font-size:.8rem}
+p{margin:.8rem 0}
+ul,ol{padding-left:1.3rem; margin:.7rem 0}
+li{margin:.3rem 0}
+hr{border:0; border-top:1px solid var(--line); margin:2.5rem 0}
+
+/* ── layout ───────────────────────────────────────────── */
+.top{
+  position:sticky; top:0; z-index:50; background:color-mix(in srgb,var(--bg) 88%,transparent);
+  backdrop-filter:blur(12px); border-bottom:1px solid var(--line);
+}
+.top-in{max-width:1500px; margin:0 auto; padding:.6rem var(--gut); display:flex; align-items:center; gap:1rem}
+.brand{font-family:var(--mono); font-weight:700; font-size:.95rem; letter-spacing:.02em}
+.brand i{color:var(--amber); font-style:normal}
+.top nav{display:flex; gap:.15rem; overflow-x:auto; flex:1; scrollbar-width:none}
+.top nav::-webkit-scrollbar{display:none}
+.top nav a{
+  font-size:.78rem; padding:.3rem .55rem; border-radius:6px; color:var(--fg2);
+  border:0; white-space:nowrap; font-family:var(--mono);
+}
+.top nav a:hover{background:var(--bg3); color:var(--fg)}
+.tgl{
+  background:var(--bg3); border:1px solid var(--line); color:var(--fg2); cursor:pointer;
+  border-radius:6px; padding:.3rem .6rem; font-size:.75rem; font-family:var(--mono);
+}
+.tgl:hover{color:var(--fg); border-color:var(--line2)}
+.wrap{max-width:1180px; margin:0 auto; padding:0 var(--gut) 6rem}
+
+/* ── hero ─────────────────────────────────────────────── */
+.hero{padding:3.5rem 0 1rem; border-bottom:1px solid var(--line); margin-bottom:1rem}
+.hero h1{font-size:clamp(2rem,5vw,3.1rem); margin:0 0 .5rem; letter-spacing:-.03em}
+.hero .sub{color:var(--fg2); font-size:1.05rem; max-width:64ch}
+.hero .meta{font-family:var(--mono); font-size:.76rem; color:var(--fg3); margin-top:1.2rem}
+
+/* ── stat strip ───────────────────────────────────────── */
+.stats{display:grid; grid-template-columns:repeat(5,1fr); gap:1px; background:var(--line); border:1px solid var(--line); border-radius:var(--r); overflow:hidden; margin:1.8rem 0}
+.stat{background:var(--bg2); padding:.8rem .9rem}
+.stat b{display:block; font-family:var(--mono); font-size:1.35rem; font-weight:650; color:var(--amber); line-height:1.2}
+.stat span{font-size:.72rem; color:var(--fg3); text-transform:uppercase; letter-spacing:.05em; display:block}
+@media(max-width:760px){.stats{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:440px){.stats{grid-template-columns:repeat(2,1fr)}}
+
+/* ── cards & callouts ─────────────────────────────────── */
+.card{background:var(--bg2); border:1px solid var(--line); border-radius:var(--r); padding:1.1rem 1.2rem; margin:1.2rem 0}
+.note{border-left:3px solid var(--cyan); background:var(--bg2); padding:.8rem 1rem; border-radius:0 var(--r) var(--r) 0; margin:1.2rem 0; font-size:.93rem}
+.note.warn{border-left-color:var(--amber)}
+.note.bad{border-left-color:var(--red)}
+.note.good{border-left-color:var(--green)}
+.note b:first-child{color:var(--fg)}
+
+/* ── tables ───────────────────────────────────────────── */
+.tw{overflow-x:auto; margin:1.2rem 0; border:1px solid var(--line); border-radius:var(--r)}
+table{border-collapse:collapse; width:100%; font-size:.86rem}
+th{background:var(--bg3); text-align:left; padding:.55rem .75rem; font-weight:600; color:var(--fg2); font-size:.75rem; text-transform:uppercase; letter-spacing:.05em; white-space:nowrap; border-bottom:1px solid var(--line)}
+td{padding:.5rem .75rem; border-bottom:1px solid var(--line); vertical-align:top}
+tbody tr:last-child td{border-bottom:0}
+tbody tr:hover{background:var(--bg2)}
+td code{white-space:nowrap}
+.t-file td:first-child{font-family:var(--mono); font-size:.8rem; color:var(--cyan); white-space:nowrap}
+
+/* ── file tree ────────────────────────────────────────── */
+.tree{font-family:var(--mono); font-size:.82rem; line-height:1.85}
+.tree details{margin:0}
+.tree summary{cursor:pointer; list-style:none; padding:.05rem .4rem; border-radius:5px; user-select:none}
+.tree summary::-webkit-details-marker{display:none}
+.tree summary:hover{background:var(--bg3)}
+.tree summary::before{content:"▸"; display:inline-block; width:1em; color:var(--fg3); transition:transform .15s}
+.tree details[open]>summary::before{transform:rotate(90deg)}
+.tree .d{color:var(--amber); font-weight:600}
+.tree .kids{padding-left:1.15rem; border-left:1px solid var(--line); margin-left:.45rem}
+.tree .f{display:grid; grid-template-columns:minmax(150px,220px) 1fr; gap:.8rem; padding:.05rem .4rem .05rem 1.4rem; border-radius:5px}
+.tree .f:hover{background:var(--bg2)}
+.tree .f b{font-weight:500; color:var(--fg)}
+.tree .f span{color:var(--fg3); font-family:var(--sans); font-size:.84rem; line-height:1.5}
+@media(max-width:700px){.tree .f{grid-template-columns:1fr; gap:0} .tree .f span{padding-left:0}}
+
+/* ── figures / animations ─────────────────────────────── */
+figure{margin:1.6rem 0; background:var(--bg2); border:1px solid var(--line); border-radius:var(--r); overflow:hidden}
+figure .fh{padding:.6rem .9rem; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:.7rem; flex-wrap:wrap; background:var(--bg3)}
+figure .fh h5{margin:0; font-size:.82rem; font-family:var(--mono); font-weight:600; letter-spacing:.02em; flex:1; min-width:150px}
+figure .body{padding:1rem}
+figcaption{padding:.7rem .9rem; border-top:1px solid var(--line); font-size:.82rem; color:var(--fg2)}
+.btn{
+  background:var(--bg2); border:1px solid var(--line2); color:var(--fg2); cursor:pointer;
+  border-radius:6px; padding:.25rem .65rem; font-size:.74rem; font-family:var(--mono);
+}
+.btn:hover{background:var(--bg3); color:var(--fg)}
+.btn.on{background:var(--amber); border-color:var(--amber); color:var(--bg)}
+.btn:disabled{opacity:.35; cursor:default}
+input[type=range]{accent-color:var(--amber); width:110px; vertical-align:middle}
+label.rg{font-size:.74rem; font-family:var(--mono); color:var(--fg2); display:inline-flex; align-items:center; gap:.4rem}
+svg{display:block; max-width:100%; height:auto}
+.legend{display:flex; gap:1rem; flex-wrap:wrap; font-size:.75rem; font-family:var(--mono); color:var(--fg2); padding:.5rem .9rem 0}
+.legend i{display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:.3rem; vertical-align:-1px}
+
+/* ── step list ────────────────────────────────────────── */
+.steps{list-style:none; padding:0; margin:0; counter-reset:s}
+.steps li{
+  counter-increment:s; padding:.45rem .6rem .45rem 2.4rem; position:relative;
+  border-radius:6px; font-size:.87rem; cursor:pointer; transition:background .12s;
+}
+.steps li::before{
+  content:counter(s); position:absolute; left:.5rem; top:.5rem; width:1.35rem; height:1.35rem;
+  border-radius:50%; background:var(--bg3); color:var(--fg3); font-family:var(--mono);
+  font-size:.7rem; display:grid; place-items:center; border:1px solid var(--line);
+}
+.steps li:hover{background:var(--bg3)}
+.steps li.act{background:var(--bg3)}
+.steps li.act::before{background:var(--amber); color:var(--bg); border-color:var(--amber)}
+.steps li.done::before{background:var(--green); color:var(--bg); border-color:var(--green)}
+.steps li b{color:var(--fg); font-weight:600}
+.steps li em{color:var(--fg3); font-style:normal; font-family:var(--mono); font-size:.78rem}
+
+/* ── pills / tags ─────────────────────────────────────── */
+.pill{display:inline-block; font-family:var(--mono); font-size:.68rem; padding:.1rem .45rem; border-radius:4px; border:1px solid var(--line2); color:var(--fg2); vertical-align:1px}
+.pill.ok{color:var(--green); border-color:color-mix(in srgb,var(--green) 40%,transparent); background:color-mix(in srgb,var(--green) 9%,transparent)}
+.pill.wip{color:var(--amber); border-color:color-mix(in srgb,var(--amber) 40%,transparent); background:color-mix(in srgb,var(--amber) 9%,transparent)}
+.pill.no{color:var(--fg3)}
+.pill.hot{color:var(--red); border-color:color-mix(in srgb,var(--red) 40%,transparent); background:color-mix(in srgb,var(--red) 9%,transparent)}
+
+/* ── phase bar ────────────────────────────────────────── */
+.phases{display:grid; grid-template-columns:repeat(13,1fr); gap:2px; margin:1.2rem 0 .4rem}
+.ph{background:var(--bg3); border-radius:4px; padding:.5rem .2rem; text-align:center; font-family:var(--mono); font-size:.72rem; border:1px solid var(--line); position:relative}
+.ph.done{background:color-mix(in srgb,var(--green) 22%,var(--bg2)); border-color:color-mix(in srgb,var(--green) 45%,transparent); color:var(--fg)}
+.ph.part{background:color-mix(in srgb,var(--amber) 22%,var(--bg2)); border-color:color-mix(in srgb,var(--amber) 45%,transparent); color:var(--fg)}
+.ph.todo{color:var(--fg3)}
+@media(max-width:800px){.phases{grid-template-columns:repeat(7,1fr)}}
+
+/* ── gap cards ────────────────────────────────────────── */
+.gap{border:1px solid var(--line); border-left:3px solid var(--red); border-radius:0 var(--r) var(--r) 0; background:var(--bg2); padding:.9rem 1.1rem; margin:1rem 0}
+.gap.med{border-left-color:var(--amber)}
+.gap.low{border-left-color:var(--fg3)}
+.gap h4{margin:0 0 .35rem; text-transform:none; letter-spacing:0; font-size:.98rem; color:var(--fg); font-weight:650}
+.gap .where{font-family:var(--mono); font-size:.74rem; color:var(--cyan); margin-bottom:.4rem}
+.gap p{margin:.35rem 0; font-size:.9rem}
+.gap .why{color:var(--fg2); font-size:.85rem; border-top:1px dashed var(--line); padding-top:.4rem; margin-top:.5rem}
+
+/* ── extend grid ──────────────────────────────────────── */
+.ext{display:grid; grid-template-columns:repeat(auto-fit,minmax(270px,1fr)); gap:.9rem; margin:1.2rem 0}
+.ex{background:var(--bg2); border:1px solid var(--line); border-radius:var(--r); padding:.9rem 1rem}
+.ex h4{margin:0 0 .3rem; text-transform:none; letter-spacing:0; font-size:.95rem; color:var(--amber); font-weight:650}
+.ex code{font-size:.78em}
+.ex p{font-size:.85rem; margin:.3rem 0}
+.ex .cost{font-family:var(--mono); font-size:.72rem; color:var(--fg3); margin-top:.5rem; display:block}
+
+.two{display:grid; grid-template-columns:1fr 1fr; gap:1.2rem}
+@media(max-width:860px){.two{grid-template-columns:1fr}}
+.mono-sm{font-family:var(--mono); font-size:.78rem; color:var(--fg2)}
+@media(max-width:820px){
+  .genwrap{grid-template-columns:1fr !important}
+  figure .fh{gap:.45rem}
+  h2{font-size:1.4rem}
+  .hero{padding-top:2rem}
+}
+html,body{overflow-x:hidden; max-width:100%}
+figure .body{overflow-x:auto}
+.dim{color:var(--fg3)}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="top-in">
+    <div class="brand">MAGNAT<i>/</i>anatomia</div>
+    <nav>
+      <a href="#stan">Stan</a>
+      <a href="#mapa">Mapa</a>
+      <a href="#czas">Czas</a>
+      <a href="#determinizm">Determinizm</a>
+      <a href="#drzewo">Pliki</a>
+      <a href="#swiat">Świat</a>
+      <a href="#miasto">Miasto</a>
+      <a href="#ludzie">Ludzie</a>
+      <a href="#ruch">Ruch</a>
+      <a href="#pieniadz">Pieniądz</a>
+      <a href="#zakup">Zakup</a>
+      <a href="#lancuch">Łańcuch</a>
+      <a href="#praca">Praca</a>
+      <a href="#firmy">Firmy</a>
+      <a href="#rozszerzanie">Rozszerzanie</a>
+      <a href="#luki">Luki</a>
+    </nav>
+    <button class="tgl" id="theme">◐</button>
+  </div>
+</header>
+
+<div class="wrap">
+
+<div class="hero">
+  <h1>Anatomia silnika</h1>
+  <p class="sub">Co naprawdę stoi w repozytorium po siedmiu fazach — nie co obiecuje plan.
+  Każde zdanie poniżej pochodzi z odczytu kodu i plików <code>data/</code>, nie z dokumentów
+  <code>docs/implementation-plan/</code>.</p>
+  <p class="meta">stan: <span id="head-commit">d2ad731</span> (po M7f) + niescommitowany M8a &nbsp;·&nbsp; 169 065 linii Rust &nbsp;·&nbsp; 24 crate'y</p>
+</div>
+
+<div class="stats">
+  <div class="stat"><b>24</b><span>crate'y</span></div>
+  <div class="stat"><b>1&nbsp;269</b><span>testów</span></div>
+  <div class="stat"><b>169k</b><span>linii Rust</span></div>
+  <div class="stat"><b>90</b><span>dóbr</span></div>
+  <div class="stat"><b>74</b><span>receptury</span></div>
+  <div class="stat"><b>96</b><span>typów zakładu</span></div>
+  <div class="stat"><b>46</b><span>ról zawodowych</span></div>
+  <div class="stat"><b>34</b><span>gramatyki</span></div>
+  <div class="stat"><b>108</b><span>skrótów <code>ponytail:</code></span></div>
+  <div class="stat"><b>0</b><span><code>TODO</code> w kodzie</span></div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<h2 id="stan">1. Stan faktyczny</h2>
+
+<p>Magnat to symulator miasta i gospodarki na własnym silniku w Rust. Nie ma tu Bevy, nie ma
+Unity — ECS, generator świata, renderer <code>wgpu</code>, nawigacja i model ekonomiczny są napisane
+od zera. Jedyna reguła, która organizuje wszystko inne: <b>ten sam seed daje ten sam przebieg</b>,
+niezależnie od liczby wątków i platformy.</p>
+
+<div class="phases">
+  <div class="ph done">M0</div><div class="ph done">M1</div><div class="ph done">M2</div>
+  <div class="ph done">M3</div><div class="ph done">M4</div><div class="ph part">M5</div>
+  <div class="ph part">M6</div><div class="ph done">M7</div><div class="ph part">M8</div>
+  <div class="ph todo">M9</div><div class="ph todo">M10</div><div class="ph todo">M11</div>
+  <div class="ph todo">M12</div>
+</div>
+<p class="mono-sm dim">zielony = bramki zamknięte · bursztyn = otwarte na jednym punkcie lub w toku · szary = nietknięte</p>
+
+<h3>Co stoi dzisiaj</h3>
+<p>Miasto 4–16 km powstaje z ziarna: teren z erozją i rzekami, drogi z L-systemu, kwartały, parcele,
+budynki z gramatyki bryłowej, zakłady, dzielnice z nazwami. Zasiedla je do 400 tys. mieszkańców,
+którzy mają rodziny, plany dnia, pracę, potrzeby i wiedzę o mieście. Jeżdżą — pieszo, rowerem,
+komunikacją, autem, taksówką — po prawdziwym grafie, z korkami i parkingami. Kupują w konkretnych
+sklepach po cenach, które te sklepy same ustaliły. Sklepy zamawiają towar u zakładów, zakłady
+produkują go z receptur, kopalnie wyczerpują złoża. Firmy zatrudniają, licytują płacę, zadłużają się
+i bankrutują. Wszystko to biegnie razem w jednym przebiegu (<code>headless m7-miasto</code>).</p>
+
+<div class="note">
+<b>Mechanizm <code>K-12</code> w akcji — złapany na żywo.</b> W trakcie pisania tego dokumentu
+<code>cargo check --workspace</code> nie przechodził: M8a dopisał siedem wariantów podatkowych do
+<code>DecisionReason</code> (<code>TaxAssessed</code>, <code>TaxSettled</code>, <code>TaxOverdue</code>
+i cztery dalsze), a <code>engine/ui/src/inspect/reason.rs</code> miał przez to niepełny
+<code>match</code>. To nie była usterka, tylko <b>zamierzone działanie</b>: enum bez
+<code>#[non_exhaustive]</code> i <code>match</code> bez <code>_</code> łamią build dopóty, dopóki ktoś
+nie napisze zdania dla gracza — w obu językach. Kilkanaście minut później teksty były na miejscu
+i cały workspace kompiluje się czysto. <span class="dim">Nie da się dorzucić decyzji, której gracz
+nie zrozumie — bo kompilator na to nie pozwoli.</span>
+</div>
+
+<h3>Czego nie ma</h3>
+<p>Nie ma gry. Nie ma menu, kreatora świata, zapisu do slotu, postaci gracza ani ekranu, na którym
+da się cokolwiek kliknąć poza inspekcją punktu — to jest <b>M9</b>. Nie ma dźwięku, animacji postaci,
+wnętrz ani trybu pierwszoosobowego (<b>M11</b>). Nie ma giełdy, marki, badań, ubezpieczeń ani związków
+zawodowych (<b>M10</b>). Nie ma sieci przesyłowych, wyborów, usług publicznych ani zdarzeń losowych
+(<b>M8</b> — właśnie się zaczyna od strony podatkowej). Nie ma moddingu, replay ani trybu 50×
+(<b>M12</b>).</p>
+
+<h3>Co da się dziś uruchomić</h3>
+<div class="tw"><table>
+<thead><tr><th>Komenda</th><th>Co robi</th></tr></thead>
+<tbody>
+<tr><td><code>magnat --seed 0xC0FFEE --size 8km</code></td><td>Okno z wygenerowanym miastem. Kamera orbitalna/swobodna/z poziomu oczu, 16 nakładek danych (<kbd>F3</kbd>), inspekcja punktu i mieszkańca prawym przyciskiem.</td></tr>
+<tr><td><code>headless generate</code> / <code>verify</code></td><td>Generacja bez GPU z raportem czasów pasów; <code>verify</code> puszcza dwa przebiegi i porównuje hashe.</td></tr>
+<tr><td><code>headless preview --field value</code></td><td>Rysuje wybrane pole generatora do PNG — wysokość, spływ, biom, strefy, wartość gruntu.</td></tr>
+<tr><td><code>headless m3day</code></td><td><b>Artefakt M3.</b> 30 dni gry na ~120 tys. mieszkańców przez systemy ECS: histogram doby, rozkład czasu dojazdu, ruch mezo, dwa bilanse do zera.</td></tr>
+<tr><td><code>headless m5shop</code></td><td><b>Artefakt M5.</b> Miasto z rynkiem detalicznym: transakcje, obroty, odmowy z powodami, niezmiennik pieniądza co do grosza, CPI, karty sklepów.</td></tr>
+<tr><td><code>headless m7-miasto</code></td><td><b>Artefakt M7.</b> Pierwszy przebieg, w którym wszystko idzie razem: firmy, rynek pracy, decyzje AI, detal, produkcja, makro, rozbicie emisji pieniądza.</td></tr>
+<tr><td><code>headless century</code></td><td>100 lat w trybie demograficznym — populacja, gospodarstwa, bezrobocie, pustostany rok po roku.</td></tr>
+<tr><td><code>balansator run / gate</code></td><td>N ziaren × D dób, metryki dobowe do RON, potem werdykt 11 bramek (stabilność cen, brak hiperinflacji, HHI, zachowanie pieniądza, determinizm, wyjaśnialność…).</td></tr>
+<tr><td><code>goods-graph check</code></td><td>Walidator grafu produkcji: osiągalność każdego towaru, ujście, ostrzeżenia o pojedynczym źródle podaży.</td></tr>
+</tbody></table></div>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<h2 id="mapa">2. Mapa zależności</h2>
+
+<p>Graf crate'ów nie jest przypadkowy — to on wymusza, kto czego <b>nie może</b> zobaczyć.
+<code>sim/firms</code> nie zależy od <code>sim/economy</code>, więc firma AI nie potrafi wyrazić
+kosztu rywala nawet gdyby chciała. <code>sim/supply</code> nie zna <code>Books</code>, więc pieniądz
+wychodzi z łańcuchu dostaw <i>listą faktów do zaksięgowania</i>, nigdy przelewem. To są bariery
+typowe, nie samodyscyplina.</p>
+
+<figure>
+<div class="fh"><h5>graf zależności crate'ów</h5>
+  <button class="btn" data-dep="all">wszystko</button>
+  <button class="btn" data-dep="engine">silnik</button>
+  <button class="btn" data-dep="sim">symulacja</button>
+</div>
+<div class="body" id="depgraph"></div>
+<figcaption>Strzałka „A → B” znaczy „A zna B”. Kliknij węzeł, żeby podświetlić jego zależności
+w górę i w dół. <b>Nie ma tu ani jednego cyklu</b> — <code>engine/core</code> jest dołem, który
+nie widzi nikogo, i dlatego mieszka w nim słownik domenowy (<code>vocab.rs</code>): bez tego
+<code>TransportMode</code> w <code>sim/traffic</code> i <code>NeedKind</code> w <code>sim/agents</code>
+zamknęłyby pętlę.</figcaption>
+</figure>
+
+<div class="two">
+<div class="card">
+<h4 style="margin-top:0">Trzy jawne punkty wymiany</h4>
+<p>Miejsca, w których trait ma <b>znanego z nazwy i numeru fazy</b> drugiego konsumenta —
+jedyne wyjątki od reguły „brak drugiej implementacji = brak abstrakcji”.</p>
+<ul style="font-size:.88rem">
+<li><code>TravelOracle</code> — M3 pyta, M4 odpowiada. W testach <code>StraightLineTravel</code>.</li>
+<li><code>Wholesale</code> — M5 pyta, M6 odpowiada (<code>ChainSupply</code>). Zaślepka <code>ExternalSupplier</code> jest za feature'em i domyślnie <b>wyłączona</b>.</li>
+<li><code>TaxEngine</code> — M5 zostawił hak, M8 go wypełnia (<code>CityTaxEngine</code>). Do dziś stoi w nim <code>NoTax</code>: mnożnik 1, zera.</li>
+</ul>
+</div>
+<div class="card">
+<h4 style="margin-top:0">Dwa odwrócone porty</h4>
+<p>Tam, gdzie kierunek zależności nie pozwalał na naturalne ułożenie, port mieszka po stronie
+liścia, a implementacja po stronie, która ma dane.</p>
+<ul style="font-size:.88rem">
+<li><code>FreightOracle</code> — port w <code>sim/supply</code>, implementacja <code>RoadFreight</code> w <code>sim/traffic</code>. Wstrzykiwana w <code>tools/headless/src/retail.rs</code>.</li>
+<li><code>Deposits</code> — port w <code>sim/supply</code>, złoża należą do <code>sim/world</code> (<code>K-13</code>).</li>
+<li><code>PolicyView</code> — <b>jedna metoda</b> <code>metric()</code>; <code>&amp;World</code> nigdy tu nie wchodzi, bo to jest granica asymetrii informacji.</li>
+</ul>
+</div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<h2 id="czas">3. Czas i pętla ticku</h2>
+
+<p>Kalendarz ma <b>360 dni</b>: dwanaście miesięcy po trzydzieści, bez lat przestępnych. Tydzień ma
+siedem dni i <b>celowo nie dzieli miesiąca</b> — 30 nie dzieli się przez 7, więc pierwszy dzień roku
+co roku wypada gdzie indziej. Rytm tygodniowy jest realny w handlu i grafikach zmianowych,
+a agregacja wykresów idzie po dekadach (3 × 10 dni), nie po tygodniach.</p>
+
+<figure>
+<div class="fh"><h5>doba symulacji — kto się budzi kiedy</h5>
+  <button class="btn" id="tick-play">▶ start</button>
+  <label class="rg">tempo <input type="range" id="tick-speed" min="1" max="60" value="18"></label>
+  <span class="mono-sm" id="tick-read">00:00 · pon · dzień 0</span>
+</div>
+<div class="body" id="tickfig"></div>
+<figcaption>Każdy system deklaruje <code>Cadence</code>, a scheduler filtruje go po numerze ticku.
+Minuta jest jednostką bazową: <code>MarketSystem</code>, <code>ChainSystem</code>,
+<code>FirmSystem</code> i <code>TrafficSystem</code> chodzą co minutę, ale większość ich pracy jest
+<b>shardowana</b> — zakład numer <i>i</i> przegląda zapasy w minucie <code>i % 60</code>, slot
+magazynowy scala partie w minucie <code>i % 1440</code>, firma decyduje operacyjnie w minucie
+<code>mix64(key) % 1440</code>. Dzięki temu nie ma piku pracy o północy i nie ma kolejki, której
+rozmiar zależy od tego, ile jest zakładów.</figcaption>
+</figure>
+
+<div class="tw"><table>
+<thead><tr><th>Jednostka</th><th>Wartość</th><th>Co się wtedy dzieje</th></tr></thead>
+<tbody>
+<tr><td><code>MICRO_TICK_MS</code></td><td>100 ms</td><td>Podkrok ruchu mikro. 600 podkroków na jedną minutę gry (<code>MICRO_STEPS_PER_TICK</code>), ale IDM całkuje wewnątrz jednego wywołania, krokiem 500 ms, maks. 120 podkroków.</td></tr>
+<tr><td>minuta</td><td>tick bazowy</td><td>Ruch mezo (<code>freeze_minute → unjam → dispatch</code>), produkcja linia po linii, rozliczenie intencji zakupu, decyzje operacyjne firm, kolejka DES mieszkańców.</td></tr>
+<tr><td>godzina</td><td>60 min</td><td>Uzupełnienie półek z zaplecza, przegląd kaskady niedoboru, rozstrzygnięcie zapytań ofertowych B2B, polityki godzinowe zdelegowanych zakładów.</td></tr>
+<tr><td>doba</td><td>1 440 min</td><td>Plan dnia każdego mieszkańca, hazardy demograficzne, obserwacja konkurencji → polityki → przecena → zamówienia, lista płac, rynek pracy, kontrola wypłacalności, tablica cen, CPI.</td></tr>
+<tr><td>miesiąc</td><td>30 dób · 43 200 min</td><td>Wypłaty, budżet gospodarstwa (koperty), domknięcie ksiąg zakładu, rachunek mediów, decyzje taktyczne firm, dobór partnerów i śluby, migracja, stopa bazowa banku.</td></tr>
+<tr><td>kwartał</td><td>90 dób</td><td>Podniesienie stanu do modelu makro (<code>lift</code>), porównanie wariantów „co jeśli”, decyzje strategiczne firm.</td></tr>
+<tr><td>rok</td><td>360 dób</td><td>Domknięcie roku podatkowego (M8a, w toku), inflacja r/r.</td></tr>
+</tbody></table></div>
+
+<div class="note">
+<b>Zegar stoi na minucie właśnie rozdawanej, nie na następnej.</b> Brzmi jak detal, ale przy
+odwrotnej konwencji każda podróż trwałaby o minutę dłużej, niż mówi plan — i rozjazd widać dopiero
+po kilkudziesięciu godzinach gry, jako dryf planów dnia względem ruchu.
+</div>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<h2 id="determinizm">4. Determinizm — trzy filary</h2>
+
+<p>Determinizm nie jest tu dyscypliną ani konwencją. Jest wymuszony przez typy, graf zależności
+i testy, które łamią build. To ma znaczenie praktyczne: bez niego nie da się odtworzyć błędu
+z raportu gracza, nie da się porównać dwóch przebiegów balansatora i nie da się wznowić gry
+z zapisu bez dryfu.</p>
+
+<figure>
+<div class="fh"><h5>trzy filary i co by było bez nich</h5></div>
+<div class="body" id="detfig"></div>
+</figure>
+
+<div class="two">
+<div class="card">
+<h4 style="margin-top:0">1 · Pieniądz nie ma wariantu float</h4>
+<p><code>Money</code> to <code>i64</code> w groszach, generowany makrem newtype'ów w
+<code>engine/core/src/types.rs</code>. Nie ma konstruktora z <code>f64</code>. To samo dotyczy
+<code>Qty</code> (milisztuki) i <code>Mass</code> (gramy).</p>
+<p class="mono-sm">Test statyczny <code>P9</code> skanuje ścieżkę pieniężną rdzenia i wymaga zera
+floatów. Test <code>P1</code> puszcza milion operacji na ośmiu kontach i sprawdza
+<code>Σ sald == podaż</code> <b>co do grosza</b>, co 50 tys. kroków.</p>
+</div>
+<div class="card">
+<h4 style="margin-top:0">2 · RNG bez stanu globalnego</h4>
+<p><code>rng(world_seed, StreamId, entity_index, tick)</code> jest czystą funkcją czterech
+argumentów. Każdy podsystem ma własny <code>StreamId</code> z zakresu przypisanego fazie
+(M1: 100–119, M2: 120–139, … M7: 220–239).</p>
+<p class="mono-sm">Konsekwencja: dołożenie systemu w M7 <b>nie przesuwa</b> sekwencji widzianej przez
+system z M5. Narodziny mieszkańca nie zmieniają losowań pozostałych — pilnuje tego test
+<code>det_demography_independence</code>.</p>
+</div>
+<div class="card">
+<h4 style="margin-top:0">3 · Brak libm w symulacji</h4>
+<p><code>engine/core/src/det_math.rs</code> (1 113 linii) zastępuje <code>ln</code>,
+<code>exp</code>, <code>pow</code>, <code>sqrt</code>, trygonometrię i <code>softmax</code>
+implementacjami w stylu musl, zbudowanymi <b>wyłącznie</b> z <code>+ − × ÷</code> i <code>sqrt</code> —
+operacji, które IEEE-754 zaokrągla poprawnie na każdej platformie.</p>
+<p class="mono-sm">Dokładność ≤ 1 ULP wobec referencji 60-cyfrowej (nie wobec libm platformy).
+Złote odciski międzyplatformowe w <code>tests/det_math_accuracy.rs</code>. Nawet <code>atan2</code>
+jest zakazany — <code>city/blocks.rs</code> sortuje kąty pseudokątem.</p>
+</div>
+<div class="card">
+<h4 style="margin-top:0">+ Kolejność iteracji jest kontraktem</h4>
+<p>Zakaz iterowania po <code>HashMap</code>/<code>HashSet</code> w kodzie symulacji.
+Zamiennik: <code>SeededMap</code> (<code>indexmap</code> z własnym hasherem) albo
+<code>BTreeMap</code>. Sąsiedztwo D8 ma zamrożoną kolejność w <code>NEIGHBORS_8</code> —
+jej zmiana przestawiłaby <b>każdą rzekę w każdym świecie</b>.</p>
+<p class="mono-sm">Równoległość: dwa systemy biegną obok siebie tylko gdy ich zbiory dostępów nie
+konfliktują, a <code>Access</code> wylicza się <b>z typów zapytania</b>, nie z deklaracji. Jedyny
+kanał wpływu to bufory komend — sortowane po <code>(SystemId, target, seq)</code>.</p>
+</div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<h2 id="drzewo">5. Drzewo katalogów</h2>
+
+<p>Podział jest dwuwarstwowy. <code>engine/</code> to silnik: nie zna pojęcia „sklep”, „mieszkaniec”
+ani „podatek”. <code>sim/</code> to symulacja: zna domenę, ale nie zna GPU. Jedynym wyjątkiem jest
+<code>engine/ui</code>, które zależy od <code>sim/*</code> — bo jest warstwą prezentacji, nie silnikiem.</p>
+
+<div class="card tree">
+
+<details open><summary><span class="d">engine/</span> <span class="dim">— silnik, 10 crate'ów, ~40k linii</span></summary>
+<div class="kids">
+
+  <details><summary><span class="d">core/</span> <span class="dim">— typy bazowe, determinizm, słownik domenowy. Nie zależy od niczego.</span></summary>
+  <div class="kids">
+    <div class="f"><b>types.rs</b><span>Newtype'y z kontraktu §2: <code>Money</code> (i64 grosze), <code>Qty</code>, <code>Mass</code>, <code>Tick</code>, <code>SimMinute</code> oraz dwa zaciskające — <code>Q</code> (0..100) i <code>Mood</code> (−100..100). Brak wariantu float z konstrukcji.</span></div>
+    <div class="f"><b>money.rs</b><span>Arytmetyka pieniądza. <code>split_proportional</code> dzieli kwotę na wagi tak, że suma części równa się oryginałowi <b>co do grosza</b> — reszta z dzielenia idzie do pierwszej pozycji.</span></div>
+    <div class="f"><b>fixed.rs</b><span><code>Fx</code> — Q32.32 na <code>i64</code>; mnożenie i dzielenie liczą w <code>i128</code>, więc przepełnia się dopiero wynik.</span></div>
+    <div class="f"><b>det_math.rs</b><span>1&nbsp;113 linii. Deterministyczne <code>ln</code>, <code>exp</code>, <code>pow</code>, <code>sqrt</code>, <code>sin/cos/tan</code>, <code>softmax</code>, <code>softmax_pick</code>. Rozkład argumentu przez <code>to_bits</code> + wielomian minimaksowy. Zero libm, zero <code>mul_add</code>.</span></div>
+    <div class="f"><b>rng.rs</b><span><code>rng(seed, StreamId, entity, tick)</code> — xoshiro256++ z SplitMix64 jako mieszalnikiem. Ok. 15 wariantów <code>StreamId</code>, rozdzielonych zakresami per faza.</span></div>
+    <div class="f"><b>vocab.rs</b><span>~37 enumów domenowych generowanych makrem: <code>NeedKind</code>, <code>StockCat</code>, <code>TransportMode</code>, <code>RoadClass</code>, <code>TaxKind</code>, <code>SpendCategory</code>, <code>ClaimPriority</code>, <code>Biome</code>, <code>FirmStrategy</code>… Istnieje po to, żeby <code>sim/*</code> nie tworzyły cyklu.</span></div>
+    <div class="f"><b>decision.rs</b><span><b>68 wariantów</b> <code>DecisionReason</code>, bez <code>#[non_exhaustive]</code>. To jest mechanizm wyjaśnialności: <code>match</code> w UI nie ma ramienia <code>_</code>, więc dopisanie powodu łamie build, dopóki ktoś nie napisze tekstu dla gracza.</span></div>
+    <div class="f"><b>time.rs</b><span>Kalendarz 360-dniowy, <code>SimCalendar</code>, <code>MinuteOfDay</code>, <code>DayOfWeek</code>, <code>OpenHours</code>, <code>Cadence::due(tick)</code>, <code>SimClock</code>.</span></div>
+    <div class="f"><b>hash.rs</b><span><code>StateHasher</code> nad xxh3, <code>StateHash(u128)</code>, trait <code>HashState</code>. Float wchodzi wyłącznie przez <code>to_bits()</code> z kanonizacją NaN — nie ma implementacji dla <code>f32</code>/<code>f64</code>, żeby autor komponentu musiał podjąć tę decyzję świadomie.</span></div>
+    <div class="f"><b>arena.rs</b><span><code>Arena&lt;T&gt;</code> + <code>ArenaHandle&lt;T&gt;</code> dla kategorii, które nie są encjami: partie towaru, oferty. Typowany uchwyt — <code>ArenaHandle&lt;A&gt;</code> nie podstawi się pod <code>&lt;B&gt;</code> (test <code>trybuild</code>).</span></div>
+    <div class="f"><b>collections.rs</b><span><code>SeededMap</code>/<code>SeededSet</code> — <code>indexmap</code> z własnym hasherem. Zamiennik <code>HashMap</code> o deterministycznej kolejności iteracji.</span></div>
+    <div class="f"><b>entity.rs · ids.rs</b><span><code>Entity{index,generation}</code> i typowane newtype'y nad nim: <code>CitizenId</code>, <code>FirmId</code>, <code>SiteId</code>.</span></div>
+    <div class="f"><b>geom.rs · schema.rs · assets.rs · weather.rs</b><span>Całkowitoliczbowa geometria siatki; tożsamość schematu komponentu pod migracje M12; odnalezienie <code>data/</code>; deterministyczna zaślepka pogody (właściciel docelowy: M8).</span></div>
+  </div></details>
+
+  <details><summary><span class="d">ecs/</span> <span class="dim">— archetypowy ECS w układzie SoA. Jedyny crate z <code>unsafe</code>.</span></summary>
+  <div class="kids">
+    <div class="f"><b>chunk.rs</b><span>Tu siedzi cały <code>unsafe</code>. Chunk to <b>jedna alokacja pod jednym wskaźnikiem</b> z kolumnami per komponent, <code>rows_per_chunk</code> dobrane pod cel 64 KiB.</span></div>
+    <div class="f"><b>archetype.rs</b><span>Archetyp = posortowany zestaw <code>ComponentId</code> + lista chunków + <b>krawędzie grafu</b> do przenoszenia encji przy insert/remove, żeby nie szukać archetypu docelowego po zestawie.</span></div>
+    <div class="f"><b>query.rs</b><span><code>Query&lt;Q,F&gt;</code> z filtrami <code>With</code>/<code>Without</code>. Kolumny rozwiązywane <b>raz na chunk</b>, nie raz na wiersz. <code>par_for_each</code>, <code>par_fold</code>.</span></div>
+    <div class="f"><b>access.rs</b><span><code>Access</code> — zbiory czytanych i pisanych komponentów, wyliczane <b>z typów zapytania</b>. Deklaracja systemu nie może rozjechać się z tym, co system robi.</span></div>
+    <div class="f"><b>system.rs</b><span>Scheduler. DAG budowany w czterech krokach: kolejność kanoniczna → krawędzie z jawnych <code>before</code>/<code>after</code> → dopiero potem krawędzie z konfliktów dostępów. Ta kolejność jest naprawiona świadomie: konflikt nie ma kierunku, więc wcześniej brał się z hasha nazwy i <code>before</code> między dwoma wyłącznymi systemami dawał cykl losowo.</span></div>
+    <div class="f"><b>command.rs</b><span>Bufor komend per system, bez zamka. <code>flush_commands</code> sortuje po <code>(SystemId, target, seq)</code> i aplikuje w barierze.</span></div>
+    <div class="f"><b>world.rs · resources.rs · entity_store.rs · component.rs</b><span>Rejestr komponentów, zasoby globalne (jedyne poprawne miejsce na <code>Arena&lt;T&gt;</code>), generacje encji, wskaźniki funkcji do haszowania i debugowania nieznanego typu.</span></div>
+  </div></details>
+
+  <details><summary><span class="d">nav/</span> <span class="dim">— routing dwualgorytmowy: CCH dla jezdni, ALT dla pieszych</span></summary>
+  <div class="kids">
+    <div class="f"><b>graph.rs</b><span><code>NavGraphs</code> — <b>cztery warstwy</b> (Road, Foot, Bike, Rail) w CSR, wspólna przestrzeń indeksów węzłów, przesiadki krawężnikowe. <code>TurnMovement</code>, <code>NodeControl</code>, mosty z tonażem.</span></div>
+    <div class="f"><b>cch.rs</b><span>1&nbsp;340 linii. Customizable Contraction Hierarchies: <code>build_order</code> z topologii, <code>contract</code>, <code>customize(weights)</code>, zapytanie dwukierunkowe. Trzy <code>ChGraph</code> (po jednym na profil wag) stoją na <b>jednej</b> kolejności kontrakcji.</span></div>
+    <div class="f"><b>alt.rs</b><span>A* z heurystyką landmarkową (8 punktów). Wynik dokładnie taki jak z Dijkstry, tylko szybciej.</span></div>
+    <div class="f"><b>cache.rs</b><span><code>RouteCache</code> z kluczem <code>(from,to,mode,hour_bucket,profile)</code> — <b>bez minuty wyjazdu</b>, bo trasa zmienia się rzadziej niż jej czas. LRU jest sekcyjne, nie globalne.</span></div>
+    <div class="f"><b>matrix.rs</b><span><code>TravelTimeMatrix</code> dzielnica × dzielnica × godzina × środek. Odpowiada na „ile zajmie dojazd” bez liczenia trasy, a treść bierze z <b>obserwacji faktycznych przejazdów</b>, nie z modelu. Gęsta, ok. 4,1 MB.</span></div>
+    <div class="f"><b>rebuild.rs</b><span>Przebudowa budżetowana <b>pracą na tick</b> (1024 jednostki), nie czasem zegarowym — żeby moment podmiany był deterministyczny.</span></div>
+    <div class="f"><b>router.rs</b><span>Trait <code>Router</code> z jedną metodą. <code>RouteQuery::passenger</code> / <code>::freight</code>, trzy profile wag, <code>observe_trip</code> karmiący macierz.</span></div>
+  </div></details>
+
+  <details><summary><span class="d">voxel/</span> <span class="dim">— chunki 32³, greedy meshing, LOD z agregacji</span></summary>
+  <div class="kids">
+    <div class="f"><b>chunk.rs</b><span>32×32×32 voxele (32 m × 32 m × 16 m, voxel 5 dm w pionie). Trzy warianty składowania: jednorodny / RLE / gęsty — bo większość chunków to samo powietrze albo sama skała.</span></div>
+    <div class="f"><b>world.rs</b><span>Świat 16 km ma 4,2 mln slotów chunków — gęsto to 134 GB, więc voxele <b>nie są składowane</b>, tylko materializują się z <code>ColumnSource</code>. Promienie LOD <code>[192, 512, 1400, 4000]</code> m, histereza 150‰ przeciw migotaniu. Budżet jest asercją: przekroczenie obniża promień, nie wyczerpuje pamięć.</span></div>
+    <div class="f"><b>mesh.rs</b><span>Greedy meshing, 6 przebiegów. Quady scalają się tylko przy identycznej czwórce <code>(materiał, AO w 4 rogach, słońce, światło punktowe)</code>. Sąsiedztwo na granicy bierze się z otoczki <code>pad=1</code>, więc mesh nie zależy od tego, czy sąsiad jest w pamięci.</span></div>
+    <div class="f"><b>lod.rs</b><span>Głosowanie większościowe po sześcianie <code>2^lod</code>, remis → niższy <code>MaterialId</code>. Agregat liczy się <b>z <code>ColumnSource</code></b>, nie z LOD0 — inaczej pierścień 4 km wymagałby 64× więcej chunków niż mieści budżet.</span></div>
+    <div class="f"><b>edit.rs · material.rs</b><span>Dwufazowa kolejka edycji (ta sama reguła co bufor komend ECS); materiały jako dane z <code>data/materials/</code>, nie enum.</span></div>
+  </div></details>
+
+  <details><summary><span class="d">render/</span> <span class="dim">— wgpu, 6 passów, 7 shaderów WGSL</span></summary>
+  <div class="kids">
+    <div class="f"><b>renderer/arena.rs</b><span>Geometria <b>wszystkich</b> chunków w jednej parze buforów z listą wolnych bloków. Powód jest po stronie sterownika: bufor na chunk = 8&nbsp;000 wiązań na klatkę.</span></div>
+    <div class="f"><b>camera.rs</b><span>Pozycja w <code>f64</code>, ale do shaderów idą pozycje <b>względem kamery</b> — przy 16&nbsp;000 m najmniejszy odstęp <code>f32</code> to ~1 mm i geometria zaczyna drgać.</span></div>
+    <div class="f"><b>clusters.rs</b><span>Froksele 16×9×24 = 3&nbsp;456 klastrów. Arytmetyka podziału w jednym miejscu — trzy jej kopie rozjechałyby się przy pierwszej zmianie wymiarów i wyglądałyby jak błąd materiału.</span></div>
+    <div class="f"><b>shadow.rs</b><span>4 kaskady, 2048 px, 1&nbsp;200 m. Rozmiar z promienia sfery otaczającej (niezależny od orientacji kamery) + snapowanie do tekseli = cienie nie migoczą.</span></div>
+    <div class="f"><b>pick.rs</b><span>Picking przez drugi pass do tekstury <code>R32Uint</code> z porównaniem głębi <code>Equal</code> — przesłanianie wychodzi za darmo. Twardy cap 65&nbsp;536 instancji.</span></div>
+    <div class="f"><b>graph.rs</b><span><code>RenderGraph</code> z jawną deklaracją zasobów. Cykl albo zapis do niezadeklarowanego zasobu to błąd <b>przy budowie grafu</b>, nie w runtime.</span></div>
+    <div class="f"><b>shaders/*.wgsl</b><span><code>clusters</code> (compute), <code>voxel</code>, <code>water</code>, <code>far_terrain</code>, <code>pedestrian</code>, <code>sky</code>, <code>post</code>. Test w CI waliduje każdy przez <code>naga</code> — bez GPU.</span></div>
+  </div></details>
+
+  <details><summary><span class="d">ui/</span> <span class="dim">— buduje <i>co</i> ma być na ekranie, nie wie nic o wgpu</span></summary>
+  <div class="kids">
+    <div class="f"><b>loc.rs</b><span><code>LocKey</code> jest interned (indeks, nie łańcuch). Katalog ładuje <code>pl.ron</code> i <code>en.ron</code> naraz, a test <b>łamie build</b>, gdy zbiory kluczy się różnią. Pluralizacja: polski 3 formy (1 · 2–4 · 5+), angielski 2.</span></div>
+    <div class="f"><b>inspect/reason.rs</b><span><b>1&nbsp;478 linii</b>, jedyne miejsce w całej grze, gdzie <code>DecisionReason</code> zamienia się w tekst. <code>match</code> wyczerpujący, bez <code>_</code>. Test sprawdza z drugiej strony: każdy z 68 wariantów musi dać niepusty napis w obu językach.</span></div>
+    <div class="f"><b>inspect/{citizen,shop,firm,supply,trip,timeline}.rs</b><span>Karty inspekcji. Zasada powtórzona w każdej: <b>karta nie liczy niczego sama</b> — dostaje migawkę i zamienia ją w tekst. Gdyby liczyła u siebie, gracz widziałby drugi rachunek obok tego, na którym stoi symulacja.</span></div>
+    <div class="f"><b>widgets.rs · time.rs · selection.rs · names.rs</b><span>Rysowanie w <code>egui</code>; sterowanie tempem gry z ograniczeniem nadganiania; wskazywanie encji (z atrapą bez GPU do testów); składanie imienia z dwóch indeksów do pul <code>data/names/</code> — to nie jest lokalizacja UI.</span></div>
+  </div></details>
+
+  <details><summary><span class="d">io/ · spatial/ · jobs/ · devtools/</span></summary>
+  <div class="kids">
+    <div class="f"><b>io/snapshot.rs</b><span>Snapshot jest <b>listą sekcji, nie płaskim buforem</b>. Katalog nieskompresowany, więc <code>read_directory</code> czyta kilkaset kB zamiast rozpakowywać 300 MB. <code>rewrite_sections</code> podmienia jedną sekcję bez ruszania reszty — warunek zapisu przyrostowego i migracji w M12.</span></div>
+    <div class="f"><b>spatial/csr.rs</b><span>Indeks statyczny SoA. <code>CategoryGrid</code> odpowiada na „najbliższa piekarnia” bez przeglądania wszystkich budynków.</span></div>
+    <div class="f"><b>spatial/dynamic.rs</b><span>Przebudowa co tick sortowaniem zliczającym. Determinizm nie z sortowania na końcu, tylko z układu przebiegu: każdy wątek przepisuje encje w rosnącym indeksie do <b>rozłącznego</b> zakresu komórek. Test porównuje bity pozycji przy 1, 4 i 8 wątkach.</span></div>
+    <div class="f"><b>spatial/tree.rs</b><span><code>ParcelTree</code> — quadtree ze straddlerami. Istnieje, bo parcele różnią się powierzchnią o trzy rzędy wielkości (400 m² vs 20 ha) i siatka jednorodna albo tonie w kandydatach, albo w pustych komórkach.</span></div>
+    <div class="f"><b>spatial/field.rs</b><span><code>ScalarField</code> — <code>u16</code> zamiast <code>f32</code>, bo pole milionowe waży wtedy 2 MB i wchodzi do tekstury R16 nakładki bez konwersji.</span></div>
+    <div class="f"><b>jobs/lib.rs</b><span>Cienka warstwa nad <b>jawną instancją</b> rayona (nie globalną pulą procesu). Determinizm z dyscypliny redukcji: wynik składa się po <b>indeksie chunka</b>, nigdy po kolejności zakończenia.</span></div>
+    <div class="f"><b>devtools/*</b><span>Konsola z przestrzenią nazw <code>&lt;obszar&gt;.&lt;akcja&gt;</code>, inspektor ECS działający gdy UI nie działa, <code>MetricSink</code> pierścieniowy (sesja stuletnia to 190 mln ticków), profiler kompilujący się do niczego bez feature'a, zapis PNG bez zależności zewnętrznej.</span></div>
+  </div></details>
+
+</div></details>
+
+<details open><summary><span class="d">sim/</span> <span class="dim">— symulacja, 10 crate'ów, ~110k linii</span></summary>
+<div class="kids">
+
+  <details><summary><span class="d">world/</span> <span class="dim">— generator terenu (P1–P12) i miasta (14 etapów), populacja startowa</span></summary>
+  <div class="kids">
+    <div class="f"><b>pipeline.rs</b><span><code>PASSES: &amp;[GenPass]</code> — <b>płaska lista</b>, bez drzewa obiektów i bez traitu. Kolejność listy jest kontraktem: jej zmiana zmienia każdy świat z każdego ziarna.</span></div>
+    <div class="f"><b>gen/*.rs</b><span>Dwanaście przebiegów: <code>landmask</code>, <code>height</code>, <code>uplift</code>, <code>flood</code>, <code>flow</code>, <code>erosion</code>, <code>water</code>, <code>geology</code>, <code>deposits</code>, <code>temperature</code>, <code>precip</code>, <code>biome</code>. Szczegóły w rozdziale <a href="#swiat">Świat</a>.</span></div>
+    <div class="f"><b>terrain.rs</b><span>Fasada zapytań po generacji — leniwa materializacja 1 m: bikubiczne podniesienie siatki 4 m, szum detalu ±0,35 m, wycięcie koryt z sieci <b>wektorowej</b>.</span></div>
+    <div class="f"><b>query.rs</b><span><code>TerrainQuery</code> — <b>jedyny</b> kontrakt terenu dla dalszych faz (<code>K-13</code>). Generator miasta widzi teren wyłącznie przez <code>&amp;dyn TerrainQuery</code>.</span></div>
+    <div class="f"><b>city/lsystem.rs</b><span>L-system arterii na kolejce priorytetowej. Aksjomat: wachlarz pięciu propozycji z każdej bramy. Reguły: domknięcie ślepego końca, kontynuacja, odgałęzienie z degradacją klasy, rozwidlenie Y, domknięcie pierścienia.</span></div>
+    <div class="f"><b>city/blocks.rs</b><span>Obchód półkrawędzi grafu planarnego. Kąty sortowane <b>pseudokątem</b>, nie <code>atan2</code> (zakaz libm). Kontrola charakterystyki Eulera.</span></div>
+    <div class="f"><b>city/parcels.rs</b><span>Trzy przebiegi: geometria (rekurencyjne cięcie OBB do 8 poziomów), sieć (wstawienie ulic lokalnych), fronty (indeks CSR segmentów).</span></div>
+    <div class="f"><b>city/zoning.rs · districts.rs · pattern.rs</b><span>Punktacja stref z twardymi wetami (woda, zalew, spadek), przydział kwotowy, wygładzanie większością sąsiadów. Dzielnice: Voronoi Dijkstry po grafie sąsiedztwa kwartałów, granice dognane do dróg kolektorowych. Wzorzec globalny przełącza się po pierścieniach promienia.</span></div>
+    <div class="f"><b>city/grammar.rs · derive.rs</b><span>DSL gramatyki bryłowej (<code>Split</code>, <code>Repeat</code>, <code>Inset</code>, <code>Extrude</code>, <code>Comp</code>, <code>Choice</code>, <code>If</code>…) i jego interpreter na pudełkach zorientowanych. 34 pliki gramatyk w <code>data/grammar/</code>.</span></div>
+    <div class="f"><b>city/build/*</b><span>Obrys kurczony do skutku przeciw ośmiu punktom kontrolnym, niwelacja do 0,5 m, podział kondygnacji na lokale, obsada stanowiskami. Derywacja <b>równolegle</b>, składanie sekwencyjnie w kolejności parcel.</span></div>
+    <div class="f"><b>city/sites/place.rs · closure.rs</b><span>Etap 7: liczba zakładów z propagacji popytu wstecz po hipergrafie receptur (12 rund), potem <code>supply_closure_check</code> — osiągalność, import przez przepustowość bram, sześć rund równoważenia do stosunku podaży do popytu w [0,85; 1,30].</span></div>
+    <div class="f"><b>city/value.rs</b><span>Dwa przebiegi wyceny. <code>pass_1</code> <b>przed</b> zabudową (bo wartość gruntu jest wejściem doboru gramatyki), <code>pass_2</code> po — już z dostępem do pracy i handlu. 12 czynników.</span></div>
+    <div class="f"><b>population/*</b><span>Jedenaście kroków. Liczba mieszkańców z liczby etatów, wieki z piramidy epoki, składy gospodarstw, praca zachłannie w dzielnicy, mieszkania sortowane pod korelację dochód↔lokal, potem 200 tys. prób zamiany pod medianę dojazdu — liczoną <b>realnie przez router</b>, nie po linii prostej.</span></div>
+    <div class="f"><b>nav_build.rs · traffic_build.rs</b><span>Z <code>RoadNetwork</code> powstają cztery warstwy grafu; walidacja wymaga, żeby każda parcela z frontem drogowym miała dojście pieszo. Potem router, flota (1 auto na gospodarstwo z rzutem 430‰, tylko gdy jest gdzie zaparkować), parkingi i 6 linii komunikacji na 50 tys. mieszkańców.</span></div>
+  </div></details>
+
+  <details><summary><span class="d">agents/</span> <span class="dim">— mieszkaniec: 140 B stanu gorącego, plan dnia, demografia, relacje</span></summary>
+  <div class="kids">
+    <div class="f"><b>components.rs</b><span>13 komponentów SoA z jawnym paddingiem, razem <b>140 B</b>. Test sprawdza <code>size_of</code> <i>i</i> <code>offset_of</code> — rozjazd łamie build.</span></div>
+    <div class="f"><b>store.rs</b><span>Slab blokowy z klasami <code>[4,8,12,16,24,32]</code> na rzeczy zmiennej długości (relacje, wiedza, plan), bo muszą wejść do hasha i snapshotu. 33. wpis wiedzy nie powiększa bloku — <b>wypycha najsłabszy</b> (ocena × świeżość).</span></div>
+    <div class="f"><b>des.rs</b><span>Kolejka zdarzeń: koło czasu 2&nbsp;880 kubełków minutowych + <code>BTreeMap</code> przelewowy. <b>Lazy scheduling</b>: w kolejce stoi wyłącznie <i>następne</i> zdarzenie mieszkańca — 6,4 MB zamiast dwunastu razy tyle.</span></div>
+    <div class="f"><b>planner/{canvas,commitments,rhythm,tasks}.rs</b><span>Kanwa 24 slotów bez nachodzenia i bez przechodzenia przez północ, wypełniana w czterech fazach. Szczegóły w rozdziale <a href="#ludzie">Ludzie</a>.</span></div>
+    <div class="f"><b>needs.rs</b><span>12 potrzeb. Spadek <b>nie jest odejmowaniem</b>: <code>f(t) = t·tempo/6000</code>, spadek = <code>f(t₁) − f(t₀)</code>. Dzięki temu shardowanie 1/60 daje bit w bit ten sam wynik co przeliczanie co minutę — tolerancja 0, bez stanu na resztę.</span></div>
+    <div class="f"><b>household.rs</b><span>Gospodarstwo jest osobną encją i <b>jednostką ekonomiczną</b> — mieszkaniec ma tylko portfel. Sześciu członków inline, siódmy i dalsi w przelewie. <code>classify</code> liczy typ ze składu, nie z deklaracji.</span></div>
+    <div class="f"><b>social.rs</b><span>Status jako funkcja siedmiu czynników z wagami z danych. <b>Klasa nie jest przechowywana</b> — to przedział statusu, więc mobilność społeczna wychodzi sama. Plotka to jedyny sposób rozchodzenia się wiedzy o miejscach.</span></div>
+    <div class="f"><b>demography/*</b><span>Krok dobowy, sharding 1/360. Hazardy roczne stosują się <b>raz w roku</b>, jedną wartością — nie 360 razy po 1/360. Umieralność 13 pasm, płodność 7 pasm z parzystością, choroby, partnerstwo, rozwody.</span></div>
+    <div class="f"><b>migration.rs</b><span><b>Jedyny regulator populacji</b> — nie ma spawnowania do liczby. Napływ wymaga wakatu <i>i</i> pustostanu naraz. Odpływ ma hazard bezrobocia przemnożony przez udział dorosłych bez pracy — to główne wzmocnienie pętli ujemnej.</span></div>
+    <div class="f"><b>places.rs</b><span>Dwa traity i nic więcej: <code>PlaceProvider</code> i <code>TravelOracle</code>. <b>Żadna sygnatura nie wspomina o cenie, <code>GoodId</code>, magazynie ani grafie.</b> Cztery atrapy, w tym panikująca (dowód, że wołanie idzie przez trait) i odmawiająca.</span></div>
+  </div></details>
+
+  <details><summary><span class="d">traffic/</span> <span class="dim">— mezo jest źródłem prawdy, mikro tylko rysuje</span></summary>
+  <div class="kids">
+    <div class="f"><b>mezo.rs</b><span><code>settle_edge</code> — <b>jedyne</b> miejsce powstawania czasu przejazdu i paliwa. Paliwo w mikrolitrach: mililitry dawałyby kilkanaście procent błędu na krawędzi 40 m, a funkcja woła się ~8 razy na pojazd na minutę.</span></div>
+    <div class="f"><b>mode.rs</b><span>Koszt uogólniony <b>w groszach</b> — nie ma ani jednej wagi bez jednostki. Sześć opcji, siedem składników dyskomfortu. <b>Argmin z nawykiem, nie logit</b>: logit losowałby przy każdej podróży i dawał inny wynik w tej samej sytuacji.</span></div>
+    <div class="f"><b>oracle.rs</b><span><code>plan(commit)</code> jest wspólne dla <code>estimate</code> i <code>begin_trip</code> — plan i podróż muszą mówić tą samą liczbą. Przy <code>commit=false</code> parking jest sprawdzany, nie rezerwowany.</span></div>
+    <div class="f"><b>trip/minute.rs</b><span><code>freeze_minute → unjam → dispatch →</code> pętla po kopcu. Prędkości zamrożone na całą minutę, więc kolejność przetwarzania nie wpływa na niczyj czas przejazdu.</span></div>
+    <div class="f"><b>micro/{idm,lanes,pedestrians}.rs</b><span>IDM + MOBIL. <b>Kierunek kalibracji jest odwrotny do planu</b>: to IDM dopasowuje się do VDF, bo VDF ma oparcie w pomiarze, a parametry IDM to liczby z podręcznika. Stąd <code>s0=120 cm</code> zamiast podręcznikowych 200.</span></div>
+    <div class="f"><b>parking.rs</b><span>Każdy pojazd poza siecią zajmuje miejsce. Koszt wyboru = dojście × wartość czasu + cena × 2 h. Parking przyuliczny to zwykły <code>ParkingLot</code>.</span></div>
+    <div class="f"><b>transit/{plan,sim}.rs</b><span>Dojście ≤ 800 m, przejazd bezpośredni albo <b>jedna</b> przesiadka. Kurs bez kierowcy jest odwołany. Pasażer czekający ponad 45 min idzie pieszo.</span></div>
+    <div class="f"><b>freight.rs</b><span><code>RoadFreight</code> — prawdziwe kilometry z grafu, profil <code>HeavyDay</code>/<code>HeavyNight</code>. Koszt liczony z <b>centymetrów</b>: dzielenie na kilometry przed mnożeniem zrównywałoby dostawę na 900 m z dostawą na 100 m.</span></div>
+    <div class="f"><b>systems.rs</b><span><code>TrafficSystem</code> — <b>jedyne</b> miejsce, gdzie ruch zapisuje do świata. Jedno miejsce do przejrzenia okiem.</span></div>
+  </div></details>
+
+  <details><summary><span class="d">economy/</span> <span class="dim">— pieniądz, sklep, cena, praca, finanse firm. 43 pliki.</span></summary>
+  <div class="kids">
+    <div class="f"><b>books.rs</b><span>Konta miasta. Saldo jest <b>prywatne</b>, jedyne przypisanie to <code>set_balance</code>. Niezmiennik: <code>Σ sald == podaż</code>. Siedem pozycji ewidencji emisji, każda zmieniana osobnym kanałem.</span></div>
+    <div class="f"><b>ledger.rs</b><span>Księga <b>jednego zakładu</b>, prawdziwy podwójny zapis: dodatnia kwota = Wn, ujemna = Ma, bilans zamyka się jako <code>Σ sald == 0</code>. Plan 21 kont, zapis najwyżej czteroliniowy i <code>Copy</code> — bez alokacji przy 450 tys. sprzedaży na dobę.</span></div>
+    <div class="f"><b>kernel.rs</b><span>Rdzeń liczbowy: bez encji, bez LOD, bez <code>&amp;World</code>, bez alokacji. Ten sam kod liczy cenę w mezo i w makro — inaczej dryf agregatów pochodziłby z rozjazdu dwóch implementacji, czyli mierzylibyśmy własny błąd zamiast błędu przybliżenia.</span></div>
+    <div class="f"><b>market/*.rs</b><span>Rynek detaliczny jako zasób świata <b>i</b> <code>PlaceProvider</code>. Osiem plików: <code>api</code>, <code>fulfil</code>, <code>close</code>, <code>restock</code>, <code>price_day</code>, <code>household</code>, <code>lifecycle</code>, <code>readout</code>. Ścieżka zakupu w rozdziale <a href="#zakup">Zakup</a>.</span></div>
+    <div class="f"><b>pricing.rs</b><span><code>PricePolicy</code> — <b>jeden typ dla gracza i AI</b>. Różnica to wyłącznie <code>PriceController.delegated</code>: kto ustawia wariant, nie który kod liczy.</span></div>
+    <div class="f"><b>cpi.rs</b><span>Laspeyres z zamrożonym koszykiem. <code>pₜ</code> to średnia <b>ważona wolumenem z cen transakcyjnych</b> — oferta, której nikt nie kupuje, nie jest ceną. Test statyczny pilnuje, że nie ma pola „inflacja”.</span></div>
+    <div class="f"><b>budget.rs</b><span>Koperty wydatków per <code>StockCat</code>. Koperta jest <b>dwiema rzeczami naraz</b>: limitem i mianownikiem członu ceny w funkcji użyteczności.</span></div>
+    <div class="f"><b>credit.rs</b><span>Uruchomienie kredytu <b>tworzy</b> depozyt, spłata kapitału <b>niszczy</b>, odsetki są zwykłym przelewem. Cała inflacja kredytowa emerguje z tego jednego zdania. Bank centralny: Taylor w arytmetyce całkowitej, krok ±50 bp/miesiąc.</span></div>
+    <div class="f"><b>labor/*</b><span><b>Nie istnieje tabela płac.</b> Jest widełka roli, stawka konkretnej oferty i mediana zawartych umów. Pensja rośnie wtedy i tylko wtedy, gdy oferta wisi bez kandydata.</span></div>
+    <div class="f"><b>corpfin/*</b><span>Cztery instrumenty: kredyt (jedyny tworzy pieniądz), leasing, obligacja, faktoring. <code>Arrear</code> to <b>jedna</b> struktura — dla dłużnika zobowiązanie, dla wierzyciela należność. Upadłość z kolejnością zaspokajania.</span></div>
+    <div class="f"><b>firmlife/*</b><span>Najpierw znikają firmy, potem powstają. Mieszkaniec zakładający firmę widzi <b>tylko swoją dzielnicę</b> i tylko to, co z ulicy widać. Limit dzienny wybiera najlepszych, nie pierwszych z brzegu.</span></div>
+    <div class="f"><b>ai_run/facts.rs</b><span>Granica asymetrii informacji. Firma widzi <b>cudze ceny półkowe</b>, nigdy cudze koszty, marże, zapasy ani gotówkę. Wąska z rozmysłu: dopisanie pola ma być decyzją, nie odruchem.</span></div>
+    <div class="f"><b>tax.rs</b><span>Hak <code>TaxEngine</code>. Do dziś <code>NoTax</code>, ale mechanizm jest w pełni okablowany: VAT <b>wyłuskuje się z ceny brutto</b>, nie dolicza; akcyza kwotowo od masy; PIT u źródła.</span></div>
+  </div></details>
+
+  <details><summary><span class="d">supply/</span> <span class="dim">— katalog, partia, zakład, transport, rynek B2B</span></summary>
+  <div class="kids">
+    <div class="f"><b>catalog/*.rs</b><span>90 dóbr, 74 receptury. Walidacja bilansu masy <code>Σ wejść + woda == Σ wyjść + strata</code> przy ładowaniu. <b>Cykle w grafie są dozwolone i pożądane</b> (rafineria ↔ elektrownia) — cykl bez wejścia z importu po prostu nie zostanie osiągnięty.</span></div>
+    <div class="f"><b>batch.rs · store/*</b><span>Partia żyje w arenie, nie w ECS: rzędu 600 tys. sztuk, rotacja co tick, nikt nie pyta przekrojowo. Pole wiodące to <b>masa w gramach</b>; sztuki i objętość są jej funkcjami. Slot trzyma partie w porządku FEFO.</span></div>
+    <div class="f"><b>store/invariants.rs</b><span>Trzy niezmienniki zwracające <b>liczby, nie <code>bool</code></b>: bilans masy (tolerancja 0 g), brak ujemnych stanów, bilans kosztu (tolerancja 0 gr).</span></div>
+    <div class="f"><b>plant/produce.rs</b><span><b>Jedna</b> funkcja produkcji dla wszystkich LOD, iterująca minuta po minucie. Bramki startu w kolejności: zmiana → receptura → przezbrojenie → klasa maszyny → prąd → woda → wsad → złoże → <b>wszystkie wejścia naraz</b> → miejsce w magazynie.</span></div>
+    <div class="f"><b>plant/dock.rs</b><span>Rampa jako kolejka M/D/c. Nadmiar ponad stanowiska i plac wylewa się <b>na ulicę</b> i bierze udział w zatorze.</span></div>
+    <div class="f"><b>mining.rs</b><span>Koncentracja efektywna maleje z pierwiastkiem sześciennym pozostałej masy — najlepsze żyły idą pierwsze. Koszt ma człon <b>kwadratowy</b> w wyczerpaniu, więc złoże zamyka się samo: w pewnym momencie import jest tańszy i nikt tego nie musiał zaprogramować.</span></div>
+    <div class="f"><b>transport.rs</b><span><code>Store::load</code>/<code>unload</code> <b>wymagają</b> <code>TransportOrderId</code>, a ten nadaje tylko <code>Transport::order</code>. Na tym stoi test <code>prop_no_teleport</code>.</span></div>
+    <div class="f"><b>transport/consolidate.rs</b><span>Clarke–Wright. Koszt trasy dzielony między zlecenia proporcjonalnie do masy; podstawienie płaci się raz za pojazd, nie raz za przystanek.</span></div>
+    <div class="f"><b>b2b/*.rs</b><span>Sprzedawcą jest zakład, którego <b>linia produkuje</b> ten towar — nie ten, który go ma na stanie. Wycena jest czystą funkcją kosztu z marżą i szumem: <b>nie ma negocjacji</b>. Kontrakty długoterminowe z trzema cennikami (stały, indeksowany, z widełkami) i karą za niedostarczenie.</span></div>
+    <div class="f"><b>shortage.rs</b><span>Kaskada jako <b>drabina, nie tabela progów</b>: <code>Ok → Buffer → Throttled → SpotSearch → Importing → Substituted → Halted</code>. W górę o jeden szczebel na przegląd, w dół <b>od razu</b> na szczebel progowy — jedna z dwóch przyczyn efektu byczego bicza.</span></div>
+    <div class="f"><b>trace.rs</b><span>Ślad partii <b>dziedziczy się w dół</b>: wyrób z oznaczonego wsadu dostaje flagę automatycznie. <code>TraceOrigin</code> mówi wprost, gdzie ślad się kończy — złoże, import, zapas startowy albo „nieśledzone”.</span></div>
+  </div></details>
+
+  <details><summary><span class="d">firms/</span> <span class="dim">— firma jako dane, HR, trzy poziomy decyzji AI</span></summary>
+  <div class="kids">
+    <div class="f"><b>key.rs</b><span><b>Dwie numeracje, świadomie.</b> <code>FirmKey(u64)</code> to monotoniczny licznik sterujący shardingiem decyzji i strumieniem RNG; <code>FirmId</code> to encja w świecie. Indeks encji bywa recyklingowany, klucz nie — firma założona po bankructwie sąsiada nie odziedziczy jego minuty decyzyjnej.</span></div>
+    <div class="f"><b>firm.rs · site.rs</b><span>Firma nie jest encją ECS — cały stan w <code>BTreeMap</code>, bo iteracja wyznacza kolejność decyzji i wypłat. <b>Pieniądza tu nie ma.</b> <code>SitePnlMonth::margin_bp()</code> zwraca <code>None</code> przy zerowym utargu: „nie wiem” i „strata” to dwa różne zdania.</span></div>
+    <div class="f"><b>hr/productivity.rs</b><span><code>Qty</code> jest milietatem. Mnożniki techniki i zarządzania stosowane <b>osobno, każdy z własnym dzieleniem</b> — kolejność jest częścią wyniku. Zły nastrój obniża pracę, nie zeruje jej.</span></div>
+    <div class="f"><b>hr/turnover.rs</b><span>Presja odejścia w <b>punktach bazowych na dobę</b> (promile wpychały rotację na 30 %/rok). Cztery kanały, wygrywa najsilniejszy i on daje powód. Zwolnienie wymaga <b>obu</b>: słabej oceny i upomnień.</span></div>
+    <div class="f"><b>ai/ops.rs</b><span>Doba. Mechanizm to <b>kotwica, nie krok</b>: cel liczony od kotwicy kursu plus korekty bieżące, więc ustanie bodźca przywraca kotwicę zamiast całkować w wojnę cenową. Próg ruchu 100 bp / 2 doby, żeby karta inspekcji nie była 32× „przesunąłem marżę o 3 bp”.</span></div>
+    <div class="f"><b>ai/tactical.rs</b><span>Miesiąc. Zamknięcie po 2–3 nieprzerwanych miesiącach straty, liczonych wstecz i <b>przerywanych pierwszym miesiącem bez pomiaru</b>. Zmiana kursu tylko dwa przejścia — bo tylko dwa da się uzasadnić zmierzoną liczbą.</span></div>
+    <div class="f"><b>ai/reaction.rs</b><span>Kwartał. Wyzwala się <b>przy zmierzonej utracie udziału</b>, nigdy przy samym pojawieniu się konkurenta: koniunkcja „sprzedaż spadła ≥ 20 %” <i>i</i> „przybyło rywali”. Kampania ma termin i po nim firma wraca do kursu sama.</span></div>
+    <div class="f"><b>personality.rs</b><span>Osobowość firmy jest <b>czystą funkcją cech dyrektora-mieszkańca</b>. Zmiana dyrektora zmienia firmę natychmiast i w całości. Firma bez dyrektora losuje raz, sumą dwóch rzutów — rozkład z wierzchołkiem w środku.</span></div>
+    <div class="f"><b>manager.rs</b><span><b>Trzy kanały wpływu</b>, żeby HR nie był dekoracją: produktywność 0,85–1,15 · straty 1,15–0,85 · rotacja 1,40–0,70. <b>Rozpiętość degraduje</b>, więc dobry menedżer jest zasobem rzadkim i przeciąganie go ma sens ekonomiczny.</span></div>
+    <div class="f"><b>labor_policy.rs</b><span><code>wage_ceiling</code> to <b>jedyny hamulec spirali płacowej</b>: górny kraniec widełek roli przesunięty o zapas marży zakładu. Zbyt tani kandydat jest <b>sygnałem ryzyka, nie okazją</b>.</span></div>
+  </div></details>
+
+  <details><summary><span class="d">policy/</span> <span class="dim">— jeden ewaluator reguł dla gracza i AI (<code>K-11</code>)</span></summary>
+  <div class="kids">
+    <div class="f"><b>ast.rs</b><span><b>Jednostka jest typem</b>: <code>Value</code> to Money/Qty/Days/Bp/Count/Enum, a nie liczba z komentarzem. Limity: 8 reguł, głębokość 3, promień 10 km.</span></div>
+    <div class="f"><b>eval.rs</b><span>Pierwsza pasująca reguła wygrywa. <code>Decided&lt;T&gt;</code> <b>nie da się zbudować bez</b> <code>DecisionReason::PolicyApplied</code>. Nieznana metryka = <code>None</code> = reguła się nie wyzwala — sklep bez ceny konkurenta <b>nie</b> przecenia do zera.</span></div>
+    <div class="f"><b>validate.rs</b><span>Błędy: niezgodność jednostek, mieszanie brutto z netto, akcja poza domeną, za głęboko. Ostrzeżenia: reguła nieosiągalna, możliwa oscylacja. Sprzedaż poniżej kosztu bywa świadoma — mieszanie podstaw ceny nie.</span></div>
+    <div class="f"><b>view.rs</b><span><code>PolicyView</code> ma <b>jedną</b> metodę. <code>&amp;World</code> nigdy tu nie wchodzi — to jest granica asymetrii informacji, a nie optymalizacja.</span></div>
+    <div class="f"><b>explain.rs</b><span>Zwraca drzewo z <b>odczytanymi wartościami</b> po obu stronach porównania, nie samą strukturą. Alokuje — dlatego jest osobno od <code>eval</code>, wołane raz na otwarcie karty, nie raz na towar na dobę.</span></div>
+  </div></details>
+
+  <details><summary><span class="d">macro/</span> <span class="dim">— model zagregowany i „co jeśli”. <b>Ani jednej reguły ekonomicznej.</b></span></summary>
+  <div class="kids">
+    <div class="f"><b>lift.rs</b><span><b>Jedyne miejsce widzące <code>World</code>.</b> Zbiera mieszkańców w komórki dzielnica × klasa, buduje firmy z ksiąg. <code>lower()</code> <b>nie istnieje</b> — M7 nigdy nie rozwija prognozy z powrotem do świata.</span></div>
+    <div class="f"><b>step/goods.rs</b><span><b>Jedyne miejsce, gdzie mezo i makro się różnią</b>: ten sam <code>purchase_score</code> i <code>softmax_shares</code>, ale makro traktuje udziały jako wagi podziału popytu komórki zamiast losować jeden sklep.</span></div>
+    <div class="f"><b>whatif.rs</b><span><code>margines()</code> to <b>deklarowany błąd</b> modelu: rośnie z horyzontem, maleje z pierwiastkiem liczby klientów. Zwycięzca istnieje dopiero, gdy przewaga go przekroczy. Na zewnątrz wychodzi „który wariant” i „w którą stronę” — <b>nigdy kwota</b>.</span></div>
+  </div></details>
+
+  <details><summary><span class="d">city/</span> <span class="pill wip">M8a w toku</span> <span class="dim">— pieniądz publiczny, niescommitowane</span></summary>
+  <div class="kids">
+    <div class="f"><b>code.rs</b><span><code>TaxCode</code> z <code>data/city/tax.ron</code>. Klasa VAT przypisuje się po <b>domenie klucza towaru</b> (12 domen, lista zamknięta), akcyza po konkretnym kluczu i <b>kwotowo</b> (grosze za kilogram).</span></div>
+    <div class="f"><b>calc.rs</b><span>Czysta arytmetyka siedmiu danin, zero floatów. PIT zaliczkowo narastająco, więc suma dwunastu zaliczek równa się podatkowi rocznemu co do grosza. Podatek od nieruchomości metodą różnicy skumulowanej.</span></div>
+    <div class="f"><b>charge.rs</b><span>Automat <code>Assessed → Settled | Overdue → Settled | Abated</code> z niezmiennikiem: naliczone = zapłacone + zaległe + umorzone, <b>zero tolerancji</b>.</span></div>
+    <div class="f"><b>budget.rs</b><span><code>CityBudget</code> <b>nie ma pola gotówki</b> — saldo miasta stoi w <code>Books</code>. Okno dwunastu miesięcy wpływów, bo CIT przychodzi raz w roku i planowanie z miesiąca na miesiąc dałoby raz hossę i jedenaście razy głód. Przy braku gotówki: <b>najpierw cięcie</b> (odwracalne), dopiero potem emisja obligacji.</span></div>
+  </div></details>
+
+  <details><summary><span class="d">snapshot/</span> <span class="dim">— jedyny kanał symulacja → render</span></summary>
+  <div class="kids">
+    <div class="f"><b>lib.rs</b><span>Wyłącznie POD, zero <code>Vec</code>/<code>Arc</code> w ładunku — <code>RenderSnapshot</code> jest <code>Copy</code>. <code>cargo tree</code> w CI pilnuje, że <code>engine/render</code> nie zależy od żadnego innego <code>sim/*</code>.</span></div>
+  </div></details>
+
+</div></details>
+
+<details><summary><span class="d">tools/</span> <span class="dim">— klient, headless, balansator, walidator grafu</span></summary>
+<div class="kids">
+  <div class="f"><b>magnat/</b><span>Klient graficzny. 16 nakładek przez jeden mechanizm <code>TerrainOverlay</code>. Strumieniowanie chunków z limitem <b>32 na klatkę</b> — zamiast sekundy zawieszenia przy skoku kamery. Przelot pomiarowy w pięciu etapach z metryką „1 % low”.</span></div>
+  <div class="f"><b>headless/</b><span>17 scenariuszy — de facto lista tego, co da się dziś zobaczyć. Moduły biblioteczne (<code>population</code>, <code>retail</code>, <code>plants</code>, <code>firms</code>, <code>labor</code>, <code>full</code>) są mostami między fazami i mają więcej niż jednego konsumenta.</span></div>
+  <div class="f"><b>balansator/</b><span>11 bramek z progami. <b>Nie liczy niczego, co liczy symulacja</b> — CPI, HHI i mediany przychodzą gotowe z <code>Market::balance_sample</code>; balansator liczy wyłącznie progi. Cztery scenariusze różnią się <b>jednym zdarzeniem</b>.</span></div>
+  <div class="f"><b>goods-graph/</b><span>Walidator grafu produkcji (test CI od M2) i generator szkieletów towarów: <code>new &lt;klucz&gt;</code> wypisuje wzór i od razu waliduje katalog, żeby było widać, że towar bez źródła nie przejdzie.</span></div>
+</div></details>
+
+<details><summary><span class="d">data/</span> <span class="dim">— 117 plików RON. To jest powierzchnia rozszerzania.</span></summary>
+<div class="kids">
+  <div class="f"><b>goods/ · recipes/</b><span>90 dóbr w 6 plikach, 74 receptury w 8. Klucze sortowane alfabetycznie przy ładowaniu — identyfikator to pozycja po sortowaniu, nie kolejność w pliku.</span></div>
+  <div class="f"><b>site_types/</b><span>96 typów zakładu w 9 branżach. Obsada = <code>per_10000m2 × powierzchnia/10000 + per_site</code>, minimum <code>min</code>. Mianownik 10&nbsp;000 m² wymuszony rozpiętością: biuro 22 m²/stanowisko, pole 1&nbsp;920.</span></div>
+  <div class="f"><b>grammar/</b><span>34 gramatyki bryłowe — kamienica secesyjna, blok galeriowiec, hala przemysłowa, zagroda, wieżowiec… Każda deklaruje <code>applies</code> (kiedy pasuje), <code>massing</code> i drzewo reguł.</span></div>
+  <div class="f"><b>buildings/ · jobs/ · chains/</b><span>109 archetypów budynków, 46 ról zawodowych z wagami produktywności sumującymi się do 1000, szablony łańcuchów przemysłowych i progi wejścia sieci zewnętrznych.</span></div>
+  <div class="f"><b>locale/pl.ron · en.ron</b><span>212 kluczy w każdym (12 przestrzeni: <code>ui.card</code>, <code>ui.firm</code>, <code>ui.shop</code>, <code>ui.trip</code>, <code>ui.supply</code>, <code>ui.reason</code>…), wszystkie pod prefiksem <code>ui.</code>. Test CI wymaga <b>identycznych zbiorów</b> — brakujący klucz łamie build, nigdy cichy fallback.</span></div>
+  <div class="f"><b>tuning/ · economy/ · roads/</b><span>Parametry, które stroi balansator: kaskada niedoboru, media, rampa, transport, B2B, koszyk CPI, koperty budżetowe, produkty kredytowe, VDF, IDM, wybór środka transportu.</span></div>
+  <div class="f"><b>names/</b><span>Pule imion i nazwisk dla 6 regionów, toponimy dzielnic, człony nazw firm. <b>To nie jest lokalizacja UI</b> — nazw generowanych proceduralnie się nie tłumaczy.</span></div>
+  <div class="f"><b>city/</b><span><span class="pill wip">M8a</span> Kod podatkowy (stawki, progi, klasy VAT, akcyza, koncesje) i polityka budżetowa miasta (rezerwa, plan wydatków, sufit długu, parametry obligacji).</span></div>
+</div></details>
+
+</div>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<h2 id="swiat">6. Jak powstaje świat</h2>
+
+<p>Świat jest <b>czystą funkcją</b> <code>WorldGenParams{seed, size, epoch, profile, region, difficulty}</code>
+i plików <code>data/*.ron</code>. Terenu się nie zapisuje — odtwarza się go z ziarna. Zapis
+<code>.mgw</code> istnieje wyłącznie dla wygody narzędzi.</p>
+
+<p>Pipeline to <b>płaska lista dwunastu przebiegów</b>, bez drzewa obiektów i bez traitu. Pola robocze
+(<code>WorkFields</code>) żyją tylko w trakcie generacji i nie wchodzą ani do zapisu, ani do hasha,
+bo są w całości pochodną ziarna.</p>
+
+<figure>
+<div class="fh"><h5>P1–P12 — generacja terenu</h5>
+  <button class="btn" id="gen-prev">◂</button>
+  <button class="btn" id="gen-play">▶ odtwórz</button>
+  <button class="btn" id="gen-next">▸</button>
+  <span class="mono-sm" id="gen-label">P1 · landmask</span>
+</div>
+<div class="body">
+  <div style="display:grid;grid-template-columns:320px 1fr;gap:1.2rem;align-items:start" class="genwrap">
+    <canvas id="genmap" width="300" height="300" style="width:100%;border-radius:6px;border:1px solid var(--line);image-rendering:pixelated"></canvas>
+    <ol class="steps" id="gen-steps"></ol>
+  </div>
+</div>
+<figcaption>Wizualizacja jest schematyczna — pokazuje <i>co dany przebieg dokłada</i>, a nie bit
+w bit wynik generatora. Trzy rzeczy w tym pipeline są nietypowe. <b>Po erozji</b> (P6) pipeline
+<b>ponawia</b> wypełnianie zagłębień i wyznaczanie spływu, bo erozja zmieniła wysokości. Wypełnianie
+liczy się w <b>milimetrach całkowitych</b> (<code>i32</code>), żeby ε algorytmu priority-flood było
+stałą, a nie wartością zależną od wysokości. A <code>RiverNetwork</code> z P7 jest <b>wektorowa</b>
+i to ona jest źródłem prawdy o korytach — raster <code>world.water</code> jest wtórny.</figcaption>
+</figure>
+
+<div class="tw"><table>
+<thead><tr><th>Siatka</th><th>Rozdzielczość</th><th>Rozmiar dla 16 km</th><th>Co trzyma</th></tr></thead>
+<tbody>
+<tr><td>robocza</td><td>4 m</td><td>4096² = 16,8 mln</td><td><code>height_m</code> (f32), spływ, zlewnie, wypełnienie — efemeryczna</td></tr>
+<tr><td>trwała</td><td>4 m</td><td>4096²</td><td><code>height</code> w <b>decymetrach</b> (i16), bity wody, biom</td></tr>
+<tr><td>odległość do wody</td><td>16 m</td><td>1024²</td><td>transformata 3-4</td></tr>
+<tr><td>klimatyczna</td><td>256 m</td><td>64²</td><td>12 miesięcy temperatury (i16 dC) i opadu (u16 mm), żyzność, zwierciadło</td></tr>
+<tr><td>zapytanie terenu</td><td>1 m</td><td>leniwe, per kafel</td><td>bikubiczne podniesienie + szum detalu ±0,35 m + koryta z sieci wektorowej</td></tr>
+<tr><td>voxel</td><td>0,5 m w pionie</td><td>materializowany</td><td>kolumna z modelu warstw geologicznych</td></tr>
+</tbody></table></div>
+
+<div class="note">
+<b>Erozja i wątki.</b> Erozja przenumerowuje komórki w kolejność stosu topologicznego, więc każda
+zlewnia zajmuje <b>rozłączny ciągły zakres</b> — dzięki temu można ją policzyć równolegle i dostać
+bit w bit ten sam wynik przy 1, 4 i 16 wątkach. Test to sprawdza, porównując hash terenu, nie
+wartości.
+</div>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<h2 id="miasto">7. Jak powstaje miasto</h2>
+
+<p>Czternaście etapów na gotowym terenie. Generator miasta widzi teren <b>wyłącznie przez</b>
+<code>&amp;dyn TerrainQuery</code> — nie zna siatek, nie zna <code>WorldData</code>, nie zna erozji.
+To jest <code>K-13</code>: jedno źródło prawdy o terenie.</p>
+
+<figure>
+<div class="fh"><h5>od bramy do zakładu — 14 etapów</h5>
+  <button class="btn" id="city-prev">◂</button>
+  <button class="btn" id="city-play">▶ odtwórz</button>
+  <button class="btn" id="city-next">▸</button>
+  <span class="mono-sm" id="city-label">1 · bramy</span>
+</div>
+<div class="body">
+  <div style="display:grid;grid-template-columns:340px 1fr;gap:1.2rem;align-items:start" class="genwrap">
+    <svg id="citysvg" viewBox="0 0 320 320" style="background:var(--bg3);border-radius:6px;border:1px solid var(--line)"></svg>
+    <ol class="steps" id="city-steps"></ol>
+  </div>
+</div>
+<figcaption>Trzy kolejności w tym pipeline nie są dowolne i każda ma powód, który da się nazwać
+jednym zdaniem. <b>Dzielnice przed parcelami</b>, bo przypisanie dzielnic przenumerowuje kwartały.
+<b>Wycena przed zabudową</b>, bo wartość gruntu jest <i>wejściem</i> doboru gramatyki i liczby
+kondygnacji, nie jej wynikiem — a druga wycena idzie po zabudowie, już z dostępem do pracy i handlu.
+I <b>domknięcie łańcuchów po rozstawieniu zakładów</b>, bo dopiero wtedy wiadomo, czego w mieście
+brakuje i ile trzeba sprowadzić przez bramy.</figcaption>
+</figure>
+
+<div class="two">
+<div class="card">
+<h4 style="margin-top:0">L-system, czyli skąd biorą się ulice</h4>
+<p>Kolejka priorytetowa propozycji. Aksjomat: wachlarz pięciu kierunków (±26°, ±52°) z każdej bramy
+niekolejowej, plus zalążek obwodnicy dla miast powyżej 150 tys.</p>
+<p>Każda propozycja przechodzi ograniczenia <b>w ustalonej kolejności</b>: strefy zakazane → limit
+spadku z sześcioma próbami ratunku (obrót ±15/±30°, połowa długości) → wybór konstrukcji
+(most/tunel/nasyp) → doklejenie do węzła w promieniu <code>len·0,25</code> → przecięcie z istniejącym
+segmentem → kontrola kąta minimalnego (≥30°, dla ulic lokalnych ≥22°).</p>
+<p class="mono-sm">Reguły produkcji: domknięcie ślepego końca · kontynuacja · odgałęzienie boczne
+z degradacją klasy · rozwidlenie Y (tylko arterie) · domknięcie pierścienia.</p>
+</div>
+<div class="card">
+<h4 style="margin-top:0">Gramatyka bryłowa</h4>
+<p>34 pliki w <code>data/grammar/</code>, każdy to jedna <code>BuildingGrammar</code>: warunek
+<code>applies</code> (kiedy pasuje — strefa, epoka, wartość gruntu, szerokość frontu),
+<code>massing</code> i drzewo reguł.</p>
+<p>Operatory: <code>Seq</code>, <code>Split</code>, <code>Repeat</code>, <code>Inset</code>,
+<code>Offset</code>, <code>Extrude</code>, <code>Comp</code>, <code>Protrude</code>,
+<code>Choice</code>, <code>If</code>, <code>Ref</code>, <code>Foundation</code>, <code>Floors</code>,
+<code>Roof</code>, <code>Fill</code>, <code>Void</code>, <code>Nothing</code>.</p>
+<p class="mono-sm">Derywacja idzie <b>równolegle</b>, ale losuje z klucza
+<code>(seed, BuildingGrammar, indeks_budynku, Tick(indeks_węzła))</code>, więc kolejność ukończenia
+zadań nie ma znaczenia. Emisja jest sekwencyjna, w kolejności parcel.</p>
+</div>
+</div>
+
+<div class="note warn">
+<b>Ostrzeżenia nie przerywają generacji.</b> Lądują w <code>GenerationReport.warnings</code>:
+odrzuty L-systemu ponad 40 %, brama która nie połączyła się z siecią, rozpad sieci jezdnej na
+składowe, odchylenie udziału stref od profilu, parcele bez frontu, klastry przemysłowe bez bocznicy.
+Świat, który ma ostrzeżenia, jest nadal światem — po prostu wiadomo, w czym.
+</div>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<h2 id="ludzie">8. Dzień mieszkańca</h2>
+
+<p>Mieszkaniec to 13 komponentów SoA, razem <b>140 bajtów</b> stanu gorącego. Rzeczy zmiennej
+długości — relacje, wiedza o miejscach, plan dnia — idą do slabów blokowych, bo muszą wejść
+do hasha i snapshotu. Budżet całości: <b>≤ 430 B na osobę</b> przy 400 tys. mieszkańców, pilnowany
+testem.</p>
+
+<h3>Kanwa i cztery fazy</h3>
+<p>Plan dnia to do 24 slotów, posortowanych, bez nachodzenia i <b>bez przechodzenia przez północ</b> —
+doba kończy się snem i zaczyna nowym planem. Cztery fazy wypełniają ją po kolei i
+<b>żadna nie usuwa slotu wstawionego przez wyższą</b>.</p>
+
+<figure>
+<div class="fh"><h5>doba Anny — 34 lata, księgowa, zmiana 8–16, odprowadza dziecko</h5>
+  <button class="btn phbtn on" data-phase="0">plan pusty</button>
+  <button class="btn phbtn" data-phase="1">1 · zobowiązania</button>
+  <button class="btn phbtn" data-phase="2">2 · rytm</button>
+  <button class="btn phbtn" data-phase="3">3 · zadania</button>
+  <button class="btn phbtn" data-phase="4">4 · czas wolny</button>
+</div>
+<div class="body"><div id="dayfig"></div></div>
+<figcaption>Scenariusz wzorcowy z testu <code>plan_golden_anna</code> (<code>sim/agents/tests/planner.rs</code>).
+<b>Faza 3 jest sednem</b>: zadanie („kończy się chleb”, pilność <code>200 − dni×10</code>) ma dwie drogi
+realizacji — wolną lukę albo <i>wplecenie w dojazd</i>. Kandydaci są oceniani z karą za nadłożenie
+drogi, a zadanie startuje <b>tak późno, jak się da</b>. Dojazdy <i>do</i> zobowiązania są nietykalne.</figcaption>
+</figure>
+
+<div class="note">
+<b>Wyjaśnialność bez logów.</b> <code>plan_day</code> jest czystą funkcją, a RNG to
+<code>rng(seed, StreamId::DayPlan, citizen_idx, day)</code>. Karta inspekcji woła
+<code>plan_day_explained</code> z tym samym ziarnem i <b>odtwarza</b> uzasadnienia — w slocie siedzi
+tylko 2 bajty tagu. Pełne logowanie to ~100 B na osobę na dobę, czyli <b>14 GB na rok gry</b>
+przy 400 tys. mieszkańców.
+</div>
+
+<h3>Dwanaście potrzeb</h3>
+<p>Spadek potrzeby <b>nie jest odejmowaniem</b>: <code>f(t) = t · tempo / 6000</code>, a spadek to
+<code>f(t₁) − f(t₀)</code>. Dzięki temu shardowanie „jedna sześćdziesiąta populacji na minutę” daje
+bit w bit ten sam wynik co przeliczanie wszystkim co minutę. Tolerancja 0, bez stanu na resztę,
+bez floata.</p>
+
+<div class="tw"><table>
+<thead><tr><th>Potrzeba</th><th>Tempo</th><th>Wizyta</th><th>Gdzie się zaspokaja</th><th>Stan</th></tr></thead>
+<tbody>
+<tr><td>Hunger</td><td>600 c/h</td><td>30 min</td><td>dom, jadłodajnia, spożywczy</td><td><span class="pill ok">działa</span></td></tr>
+<tr><td>Sleep</td><td>420</td><td>480 min</td><td>dom</td><td><span class="pill ok">działa</span></td></tr>
+<tr><td>Hygiene</td><td>420</td><td>20 min</td><td>dom</td><td><span class="pill ok">działa</span></td></tr>
+<tr><td>Leisure</td><td>300</td><td>90 min</td><td>rozrywka, dom</td><td><span class="pill ok">działa</span></td></tr>
+<tr><td>Social</td><td>250</td><td>90 min</td><td>miejsca spotkań, dom</td><td><span class="pill ok">działa</span></td></tr>
+<tr><td>Mobility</td><td>60</td><td>—</td><td><b>fakt dojechania</b>, nie wizyta</td><td><span class="pill ok">działa</span></td></tr>
+<tr><td>Clothing</td><td>60</td><td>40 min</td><td>odzieżowy</td><td><span class="pill ok">działa</span></td></tr>
+<tr><td>Development</td><td>5</td><td>120 min</td><td>edukacja</td><td><span class="pill ok">działa</span></td></tr>
+<tr><td>Health</td><td>0 <span class="dim">(zdarzeniowa)</span></td><td>45 min</td><td>lekarz, apteka, szpital</td><td><span class="pill ok">działa</span></td></tr>
+<tr><td>Safety</td><td>0</td><td>15</td><td><span class="dim">— brak miejsc</span></td><td><span class="pill no">M8</span></td></tr>
+<tr><td>Housing</td><td>0</td><td>15</td><td><span class="dim">— brak miejsc</span></td><td><span class="pill no">M9</span></td></tr>
+<tr><td>Status</td><td>0</td><td>30</td><td><span class="dim">— brak miejsc</span></td><td><span class="pill hot">bez właściciela</span></td></tr>
+</tbody></table></div>
+
+<h3>Demografia i migracja</h3>
+<p>Krok dobowy, sharding 1/360 po indeksie encji. Hazardy roczne stosują się <b>raz w roku</b>, jedną
+wartością — nie 360 razy po 1/360. Kolejność doby jest wynikiem, nie konwencją: porody i wyzdrowienia
+z terminarza → zgon → emerytura → choroba → poczęcie. Odwrotna kolejność kazałaby ciężarnej, która
+dziś umiera, najpierw urodzić.</p>
+
+<p><b>Migracja jest jedynym regulatorem populacji</b> — nie ma spawnowania do zadanej liczby.
+Przyjezdny potrzebuje wakatu <i>i</i> pustostanu naraz. Odpływ ma cztery kanały, z czego jeden —
+hazard bezrobocia przemnożony przez udział dorosłych bez pracy — jest głównym wzmocnieniem pętli
+ujemnego sprzężenia. Test <code>century</code> puszcza 100 lat i wymaga, żeby populacja została
+w paśmie [0,5×, 2,0×].</p>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<h2 id="ruch">9. Ruch</h2>
+
+<h3>Wybór środka transportu</h3>
+<p>Sześć opcji, wszystko <b>zmonetyzowane w groszach</b>. Nie ma tu ani jednej wagi bez jednostki —
+i dlatego karta inspekcji potrafi powiedzieć „rower kosztowałby o 3,40 zł więcej, bo pada”.</p>
+
+<figure>
+<div class="fh"><h5>koszt uogólniony — przelicz sam</h5>
+  <label class="rg">dochód <input type="range" id="mc-inc" min="0" max="100" value="45"><span id="mc-inc-v">2 800 zł</span></label>
+  <label class="rg">deszcz <input type="range" id="mc-rain" min="0" max="100" value="0"><span id="mc-rain-v">0 %</span></label>
+  <label class="rg">dystans <input type="range" id="mc-dist" min="3" max="80" value="28"><span id="mc-dist-v">2,8 km</span></label>
+</div>
+<div class="body"><div id="modefig"></div></div>
+<figcaption>Wzór: <code>czas × VoT + pieniądz + dyskomfort</code>. Wartość czasu to dochód netto
+na godzinę podzielony przez 60, przemnożony przez cel podróży (praca 1,30 · lekarz 1,40 ·
+odprowadzanie 1,50 · zakupy 0,85) i <b>przycięty do 6–150 gr/min</b>. Podłoga istnieje po to, żeby
+bezrobotni nie chodzili wszędzie pieszo. Wybór to <b>argmin z nawykiem</b> (6 ‰ kosztu najtańszej
+opcji), nie logit — logit losowałby przy każdej podróży i dawał inny wynik w tej samej sytuacji.
+Remis rozstrzyga kolejność w enumie, nigdy kolejność ofert.</figcaption>
+</figure>
+
+<div class="note">
+<b>Brak parkingu przesłania porównanie.</b> Kolejność ważności uzasadnienia jest ustalona:
+<code>NoParkingAtDestination</code> stoi przed <code>ModeCompared</code>. Gracz ma się dowiedzieć,
+że nie ma gdzie zaparkować, zanim zobaczy tabelę kosztów. A gdy <b>żadna</b> opcja nie jest
+wykonalna, mieszkaniec idzie pieszo — podróż bez zakończenia zawiesiłaby go do końca gry.
+</div>
+
+<h3>Mezo — skąd bierze się korek</h3>
+<p><code>settle_edge</code> jest <b>jedynym</b> miejscem, w którym powstaje czas przejazdu i zużycie
+paliwa. Czas liczony tą samą arytmetyką, której router używa na wagi — inna dałaby plan niezgodny
+z przejazdem. Paliwo w <b>mikrolitrach</b>, bo mililitry dawałyby kilkanaście procent błędu na
+krawędzi 40 m.</p>
+
+<figure>
+<div class="fh"><h5>przewężenie i spillback</h5>
+  <button class="btn" id="jam-play">▶ start</button>
+  <label class="rg">napływ <input type="range" id="jam-rate" min="1" max="10" value="7"></label>
+  <span class="mono-sm" id="jam-read"></span>
+</div>
+<div class="body"><div id="jamfig"></div></div>
+<figcaption>VDF jest <b>dwureżimowy, nie BPR</b>: do gęstości krytycznej prędkość swobodna, powyżej
+spada liniowo do <code>min_speed</code>. Mezo zna gęstość (ile pojazdów stoi), a nie natężenie.
+Gdy krawędź docelowa jest pełna, pojazd <b>zostaje tam, gdzie jest, i czeka na zdarzenie</b> —
+nie ponawia próby co minutę. Ponawianie obcięłoby przepustowość przewężenia do
+<code>storage_capacity</code> pojazdów na minutę, czyli do liczby zupełnie niezwiązanej
+z przepustowością drogi.</figcaption>
+</figure>
+
+<h3>Mikro jest wizualizatorem bez prawa zapisu</h3>
+<p>To jest najmocniejsze zdanie o LOD w całym projekcie i warto je rozwinąć. Postęp pojazdu
+w warstwie mikro wynika <b>wyłącznie</b> z pary <code>(entry_cs, exit_cs)</code> policzonej przez
+mezo. IDM i MOBIL rozstrzygają, <i>gdzie w danej chwili stoi bryła</i> — nie <i>kiedy dojedzie</i>.</p>
+
+<p>Konsekwencja: test spójności LOD przechodzi z tolerancją zero <b>z konstrukcji</b>, a nie przez
+kalibrację. Kolejka przed światłem powstaje, bo pierwszy pojazd ma linię wyjazdową jako nieruchomego
+poprzednika do chwili <code>exit_cs</code> — sygnalizacji nikt nie liczy drugi raz. Serwo przycina
+pożądaną prędkość do 850–1150 ‰ tak, żeby dystans zszedł do zera w zaksięgowanej chwili; wielkość
+tej korekty jest <b>metryką jakości kalibracji, nie poprawności</b>.</p>
+
+<p>Test <code>micro_writes_nothing</code> sprawdza <b>deklarację dostępu</b> systemu mikro — nie
+przebieg. Deklaracja nie zawiera ani jednego komponentu ekonomicznego, więc scheduler by na to
+nie pozwolił, nawet gdyby kod chciał.</p>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<h2 id="pieniadz">10. Pieniądz</h2>
+
+<p>Dwie księgi, dwie różne rzeczy. <code>Books</code> to rejestr sald kont miasta z niezmiennikiem
+<code>Σ sald == podaż</code>. <code>Ledger</code> to prawdziwy podwójny zapis <b>jednego zakładu</b>
+z niezmiennikiem <code>Σ sald == 0</code>.</p>
+
+<figure>
+<div class="fh"><h5>siedem kanałów — kiedy pieniądza przybywa i ubywa</h5>
+  <button class="btn" id="mon-play">▶ przebieg</button>
+  <span class="mono-sm" id="mon-read">podaż: 0 zł</span>
+</div>
+<div class="body"><div id="moneyfig"></div></div>
+<figcaption>Saldo konta jest <b>prywatne</b> i w całym crate'cie <code>sim/economy</code> istnieje
+<b>dokładnie jedno</b> przypisanie do niego. Pilnuje tego test <i>tekstowy</i>
+(<code>single_entry_point.rs</code>), który skanuje wszystkie pliki źródłowe i wymaga, żeby to jedno
+przypisanie stało w <code>books.rs</code>. Prywatność chroni przed zewnętrzem modułu, ale nie przed
+jego wnętrzem — a to wnętrze rosło przez całą fazę M5. Drugi test sprawdza sam wykrywacz:
+bramka, która nigdy nie świeci na czerwono, nie jest bramką.</figcaption>
+</figure>
+
+<div class="two">
+<div class="card">
+<h4 style="margin-top:0">Skąd bierze się inflacja</h4>
+<p>Nie ma parametru „inflacja”. Jest łańcuch: <b>uruchomienie kredytu tworzy depozyt</b> →
+większe koperty budżetowe gospodarstw → szybciej schodzący zapas w sklepach → dodatnia korekta
+zapasu w składaniu ceny → wyższe ceny → wyższy CPI. Spłata kapitału niszczy pieniądz, odsetki są
+zwykłym przelewem i podaży nie ruszają.</p>
+<p class="mono-sm">Test <code>budget_credit_cpi</code>: większa akcja kredytowa przy stałej podaży
+dóbr <b>podnosi CPI</b> — i ten wzrost nie jest nigdzie zapisany jako liczba.</p>
+</div>
+<div class="card">
+<h4 style="margin-top:0">Jak liczy się CPI</h4>
+<p>Laspeyres z zamrożonym koszykiem 18 pozycji, okno 30 dób. <code>pₜ</code> to średnia
+<b>ważona wolumenem z cen transakcyjnych</b> — oferta, której nikt nie kupuje, nie jest ceną.
+Pozycja bez transakcji <b>wypada z licznika i mianownika naraz</b>.</p>
+<p class="mono-sm"><code>yoy_bp</code> zwraca <code>None</code> przed 13 miesiącami historii.
+Zero czytałoby się jak „inflacja 0 %” i bank centralny zacząłby ciąć stopę na podstawie braku
+danych.</p>
+</div>
+</div>
+
+<h3>Składanie ceny</h3>
+<p>Całkowitoliczbowo, w punktach bazowych. <code>base = koszt × (1 + marża docelowa)</code>, potem
+cztery korekty i dwa ograniczniki:</p>
+
+<div class="tw"><table>
+<thead><tr><th>Korekta</th><th>Wzór</th><th>Zakres</th><th>Uwaga</th></tr></thead>
+<tbody>
+<tr><td>zapas</td><td><code>k_stock × (1 − stan/cel)</code></td><td>−2000 … +1500 bp</td><td>Nadmiar obniża, brak podnosi. Znak <b>odwrócony</b> wobec pierwotnego planu (korekta W-1).</td></tr>
+<tr><td>konkurencja</td><td><code>k_comp × (cena_rywala/base − 1)</code></td><td>±1500 bp</td><td>Rywal widziany z opóźnieniem 1–7 dób, losowanym <b>raz na firmę</b>.</td></tr>
+<tr><td>elastyczność</td><td>krok w stronę <code>p·(1 + 1/(e+1))</code></td><td>±500 bp</td><td>Przy <code>e ≈ −1</code> korekty nie ma — pomiar nic nie mówi.</td></tr>
+<tr><td>przecena psującego</td><td>schodkowo wg terminu</td><td>−6000 … 0 bp</td><td>≤2 dni: −2000 · ≤1: −4000 · 0: −6000. <b>Obniża też podłogę</b>, bo alternatywą jest strata 100 %.</td></tr>
+<tr><td><b>podłoga</b></td><td><code>koszt × (1 + min_marża + przecena)</code></td><td>twarda</td><td><b>Krytyczna.</b> Bez niej nadmiar zapasu daje spiralę deflacyjną poniżej kosztu (bramka G3).</td></tr>
+<tr><td><b>sufit</b></td><td><code>koszt × (1 + max_marża)</code></td><td>twardy</td><td>Przycina <b>każdą</b> ścieżkę — także cenę ręczną gracza i „−2 % od najtańszego”.</td></tr>
+</tbody></table></div>
+
+<p>Ostatnim krokiem jest <code>tax.gross_from_net</code>: cała arytmetyka dzieje się netto, a cena
+półkowa jest <b>brutto</b> (<code>K-7</code>). Dzięki temu podwyżka VAT uderza w popyt natychmiast,
+zamiast podnosić marże wszystkich sklepów.</p>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<h2 id="zakup">11. Anna kupuje chleb</h2>
+
+<p>To jest ścieżka, która przecina najwięcej crate'ów w całym projekcie: <code>sim/agents</code> →
+<code>sim/economy</code> → <code>sim/supply</code> → <code>sim/traffic</code> → <code>engine/core</code>
+i z powrotem. Warto prześledzić ją w całości, bo pokazuje, gdzie stoją granice.</p>
+
+<figure>
+<div class="fh"><h5>od „kończy się chleb” do zapisu w księdze</h5>
+  <button class="btn" id="buy-prev">◂</button>
+  <button class="btn" id="buy-play">▶ odtwórz</button>
+  <button class="btn" id="buy-next">▸</button>
+  <span class="mono-sm" id="buy-label"></span>
+</div>
+<div class="body"><div id="buyfig"></div></div>
+<figcaption>Najciekawszy krok to <b>szósty</b>: powrót do porządku tożsamościowego. Kandydaci
+są najpierw rankowani po koszcie (całkowitoliczbowo) i obcinani do piętnastu, ale <b>przed</b>
+liczeniem użyteczności wracają do kolejności <code>(SiteId, GoodId)</code>. Powód jest subtelny:
+<code>softmax_pick</code> sumuje w kolejności wejścia, więc porządek cenowy sprawiał, że podwyżka
+przestawiała tablicę i udział rynkowy przestawał reagować monotonicznie. Kryterium fazy brzmiało
+„podniesienie ceny przesuwa udział rynkowy w dół” — i nie przechodziło.</figcaption>
+</figure>
+
+<div class="two">
+<div class="card">
+<h4 style="margin-top:0">Dlaczego softmax, a nie argmax</h4>
+<p>Argmax produkuje monopole: jeden sklep wygrywa o grosz i zabiera wszystko. Softmax z temperaturą
+0,06 rozkłada popyt proporcjonalnie do użyteczności — przewaga o grosz daje przewagę o kilka procent
+udziału, a nie sto.</p>
+<p>Szum oferty jest <b>stały dla trójki</b> (kupujący, oferta, decyzja) i <b>nie zależy od pozycji
+w rankingu</b>. Gdyby zależał, ten sam sklep wypadałby inaczej w zależności od tego, ilu konkurentów
+akurat było w promieniu.</p>
+</div>
+<div class="card">
+<h4 style="margin-top:0">Utracona sprzedaż</h4>
+<p>Każdy śledzony sklep, który <b>przegrał wybór</b>, dostaje wpis <code>LostSale</code> z powodem
+(za drogo / za daleko / gorsza jakość / poniżej progu) i <b>nazwiskiem zwycięzcy</b>.</p>
+<p>Kryterium fazy: ≥ 95 % ludzi, którzy rozważyli sklep i nie kupili, ma zapisany powód — licząc
+<b>przegranych w wyborze</b>, nie tylko nieudane wizyty. Przy tej drugiej definicji kryterium
+spełniało się tożsamościowo.</p>
+<p class="mono-sm">Zakład nieśledzony nie płaci za ten mechanizm nic — i poziom śledzenia
+<b>nie wchodzi do hasha stanu</b>. Kliknięcie „śledź” nie ma prawa zmieniać przebiegu.</p>
+</div>
+</div>
+
+<div class="note good">
+<b>Nie istnieje ścieżka, w której świat traci i pieniądz, i towar.</b> Każda porażka na dowolnym
+kroku rozliczenia woła <code>return_goods</code>, a partia wraca do slotu <b>w całości i taka sama</b>:
+ta sama jakość, marka, data przydatności i koszt. Wyścig o ostatnią sztukę rozstrzyga się
+konstrukcyjnie — pętla doby jest systemem wyłącznym, więc półka schodzi w tej samej chwili co decyzja.
+</div>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<h2 id="lancuch">12. Łańcuch dostaw</h2>
+
+<p>Nie ma magazynu, z którego towar bierze się sam. Chleb na półce był kiedyś ziarnem na polu,
+a każdy gram po drodze jest policzony — testy wymagają bilansu masy z tolerancją <b>zero gramów</b>
+i bilansu kosztu z tolerancją <b>zero groszy</b>.</p>
+
+<figure>
+<div class="fh"><h5>łańcuch referencyjny nr 1: pole → młyn → piekarnia → półka</h5>
+  <button class="btn" id="chain-play">▶ uruchom</button>
+  <button class="btn" id="chain-break">⚡ zerwij dostawę mąki</button>
+  <span class="mono-sm" id="chain-read"></span>
+</div>
+<div class="body"><div id="chainfig"></div></div>
+<figcaption>Z tony pszenicy schodzi 760 kg mąki, 220 kg otrąb i 20 kg zanieczyszczeń —
+<code>process_loss</code> jest zerem, bo nic nie ubywa. <b>Otręby są produktem, nie stratą</b>,
+i mają cenę, więc podział kosztu musi iść za wartością rynkową, a nie za masą: inaczej otręby
+kosztowałyby tyle co mąka i mąka wyszłaby o jedną piątą za tanio. A <code>cap_by_worst_input</code>
+jest sednem modelu jakości — dobra mąka nie powstanie ze słabego zboża, choćby młyn był nowy
+i obsada wyszkolona.</figcaption>
+</figure>
+
+<h3>Kaskada niedoboru — drabina, nie tabela progów</h3>
+<p>Siedem szczebli: <code>Ok → Buffer → Throttled → SpotSearch → Importing → Substituted → Halted</code>.
+Ruch <b>w górę</b> to jeden szczebel na przegląd, dopóki sytuacja się pogarsza. Ruch <b>w dół</b>
+to skok od razu na szczebel progowy, bo dostawa zdejmuje ze wszystkich naraz.</p>
+
+<p>Ta asymetria jest jedną z dwóch przyczyn <b>efektu byczego bicza</b> w tej symulacji — drugą jest
+reguła zamawiania: sklep zamawia do celu zapasu, a nie proporcjonalnie do obrotu. To drugie było
+próbowane i <b>odwróciło inflację emergentną</b> (CPI 9793 → 8239 zamiast wzrostu), więc wróciło
+do wersji z celem.</p>
+
+<h3>Rynek B2B: nie ma negocjacji</h3>
+<p>Wycena sprzedawcy jest czystą funkcją: <code>koszt wytworzenia × (1 + 18 %)</code> plus symetryczny
+szum ±2 %. Brak rabatu stałego klienta, brak różnicowania per odbiorca, brak odmowy. Rozstrzygnięcie
+minimalizuje <code>cena×masa + transport + kara za spóźnienie + kara za jakość</code>, remis po
+indeksie encji sprzedawcy — <b>nigdy</b> po kolejności wpisu oferty.</p>
+
+<p>Sprzedawcą jest zakład, którego <b>linia produkuje</b> ten towar — nie ten, który go ma na stanie.
+Magazyn mąki w piekarni nie czyni z niej młyna.</p>
+
+<div class="tw"><table>
+<thead><tr><th>Mechanizm</th><th>Co robi</th></tr></thead>
+<tbody>
+<tr><td>Kontrakt długoterminowy</td><td>Harmonogram dostaw, trzy cenniki (stały / indeksowany 7-dobową średnią spot / z widełkami), kara za niedostarczenie. <b>Resztę księguje jako niedostarczoną i nalicza karę</b> — nie „przesuwa na jutro”. Niezmiennik: <code>dostarczone + brakujące == zaplanowane</code> co do grama.</td></tr>
+<tr><td>Import przez bramę</td><td>Trzy hamulce naraz: kolejka (<code>lead × (1 + backlog/capacity)</code> — przeciążony węzeł wydłuża czas <b>wszystkim</b>), elastyczność ceny (dziesięciokrotny zakup = +300 %) i cło <b>osobno od ceny</b>.</td></tr>
+<tr><td>Wyłączność</td><td>Rywal <b>nie dostaje odmowy</b> — po prostu przestaje widzieć tego dostawcę w zapytaniach. Posiadacz płaci premię.</td></tr>
+<tr><td>Konsolidacja</td><td>Clarke–Wright. Koszt trasy dzielony proporcjonalnie do masy, a podstawienie pojazdu płaci się <b>raz za pojazd</b>, nie raz za przystanek. Test: centrum dystrybucyjne wygrywa z dostawą bezpośrednią <i>geografią</i>, nie arytmetyką.</td></tr>
+<tr><td>Wyczerpanie złoża</td><td>Koncentracja efektywna maleje z pierwiastkiem sześciennym pozostałej masy; koszt ma człon <b>kwadratowy</b> w wyczerpaniu. Złoże zamyka się samo, bo w pewnym momencie import jest tańszy — <b>nikt tego nie zaprogramował</b>.</td></tr>
+<tr><td>Zakaz teleportacji</td><td><code>Store::load</code>/<code>unload</code> wymagają <code>TransportOrderId</code>, a ten nadaje tylko <code>Transport::order</code>. Partia w drodze <b>nie znika z bilansu</b> — wypada tylko z listy slotu.</td></tr>
+</tbody></table></div>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<h2 id="praca">13. Rynek pracy</h2>
+
+<p><b>Nie istnieje tabela płac.</b> Jest widełka roli z <code>data/jobs/roles.ron</code> (zakres,
+w którym wolno licytować), stawka konkretnej oferty i mediana zawartych umów. Pensja rośnie wtedy
+i tylko wtedy, gdy oferta wisi bez kandydata.</p>
+
+<figure>
+<div class="fh"><h5>licytacja: oferta wisi, firma podbija, sufit zatrzymuje</h5>
+  <button class="btn" id="wage-play">▶ 60 dób</button>
+  <label class="rg">niedobór <input type="range" id="wage-short" min="0" max="100" value="60"></label>
+  <label class="rg">zapas marży <input type="range" id="wage-head" min="-20" max="20" value="5"></label>
+</div>
+<div class="body"><div id="wagefig"></div></div>
+<figcaption>Stawka startowa to <b>dolny kraniec widełek</b>, nie mediana — firma licytuje w górę
+dopiero, gdy nikt nie przychodzi. To cała degresja przy nadmiarze podaży pracy. Gdy licytacja
+dobija do sufitu, oferta się <b>zamraża</b> i dostaje świadczenie pozapłacowe zamiast podwyżki,
+z własnym powodem w karcie inspekcji (<code>WageCause::Ceiling</code>). Sufit jest jedynym hamulcem
+spirali — zapas marży zakładu może go przesunąć o ±5 punktów procentowych, ale nie znieść.</figcaption>
+</figure>
+
+<div class="two">
+<div class="card">
+<h4 style="margin-top:0">Kolejność doby jest kontraktem</h4>
+<ol style="font-size:.86rem;margin:.4rem 0">
+<li>Kto zniknął z miasta — zwalnia etat <span class="dim">(najpierw, bo etat ma dziś szansę się obsadzić)</span></li>
+<li>Rotacja: odejścia dobrowolne i zwolnienia</li>
+<li>Świadczenia, premie, szkolenia</li>
+<li>Menedżerowie i morale zakładu</li>
+<li>Wygaszenie i eskalacja ofert <span class="dim">(<b>przed</b> publikacją)</span></li>
+<li>Publikacja ofert</li>
+<li>Headhunting <span class="dim">(<b>po</b> publikacji, bo korzysta z niedoboru)</span></li>
+<li>Przebudowa indeksu</li>
+<li>Zgłoszenia → zatrudnienia</li>
+<li>Odświeżenie statystyk</li>
+</ol>
+</div>
+<div class="card">
+<h4 style="margin-top:0">Jak rozstrzyga się „dlaczego on”</h4>
+<p>Kandydat ogląda <b>3–15 ofert</b>, nie wszystkie. Zgłoszenia grupowane po ofercie, ranking malejąco
+po <code>score_application</code>, remis po indeksie encji — <b>nigdy po kolejności zgłoszeń</b>.</p>
+<p>Zapisywany jest wynik zwycięzcy <b>i drugiego w kolejce</b>. To jest cała odpowiedź na pytanie
+gracza „dlaczego zatrudnili jego, a nie mnie”.</p>
+<p class="mono-sm">Zbyt tani kandydat (oszczędność ponad 25 % wobec widełek) jest <b>sygnałem ryzyka,
+nie okazją</b>. Przekwalifikowany (nadwyżka umiejętności ponad +30) dostaje karę.</p>
+</div>
+</div>
+
+<div class="note">
+<b>Gdzie praca staje się produkcją.</b> Pokrycie etatowe po każdej dobie ląduje w
+<code>PlantSite::labor_pct</code>, a <code>kernel::throughput</code> mnoży je przez ogranicznik
+materiałowy — <b>mnoży, nie minimalizuje</b>. Pół ludzi i pół mąki daje ćwierć szarży, nie połowę.
+</div>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<h2 id="firmy">14. Firmy AI</h2>
+
+<p>Firma widzi świat wyłącznie przez <code>FirmView</code> — i to nie jest samodyscyplina.
+<code>sim/firms</code> nie zależy od <code>sim/economy</code> ani <code>sim/macro</code>, więc koszt
+rywala i kwota prognozy są w tym crate'cie <b>niewyrażalne</b>.</p>
+
+<figure>
+<div class="fh"><h5>trzy poziomy, trzy kadencje, jedna kolejka</h5>
+  <button class="btn" id="tier-play">▶ kwartał</button>
+  <span class="mono-sm" id="tier-read"></span>
+</div>
+<div class="body"><div id="tierfig"></div></div>
+<figcaption>Kto dziś decyduje, mówi <code>slots(key)</code> — czysta funkcja <code>mix64</code>
+klucza firmy. Budżet: <b>32 / 4 / 1</b> firmy na tick dla poziomu operacyjnego / taktycznego /
+strategicznego; nadmiar czeka w kolejce FIFO, która <b>wchodzi do hasha stanu</b> (bo to jest stan),
+w odróżnieniu od kubełków indeksu, które są pochodne i do hasha nie wchodzą.</figcaption>
+</figure>
+
+<div class="tw"><table>
+<thead><tr><th>Poziom</th><th>Kadencja</th><th>Dźwignie</th><th>Mechanizm</th></tr></thead>
+<tbody>
+<tr><td><b>Operacyjny</b></td><td>doba</td><td><code>SetMarginTarget</code>, <code>SetRestockDays</code></td><td><b>Kotwica, nie krok.</b> Cel liczony od kotwicy kursu (dyskont 15 % widełek, nisza jakościowa 85 %) plus korekty bieżące — ustanie bodźca przywraca kotwicę zamiast całkować w wojnę cenową. Próg ruchu 100 bp / 2 doby.</td></tr>
+<tr><td><b>Taktyczny</b></td><td>miesiąc</td><td><code>CloseSite</code>, <code>SetStrategy</code>, <code>AdoptPolicy</code></td><td>Zamknięcie po 2–3 nieprzerwanych miesiącach straty, liczonych wstecz i <b>przerywanych pierwszym miesiącem bez pomiaru</b>. Zmiana kursu tylko dwa przejścia — bo tylko dwa da się uzasadnić zmierzoną liczbą.</td></tr>
+<tr><td><b>Reakcja</b></td><td>kwartał</td><td><code>Poach</code>, <code>PriceWar</code>, <code>SupplierLock</code></td><td>Wyzwala <b>koniunkcja</b>: sprzedaż spadła ≥ 20 % <i>i</i> przybyło rywali. Sam nowy konkurent nie wystarczy. Każda odpowiedź kosztuje <b>reagującego</b>. Kampania ma termin i po nim firma wraca do kursu sama.</td></tr>
+<tr><td><b>Strategiczny</b></td><td>kwartał</td><td><code>OpenSite</code>, <code>CloseSite</code>, <code>KeepCourse</code></td><td>Firma proponuje warianty <b>z własnych ksiąg</b>, model makro je porządkuje. Wraca <b>ranking, nie prognoza</b> — zwycięzca istnieje dopiero, gdy przewaga przekroczy deklarowany błąd modelu. <code>winner: None</code> → <code>KeepCourse</code>: niepewność modelu przekłada się na bezwładność firmy.</td></tr>
+</tbody></table></div>
+
+<div class="note">
+<b>Osobowość firmy jest czystą funkcją cech dyrektora-mieszkańca.</b> Ambicja i tolerancja ryzyka →
+agresja; oszczędność → nacisk na cenę; sumienność → nacisk na jakość; otwartość → innowacyjność.
+Zmiana dyrektora zmienia firmę natychmiast i w całości. Firma bez dyrektora losuje raz, sumą dwóch
+rzutów — rozkład z wierzchołkiem w środku, a nie płaski.
+</div>
+
+<h3>Co widzi, a czego nie</h3>
+<div class="two">
+<div class="card"><h4 style="margin-top:0;color:var(--green)">Widzi</h4>
+<ul style="font-size:.88rem">
+<li>Własne: cenę, koszt jednostkowy z magazynu, marżę, dni pokrycia, sprzedaż 7-dobową, wakaty, obsadę, miesiące straty.</li>
+<li>Cudze: <b>ceny półkowe</b> z tablicy publicznej, liczbę rywali teraz i wcześniej.</li>
+<li>Miasto: populację dzielnicy, medianę dochodu — to, co widać z ulicy.</li>
+</ul>
+</div>
+<div class="card"><h4 style="margin-top:0;color:var(--red)">Nie widzi</h4>
+<ul style="font-size:.88rem">
+<li>Cudzych kosztów, marż, zapasów, gotówki.</li>
+<li>Własnej oferty w „konkurencji” — jest odfiltrowana, inaczej ścigałaby samą siebie w dół.</li>
+<li>Kwot z modelu makro. <code>OutlookRow</code> <b>nie ma pola</b>, w które dałoby się je włożyć.</li>
+</ul>
+</div>
+</div>
+
+<p>Opóźnienie obserwacji: <code>7 − min(zakłady,3) − innowacyjność/34</code>, przycięte do 1–7 dób.
+Duża i ciekawska firma patrzy częściej. Opóźnienie realizuje się <b>przy odczycie</b> z tablicy cen,
+więc jedno źródło obsługuje firmę czujną i gapowatą — opóźnienie jest cechą patrzącego, nie obrazu.</p>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<h2 id="rozszerzanie">15. Co da się rozszerzać łatwo</h2>
+
+<p>Powierzchnia rozszerzania jest w <code>data/</code> i w wariantach enumów. Poniżej rzeczy, które
+<b>realnie</b> dodaje się bez dotykania architektury — z kosztem oszacowanym z tego, jak wygląda
+istniejący kod.</p>
+
+<div class="ext">
+
+<div class="ex">
+<h4>Nowy towar</h4>
+<p>Wpis w <code>data/goods/&lt;kategoria&gt;.ron</code>: klucz, kategoria potrzeby, <code>form</code>
+(sypki / ciekły / gazowy / sztukowy / paletowany), <code>storage</code>, gęstość albo masa sztuki,
+cena zewnętrzna.</p>
+<p><code>goods-graph new mój_towar --category food</code> wypisze szkielet na wzór istniejących
+i od razu zwaliduje katalog.</p>
+<span class="cost">Koszt: 1 wpis. Zero kodu. Walidator wymusi ujście — towar, którego nikt nie
+kupuje i nikt nie przerabia, nie przejdzie.</span>
+</div>
+
+<div class="ex">
+<h4>Nowa receptura</h4>
+<p>Wpis w <code>data/recipes/&lt;dział&gt;.ron</code>: wejścia z masami i minimalną jakością, wyjścia
+z <code>OutputKind</code>, czas, model jakości, alokacja kosztu, emisje.</p>
+<p>Bilans masy <code>Σ wejść + woda == Σ wyjść + strata</code> jest sprawdzany przy ładowaniu.</p>
+<span class="cost">Koszt: 1 wpis. Cykle są dozwolone. Jeśli receptura tworzy produkcję łączną,
+ustaw <code>ByMarketValue</code> — inaczej produkt uboczny będzie kosztował tyle co główny.</span>
+</div>
+
+<div class="ex">
+<h4>Nowy typ zakładu</h4>
+<p>Wpis w <code>data/site_types/&lt;branża&gt;.ron</code>: obsada per rola
+(<code>per_10000m2</code> + <code>per_site</code> + <code>min</code>), czynsz, nakład, receptury,
+epoki, archetyp budynku.</p>
+<span class="cost">Koszt: 1 wpis + archetyp w <code>data/buildings/</code>. Walidator odrzuci typ
+bez stanowiska kierowniczego i typ, którego receptura nie istnieje.</span>
+</div>
+
+<div class="ex">
+<h4>Nowa gramatyka budynku</h4>
+<p>Plik w <code>data/grammar/</code>: <code>applies</code> (strefa, epoka, widełki wartości gruntu,
+szerokość frontu), <code>massing</code>, drzewo reguł, <code>interior</code>.</p>
+<p>Dobór jest losowaniem ważonym z rozluźnianym filtrem — nowa gramatyka konkuruje z istniejącymi,
+nie zastępuje ich.</p>
+<span class="cost">Koszt: 1 plik. To jest najtańsza rzecz w projekcie i najmocniej zmienia to,
+co widać na ekranie.</span>
+</div>
+
+<div class="ex">
+<h4>Nowa nakładka danych</h4>
+<p>Wpis w <code>data/ui/overlays.ron</code>: klucz, <code>loc_key</code>, jednostka, progi z barwami.
+Plus źródło danych jako <code>ScalarField</code>.</p>
+<p>Test pilnuje <b>monotoniczności jasności</b> palety — nakładka ma się czytać na monochromie
+i przy deuteranopii.</p>
+<span class="cost">Koszt: 1 wpis + 2 klucze lokalizacji. Mechanizm renderowania jest wspólny dla
+wszystkich szesnastu.</span>
+</div>
+
+<div class="ex">
+<h4>Nowa polityka (preset reguł)</h4>
+<p>Wpis w <code>data/policies/presets.ron</code>: warunki, akcje, kadencja, martwa strefa.
+Ten sam typ obsługuje gracza i AI — <code>K-11</code>.</p>
+<p>Wadliwy preset <b>przerywa ładowanie</b>, bo każdy jest walidowany przy starcie.</p>
+<span class="cost">Koszt: 1 wpis. Dostępne domeny to dziś <code>Pricing</code> i <code>Stock</code> —
+<code>Hr</code>, <code>Production</code> i <code>Logistics</code> są w słowniku, ale walidator je
+odrzuca, dopóki nie ma wykonawcy.</span>
+</div>
+
+<div class="ex">
+<h4>Nowy powód decyzji</h4>
+<p>Wariant w <code>DecisionReason</code> (<code>engine/core/src/decision.rs</code>) + gałąź
+w <code>engine/ui/src/inspect/reason.rs</code> + dwa klucze w <code>pl.ron</code> i <code>en.ron</code>.</p>
+<p><b>Kompilator wymusi drugi krok</b>, a test CI trzeci. Nie da się dodać powodu i zapomnieć
+o tekście.</p>
+<span class="cost">Koszt: 3 miejsca, wszystkie wskazane przez błędy kompilacji. M8a dopisał
+7 wariantów podatkowych i build stał do czasu, aż karta inspekcji dostała dla nich zdania.</span>
+</div>
+
+<div class="ex">
+<h4>Nowa rola zawodowa</h4>
+<p>Wpis <b>na końcu</b> <code>data/jobs/roles.ron</code>: widełki płacy, zmiana, klasa lokalu,
+prestiż, wagi produktywności (umiejętność / energia / nastrój / zdrowie) sumujące się do 1000.</p>
+<span class="cost">Koszt: 1 wpis. <b>Wyłącznie na końcu</b> — <code>JobRoleId</code> to pozycja
+w pliku i jest kontraktem zapisu gry.</span>
+</div>
+
+<div class="ex">
+<h4>Nowy scenariusz headless</h4>
+<p>Moduł w <code>tools/headless/src/</code> + podpolecenie. Moduły biblioteczne
+(<code>population</code>, <code>retail</code>, <code>plants</code>, <code>firms</code>,
+<code>labor</code>, <code>full</code>) budują świat warstwami — nowy scenariusz je składa.</p>
+<span class="cost">Koszt: 1 plik. Scenariusze są zwolnione z progów kontroli strukturalnej, więc
+mogą być długie i liniowe — mają być czytelne, nie eleganckie.</span>
+</div>
+
+<div class="ex">
+<h4>Nowy system ECS</h4>
+<p><code>SystemDesc</code> z <code>with_query</code>, <code>reads/writes_resource</code>,
+<code>Cadence</code> i jawnymi <code>before</code>/<code>after</code>.</p>
+<p><code>Access</code> wylicza się <b>z typów zapytania</b>, więc deklaracja nie może się rozjechać
+z tym, co system robi.</p>
+<span class="cost">Koszt: 1 typ + rejestracja. Cykl ograniczeń jest błędem przy budowie
+harmonogramu, nie zakleszczeniem w runtime.</span>
+</div>
+
+<div class="ex">
+<h4>Nowy strumień losowy</h4>
+<p>Wariant <code>StreamId</code> z zakresu przypisanego fazie. Test jednostkowy pilnuje, że żaden
+numer nie jest użyty dwa razy.</p>
+<span class="cost">Koszt: 1 wariant. Dołożenie strumienia <b>nie przesuwa</b> żadnej istniejącej
+sekwencji — to jest cała wartość tego rozwiązania. <b>Uwaga:</b> M8 nie ma jeszcze przydzielonego
+zakresu.</span>
+</div>
+
+<div class="ex">
+<h4>Nowy pass renderu</h4>
+<p><code>RenderGraph::register</code> z jawną deklaracją czytanych i pisanych zasobów.
+Cykl albo zapis do niezadeklarowanego zasobu to błąd <b>przy budowie grafu</b>.</p>
+<span class="cost">Koszt: 1 implementacja <code>RenderPass</code> + shader WGSL. Test CI zwaliduje
+shader przez <code>naga</code> bez GPU.</span>
+</div>
+
+</div>
+
+<div class="note good">
+<b>Wzorzec, który się powtarza:</b> każdy z tych plików ma stałą <code>*_SCHEMA_VERSION</code>,
+jawny enum błędu i walidację <b>kompletności przed użyciem</b>. Brak wpisu jest błędem ładowania,
+nigdy cichym zerem. To dlatego rozszerzanie przez dane jest tutaj bezpieczne — pomyłka wychodzi
+przy starcie, a nie po trzech godzinach gry jako pusta półka bez komunikatu.
+</div>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<h2 id="luki">16. Luki</h2>
+
+<p>Poniższa lista jest <b>przefiltrowana</b>: wszystko, co planują fazy M8–M12, zostało z niej
+usunięte. Brak sieci przesyłowych nie jest luką, bo to M8b. Brak giełdy nie jest luką, bo to M10d.
+Brak dźwięku nie jest luką, bo to M11d. Zostało to, czego <b>nikt nie jest właścicielem</b> —
+najczęściej dlatego, że adresem wyjścia była faza, która już się zamknęła.</p>
+
+<h3>Wysoki priorytet</h3>
+
+<div class="gap">
+<h4>Miasto ma dziesięć razy za mało firm, a bezrobocie jest zerowe przy dwunastu tysiącach pustych etatów</h4>
+<div class="where">sim/world/src/city/sites/place.rs · Etap 7 generatora · zapisane jako BF-4 i BF-10</div>
+<p>Pięcioletni przebieg kończy bezrobociem <b>0,2 %</b> przy <b>12 032</b> nieobsadzonych etatach,
+a gęstość firm wychodzi <b>jedna na ~130 mieszkańców</b> zamiast obiecanych 6–10 tys. firm
+na 150 tys. ludzi.</p>
+<p class="why"><b>Dlaczego to luka, a nie plan:</b> adresem obu pozycji jest <b>M2</b> — faza
+zamknięta sześć podfaz temu. Żadna z M8–M12 nie dotyka gęstości Etapu 7. To jest zarazem
+najpoważniejsza rzecz na tej liście, bo <b>każda bramka kalibracyjna</b> (HHI, pasmo bezrobocia,
+populacja firm) mierzy się na świecie, który ma złą gęstość — czyli mierzymy coś innego, niż
+myślimy.</p>
+</div>
+
+<div class="gap">
+<h4>Zakład produkcyjny nigdy nie ma utargu, więc nigdy nie zostanie zamknięty</h4>
+<div class="where">sim/economy/src/systems.rs:203 → market/close.rs:43 <span class="dim">(pętla po <code>m.shops</code>)</span></div>
+<p><code>Firms::post_revenue</code> ma w całym repozytorium <b>jednego wołającego</b>, a ten wołający
+dostaje wyniki z <code>close_month_with</code> — funkcji, która iteruje wyłącznie po sklepach.
+Zakład produkcyjny bez półki nigdy nie dostaje wpisu, więc <code>SitePnlMonth.revenue</code> zostaje
+zerem, a <code>margin_bp()</code> zwraca <code>None</code>.</p>
+<p>Skutek jest cichy i dokładnie odwrotny do zamierzonego: tier taktyczny AI liczy miesiące straty
+i <b>przerywa liczenie na pierwszym miesiącu bez pomiaru</b> (świadoma reguła: „nie wiem” ≠ „strata”).
+Fabryka nie ma pomiaru <b>nigdy</b>, więc jest <b>strukturalnie odporna na zamknięcie</b> —
+niezależnie od tego, jak długo przynosi straty.</p>
+<p class="why"><b>Dlaczego to luka:</b> przyczyna jest w kształcie typu — <code>supply::Settlement</code>
+niesie sprzedawcę jako <code>FirmId</code>, nie <code>SiteId</code>, więc utargu hurtowego nie ma jak
+przypisać do linii produkcyjnej. Żadna faza 8–12 nie planuje zmiany tego typu ani domknięcia ksiąg
+zakładu produkcyjnego. <b>Zweryfikowane w kodzie, nie z raportu.</b></p>
+</div>
+
+<div class="gap">
+<h4>W mieście 4 km stoi 39 zakładów wytwórczych i zero wydobywczych ze złożem</h4>
+<div class="where">sim/world/src/city/sites/place.rs · wypełniacz strefy · AQ-8, AP-12</div>
+<p>Archetypy kopalń trafiają do wypełniacza stref nieprodukcyjnych, a ten <b>nie sprawdza złóż</b>.
+W efekcie cały model wyczerpywania złoża — koncentracja malejąca z pierwiastkiem sześciennym, koszt
+z członem kwadratowym, samoistne zamykanie się szybu — jest napisany, przetestowany
+(<code>tests/mining.rs</code>: złoże wyczerpuje się w 50 lat i szyb staje) i <b>nie uruchamia się
+w żadnym wygenerowanym mieście</b> tej wielkości.</p>
+<p class="why"><b>Dlaczego to luka:</b> adres wyjścia w <code>00-postep.md</code> to M7 — zamknięte.
+M8–M12 nie dotykają rozstawiania zakładów.</p>
+</div>
+
+<div class="gap">
+<h4>Dług, który właśnie zatrzymał build, nie ma właściciela fazowego</h4>
+<div class="where">engine/ui/src/inspect/reason.rs · <code>describe</code>, <b>730 linii</b> · pozycja 37 rejestru (próg błędu: 250)</div>
+<p>Funkcja rośnie o kilkadziesiąt linii na każdą podfazę: 319 przed M6b, 660 na commicie <code>d2ad731</code>, <b>730 po kilku godzinach pracy nad M8a</b> — przyrost zmierzony w trakcie pisania tego dokumentu. Ścieżka wyjścia wymaga
+przebudowy <code>DecisionReason</code> na trzy enumy (<code>Citizen | Firm | City</code>), co dotyka
+<b>370 miejsc w 10 crate'ach</b> i <b>zmienia format zapisu gry</b>. Rejestr opisuje to jako
+„osobną zmianę, nie podfazę” — czyli nikt jej nie ma w planie.</p>
+<p>W trakcie pisania tego dokumentu ten dług przestał być abstrakcją: M8a dopisał siedem wariantów
+podatkowych, <code>match</code> w tej właśnie funkcji przestał być wyczerpujący i workspace nie
+kompilował się, dopóki nie dopisano siedmiu gałęzi i czternastu kluczy lokalizacji.
+Każda kolejna podfaza płaci ten sam rachunek, a funkcja jest już trzykrotnie ponad progiem błędu.</p>
+<p class="why"><b>Dlaczego to luka:</b> mechanizm <code>K-12</code> działa dokładnie tak, jak miał —
+kompilator nie wypuści powodu bez tekstu. Ale nośnik tego mechanizmu rośnie liniowo z liczbą faz
+i nikt nie jest umówiony na jego podział. Za pięć faz będzie miał tysiąc linii.</p>
+</div>
+
+<h3>Średni priorytet</h3>
+
+<div class="gap med">
+<h4>Szczebel „Substituted” w kaskadzie niedoboru nie robi nic</h4>
+<div class="where">sim/supply/src/b2b.rs:432 — <code>ShortageAction::Substitute { .. } =&gt; {}</code></div>
+<p><code>shortage::review</code> produkuje akcję podmiany (pyta najpierw o substytut receptury, potem
+o substytut towaru), a konsument <b>ma dla niej puste ramię <code>match</code></b>. Szósty z siedmiu
+szczebli drabiny jest więc przejściem do siódmego — zakład idzie z „szukam zamiennika” prosto
+w <code>Halted</code>.</p>
+<p class="why"><b>Dlaczego to luka:</b> substytucja towarów należy do M6 (zamknięte) i nie pojawia się
+w zakresie żadnej z faz 8–12. Dane są gotowe — <code>Substitute</code> istnieje w katalogu dóbr
+i jest ładowany.</p>
+</div>
+
+<div class="gap med">
+<h4>Potrzeba „Status” jest martwym slotem</h4>
+<div class="where">data/needs/needs.ron · tempo 0, <code>places: []</code>, <code>StatusLoss</code> jawnie pusty</div>
+<p>Trzy z dwunastu potrzeb mają tempo zero i brak miejsc zaspokojenia. Dla <code>Safety</code>
+właścicielem jest M8, dla <code>Housing</code> — M9, i to jest w porządku. <code>Status</code> miał
+właściciela w <b>M5</b> — fazie zamkniętej. Potrzeba nigdy nie spada, nigdy nie jest zaspokajana
+i zajmuje slot w tablicy przeliczanej dla każdego mieszkańca co minutę.</p>
+<p class="why">Ten sam wzorzec dotyczy efektów deprywacji: <code>ProductivityLoss</code>
+i <code>AmbitionGain</code> są jawnie puste z właścicielem M7 — też zamkniętym.</p>
+</div>
+
+<div class="gap med">
+<h4>Piesi chodzą drogami szybkiego ruchu</h4>
+<div class="where">sim/world/src/nav_build.rs · <code>ponytail:</code> z wyjściem przez <code>RoadFlags::SIDEWALK</code> w M4c</div>
+<p>Warstwa <code>Modality::Foot</code> bierze wszystkie segmenty poza koleją. Ścieżka wyjścia była
+nazwana i przypisana do M4c — <b>M4 zamknęło się bez niej</b>. Skutek jest widoczny w wyborze środka
+transportu: marsz wzdłuż obwodnicy jest wykonalny i tani, więc bywa wybierany.</p>
+<p class="why">Drugi skrót w tym samym pliku: motoryzacja to <b>płaska stawka 430 ‰</b> bez związku
+z dochodem gospodarstwa. Bogaty i biedny mają tak samo prawdopodobne auto, a to psuje jedną z dwóch
+wielkości, na których stoi wybór środka transportu (drugą jest wartość czasu, która z dochodu
+korzysta).</p>
+</div>
+
+<div class="gap med">
+<h4>Bramki kalibracyjne nie chodzą w CI na pełnej próbce</h4>
+<div class="where">tools/balansator · profil <code>ci</code>, doc-komentarz <code>main.rs</code></div>
+<p>Zmierzone ~7,3 minuty CPU na jedno ziarno przy 365 dobach. Domyślna próbka to 8 ziaren, czyli
+profil <code>ci</code> <b>nie mieści się w dziesięciominutowym oknie</b>. Jedenaście bramek — w tym
+G7 (zachowanie pieniądza) i G8 (determinizm) — jest więc puszczanych na skróconych przebiegach
+albo poza CI.</p>
+<p class="why">Do tego dochodzi G4 (reaktywność szoku), która jest <b>doradcza</b>: zmierzona
+stabilizacja po 5 dobach wobec widełek 14–56. Adresem miało być tarcie rynku B2B z M6 — M6 się
+zamknęło, a widełki nadal nie są trafione.</p>
+</div>
+
+<div class="gap med">
+<h4>Większość testów miasta jest wyłączona</h4>
+<div class="where">sim/world/tests/city.rs — 11 testów, przeważnie <code>#[ignore]</code></div>
+<p>Każdy stawia pełny świat, więc każdy kosztuje. W efekcie bramy, L-system, domknięcie sieci
+i kwartały są weryfikowane <b>ręcznie albo wcale</b>, a jedynym mechanizmem, który chodzi
+automatycznie, jest hash determinizmu — a ten mówi „tak samo jak wczoraj”, nie „poprawnie”.</p>
+<p class="why">Nie ma to adresu w żadnej fazie. Naturalne miejsce to skrócony wariant świata
+(2 km) w testach, ale nikt tego nie zaplanował.</p>
+</div>
+
+<h3>Dług i drobiazgi</h3>
+
+<div class="gap low">
+<h4>Generator dróg nie ma fazy, która by go otworzyła</h4>
+<div class="where">sim/world/src/city/lsystem.rs · pozycje 33–35 rejestru długu</div>
+<p><code>impl Builder</code> 605 linii (próg błędu 500), <code>grow_network</code> 317 (próg 250),
+<code>Builder::grow</code> 257. Rejestr mówi wprost: <b>żadna z M6–M12 tego nie planuje</b>.
+Pozycja 33 jest jedyną, która dzieli się dziś za darmo.</p>
+</div>
+
+<div class="gap low">
+<h4>Mechanizm „adresu wyjścia” nie zadziałał dwa razy</h4>
+<div class="where">city/mod.rs · <code>generate_city</code> 368 linii (poz. 24) &nbsp;·&nbsp; economy/data.rs · <code>EconomyData::load</code> 269 (poz. 38)</div>
+<p>Pierwszej pozycji wyzwalacz nie zadziałał raz, drugiej <b>trzy razy</b> („pierwsza faza dopisująca
+czytnik do <code>retail.ron</code>” — fazy dopisywały, wyzwalacz nie strzelał). To nie jest luka
+w kodzie, tylko w procesie: wyzwalacz zapisany jako „następna faza, która dotknie X” nie ma
+egzekutora.</p>
+</div>
+
+<div class="gap low">
+<h4>Warianty bez ścieżki wykonania</h4>
+<div class="where">sim/supply/src/transport.rs — <code>Carrier::Pipeline</code>, <code>PipelineId</code>, <code>pipeline_gr_per_tonne</code></div>
+<p>Rurociąg jest zadeklarowany w typie i w strojeniu, ale nie ma własnej gałęzi wykonania.
+Podobnie <code>MachineClassId</code> nie ma katalogu danych — jest wyprowadzany z receptur,
+ze świadomym <code>ponytail:</code> i nazwaną ścieżką do <code>data/machines/classes.ron</code>,
+której żadna faza nie tworzy.</p>
+<p class="why">Zgodnie z regułą YAGNI obie rzeczy powinny albo dostać implementację, albo zniknąć
+z typu. Dziś są trzecią możliwością: deklaracją, która wygląda jak funkcja.</p>
+</div>
+
+<div class="gap low">
+<h4>Erozja nie przechwytuje rzek</h4>
+<div class="where">sim/world/src/gen/erosion.rs · <code>ponytail:</code> z wyliczonym kosztem</div>
+<p>Topologia sieci odwodnienia ustala się <b>raz, przed pętlą</b> 40–80 iteracji. Rzeka nie może
+więc przechwycić sąsiedniej zlewni w trakcie erozji — zjawiska, które w rzeczywistości kształtuje
+większość dużych dorzeczy. Koszt naprawy jest w komentarzu: 1,4 s na powtórzenie routingu.</p>
+</div>
+
+<div class="gap low">
+<h4>README kłamie o sześć faz</h4>
+<div class="where">README.md — „Stan: <b>M1 zamknięte</b> (świat statyczny…)”</div>
+<p>Repozytorium jest po M7f i w trakcie M8a. README opisuje flagi klienta i sterowanie poprawnie,
+ale nagłówek stanu nie był ruszany od fazy pierwszej. To jedyny plik, który ktoś z zewnątrz
+przeczyta pierwszy.</p>
+</div>
+
+<div class="gap low">
+<h4>M8 nie ma przydzielonego zakresu <code>StreamId</code></h4>
+<div class="where">engine/core/src/rng.rs — zakresy: M1 100–119, M2 120–139, … M7 220–239</div>
+<p><code>sim/city</code> w obecnej postaci niczego nie losuje, więc problem jeszcze nie boli.
+Ale pierwsze zdarzenie losowe w M8c (generator zdarzeń) będzie go potrzebowało, a test
+jednostkowy pilnujący unikalności strumieni zapali się dopiero po fakcie.</p>
+</div>
+
+<div class="note">
+<b>Czego świadomie nie ma na tej liście.</b> 108 komentarzy <code>ponytail:</code> to w większości
+<i>zdrowe</i> skróty: nazwany sufit, wyliczony koszt naprawy i wskazana droga wyjścia. Liniowe
+przeszukanie w dzienniku partii, globalne LRU zamiast sekcyjnego, płaska macierz dojazdów w modelu
+makro, <code>Mutex&lt;Vec&gt;</code> zamiast buforów thread-local — każdy z nich jest decyzją, którą
+da się przeczytać. Do luk trafiły tylko te, których <b>sufit został osiągnięty</b> albo których
+<b>droga wyjścia prowadzi do fazy, która się zamknęła</b>.
+</div>
+
+<hr>
+
+<h2 id="koniec">Na koniec — trzy rzeczy, które ten kod robi inaczej</h2>
+
+<div class="two">
+<div class="card">
+<h4 style="margin-top:0">Wyjaśnialność wymuszona typem</h4>
+<p><code>Decided&lt;T&gt;</code> nie ma konstruktora bez <code>DecisionReason</code>.
+<code>DecisionReason</code> nie ma <code>#[non_exhaustive]</code>, a <code>match</code> w UI nie ma
+ramienia <code>_</code>. Wynik: <b>nie da się dodać decyzji, której gracz nie zrozumie</b> — build
+stanie. To kosztuje (patrz luka o <code>reason.rs</code>), ale kosztuje w miejscu, w którym widać,
+za co się płaci.</p>
+</div>
+<div class="card">
+<h4 style="margin-top:0">Emergencja zamiast parametrów</h4>
+<p>Nie ma parametru „inflacja” — jest kreacja kredytu. Nie ma tabeli płac — jest oferta, która wisi.
+Nie ma progu zamknięcia kopalni — jest koszt z członem kwadratowym. Nie ma mnożnika monopolizacji —
+jest softmax zamiast argmaxu. W każdym z tych miejsc test statyczny pilnuje, żeby ktoś nie dopisał
+pola na skróty.</p>
+</div>
+<div class="card">
+<h4 style="margin-top:0">Determinizm z konstrukcji, nie z kalibracji</h4>
+<p>Spójność mikro/mezo jest zerowa <b>z konstrukcji</b>, bo mikro nie ma prawa zapisu. Shardowanie
+potrzeb daje bit w bit ten sam wynik, bo spadek to różnica funkcji czasu, nie odejmowanie.
+Przebudowa indeksu jest deterministyczna, bo każdy wątek pisze do rozłącznego zakresu. Nigdzie nie
+ma „posortujemy na końcu”.</p>
+</div>
+</div>
+
+<p class="mono-sm dim" style="margin-top:2.5rem;padding-top:1rem;border-top:1px solid var(--line)">
+Dokument wygenerowany z odczytu kodu na stanie <code>d2ad731</code> + niescommitowany M8a.
+Liczby pochodzą z <code>find</code>, <code>grep</code> i <code>cargo check</code> — nie z dokumentów planu.
+<code>cargo check --workspace --all-targets</code> na stanie z chwili zamknięcia dokumentu: <b>przechodzi czysto</b>.
+Wszystkie twierdzenia o lukach zweryfikowane bezpośrednio w kodzie.
+</p>
+
+</div><!-- /wrap -->
+
+<script>
+"use strict";
+const NS="http://www.w3.org/2000/svg";
+const el=(t,a={},kids=[])=>{const n=document.createElementNS(NS,t);for(const k in a)n.setAttribute(k,a[k]);kids.forEach(c=>n.appendChild(c));return n;};
+const txt=(x,y,s,a={})=>{const n=el("text",Object.assign({x,y,"font-family":"ui-monospace,monospace","font-size":9,fill:"var(--fg2)"},a));n.textContent=s;return n;};
+const svg=(host,w,h)=>{const s=el("svg",{viewBox:`0 0 ${w} ${h}`,width:"100%"});document.getElementById(host).appendChild(s);return s;};
+const clamp=(v,a,b)=>v<a?a:v>b?b:v;
+const lerp=(a,b,t)=>a+(b-a)*t;
+// deterministyczny RNG — ten sam pomysł co w silniku: czysta funkcja ziarna
+function mulberry(seed){let a=seed>>>0;return()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+
+/* ══ motyw ══ */
+const themeBtn=document.getElementById("theme");
+themeBtn.onclick=()=>{const cur=document.documentElement.getAttribute("data-theme");
+  const next=cur==="light"?"dark":cur==="dark"?"light":(matchMedia("(prefers-color-scheme: dark)").matches?"light":"dark");
+  document.documentElement.setAttribute("data-theme",next);try{localStorage.setItem("mg-theme",next);}catch(e){}};
+try{const t=localStorage.getItem("mg-theme");if(t)document.documentElement.setAttribute("data-theme",t);}catch(e){}
+
+/* ═══════════════════ 1. GRAF ZALEŻNOŚCI ═══════════════════ */
+(function(){
+const DEPS={
+ "core":[], "jobs":[],
+ "ecs":["core","jobs"], "spatial":["core","jobs"], "nav":["core","jobs"], "voxel":["core","jobs"],
+ "policy":["core"], "snapshot":["core"],
+ "io":["core","ecs"], "supply":["core","ecs"],
+ "agents":["core","ecs","spatial","snapshot"],
+ "firms":["core","ecs","supply","agents","policy"],
+ "traffic":["core","supply","ecs","nav","agents","spatial","snapshot"],
+ "economy":["core","ecs","jobs","spatial","agents","supply","firms","policy"],
+ "world":["core","jobs","nav","agents","traffic","ecs","spatial","supply","voxel"],
+ "macro":["core","ecs","economy","firms","agents","supply"],
+ "city":["core","ecs","economy","firms","supply","world"],
+ "devtools":["core","ecs","io"],
+ "render":["core","voxel","snapshot","devtools"],
+ "ui":["core","ecs","agents","traffic","economy","firms","supply"],
+};
+const KIND={core:"e",jobs:"e",ecs:"e",spatial:"e",nav:"e",voxel:"e",io:"e",devtools:"e",render:"e",ui:"e",
+ policy:"s",snapshot:"s",supply:"s",agents:"s",firms:"s",traffic:"s",economy:"s",world:"s",macro:"s",city:"s"};
+const LAYERS=[["core","jobs"],["ecs","spatial","nav","voxel","policy","snapshot"],["io","supply","agents","devtools"],
+ ["firms","traffic"],["economy","world"],["macro","city","render","ui"]];
+const W=980,H=430,pos={};
+LAYERS.forEach((row,i)=>{const y=34+i*((H-70)/(LAYERS.length-1));
+  row.forEach((n,j)=>{pos[n]={x:(W/(row.length+1))*(j+1),y};});});
+const s=svg("depgraph",W,H);
+const gE=el("g"),gN=el("g");s.appendChild(gE);s.appendChild(gN);
+const edges=[];
+for(const n in DEPS)DEPS[n].forEach(d=>{
+  const a=pos[n],b=pos[d];if(!a||!b)return;
+  const p=el("path",{d:`M${a.x},${a.y+11} C${a.x},${a.y+50} ${b.x},${b.y-50} ${b.x},${b.y-11}`,
+    fill:"none",stroke:"var(--line2)","stroke-width":1,opacity:.4});
+  gE.appendChild(p);edges.push({from:n,to:d,p});});
+const nodes={};
+for(const n in DEPS){const p=pos[n];const w=n.length*7+18;
+  const g=el("g",{style:"cursor:pointer"});
+  const r=el("rect",{x:p.x-w/2,y:p.y-11,width:w,height:22,rx:5,
+    fill:KIND[n]==="e"?"color-mix(in srgb,var(--cyan) 14%,var(--bg2))":"color-mix(in srgb,var(--amber) 14%,var(--bg2))",
+    stroke:KIND[n]==="e"?"var(--cyan)":"var(--amber)","stroke-width":1});
+  const t=txt(p.x,p.y+4,n,{"text-anchor":"middle","font-size":11,fill:"var(--fg)"});
+  g.appendChild(r);g.appendChild(t);gN.appendChild(g);nodes[n]={g,r,t,w};
+  g.onclick=()=>hi(n);}
+function up(n,acc){(DEPS[n]||[]).forEach(d=>{if(!acc.has(d)){acc.add(d);up(d,acc);}});return acc;}
+function down(n,acc){for(const k in DEPS)if(DEPS[k].includes(n)&&!acc.has(k)){acc.add(k);down(k,acc);}return acc;}
+let sel=null;
+function hi(n){
+  if(sel===n){sel=null;}else sel=n;
+  if(!sel){reset();return;}
+  const u=up(sel,new Set()),d=down(sel,new Set());
+  for(const k in nodes){const on=k===sel||u.has(k)||d.has(k);
+    nodes[k].g.setAttribute("opacity",on?1:.18);}
+  edges.forEach(e=>{const on=(e.from===sel||u.has(e.from)||d.has(e.from))&&(e.to===sel||u.has(e.to)||d.has(e.to));
+    e.p.setAttribute("opacity",on?.95:.05);
+    e.p.setAttribute("stroke",on?(d.has(e.from)||e.from===sel?"var(--amber)":"var(--cyan)"):"var(--line2)");
+    e.p.setAttribute("stroke-width",on?1.7:1);});}
+function reset(){for(const k in nodes)nodes[k].g.setAttribute("opacity",1);
+  edges.forEach(e=>{e.p.setAttribute("opacity",.4);e.p.setAttribute("stroke","var(--line2)");e.p.setAttribute("stroke-width",1);});}
+document.querySelectorAll("[data-dep]").forEach(b=>b.onclick=()=>{
+  document.querySelectorAll("[data-dep]").forEach(x=>x.classList.remove("on"));b.classList.add("on");
+  sel=null;const f=b.dataset.dep;
+  for(const k in nodes)nodes[k].g.setAttribute("opacity",f==="all"||(f==="engine")===(KIND[k]==="e")?1:.15);
+  edges.forEach(e=>e.p.setAttribute("opacity",f==="all"?.4:((f==="engine")===(KIND[e.from]==="e")&&(f==="engine")===(KIND[e.to]==="e")?.5:.05)));});
+document.querySelector('[data-dep="all"]').classList.add("on");
+})();
+
+/* ═══════════════════ 2. DOBA I KADENCJE ═══════════════════ */
+(function(){
+const W=940,H=200,s=svg("tickfig",W,H);
+const L=70,R=W-20,span=R-L;
+const rows=[["minuta","co tick",1],["godzina","i % 60",60],["doba","plan dnia, ceny, praca",1440]];
+s.appendChild(el("rect",{x:L,y:26,width:span,height:10,rx:3,fill:"var(--bg3)"}));
+for(let h=0;h<=24;h+=3){const x=L+span*h/24;
+  s.appendChild(el("line",{x1:x,y1:20,x2:x,y2:40,stroke:"var(--line2)","stroke-width":1}));
+  s.appendChild(txt(x,16,String(h).padStart(2,"0"),{"text-anchor":"middle","font-size":8,fill:"var(--fg3)"}));}
+rows.forEach((r,i)=>{const y=62+i*40;
+  s.appendChild(txt(L-8,y+4,r[0],{"text-anchor":"end","font-size":10,fill:"var(--fg2)"}));
+  s.appendChild(txt(L-8,y+15,r[1],{"text-anchor":"end","font-size":8,fill:"var(--fg3)"}));
+  s.appendChild(el("line",{x1:L,y1:y,x2:R,y2:y,stroke:"var(--line)","stroke-width":1}));
+  const n=r[2]===1?96:r[2]===60?24:1;
+  for(let k=0;k<n;k++){const x=L+span*(k+.5)/n;
+    s.appendChild(el("circle",{cx:x,cy:y,r:r[2]===1?1.6:r[2]===60?2.6:4,fill:"var(--line2)",class:"tk",
+      "data-m":Math.round(1440*(k+.5)/n),"data-w":r[2]===1?15:r[2]===60?60:1440}));}});
+// sharding: 12 zakładów, każdy w swojej minucie godziny
+s.appendChild(txt(L-8,186,"12 zakładów",{"text-anchor":"end","font-size":10,fill:"var(--fg2)"}));
+s.appendChild(txt(L-8,196,"shard i % 60","text-anchor:end"));
+const shTx=s.querySelectorAll("text");shTx[shTx.length-1].setAttribute("text-anchor","end");
+shTx[shTx.length-1].setAttribute("font-size","8");shTx[shTx.length-1].setAttribute("fill","var(--fg3)");
+const plants=[];
+for(let i=0;i<12;i++){const y=182,x=L+span*(i*5+2)/1440*24;
+  const c=el("circle",{cx:L+span*((i*5)/60)/24,cy:y,r:3.4,fill:"var(--line2)"});
+  s.appendChild(c);plants.push({c,min:i*5});}
+const head=el("line",{x1:L,y1:12,x2:L,y2:H-8,stroke:"var(--amber)","stroke-width":1.5});
+s.appendChild(head);
+const marks=s.querySelectorAll(".tk");
+let m=0,run=false,spd=18;
+const read=document.getElementById("tick-read"),btn=document.getElementById("tick-play");
+btn.onclick=()=>{run=!run;btn.textContent=run?"⏸ pauza":"▶ start";btn.classList.toggle("on",run);};
+document.getElementById("tick-speed").oninput=e=>spd=+e.target.value;
+const DNI=["pon","wto","śro","czw","pią","sob","nie"];
+let day=0;
+function frame(){
+  if(run){m+=spd;if(m>=1440){m-=1440;day++;}}
+  const x=L+span*m/1440;head.setAttribute("x1",x);head.setAttribute("x2",x);
+  marks.forEach(k=>{const km=+k.dataset.m,w=+k.dataset.w,d=Math.abs(km-m);
+    const on=d<w/2;k.setAttribute("fill",on?"var(--amber)":"var(--line2)");
+    k.setAttribute("opacity",on?1:.5);});
+  plants.forEach(p=>{const on=Math.abs((m%60)-p.min)<3;
+    p.c.setAttribute("fill",on?"var(--green)":"var(--line2)");p.c.setAttribute("opacity",on?1:.45);});
+  read.textContent=`${String(Math.floor(m/60)).padStart(2,"0")}:${String(Math.floor(m%60)).padStart(2,"0")} · ${DNI[day%7]} · dzień ${day}`;
+  requestAnimationFrame(frame);}
+frame();
+})();
+
+/* ═══════════════════ 3. TRZY FILARY ═══════════════════ */
+(function(){
+const W=940,H=150,s=svg("detfig",W,H);
+const P=[["Money = i64","brak konstruktora z f64","zaokrąglenie 0,1+0,2 na dwóch maszynach\nrozjeżdża bilans po tygodniu gry","var(--green)"],
+ ["rng(seed,stream,id,tick)","czysta funkcja, bez stanu","nowy system w M7 przesuwa\nsekwencję systemu z M5","var(--cyan)"],
+ ["det_math zamiast libm","tylko + − × ÷ i sqrt","exp() daje inny bit na Intelu\ni na ARM — hash się rozjeżdża","var(--violet)"]];
+P.forEach((p,i)=>{const x=20+i*((W-40)/3),w=(W-40)/3-16;
+  s.appendChild(el("rect",{x,y:12,width:w,height:H-30,rx:7,fill:"var(--bg3)",stroke:p[3],"stroke-width":1.2,opacity:.95}));
+  s.appendChild(txt(x+14,36,p[0],{"font-size":13,fill:p[3],"font-weight":"600"}));
+  s.appendChild(txt(x+14,52,p[1],{"font-size":10,fill:"var(--fg2)"}));
+  s.appendChild(el("line",{x1:x+14,y1:64,x2:x+w-14,y2:64,stroke:"var(--line2)","stroke-dasharray":"3 3"}));
+  s.appendChild(txt(x+14,80,"bez niego:",{"font-size":9,fill:"var(--red)"}));
+  p[2].split("\n").forEach((ln,j)=>s.appendChild(txt(x+14,94+j*13,ln,{"font-size":10,fill:"var(--fg2)"})));});
+})();
+
+/* ═══════════════════ 4. PIPELINE TERENU ═══════════════════ */
+(function(){
+const N=72,rnd=mulberry(0xC0FFEE);
+// --- pole wysokości: fBm z wartości losowych, interpolacja kwintyczna jak w noise.rs
+const perm=[];for(let i=0;i<512;i++)perm.push(rnd());
+function vn(x,y,f){const xi=Math.floor(x*f),yi=Math.floor(y*f),xf=x*f-xi,yf=y*f-yi;
+  const g=(a,b)=>perm[((a*73+b*151)%509+509)%509];
+  const u=xf*xf*xf*(xf*(xf*6-15)+10),v=yf*yf*yf*(yf*(yf*6-15)+10);
+  return lerp(lerp(g(xi,yi),g(xi+1,yi),u),lerp(g(xi,yi+1),g(xi+1,yi+1),u),v);}
+const h=new Float32Array(N*N),land=new Uint8Array(N*N);
+for(let y=0;y<N;y++)for(let x=0;x<N;x++){const i=y*N+x;
+  let a=0,amp=1,f=.06,sum=0;
+  for(let o=0;o<5;o++){a+=vn(x,y,f)*amp;sum+=amp;amp*=.5;f*=2;}
+  a/=sum;
+  const cx=(x/N-.5),cy=(y/N-.5),d=Math.sqrt(cx*cx+cy*cy);
+  a=a*1.15-d*.75+.18; h[i]=a; land[i]=a>.28?1:0;}
+const h0=Float32Array.from(h);
+// --- D8 + akumulacja (uproszczone: bez wypełniania, w kolejności malejącej wysokości)
+const NB=[[1,0],[1,1],[0,1],[-1,1],[-1,0],[-1,-1],[0,-1],[1,-1]];
+function flow(hh){const acc=new Float32Array(N*N).fill(1),rec=new Int32Array(N*N).fill(-1);
+  const ord=[...Array(N*N).keys()].sort((a,b)=>hh[b]-hh[a]);
+  for(const i of ord){const x=i%N,y=(i/N)|0;let best=-1,bh=hh[i];
+    for(const[dx,dy]of NB){const nx=x+dx,ny=y+dy;if(nx<0||ny<0||nx>=N||ny>=N)continue;
+      const j=ny*N+nx;if(hh[j]<bh){bh=hh[j];best=j;}}
+    rec[i]=best;}
+  for(const i of ord){if(rec[i]>=0)acc[rec[i]]+=acc[i];}
+  return{acc,rec};}
+let F=flow(h);
+// --- erozja: stream-power, 26 iteracji
+const hE=Float32Array.from(h);
+for(let it=0;it<26;it++){const f=flow(hE);
+  for(let i=0;i<N*N;i++){if(!land[i])continue;const j=f.rec[i];if(j<0)continue;
+    const sl=Math.max(0,hE[i]-hE[j]);hE[i]-=Math.min(sl*.5,0.0022*Math.sqrt(f.acc[i])*sl*8);}}
+const FE=flow(hE);
+const cv=document.getElementById("genmap"),ctx=cv.getContext("2d"),PX=cv.width/N;
+const STEPS=[
+["P1 landmask","4-oktawowy fBm linii brzegowej → <code>work.land</code>. Ląd i morze, nic więcej.",d=>d.mask],
+["P2 height","Rzeźba wieloktawowa z domain warpingiem, tłumiona pod morzem. Pierwszy <code>commit_height</code> → decymetry.",d=>d.relief],
+["P3 uplift","Pola wypiętrzenia <code>U</code> i podatności na erozję <code>K</code> — wejście stream-power.",d=>d.uplift],
+["P4 flood","Priority-flood z ε, w <b>milimetrach całkowitych</b> — żeby ε było stałą, a nie funkcją wysokości.",d=>d.filled],
+["P5 flow","D8, stos topologiczny, akumulacja spływu, zlewnie, listy donorów w CSR.",d=>d.acc],
+["P6 erosion","Stream-power + dyfuzja stokowa + kąt zsypu, 40–80 iteracji. Potem <b>ponawia P4 i P5</b>.",d=>d.eroded],
+["P7 water","Klasyfikacja Dry/Sea/Lake/River, rząd Strahlera, wycięcie koryta. <code>RiverNetwork</code> jest <b>wektorowa</b>.",d=>d.water],
+["P8 geology","Model warstw + odległość do wody na siatce 16 m (transformata 3-4).",d=>d.geo],
+["P9 deposits","Zasiew z jitterem, ruletka <code>base × region × profil × epoka</code>, przycięcie do skały macierzystej.",d=>d.dep],
+["P10 temperature","12 siatek miesięcznych: szerokość geograficzna, gradient −0,065 °C/m, kontynentalizm.",d=>d.temp],
+["P11 precip","Adwekcja wilgoci wiatrem dominującym, opad orograficzny, cień opadowy.",d=>d.prec],
+["P12 biome","Whittaker + nadpisania lokalne (woda, skała, śnieg, mokradło) + żyzność.",d=>d.biome]];
+const ol=document.getElementById("gen-steps");
+STEPS.forEach((st,i)=>{const li=document.createElement("li");
+  li.innerHTML=`<b>${st[0]}</b> — ${st[1]}`;li.onclick=()=>go(i);ol.appendChild(li);});
+const lis=[...ol.children];
+function px(i,r,g,b){ctx.fillStyle=`rgb(${r|0},${g|0},${b|0})`;ctx.fillRect((i%N)*PX,((i/N)|0)*PX,PX+1,PX+1);}
+function draw(step){
+  const hh=step>=5?hE:h, ff=step>=5?FE:F;
+  for(let i=0;i<N*N;i++){
+    const a=clamp((hh[i]-.15)/.72,0,1);
+    let r,g,b;
+    if(!land[i]){r=18+a*30;g=38+a*50;b=74+a*70;}
+    else{r=lerp(72,214,a);g=lerp(104,206,a);b=lerp(66,178,a);}
+    if(step===0){const v=land[i]?150:52;r=land[i]?122:34;g=v;b=land[i]?92:96;}
+    if(step===2&&land[i]){const u=clamp((perm[(i*7)%509]+a)/2,0,1);r=lerp(60,230,u);g=lerp(60,140,u);b=lerp(120,60,u);}
+    if(step===3&&land[i]&&hh[i]<.36){r=90;g=120;b=190;}
+    if(step===4&&land[i]){const f=clamp(Math.log(1+ff.acc[i])/6,0,1);r=lerp(r,60,f);g=lerp(g,150,f);b=lerp(b,235,f);}
+    if(step===7&&land[i]){const l=Math.floor(clamp(hh[i]*7,0,4));const C=[[150,120,86],[168,140,98],[132,128,126],[110,104,116],[92,86,96]][l];r=C[0];g=C[1];b=C[2];}
+    if(step===9){const t=clamp(1-(hh[i]-.2)*1.4-((i/N|0)/N)*.5,0,1);r=lerp(40,232,t);g=lerp(80,120,t);b=lerp(190,60,t);}
+    if(step===10){const p=clamp(.35+vn(i%N,(i/N)|0,.05)*.8-(hh[i]-.3),0,1);r=lerp(226,26,p);g=lerp(214,110,p);b=lerp(170,190,p);}
+    if(step===11&&land[i]){const w=clamp(.35+vn(i%N,(i/N)|0,.05)*.8-(hh[i]-.3),0,1),t=clamp(1-(hh[i]-.2)*1.4,0,1);
+      const C=hh[i]>.72?[224,226,232]:w<.3?[198,178,110]:w>.62?[44,110,62]:t>.6?[126,158,74]:[96,138,88];r=C[0];g=C[1];b=C[2];}
+    px(i,r,g,b);}
+  if(step>=4){ // rzeki
+    for(let i=0;i<N*N;i++){if(!land[i])continue;const th=step>=6?14:40;
+      if(ff.acc[i]>th){const w=clamp(Math.log(ff.acc[i])/8,.25,1);
+        ctx.fillStyle=`rgba(56,132,210,${step>=6?.95:.55})`;
+        const sz=PX*(step>=6?clamp(w*1.7,.6,1.8):1);
+        ctx.fillRect((i%N)*PX,((i/N)|0)*PX,sz,sz);}}}
+  if(step>=8){const r2=mulberry(7);ctx.fillStyle="#e8a33d";
+    for(let k=0;k<26;k++){const x=Math.floor(r2()*N),y=Math.floor(r2()*N);
+      if(!land[y*N+x])continue;ctx.beginPath();ctx.arc(x*PX,y*PX,2.6,0,7);ctx.fill();}}
+}
+let cur=0,timer=null;
+function go(i){cur=clamp(i,0,STEPS.length-1);draw(cur);
+  lis.forEach((l,k)=>{l.classList.toggle("act",k===cur);l.classList.toggle("done",k<cur);});
+  document.getElementById("gen-label").textContent=STEPS[cur][0];}
+document.getElementById("gen-next").onclick=()=>go(cur+1>=STEPS.length?0:cur+1);
+document.getElementById("gen-prev").onclick=()=>go(cur-1<0?STEPS.length-1:cur-1);
+const gp=document.getElementById("gen-play");
+gp.onclick=()=>{if(timer){clearInterval(timer);timer=null;gp.textContent="▶ odtwórz";gp.classList.remove("on");return;}
+  gp.textContent="⏸ pauza";gp.classList.add("on");go(0);
+  timer=setInterval(()=>{if(cur+1>=STEPS.length){clearInterval(timer);timer=null;gp.textContent="▶ odtwórz";gp.classList.remove("on");return;}go(cur+1);},1100);};
+go(0);
+})();
+
+/* ═══════════════════ 5. PIPELINE MIASTA ═══════════════════ */
+(function(){
+const S=320,C=S/2,rnd=mulberry(0x5EED);
+// bramy
+const gates=[];for(let i=0;i<5;i++){const a=(i/5)*Math.PI*2+.4;
+  gates.push({x:C+Math.cos(a)*(C-12),y:C+Math.sin(a)*(C-12),a:a+Math.PI});}
+// mini L-system: promienie z bram do centrum z jitterem + dwa pierścienie + odgałęzienia
+const roads=[];
+gates.forEach(g=>{let x=g.x,y=g.y,a=Math.atan2(C-y,C-x);
+  for(let k=0;k<9;k++){const len=(C-14)/9,na=a+(rnd()-.5)*.34;
+    const nx=x+Math.cos(na)*len,ny=y+Math.sin(na)*len;
+    roads.push({x1:x,y1:y,x2:nx,y2:ny,c:k<5?"art":"col"});x=nx;y=ny;a=na*.55+Math.atan2(C-y,C-x)*.45;}});
+[58,104].forEach((r,ri)=>{const seg=26;let px=C+r,py=C;
+  for(let k=1;k<=seg;k++){const t=k/seg*Math.PI*2,rr=r*(1+(rnd()-.5)*.11);
+    const nx=C+Math.cos(t)*rr,ny=C+Math.sin(t)*rr;roads.push({x1:px,y1:py,x2:nx,y2:ny,c:ri?"col":"art"});px=nx;py=ny;}});
+const base=roads.length;
+for(let i=0;i<base;i+=2){const r=roads[i];if(rnd()>.55)continue;
+  const mx=(r.x1+r.x2)/2,my=(r.y1+r.y2)/2,a=Math.atan2(r.y2-r.y1,r.x2-r.x1)+Math.PI/2*(rnd()>.5?1:-1);
+  let x=mx,y=my;for(let k=0;k<3;k++){const nx=x+Math.cos(a)*16,ny=y+Math.sin(a)*16;
+    if(nx<8||ny<8||nx>S-8||ny>S-8)break;roads.push({x1:x,y1:y,x2:nx,y2:ny,c:"loc"});x=nx;y=ny;}}
+// kwartały: jittered grid, odrzucamy te blisko dróg
+function distSeg(px,py,r){const dx=r.x2-r.x1,dy=r.y2-r.y1,L=dx*dx+dy*dy;
+  let t=L?((px-r.x1)*dx+(py-r.y1)*dy)/L:0;t=clamp(t,0,1);
+  const qx=r.x1+t*dx,qy=r.y1+t*dy;return Math.hypot(px-qx,py-qy);}
+const blocks=[];
+for(let gy=0;gy<15;gy++)for(let gx=0;gx<15;gx++){
+  const x=14+gx*20.5+(rnd()-.5)*4,y=14+gy*20.5+(rnd()-.5)*4;
+  const d=Math.hypot(x-C,y-C);if(d>C-16)continue;
+  let md=99;roads.forEach(r=>{md=Math.min(md,distSeg(x,y,r));});
+  if(md<6||md>16)continue;
+  const w=13+rnd()*4,hh=11+rnd()*4;
+  blocks.push({x,y,w,h:hh,d,zone:d<52?(rnd()<.6?"C":"M"):d<96?(rnd()<.55?"R":"M"):(rnd()<.5?"I":"R"),
+    dist:Math.floor((Math.atan2(y-C,x-C)+Math.PI)/(Math.PI*2)*6),val:clamp(1-d/(C-10)+ (rnd()-.5)*.3,0,1)});}
+const ZC={C:"#e8a33d",R:"#5fc98a",M:"#4cc9d9",I:"#a98cf0"};
+const s=document.getElementById("citysvg");
+const L={};["roads","blocks","zones","dist","rail","parc","val","bld","sites","gates","flow"].forEach(k=>{L[k]=el("g");s.appendChild(L[k]);});
+function clear(){for(const k in L)L[k].innerHTML="";}
+const STEPS=[
+["bramy","Punktacja centrum (płasko, sucho, centralnie, blisko wody), potem bramy wymagane i opcjonalne z profilu strefowego.",d=>{D.gates()}],
+["L-system","Wachlarz pięciu propozycji z każdej bramy. Ograniczenia w kolejności: strefy zakazane → spadek z sześcioma próbami ratunku → konstrukcja → doklejenie → przecięcie → kąt minimalny.",()=>{D.gates();D.roads(.55)}],
+["finalize","Przycięcie wiszących końców <b>do punktu stałego</b>, największa składowa, kompaktacja tablic, CSR, latarnie.",()=>{D.gates();D.roads(1)}],
+["kwartały","Obchód półkrawędzi grafu planarnego. Kąty sortowane <b>pseudokątem</b>, nie <code>atan2</code>. Cofnięcie o pół szerokości pasa drogowego.",()=>{D.gates();D.roads(1);D.blocks("none")}],
+["strefy","Punktacja z twardymi wetami (woda, zalew, spadek), przydział kwotowy zachłanny po marginesie, dwa przebiegi wygładzania większością sąsiadów.",()=>{D.gates();D.roads(1);D.blocks("zone")}],
+["dzielnice","<b>Przed parcelami</b>, bo przypisanie dzielnic przenumerowuje kwartały. Voronoi Dijkstry po grafie sąsiedztwa, granice dognane do kolektorów.",()=>{D.gates();D.roads(1);D.blocks("zone");D.dist()}],
+["kolej","Dijkstra od bramy kolejowej, backtracking do klastrów przemysłowych, spadek zaciśnięty do 2 %.",()=>{D.gates();D.roads(1);D.blocks("zone");D.rail()}],
+["parcele","Rekurencyjne cięcie wzdłuż długiej osi OBB (w miejscu cięcia ulica lokalna), do ośmiu poziomów, potem podział pasa przyfrontowego.",()=>{D.gates();D.roads(1);D.blocks("zone");D.parc()}],
+["wycena I","<b>Przed zabudową</b> — wartość gruntu jest <i>wejściem</i> doboru gramatyki i liczby kondygnacji, nie jej wynikiem.",()=>{D.gates();D.roads(1);D.blocks("val")}],
+["zabudowa","Dobór gramatyki (filtr rozluźniany, losowanie ważone), obrys kurczony do skutku, niwelacja, derywacja <b>równolegle</b>, emisja sekwencyjnie.",()=>{D.gates();D.roads(1);D.blocks("zone");D.bld()}],
+["zakłady","Liczba zakładów z propagacji popytu wstecz po hipergrafie receptur, 12 rund. Klastry przemysłowe z szablonami łańcuchów, dopasowanie do złoża.",()=>{D.gates();D.roads(1);D.blocks("zone");D.bld();D.sites()}],
+["domknięcie","Osiągalność receptur, import przez przepustowość bram, <b>sześć rund</b> równoważenia skali do stosunku podaży do popytu w [0,85; 1,30].",()=>{D.gates();D.roads(1);D.blocks("zone");D.bld();D.sites();D.flow()}],
+["wycena II","Teraz z dostępem do pracy, handlu i usług oraz zanieczyszczeniem. Nadpisuje wartość z pierwszego przebiegu.",()=>{D.gates();D.roads(1);D.blocks("val");D.bld()}],
+["voxele","Segmenty dzielone co 32 m, komendy wypełnienia i wycięcia per konstrukcja, kanoniczna kolejność warstwowania. Potem hash i raport.",()=>{D.gates();D.roads(1);D.blocks("zone");D.bld();D.sites();D.vox()}]];
+const D={
+ gates(){gates.forEach(g=>{L.gates.appendChild(el("circle",{cx:g.x,cy:g.y,r:5,fill:"var(--amber)",stroke:"var(--bg)","stroke-width":1.5}));});
+   L.gates.appendChild(el("circle",{cx:C,cy:C,r:4,fill:"none",stroke:"var(--amber)","stroke-width":1.5}));},
+ roads(f){const n=Math.floor(roads.length*f);
+   for(let i=0;i<n;i++){const r=roads[i];
+     L.roads.appendChild(el("line",{x1:r.x1,y1:r.y1,x2:r.x2,y2:r.y2,
+       stroke:r.c==="art"?"var(--fg2)":r.c==="col"?"var(--fg3)":"var(--line2)",
+       "stroke-width":r.c==="art"?2.2:r.c==="col"?1.4:.8,"stroke-linecap":"round"}));}},
+ blocks(mode){blocks.forEach(b=>{
+   let f="none",st="var(--line2)";
+   if(mode==="zone"){f=ZC[b.zone];st="none";}
+   if(mode==="val"){const v=b.val;f=`rgb(${lerp(30,255,v)|0},${lerp(24,205,v)|0},${lerp(70,120,v)|0})`;st="none";}
+   L.blocks.appendChild(el("rect",{x:b.x-b.w/2,y:b.y-b.h/2,width:b.w,height:b.h,rx:1.5,
+     fill:f,opacity:mode==="none"?1:.75,stroke:st,"stroke-width":.7}));});},
+ dist(){for(let d=0;d<6;d++){const pts=blocks.filter(b=>b.dist===d);if(pts.length<3)continue;
+   const cx=pts.reduce((a,p)=>a+p.x,0)/pts.length,cy=pts.reduce((a,p)=>a+p.y,0)/pts.length;
+   L.dist.appendChild(el("circle",{cx,cy,r:3,fill:"var(--fg)",opacity:.7}));
+   pts.forEach(p=>L.dist.appendChild(el("line",{x1:cx,y1:cy,x2:p.x,y2:p.y,stroke:"var(--fg)","stroke-width":.35,opacity:.3})));}},
+ rail(){L.rail.appendChild(el("path",{d:`M${gates[1].x},${gates[1].y} Q${C+30},${C-20} ${C-70},${C+64}`,
+   fill:"none",stroke:"var(--fg)","stroke-width":2,"stroke-dasharray":"5 4",opacity:.85}));},
+ parc(){blocks.forEach(b=>{const n=2+Math.floor(b.w/6);
+   for(let k=1;k<n;k++){const x=b.x-b.w/2+b.w*k/n;
+     L.parc.appendChild(el("line",{x1:x,y1:b.y-b.h/2,x2:x,y2:b.y+b.h/2,stroke:"var(--line2)","stroke-width":.5}));}
+   L.parc.appendChild(el("rect",{x:b.x-b.w/2,y:b.y-b.h/2,width:b.w,height:b.h,fill:"none",stroke:"var(--fg3)","stroke-width":.6}));});},
+ bld(){const r2=mulberry(11);blocks.forEach(b=>{const n=2+Math.floor(b.w/6);
+   for(let k=0;k<n;k++){const w=b.w/n*.78,hh=b.h*(.45+r2()*.45);
+     L.bld.appendChild(el("rect",{x:b.x-b.w/2+b.w*(k+.11)/n,y:b.y-hh/2,width:w,height:hh,rx:.8,
+       fill:ZC[b.zone],opacity:.95,stroke:"var(--bg)","stroke-width":.4}));}});},
+ sites(){const r2=mulberry(19);blocks.filter(b=>b.zone==="I"||(b.zone==="C"&&r2()<.5)).forEach(b=>{
+   L.sites.appendChild(el("rect",{x:b.x-3,y:b.y-3,width:6,height:6,rx:1,fill:"var(--bg)",stroke:"var(--red)","stroke-width":1.3}));});},
+ flow(){gates.forEach(g=>{L.flow.appendChild(el("path",{d:`M${g.x},${g.y} Q${(g.x+C)/2+14},${(g.y+C)/2-14} ${C},${C}`,
+   fill:"none",stroke:"var(--red)","stroke-width":1.2,"stroke-dasharray":"4 3",opacity:.8}));});},
+ vox(){blocks.forEach(b=>{L.bld.appendChild(el("rect",{x:b.x-b.w/2-1,y:b.y-b.h/2-1,width:b.w+2,height:b.h+2,
+   fill:"none",stroke:"var(--cyan)","stroke-width":.5,opacity:.55}));});}};
+const ol=document.getElementById("city-steps");
+STEPS.forEach((st,i)=>{const li=document.createElement("li");li.innerHTML=`<b>${st[0]}</b> — ${st[1]}`;
+  li.onclick=()=>go(i);ol.appendChild(li);});
+const lis=[...ol.children];let cur=0,timer=null;
+function go(i){cur=clamp(i,0,STEPS.length-1);clear();STEPS[cur][2]();
+  lis.forEach((l,k)=>{l.classList.toggle("act",k===cur);l.classList.toggle("done",k<cur);});
+  document.getElementById("city-label").textContent=`${cur+1} · ${STEPS[cur][0]}`;}
+document.getElementById("city-next").onclick=()=>go(cur+1>=STEPS.length?0:cur+1);
+document.getElementById("city-prev").onclick=()=>go(cur-1<0?STEPS.length-1:cur-1);
+const cp=document.getElementById("city-play");
+cp.onclick=()=>{if(timer){clearInterval(timer);timer=null;cp.textContent="▶ odtwórz";cp.classList.remove("on");return;}
+  cp.textContent="⏸ pauza";cp.classList.add("on");go(0);
+  timer=setInterval(()=>{if(cur+1>=STEPS.length){clearInterval(timer);timer=null;cp.textContent="▶ odtwórz";cp.classList.remove("on");return;}go(cur+1);},1200);};
+go(0);
+})();
+
+/* ===== 6. DOBA ANNY ===== */
+(function(){
+const SLOTS=[
+ {p:1,a:"Dojazd → szkoła",s:430,e:452,c:"var(--cyan)",r:"odprowadza · dorosly o najpóźniej zaczynającej się zmianie"},
+ {p:1,a:"Dojazd → praca",s:452,e:478,c:"var(--cyan)",r:"dojazd do zobowiązania — nietykalny dla faz niższych"},
+ {p:1,a:"Praca",s:480,e:720,c:"var(--amber)",r:"ShiftKind::window() — zmiana 8:00–16:00"},
+ {p:1,a:"Praca",s:750,e:960,c:"var(--amber)",r:"druga połowa zmiany, po przerwie"},
+ {p:1,a:"Dojazd → szkoła",s:960,e:984,c:"var(--cyan)",r:"odbiera · dorosły o najwcześniej kończącej się zmianie"},
+ {p:1,a:"Dojazd → dom",s:984,e:1010,c:"var(--cyan)",r:"powrót przez szkołę — bez dziecka byłby prosto"},
+ {p:2,a:"Sen",s:0,e:400,c:"var(--violet)",r:"pobudka = pierwsze zobowiązanie − PREP_MIN (30 min)"},
+ {p:2,a:"Higiena",s:400,e:420,c:"var(--violet)",r:"poniżej HYGIENE_TRIGGER"},
+ {p:2,a:"Śniadanie",s:420,e:430,c:"var(--green)",r:"okno: po pobudce +150 min"},
+ {p:2,a:"Obiad",s:720,e:750,c:"var(--green)",r:"okno 11:00–15:00 — trafia w przerwę zmiany"},
+ {p:2,a:"Sen",s:1350,e:1440,c:"var(--violet)",r:"pora snu → północ; doba się nie zawija"},
+ {p:3,a:"Zakupy — pieczywo",s:1010,e:1040,c:"var(--red)",r:"pilność 200 − dni×10 · wplecione w dojazd, start tak późno jak się da"},
+ {p:4,a:"Kolacja",s:1050,e:1075,c:"var(--green)",r:"okno 17:00–21:00"},
+ {p:4,a:"Czas wolny",s:1075,e:1200,c:"var(--blue)",r:"losowanie ważone z osobowości; w nocy Social = 0"},
+ {p:4,a:"Dom",s:1200,e:1350,c:"var(--fg3)",r:"Idle — reszta luk"}];
+const W=940,H=230,s=svg("dayfig",W,H),L=165,R=W-16,span=R-L;
+for(let h=0;h<=24;h+=2){const x=L+span*h*60/1440;
+  s.appendChild(el("line",{x1:x,y1:22,x2:x,y2:H-46,stroke:"var(--line)","stroke-width":h%6===0?1:.5}));
+  s.appendChild(txt(x,16,String(h).padStart(2,"0")+":00",{"text-anchor":"middle","font-size":8,fill:"var(--fg3)"}));}
+const g=el("g");s.appendChild(g);
+const info=txt(L,H-10,"",{"font-size":10,fill:"var(--fg2)"});s.appendChild(info);
+const NAMES=["","zobowiązania","rytm dobowy","zadania","czas wolny"];
+function fmt(m){return String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padStart(2,"0");}
+function render(ph){
+  g.innerHTML="";
+  for(let p=1;p<=4;p++){const y=28+(p-1)*32,on=p<=ph;
+    g.appendChild(el("rect",{x:L,y,width:span,height:24,rx:3,fill:"var(--bg3)",opacity:on?.55:.28}));
+    g.appendChild(txt(L-10,y+10,"faza "+p,{"text-anchor":"end","font-size":10,fill:on?"var(--fg)":"var(--fg3)",opacity:on?1:.45}));
+    g.appendChild(txt(L-10,y+21,NAMES[p],{"text-anchor":"end","font-size":9,fill:on?"var(--fg2)":"var(--fg3)",opacity:on?1:.4}));}
+  const vis=SLOTS.filter(x=>x.p<=ph);
+  vis.forEach(sl=>{const x=L+span*sl.s/1440,w=Math.max(3,span*(sl.e-sl.s)/1440),y=28+(sl.p-1)*32;
+    const r=el("rect",{x,y,width:w,height:24,rx:3.5,fill:sl.c,opacity:.9,style:"cursor:pointer"});
+    r.onmouseenter=()=>{info.textContent=sl.a+" · "+fmt(sl.s)+"–"+fmt(sl.e)+" · "+sl.r;};
+    g.appendChild(r);
+    if(w>56)g.appendChild(txt(x+6,y+16,sl.a,{"font-size":9.5,fill:"var(--bg)","font-weight":"600","pointer-events":"none"}));});
+  // suma unii minut, nie suma długości — fazy leżą w osobnych rzędach
+  const cov=new Uint8Array(1440);vis.forEach(x=>{for(let m=x.s;m<x.e&&m<1440;m++)cov[m]=1;});
+  const filled=cov.reduce((a,b)=>a+b,0);
+  info.textContent = ph===0
+    ? "Kanwa jest pusta — 24 sloty, zero wypełnionych. Najedź na pasek, żeby zobaczyć uzasadnienie slotu."
+    : "Wypełnione: "+filled+" z 1440 minut · wolnych luk: "+(1440-filled)+" min · slotów: "+vis.length+"/24";}
+document.querySelectorAll(".phbtn").forEach(b=>b.onclick=()=>{
+  document.querySelectorAll(".phbtn").forEach(x=>x.classList.remove("on"));b.classList.add("on");
+  render(+b.dataset.phase);});
+render(0);
+})();
+
+/* ═══════════════════ 7. WYBÓR ŚRODKA ═══════════════════ */
+(function(){
+const W=940,H=250,s=svg("modefig",W,H);
+const MODES=[
+ {k:"Walk",n:"pieszo",sp:83,fix:0,km:0,exp:700,cost:0},        // cm/s -> m/min 83
+ {k:"Bike",n:"rower",sp:250,fix:480,km:0,exp:900,cost:0},
+ {k:"Transit",n:"komunikacja",sp:300,fix:40,km:0,exp:250,cost:90},
+ {k:"CarOwn",n:"auto",sp:450,fix:140,km:78,exp:0,cost:0},
+ {k:"Taxi",n:"taksówka",sp:450,fix:0,km:400,exp:0,cost:800}];
+const g=el("g");s.appendChild(g);
+function calc(){
+  const incR=+document.getElementById("mc-inc").value;
+  const rain=+document.getElementById("mc-rain").value/100;
+  const distM=+document.getElementById("mc-dist").value*100;
+  const income=800+incR*80;                                 // zł/mies.
+  document.getElementById("mc-inc-v").textContent=income.toLocaleString("pl")+" zł";
+  document.getElementById("mc-rain-v").textContent=Math.round(rain*100)+" %";
+  document.getElementById("mc-dist-v").textContent=(distM/1000).toFixed(1).replace(".",",")+" km";
+  // VoT: dochód netto/h ÷ 60 × mnożnik celu (praca 1300/1000), clamp 6..150 gr/min
+  const vot=clamp(Math.round(income*100/168/60*1.3),6,150);
+  return MODES.map(m=>{
+    const min=Math.max(1,Math.round(distM/m.sp*60/60));     // minuty
+    const t=min*vot;
+    const pieniadz=m.cost+Math.round(m.km*distM/1000);
+    const pogoda=Math.round(min*vot*rain*m.exp/1000);
+    const disc=m.fix+pogoda;
+    let infeasible=null;
+    if(m.k==="Walk"&&min>60)infeasible="ponad 60 min marszu";
+    if(m.k==="Bike"&&min>35)infeasible="ponad 35 min jazdy";
+    if(m.k==="CarOwn"&&distM<800)infeasible="poniżej 800 m auto nie wchodzi";
+    return{m,min,t,pieniadz,disc,fix:m.fix,pogoda,total:t+pieniadz+disc,infeasible,vot};});}
+function render(){
+  const r=calc();g.innerHTML="";
+  const ok=r.filter(x=>!x.infeasible);
+  const best=ok.reduce((a,b)=>b.total<a.total?b:a,ok[0]);
+  const max=Math.max(...r.map(x=>x.total))*1.08;
+  const L=120,R=W-150,span=R-L;
+  g.appendChild(txt(L,16,`wartość czasu: ${r[0].vot} gr/min  ·  nawyk broni wyboru do 6 ‰ kosztu najtańszej opcji`,{"font-size":9.5,fill:"var(--fg3)"}));
+  r.forEach((x,i)=>{const y=34+i*42;
+    g.appendChild(txt(L-10,y+16,x.m.n,{"text-anchor":"end","font-size":11,fill:x.infeasible?"var(--fg3)":"var(--fg)"}));
+    if(x.infeasible){
+      g.appendChild(el("rect",{x:L,y:y+4,width:span,height:20,rx:4,fill:"var(--bg3)"}));
+      g.appendChild(txt(L+8,y+18,"niewykonalne — "+x.infeasible,{"font-size":9.5,fill:"var(--red)"}));return;}
+    let cx=L;
+    [[x.t,"var(--cyan)","czas"],[x.pieniadz,"var(--amber)","pieniądz"],[x.fix,"var(--violet)","stała"],[x.pogoda,"var(--blue)","pogoda"]].forEach(seg=>{
+      const w=span*seg[0]/max;if(w<=0)return;
+      const rr=el("rect",{x:cx,y:y+4,width:w,height:20,rx:2,fill:seg[1],opacity:.88});
+      rr.appendChild(el("title",{},[]));rr.lastChild.textContent=`${seg[2]}: ${(seg[0]/100).toFixed(2)} zł`;
+      g.appendChild(rr);
+      if(w>34)g.appendChild(txt(cx+w/2,y+18,(seg[0]/100).toFixed(2),{"text-anchor":"middle","font-size":8.5,fill:"var(--bg)","pointer-events":"none"}));
+      cx+=w;});
+    g.appendChild(txt(cx+8,y+18,(x.total/100).toFixed(2)+" zł",
+      {"font-size":11,fill:x===best?"var(--green)":"var(--fg2)","font-weight":x===best?"700":"400"}));
+    g.appendChild(txt(cx+72,y+18,`${x.min} min`,{"font-size":9,fill:"var(--fg3)"}));
+    if(x===best)g.appendChild(el("rect",{x:L-2,y:y+2,width:(cx-L)+4,height:24,rx:5,fill:"none",stroke:"var(--green)","stroke-width":1.4}));});
+  let lx=L;
+  [["czas × VoT","var(--cyan)"],["pieniądz","var(--amber)"],["stała niedogodność środka","var(--violet)"],["ekspozycja na pogodę","var(--blue)"]].forEach(lg=>{
+    g.appendChild(el("rect",{x:lx,y:H-17,width:9,height:9,rx:2,fill:lg[1]}));
+    g.appendChild(txt(lx+13,H-9,lg[0],{"font-size":9,fill:"var(--fg3)"}));
+    lx+=lg[0].length*5.4+26;});}
+["mc-inc","mc-rain","mc-dist"].forEach(id=>document.getElementById(id).oninput=render);
+render();
+})();
+
+/* ═══════════════════ 8. KOREK I SPILLBACK ═══════════════════ */
+(function(){
+const W=940,H=190,s=svg("jamfig",W,H);
+const EDGES=[{x:40,w:300,lanes:3,cap:26,name:"arteria · 3 pasy"},
+             {x:340,w:180,lanes:1,cap:7,name:"przewężenie · 1 pas"},
+             {x:520,w:380,lanes:3,cap:30,name:"arteria · 3 pasy"}];
+EDGES.forEach((e,i)=>{
+  s.appendChild(el("rect",{x:e.x,y:56,width:e.w,height:e.lanes*17,rx:3,fill:"var(--bg3)",stroke:"var(--line)"}));
+  s.appendChild(txt(e.x+4,50,e.name,{"font-size":9,fill:"var(--fg3)"}));});
+const gCars=el("g");s.appendChild(gCars);
+const bars=EDGES.map((e,i)=>{const r=el("rect",{x:e.x,y:132,width:0,height:9,rx:2,fill:"var(--green)"});
+  s.appendChild(el("rect",{x:e.x,y:132,width:e.w,height:9,rx:2,fill:"var(--bg3)"}));s.appendChild(r);
+  s.appendChild(txt(e.x+4,156,"",{"font-size":9,fill:"var(--fg3)",class:"jl"}));return r;});
+const labs=[...s.querySelectorAll(".jl")];
+let cars=[],t=0,run=false,rate=7,spawned=0,done=0,waiting=0;
+const btn=document.getElementById("jam-play"),read=document.getElementById("jam-read");
+btn.onclick=()=>{run=!run;btn.textContent=run?"⏸ pauza":"▶ start";btn.classList.toggle("on",run);};
+document.getElementById("jam-rate").oninput=e=>rate=+e.target.value;
+function count(e){return cars.filter(c=>c.e===e).length;}
+function step(){
+  if(run){
+    t++;
+    if(t%Math.max(2,12-rate)===0){cars.push({e:0,p:0,lane:Math.floor(Math.random()*3),wait:false});spawned++;}
+    cars.forEach(c=>{
+      const e=EDGES[c.e];
+      // prędkość z VDF: dwureżimowo — do gęstości krytycznej swobodna, potem liniowo w dół
+      const dens=count(c.e)/e.cap, crit=.55;
+      const v=dens<=crit?1:Math.max(.13,1-(dens-crit)/(1-crit)*.87);
+      const next=c.e+1;
+      if(c.p>=.985){
+        if(next>=EDGES.length){c.dead=true;done++;return;}
+        if(count(next)>=EDGES[next].cap){c.wait=true;return;}  // spillback: czeka na zdarzenie
+        c.wait=false;c.e=next;c.p=0;c.lane=Math.floor(Math.random()*EDGES[next].lanes);return;}
+      c.wait=false;c.p+=v*.016;});
+    cars=cars.filter(c=>!c.dead);
+    waiting=cars.filter(c=>c.wait).length;}
+  gCars.innerHTML="";
+  cars.forEach(c=>{const e=EDGES[c.e];
+    gCars.appendChild(el("rect",{x:e.x+4+c.p*(e.w-14),y:58+Math.min(c.lane,e.lanes-1)*17+3,width:9,height:10,rx:2,
+      fill:c.wait?"var(--red)":"var(--green)",opacity:.9}));});
+  EDGES.forEach((e,i)=>{const n=count(i),f=clamp(n/e.cap,0,1);
+    bars[i].setAttribute("width",e.w*f);
+    bars[i].setAttribute("fill",f>.95?"var(--red)":f>.55?"var(--amber)":"var(--green)");
+    labs[i].textContent=`${n}/${e.cap} · gęstość ${Math.round(f*100)}%`+(f>.55?" — prędkość spada":"");});
+  read.textContent=`wjazdy ${spawned} · wyjazdy ${done} · na sieci ${cars.length} · czekających ${waiting}  ⇒  bilans ${cars.length===spawned-done?"✓":"✗"}`;
+  requestAnimationFrame(step);}
+step();
+})();
+
+/* ═══════════════════ 9. PIENIĄDZ ═══════════════════ */
+(function(){
+const W=940,H=250,s=svg("moneyfig",W,H);
+const CH=[["endowment","zasilenie startowe",1],["credit_created","uruchomienie kredytu",1],
+ ["credit_repaid","spłata kapitału",-1],["external_capital_in","kapitał sieci z zewnątrz",1],
+ ["external_capital_out","repatriacja",-1],["household_sector_in","wpływ od gospodarstw",1],
+ ["household_sector_out","wypłata do gospodarstw",-1]];
+const ACC=["Sklepy","Firmy","Bank","RestOfWorld","Miasto"];
+let supply=0,bal=ACC.map(()=>0),ch=CH.map(()=>0),log=[];
+const g=el("g");s.appendChild(g);
+const SCEN=[
+ [0,4,240000000,"Świat startuje: zasilenie 2 400 000 zł na konto miasta"],
+ [5,0,1840000,"Gospodarstwa kupują chleb za 18 400 zł — pieniądz wchodzi do ksiąg"],
+ [1,1,50000000,"Piekarnia bierze kredyt obrotowy 500 000 zł — depozyt POWSTAJE"],
+ [6,1,12000000,"Wypłaty za miesiąc: 120 000 zł wychodzi do gospodarstw"],
+ [5,0,9400000,"Gospodarstwa wydają 94 000 zł w sklepach"],
+ [3,0,80000000,"Sieć dyskontów wchodzi z kapitałem 800 000 zł spoza miasta"],
+ [2,1,4200000,"Piekarnia spłaca kapitał 42 000 zł — depozyt ZNIKA"],
+ [4,0,6000000,"Sieć wyprowadza zysk 60 000 zł za granicę"]];
+function render(){
+  g.innerHTML="";
+  const L=190,R=W-20,span=R-L;
+  g.appendChild(txt(L-10,24,"podaż pieniądza",{"text-anchor":"end","font-size":11,fill:"var(--fg)"}));
+  const maxS=Math.max(supply,1)*1.1;
+  g.appendChild(el("rect",{x:L,y:12,width:span,height:16,rx:3,fill:"var(--bg3)"}));
+  g.appendChild(el("rect",{x:L,y:12,width:span*supply/maxS,height:16,rx:3,fill:"var(--amber)",opacity:.9}));
+  g.appendChild(txt(L+span*supply/maxS+8,24,(supply/100).toLocaleString("pl",{maximumFractionDigits:0})+" zł",{"font-size":10,fill:"var(--fg)"}));
+  CH.forEach((c,i)=>{const y=44+i*17;
+    g.appendChild(txt(L-10,y+8,c[1],{"text-anchor":"end","font-size":9,fill:"var(--fg2)"}));
+    const maxC=Math.max(...ch.map(Math.abs),1);
+    g.appendChild(el("rect",{x:L,y,width:span*.55*Math.abs(ch[i])/maxC,height:10,rx:2,
+      fill:c[2]>0?"var(--green)":"var(--red)",opacity:.85}));
+    if(ch[i])g.appendChild(txt(L+span*.55*Math.abs(ch[i])/maxC+6,y+8,(ch[i]/100).toLocaleString("pl",{maximumFractionDigits:0}),{"font-size":8.5,fill:"var(--fg3)"}));});
+  const y0=176;
+  g.appendChild(txt(L-10,y0+8,"salda kont",{"text-anchor":"end","font-size":10,fill:"var(--fg)"}));
+  const sum=bal.reduce((a,b)=>a+b,0),maxB=Math.max(...bal.map(Math.abs),1);
+  let cx=L;
+  bal.forEach((b,i)=>{const w=span*Math.abs(b)/Math.max(sum,1);
+    g.appendChild(el("rect",{x:cx,y:y0,width:w,height:14,rx:2,fill:["var(--cyan)","var(--violet)","var(--blue)","var(--fg3)","var(--green)"][i],opacity:.85}));
+    if(w>50)g.appendChild(txt(cx+4,y0+11,ACC[i],{"font-size":8.5,fill:"var(--bg)"}));cx+=w;});
+  const ok=sum===supply;
+  g.appendChild(txt(L,y0+34,`Σ sald = ${(sum/100).toLocaleString("pl",{maximumFractionDigits:0})} zł   ·   podaż = ${(supply/100).toLocaleString("pl",{maximumFractionDigits:0})} zł   ·   P1: ${ok?"✓ zgadza się co do grosza":"✗ ROZJAZD"}`,
+    {"font-size":10.5,fill:ok?"var(--green)":"var(--red)","font-weight":"600"}));
+  g.appendChild(txt(L,y0+50,log[log.length-1]||"",{"font-size":9.5,fill:"var(--fg2)"}));
+  document.getElementById("mon-read").textContent="podaż: "+(supply/100).toLocaleString("pl",{maximumFractionDigits:0})+" zł";}
+let idx=0,tm=null;
+function tick(){
+  if(idx>=SCEN.length){clearInterval(tm);tm=null;
+    document.getElementById("mon-play").textContent="▶ przebieg";document.getElementById("mon-play").classList.remove("on");return;}
+  const[c,acct,amt,desc]=SCEN[idx++];
+  const sign=CH[c][2];
+  // każdy kanał rusza sald o tę samą kwotę co pozycję ewidencji — stąd P1
+  supply+=sign*amt; bal[acct]+=sign*amt; ch[c]+=amt;
+  log.push(desc);render();}
+document.getElementById("mon-play").onclick=function(){
+  if(tm){clearInterval(tm);tm=null;this.textContent="▶ przebieg";this.classList.remove("on");return;}
+  supply=0;bal=ACC.map(()=>0);ch=CH.map(()=>0);log=[];idx=0;
+  this.textContent="⏸ pauza";this.classList.add("on");render();tm=setInterval(tick,1300);};
+render();
+})();
+
+/* ═══════════════════ 10. ZAKUP CHLEBA ═══════════════════ */
+(function(){
+const STEPS=[
+ ["planer woła <code>PlaceProvider::candidates</code>","<code>sim/agents/systems.rs</code> → trait. Sygnatura nie wspomina o cenie ani o <code>GoodId</code>.","agents"],
+ ["sprawdzenie zapasu domowego","<code>Household.stock[Food]</code> ≥ <code>home_stock_min_days</code> → zadanie w ogóle nie powstaje.","agents"],
+ ["zbieranie kandydatów w promieniu 1200 m","<code>query_offers</code> na warstwie kategorii w <code>DynamicGrid</code>. Promień <b>rozszerzany raz ×2</b>, gdy kandydatów &lt; 3.","economy"],
+ ["odsiew","Brak towaru · sklep nieznany (<code>KnowledgeView::knows</code>) · za mało sztuk · dojście ponad limit.","economy"],
+ ["wstępny ranking całkowitoliczbowy","Sort po <code>cena + koszt dojazdu + czas × VoT</code>, obcięcie do <b>15</b> kandydatów.","economy"],
+ ["<b>powrót do porządku tożsamościowego</b>","Sort po <code>(SiteId, GoodId)</code> — bo <code>softmax_pick</code> sumuje w kolejności wejścia.","core"],
+ ["użyteczność każdego kandydata","<code>purchase_score</code> = cena + jakość + dystans + lojalność + status + nowość + szum. Człon ceny to <code>−ln1p(cena/budżet)</code> przez <code>det_math</code>.","core"],
+ ["wybór: <code>softmax_pick</code>","Temperatura 0,06. <b>Nie argmax</b> — argmax produkuje monopole.","core"],
+ ["przegrani dostają <code>LostSale</code>","Powód + <b>nazwisko zwycięzcy</b>. Tylko sklepy śledzone; poziom śledzenia nie wchodzi do hasha.","economy"],
+ ["wizyta: <code>fulfil</code>","Budżet = wskazówka − rezerwacje tej minuty. Pętla po substytutach w kolejności rangi, <b>bez rekurencji</b> (stos 48 pozycji).","economy"],
+ ["zdjęcie partii FEFO z magazynu","<code>shelf_pick</code> — i <b>stąd</b> bierze się koszt własny: z partii, nie ze średniej.","supply"],
+ ["rozliczenie w następnej minucie","Rachunek → gotówka → <code>Books::household_pay</code> → zapas gospodarstwa → <code>record_sale</code>: jeden zapis <code>Wn Bank / Ma Revenue / Wn Cogs / Ma Inventory</code> + osobny zapis danin + wpis do koszyka CPI.","economy"]];
+const W=940,H=430,s=svg("buyfig",W,H);
+const COL={agents:"var(--violet)",economy:"var(--amber)",supply:"var(--green)",core:"var(--cyan)"};
+const g=el("g");s.appendChild(g);
+let cur=-1,tm=null;
+function render(){
+  g.innerHTML="";
+  STEPS.forEach((st,i)=>{const y=14+i*34,on=i===cur,past=i<cur;
+    g.appendChild(el("rect",{x:110,y,width:W-130,height:28,rx:5,
+      fill:on?"color-mix(in srgb,"+COL[st[2]]+" 20%,var(--bg2))":"var(--bg3)",
+      stroke:on?COL[st[2]]:"var(--line)","stroke-width":on?1.6:.8,opacity:past?.65:1}));
+    g.appendChild(el("circle",{cx:96,cy:y+14,r:on?7:5,fill:on||past?COL[st[2]]:"var(--line2)"}));
+    if(i<STEPS.length-1)g.appendChild(el("line",{x1:96,y1:y+21,x2:96,y2:y+34,stroke:past?COL[st[2]]:"var(--line2)","stroke-width":1.6}));
+    g.appendChild(txt(84,y+18,st[2],{"text-anchor":"end","font-size":9,fill:COL[st[2]],opacity:on||past?1:.5}));
+    const t=el("foreignObject",{x:120,y:y+2,width:W-150,height:26});
+    const d=document.createElement("div");d.setAttribute("xmlns","http://www.w3.org/1999/xhtml");
+    d.style.cssText="font:500 11.5px var(--sans);color:var(--fg);line-height:1.15;padding-top:1px";
+    d.innerHTML=`<span style="color:var(--fg)">${st[0]}</span> <span style="color:var(--fg3);font-size:10.5px">— ${st[1]}</span>`;
+    t.appendChild(d);g.appendChild(t);});
+  document.getElementById("buy-label").textContent=cur<0?"—":`krok ${cur+1}/${STEPS.length}`;}
+function go(i){cur=((i%STEPS.length)+STEPS.length)%STEPS.length;render();}
+document.getElementById("buy-next").onclick=()=>go(cur+1);
+document.getElementById("buy-prev").onclick=()=>go(cur-1);
+const bp=document.getElementById("buy-play");
+bp.onclick=function(){if(tm){clearInterval(tm);tm=null;this.textContent="▶ odtwórz";this.classList.remove("on");return;}
+  this.textContent="⏸ pauza";this.classList.add("on");go(0);
+  tm=setInterval(()=>{if(cur+1>=STEPS.length){clearInterval(tm);tm=null;bp.textContent="▶ odtwórz";bp.classList.remove("on");return;}go(cur+1);},1400);};
+render();
+})();
+
+/* ═══════════════════ 11. ŁAŃCUCH DOSTAW ═══════════════════ */
+(function(){
+const W=940,H=250,s=svg("chainfig",W,H);
+const NODES=[{x:70,n:"pole",sub:"raw_wheat",c:"var(--green)"},
+ {x:270,n:"młyn",sub:"milling_wheat_t550",c:"var(--amber)"},
+ {x:470,n:"piekarnia",sub:"baking_bread",c:"var(--amber)"},
+ {x:670,n:"sklep",sub:"półka · FEFO",c:"var(--cyan)"},
+ {x:860,n:"dom",sub:"Household.stock",c:"var(--violet)"}];
+const Y=70;
+NODES.forEach((n,i)=>{
+  s.appendChild(el("rect",{x:n.x-46,y:Y-24,width:92,height:48,rx:7,fill:"var(--bg3)",stroke:n.c,"stroke-width":1.3}));
+  s.appendChild(txt(n.x,Y-2,n.n,{"text-anchor":"middle","font-size":12,fill:"var(--fg)","font-weight":"600"}));
+  s.appendChild(txt(n.x,Y+12,n.sub,{"text-anchor":"middle","font-size":8,fill:"var(--fg3)"}));
+  if(i<NODES.length-1)s.appendChild(el("line",{x1:n.x+46,y1:Y,x2:NODES[i+1].x-46,y2:Y,stroke:"var(--line2)","stroke-width":1.4,"stroke-dasharray":"4 4"}));});
+// otręby jako produkt uboczny
+s.appendChild(el("path",{d:`M270,${Y+24} L270,${Y+56} L360,${Y+56}`,fill:"none",stroke:"var(--fg3)","stroke-width":1.2}));
+s.appendChild(txt(366,Y+60,"otręby 220 kg → pasza (produkt, nie strata)",{"font-size":9,fill:"var(--fg3)"}));
+const gB=el("g");s.appendChild(gB);
+const gS=el("g");s.appendChild(gS);
+// kaskada niedoboru
+const LAD=["Ok","Buffer","Throttled","SpotSearch","Importing","Substituted","Halted"];
+LAD.forEach((l,i)=>{const x=70+i*118;
+  gS.appendChild(el("rect",{x,y:182,width:104,height:22,rx:4,fill:"var(--bg3)",stroke:"var(--line)",class:"lad"}));
+  gS.appendChild(txt(x+52,196,l,{"text-anchor":"middle","font-size":9.5,fill:"var(--fg2)",class:"ladt"}));});
+s.appendChild(txt(70,176,"kaskada niedoboru w piekarni — w górę o jeden szczebel na przegląd, w dół od razu na szczebel progowy",{"font-size":9,fill:"var(--fg3)"}));
+const lads=[...gS.querySelectorAll(".lad")],ladt=[...gS.querySelectorAll(".ladt")];
+let batches=[],t=0,run=false,broken=false,stage=0,produced=0,consumed=0,inflight=0;
+const read=document.getElementById("chain-read");
+document.getElementById("chain-play").onclick=function(){run=!run;this.textContent=run?"⏸ pauza":"▶ uruchom";this.classList.toggle("on",run);};
+document.getElementById("chain-break").onclick=function(){broken=!broken;this.classList.toggle("on",broken);
+  this.textContent=broken?"↺ przywróć dostawę":"⚡ zerwij dostawę mąki";};
+function step(){
+  if(run){t++;
+    if(t%26===0){batches.push({seg:0,p:0,mass:1000000});produced+=1000000;}
+    batches.forEach(b=>{
+      if(broken&&b.seg===1&&b.p>=.95){b.held=true;return;}
+      b.held=false;b.p+=.012;
+      if(b.p>=1){b.p=0;b.seg++;
+        if(b.seg===1)b.mass=Math.round(b.mass*0.76);       // przemiał: 760 kg z tony
+        if(b.seg===2)b.mass=Math.round(b.mass*1.34);       // wypiek: mąka + woda + drożdże
+        if(b.seg>=4){b.dead=true;consumed+=b.mass;}}});
+    batches=batches.filter(x=>!x.dead);
+    inflight=batches.reduce((a,b)=>a+b.mass,0);
+    // kaskada
+    const dry=broken&&batches.filter(b=>b.seg>=2).length===0;
+    if(t%40===0){if(dry&&stage<6)stage++;else if(!broken&&stage>0)stage=0;}}
+  gB.innerHTML="";
+  batches.forEach(b=>{if(b.seg>=4)return;const a=NODES[b.seg],c=NODES[b.seg+1];
+    const x=lerp(a.x+46,c.x-46,b.p),r=clamp(Math.sqrt(b.mass/1000000)*7,3,10);
+    gB.appendChild(el("circle",{cx:x,cy:Y,r,fill:b.held?"var(--red)":"var(--green)",opacity:.9}));});
+  lads.forEach((l,i)=>{const on=i===stage;
+    l.setAttribute("fill",on?(i>=5?"color-mix(in srgb,var(--red) 30%,var(--bg2))":"color-mix(in srgb,var(--amber) 28%,var(--bg2))"):"var(--bg3)");
+    l.setAttribute("stroke",on?(i>=5?"var(--red)":"var(--amber)"):"var(--line)");
+    ladt[i].setAttribute("fill",on?"var(--fg)":"var(--fg2)");});
+  read.textContent=`pszenica z pola ${(produced/1000).toFixed(0)} kg · masa w łańcuchu ${(inflight/1000).toFixed(0)} kg · chleb w gospodarstwach ${(consumed/1000).toFixed(0)} kg`
+    +(stage===5?"  ⚠ szczebel „Substituted” nie ma wykonawcy — patrz Luki":"");
+  requestAnimationFrame(step);}
+step();
+})();
+
+/* ═══════════════════ 12. LICYTACJA PŁACY ═══════════════════ */
+(function(){
+const W=940,H=250,s=svg("wagefig",W,H);
+const L=70,R=W-150,T=22,B=H-38,span=R-L,hgt=B-T;
+const g=el("g");s.appendChild(g);
+function sim(){
+  const short=+document.getElementById("wage-short").value/100;
+  const head=+document.getElementById("wage-head").value/100;
+  const band=[3200,5400];                                   // widełki roli, zł
+  const ceil=Math.round(band[1]*(1+head));
+  const med=4100;
+  let w=band[0],pts=[],cause=[],hired=-1;
+  for(let d=0;d<=60;d++){
+    pts.push(w);
+    if(hired<0&&d>0&&d%7===0){
+      if(w>=ceil){cause.push([d,"sufit — świadczenie zamiast podwyżki"]);}
+      else{const step=Math.round(band[0]*(.02+short*.055));
+        w=Math.min(ceil,w+step);cause.push([d,`+${step} zł — brak kandydatów`]);}}
+    // im wyżej nad medianą, tym większa szansa zatrudnienia
+    if(hired<0&&d>6&&w>med*(1+ (1-short)*.12) && Math.random()<0.055+ (w-med)/med*0.5*(1-short)) hired=d;
+    if(hired>=0&&d>hired)pts[pts.length-1]=w;}
+  return{pts,band,ceil,med,cause,hired};}
+function render(anim){
+  const r=sim();g.innerHTML="";
+  const lo=2800,hi=Math.max(r.ceil,6200)*1.05;
+  const Y=v=>B-hgt*(v-lo)/(hi-lo);
+  const LBL=[[r.band[0],"dolny kraniec widełek — stawka startowa","var(--fg3)"],
+   [r.med,"mediana zawartych umów","var(--cyan)"],
+   [r.band[1],"górny kraniec widełek roli","var(--fg3)"],
+   [r.ceil,"sufit = widełka + zapas marży zakładu","var(--red)"]];
+  LBL.forEach(l=>g.appendChild(el("line",{x1:L,y1:Y(l[0]),x2:R,y2:Y(l[0]),stroke:l[2],"stroke-width":1,"stroke-dasharray":"4 4",opacity:.7})));
+  // rozsuń etykiety, żeby sufit i widełka nie nachodziły przy zerowym zapasie marży
+  const ly=LBL.map(l=>({y:Y(l[0]),l})).sort((a,b)=>a.y-b.y);
+  for(let i=1;i<ly.length;i++)if(ly[i].y-ly[i-1].y<11)ly[i].y=ly[i-1].y+11;
+  ly.forEach(o=>{g.appendChild(txt(R+8,o.y+3,o.l[1],{"font-size":8.5,fill:o.l[2]}));});
+  let d="";r.pts.forEach((v,i)=>{d+=(i?"L":"M")+(L+span*i/60)+","+Y(v);});
+  g.appendChild(el("path",{d,fill:"none",stroke:"var(--amber)","stroke-width":2.2,"stroke-linejoin":"round"}));
+  r.cause.forEach(c=>{const x=L+span*c[0]/60,y=Y(r.pts[c[0]]);
+    const isCeil=c[1].startsWith("sufit");
+    g.appendChild(el("circle",{cx:x,cy:y,r:3.6,fill:isCeil?"var(--red)":"var(--amber)"}));});
+  if(r.hired>=0){const x=L+span*r.hired/60;
+    g.appendChild(el("line",{x1:x,y1:T,x2:x,y2:B,stroke:"var(--green)","stroke-width":1.5}));
+    g.appendChild(txt(x+5,T+12,`doba ${r.hired}: zatrudniony · ${r.pts[r.hired].toLocaleString("pl")} zł`,{"font-size":9.5,fill:"var(--green)"}));}
+  else g.appendChild(txt(L+8,T+12,"60 dób bez kandydata — oferta zamrożona na suficie",{"font-size":9.5,fill:"var(--red)"}));
+  for(let d2=0;d2<=60;d2+=10){const x=L+span*d2/60;
+    g.appendChild(txt(x,B+14,"d"+d2,{"text-anchor":"middle","font-size":8.5,fill:"var(--fg3)"}));}
+  g.appendChild(txt(L,B+30,"Każdy punkt to eskalacja z zapisanym powodem. Na czerwono: "+
+    "WageCause::Ceiling — od tej chwili oferta dostaje świadczenie pozapłacowe, nie podwyżkę.",{"font-size":9,fill:"var(--fg3)"}));}
+document.getElementById("wage-play").onclick=()=>render(true);
+["wage-short","wage-head"].forEach(id=>document.getElementById(id).oninput=()=>render(false));
+render(false);
+})();
+
+/* ═══════════════════ 13. TRZY TIERY ═══════════════════ */
+(function(){
+const W=940,H=230,s=svg("tierfig",W,H);
+const CX=140,CY=112;
+const RINGS=[[92,"doba","operacyjny · 32 firmy/tick","var(--green)",1],
+ [66,"miesiąc","taktyczny · 4 firmy/tick","var(--amber)",30],
+ [40,"kwartał","strategiczny · 1 firma/tick","var(--violet)",90]];
+RINGS.forEach(r=>s.appendChild(el("circle",{cx:CX,cy:CY,r:r[0],fill:"none",stroke:r[3],"stroke-width":1.2,opacity:.35})));
+const hands=RINGS.map(r=>{const l=el("line",{x1:CX,y1:CY,x2:CX,y2:CY-r[0],stroke:r[3],"stroke-width":2,"stroke-linecap":"round"});s.appendChild(l);return l;});
+const dots=RINGS.map(r=>{const c=el("circle",{cx:CX,cy:CY-r[0],r:4.5,fill:r[3]});s.appendChild(c);return c;});
+RINGS.forEach((r,i)=>{s.appendChild(txt(260,44+i*30,r[1],{"font-size":12,fill:r[3],"font-weight":"600"}));
+  s.appendChild(txt(320,44+i*30,r[2],{"font-size":10,fill:"var(--fg2)"}));});
+const feed=el("g");s.appendChild(feed);
+const MSG={0:["cel marży −150 bp — droższy od rywala","cel zapasu +2 dni — pusta półka",
+  "cel marży +150 bp — powrót do kotwicy kursu","bez ruchu — poniżej progu 100 bp"],
+ 1:["zamknięcie zakładu — 3. miesiąc straty z rzędu","kurs → Cautious — średnia marża ujemna",
+  "preset „Zapas min-max” dla zdelegowanego sklepu"],
+ 2:["ranking wariantów: OpenSite wygrywa poza marginesem błędu","winner: None → KeepCourse (przewaga w marginesie)",
+  "reakcja: SupplierLock — utrata 24 % sprzedaży + nowy rywal"]};
+let day=0,run=false,lines=[];
+const btn=document.getElementById("tier-play"),read=document.getElementById("tier-read");
+btn.onclick=()=>{run=!run;btn.textContent=run?"⏸ pauza":"▶ kwartał";btn.classList.toggle("on",run);};
+function push(t,m){lines.unshift([t,m]);if(lines.length>5)lines.pop();}
+let acc=0;
+function frame(){
+  if(run){acc+=.22;if(acc>=1){acc=0;day++;
+    if(day%1===0&&Math.random()<.6)push(0,MSG[0][Math.floor(Math.random()*4)]);
+    if(day%30===0)push(1,MSG[1][Math.floor(Math.random()*3)]);
+    if(day%90===0)push(2,MSG[2][Math.floor(Math.random()*3)]);
+    if(day>360)day=0;}}
+  RINGS.forEach((r,i)=>{const frac=((day+acc)%r[4])/r[4],a=frac*Math.PI*2-Math.PI/2;
+    const x=CX+Math.cos(a)*r[0],y=CY+Math.sin(a)*r[0];
+    hands[i].setAttribute("x2",x);hands[i].setAttribute("y2",y);
+    dots[i].setAttribute("cx",x);dots[i].setAttribute("cy",y);});
+  feed.innerHTML="";
+  lines.forEach((l,i)=>{const y=142+i*17;
+    feed.appendChild(el("rect",{x:260,y:y-11,width:W-280,height:15,rx:3,fill:"var(--bg3)",opacity:1-i*.16}));
+    feed.appendChild(txt(266,y,"▸",{"font-size":9,fill:RINGS[l[0]][3]}));
+    feed.appendChild(txt(280,y,l[1],{"font-size":9.5,fill:"var(--fg2)",opacity:1-i*.15}));});
+  read.textContent=`doba ${day} · miesiąc ${Math.floor(day/30)+1} · kwartał ${Math.floor(day/90)+1}`;
+  requestAnimationFrame(frame);}
+frame();
+})();
+</script>
+</body>
+</html>
