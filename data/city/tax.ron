@@ -23,10 +23,12 @@
 // całość akcyzy nie ma. Stawka jest kwotowa (grosze za kilogram), nie procentowa —
 // to jest cała różnica między akcyzą a VAT-em i ona ma być widoczna w danych.
 //
-// Akcyzy od energii tu nie ma i w M8a nie będzie: energia elektryczna nie przechodzi
-// przez rozliczenie B2B, tylko przez taryfę sieci przesyłowej — czyli przez M8b.
+// Akcyza od energii jest osobną sekcją (`excise_energy`) i przyszła z M8b razem
+// z sieciami przesyłowymi. Nie mieści się w `excise`, bo tamta liczy od masy wyrobu,
+// a kilowatogodzina masy nie ma; nalicza się przy rachunku za media, czyli w jedynym
+// miejscu, w którym `ExciseClass::Energy` z PRD §6.8 ma w tej grze wolumen.
 (
-    schema_version: 1,
+    schema_version: 2,
 
     // ── CIT ──────────────────────────────────────────────────────────────────────
     // Podatek od dochodu rocznego zakładu, ze stratą rozliczaną w przód.
@@ -69,6 +71,12 @@
         (good: "fuel_lpg",         per_kg: 120),
         (good: "food_beer",        per_kg:  90),
         (good: "cons_cigarettes",  per_kg: 9000),
+    ],
+
+    // Grosze za jednostkę rozliczeniową medium: kWh dla prądu, gazu i ciepła,
+    // m³ dla cieczy. Woda i kanalizacja akcyzy nie mają i mieć nie będą.
+    excise_energy: [
+        (service: "Electricity", per_unit: 12),
     ],
 
     // ── Koncesje ─────────────────────────────────────────────────────────────────

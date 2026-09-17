@@ -43,6 +43,10 @@ pub struct CitySetup {
     /// (`R2` — martwy hazard, ta sama klasa błędu).
     pub vat_goods: usize,
     pub excise_goods: usize,
+    /// Ile mediów jest obłożonych akcyzą od energii (M8b). Zero znaczy, że ta
+    /// ścieżka jest martwa — i to jest informacja do raportu, a nie stan
+    /// do przemilczenia. Ten sam powód, dla którego obok stoi `excise_goods`.
+    pub excise_services: usize,
 }
 
 /// Stawia miasto jako aktora fiskalnego w gotowym świecie.
@@ -89,6 +93,7 @@ pub fn setup(world: &mut World, city_data: &CityData) -> Result<CitySetup, Box<d
         licensed_types: miasto.licenses.len(),
         vat_goods: miasto.rates.vat_goods(),
         excise_goods: miasto.rates.excise_goods(),
+        excise_services: miasto.code.excise_services(),
     };
     magnat_city::register_city(world, miasto);
     Ok(raport)

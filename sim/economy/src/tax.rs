@@ -11,7 +11,7 @@
 //! i `TravelOracle`), więc trait z jedną implementacją jest tu decyzją, a nie
 //! zapasem: drugi konsument jest znany z nazwy i z numeru fazy.
 
-use magnat_core::{GoodId, Money};
+use magnat_core::{GoodId, Money, UtilityService};
 
 /// Przeliczenie między podstawą netto (w której liczy się cena) a brutto
 /// (w której płaci kupujący, `K-7`).
@@ -41,6 +41,25 @@ pub trait TaxEngine: Send + Sync {
     ///
     /// Hak M8, domyślnie zero.
     fn excise_on(&self, _good: GoodId, _mass: magnat_core::Mass) -> Money {
+        Money::ZERO
+    }
+
+    /// Akcyza od energii na rachunku za media. **Stawka kwotowa za jednostkę
+    /// rozliczeniową** (grosze za kWh), naliczana w chwili wystawienia faktury.
+    ///
+    /// `units_milli` to rozliczone zużycie w **tysięcznych** jednostki: dzielimy
+    /// na końcu, tak samo jak przy taryfie, żeby ułamek kilowatogodziny nie
+    /// znikał z podstawy przy każdym rachunku.
+    ///
+    /// Hak M8b, domyślnie zero. Stoi osobno od [`TaxEngine::excise_on`], bo tamta
+    /// liczy od **masy wyrobu**, a prąd masy nie ma — i to nie jest formalność:
+    /// `ExciseClass::Energy` z PRD §6.8 jest jedyną z czterech klas akcyzowych,
+    /// która ma w tej grze codzienny wolumen, a przechodzi wyłącznie przez rachunek
+    /// za media. Wpięcie jej w `excise_on` wymagałoby udawanej masy kilowatogodziny.
+    ///
+    /// Zgodnie z `K-57`: faza dokładająca daninę naliczaną na zdarzeniu gospodarki
+    /// dokłada **metodę z ciałem domyślnym**, a nie drugi trait.
+    fn excise_on_utility(&self, _service: UtilityService, _units_milli: i64) -> Money {
         Money::ZERO
     }
 

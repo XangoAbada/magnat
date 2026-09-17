@@ -31,7 +31,8 @@ use crate::vocab::{
     AbateReason, ActionKind, BankruptcyTrigger, ClaimPriority, CommitmentKind, DeprivationEffect,
     FirmStrategy, FixedCost, LeaveCause, LifeEventKind, LineStopCause, LoanKind, MigrationKind,
     NeedKind, PlaceRef, PriceDriver, ReactionKind, RejectCause, RejectCredit, ShortageStageKind,
-    SpendCategory, StockCat, TaxKind, TraitId, TransportMode, Trend, UtilityKind, WageCause,
+    SpendCategory, StockCat, TaxKind, TraitId, TransportMode, Trend, UtilityKind,
+    UtilityService, WageCause,
 };
 use serde::{Deserialize, Serialize};
 
@@ -533,7 +534,29 @@ pub enum DecisionReason {
     /// Domknięcie deficytu cięciem wydatków: `gap` to luka, `cut_bp` — o ile
     /// promili przycięto plan wydatków bieżących.
     BudgetDeficitClosed { gap: Money, cut_bp: u16 } = 606,
-    // 607–699 zarezerwowane dla M8.
+    /// Zrzut obciążenia w sieci przesyłowej (M8b §5.4 krok 3): wyspa nie domykała
+    /// bilansu, więc odbiorcy od najniższego priorytetu poszli w ciemność.
+    ///
+    /// `priority` to **ostatni odłączony** próg, a nie każdy po kolei: gracz pyta
+    /// „dokąd sięgnęło", a nie „ilu było". `shortfall_w` niesie moc, której
+    /// zabrakło **przed** zrzutem — po zrzucie jest z definicji zero, więc powód
+    /// zapisany po fakcie mówiłby, że nic się nie stało.
+    LoadShed {
+        service: UtilityService,
+        priority: u8,
+        shortfall_w: u32,
+    } = 607,
+    /// Zabezpieczenie krawędzi zadziałało: przepływ przekroczył przepustowość
+    /// i linia wypadła z sieci (M8b §5.4 krok 5). To jest wejście do kaskady —
+    /// wypadnięcie linii zmienia topologię, a zmiana topologii jest następną rundą.
+    ///
+    /// `repair_minutes` jest **wylosowanym** czasem brygady (`StreamId::GridFault`),
+    /// a nie stałą: to jedyna rzecz, którą sieć w tej fazie losuje.
+    GridTripped {
+        service: UtilityService,
+        repair_minutes: u16,
+    } = 608,
+    // 609–699 zarezerwowane dla M8.
     // ... kolejne fazy dopisują własne bloki na końcu pliku
 }
 
@@ -617,6 +640,8 @@ impl DecisionReason {
             DecisionReason::PublicSpend { .. } => 604,
             DecisionReason::MunicipalBondIssued { .. } => 605,
             DecisionReason::BudgetDeficitClosed { .. } => 606,
+            DecisionReason::LoadShed { .. } => 607,
+            DecisionReason::GridTripped { .. } => 608,
         }
     }
 }
@@ -771,6 +796,14 @@ mod tests {
             }
             .discriminant(),
             606
+        );
+        assert_eq!(
+            DecisionReason::GridTripped {
+                service: UtilityService::Electricity,
+                repair_minutes: 180
+            }
+            .discriminant(),
+            608
         );
     }
 

@@ -242,7 +242,11 @@ Decyzje, których pojedyncza faza nie mogła podjąć sama. Numeracja `K-n`.
   dopisany po M7d. **Kolejności zaspokojenia w nim nie ma i nie będzie**:
   jest regułą podziału, nie kalibracją, i siedzi w `ClaimPriority` (`K-48`). **Tabeli płac w `labor.ron` nie
   ma i nie będzie**: widełki roli mieszkają w `data/jobs/roles.ron` i są przedziałem,
-  w którym firma licytuje),
+  w którym firma licytuje; `grid.ron` — taryfy operatorów sieci przesyłowych,
+  dobowy kształt popytu, czas naprawy i wymiarowanie sieci, właściciel M8,
+  dopisany po M8b. **Taryfa stoi tu, a nie w `data/city/`**, bo jest ceną
+  operatora, a nie daniną — uchwała ograniczająca ją (`Policy::TariffCap`, M8e)
+  będzie w `data/city/`, ale sama cena nie jest polityką fiskalną),
   `data/city/` (polityka fiskalna miasta: `tax.ron` — siedem danin, klasy VAT
   przypisane przez domenę klucza towaru, stawki akcyzy, opłaty koncesyjne, terminy
   i odsetki; `budget.ron` — udziały planu wydatków, rezerwa, próg cięcia i parametry

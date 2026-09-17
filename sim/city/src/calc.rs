@@ -210,6 +210,7 @@ mod tests {
             vat_classes: Vec::new(),
             property_bp_per_year: 100,
             excise: Vec::new(),
+            excise_energy: Vec::new(),
             licenses: Vec::new(),
             vat_due_day: 20,
             pit_due_day: 20,

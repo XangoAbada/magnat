@@ -158,13 +158,16 @@ jobs:
         # powodu: hash zmienia się przy każdym dopisaniu stanu, więc złoty plik
         # w repozytorium byłby zobowiązaniem do nieruszania niczego, a nie bramką.
         #
-        # 35 dób, bo pierwsza deklaracja miesięczna wypada trzydziestego pierwszego:
-        # krótszy przebieg porównywałby hashe świata, w którym miasto niczego jeszcze
-        # nie naliczyło.
+        # 51 dób, bo tyle potrzeba, żeby przebieg **zapłacił**, a nie tylko naliczył:
+        # pierwsza deklaracja miesięczna wypada trzydziestego pierwszego, a termin
+        # VAT-u, PIT-u i podatku od nieruchomości jest dwudziestego miesiąca
+        # następnego. Przy 35 dobach wpływ miało wyłącznie cło (płatne tego samego
+        # dnia) i bramka „≥ 3 daniny z niezerowymi wpływami" była czerwona;
+        # przy 51 dobach wpływy ma pięć danin z siedmiu (`CC-16` w `M8b-…md`).
         shell: bash
         run: |
-          cargo run --release -q -p magnat-headless -- m8miasto --size 4km --days 35             --citizens 3000 --hash-every 1440 --threads 1 --out m8_t1.hashes
-          cargo run --release -q -p magnat-headless -- m8miasto --size 4km --days 35             --citizens 3000 --hash-every 1440 --threads 8 --expect m8_t1.hashes
+          cargo run --release -q -p magnat-headless -- m8miasto --size 4km --days 51             --citizens 3000 --hash-every 1440 --threads 1 --out m8_t1.hashes
+          cargo run --release -q -p magnat-headless -- m8miasto --size 4km --days 51             --citizens 3000 --hash-every 1440 --threads 8 --expect m8_t1.hashes
       - name: M4 — dowód spójności mikro ↔ mezo (A1–A5, M4d/WP9)
         run: cargo test --release -p magnat-world --test lod -- --include-ignored
       - name: M4 — diagram IDM zgadza się z tabelą VDF (miernik dryfu R2)

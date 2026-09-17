@@ -72,6 +72,12 @@ pub struct UtilityBill {
     pub supplier: magnat_core::FirmId,
     pub kind: magnat_core::UtilityService,
     pub amount: Money,
+    /// Rozliczone zużycie w **tysięcznych jednostki rozliczeniowej** (kWh dla
+    /// energii, m³ dla cieczy). Osobno od kwoty, bo **akcyza od energii jest
+    /// kwotowa** (grosze za kWh) i liczy się od zużycia, a nie od rachunku (M8b).
+    /// W tysięcznych, żeby obcięcie ułamka nie zaniżało podstawy przy każdej
+    /// fakturze w tę samą stronę.
+    pub units_milli: i64,
 }
 
 /// Zakład: linie, harmonogram, magazyny, liczniki i rampa.
@@ -347,13 +353,14 @@ impl Plant {
         let mut faktury = Vec::new();
         for s in self.sites.values_mut() {
             for m in &mut s.meters {
-                let amount = m.bill(until);
+                let (amount, units_milli) = m.bill(until);
                 if amount.0 != 0 {
                     faktury.push(UtilityBill {
                         site: s.site,
                         supplier: m.supplier,
                         kind: m.kind,
                         amount,
+                        units_milli,
                     });
                 }
             }

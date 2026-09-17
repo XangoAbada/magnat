@@ -140,6 +140,35 @@ fn krok_linii(
         raport.setups += u32::from(sprobuj_start(ctx, store, zaklad, &mut l, now));
     }
 
+    // Odcięcie medium zatrzymuje linię **w toku**, a nie dopiero przy próbie startu
+    // następnej szarży (M8b). Do M8b `cut_off` sprawdzało się wyłącznie w
+    // `sprobuj_start`, więc szarża rozpoczęta przed blackoutem dochodziła do końca
+    // i pobierała prąd, którego nie było — a test T2 mierzy „wolumen produkcji
+    // w oknie awarii dokładnie 0", nie „po zakończeniu bieżącej szarży".
+    //
+    // Wsad przepada, tak samo jak przy awarii mechanicznej dwie linie niżej:
+    // to jest ta sama sytuacja i ten sam zapis stanu, więc nie ma powodu, żeby
+    // bilans masy rozróżniał, dlaczego maszyna stanęła. Przerwany wypiek jest
+    // stratą i tak ma być.
+    if let LineState::Running { recipe, .. } = l.state {
+        let bez_pradu = l.power_draw.0 > 0 && !zaklad.has_utility(UtilityService::Electricity);
+        // Woda idzie tą samą drogą i z tego samego powodu: receptura pobiera ją
+        // przy **zamknięciu** szarży, więc szarża dowieziona do końca bez wody
+        // zużyłaby wodę, której nie było. `sprobuj_start` blokował tylko start.
+        let bez_wody = ctx.cat.recipe(recipe).water.0 > 0
+            && !zaklad.has_utility(UtilityService::Water);
+        if bez_pradu || bez_wody {
+            l.state = LineState::Broken {
+                since: now,
+                cause: if bez_pradu {
+                    BreakCause::NoPower
+                } else {
+                    BreakCause::NoWater
+                },
+            };
+        }
+    }
+
     if let LineState::Running { .. } = l.state {
         l.age_minutes += 1;
         l.worked_since_service += 1;

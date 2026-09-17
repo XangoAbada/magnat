@@ -26,6 +26,7 @@
 pub mod city;
 pub mod firms;
 pub mod full;
+pub mod grid;
 pub mod labor;
 pub mod plants;
 pub mod population;

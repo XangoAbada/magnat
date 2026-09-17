@@ -31,3 +31,7 @@ workspace = true
 [[bench]]
 name = "traffic_bench"
 harness = false
+
+[[bench]]
+name = "utility_bench"
+harness = false

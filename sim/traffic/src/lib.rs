@@ -32,6 +32,7 @@ pub mod spec;
 pub mod systems;
 pub mod transit;
 pub mod trip;
+pub mod utility;
 pub mod vehicle;
 
 pub use mezo::{

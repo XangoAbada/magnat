@@ -134,6 +134,19 @@ pub fn abate_reason(c: &Catalog, l: Locale, a: magnat_core::AbateReason) -> Stri
     c.fmt_key(l, &format!("ui.abate.{}", a.name()), &[])
 }
 
+/// Nazwa medium sieciowego (M8b §5.4).
+#[must_use]
+pub fn utility_service(c: &Catalog, l: Locale, u: magnat_core::UtilityService) -> String {
+    c.fmt_key(l, &format!("ui.utility.{}", u.name()), &[])
+}
+
+/// Waty jako kilowaty z jednym miejscem po przecinku — bez floata, bo moc sieci
+/// jest liczbą całkowitą i „1 MW" zamiast 1,4 MW gubiłoby połowę deficytu.
+#[must_use]
+pub fn kilowaty(w: u32) -> String {
+    format!("{},{} kW", w / 1000, (w % 1000) / 100)
+}
+
 /// Punkty bazowe jako procent z dwoma miejscami — bez floata, bo stawka podatkowa
 /// jest liczbą całkowitą i zaokrąglenie jej do „19 %" gubiłoby 19,5 %.
 #[must_use]
@@ -955,6 +968,30 @@ pub fn describe(c: &Catalog, l: Locale, r: DecisionReason) -> String {
                 ("ciecie", &procent(u32::from(cut_bp))),
             ],
         ),
+        DecisionReason::LoadShed {
+            service,
+            priority,
+            shortfall_w,
+        } => c.fmt_key(
+            l,
+            "ui.reason.LoadShed",
+            &[
+                ("medium", &utility_service(c, l, service)),
+                ("priorytet", &priority.to_string()),
+                ("moc", &kilowaty(shortfall_w)),
+            ],
+        ),
+        DecisionReason::GridTripped {
+            service,
+            repair_minutes,
+        } => c.fmt_key(
+            l,
+            "ui.reason.GridTripped",
+            &[
+                ("medium", &utility_service(c, l, service)),
+                ("czas", &minutes(c, l, repair_minutes)),
+            ],
+        ),
     }
 }
 
@@ -1357,6 +1394,15 @@ mod tests {
                 gap: Money(4_500_000),
                 cut_bp: 1250,
             },
+            DecisionReason::LoadShed {
+                service: magnat_core::UtilityService::Electricity,
+                priority: 3,
+                shortfall_w: 1_450_000,
+            },
+            DecisionReason::GridTripped {
+                service: magnat_core::UtilityService::Electricity,
+                repair_minutes: 195,
+            },
         ]
     }
 
@@ -1399,7 +1445,10 @@ mod tests {
         // kierunek wydatku i przyczyna umorzenia wchodzą **podstawieniem**, tak samo
         // jak `Trend` wyżej — siedem danin nie robi siedmiu zdań o naliczeniu, tylko
         // jedno zdanie z siedmioma podstawieniami. Razem 74.
-        assert_eq!(wszystkie().len(), 74);
+        // Po M8b dwa powody sieci przesyłowej (607, 608), po jednym wpisie: rodzaj
+        // medium wchodzi podstawieniem, więc siedem sieci nie robi czternastu zdań.
+        // Razem 76.
+        assert_eq!(wszystkie().len(), 76);
     }
 
     #[test]

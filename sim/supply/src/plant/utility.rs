@@ -29,6 +29,13 @@ pub struct UtilityMeter {
     pub billed_until: SimMinute,
     /// Brak płatności albo awaria sieci (M8). Zakład bez prądu stoi.
     pub cut_off: bool,
+    /// Opłata stała okresu — należy się **niezależnie od zużycia**.
+    ///
+    /// Zero do M8b i to jest wartość neutralna: do sieci przesyłowych rachunek
+    /// był wyłącznie licznikowy. Od M8b wpisuje ją operator sieci
+    /// (`magnat_traffic::utility`) razem z taryfą i to ona sprawia, że **blackout
+    /// widać w kosztach**: licznik stoi na zerze, a rachunek nie znika.
+    pub standing: Money,
 }
 
 impl UtilityMeter {
@@ -41,6 +48,7 @@ impl UtilityMeter {
             tariff,
             billed_until: SimMinute(0),
             cut_off: false,
+            standing: Money::ZERO,
         }
     }
 
@@ -86,14 +94,28 @@ impl UtilityMeter {
         Money((i128::from(self.consumed) * i128::from(self.tariff.0) / dzielnik) as i64)
     }
 
-    /// Zamyka okres rozliczeniowy: zwraca kwotę faktury i zeruje licznik.
+    /// Zamyka okres rozliczeniowy: zwraca **kwotę faktury i rozliczone zużycie
+    /// w tysięcznych jednostki** (mkWh albo ml wyrażone w tysięcznych m³),
+    /// i zeruje licznik.
+    ///
+    /// Zużycie wychodzi osobno, bo od M8b obłożone jest **akcyzą od energii**,
+    /// a akcyza jest kwotowa: tyle a tyle groszy za kilowatogodzinę. Wyliczenie
+    /// jej z kwoty przez podzielenie przez taryfę byłoby dzieleniem zaokrąglonej
+    /// liczby przez liczbę, która zmienia się uchwałą rady.
+    ///
+    /// **Tysięczne, a nie całe jednostki**, i to z tego samego powodu, dla którego
+    /// taryfa dzieli na końcu: rachunek za 1,5 kWh obciążony akcyzą po jednej
+    /// całej kilowatogodzinie zaniżałby podstawę o jedną trzecią, **zawsze w tę
+    /// samą stronę** i przy każdej fakturze. Reszta poniżej tysięcznej zostaje
+    /// na liczniku razem z resztą groszową.
     ///
     /// Reszta **nie przepada**: to, co nie złożyło się na pełną jednostkę, zostaje
     /// na liczniku i doliczy się w następnym miesiącu. Bez tego zakład o małym poborze
     /// płaciłby zero co miesiąc przez sto lat gry, a bilans pieniądza nigdy by tego
     /// nie zauważył, bo zero jest poprawną kwotą.
-    pub fn bill(&mut self, until: SimMinute) -> Money {
-        let kwota = self.amount_due();
+    pub fn bill(&mut self, until: SimMinute) -> (Money, i64) {
+        let zuzycie = self.amount_due();
+        let kwota = Money(zuzycie.0 + self.standing.0);
         let dzielnik: i128 = if self.is_energy() {
             60 * 1_000
         } else {
@@ -102,11 +124,11 @@ impl UtilityMeter {
         let rozliczone = if self.tariff.0 == 0 {
             self.consumed
         } else {
-            (i128::from(kwota.0) * dzielnik / i128::from(self.tariff.0)) as i64
+            (i128::from(zuzycie.0) * dzielnik / i128::from(self.tariff.0)) as i64
         };
         self.consumed -= rozliczone;
         self.billed_until = until;
-        kwota
+        (kwota, (i128::from(rozliczone) * 1_000 / dzielnik) as i64)
     }
 
     /// Energia naliczona od ostatniej faktury — do karty inspekcji i do panelu.
@@ -124,6 +146,7 @@ impl HashState for UtilityMeter {
         self.tariff.hash_state(h);
         self.billed_until.hash_state(h);
         h.write_u8(u8::from(self.cut_off));
+        self.standing.hash_state(h);
     }
 }
 
@@ -147,7 +170,7 @@ mod tests {
             m.draw_energy(WattMinutes::per_minute(Energy(30)));
         }
         assert_eq!(m.energy(), Energy(21_600));
-        assert_eq!(m.bill(SimMinute(43_200)), Money(1_404)); // 21,6 kWh × 0,65 zł
+        assert_eq!(m.bill(SimMinute(43_200)), (Money(1_404), 21_600)); // 21,6 kWh × 0,65 zł
     }
 
     /// Reszta nie przepada: to, co nie złożyło się na pełną jednostkę rozliczeniową,
@@ -157,7 +180,7 @@ mod tests {
         let mut m = UtilityMeter::new(UtilityService::Electricity, firma(), Money(65));
         // 900 watominut to 15 Wh — poniżej grosza przy tej taryfie.
         m.draw_energy(WattMinutes(900));
-        assert_eq!(m.bill(SimMinute(43_200)), Money::ZERO);
+        assert_eq!(m.bill(SimMinute(43_200)), (Money::ZERO, 0));
         assert_eq!(
             m.consumed, 900,
             "licznik nie skasował nierozliczonego zużycia"
@@ -165,8 +188,31 @@ mod tests {
 
         // Po dołożeniu reszty rachunek wreszcie wychodzi.
         m.draw_energy(WattMinutes(60 * 1_000 - 900));
-        assert_eq!(m.bill(SimMinute(86_400)), Money(65));
+        assert_eq!(m.bill(SimMinute(86_400)), (Money(65), 1_000));
         assert_eq!(m.consumed, 0);
+    }
+
+    /// Rozliczone zużycie nie gubi ułamka jednostki. Rachunek za 1,5 kWh ma
+    /// podstawę akcyzy 1500 tysięcznych, a nie jedną całą kilowatogodzinę —
+    /// obcięcie w dół przy **każdej** fakturze byłoby błędem systematycznym,
+    /// a nie zaokrągleniem.
+    #[test]
+    fn podstawa_akcyzy_nie_gubi_ulamka_jednostki() {
+        let mut m = UtilityMeter::new(UtilityService::Electricity, firma(), Money(65));
+        m.draw_energy(WattMinutes(90_000)); // 1,5 kWh
+        let (kwota, tysieczne) = m.bill(SimMinute(43_200));
+        assert_eq!(kwota, Money(97)); // 1,5 kWh × 0,65 zł, zaokrąglone w dół do grosza
+        assert_eq!(tysieczne, 1_492); // tyle zużycia złożyło się na te 97 groszy
+    }
+
+    /// Opłata stała należy się **niezależnie od zużycia** — i to ona sprawia,
+    /// że blackout widać w kosztach: licznik stoi na zerze, a rachunek przychodzi.
+    #[test]
+    fn oplata_stala_biegnie_przy_zerowym_zuzyciu() {
+        let mut m = UtilityMeter::new(UtilityService::Electricity, firma(), Money(65));
+        m.standing = Money(4_500);
+        m.cut_off = true;
+        assert_eq!(m.bill(SimMinute(43_200)), (Money(4_500), 0));
     }
 
     /// Woda rozlicza się w metrach sześciennych, nie w kilowatogodzinach — jedyna

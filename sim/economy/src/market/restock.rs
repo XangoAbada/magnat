@@ -189,7 +189,7 @@ impl Market {
         if bills.is_empty() {
             return Money::ZERO;
         }
-        let m = self.lock();
+        let mut m = self.lock();
         let rest = m.rest_of_world;
         let mut razem = Money::ZERO;
         for f in bills {
@@ -202,6 +202,22 @@ impl Market {
                 .map(|i| m.shops[*i as usize].account)
                 .or_else(|| m.plants.get(&f.site).map(|(_, a)| *a));
             let Some(konto) = konto else { continue };
+            // **Akcyza od energii** (M8b). Nalicza się od zużycia, nie od kwoty,
+            // i idzie tą samą kolejką co akcyza hurtowa — miasto zapisuje ją jako
+            // należność miesiąca, a nie jako drugi przelew. Do M8b hak zwraca
+            // zero i ta gałąź nie robi nic.
+            //
+            // **Po** rozpoznaniu konta, a nie przed: zakład, którego rynek nie umie
+            // obciążyć, nie dostaje faktury — a danina od faktury, której nikt nie
+            // wystawił, weszłaby do rejestru jako należność bez pokrycia i po
+            // terminie zamieniła się w zaległość niczyją. Sam **nieudany przelew**
+            // akcyzy nie odwołuje: zobowiązanie podatkowe powstaje z chwilą
+            // wystawienia rachunku, a nie z chwilą zapłaty.
+            let akcyza = m.tax.excise_on_utility(f.kind, f.units_milli);
+            if akcyza.get() > 0 {
+                let e = m.b2b_outbox.entry(f.site).or_default();
+                e.excise = Money(e.excise.get() + akcyza.get());
+            }
             let memo = TxMemo::new(
                 TxKind::Utility {
                     site: f.site,

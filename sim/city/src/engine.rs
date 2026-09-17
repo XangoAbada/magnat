@@ -180,6 +180,34 @@ impl TaxEngine for CityTaxEngine {
         vat_from_gross(gross, self.rates.vat_bp(good))
     }
 
+    /// Akcyza od masy wyrobu obłożonego.
+    ///
+    /// **Do M8b tej metody nie było i to był błąd, nie odłożenie.** M5 woła
+    /// `excise_on` w dwóch prawdziwych miejscach (sprzedaż detaliczna, rozliczenie
+    /// hurtowe), a `CityTaxEngine` jej nie nadpisywał — więc ciało domyślne z traitu
+    /// zwracało zero, sekcja `excise` w `data/city/tax.ron` była martwa, a raport
+    /// M8a pokazywał „zero naliczeń" i tłumaczył to brakiem obłożonych towarów
+    /// w obrocie. Obrót nie miał z tym nic wspólnego: nikt nie pytał o stawkę.
+    /// To jest dokładnie `R2` w postaci, w której trudno go zobaczyć — danina,
+    /// której nikt nigdy nie naliczył, przechodzi **każdy** test domknięcia.
+    fn excise_on(&self, good: GoodId, mass: magnat_core::Mass) -> Money {
+        crate::calc::excise_due(mass, self.rates.excise_per_kg(good))
+    }
+
+    /// Akcyza od energii na rachunku za media (M8b, `CB-4`).
+    ///
+    /// Stawka kwotowa za jednostkę rozliczeniową, więc podwyżka uderza w zakład
+    /// energochłonny mocniej niż w biuro — i przekłada się na cenę **emergentnie**,
+    /// przez politykę marżową firmy, a nie przez zadanie jej z zewnątrz (T7).
+    fn excise_on_utility(&self, service: magnat_core::UtilityService, units_milli: i64) -> Money {
+        if units_milli <= 0 {
+            return Money::ZERO;
+        }
+        let stawka = self.code.excise_energy_per_unit(service).get();
+        // Dzielenie **na końcu**: 1,5 kWh po 12 gr to 18 groszy, a nie 12.
+        Money((i128::from(units_milli) * i128::from(stawka) / 1_000) as i64)
+    }
+
     fn withhold(&self, household: u32, gross: Money) -> Money {
         self.withholding.withhold(household, gross, &self.code)
     }
@@ -206,6 +234,7 @@ mod tests {
             vat_classes: Vec::new(),
             property_bp_per_year: 100,
             excise: Vec::new(),
+            excise_energy: Vec::new(),
             licenses: Vec::new(),
             vat_due_day: 20,
             pit_due_day: 20,

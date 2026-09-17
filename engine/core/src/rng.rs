@@ -183,6 +183,21 @@ pub enum StreamId {
     /// mieszkańca, więc zmiana dyrektora zmienia firmę — o to chodzi w §12.1.
     FirmPersonality = 222,
     // 223–239 zarezerwowane dla M7. Rezerwa dalsza 1220–1239.
+
+    // ── M8: 240..=259 — miasto jako aktor (`K-4`, przydział w M8a §5.0) ──────────
+    /// Czas naprawy krawędzi sieci przesyłowej, która zadziałała zabezpieczeniem
+    /// (M8b §5.4 krok 5). Klucz: indeks krawędzi i tick zadziałania.
+    ///
+    /// **Losowany jest czas naprawy, nie samo zadziałanie.** Przeciążenie wynika
+    /// z bilansu wyspy i jest funkcją stanu — gdyby o nim rozstrzygał strumień,
+    /// blackout przestałby być skutkiem mrozu i stałby się loterią. Rozrzut jest
+    /// natomiast w brygadzie: ta sama zerwana linia raz wraca po godzinie, raz
+    /// po czterech, i to jest jedyne miejsce, w którym sieć czegokolwiek losuje.
+    GridFault = 248,
+    // 240–247 i 249–259 zarezerwowane dla M8 zgodnie z przydziałem w M8a §5.0:
+    // 240 `EventHazard`, 241 `EventRoll`, 242 `EventSeverity`, 243 `EventDuration`,
+    // 244 `Weather`, 245 `Election`, 246 `Audit`, 247 `PermitProcessing`,
+    // 249 `CityPolicy`, 250 `TenderScoring`, 251 `Demography`.
 }
 
 /// Encja zastępcza dla losowania bez encji (zdarzenie globalne, generator świata).
@@ -422,5 +437,6 @@ mod tests {
         assert_eq!(StreamId::LaborSearch as u16, 220);
         assert_eq!(StreamId::LaborQuit as u16, 221);
         assert_eq!(StreamId::FirmPersonality as u16, 222);
+        assert_eq!(StreamId::GridFault as u16, 248);
     }
 }

@@ -1,0 +1,87 @@
+// Strojenie sieci przesyłowych — M8b §5.4, `K-35`.
+//
+// Katalog `data/tuning/` jest **wspólny dla faz**, nie prywatny dla M6: siedzą
+// w nim liczby, które wolno przestawić bez zmiany znaczenia modelu. Ten plik
+// należy do M8 i stoi obok `supply.ron` (M6), `labor.ron` i `insolvency.ron` (M7).
+//
+// Taryfy stoją **tutaj, a nie w `data/city/`**, i to jest granica warta zapisania:
+// `data/city/` niesie politykę fiskalną miasta, a taryfa jest ceną operatora.
+// Miasto może ją ograniczyć uchwałą (`Policy::TariffCap`, M8e) i wtedy uchwała
+// będzie w `data/city/` — ale sama cena nie jest daniną.
+//
+// Wszystko całkowitoliczbowe: pieniądz w groszach, moc w watach, przepływ wody
+// w mililitrach na godzinę, stawki w punktach bazowych (10 000 = 100 %).
+(
+    schema_version: 1,
+
+    // ── Kształt doby po stronie popytu ───────────────────────────────────────────
+    // Mnożnik mocy przyłączeniowej dla każdej godziny doby, w punktach bazowych.
+    // 10 000 znaczy „pełna moc przyłączona", czyli szczyt.
+    //
+    // Bez tej tabeli popyt jest stały, a sieć o stałym popycie nie przeciąża się
+    // nigdy — blackout byłby wtedy wyłącznie skutkiem wymuszonej awarii, czyli
+    // scenariuszem testowym udającym mechanizm (`R2`).
+    //
+    //                   0     1     2     3     4     5     6     7
+    //                   8     9    10    11    12    13    14    15
+    //                  16    17    18    19    20    21    22    23
+    profile_household: [3000, 2600, 2400, 2400, 2600, 3400, 5200, 6400,
+                        5600, 4800, 4600, 4600, 5000, 4800, 4600, 5000,
+                        6400, 8200, 9600,10000, 9200, 7600, 5600, 4000],
+    profile_industry:  [3000, 3000, 3000, 3000, 3200, 5000, 8000, 9600,
+                       10000,10000, 9800, 9400, 9000, 9600,10000, 9800,
+                        9000, 7000, 5000, 4000, 3400, 3200, 3000, 3000],
+
+    // ── Brygada naprawcza ────────────────────────────────────────────────────────
+    // Ile minut gry stoi krawędź, której zabezpieczenie zadziałało. Jedyna rzecz,
+    // którą sieć losuje (`StreamId::GridFault`) — samo zadziałanie jest funkcją
+    // bilansu, nie loterią.
+    repair_minutes: (min: 60, max: 420),
+
+    // ── Taryfy operatorów ────────────────────────────────────────────────────────
+    // `per_unit_gr` zastępuje sekcję `utility` z `supply.ron` w chwili, w której
+    // sieć przejmuje przyłącze; zakład bez przyłącza zostaje przy tamtej stawce.
+    // `standing_gr_per_month` to opłata stała: należy się niezależnie od zużycia
+    // i to ona sprawia, że blackout widać w kosztach.
+    tariffs: [
+        (service: "Electricity", per_unit_gr:  65, standing_gr_per_month: 4_500),
+        (service: "Water",       per_unit_gr: 480, standing_gr_per_month: 2_100),
+    ],
+
+    // ── Popyt odbiorców bez licznika ─────────────────────────────────────────────
+    // Gospodarstwa domowe nie mają licznika po stronie M6 (płacą ryczałt w kopercie,
+    // M5d), ale **obciążają sieć** i podlegają zrzutowi. Bez nich przemysł byłby
+    // jedynym odbiorcą w mieście i priorytety zrzutu nie miałyby czego szeregować.
+    //
+    // Jeden węzeł na dzielnicę, moc na mieszkańca. Sklepu tu nie ma i to jest
+    // decyzja, nie przeoczenie: sklep ma ten sam priorytet co gospodarstwo, więc
+    // osobny węzeł zmieniałby wyłącznie rozbicie tej samej liczby.
+    household_w: 850,
+    // Woda: mililitry na godzinę.
+    household_water_ml_h: 6_000,
+    // Pobór wody zakładu przyłączonego do wodociągu. Jedna liczba na zakład,
+    // nie na recepturę: w M8b sieć wodociągowa nie ma problemu z przepustowością,
+    // a jej rolą jest taryfa i to, że gaśnie razem z prądem w ujęciu.
+    plant_water_ml_h: 90_000,
+
+    // ── Priorytety zrzutu obciążenia ─────────────────────────────────────────────
+    // Niższy numer schodzi **później**. Ujęcie wody i instytucje idą przed
+    // wszystkimi, bo wodociąg bez prądu zabiera wodę całemu miastu.
+    priority_critical: 0,
+    priority_household: 2,
+    priority_industry: 3,
+
+    // ── Wymiarowanie sieci przy stawianiu miasta ────────────────────────────────
+    // Moc źródła jako mnożnik szczytowego popytu całej sieci. 11 500 znaczy 15 %
+    // zapasu — dość, żeby zwykły wieczór przeszedł, za mało, żeby wybaczyć awarię
+    // bloku albo mroźny tydzień (M8c).
+    source_margin_bps: 11_500,
+    // Przepustowość odgałęzienia jako mnożnik szczytowego popytu jego poddrzewa.
+    spur_capacity_bps: 12_500,
+    // Przepustowość pierścienia magistralnego. Hojniej, bo magistrala ma nieść
+    // przerzut mocy między dzielnicami, a nie tylko własny popyt.
+    backbone_capacity_bps: 30_000,
+    // Strata na przesyle. Magistrala jest wysokiego napięcia i traci mniej.
+    loss_bps_backbone: 90,
+    loss_bps_spur: 210,
+)

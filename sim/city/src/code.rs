@@ -9,12 +9,12 @@
 //! naliczenie ma dawać ten sam grosz na każdej platformie, więc nie przechodzi
 //! nawet przez `det_math`.
 
-use magnat_core::{GoodId, Money, Tick};
+use magnat_core::{GoodId, Money, Tick, UtilityService};
 use magnat_supply::Catalog;
 use serde::{Deserialize, Serialize};
 
 /// Wersja schematu `data/city/tax.ron`. Podbicie wymaga migracji zapisów gry.
-pub const TAX_SCHEMA_VERSION: u32 = 1;
+pub const TAX_SCHEMA_VERSION: u32 = 2;
 
 /// Próg skali podatkowej. `upper == 0` znaczy „bez górnej granicy" i wolno mu
 /// wystąpić wyłącznie w ostatnim wierszu — pilnuje tego walidator.
@@ -46,6 +46,22 @@ pub struct ExciseRate {
     pub per_kg: i64,
 }
 
+/// Stawka akcyzy od energii: kwota w groszach za jednostkę rozliczeniową medium
+/// (kWh dla prądu, gazu i ciepła; m³ dla cieczy).
+///
+/// Osobna sekcja od [`ExciseRate`], bo tamta liczy od **masy wyrobu**, a prąd masy
+/// nie ma. `ExciseClass::Energy` z PRD §6.8 jest przy tym jedyną z czterech klas
+/// akcyzowych, która ma w tej grze codzienny wolumen: paliwo kupują pojazdy przez
+/// `FuelLedger` bez konta w księgach, piwo przegrywa z sokiem w rangach substytutu,
+/// a papierosów nie ma w asortymencie detalicznym. Rachunek za media wystawia się
+/// natomiast każdemu zakładowi co miesiąc (`CB-4`).
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
+pub struct ExciseEnergyRate {
+    /// Nazwa wariantu `UtilityService`: `Electricity`, `Gas`, `Heat`, …
+    pub service: String,
+    pub per_unit: i64,
+}
+
 /// Opłata koncesyjna za rok działalności reglamentowanej, po kluczu rodzaju zakładu.
 #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct LicenseFee {
@@ -65,6 +81,8 @@ pub struct TaxCode {
     pub vat_classes: Vec<VatClass>,
     pub property_bp_per_year: u32,
     pub excise: Vec<ExciseRate>,
+    #[serde(default)]
+    pub excise_energy: Vec<ExciseEnergyRate>,
     pub licenses: Vec<LicenseFee>,
     pub vat_due_day: u8,
     pub pit_due_day: u8,
@@ -94,6 +112,8 @@ pub enum TaxCodeError {
     DomainWithoutVat(String),
     /// Akcyza na towar, którego nie ma w katalogu: literówka w danych, nie fakt.
     UnknownExciseGood(String),
+    /// Akcyza na medium spoza słownika `UtilityService` — ta sama klasa błędu.
+    UnknownExciseService(String),
     /// Skala, w której próg bez górnej granicy nie jest ostatni — dalsze wiersze
     /// byłyby nieosiągalne, a nikt by tego nie zauważył.
     OpenBracketNotLast,
@@ -113,6 +133,9 @@ impl std::fmt::Display for TaxCodeError {
             }
             TaxCodeError::UnknownExciseGood(k) => {
                 write!(f, "data/city/tax.ron: akcyza na nieznany towar `{k}`")
+            }
+            TaxCodeError::UnknownExciseService(k) => {
+                write!(f, "data/city/tax.ron: akcyza na nieznane medium `{k}`")
             }
             TaxCodeError::OpenBracketNotLast => write!(
                 f,
@@ -139,6 +162,7 @@ impl TaxCode {
             vat_classes: Vec::new(),
             property_bp_per_year: 0,
             excise: Vec::new(),
+            excise_energy: Vec::new(),
             licenses: Vec::new(),
             vat_due_day: 20,
             pit_due_day: 20,
@@ -212,7 +236,34 @@ impl TaxCode {
             };
             excise[g.id.0 as usize] = r.per_kg;
         }
+        for r in &self.excise_energy {
+            if !UtilityService::ALL.iter().any(|s| s.name() == r.service) {
+                return Err(TaxCodeError::UnknownExciseService(r.service.clone()));
+            }
+        }
         Ok(VatTable { vat, excise })
+    }
+
+    /// Stawka akcyzy od jednostki rozliczeniowej medium — grosze za kWh albo za m³.
+    ///
+    /// Liniowe szukanie po nazwie, a nie tablica indeksowana wariantem: sekcja ma
+    /// najwyżej siedem wierszy, a pyta się o nią raz na zakład na miesiąc.
+    #[must_use]
+    pub fn excise_energy_per_unit(&self, service: UtilityService) -> Money {
+        Money(
+            self.excise_energy
+                .iter()
+                .find(|r| r.service == service.name())
+                .map_or(0, |r| r.per_unit),
+        )
+    }
+
+    /// Ile mediów jest w tym mieście obłożonych akcyzą. Zero znaczy, że ścieżka
+    /// akcyzy energetycznej jest martwa — informacja do raportu, nie stan
+    /// do przemilczenia (`R2`).
+    #[must_use]
+    pub fn excise_services(&self) -> usize {
+        self.excise_energy.iter().filter(|r| r.per_unit != 0).count()
     }
 }
 

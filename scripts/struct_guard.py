@@ -115,7 +115,12 @@ REJESTR = {
     # trzech argumentów to dziesięć linii na ramię, nie pięć. Siedem danin nie robi
     # siedmiu zdań o naliczeniu — robi jedno zdanie z siedmioma podstawieniami,
     # i to jest właśnie ten podział, który utrzymuje przyrost liniowym.
-    ("engine/ui/src/inspect/reason.rs", "fn", 730): 37,
+    # 754 po M8b: dwa ramiona sieci przesyłowych (607–608), +24. Przyrost wraca
+    # do prognozy „~20 na podfazę" i pokazuje tę samą regułę z drugiej strony:
+    # `LoadShed` ma trzy podstawienia i dwanaście linii, `GridTripped` dwa
+    # i dziesięć. Siedem mediów nie robi czternastu zdań — rodzaj medium wchodzi
+    # podstawieniem `{medium}`, tak samo jak danina w bloku M8a.
+    ("engine/ui/src/inspect/reason.rs", "fn", 754): 37,
     # 269 po M7d: jedna linia za `finance: bf.finance` w budowie `BankParams`.
     ("sim/economy/src/data.rs", "fn", 269): 38,
 }

@@ -30,7 +30,7 @@ use magnat_economy::labor::LaborSystem;
 use magnat_economy::MarketSystem;
 use magnat_ecs::{App, ScheduleBuilder};
 use magnat_headless::population::{swiat_agentow, zaludnij, zbuduj_miasto};
-use magnat_headless::{city as city_bridge, full};
+use magnat_headless::{city as city_bridge, full, grid as grid_bridge};
 use magnat_io::world_state_hash;
 use magnat_jobs::JobPool;
 use magnat_macro::MacroSystem;
@@ -83,11 +83,20 @@ pub struct M8MiastoArgs {
     ///
     /// Domyślnie 3, i ta liczba jest **pomiarem, nie ambicją**. W przebiegu
     /// krótszym niż rok nie ma CIT-u ani koncesji, bo obie rozliczają się rocznie.
-    /// Akcyza nie ma czego obłożyć: obłożone są paliwa, piwo i papierosy, a z tych
-    /// trzech tylko piwo w ogóle stoi na półce — i przegrywa z sokiem, bo w kategorii
-    /// `Drink` sok jest pierwszy w rangach substytutu (`data/economy/retail.ron`).
-    /// Paliwo kupują pojazdy przez `FuelLedger` (M4), który nie ma jeszcze konta
-    /// w księgach. To jest `R2` nazwany wprost, a nie przemilczany.
+    /// **Sprostowanie po M8b (`CC-9`).** Do M8b ten komentarz tłumaczył zerową akcyzę
+    /// brakiem obłożonego towaru w obrocie i było to tłumaczenie fałszywe: przyczyną
+    /// było to, że `CityTaxEngine` **nie nadpisywał** `TaxEngine::excise_on`, więc
+    /// ciało domyślne zwracało zero i nikt nigdy nie zapytał o stawkę. Po poprawce
+    /// akcyza od towarów nalicza się normalnie, a M8b dokłada do niej akcyzę
+    /// od energii na rachunku za media.
+    ///
+    /// Co zostaje prawdą o obrocie: paliwo kupują pojazdy przez `FuelLedger` (M4),
+    /// który nie ma konta w księgach, a piwo przegrywa z sokiem w rangach substytutu
+    /// kategorii `Drink` (`data/economy/retail.ron`).
+    ///
+    /// Trzy daniny z wpływami wymagają przebiegu **≥ 51 dób**: VAT, PIT i podatek
+    /// od nieruchomości mają termin dwudziestego miesiąca następnego, a cło jest
+    /// płatne tego samego dnia. Krótszy przebieg mierzy naliczenia, nie wpływy.
     #[arg(long, default_value_t = 3)]
     pub expect_taxes: usize,
 }
@@ -125,17 +134,35 @@ pub fn run(a: &M8MiastoArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
     // w świecie — patrz komentarz w `city_bridge::setup`.
     let publiczne = city_bridge::setup(&mut world, &city)?;
     eprintln!(
-        "miasto jako aktor: {} zakładów w katastrze o wartości {} zł, {} rodzajów zakładu pod koncesją, {} towarów z VAT-em, {} z akcyzą",
+        "miasto jako aktor: {} zakładów w katastrze o wartości {} zł, {} rodzajów zakładu pod koncesją, {} towarów z VAT-em, {} z akcyzą towarową, {} mediów z akcyzą energetyczną",
         publiczne.cadastre,
         publiczne.cadastral_value.get() / 100,
         publiczne.licensed_types,
         publiczne.vat_goods,
-        publiczne.excise_goods
+        publiczne.excise_goods,
+        publiczne.excise_services
+    );
+
+    // Sieci przesyłowe. Po zakładach, bo moc przyłączeniowa bierze się z linii
+    // produkcyjnych, i po mieście, bo akcyza od energii nalicza się na rachunku.
+    let sieci = grid_bridge::setup(&mut world, &city)?;
+    eprintln!(
+        "sieci przesyłowe: {} sieci, {} węzłów, {} krawędzi; elektrownia {} MW przy szczycie {} MW, {} zakładów na prądzie, {} na wodzie",
+        sieci.nets,
+        sieci.nodes,
+        sieci.edges,
+        sieci.source_w / 1_000_000,
+        sieci.peak_w / 1_000_000,
+        sieci.powered_sites,
+        sieci.watered_sites
     );
 
     bootstrap_day(&mut world, 0);
     let mut builder = ScheduleBuilder::new();
     builder
+        .add(magnat_traffic::utility::UtilitySystem::new(
+            magnat_traffic::utility::GridTuning::load_default()?,
+        ))
         .add(magnat_supply::ChainSystem::new())
         .add(magnat_firms::systems::FirmSystem::new())
         .add(MarketSystem::new(&world))
