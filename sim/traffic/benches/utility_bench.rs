@@ -12,12 +12,12 @@
 //! Dlatego scena rozgrzewa się jednym krokiem, zanim zacznie się pomiar.
 
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
-use std::hint::black_box;
 use magnat_core::{Entity, FirmId, Money, Tick, UtilityService};
 use magnat_traffic::utility::solve::{ProfileTable, RepairWindow};
 use magnat_traffic::utility::{
     LoadProfile, Tariff, UtilityEdge, UtilityNetwork, UtilityNode, MAX_CASCADE_ROUNDS,
 };
+use std::hint::black_box;
 use std::num::NonZeroU32;
 
 const SEED: u64 = 0x005E_ED8B;
@@ -39,7 +39,11 @@ fn taryfa() -> Tariff {
 /// `ciasno` zwęża przepustowość odgałęzień tak, żeby każda runda wywalała kolejne
 /// — służy wyłącznie zmierzeniu górnego kosztu kaskady.
 fn metropolia(service: UtilityService, ciasno: bool) -> UtilityNetwork {
-    let mut nodes = vec![UtilityNode::source(if ciasno { 10_000_000 } else { 400_000_000 })];
+    let mut nodes = vec![UtilityNode::source(if ciasno {
+        10_000_000
+    } else {
+        400_000_000
+    })];
     let mut edges = Vec::new();
     for _ in 0..STACJI {
         nodes.push(UtilityNode::hub());
@@ -96,7 +100,13 @@ fn piec_sieci(ciasno: bool) -> Vec<UtilityNetwork> {
 
 fn rozgrzej(sieci: &mut [UtilityNetwork]) {
     for n in sieci.iter_mut() {
-        let _ = n.solve(SEED, Tick(1), 3, &ProfileTable::default(), RepairWindow::default());
+        let _ = n.solve(
+            SEED,
+            Tick(1),
+            3,
+            &ProfileTable::default(),
+            RepairWindow::default(),
+        );
     }
 }
 
@@ -141,27 +151,12 @@ fn m8b_tick(c: &mut Criterion) {
 /// a nie zakładać.
 fn m8b_kaskada(c: &mut Criterion) {
     let mut g = c.benchmark_group("m8b-2 kaskada");
-    g.bench_function(format!("{MAX_CASCADE_ROUNDS}_rund_siec_energetyczna"), |b| {
-        b.iter_batched(
-            || metropolia(UtilityService::Electricity, true),
-            |mut n| {
-                let r = n.solve(
-                    SEED,
-                    Tick(2),
-                    19,
-                    &ProfileTable::default(),
-                    RepairWindow::default(),
-                );
-                black_box(r.cascade_rounds)
-            },
-            BatchSize::LargeInput,
-        );
-    });
-    g.bench_function(format!("{MAX_CASCADE_ROUNDS}_rund_{SIECI}_sieci_naraz"), |b| {
-        b.iter_batched(
-            || piec_sieci(true),
-            |mut sieci| {
-                for n in sieci.iter_mut() {
+    g.bench_function(
+        format!("{MAX_CASCADE_ROUNDS}_rund_siec_energetyczna"),
+        |b| {
+            b.iter_batched(
+                || metropolia(UtilityService::Electricity, true),
+                |mut n| {
                     let r = n.solve(
                         SEED,
                         Tick(2),
@@ -169,13 +164,34 @@ fn m8b_kaskada(c: &mut Criterion) {
                         &ProfileTable::default(),
                         RepairWindow::default(),
                     );
-                    black_box(r.cascade_rounds);
-                }
-                black_box(sieci.len())
-            },
-            BatchSize::LargeInput,
-        );
-    });
+                    black_box(r.cascade_rounds)
+                },
+                BatchSize::LargeInput,
+            );
+        },
+    );
+    g.bench_function(
+        format!("{MAX_CASCADE_ROUNDS}_rund_{SIECI}_sieci_naraz"),
+        |b| {
+            b.iter_batched(
+                || piec_sieci(true),
+                |mut sieci| {
+                    for n in sieci.iter_mut() {
+                        let r = n.solve(
+                            SEED,
+                            Tick(2),
+                            19,
+                            &ProfileTable::default(),
+                            RepairWindow::default(),
+                        );
+                        black_box(r.cascade_rounds);
+                    }
+                    black_box(sieci.len())
+                },
+                BatchSize::LargeInput,
+            );
+        },
+    );
     g.finish();
 }
 

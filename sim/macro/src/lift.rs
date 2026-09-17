@@ -87,8 +87,18 @@ struct Osoba {
 }
 
 /// Granice wieku produkcyjnego — ten sam mianownik, którego używa statystyka
-/// rynku pracy w `sim/economy::labor` (dziecko bez pracy nie jest bezrobotne).
-const WORKING_AGE: std::ops::RangeInclusive<u16> = 16..=74;
+/// rynku pracy w `sim/economy::labor` (dziecko bez pracy nie jest bezrobotne),
+/// bo obie strony czytają **to samo pole danych** (`ages.labour_force`, `K-60`).
+/// Świat bez tabeli demograficznej nie ma siły roboczej wcale (`None`) — i to jest
+/// uczciwsze niż liczba wzięta ze stałej, której nikt nie widzi.
+fn wiek_produkcyjny(world: &World) -> Option<(u16, u16)> {
+    world
+        .get_resource::<magnat_agents::DemographyTable>()
+        .map(|t| {
+            let lf = t.ages().labour_force;
+            (u16::from(lf.min), u16::from(lf.max))
+        })
+}
 
 /// Doba świata. Zegar niesie rynek (`Market::tick`) — `World` sam z siebie nie wie,
 /// która jest godzina, bo `SimClock` jest przelicznikiem prezentacji i do symulacji
@@ -105,6 +115,7 @@ fn zbierz_ludzi(world: &World) -> Vec<Osoba> {
         return Vec::new();
     };
     let dzis = i32::try_from(doba(world)).unwrap_or(0);
+    let wiek = wiek_produkcyjny(world);
     let mut out = Vec::with_capacity(pop.citizens().len());
     // Spis jest posortowany po indeksie encji, więc kolejność zdjęcia nie zależy
     // od układu archetypów w ECS (00 §3.2).
@@ -133,7 +144,7 @@ fn zbierz_ludzi(world: &World) -> Vec<Osoba> {
             class: SocialClass::of(Q::new(v.status)).as_index() as u8,
             age_years: lata,
             employed: emp.is_some_and(|e| e.has_job()),
-            in_labour_force: WORKING_AGE.contains(&lata),
+            in_labour_force: wiek.is_some_and(|(lo, hi)| lata >= lo && lata <= hi),
             skills,
             needs,
         });

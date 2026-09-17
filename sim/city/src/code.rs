@@ -263,7 +263,10 @@ impl TaxCode {
     /// do przemilczenia (`R2`).
     #[must_use]
     pub fn excise_services(&self) -> usize {
-        self.excise_energy.iter().filter(|r| r.per_unit != 0).count()
+        self.excise_energy
+            .iter()
+            .filter(|r| r.per_unit != 0)
+            .count()
     }
 }
 

@@ -1,0 +1,35 @@
+[package]
+name = "magnat-events"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+# Testy jednostkowe nie są benchmarkami — patrz komentarz w `engine/ecs/Cargo.toml`.
+[lib]
+bench = false
+
+[dependencies]
+magnat-core = { workspace = true }
+magnat-ecs = { workspace = true }
+# Generator zdarzeń stoi **nad** wszystkim, co odpytuje i co zmienia, i to jest
+# jedyny układ bez cyklu: sondy czytają stan czterech faz, a patche piszą do trzech.
+# Gdyby `SimParam` miał być czytany przez konsumentów, każdy z nich musiałby zależeć
+# od tego crate'u — i wtedy `economy → events → economy` nie zbudowałoby się.
+# Dlatego zdarzenie **zapisuje** wartość do pola właściciela, a nie wystawia ją
+# do odczytu; wartość sprzed zdarzenia pamięta `ParamOverlay` i ona ją przywraca.
+magnat-agents = { workspace = true }
+# Zdolność produkcyjna zakładu, kondycja linii, ceny zewnętrzne i stawki celne.
+magnat-supply = { workspace = true }
+# Zatrudnienie, morale, wynik zakładu — sondy strajku i wypadku.
+magnat-firms = { workspace = true }
+# CPI, bezrobocie i podaż pieniądza — wskaźniki miasta liczone miesięcznie.
+magnat-economy = { workspace = true }
+# Sieci przesyłowe: obciążenie źródeł jako sonda, wyłączenie bloku jako skutek.
+magnat-traffic = { workspace = true }
+serde = { workspace = true }
+ron = { workspace = true }
+
+[lints]
+workspace = true

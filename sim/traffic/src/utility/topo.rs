@@ -277,12 +277,7 @@ mod tests {
     #[test]
     fn zrodlo_zostaje_korzeniem_wyspy() {
         let mut t = TopologyCache::default();
-        t.rebuild(
-            3,
-            &[(0, 1), (1, 2)],
-            &[true, true],
-            &[false, false, true],
-        );
+        t.rebuild(3, &[(0, 1), (1, 2)], &[true, true], &[false, false, true]);
         assert_eq!(t.roots, vec![2]);
         assert_eq!(t.parent[0], 1);
         assert_eq!(t.parent[1], 2);

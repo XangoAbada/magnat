@@ -476,6 +476,31 @@ vocab_enum! {
 }
 
 vocab_enum! {
+    /// Kategoria zdarzenia świata (PRD §11.2, M8c §5.5).
+    ///
+    /// Tutaj, a nie w `sim/events`, bo jest **ładunkiem** `DecisionReason::EventStarted`,
+    /// a ładunek centralnego enuma nie może pochodzić z crate'u, który od `core` zależy —
+    /// ta sama reguła, która wypchnęła tu `PriceDriver` (`K-30`) i `WageCause` (`K-45`).
+    /// Kolejność wariantów jest kontraktem: `as_index()` indeksuje histogram zdarzeń
+    /// na rok w raporcie balansatora (ryzyko `R1` fazy) i licznik `max_concurrent`
+    /// per kategoria.
+    EventCategory {
+        Natural, Infrastructure, External, Social, Firm, Political,
+    }
+}
+
+vocab_enum! {
+    /// Pora roku. Rok gry ma 360 dób (`K-1`), więc sezon to równe 90 dób i nie ma
+    /// sporu o granicę. Czytają go: generator zdarzeń (bramka „susza tylko wiosną
+    /// i latem"), rolnictwo M6 (kalendarz agrotechniczny) i UI.
+    ///
+    /// Kolejność zaczyna się od zimy, bo doba 0 roku gry wypada w styczniu.
+    Season {
+        Winter, Spring, Summer, Autumn,
+    }
+}
+
+vocab_enum! {
     /// Rodzaj surowca w złożu. Tutaj, a nie w `sim/world`, bo słownika używają M5
     /// (ceny surowców), M6 (wydobycie i mapowanie na `GoodId`) i M8 (opłaty eksploatacyjne) —
     /// czyli więcej niż jedna faza, co jest kryterium z 00 §K-8.
@@ -851,6 +876,20 @@ impl Default for PlaceRef {
     /// mieszkaniec poszedłby po zakupy do początku układu współrzędnych.
     fn default() -> PlaceRef {
         PlaceRef::Coord(WorldCoord::ORIGIN)
+    }
+}
+
+impl Season {
+    /// Sezon doby roku (0..=359). Cztery równe kwartały po 90 dób — patrz komentarz
+    /// przy `SimCalendar` w `core::time`.
+    #[must_use]
+    pub const fn of_day(day_of_year: u16) -> Season {
+        match day_of_year / 90 {
+            0 => Season::Winter,
+            1 => Season::Spring,
+            2 => Season::Summer,
+            _ => Season::Autumn,
+        }
     }
 }
 

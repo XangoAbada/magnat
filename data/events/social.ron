@@ -1,0 +1,135 @@
+// Zdarzenia społeczne (M8c WP5, PRD §11.2).
+//
+// Strajk jest tu wzorcem z §5.5 C i jedynym zdarzeniem, którego sonda ma dwa źródła
+// naraz: płace z rejestru firm i medianę zawodu z rynku pracy. Bez mediany „luka
+// płacowa" byłaby liczbą bez odniesienia, a strajk — loterią.
+//
+// **Strajk kończy się wtedy, gdy firma podniesie płace**, a nie po wylosowanej
+// liczbie dób: `UntilBelow` nad tą samą sondą, która go zaczęła. To zamyka pętlę,
+// o którą chodzi w §1 dokumentu fazy — firma liczy koszt przestoju i porównuje go
+// z kosztem podwyżki, a hazard wygasa sam, bez ani jednej linii kodu o strajku
+// po stronie M7.
+(
+    schema_version: 1,
+
+    events: [
+        (
+            key: "social/strike",
+            category: Social,
+            scope: Firm,
+            trigger: (
+                base_ppm: 70,
+                gate: [MinFirmHeadcount(15), MinFirmAgeDays(180)],
+                factors: [
+                    (probe: FirmWageGapPermille, curve: ([(0, 10000), (100, 30000), (250, 100000)])),
+                    (probe: FirmMoraleQ, curve: ([(30, 40000), (50, 10000), (70, 5000)])),
+                    (probe: CpiYoyBp, curve: ([(300, 10000), (1200, 22000)])),
+                ],
+            ),
+            severity: (min_bps: 3000, max_bps: 10000, from: Some((FirmWageGapPermille, 0, 250))),
+            duration: UntilBelow(probe: FirmWageGapPermille, value: 40, min_days: 3),
+            effects: [
+                // Siła zdarzenia jest **odsetkiem załogi przystępującej do strajku**,
+                // a zakład bez ludzi nie produkuje. Mnożnik 2000 przy pełnej sile
+                // znaczy „zostaje piąta część zdolności produkcyjnej".
+                SiteOutput(mul_bps: 2000, filter: Any),
+            ],
+            cooldown_days: 60,
+            max_concurrent: 4,
+            chronicle: "event.social.strike",
+        ),
+
+        // Protest. Miejski, nie firmowy — bierze się z bezrobocia, nastroju
+        // i drożyzny, czyli z trzech liczb, które miasto i tak mierzy co miesiąc.
+        (
+            key: "social/protest",
+            category: Social,
+            scope: World,
+            trigger: (
+                base_ppm: 700,
+                factors: [
+                    (probe: UnemploymentPermille, curve: ([(40, 10000), (150, 50000)])),
+                    (probe: MoodMean, curve: ([(-40, 40000), (0, 10000), (30, 5000)])),
+                    (probe: CpiYoyBp, curve: ([(300, 10000), (1500, 25000)])),
+                ],
+            ),
+            severity: (min_bps: 2000, max_bps: 9000, from: None),
+            duration: RangeDays(1, 5),
+            effects: [
+                NeedDecay(need: Safety, mul_bps: 13000),
+            ],
+            cooldown_days: 30,
+            max_concurrent: 1,
+            chronicle: "event.social.protest",
+        ),
+
+        // Festyn. Zdarzenie **dobre** — rozrywka schodzi wolniej, bo miasto ma
+        // co robić. Katalog samych nieszczęść jest błędem balansu, nie oszczędnością.
+        (
+            key: "social/festival",
+            category: Social,
+            scope: World,
+            trigger: (
+                base_ppm: 1800,
+                gate: [Season([Summer])],
+                factors: [
+                    (probe: MoodMean, curve: ([(-20, 6000), (0, 10000), (40, 20000)])),
+                ],
+            ),
+            severity: (min_bps: 3000, max_bps: 10000, from: None),
+            duration: FixedDays(3),
+            effects: [
+                NeedDecay(need: Leisure, mul_bps: 6000),
+            ],
+            cooldown_days: 45,
+            max_concurrent: 1,
+            chronicle: "event.social.festival",
+        ),
+
+        // Moda. Potrzeba statusu zaczyna schodzić szybciej, więc miasto kupuje
+        // inaczej — a ile i po ile, rozstrzyga rynek, nie to zdarzenie.
+        (
+            key: "social/consumer_fad",
+            category: Social,
+            scope: World,
+            trigger: (
+                base_ppm: 900,
+                factors: [
+                    (probe: MoodMean, curve: ([(-20, 5000), (0, 10000), (40, 25000)])),
+                ],
+            ),
+            severity: (min_bps: 2000, max_bps: 9000, from: None),
+            duration: RangeDays(20, 60),
+            effects: [
+                NeedDecay(need: Status, mul_bps: 14000),
+            ],
+            cooldown_days: 120,
+            max_concurrent: 1,
+            chronicle: "event.social.consumer_fad",
+        ),
+
+        // Fala przestępczości. Rośnie z bezrobocia i z nastroju, a zabiera
+        // poczucie bezpieczeństwa — czyli tę potrzebę, której M3 do M8 nie umiało
+        // ani zaspokoić, ani odebrać (`Z-1` w dokumencie fazy).
+        (
+            key: "social/crime_wave",
+            category: Social,
+            scope: World,
+            trigger: (
+                base_ppm: 600,
+                factors: [
+                    (probe: UnemploymentPermille, curve: ([(40, 10000), (150, 40000)])),
+                    (probe: MoodMean, curve: ([(-40, 25000), (0, 10000)])),
+                ],
+            ),
+            severity: (min_bps: 2000, max_bps: 9000, from: None),
+            duration: RangeDays(20, 60),
+            effects: [
+                NeedDecay(need: Safety, mul_bps: 15000),
+            ],
+            cooldown_days: 90,
+            max_concurrent: 1,
+            chronicle: "event.social.crime_wave",
+        ),
+    ],
+)

@@ -123,12 +123,36 @@ pub struct PlantSite {
     /// a 1000 to jest różnica, której nie chcemy zgubić na zaokrągleniu w każdej
     /// minucie każdej linii.
     pub labor_pct: u16,
+    /// Mnożnik zdarzeniowy zdolności produkcyjnej, w punktach bazowych
+    /// (10 000 = bez zmian). Pisze go **wyłącznie** `sim/events` (M8c §5.5),
+    /// czytelnik jest jeden: `sprobuj_start`.
+    ///
+    /// Osobne pole od `labor_pct`, choć w kernelu mnoży się tak samo — bo
+    /// `labor_pct` przepisuje **co dobę** rynek pracy M7 z faktycznej obsady,
+    /// więc strajk wpisany tam zniknąłby przy najbliższym przeliczeniu.
+    /// Znaczenie jest też inne: „nie ma komu" i „nie ma czym" to dla gracza
+    /// dwa różne zdania o tym samym zakładzie, a powód zdarzenia mówi które.
+    pub event_output_bps: u16,
     reasons: Vec<(SimMinute, DecisionReason)>,
 }
 
 impl PlantSite {
     /// Obsada kompletna — wartość neutralna dla przepustowości.
     pub const FULL_LABOR: u16 = 1000;
+
+    /// Brak zdarzenia dotykającego zakładu — wartość neutralna mnożnika M8c.
+    pub const NO_EVENT: u16 = 10_000;
+
+    /// Pokrycie etatowe po uwzględnieniu zdarzeń świata.
+    ///
+    /// Mnożenie, a nie minimum, z tego samego powodu co przy wsadzie i obsadzie
+    /// w `sprobuj_start`: zakład, w którym połowa załogi strajkuje, a druga połowa
+    /// pracuje na zepsutej linii, robi ćwierć szarży, bo brakuje mu obu rzeczy.
+    #[must_use]
+    pub fn effective_labor_pct(&self) -> u16 {
+        let v = u32::from(self.labor_pct) * u32::from(self.event_output_bps) / 10_000;
+        u16::try_from(v).unwrap_or(u16::MAX)
+    }
 
     #[must_use]
     pub fn new(site: SiteId, owner: magnat_core::FirmId, dock: Dock) -> PlantSite {
@@ -149,6 +173,7 @@ impl PlantSite {
             // Zakład bez przypisanej firmy pracuje pełną parą — inaczej każdy test M6
             // musiałby zakładać firmę, żeby cokolwiek wyprodukować.
             labor_pct: PlantSite::FULL_LABOR,
+            event_output_bps: PlantSite::NO_EVENT,
             reasons: Vec::new(),
         }
     }
@@ -289,6 +314,7 @@ impl HashState for PlantSite {
         }
         // Pokrycie etatowe jest stanem: zmienia to, ile zakład wyprodukuje.
         h.write_u16(self.labor_pct);
+        h.write_u16(self.event_output_bps);
         h.write_u32(self.reasons.len() as u32);
         for (at, r) in &self.reasons {
             at.hash_state(h);

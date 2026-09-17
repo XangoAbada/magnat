@@ -98,6 +98,7 @@ pub fn krok(
         };
         powody.extend(r.reasons.iter().copied());
         przepisz |= grids.mark_outage(i, r.outage_key, r.unserved);
+        grids.mark_balance(i, r.supply_total, r.demand_total);
     }
     // Pierścień powodów ma 64 miejsca, więc zapisywanie wcześniejszych jest pracą
     // dla kosza. Kaskada rozbijająca metropolię na setki wysp potrafi wyprodukować

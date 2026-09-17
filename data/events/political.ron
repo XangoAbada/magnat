@@ -1,0 +1,129 @@
+// Zdarzenia polityczne (M8c WP5, PRD §11.2).
+//
+// **Zakres tej kategorii jest w M8c wąski i jest to decyzja, nie przeoczenie.**
+// Rada miasta, burmistrz, przetargi i dotacje powstają w M8e; zdarzenie polityczne
+// bez organu, który je podejmuje, byłoby rzutem kostką udającym politykę. Zostaje
+// to, co jest polityką **handlową** i ma w M8c prawdziwe wejście: stawka celna
+// klasy taryfowej (`data/trade/tariffs.ron`, klasa jest etykietą towaru — `K-38`).
+//
+// Stawka jest **poziomem**, nie zmianą: uchwała ustala cło na 25 %, a nie „o 5 pkt
+// więcej niż poprzednio". Dlatego siła zdarzenia nie skaluje tych efektów —
+// tak samo jak nie skaluje wyłączenia bloku energetycznego.
+//
+// Kierunek związku jest w obie strony i tak ma być: bezrobocie pcha miasto
+// ku protekcjonizmowi, drożyzna — ku otwarciu granicy na żywność.
+(
+    schema_version: 1,
+
+    events: [
+        (
+            key: "political/tariff_hike",
+            category: Political,
+            scope: World,
+            trigger: (
+                base_ppm: 700,
+                factors: [
+                    (probe: UnemploymentPermille, curve: ([(40, 6000), (80, 10000), (180, 45000)])),
+                ],
+            ),
+            severity: (min_bps: 4000, max_bps: 10000, from: None),
+            duration: RangeDays(180, 720),
+            effects: [
+                Duty(class: "industrial", bp: 2500),
+            ],
+            cooldown_days: 360,
+            max_concurrent: 1,
+            chronicle: "event.political.tariff_hike",
+        ),
+
+        (
+            key: "political/tariff_cut",
+            category: Political,
+            scope: World,
+            trigger: (
+                base_ppm: 700,
+                factors: [
+                    (probe: UnemploymentPermille, curve: ([(20, 30000), (80, 10000), (180, 4000)])),
+                ],
+            ),
+            severity: (min_bps: 4000, max_bps: 10000, from: None),
+            duration: RangeDays(180, 720),
+            effects: [
+                Duty(class: "industrial", bp: 100),
+            ],
+            cooldown_days: 360,
+            max_concurrent: 1,
+            chronicle: "event.political.tariff_cut",
+        ),
+
+        // Zniesienie cła na żywność przy drożyźnie. To jest dokładnie ta decyzja,
+        // którą §5.5 A zapowiada na końcu kaskady suszy — tyle że podjęta odruchowo,
+        // bo rady miasta jeszcze nie ma.
+        (
+            key: "political/food_tariff_relief",
+            category: Political,
+            scope: World,
+            trigger: (
+                base_ppm: 600,
+                factors: [
+                    (probe: CpiYoyBp, curve: ([(0, 4000), (300, 10000), (1500, 50000)])),
+                ],
+            ),
+            severity: (min_bps: 4000, max_bps: 10000, from: None),
+            duration: RangeDays(90, 360),
+            effects: [
+                Duty(class: "food", bp: 0),
+            ],
+            cooldown_days: 360,
+            max_concurrent: 1,
+            chronicle: "event.political.food_tariff_relief",
+        ),
+
+        // Akcyzowa podwyżka cła na paliwo. Rzadka i długa — zmiana stawki paliwowej
+        // przechodzi przez koszt transportu do każdej ceny w mieście, więc ma prawo
+        // być decyzją, a nie tygodniowym kaprysem.
+        (
+            key: "political/fuel_tariff_hike",
+            category: Political,
+            scope: World,
+            trigger: (
+                base_ppm: 600,
+                factors: [
+                    (probe: CpiYoyBp, curve: ([(0, 20000), (600, 10000), (1500, 4000)])),
+                ],
+            ),
+            severity: (min_bps: 4000, max_bps: 10000, from: None),
+            duration: RangeDays(180, 540),
+            effects: [
+                Duty(class: "fuel", bp: 1500),
+            ],
+            cooldown_days: 540,
+            max_concurrent: 1,
+            chronicle: "event.political.fuel_tariff_hike",
+        ),
+
+        // Embargo na surowce. Dwa skutki naraz i to jest jego istota: cło rośnie,
+        // a dostawca z zewnątrz i tak podnosi cenę, bo kolejka po surowiec jest
+        // dłuższa. Jedno bez drugiego byłoby połową zdarzenia.
+        (
+            key: "political/raw_embargo",
+            category: Political,
+            scope: World,
+            trigger: (
+                base_ppm: 400,
+                factors: [
+                    (probe: MoodMean, curve: ([(-40, 25000), (0, 10000), (40, 6000)])),
+                ],
+            ),
+            severity: (min_bps: 4000, max_bps: 10000, from: None),
+            duration: RangeDays(60, 240),
+            effects: [
+                Duty(class: "raw", bp: 4000),
+                ExternalPrice(good: "raw_iron_ore", mul_bps: 14000),
+            ],
+            cooldown_days: 720,
+            max_concurrent: 1,
+            chronicle: "event.political.raw_embargo",
+        ),
+    ],
+)

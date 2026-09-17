@@ -26,13 +26,13 @@
 
 use crate::ids::{FirmId, SiteId};
 use crate::time::MinuteOfDay;
-use crate::types::{DistrictId, GoodId, JobRoleId, Money, PolicyId, Q};
+use crate::types::{DistrictId, EventId, GoodId, JobRoleId, Money, PolicyId, Q};
 use crate::vocab::{
     AbateReason, ActionKind, BankruptcyTrigger, ClaimPriority, CommitmentKind, DeprivationEffect,
-    FirmStrategy, FixedCost, LeaveCause, LifeEventKind, LineStopCause, LoanKind, MigrationKind,
-    NeedKind, PlaceRef, PriceDriver, ReactionKind, RejectCause, RejectCredit, ShortageStageKind,
-    SpendCategory, StockCat, TaxKind, TraitId, TransportMode, Trend, UtilityKind,
-    UtilityService, WageCause,
+    EventCategory, FirmStrategy, FixedCost, LeaveCause, LifeEventKind, LineStopCause, LoanKind,
+    MigrationKind, NeedKind, PlaceRef, PriceDriver, ReactionKind, RejectCause, RejectCredit,
+    ShortageStageKind, SpendCategory, StockCat, TaxKind, TraitId, TransportMode, Trend,
+    UtilityKind, UtilityService, WageCause,
 };
 use serde::{Deserialize, Serialize};
 
@@ -556,7 +556,32 @@ pub enum DecisionReason {
         service: UtilityService,
         repair_minutes: u16,
     } = 608,
-    // 609–699 zarezerwowane dla M8.
+    /// Zdarzenie świata zaczęło się (M8c §5.5, PRD §11.1).
+    ///
+    /// Powodem **nie jest** losowanie: rzut rozstrzygnął tylko „czy dziś", a szansę
+    /// wyliczyły sondy stanu świata. Dlatego karta zdarzenia pokazuje obok tego powodu
+    /// rozbicie hazardu na czynniki (`HazardFactor`) — „awaria, bo blok ma 32 lata
+    /// i 90 dób zaległej konserwacji", a nie „awaria, bo wypadła szóstka".
+    ///
+    /// `severity_bps` jest siłą **wylosowaną w widełkach definicji** i to ona skaluje
+    /// każdy efekt zdarzenia: to samo zdarzenie o sile 2000 i 9000 bps zmienia parametr
+    /// inaczej, bo susza bywa dokuczliwa i bywa katastrofą.
+    EventStarted {
+        event: EventId,
+        category: EventCategory,
+        severity_bps: u16,
+    } = 609,
+    /// Zdarzenie świata się skończyło (M8c §5.5).
+    ///
+    /// `days` to długość, która faktycznie wyszła, a nie ta zapowiedziana: zdarzenie
+    /// `UntilResolved` kończy się wtedy, gdy stan świata przestaje je podtrzymywać,
+    /// więc „ile trwało" jest wynikiem symulacji, nie parametrem definicji.
+    EventEnded {
+        event: EventId,
+        category: EventCategory,
+        days: u16,
+    } = 610,
+    // 611–699 zarezerwowane dla M8.
     // ... kolejne fazy dopisują własne bloki na końcu pliku
 }
 
@@ -642,6 +667,8 @@ impl DecisionReason {
             DecisionReason::BudgetDeficitClosed { .. } => 606,
             DecisionReason::LoadShed { .. } => 607,
             DecisionReason::GridTripped { .. } => 608,
+            DecisionReason::EventStarted { .. } => 609,
+            DecisionReason::EventEnded { .. } => 610,
         }
     }
 }

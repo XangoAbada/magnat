@@ -74,6 +74,29 @@ pub fn zbuduj_miasto(
     profile: &str,
     pool: &JobPool,
 ) -> Result<CityData, Box<dyn std::error::Error>> {
+    Ok(zbuduj_miasto_z_klimatem(seed, size, region, epoch, profile, pool)?.0)
+}
+
+/// To samo co [`zbuduj_miasto`], plus **normy klimatyczne środka miasta**.
+///
+/// Osobna funkcja, a nie zmieniona sygnatura tamtej: normy potrzebuje jeden
+/// konsument (pogoda M8c), a pozostałych pięciu wywołań nie ma powodu przepisywać.
+///
+/// Normy są kopiowane z komórki klimatu pod środkiem miasta i to jest cała
+/// ich droga do `sim/events`. Kopia, a nie zapytanie: `ClimateCell` ma 48 bajtów,
+/// nie zmienia się nigdy, a zapytanie wymagałoby trzymania całego terenu przy życiu
+/// przez cały przebieg — czyli gigabajtów pod jedną tablicę dwunastu liczb.
+///
+/// # Errors
+/// Jak [`zbuduj_miasto`].
+pub fn zbuduj_miasto_z_klimatem(
+    seed: u64,
+    size: &str,
+    region: &str,
+    epoch: &str,
+    profile: &str,
+    pool: &JobPool,
+) -> Result<(CityData, magnat_world::ClimateCell), Box<dyn std::error::Error>> {
     let params = WorldGenParams {
         seed,
         size: size.parse()?,
@@ -90,7 +113,11 @@ pub fn zbuduj_miasto(
     let terrain = Terrain::new(data, reg);
     let plan = CityPlan::from_world(&params);
     let city = generate_city(&plan, &terrain, terrain.materials(), pool)?;
-    Ok(city)
+    let klimat = {
+        use magnat_world::TerrainQuery;
+        *terrain.climate_at(city.center.x as i32, city.center.y as i32)
+    };
+    Ok((city, klimat))
 }
 
 /// Świat ECS z zarejestrowaną warstwą M3a i M3c, gotowy do zaludnienia.

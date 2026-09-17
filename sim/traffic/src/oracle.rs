@@ -185,6 +185,9 @@ pub struct TrafficOracle {
     /// bo `weather_at` jest czystą funkcją i wołanie jej milion razy nic nie zmienia.
     day: AtomicU64,
     weather: Mutex<Weather>,
+    /// Czy pogodę prowadzi `sim/events` (M8c). Ustawia się raz, przy pierwszym
+    /// `set_weather`, i od tej chwili zaślepka `weather_at` w tym świecie milczy.
+    weather_external: std::sync::atomic::AtomicBool,
     /// Suma taryf zapłaconych przewoźnikom taksówkowym, w groszach. Druga strona
     /// bilansu pieniądza dla opcji, która nie wjeżdża na sieć (`D5`).
     taxi_fares: AtomicU64,
@@ -257,6 +260,7 @@ impl TrafficOracle {
             seed: 0,
             day: AtomicU64::new(0),
             weather: Mutex::new(Weather::default()),
+            weather_external: std::sync::atomic::AtomicBool::new(false),
             taxi_fares: AtomicU64::new(0),
             mode_counts: std::array::from_fn(|_| AtomicU64::new(0)),
             infeasible_counts: std::array::from_fn(|_| AtomicU64::new(0)),
@@ -305,11 +309,28 @@ impl TrafficOracle {
     }
 
     /// Doba świata. Woła to `TrafficSystem`; pogoda przelicza się przy zmianie doby
-    /// i tylko wtedy.
+    /// i tylko wtedy — **o ile pogody nie prowadzi już `sim/events`** (M8c §5.6).
+    ///
+    /// Świat ze zdarzeniami ma pogodę z norm klimatycznych M1 i procesu odchyłek,
+    /// liczoną co godzinę; świat bez nich (scenariusze M3/M4) zostaje przy zaślepce
+    /// `weather_at`, bo inaczej straciłby sezonowość, a `K-26` obiecywał podmianę
+    /// ciała, nie odebranie funkcji.
     pub fn set_day(&self, day: u64) {
-        if self.day.swap(day, Ordering::Relaxed) != day {
+        if self.day.swap(day, Ordering::Relaxed) != day
+            && !self.weather_external.load(Ordering::Relaxed)
+        {
             *self.weather.lock().expect("weather") = weather_at(self.seed, day);
         }
+    }
+
+    /// Pogoda z zewnątrz — wyłączna od pierwszego wywołania (`K-26`).
+    ///
+    /// Woła to krok pogody w `sim/events`. Od tej chwili zaślepka `weather_at`
+    /// nie odzywa się w tym świecie ani razu: dwie pogody naraz byłyby dwiema
+    /// prawdami o tej samej dobie.
+    pub fn set_weather(&self, w: Weather) {
+        self.weather_external.store(true, Ordering::Relaxed);
+        *self.weather.lock().expect("weather") = w;
     }
 
     #[must_use]

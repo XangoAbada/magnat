@@ -12,24 +12,33 @@ use serde::Deserialize;
 use super::solve::{ProfileTable, RepairWindow};
 use super::Tariff;
 
-pub const GRID_SCHEMA_VERSION: u32 = 1;
+pub const GRID_SCHEMA_VERSION: u32 = 2;
 
 #[derive(Debug)]
 pub enum GridDataError {
     Io(std::io::Error),
     Ron(String),
-    Schema { found: u32, want: u32 },
+    Schema {
+        found: u32,
+        want: u32,
+    },
     /// Nieznany klucz medium w sekcji `tariffs`. Cicha zaślepka byłaby gorsza:
     /// sieć z taryfą zero wygląda w raporcie tak samo jak sieć, której nikt
     /// nie fakturuje (`R2`).
     UnknownService(String),
     /// Profil doby nie ma 24 wpisów. Uzupełnienie brakujących zerami dałoby
     /// miasto, które gaśnie o godzinie, której nikt nie wpisał.
-    BadProfile { name: &'static str, found: usize },
+    BadProfile {
+        name: &'static str,
+        found: usize,
+    },
     /// Widełki naprawy bez sensu: górna poniżej dolnej albo dolna równa zeru.
     /// Naprawa w zero minut znaczy krawędź wracającą w tym samym ticku,
     /// w którym wypadła — czyli kaskadę, która nie ma jak się zatrzymać.
-    BadRepair { min: u32, max: u32 },
+    BadRepair {
+        min: u32,
+        max: u32,
+    },
 }
 
 impl std::fmt::Display for GridDataError {
@@ -85,6 +94,8 @@ struct GridFile {
     household_w: i64,
     household_water_ml_h: i64,
     plant_water_ml_h: i64,
+    household_heat_w: i64,
+    household_gas_w: i64,
     priority_critical: u8,
     priority_household: u8,
     priority_industry: u8,
@@ -106,6 +117,12 @@ pub struct GridTuning {
     pub household_w: i64,
     pub household_water_ml_h: i64,
     pub plant_water_ml_h: i64,
+    /// Moc grzewcza gospodarstwa przy **pełnym obciążeniu** sieci, czyli przy
+    /// 200 stopniodniach. W lipcu ten sam węzeł bierze kilka procent tej liczby:
+    /// mnożnik pogodowy sieci (`UtilityNetwork::weather_bps`) liczy się ze
+    /// stopniodni, nie z kalendarza. Dopisane w M8c razem z pogodą (`CD-1`).
+    pub household_heat_w: i64,
+    pub household_gas_w: i64,
     pub priority_critical: u8,
     pub priority_household: u8,
     pub priority_industry: u8,
@@ -132,6 +149,8 @@ impl Default for GridTuning {
             household_w: 0,
             household_water_ml_h: 0,
             plant_water_ml_h: 0,
+            household_heat_w: 0,
+            household_gas_w: 0,
             priority_critical: 0,
             priority_household: 2,
             priority_industry: 3,
@@ -195,6 +214,8 @@ impl GridTuning {
             household_w: f.household_w,
             household_water_ml_h: f.household_water_ml_h,
             plant_water_ml_h: f.plant_water_ml_h,
+            household_heat_w: f.household_heat_w,
+            household_gas_w: f.household_gas_w,
             priority_critical: f.priority_critical,
             priority_household: f.priority_household,
             priority_industry: f.priority_industry,
@@ -238,7 +259,11 @@ mod tests {
         let t = GridTuning::load_default().expect("data/tuning/grid.ron");
         assert!(t.has_tariff(UtilityService::Electricity));
         assert!(t.has_tariff(UtilityService::Water));
-        assert!(t.tariff(UtilityService::Electricity).standing_charge_per_month > Money::ZERO);
+        assert!(
+            t.tariff(UtilityService::Electricity)
+                .standing_charge_per_month
+                > Money::ZERO
+        );
         // Szczyt wieczorny gospodarstw jest wyższy od nocy — inaczej profil
         // nie miałby kształtu i nie byłoby po co go wczytywać.
         assert!(t.profiles.household[19] > t.profiles.household[3]);

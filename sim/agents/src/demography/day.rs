@@ -71,6 +71,12 @@ fn hazardy(world: &mut World, day: u64, hooks: &mut dyn InheritanceHook, raport:
 
     let tabela = world.resource::<DemographyTable>().clone();
     let ages = tabela.ages();
+    // Mnożniki zdarzeniowe (`D11` fazy M8): epidemia podnosi śmiertelność, zapaść
+    // gospodarcza obniża dzietność. Świat bez `sim/events` dostaje jedynki.
+    let dparams = world
+        .get_resource::<crate::worldparams::DemographyParams>()
+        .copied()
+        .unwrap_or_default();
     let mut zgony: Vec<Entity> = Vec::new();
 
     for e in dzisiaj {
@@ -95,7 +101,10 @@ fn hazardy(world: &mut World, day: u64, hooks: &mut dyn InheritanceHook, raport:
         let hazard = if wiek >= i32::from(ages.max) {
             100_000
         } else {
-            tabela.mortality_per_100k(wiek, vitals.health_q())
+            crate::worldparams::DemographyParams::scale(
+                tabela.mortality_per_100k(wiek, vitals.health_q()),
+                dparams.mortality_bps,
+            )
         };
         if r.gen_range_u32(100_000) < hazard {
             zgony.push(e);
@@ -228,7 +237,14 @@ fn poczecie(
     let housing = world
         .get::<Needs>(e)
         .map_or(Q::MAX, |n| n.get(NeedKind::Housing));
-    let h = tabela.fertility_per_100k(wiek, dzieci, partnered, housing);
+    let h = crate::worldparams::DemographyParams::scale(
+        tabela.fertility_per_100k(wiek, dzieci, partnered, housing),
+        world
+            .get_resource::<crate::worldparams::DemographyParams>()
+            .copied()
+            .unwrap_or_default()
+            .fertility_bps,
+    );
     if h == 0 || r.gen_range_u32(100_000) >= h {
         return false;
     }

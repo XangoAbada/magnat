@@ -1,0 +1,130 @@
+// Zdarzenia świata zewnętrznego (M8c WP5, PRD §11.2).
+//
+// **To jedyny plik, w którym wolno dotknąć ceny — i tylko ceny u dostawcy spoza
+// miasta.** Embargo, wojna „w świecie" i globalna nadprodukcja nie są decyzją
+// żadnej tutejszej firmy, więc nie da się ich wyrazić inaczej. Cena w mieście
+// zmienia się potem sama: hurtownik widzi wyższy koszt nabycia, piekarnia wyższy
+// koszt jednostkowy, a polityka marżowa M7 podnosi cenę bułki. M8 nie zapisał
+// ani jednej ceny w mieście i test T7 tego pilnuje.
+//
+// Sondy są tu słabsze niż w pozostałych plikach i to jest uczciwe: szok naftowy
+// naprawdę przychodzi z zewnątrz. Zostaje związek, który istnieje — inflacja
+// i koniunktura zwiększają szansę, że świat zewnętrzny zrobi coś gwałtownego.
+(
+    schema_version: 1,
+
+    events: [
+        // Szok naftowy. Ropa jest wejściem rafinerii, więc podrożeje wszystko,
+        // co jeździ — ale dopiero po drodze przez łańcuch, a nie dekretem.
+        (
+            key: "external/oil_shock",
+            category: External,
+            scope: World,
+            trigger: (
+                base_ppm: 800,
+                factors: [
+                    (probe: CpiYoyBp, curve: ([(0, 8000), (300, 10000), (1500, 25000)])),
+                ],
+            ),
+            severity: (min_bps: 3000, max_bps: 10000, from: None),
+            duration: RangeDays(30, 120),
+            effects: [
+                ExternalPrice(good: "raw_crude_oil", mul_bps: 18000),
+            ],
+            cooldown_days: 540,
+            max_concurrent: 1,
+            chronicle: "event.external.oil_shock",
+        ),
+
+        // Szok gazowy. Zimą, bo wtedy gaz jest towarem, o który się bije —
+        // i wtedy jego brak boli miasto najbardziej.
+        (
+            key: "external/gas_shock",
+            category: External,
+            scope: World,
+            trigger: (
+                base_ppm: 700,
+                gate: [Season([Autumn, Winter])],
+                factors: [
+                    (probe: HeatingDegreeDc, curve: ([(0, 5000), (100, 10000), (250, 30000)])),
+                ],
+            ),
+            severity: (min_bps: 3000, max_bps: 10000, from: Some((HeatingDegreeDc, 0, 250))),
+            duration: RangeDays(30, 90),
+            effects: [
+                ExternalPrice(good: "raw_natural_gas", mul_bps: 17000),
+            ],
+            cooldown_days: 360,
+            max_concurrent: 1,
+            chronicle: "event.external.gas_shock",
+        ),
+
+        // Światowy nieurodzaj zboża. Sonda jest lokalna, bo susza u nas i susza
+        // w świecie mają tę samą przyczynę pogodową — i to jest jedyny uczciwy
+        // związek, jaki miasto może o świecie zewnętrznym wiedzieć.
+        (
+            key: "external/grain_shortage",
+            category: External,
+            scope: World,
+            trigger: (
+                base_ppm: 500,
+                factors: [
+                    (probe: PrecipDeficit90dChm, curve: ([(0, 8000), (6000, 10000), (25000, 40000)])),
+                ],
+            ),
+            severity: (min_bps: 3000, max_bps: 10000, from: Some((PrecipDeficit90dChm, 6000, 25000))),
+            duration: RangeDays(60, 180),
+            effects: [
+                ExternalPrice(good: "raw_wheat", mul_bps: 16000),
+            ],
+            cooldown_days: 540,
+            max_concurrent: 1,
+            chronicle: "event.external.grain_shortage",
+        ),
+
+        // Globalna nadprodukcja węgla. Zdarzenie **w drugą stronę** i po to jest
+        // w katalogu: świat zewnętrzny bywa też tani, a katalog złożony z samych
+        // katastrof robi z gry festiwal nieszczęść (ryzyko `R1`).
+        (
+            key: "external/coal_glut",
+            category: External,
+            scope: World,
+            trigger: (
+                base_ppm: 600,
+                factors: [
+                    (probe: UnemploymentPermille, curve: ([(20, 20000), (60, 10000), (150, 6000)])),
+                ],
+            ),
+            severity: (min_bps: 3000, max_bps: 10000, from: None),
+            duration: RangeDays(45, 150),
+            effects: [
+                ExternalPrice(good: "raw_coal", mul_bps: 7000),
+            ],
+            cooldown_days: 360,
+            max_concurrent: 1,
+            chronicle: "event.external.coal_glut",
+        ),
+
+        // Skok cen oleju napędowego. Osobno od ropy, bo rafinerii bywa brak
+        // niezależnie od surowca — i bo to ta cena idzie prosto w koszt transportu.
+        (
+            key: "external/diesel_spike",
+            category: External,
+            scope: World,
+            trigger: (
+                base_ppm: 600,
+                factors: [
+                    (probe: CpiYoyBp, curve: ([(0, 8000), (300, 10000), (1200, 22000)])),
+                ],
+            ),
+            severity: (min_bps: 3000, max_bps: 9000, from: None),
+            duration: RangeDays(20, 90),
+            effects: [
+                ExternalPrice(good: "fuel_diesel_b7", mul_bps: 15000),
+            ],
+            cooldown_days: 240,
+            max_concurrent: 1,
+            chronicle: "event.external.diesel_spike",
+        ),
+    ],
+)

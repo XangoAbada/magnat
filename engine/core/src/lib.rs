@@ -49,17 +49,17 @@ pub use rng::{mix64, rng, Rng, StreamId, NO_ENTITY};
 pub use schema::ComponentSchemaId;
 pub use time::{Cadence, DayOfWeek, MinuteOfDay, OpenHours, SimCalendar, SimClock, SimSpeed};
 pub use types::{
-    DepositId, DistrictId, Energy, GoodId, JobRoleId, Mass, Money, Mood, NeedCategoryId, PolicyId,
-    Qty, RecipeId, SimInstant, SimMinute, TariffClassId, Tick, Volume, Q,
+    DepositId, DistrictId, Energy, EventId, GoodId, JobRoleId, Mass, Money, Mood, NeedCategoryId,
+    PolicyId, Qty, RecipeId, SimInstant, SimMinute, TariffClassId, Tick, Volume, Q,
 };
 pub use vocab::{
     AbateReason, ActionKind, ActivityKind, BankruptcyTrigger, Biome, BodyType, ClaimPriority,
-    CommitmentKind, DeprivationEffect, FirmStrategy, FixedCost, GateKind, LeaveCause,
-    LifeEventKind, LineStopCause, LoanKind, LossKind, MigrationKind, NeedKind, PlaceKind, PlaceRef,
-    PriceBasis, PriceDriver, ReactionKind, RejectCause, RejectCredit, ResourceKind, RoadClass,
-    ShortageStageKind, SpendCategory, StockCat, TaxKind, TraitId, TransportMode, Trend,
-    UtilityKind, UtilityService, WageCause, WorldCoord, CLAIM_PRIORITY_COUNT, FIXED_COST_COUNT,
-    LOSS_KIND_COUNT, NEED_COUNT, REJECT_CAUSE_COUNT, SPEND_CATEGORY_COUNT, STOCK_CAT_COUNT,
-    TAX_KIND_COUNT, UTILITY_KIND_COUNT,
+    CommitmentKind, DeprivationEffect, EventCategory, FirmStrategy, FixedCost, GateKind,
+    LeaveCause, LifeEventKind, LineStopCause, LoanKind, LossKind, MigrationKind, NeedKind,
+    PlaceKind, PlaceRef, PriceBasis, PriceDriver, ReactionKind, RejectCause, RejectCredit,
+    ResourceKind, RoadClass, Season, ShortageStageKind, SpendCategory, StockCat, TaxKind, TraitId,
+    TransportMode, Trend, UtilityKind, UtilityService, WageCause, WorldCoord, CLAIM_PRIORITY_COUNT,
+    FIXED_COST_COUNT, LOSS_KIND_COUNT, NEED_COUNT, REJECT_CAUSE_COUNT, SPEND_CATEGORY_COUNT,
+    STOCK_CAT_COUNT, TAX_KIND_COUNT, UTILITY_KIND_COUNT,
 };
 pub use weather::{weather_at, Weather};

@@ -105,7 +105,7 @@ w R2, tamte fazy zamkną się na bramce, która świeci na zielono, bo nie ma cz
 | Poz. | Co blokuje | Gdzie |
 |---|---|---|
 | 1, 21 | Test skutku szkoły: mediana umiejętności 18-latków w obwodzie po 10 latach gry, pary A/B | `M8-miasto-jako-aktor.md` §7 T4a · `M8d` otwarte |
-| 6, 7 | Kalibracja hazardów zdarzeń na sondach `UnemploymentBps` i `WageGapBps`; wymóg „każda definicja z katalogu zachodzi ≥ 1 raz w 20-letnim przebiegu" | `M8c-zdarzenia.md` §5.5, `M8` R2 · `M8c` otwarte |
+| 6, 7 | Kalibracja hazardów zdarzeń na sondach `UnemploymentBps` i `WageGapBps`; wymóg „każda definicja z katalogu zachodzi ≥ 1 raz w 20-letnim przebiegu" | `M8c-zdarzenia.md` §5.5, `M8` R2 · **poz. 7 wykonana w M8c** (`K-60`), poz. 6 zostaje w R2 |
 | 11 | Warunek powstania związku zawodowego: spójna składowa grafu relacji **wśród pracowników zakładu** ≥ max(8, 25 % załogi) — przy uczniach w indeksie miejsc pracy pierwszą kandydatką jest szkoła | `M10e-relacje-i-zwiazki.md` §5.9 |
 | 2 | Skutek strajku w rachunku wyniku zakładu — niewidoczny, dopóki zakład produkcyjny nie ma utargu | `M10e` §5.9, `M7e` `BC-8` · **adres M8a wyczerpany** |
 
@@ -344,7 +344,7 @@ przed R2: `—` = nieznane planowi, `zapis` = zapisane jako znana usterka bez wy
 | 4 | Wartość czasu zamrożona na stanie z generacji świata | — | R2-WP13 | `[ ]` |
 | 5 | Zero zakładów wydobywczych ze złożem w mieście 4 km | zapis `M6e` `AQ-8` | R2-WP17 | `[ ]` |
 | 6 | Gęstość firm ~10× za niska; bezrobocie 0,2 % przy 12 032 wakatach | zapis `00-postep` `BF-4`/`BF-10` | R2-WP18 | `[ ]` |
-| 7 ⇧ | `WORKING_AGE` w kodzie (2 miejsca) vs `work_start`/`retirement` w danych | — | R2-WP12 | `[ ]` |
+| 7 ⇧ | `WORKING_AGE` w kodzie (2 miejsca) vs `work_start`/`retirement` w danych | — | R2-WP12 | `[x]` **wykonane w M8c** (`K-60`) |
 | 8 | Rodzeństwo z zasiedlenia i napływu bez relacji `Sibling` | — | R2-WP2 | `[ ]` |
 | 9 | Babcia dostaje z wnukiem relację `Sibling`; brak `Grandparent` | — | R2-WP2 | `[ ]` |
 | 10 | Dziecko urodzone w pełnym gospodarstwie nie wchodzi do listy członków | — | R2-WP3 | `[ ]` |
@@ -381,6 +381,8 @@ przed R2: `—` = nieznane planowi, `zapis` = zapisane jako znana usterka bez wy
 | 40 | Większość testów miasta `#[ignore]` | zapis `R1` `D-R7` | R2-WP25 | `[ ]` |
 | 41 | Brak testu `income_monthly` po zdarzeniu życiowym | — | R2-WP9 | `[ ]` |
 | 42 | Erozja nie przechwytuje rzek | — | R2-WP19 | `[ ]` |
+| 43 | **Nastrój mieszkańca tylko spada i nic go nie odbudowuje** — `DeprivationEffect::MoodLoss` jest jedynym pisarzem `Vitals.mood` w całym repozytorium (`sim/agents/src/needs.rs`, `saturating_sub`). Po roku gry cała populacja siedzi na −100, a przebieg 400-dobowy `m8miasto` mierzy średnią **−99** | — | R2-WP16 (ten sam pakiet co `StatusLoss` i `ProductivityLoss`) | `[ ]` |
+| 44 | **`README.md` opisywał stan „M1 zamknięte"** przez siedem faz — poprawione w M8c na „M8c zamknięte". Pozycja 36 zostaje, bo jej treścią jest **test CI pilnujący opisu**, a nie jednorazowa poprawka | — | R2-WP23 (test) | `[~]` tekst poprawiony w M8c, testu nadal nie ma |
 
 **Bilans wejściowy:** 1 pozycja miała pakiet (37), 1 okazała się rozstrzygnięta i wypadła
 z wykazu (38), 11 było zapisanych jako znana usterka **bez wykonawcy**, a 29 nie było znanych

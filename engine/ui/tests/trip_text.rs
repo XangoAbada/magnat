@@ -64,6 +64,7 @@ fn decyzja() -> ModeDecision {
         weather: Weather {
             temp_dc: 60,
             precip_permille: 700,
+            ..Weather::default()
         },
         luggage_kg: 3,
         habit: Some(TravelOption::CarOwn),
@@ -321,6 +322,7 @@ fn brak_parkingu_przeslania_porownanie_srodkow() {
         weather: Weather {
             temp_dc: 180,
             precip_permille: 0,
+            ..Weather::default()
         },
         luggage_kg: 0,
         habit: None,

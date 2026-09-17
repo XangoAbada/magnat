@@ -194,10 +194,31 @@ pub enum StreamId {
     /// natomiast w brygadzie: ta sama zerwana linia raz wraca po godzinie, raz
     /// po czterech, i to jest jedyne miejsce, w którym sieć czegokolwiek losuje.
     GridFault = 248,
-    // 240–247 i 249–259 zarezerwowane dla M8 zgodnie z przydziałem w M8a §5.0:
-    // 240 `EventHazard`, 241 `EventRoll`, 242 `EventSeverity`, 243 `EventDuration`,
-    // 244 `Weather`, 245 `Election`, 246 `Audit`, 247 `PermitProcessing`,
-    // 249 `CityPolicy`, 250 `TenderScoring`, 251 `Demography`.
+    /// Czy zdarzenie zachodzi w tej instancji zakresu w tej dobie (M8c §5.5).
+    /// Klucz: mieszanka indeksu definicji i indeksu instancji zakresu, tick oceny.
+    ///
+    /// Losowany jest **wyłącznie rzut**, nigdy szansa: hazard liczy się z sond stanu
+    /// świata arytmetyką całkowitą i jest funkcją stanu (§11.1 PRD). Dlatego
+    /// zarezerwowane `240 EventHazard` zostaje **niezajęte i takie zostanie** —
+    /// strumień „na losowanie prawdopodobieństwa" opisywałby mechanizm, którego
+    /// ta faza świadomie nie ma.
+    EventRoll = 241,
+    /// Siła zdarzenia w widełkach definicji (M8c §5.5). Klucz: ten sam co przy rzucie.
+    EventSeverity = 242,
+    /// Czas trwania zdarzenia o stałym albo widełkowym czasie (M8c §5.5).
+    /// Zdarzenia `UntilRepaired`/`UntilResolved` strumienia nie dotykają — ich koniec
+    /// wynika ze stanu świata, a nie z losowania.
+    EventDuration = 243,
+    /// Odchyłka pogody od normy klimatycznej M1 (M8c §5.6). Klucz: doba świata.
+    ///
+    /// **To nie jest `WeatherStub = 166`.** Tamten numer należy do M4 i zostaje przy
+    /// zaślepce `weather_at`, bo niosą go zapisy sprzed M8; ten losuje odchyłkę
+    /// procesu wieloskalowego, który zna normy klimatyczne dzielnicy.
+    Weather = 244,
+    // 240 i 245–247, 249–259 zarezerwowane dla M8 zgodnie z przydziałem w M8a §5.0:
+    // 240 `EventHazard` (nie powstanie — patrz `EventRoll`), 245 `Election`,
+    // 246 `Audit`, 247 `PermitProcessing`, 249 `CityPolicy`, 250 `TenderScoring`,
+    // 251 `Demography`.
 }
 
 /// Encja zastępcza dla losowania bez encji (zdarzenie globalne, generator świata).
@@ -438,5 +459,9 @@ mod tests {
         assert_eq!(StreamId::LaborQuit as u16, 221);
         assert_eq!(StreamId::FirmPersonality as u16, 222);
         assert_eq!(StreamId::GridFault as u16, 248);
+        assert_eq!(StreamId::EventRoll as u16, 241);
+        assert_eq!(StreamId::EventSeverity as u16, 242);
+        assert_eq!(StreamId::EventDuration as u16, 243);
+        assert_eq!(StreamId::Weather as u16, 244);
     }
 }

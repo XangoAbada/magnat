@@ -117,6 +117,39 @@ impl TariffTable {
         self.classes.get(class.0 as usize).map_or(0, |c| c.duty_bp)
     }
 
+    /// Klasa taryfowa po **własnym kluczu** (`raw`, `food`, `fuel`, …).
+    ///
+    /// Osobno od [`TariffTable::class_of`], które mapuje **klucz towaru** na klasę
+    /// przez domenę. Dwie różne rzeczy pod jedną nazwą rozjechałyby się przy
+    /// pierwszym towarze, którego klucz przypadkiem wygląda jak nazwa klasy.
+    #[must_use]
+    pub fn class_by_key(&self, key: &str) -> Option<TariffClassId> {
+        self.classes
+            .iter()
+            .position(|c| c.key == key)
+            .and_then(|i| u16::try_from(i).ok())
+            .map(TariffClassId)
+    }
+
+    /// Liczba klas taryfowych — zakres, po którym generator zdarzeń M8c wylicza
+    /// instancje zakresu `TariffClass`.
+    #[must_use]
+    pub fn class_count(&self) -> usize {
+        self.classes.len()
+    }
+
+    /// Podmienia stawkę klasy. Zwraca poprzednią.
+    ///
+    /// Wejście dla polityki celnej M8: uchwała rady (M8e) i zdarzenie polityczne
+    /// (M8c) zmieniają **stawkę**, nigdy przypisania towaru do klasy — klasa jest
+    /// etykietą towaru i należy do katalogu M6 (`K-38`).
+    pub fn set_duty_bp(&mut self, class: TariffClassId, bp: i64) -> i64 {
+        match self.classes.get_mut(class.0 as usize) {
+            Some(c) => std::mem::replace(&mut c.duty_bp, bp.max(0)),
+            None => 0,
+        }
+    }
+
     /// Każdy towar katalogu ma klasę. Wołane przy ładowaniu, nie w pętli handlu.
     pub fn check_covers(&self, cat: &Catalog) -> Result<(), TariffError> {
         for g in &cat.goods {

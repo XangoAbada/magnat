@@ -139,6 +139,20 @@ scalar_newtype! {
     TariffClassId(u16)
 }
 
+scalar_newtype! {
+    /// Uchwyt do zdarzenia świata w rejestrze `sim/events` (M8c §5.5).
+    ///
+    /// Mieszka w `core`, bo jest **ładunkiem** `DecisionReason::EventStarted` — tak samo
+    /// jak `PriceDriver` (`K-30`) i z tego samego powodu: ładunek centralnego enuma
+    /// nie może pochodzić z crate'u, który od `core` zależy. Drugim konsumentem znanym
+    /// z nazwy i numeru fazy jest M9: `Subject::Event(EventId)` (`K-62`) robi z wpisu
+    /// w kronice odnośnik do karty zdarzenia, a nie napis.
+    ///
+    /// Numer jest **monotoniczny w obrębie gry** i nigdy nie wraca: zdarzenie, które się
+    /// skończyło, zostaje w kronice pod swoim numerem na zawsze.
+    EventId(u32)
+}
+
 /// Skala 0..=100: jakość, zaspokojenie potrzeby, poziom umiejętności.
 /// Konstruktor przycina do zakresu — wartość spoza skali nigdy nie powstaje.
 #[derive(

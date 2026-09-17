@@ -39,7 +39,7 @@ pięciu.
 
 | WP | Nazwa | Zależy od | Rozmiar | Status |
 |---|---|---|---|---|
-| R2-WP12 ⇧ | Wiek produkcyjny w jednym miejscu | — | S | `[ ]` |
+| R2-WP12 ⇧ | Wiek produkcyjny w jednym miejscu | — | S | `[x]` **wykonane w M8c** (2026-09-17) jako warunek wejścia podfazy, zgodnie z propozycją domyślną `D-N1` |
 | R2-WP13 | Wartość czasu idzie za dochodem | — | M | `[ ]` |
 | R2-WP14 | Szczebel substytucji dostaje wykonawcę | — | M | `[ ]` |
 | R2-WP15 | Chodniki: warstwa piesza bez dróg szybkiego ruchu | — | S | `[ ]` |
@@ -72,6 +72,15 @@ pliku, co pozostałe progi, walidowane razem z nimi. Obie stałe znikają, obaj 
 | `ages.labour_force: (16, 74)` z walidatorem (dolna ≥ `school_start`, górna ≤ `ages.max`) | `data/demography/demography.ron`, `sim/agents/src/demography/table.rs` |
 | Usunięcie obu stałych, przejście na dane | `sim/economy/src/labor/system.rs`, `sim/macro/src/lift.rs` |
 | Wpis `K-60` w `00` §4a | — |
+
+**Wykonane przed R2, w M8c.** Pakiet był pozycją 7 wykazu i jedyną z §2b, która blokowała
+**kalibrację hazardów** M8c: sonda `UnemploymentPermille` generatora zdarzeń stoi na stopie
+bezrobocia, a ta miała trzy niezgodne definicje (18–65 w danych, 16–74 dwa razy w kodzie,
+w dwóch różnych typach całkowitych). Krzywe protestu i fali przestępczości mierzyłyby wtedy
+własny rozjazd. Stan po wykonaniu: pole `ages.labour_force: (min: 16, max: 74)` z walidatorem,
+`DEMOGRAPHY_SCHEMA_VERSION` 1 → 2, obie stałe usunięte, test `sim/agents/tests/labour_force.rs`
+(dwa przypadki: granice są w danych i są szersze niż wiek pracy; odwrócone granice są błędem
+ładowania). Wpis `K-60` w `00` §4a powstał razem z commitem M8c.
 
 **Kryterium:** test odtwarzający — zmiana `ages.labour_force` w pliku danych zmienia mianownik
 stopy bezrobocia **i** liczbę kohort w modelu makro. Przed naprawą nie zmienia żadnego z dwóch.

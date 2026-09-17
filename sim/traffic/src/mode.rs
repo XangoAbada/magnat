@@ -586,6 +586,7 @@ mod tests {
             weather: Weather {
                 temp_dc: 180,
                 precip_permille: 0,
+                ..Weather::default()
             },
             luggage_kg: 0,
             habit: None,
@@ -655,6 +656,7 @@ mod tests {
         leje.weather = Weather {
             temp_dc: 40,
             precip_permille: 900,
+            ..Weather::default()
         };
         let oferty = |ctx: &ModeContext| {
             let _ = ctx;

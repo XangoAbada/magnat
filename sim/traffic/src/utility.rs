@@ -108,6 +108,11 @@ pub enum LoadProfile {
     Household,
     /// Szczyt w godzinach zmiany.
     Industry,
+    /// Odbiór grzewczy: ten sam kształt dobowy co gospodarstwo, ale **czuły
+    /// na pogodę**. Dopisany w M8c razem z popytem na ciepło i gaz — sieć bez
+    /// ani jednego odbiorcy przechodzi każdy test i wygląda w raporcie tak samo
+    /// jak sieć, która działa (`CD-1`).
+    Heating,
 }
 
 /// Węzeł sieci.
@@ -120,6 +125,16 @@ pub struct UtilityNode {
     /// Zakład za przyłączem, jeśli przyłącze prowadzi do zakładu. Gospodarstwa
     /// domowe wchodzą zbiorczo per dzielnica i nie mają `SiteId`.
     pub site: Option<SiteId>,
+    /// Zakład, który ten węzeł **prowadzi** — dla źródeł: elektrownia, ciepłownia,
+    /// ujęcie wody. Dopisane w M8c (`CD-2`) i celowo **osobne pole od `site`**:
+    /// `site` znaczy „za tym przyłączem stoi odbiorca z licznikiem" i indeksuje
+    /// `UtilityGrids`, a `owner_site` znaczy „to urządzenie ma właściciela, wiek
+    /// i harmonogram konserwacji". Jeden zakład bywa i jednym, i drugim — elektrownia
+    /// też bierze prąd — a dwa wpisy w indeksie przyłączy zepsułyby `power_available`.
+    ///
+    /// Bez tego pola sondy „blok ma 32 lata" i „90 dób zaległej konserwacji" nie
+    /// miałyby skąd wziąć liczby: źródło w grafie sieci jest węzłem, a nie maszyną.
+    pub owner_site: Option<SiteId>,
     pub role: NodeRole,
     /// Moc przyłączeniowa: waty dla energii, mililitry na godzinę dla cieczy.
     /// To jest **moc znamionowa, nie chwilowy pobór** — i to nie jest niedbałość.
@@ -143,6 +158,7 @@ impl UtilityNode {
     ) -> UtilityNode {
         UtilityNode {
             site,
+            owner_site: None,
             role: NodeRole::Connection { priority },
             base_demand,
             profile,
@@ -156,6 +172,27 @@ impl UtilityNode {
     pub const fn source(capacity: i64) -> UtilityNode {
         UtilityNode {
             site: None,
+            owner_site: None,
+            role: NodeRole::Source {
+                capacity,
+                online: true,
+            },
+            base_demand: 0,
+            profile: LoadProfile::Flat,
+            supplied: 0,
+            state: SupplyState::Ok,
+        }
+    }
+
+    /// Źródło prowadzone przez konkretny zakład — elektrownia, ciepłownia, ujęcie.
+    ///
+    /// To jest wejście, którym hazard awarii M8c sięga po wiek bloku i zaległą
+    /// konserwację: bez właściciela źródło jest liczbą watów bez historii.
+    #[must_use]
+    pub const fn source_owned(site: SiteId, capacity: i64) -> UtilityNode {
+        UtilityNode {
+            site: None,
+            owner_site: Some(site),
             role: NodeRole::Source {
                 capacity,
                 online: true,
@@ -172,6 +209,7 @@ impl UtilityNode {
     pub const fn hub() -> UtilityNode {
         UtilityNode {
             site: None,
+            owner_site: None,
             role: NodeRole::Hub,
             base_demand: 0,
             profile: LoadProfile::Flat,
@@ -195,6 +233,13 @@ impl HashState for UtilityNode {
                 h.write_u8(priority);
             }
         }
+        match self.owner_site {
+            Some(s) => {
+                h.write_u8(1);
+                s.0.hash_state(h);
+            }
+            None => h.write_u8(0),
+        }
         h.write_i64(self.base_demand);
         h.write_i64(self.supplied);
         h.write_u8(self.state.tag());
@@ -211,7 +256,9 @@ impl HashState for UtilityNode {
 pub enum EdgeState {
     Ok,
     /// Zadziałało zabezpieczenie; wraca sama w ticku `until`.
-    Tripped { until: Tick },
+    Tripped {
+        until: Tick,
+    },
 }
 
 /// Krawędź sieci.
@@ -299,6 +346,15 @@ pub struct UtilityNetwork {
     pub nodes: Vec<UtilityNode>,
     pub edges: Vec<UtilityEdge>,
     pub tariff: Tariff,
+    /// Mnożnik pogodowy popytu, w punktach bazowych (10 000 = norma sezonu).
+    ///
+    /// Pisze go **wyłącznie** krok pogody w `sim/events` (M8c §5.6), jeden na sieć,
+    /// bo mróz podnosi pobór ciepła i prądu, a upał — wody; jedna liczba dla
+    /// wszystkich mediów byłaby fałszem w trzech z nich. Dotyczy profilu
+    /// `Household` i `Heating`; przemysł grzeje halę tak samo w lipcu i w styczniu.
+    ///
+    /// Wchodzi do hasha stanu, bo zmienia bilans wyspy, czyli to, czy zapala się zrzut.
+    pub weather_bps: u32,
     topo: TopologyCache,
     dirty: bool,
     scratch: solve::Scratch,
@@ -319,6 +375,7 @@ impl UtilityNetwork {
             nodes,
             edges,
             tariff,
+            weather_bps: solve::BPS_U32,
             topo: TopologyCache::default(),
             dirty: true,
             scratch: solve::Scratch::default(),
@@ -366,6 +423,44 @@ impl UtilityNetwork {
             .map_or(SupplyState::Isolated, |n| n.state)
     }
 
+    /// Indeksy węzłów źródłowych — w kolejności rosnącej, bo po niej idą patche
+    /// generatora zdarzeń, a kolejność patchy wchodzi do hasha stanu.
+    #[must_use]
+    pub fn sources(&self) -> Vec<u32> {
+        self.nodes
+            .iter()
+            .enumerate()
+            .filter(|(_, n)| matches!(n.role, NodeRole::Source { .. }))
+            .map(|(i, _)| i as u32)
+            .collect()
+    }
+
+    /// Moc osiągalna źródła i jego właściciel — wejście sond M8c.
+    #[must_use]
+    pub fn source_info(&self, node: u32) -> Option<(i64, bool, Option<SiteId>)> {
+        let n = self.nodes.get(node as usize)?;
+        let NodeRole::Source { capacity, online } = n.role else {
+            return None;
+        };
+        Some((capacity, online, n.owner_site))
+    }
+
+    /// Ustawia moc osiągalną źródła. Zwraca `false`, gdy węzeł źródłem nie jest.
+    ///
+    /// Wejście dla `SimParam::SourceCapacityMulBps`: awaria **jednego bloku** nie gasi
+    /// elektrowni, tylko zabiera jej część mocy — i to jest różnica między „zgasło
+    /// pół dzielnicy" a „zgasło miasto".
+    pub fn set_source_capacity(&mut self, node: u32, cap: i64) -> bool {
+        let Some(n) = self.nodes.get_mut(node as usize) else {
+            return false;
+        };
+        let NodeRole::Source { capacity, .. } = &mut n.role else {
+            return false;
+        };
+        *capacity = cap.max(0);
+        true
+    }
+
     /// Topologia — do inspektora i do testów.
     #[must_use]
     pub fn topology(&self) -> &TopologyCache {
@@ -389,6 +484,7 @@ impl HashState for UtilityNetwork {
             e.hash_state(h);
         }
         self.tariff.hash_state(h);
+        h.write_u32(self.weather_bps);
         self.topo.hash_state(h);
     }
 }
@@ -420,6 +516,13 @@ pub struct UtilityGrids {
     last_outage: Vec<u64>,
     /// Suma niedostarczonej mocy per sieć — wyłącznie do raportu i inspektora.
     last_unserved: Vec<i64>,
+    /// Moc osiągalna i popyt z ostatniego kroku, per sieć. **Nie wchodzą do hasha**:
+    /// są przeliczane od zera w każdym kroku z węzłów, które do hasha wchodzą.
+    /// Są za to jedynym wejściem, którym generator zdarzeń M8c widzi obciążenie
+    /// źródeł — bez nich sonda „elektrownia chodzi na 98 % mocy" nie miałaby skąd
+    /// wziąć liczby, bo bilans wyspy żyje w buforach roboczych solvera.
+    last_supply: Vec<i64>,
+    last_demand: Vec<i64>,
     /// Zależności między sieciami: `(sieć, przyłącze, sieć zależna, jej źródło)`.
     /// Utrata zasilania przyłącza wyłącza źródło drugiej sieci.
     ///
@@ -445,6 +548,8 @@ impl UtilityGrids {
         // liczniki zawsze, bo to on wpisuje im taryfę operatora.
         self.last_outage.push(u64::MAX);
         self.last_unserved.push(0);
+        self.last_supply.push(0);
+        self.last_demand.push(0);
         self.index.sort_unstable();
     }
 
@@ -455,6 +560,40 @@ impl UtilityGrids {
         self.last_outage[net] = key;
         self.last_unserved[net] = unserved;
         zmiana
+    }
+
+    /// Odnotowuje bilans kroku: moc osiągalna i popyt, oba w skali u źródła.
+    pub(crate) fn mark_balance(&mut self, net: usize, supply: i64, demand: i64) {
+        self.last_supply[net] = supply;
+        self.last_demand[net] = demand;
+    }
+
+    /// Obciążenie sieci w punktach bazowych: `popyt / moc osiągalna`.
+    ///
+    /// 10 000 znaczy „źródła oddają dokładnie tyle, ile miasto bierze", powyżej —
+    /// wyspa nie domyka bilansu. Sieć bez czynnego źródła zwraca `u32::MAX`,
+    /// bo „nieskończenie przeciążona" jest bliższe prawdy niż zero.
+    #[must_use]
+    pub fn load_factor_bps(&self, service: UtilityService) -> u32 {
+        let Some(i) = self.nets.iter().position(|n| n.service == service) else {
+            return 0;
+        };
+        let (s, d) = (self.last_supply[i], self.last_demand[i]);
+        if s <= 0 {
+            return if d > 0 { u32::MAX } else { 0 };
+        }
+        u32::try_from(d.max(0).saturating_mul(10_000) / s).unwrap_or(u32::MAX)
+    }
+
+    /// Zapas mocy sieci w punktach bazowych: `(moc − popyt) / moc`. Ujemny znaczy
+    /// deficyt, czyli zrzut obciążenia w tym samym kroku.
+    #[must_use]
+    pub fn reserve_margin_bps(&self, service: UtilityService) -> i32 {
+        let lf = self.load_factor_bps(service);
+        if lf == u32::MAX {
+            return i32::MIN;
+        }
+        10_000 - i32::try_from(lf).unwrap_or(i32::MAX)
     }
 
     /// Wiąże przyłącze jednej sieci ze źródłem drugiej: gdy przyłącze traci

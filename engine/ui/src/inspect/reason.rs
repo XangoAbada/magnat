@@ -140,6 +140,12 @@ pub fn utility_service(c: &Catalog, l: Locale, u: magnat_core::UtilityService) -
     c.fmt_key(l, &format!("ui.utility.{}", u.name()), &[])
 }
 
+/// Kategoria zdarzenia świata jako słowo (M8c).
+#[must_use]
+pub fn event_category(c: &Catalog, l: Locale, k: magnat_core::EventCategory) -> String {
+    c.fmt_key(l, &format!("ui.event.category.{}", k.name()), &[])
+}
+
 /// Waty jako kilowaty z jednym miejscem po przecinku — bez floata, bo moc sieci
 /// jest liczbą całkowitą i „1 MW" zamiast 1,4 MW gubiłoby połowę deficytu.
 #[must_use]
@@ -219,6 +225,13 @@ pub fn household_kind(c: &Catalog, l: Locale, k: magnat_agents::HouseholdKind) -
 #[must_use]
 pub fn minutes(c: &Catalog, l: Locale, n: u16) -> String {
     c.plural(l, c.must("ui.unit.minutes"), u64::from(n))
+}
+
+/// Dni jako odmieniony liczebnik. Alias, bo nazwa pola `days` w wariancie powodu
+/// przesłania nazwę funkcji w ramieniu `match`.
+#[must_use]
+pub fn days_txt(c: &Catalog, l: Locale, n: u32) -> String {
+    days(c, l, n)
 }
 
 /// Dni jako odmieniony liczebnik.
@@ -990,6 +1003,32 @@ pub fn describe(c: &Catalog, l: Locale, r: DecisionReason) -> String {
             &[
                 ("medium", &utility_service(c, l, service)),
                 ("czas", &minutes(c, l, repair_minutes)),
+            ],
+        ),
+        DecisionReason::EventStarted {
+            event,
+            category,
+            severity_bps,
+        } => c.fmt_key(
+            l,
+            "ui.reason.EventStarted",
+            &[
+                ("kategoria", &event_category(c, l, category)),
+                ("sila", &procent(u32::from(severity_bps))),
+                ("numer", &event.0.to_string()),
+            ],
+        ),
+        DecisionReason::EventEnded {
+            event,
+            category,
+            days,
+        } => c.fmt_key(
+            l,
+            "ui.reason.EventEnded",
+            &[
+                ("kategoria", &event_category(c, l, category)),
+                ("dni", &days_txt(c, l, u32::from(days))),
+                ("numer", &event.0.to_string()),
             ],
         ),
     }

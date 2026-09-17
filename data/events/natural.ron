@@ -1,0 +1,164 @@
+// Zdarzenia naturalne (M8c WP5, PRD §11.2).
+//
+// Każda definicja ma **sondę stanu świata**, a nie kalendarz. Susza zaczyna się od
+// deficytu opadów, przymrozek od temperatury, epidemia od zimna — i to dlatego
+// w tym pliku nie ma ani jednej liczby mówiącej „w 120. dobie".
+//
+// `base_ppm` czyta się jako „szansa na milion, na **jedną ocenę**, na **jedną
+// instancję zakresu**". Zdarzenie dzielnicowe w mieście o ośmiu dzielnicach
+// dostaje osiem rzutów na dobę, a nie jeden; zdarzenie ocenianie co godzinę —
+// dwadzieścia cztery razy tyle. Bez tego zdania liczby w tej kolumnie kłamią
+// o rząd wielkości.
+//
+// Krzywe: `(wartość sondy, mnożnik w punktach bazowych)`. 10 000 znaczy „bez zmian",
+// 40 000 — „cztery razy częściej". Punkty muszą rosnąć po pierwszej współrzędnej;
+// krzywa malejąca zapisuje się malejącą **drugą** współrzędną, nie odwróconą listą.
+(
+    schema_version: 1,
+
+    events: [
+        // Susza. Wzorzec z §5.5 A: deficyt opadów podnosi hazard, a jego wielkość
+        // ustala siłę — susza przy deficycie 80 mm ma być cięższa od suszy przy 40 mm
+        // za każdym razem, a nie średnio.
+        (
+            key: "natural/drought",
+            category: Natural,
+            scope: District,
+            trigger: (
+                base_ppm: 200,
+                gate: [Season([Spring, Summer]), HasFarms],
+                factors: [
+                    (probe: PrecipDeficit30dChm, curve: ([(0, 10000), (4000, 30000), (9000, 90000)])),
+                    (probe: AirTempDc, curve: ([(200, 10000), (300, 25000)])),
+                ],
+            ),
+            severity: (min_bps: 2000, max_bps: 9000, from: Some((PrecipDeficit30dChm, 2000, 9000))),
+            duration: UntilBelow(probe: PrecipDeficit30dChm, value: 2000, min_days: 10),
+            effects: [
+                // Plon spada. Zakład rolny jest zwykłym zakładem z recepturą z gałęzi
+                // rolnej, więc susza zabiera mu zdolność wyprodukowania szarży —
+                // ceny zboża zmienią się same, w decyzji cenowej firmy (M7).
+                SiteOutput(mul_bps: 4000, filter: Farm),
+            ],
+            cooldown_days: 120,
+            max_concurrent: 3,
+            chronicle: "event.natural.drought",
+        ),
+
+        // Przymrozek. Krótki, gwałtowny i wyłącznie wiosną — jesienią plon jest już
+        // w magazynie i mróz nie ma czego zabrać.
+        (
+            key: "natural/frost",
+            category: Natural,
+            scope: District,
+            trigger: (
+                base_ppm: 4000,
+                gate: [Season([Spring]), MaxAirTempDc(20), HasFarms],
+                factors: [
+                    (probe: AirTempDc, curve: ([(-50, 60000), (20, 10000)])),
+                ],
+            ),
+            severity: (min_bps: 3000, max_bps: 10000, from: None),
+            duration: FixedDays(3),
+            effects: [
+                SiteOutput(mul_bps: 3000, filter: Farm),
+            ],
+            cooldown_days: 60,
+            max_concurrent: 4,
+            chronicle: "event.natural.frost",
+        ),
+
+        // Fala upałów. Męczy ludzi, a nie plony — plon zabiera susza i to ona
+        // ma na to sondę. Dwie definicje na jedno zjawisko byłyby dwiema prawdami.
+        (
+            key: "natural/heatwave",
+            category: Natural,
+            scope: World,
+            trigger: (
+                base_ppm: 2500,
+                gate: [Season([Summer]), MinAirTempDc(280)],
+                factors: [
+                    (probe: AirTempDc, curve: ([(280, 10000), (350, 40000)])),
+                ],
+            ),
+            severity: (min_bps: 2000, max_bps: 9000, from: Some((AirTempDc, 280, 360))),
+            duration: RangeDays(2, 6),
+            effects: [
+                NeedDecay(need: Health, mul_bps: 13000),
+            ],
+            cooldown_days: 20,
+            max_concurrent: 1,
+            chronicle: "event.natural.heatwave",
+        ),
+
+        // Wichura. Zrywa linie — czyli zabiera sieci część mocy osiągalnej.
+        // Oceniana co godzinę, bo trwa godziny, a nie tygodnie.
+        (
+            key: "natural/windstorm",
+            category: Natural,
+            scope: Network,
+            hourly: true,
+            trigger: (
+                base_ppm: 8,
+                gate: [SourceOnline],
+                factors: [
+                    (probe: WindKmh, curve: ([(40, 10000), (80, 60000), (120, 200000)])),
+                ],
+            ),
+            severity: (min_bps: 2000, max_bps: 10000, from: Some((WindKmh, 40, 120))),
+            duration: RangeDays(1, 3),
+            effects: [
+                SourceCapacity(mul_bps: 6000),
+            ],
+            cooldown_days: 15,
+            max_concurrent: 2,
+            chronicle: "event.natural.windstorm",
+        ),
+
+        // Epidemia grypy. Zima i chłód, długi czas trwania, dwa skutki naraz:
+        // zdrowie spada szybciej, a zakłady tracą część załogi na zwolnieniach.
+        (
+            key: "natural/epidemic",
+            category: Natural,
+            scope: World,
+            trigger: (
+                base_ppm: 400,
+                gate: [Season([Autumn, Winter])],
+                factors: [
+                    (probe: AirTempDc, curve: ([(-50, 30000), (50, 20000), (200, 10000)])),
+                ],
+            ),
+            severity: (min_bps: 2000, max_bps: 9000, from: None),
+            duration: RangeDays(15, 45),
+            effects: [
+                NeedDecay(need: Health, mul_bps: 16000),
+                SiteOutput(mul_bps: 8500, filter: Any),
+            ],
+            cooldown_days: 360,
+            max_concurrent: 1,
+            chronicle: "event.natural.epidemic",
+        ),
+
+        // Plaga szkodników. Lato, ciepło, długo — i tylko na polach.
+        (
+            key: "natural/pest_plague",
+            category: Natural,
+            scope: District,
+            trigger: (
+                base_ppm: 120,
+                gate: [Season([Summer]), HasFarms],
+                factors: [
+                    (probe: AirTempDc, curve: ([(180, 10000), (280, 30000)])),
+                ],
+            ),
+            severity: (min_bps: 2000, max_bps: 8000, from: None),
+            duration: RangeDays(20, 60),
+            effects: [
+                SiteOutput(mul_bps: 5500, filter: Farm),
+            ],
+            cooldown_days: 180,
+            max_concurrent: 2,
+            chronicle: "event.natural.pest_plague",
+        ),
+    ],
+)

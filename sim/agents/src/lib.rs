@@ -52,6 +52,7 @@ pub mod social;
 pub mod society;
 pub mod store;
 pub mod systems;
+pub mod worldparams;
 
 pub use arrayvec::ArrayVec;
 pub use components::{
@@ -103,6 +104,8 @@ pub use social::{
 pub use society::{
     households, is_month_start, population, register_society, total_money, SocietyReport,
 };
+pub use worldparams::{register_world_params, DemographyParams, NeedModifiers, NEUTRAL_BPS};
+
 pub use store::{
     Knowledge, KnowledgeKind, KnowledgeSlab, PlanSlab, PlanSlot, Relation, RelationKind,
     RelationSlab, Slab, SlabRef, SLAB_CLASSES, SLAB_MAX,

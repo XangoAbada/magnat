@@ -24,6 +24,7 @@
 #![forbid(unsafe_code)]
 
 pub mod city;
+pub mod events;
 pub mod firms;
 pub mod full;
 pub mod grid;

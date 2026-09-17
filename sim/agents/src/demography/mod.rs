@@ -42,7 +42,7 @@ pub use day::step_day;
 pub use month::{compatibility, przeklasyfikuj};
 pub use table::{Ages, DemographyError, DemographyTable, StatusWeights};
 
-pub const DEMOGRAPHY_SCHEMA_VERSION: u32 = 1;
+pub const DEMOGRAPHY_SCHEMA_VERSION: u32 = 2;
 
 /// Ile dób dzieli dwa losowania hazardów tego samego mieszkańca (§5.6, sharding 1/360).
 pub const DEMOGRAPHY_SHARDS: u64 = 360;

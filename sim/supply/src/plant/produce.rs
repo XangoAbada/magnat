@@ -155,8 +155,8 @@ fn krok_linii(
         // Woda idzie tą samą drogą i z tego samego powodu: receptura pobiera ją
         // przy **zamknięciu** szarży, więc szarża dowieziona do końca bez wody
         // zużyłaby wodę, której nie było. `sprobuj_start` blokował tylko start.
-        let bez_wody = ctx.cat.recipe(recipe).water.0 > 0
-            && !zaklad.has_utility(UtilityService::Water);
+        let bez_wody =
+            ctx.cat.recipe(recipe).water.0 > 0 && !zaklad.has_utility(UtilityService::Water);
         if bez_pradu || bez_wody {
             l.state = LineState::Broken {
                 since: now,
@@ -352,7 +352,7 @@ fn sprobuj_start(
         l.nominal_throughput,
         r.duration_minutes,
         pct,
-        zaklad.labor_pct,
+        zaklad.effective_labor_pct(),
     );
     if wsad.0 <= 0 || r.batch_mass.0 <= 0 {
         l.state = LineState::Idle;

@@ -57,7 +57,7 @@ jobs:
           # niego. Gdyby mógł sięgnąć do `sim/world` albo `sim/city`, kontrakt snapshotu
           # przestałby cokolwiek znaczyć — i nikt by tego nie zauważył do M11.
           for crate in magnat-render magnat-voxel; do
-            if cargo tree -p $crate --prefix none               | grep -E '^magnat-(world|city|econ|sim)($| )'               | grep -v 'magnat-sim-snapshot'; then
+            if cargo tree -p $crate --prefix none               | grep -E '^magnat-(world|city|econ|events|sim)($| )'               | grep -v 'magnat-sim-snapshot'; then
               echo "$crate zależy od symulacji poza sim-snapshot" && exit 1
             fi
           done
@@ -153,7 +153,7 @@ jobs:
             --citizens 3000 --hash-every 1440 --threads 8 --expect m5_t1.hashes
       - name: M8a — budżet miasta domyka się do grosza (T1, WP1/WP2)
         run: cargo test --release -p magnat-headless --test city_tax -- --include-ignored
-      - name: M8a — determinizm miasta z podatkami
+      - name: M8a/M8c — determinizm miasta z podatkami, pogodą i zdarzeniami
         # Dwa przebiegi tego samego drzewa, jak przy `m5shop` wyżej i z tego samego
         # powodu: hash zmienia się przy każdym dopisaniu stanu, więc złoty plik
         # w repozytorium byłby zobowiązaniem do nieruszania niczego, a nie bramką.
@@ -164,6 +164,13 @@ jobs:
         # następnego. Przy 35 dobach wpływ miało wyłącznie cło (płatne tego samego
         # dnia) i bramka „≥ 3 daniny z niezerowymi wpływami" była czerwona;
         # przy 51 dobach wpływy ma pięć danin z siedmiu (`CC-16` w `M8b-…md`).
+        #
+        # Od M8c ten sam przebieg jest **testem T3**: scenariusz `m8miasto` stawia
+        # generator zdarzeń, więc porównywany ciąg hashy obejmuje pogodę (proces
+        # z pamięcią, liczony co godzinę), rejestr zdarzeń i nakładkę parametrów.
+        # Osobnego, dłuższego przebiegu nie ma z rozmysłu: rozjazd w losowaniu
+        # zdarzeń widać w pierwszej dobie tak samo jak w setnej, a 400 dób razy
+        # dwa przebiegi to trzynaście minut bramki, która niczego więcej nie łapie.
         shell: bash
         run: |
           cargo run --release -q -p magnat-headless -- m8miasto --size 4km --days 51             --citizens 3000 --hash-every 1440 --threads 1 --out m8_t1.hashes

@@ -1523,6 +1523,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "magnat-events"
+version = "0.1.0"
+dependencies = [
+ "magnat-agents",
+ "magnat-core",
+ "magnat-economy",
+ "magnat-ecs",
+ "magnat-firms",
+ "magnat-supply",
+ "magnat-traffic",
+ "ron",
+ "serde",
+]
+
+[[package]]
 name = "magnat-firms"
 version = "0.1.0"
 dependencies = [
@@ -1550,6 +1565,7 @@ dependencies = [
  "magnat-devtools",
  "magnat-economy",
  "magnat-ecs",
+ "magnat-events",
  "magnat-firms",
  "magnat-io",
  "magnat-jobs",

@@ -4,7 +4,8 @@ Symulator miasta i gospodarki. Własny silnik w Rust — ECS, generacja świata,
 Deterministyczny: ten sam seed daje ten sam świat i ten sam przebieg, niezależnie od liczby wątków
 i platformy.
 
-Stan: **M1 zamknięte** (świat statyczny — teren, woda, biomy, renderer). Szczegóły postępu:
+Stan: **M8c zamknięte** (miasto, ludzie, ruch, gospodarka, łańcuch dostaw, firmy AI, podatki,
+sieci przesyłowe i zdarzenia świata). Szczegóły postępu:
 [`docs/implementation-plan/00-postep.md`](docs/implementation-plan/00-postep.md).
 
 ## Wymagania

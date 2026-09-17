@@ -475,7 +475,17 @@ fn odplyw(world: &mut World, day: u64, raport: &mut MigrationReport) {
         // (kryterium WP8).
         let bez_pracy = dorosli.saturating_sub(pracujacy);
         let czesciowy = if bez_pracy > 0 && dorosli > 0 {
-            let p = u32::from(params.jobless_leave_permille) * bez_pracy / dorosli;
+            // Mnożnik zdarzeniowy wchodzi tu, a nie przy gospodarstwie bez ani jednego
+            // pracującego: wyjazd z braku pracy jest kanałem koniunktury, a wyjazd
+            // z braku dachu nad głową — nie (`D11`).
+            let emig = u32::from(
+                world
+                    .get_resource::<crate::worldparams::DemographyParams>()
+                    .copied()
+                    .unwrap_or_default()
+                    .emigration_bps,
+            );
+            let p = u32::from(params.jobless_leave_permille) * bez_pracy / dorosli * emig / 10_000;
             let mut r = rng(
                 world.seed,
                 StreamId::Migration,
@@ -634,9 +644,23 @@ fn naplyw(world: &mut World, day: u64, raport: &mut MigrationReport) {
     if szansa == 0 {
         return;
     }
-    // napływ = k_in · min(wakaty, pustostany) · atrakcyjność
-    let ile = (szansa as u64 * u64::from(params.k_in_permille) * u64::from(raport.attractiveness)
-        / (1000 * 100)) as usize;
+    // napływ = k_in · min(wakaty, pustostany) · atrakcyjność · mnożnik zdarzeń
+    //
+    // Mnożnik jest czwartym czynnikiem, a nie zastąpieniem trzeciego: `attractiveness`
+    // mówi, jak miasto wygląda z zewnątrz **dziś**, a `immigration_bps` niesie falę
+    // migracji jako zdarzenie (PRD §11.2) i koniunkturę jako wskaźnik (`D11`).
+    let mnoznik = u64::from(
+        world
+            .get_resource::<crate::worldparams::DemographyParams>()
+            .copied()
+            .unwrap_or_default()
+            .immigration_bps,
+    );
+    let ile = (szansa as u64
+        * u64::from(params.k_in_permille)
+        * u64::from(raport.attractiveness)
+        * mnoznik
+        / (1000 * 100 * 10_000)) as usize;
     if ile == 0 {
         return;
     }

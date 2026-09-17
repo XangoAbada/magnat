@@ -157,11 +157,20 @@ fn write_labor_pct(world: &mut World, firms: &Firms, roles: &RoleTable) {
 
 /// Wiek, od którego mieszkaniec liczy się do siły roboczej, i wiek, do którego się liczy.
 ///
+/// Granice wieku produkcyjnego czyta się z `data/demography/demography.ron`
+/// (`ages.labour_force`, `K-60`) — **nie** ze stałej w kodzie.
+///
 /// Granice są po to, żeby stopa bezrobocia miała ten sam mianownik co w statystyce
 /// publicznej: dziecko bez pracy nie jest bezrobotne. Emerytura ma własną flagę
 /// i to ona rozstrzyga o górnej granicy — te liczby są tylko zabezpieczeniem
 /// dla mieszkańców, którym M3 flagi nie nadał.
-const WORKING_AGE: std::ops::RangeInclusive<i32> = 16..=74;
+fn wiek_produkcyjny(world: &World) -> std::ops::RangeInclusive<i32> {
+    let lf = world
+        .resource::<magnat_agents::DemographyTable>()
+        .ages()
+        .labour_force;
+    i32::from(lf.min)..=i32::from(lf.max)
+}
 
 /// Port rynku pracy nad ECS-em — implementacja produkcyjna [`Workforce`].
 pub struct WorldWorkforce<'a> {
@@ -235,6 +244,7 @@ impl Workforce for WorldWorkforce<'_> {
     fn job_seekers(&mut self, day: u32, on_the_job_every: u16, out: &mut Vec<CitizenId>) {
         out.clear();
         let dzis = day as i32;
+        let wiek = wiek_produkcyjny(self.world);
         let co_ile = u32::from(on_the_job_every.max(1));
         let dzisiejsza_zmiana = day % co_ile;
         let mut kandydaci: Vec<(u64, CitizenId)> = Vec::new();
@@ -249,7 +259,7 @@ impl Workforce for WorldWorkforce<'_> {
             if emp.has_job() && e.index() % co_ile != dzisiejsza_zmiana {
                 continue;
             }
-            if !w_sile_roboczej(id, emp, dzis) {
+            if !w_sile_roboczej(id, emp, dzis, &wiek) {
                 continue;
             }
             kandydaci.push((e.to_bits(), CitizenId(e)));
@@ -319,6 +329,7 @@ impl Workforce for WorldWorkforce<'_> {
 
     fn labour_force(&mut self, day: u32) -> (u32, u32) {
         let dzis = day as i32;
+        let wiek = wiek_produkcyjny(self.world);
         let mut sila = 0;
         let mut bez_pracy = 0;
         for (id, emp) in self
@@ -326,7 +337,7 @@ impl Workforce for WorldWorkforce<'_> {
             .query::<(&Identity, &AgentEmployment), ()>()
             .iter()
         {
-            if !w_sile_roboczej(id, emp, dzis) {
+            if !w_sile_roboczej(id, emp, dzis, &wiek) {
                 continue;
             }
             sila += 1;
@@ -350,7 +361,12 @@ fn site_id(key: u32) -> SiteId {
 ///
 /// Funkcja wolna, a nie metoda, bo woła się ją w środku zapytania ECS — a zapytanie
 /// trzyma świat na wyłączność i drugiego odczytu przez `&self` już nie puści.
-fn w_sile_roboczej(id: &Identity, emp: &AgentEmployment, dzis: i32) -> bool {
+fn w_sile_roboczej(
+    id: &Identity,
+    emp: &AgentEmployment,
+    dzis: i32,
+    wiek: &std::ops::RangeInclusive<i32>,
+) -> bool {
     if !id.is_alive() {
         return false;
     }
@@ -362,7 +378,7 @@ fn w_sile_roboczej(id: &Identity, emp: &AgentEmployment, dzis: i32) -> bool {
     {
         return false;
     }
-    WORKING_AGE.contains(&id.age_years(dzis))
+    wiek.contains(&id.age_years(dzis))
 }
 
 /// Zawód, w którym mieszkaniec jest najlepszy.

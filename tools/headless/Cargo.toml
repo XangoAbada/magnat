@@ -36,6 +36,7 @@ serde = { workspace = true }
 magnat-nav = { workspace = true }
 magnat-world = { workspace = true }
 magnat-economy = { workspace = true }
+magnat-events = { workspace = true }
 # Katalog presetów polityk — most stawiający miasto wpina go do świata razem
 # z tablicą publiczną cen (M7e WP10, `AZ-1`).
 magnat-policy = { workspace = true }

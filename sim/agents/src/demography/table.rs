@@ -29,6 +29,12 @@ pub struct Ages {
     pub senior: u8,
     pub max: u8,
     pub leave_nest: u8,
+    /// Granice wieku produkcyjnego w rozumieniu statystyki publicznej (`K-60`).
+    /// Mianownik stopy bezrobocia (`sim/economy::labor`) i podstawa
+    /// `MacroCell::in_labour_force` (`sim/macro`) — **jedno** źródło dla obu.
+    /// Szersze niż `work_start..=retirement` z rozmysłu: szesnastolatek bez pracy
+    /// i bez szkoły jest bezrobotny, a nie dzieckiem.
+    pub labour_force: Range8,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize)]
@@ -138,6 +144,7 @@ pub enum DemographyError {
     Schema { found: u32, want: u32 },
     AgeGap { at: u8, table: &'static str },
     StatusWeights(u16),
+    LabourForce { min: u8, max: u8 },
 }
 
 impl std::fmt::Display for DemographyError {
@@ -159,6 +166,10 @@ impl std::fmt::Display for DemographyError {
             DemographyError::StatusWeights(s) => write!(
                 f,
                 "data/demography: wagi statusu sumują się do {s}, a mają do 100"
+            ),
+            DemographyError::LabourForce { min, max } => write!(
+                f,
+                "data/demography: ages.labour_force ({min}, {max}) wychodzi poza                  [school_start, ages.max] albo ma odwrócone granice"
             ),
         }
     }
@@ -193,6 +204,13 @@ impl DemographyTable {
         }
         pokrycie(&f.mortality, 0, f.ages.max, "mortality")?;
         pokrycie(&f.illness, 0, f.ages.max, "illness")?;
+        let lf = f.ages.labour_force;
+        if lf.min < f.ages.school_start || lf.max > f.ages.max || lf.min > lf.max {
+            return Err(DemographyError::LabourForce {
+                min: lf.min,
+                max: lf.max,
+            });
+        }
         Ok(DemographyTable { f })
     }
 

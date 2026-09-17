@@ -8,7 +8,7 @@
 // kryterium WP7 mówi, że populacja po 100 latach ma zostać w przedziale [0,5×, 2,0×].
 // Balansator M5 i historia „na sucho" M10 przestroją je na epoki.
 (
-    schema_version: 1,
+    schema_version: 2,
 
     ages: (
         // Od tego wieku mieszkaniec jest dorosły: może odprowadzać, robić zakupy,
@@ -27,6 +27,13 @@
         // Od tego wieku dorosły próbuje wyprowadzić się z gospodarstwa rodziców —
         // i to jest zawór, przez który nadwyżka urodzeń wychodzi z miasta (§5.7).
         leave_nest: 25,
+        // Granice wieku produkcyjnego w rozumieniu **statystyki publicznej** (`K-60`):
+        // mianownik stopy bezrobocia i podstawa `MacroCell.in_labour_force`. To nie
+        // to samo co `work_start`/`retirement`, które mówią, kiedy mieszkaniec
+        // faktycznie wchodzi do pracy i z niej wychodzi — statystyka liczy szerzej,
+        // bo szesnastolatek bez pracy i bez szkoły jest bezrobotny, a nie dzieckiem.
+        // Dwa pojęcia, dwie pary liczb, **jedno źródło każdej z nich**.
+        labour_force: (min: 16, max: 74),
     ),
 
     // Umieralność roczna na 100 000 osób, pasmami wieku. Zakresy są domknięte obustronnie

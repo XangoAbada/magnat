@@ -1,0 +1,146 @@
+// Zdarzenia infrastrukturalne (M8c WP5, PRD §11.2).
+//
+// Wszystkie mają zakres `Network` i są oceniane **co godzinę**: awaria bloku
+// zaczyna się w minucie, a nie w dobie, a T2 mierzy „wolumen produkcji w oknie
+// awarii dokładnie 0". Wejściem do sieci jest `set_source_online` (pełna awaria)
+// albo moc osiągalna źródła (awaria jednego bloku) — M8b zostawiła obie drogi
+// i nie ma tu ani jednego nowego mechanizmu.
+//
+// Zakres `Network` wylicza **wszystkie** sieci miasta, więc każda definicja musi
+// powiedzieć bramką, którego medium dotyczy. Bez tego „przeciek w sieci
+// ciepłowniczej" oceniałby się także dla elektrowni.
+(
+    schema_version: 1,
+
+    events: [
+        // Awaria elektrowni — wzorzec z §5.5 B. Cztery sondy i każda z nich jest
+        // liczbą, którą świat naprawdę prowadzi: wiek najstarszej linii zakładu
+        // prowadzącego źródło, zaległość konserwacyjna, obciążenie sieci
+        // i temperatura (chłodzenie). Blok, który stoi, nie psuje się drugi raz —
+        // stąd bramka `SourceOnline`.
+        (
+            key: "infrastructure/power_plant_failure",
+            category: Infrastructure,
+            scope: Network,
+            hourly: true,
+            trigger: (
+                base_ppm: 60,
+                gate: [Service([Electricity]), SourceOnline],
+                factors: [
+                    (probe: SourceAgeDays, curve: ([(0, 10000), (7200, 20000), (14400, 50000)])),
+                    (probe: SourceMaintenanceOverdueDays, curve: ([(0, 10000), (30, 25000), (180, 80000)])),
+                    (probe: GridLoadFactorBps, curve: ([(8000, 10000), (9500, 20000), (10000, 40000)])),
+                    (probe: AirTempDc, curve: ([(250, 10000), (350, 18000)])),
+                ],
+            ),
+            severity: (min_bps: 7000, max_bps: 10000, from: None),
+            duration: RangeDays(1, 4),
+            effects: [
+                SourceOnline,
+            ],
+            cooldown_days: 40,
+            max_concurrent: 1,
+            chronicle: "event.infrastructure.power_plant_failure",
+        ),
+
+        // Awaria **jednego bloku**. Ta sama fizyka, inny rząd skutku — i to jest
+        // różnica, którą gracz widzi jako „zgasła dzielnica" zamiast „zgasło miasto".
+        // Zdarza się kilkakrotnie częściej niż awaria całego zakładu, bo tak właśnie
+        // psują się elektrownie.
+        (
+            key: "infrastructure/power_block_derate",
+            category: Infrastructure,
+            scope: Network,
+            hourly: true,
+            trigger: (
+                base_ppm: 120,
+                gate: [Service([Electricity]), SourceOnline],
+                factors: [
+                    (probe: SourceMaintenanceOverdueDays, curve: ([(0, 10000), (30, 22000), (180, 60000)])),
+                    (probe: GridLoadFactorBps, curve: ([(8000, 10000), (9500, 18000), (10000, 30000)])),
+                ],
+            ),
+            severity: (min_bps: 2000, max_bps: 7000, from: Some((GridLoadFactorBps, 8000, 10500))),
+            duration: RangeDays(1, 3),
+            effects: [
+                SourceCapacity(mul_bps: 5000),
+            ],
+            cooldown_days: 10,
+            max_concurrent: 1,
+            chronicle: "event.infrastructure.power_block_derate",
+        ),
+
+        // Awaria ujęcia wody. Sonda kondycji, bo pompownia zużywa się tak samo
+        // jak każda maszyna — i tak samo ją widać w `ProductionLine::condition`.
+        (
+            key: "infrastructure/water_intake_failure",
+            category: Infrastructure,
+            scope: Network,
+            hourly: true,
+            trigger: (
+                base_ppm: 40,
+                gate: [Service([Water]), SourceOnline],
+                factors: [
+                    (probe: SourceConditionQ, curve: ([(20, 50000), (60, 20000), (100, 10000)])),
+                    (probe: SourceMaintenanceOverdueDays, curve: ([(0, 10000), (60, 30000)])),
+                ],
+            ),
+            severity: (min_bps: 6000, max_bps: 10000, from: None),
+            duration: RangeDays(1, 2),
+            effects: [
+                SourceOnline,
+            ],
+            cooldown_days: 30,
+            max_concurrent: 1,
+            chronicle: "event.infrastructure.water_intake_failure",
+        ),
+
+        // Pęknięcie rurociągu. Mróz rozsadza rury i to jest cała sonda — dlatego
+        // krzywa jest **malejąca**: im zimniej, tym częściej.
+        (
+            key: "infrastructure/pipeline_burst",
+            category: Infrastructure,
+            scope: Network,
+            hourly: true,
+            trigger: (
+                base_ppm: 50,
+                gate: [Service([Water, Gas, Heat]), SourceOnline],
+                factors: [
+                    (probe: AirTempDc, curve: ([(-100, 60000), (0, 10000)])),
+                ],
+            ),
+            severity: (min_bps: 2000, max_bps: 8000, from: None),
+            duration: RangeDays(1, 5),
+            effects: [
+                SourceCapacity(mul_bps: 4000),
+            ],
+            cooldown_days: 15,
+            max_concurrent: 2,
+            chronicle: "event.infrastructure.pipeline_burst",
+        ),
+
+        // Przeciek w sieci ciepłowniczej. Zdarza się wtedy, gdy sieć pracuje —
+        // czyli w mrozie, i stąd sonda stopniodni grzewczych.
+        (
+            key: "infrastructure/heat_network_leak",
+            category: Infrastructure,
+            scope: Network,
+            hourly: true,
+            trigger: (
+                base_ppm: 60,
+                gate: [Service([Heat]), SourceOnline],
+                factors: [
+                    (probe: HeatingDegreeDc, curve: ([(0, 5000), (100, 10000), (250, 30000)])),
+                ],
+            ),
+            severity: (min_bps: 2000, max_bps: 7000, from: Some((HeatingDegreeDc, 0, 250))),
+            duration: RangeDays(1, 3),
+            effects: [
+                SourceCapacity(mul_bps: 7000),
+            ],
+            cooldown_days: 12,
+            max_concurrent: 1,
+            chronicle: "event.infrastructure.heat_network_leak",
+        ),
+    ],
+)

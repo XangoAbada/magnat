@@ -43,6 +43,14 @@ pub struct Weather {
     pub temp_dc: i16,
     /// Natężenie opadu w promilach: 0 = sucho, 1000 = ulewa.
     pub precip_permille: u16,
+    /// Prędkość wiatru w km/h. Dopisane w M8c: wiatr jest sondą zdarzeń (wichura,
+    /// zerwana linia) i składnikiem dyskomfortu pieszego. Zaślepka `weather_at`
+    /// zostawia zero — wiatru nie ma, dopóki nie liczy go `sim/events`.
+    pub wind_kmh: u16,
+    /// Pokrywa śnieżna w milimetrach słupa wody. Dopisane w M8c: śnieg **zalega**,
+    /// więc jest stanem, a nie pogodą doby — i to on spowalnia ruch po tym, jak
+    /// przestało padać. Zaślepka zostawia zero.
+    pub snow_cover_mm: u16,
 }
 
 impl Weather {
@@ -109,6 +117,10 @@ pub fn weather_at(seed: u64, day: u64) -> Weather {
     Weather {
         temp_dc,
         precip_permille,
+        // Zaślepka nie liczy ani wiatru, ani zalegania śniegu — obie liczby są
+        // stanem, a `weather_at` jest funkcją czystą doby. Wypełnia je `sim/events`.
+        wind_kmh: 0,
+        snow_cover_mm: 0,
     }
 }
 
@@ -155,14 +167,17 @@ mod tests {
         let sucho = Weather {
             temp_dc: 180,
             precip_permille: 0,
+            ..Weather::default()
         };
         let deszcz = Weather {
             temp_dc: 180,
             precip_permille: 600,
+            ..Weather::default()
         };
         let mroz = Weather {
             temp_dc: -100,
             precip_permille: 0,
+            ..Weather::default()
         };
         assert_eq!(sucho.harshness_permille(), 0);
         assert!(!sucho.is_harsh());

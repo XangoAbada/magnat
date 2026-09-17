@@ -267,6 +267,29 @@ impl B2b {
         }
     }
 
+    /// Stawka celna klasy i jej podmiana — polityka celna miasta (M8).
+    #[must_use]
+    pub fn duty_bp(&self, class: magnat_core::TariffClassId) -> i64 {
+        self.tariffs.duty_bp(class)
+    }
+
+    /// Klasa taryfowa po własnym kluczu — wejście dla katalogu zdarzeń M8c.
+    #[must_use]
+    pub fn tariff_class_of(&self, key: &str) -> Option<magnat_core::TariffClassId> {
+        self.tariffs.class_by_key(key)
+    }
+
+    /// Liczba klas taryfowych w tabeli.
+    #[must_use]
+    pub fn tariff_class_count(&self) -> usize {
+        self.tariffs.class_count()
+    }
+
+    /// Podmienia stawkę celną klasy; zwraca poprzednią.
+    pub fn set_duty_bp(&mut self, class: magnat_core::TariffClassId, bp: i64) -> i64 {
+        self.tariffs.set_duty_bp(class, bp)
+    }
+
     /// Mnożnik szoku dla towaru; `10_000` znaczy „bez zmian".
     #[must_use]
     pub fn supply_shock(&self, good: GoodId) -> i32 {

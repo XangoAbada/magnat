@@ -22,6 +22,9 @@ use super::{
 /// z 00 §2 obowiązuje i tutaj.
 const BPS: i64 = 10_000;
 
+/// To samo 10 000 w `u32` — wartość neutralna mnożnika pogodowego sieci.
+pub(crate) const BPS_U32: u32 = 10_000;
+
 /// Widełki czasu naprawy krawędzi, w minutach gry.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct RepairWindow {
@@ -85,12 +88,23 @@ impl ProfileTable {
             LoadProfile::Flat => BPS,
             LoadProfile::Household => i64::from(self.household[h]),
             LoadProfile::Industry => i64::from(self.industry[h]),
+            // Odbiór grzewczy ma ten sam kształt doby co gospodarstwo — różni się
+            // tym, że jest czuły na pogodę, a to jest osobny mnożnik.
+            LoadProfile::Heating => i64::from(self.household[h]),
         }
     }
 }
 
-fn demand_at(node: &UtilityNode, hour: u32, p: &ProfileTable) -> i64 {
-    node.base_demand * p.mnoznik(node.profile, hour) / BPS
+/// Popyt węzła w tej godzinie: moc przyłączeniowa × kształt doby × pogoda.
+///
+/// Mnożnik pogodowy dotyczy wyłącznie odbioru bytowego i grzewczego. Przemysł
+/// bierze tyle, ile bierze linia produkcyjna, i mróz tego nie zmienia.
+fn demand_at(node: &UtilityNode, hour: u32, p: &ProfileTable, weather_bps: u32) -> i64 {
+    let podstawa = node.base_demand * p.mnoznik(node.profile, hour) / BPS;
+    match node.profile {
+        LoadProfile::Household | LoadProfile::Heating => podstawa * i64::from(weather_bps) / BPS,
+        LoadProfile::Flat | LoadProfile::Industry => podstawa,
+    }
 }
 
 /// Co zrobiła jedna minuta sieci.
@@ -109,6 +123,12 @@ pub struct SolveReport {
     /// z odcięciem odwrotnym do prawdy aż do najbliższej zmiany sumy.
     pub outage_key: u64,
     pub cascade_rounds: u8,
+    /// Moc osiągalna i popyt po ostatniej rundzie, oba w skali u źródła
+    /// (czyli z doliczoną stratą przesyłu). Wychodzą z solvera, bo bilans wyspy
+    /// żyje w buforach roboczych i po kroku znika — a to jedyne liczby, z których
+    /// generator zdarzeń M8c widzi, że elektrownia chodzi na 98 % mocy.
+    pub supply_total: i64,
+    pub demand_total: i64,
     /// Powody do karty inspekcji (00 §7). Wyjaśnienie jest częścią wyniku, a nie
     /// polem sieci — sieć nie ma prawa zapisać go sama, bo nie zna ticku.
     pub reasons: Vec<DecisionReason>,
@@ -209,7 +229,7 @@ impl UtilityNetwork {
             if !matches!(n.role, NodeRole::Connection { .. }) || n.state == SupplyState::Ok {
                 continue;
             }
-            raport.unserved += demand_at(n, hour, profile);
+            raport.unserved += demand_at(n, hour, profile, self.weather_bps);
             // Mieszalnik, nie suma: dwa węzły zamienione miejscami mają dać inny
             // odcisk, a suma indeksów ich nie odróżnia.
             raport.outage_key = raport
@@ -226,7 +246,8 @@ impl UtilityNetwork {
     /// Krok 1: wyspy, las rozpinający i mosty, a po nich mnożnik strat.
     fn przygotuj_topologie(&mut self, s: &mut Scratch) {
         s.active.clear();
-        s.active.extend(self.edges.iter().map(UtilityEdge::is_active));
+        s.active
+            .extend(self.edges.iter().map(UtilityEdge::is_active));
         if self.dirty {
             s.pary.clear();
             s.pary.extend(self.edges.iter().map(|e| (e.a, e.b)));
@@ -262,6 +283,7 @@ impl UtilityNetwork {
         raport: &mut SolveReport,
     ) {
         let n = self.nodes.len();
+        let pogoda = self.weather_bps;
         s.supply.clear();
         s.supply.resize(n, 0);
         s.demand.clear();
@@ -287,12 +309,23 @@ impl UtilityNetwork {
                 }
                 NodeRole::Connection { .. } => {
                     node.state = SupplyState::Ok;
-                    let d = demand_at(node, hour, profile);
+                    let d = demand_at(node, hour, profile, pogoda);
                     node.supplied = d;
                     s.w[i] = d * s.gross[i];
                     s.demand[wyspa] += s.w[i];
                 }
             }
+        }
+
+        // Bilans całej sieci, zanim zrzut zetnie popyt do możliwości źródeł.
+        // Kolejność sumowania idzie po `roots`, czyli po indeksach węzłów —
+        // nie po `HashMap` (00 §3.2).
+        raport.supply_total = 0;
+        raport.demand_total = 0;
+        for &korzen in &self.topo.roots {
+            let k = korzen as usize;
+            raport.supply_total += s.supply[k];
+            raport.demand_total += s.demand[k] / BPS;
         }
 
         // Wyspy, które nie domykają bilansu. Bez tego kroku zrzut przechodziłby

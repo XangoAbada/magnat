@@ -29,8 +29,8 @@ use magnat_economy::corpfin::system::InsolvencySystem;
 use magnat_economy::labor::LaborSystem;
 use magnat_economy::MarketSystem;
 use magnat_ecs::{App, ScheduleBuilder};
-use magnat_headless::population::{swiat_agentow, zaludnij, zbuduj_miasto};
-use magnat_headless::{city as city_bridge, full, grid as grid_bridge};
+use magnat_headless::population::{swiat_agentow, zaludnij, zbuduj_miasto_z_klimatem};
+use magnat_headless::{city as city_bridge, events as events_bridge, full, grid as grid_bridge};
 use magnat_io::world_state_hash;
 use magnat_jobs::JobPool;
 use magnat_macro::MacroSystem;
@@ -104,7 +104,8 @@ pub struct M8MiastoArgs {
 pub fn run(a: &M8MiastoArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
     let pool = JobPool::new(a.threads);
     let start = std::time::Instant::now();
-    let city = zbuduj_miasto(a.seed, &a.size, &a.region, &a.epoch, &a.profile, &pool)?;
+    let (city, klimat) =
+        zbuduj_miasto_z_klimatem(a.seed, &a.size, &a.region, &a.epoch, &a.profile, &pool)?;
     eprintln!("miasto {:.1} s", start.elapsed().as_secs_f64());
 
     let mut world = swiat_agentow(a.seed)?;
@@ -157,9 +158,30 @@ pub fn run(a: &M8MiastoArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
         sieci.watered_sites
     );
 
+    // Zdarzenia. Po sieciach, bo bramka „sieć ma czynne źródło" pyta rejestr sieci,
+    // i po zakładach, bo wycinek miasta bierze się z areny zakładów.
+    let zdarzenia = events_bridge::setup(
+        &mut world,
+        &city,
+        &klimat,
+        a.epoch
+            .parse::<magnat_world::Epoch>()
+            .map_or(1990, |e| e.year()),
+    )?;
+    eprintln!(
+        "zdarzenia: {} definicji, {} zakładów w wycinku ({} rolnych) w {} dzielnicach;          norma klimatu {} °C i {} mm rocznie",
+        zdarzenia.defs,
+        zdarzenia.sites,
+        zdarzenia.farms,
+        zdarzenia.districts,
+        zdarzenia.mean_temp_dc / 10,
+        zdarzenia.annual_precip_mm
+    );
+
     bootstrap_day(&mut world, 0);
     let mut builder = ScheduleBuilder::new();
     builder
+        .add(magnat_events::EventSystem::new())
         .add(magnat_traffic::utility::UtilitySystem::new(
             magnat_traffic::utility::GridTuning::load_default()?,
         ))
@@ -228,6 +250,109 @@ pub fn run(a: &M8MiastoArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
         }
     }
     Ok(kod)
+}
+
+/// Sekcja „zdarzenia i pogoda" raportu. Zwraca `false`, gdy bramka podfazy M8c
+/// się nie zamknęła: przebieg dłuższy niż rok gry ma pokazać zdarzenia
+/// z **każdej** kategorii, bo katalog, z którego odpala się jedna piąta,
+/// wygląda w raporcie tak samo jak katalog kompletny (`R2`).
+fn raport_zdarzen(world: &magnat_ecs::World, dob: u32) -> bool {
+    use magnat_core::EventCategory;
+    let Some(ev) = world.get_resource::<magnat_events::Events>() else {
+        return true;
+    };
+    println!("── zdarzenia i pogoda ────────────────────────────────");
+    let w = ev.weather().weather();
+    let wsk = ev.indicators();
+    // Znak przed przecinkiem, nie po: `-5` dziesiątych to −0,5 °C, a `temp/10`
+    // daje wtedy zero i minus przepada. Ten sam błąd co przy dzieleniu groszy.
+    let znak = if w.temp_dc < 0 { "-" } else { "" };
+    println!(
+        "pogoda: {znak}{},{} °C, opad {} ‰, wiatr {} km/h, pokrywa śnieżna {} mm",
+        (w.temp_dc / 10).abs(),
+        (w.temp_dc % 10).abs(),
+        w.precip_permille,
+        w.wind_kmh,
+        w.snow_cover_mm
+    );
+    println!(
+        "wskaźniki miasta: CPI {} bp (r/r {} bp), bezrobocie {} ‰, kredyt {} bp, nastrój {}, koniunktura {} bp",
+        wsk.cpi_index_bp,
+        wsk.cpi_yoy_bp,
+        wsk.unemployment_permille,
+        wsk.credit_growth_bp,
+        wsk.mood_mean.get(),
+        wsk.heat_bps
+    );
+
+    let mut razem = 0u32;
+    let mut zywe_kategorie = 0;
+    for kat in EventCategory::ALL {
+        let ile: u32 = ev
+            .catalog()
+            .defs
+            .iter()
+            .enumerate()
+            .filter(|(_, d)| d.category == *kat)
+            .filter_map(|(i, _)| ev.diagnosis(u16::try_from(i).unwrap_or(0)))
+            .map(|d| d.fired)
+            .sum();
+        razem += ile;
+        if ile > 0 {
+            zywe_kategorie += 1;
+        }
+        println!("{:<16} {ile:>4} wystąpień", kat.name());
+    }
+    println!(
+        "razem {razem} zdarzeń, {} trwa teraz, {} parametrów pod nakładką",
+        ev.active().len(),
+        ev.overlay().len()
+    );
+
+    // „Dlaczego jeszcze nie" — pięć definicji o najwyższym hazardzie w ostatniej
+    // ocenie, z rozbiciem na czynniki. To jest odpowiedź, której wymaga WP4:
+    // gracz ma zobaczyć, że blok stoi na ×5,0 od wieku, a nie że hazard wynosi 137 ppm.
+    let mut wiersze: Vec<(u32, &str, String)> = Vec::new();
+    for (i, d) in ev.catalog().defs.iter().enumerate() {
+        let Some(diag) = ev.diagnosis(u16::try_from(i).unwrap_or(0)) else {
+            continue;
+        };
+        let czynniki = diag
+            .best_factors
+            .iter()
+            .map(|f| {
+                format!(
+                    "{:?}={} ×{},{:02}",
+                    f.probe,
+                    f.value,
+                    f.mul_bps / 10_000,
+                    (f.mul_bps % 10_000) / 100
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(", ");
+        wiersze.push((diag.best_ppm, d.key.as_str(), czynniki));
+    }
+    wiersze.sort_unstable_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(b.1)));
+    println!("najbliżej zajścia w ostatniej ocenie:");
+    for (ppm, klucz, czynniki) in wiersze.iter().take(5) {
+        println!("  {klucz:<40} {ppm:>7} ppm   {czynniki}");
+    }
+
+    // Bramka. Rok gry to minimum, w którym każda pora roku wypadła raz — poniżej
+    // niego brak zdarzeń zimowych nie jest wadą katalogu, tylko krótkim przebiegiem.
+    if dob < 360 {
+        println!("(przebieg krótszy niż rok gry — bramka kategorii nie obowiązuje)");
+        return true;
+    }
+    if zywe_kategorie < 6 {
+        println!(
+            "BRAMKA: zdarzenia z {zywe_kategorie} z 6 kategorii, oczekiwano wszystkich sześciu"
+        );
+        return false;
+    }
+    println!("bramka M8c: zdarzenia ze wszystkich sześciu kategorii — zielona");
+    true
 }
 
 /// Zwraca `false`, gdy którakolwiek bramka scenariusza się nie zamknęła.
@@ -327,6 +452,8 @@ fn raport(
             }
         }
     }
+
+    ok &= raport_zdarzen(world, a.days);
 
     if zywe < a.expect_taxes {
         println!(

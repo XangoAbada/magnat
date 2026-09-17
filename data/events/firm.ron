@@ -1,0 +1,136 @@
+// Zdarzenia firmowe (M8c WP5, PRD §11.2).
+//
+// Wszystkie mają zakres `Site` albo `Firm` i wszystkie sondy biorą z liczb, które
+// zakład prowadzi sam: kondycja linii, zaległość przeglądu, pokrycie etatowe.
+// Dzięki temu „awaria maszyny" nie jest rzutem kostką, tylko rachunkiem za
+// odkładanie przeglądów — a gracz widzi ten rachunek w karcie zakładu, zanim
+// awaria nastąpi.
+//
+// Zakres `Site` ocenia się **wyłącznie dla zakładów przechodzących filtr efektu**
+// (ryzyko `R6`), więc pożar magazynu nie pyta o sondy sklepu spożywczego.
+(
+    schema_version: 1,
+
+    events: [
+        // Awaria maszyny. Kondycja i zaległy przegląd — te same dwie liczby,
+        // którymi M6 liczy `mtbf`. Zdarzenie nie dubluje tamtej mechaniki:
+        // tamta zatrzymuje **linię**, ta zabiera **zakładowi** zdolność na dni.
+        (
+            key: "firm/machine_breakdown",
+            category: Firm,
+            scope: Site,
+            trigger: (
+                base_ppm: 60,
+                gate: [MinSiteLines(1)],
+                factors: [
+                    (probe: SiteConditionQ, curve: ([(20, 50000), (60, 15000), (100, 10000)])),
+                    (probe: SiteMaintenanceOverdueDays, curve: ([(0, 10000), (30, 25000), (180, 80000)])),
+                ],
+            ),
+            severity: (min_bps: 2000, max_bps: 9000, from: None),
+            duration: RangeDays(1, 4),
+            effects: [
+                SiteOutput(mul_bps: 5000, filter: Industry),
+            ],
+            cooldown_days: 20,
+            max_concurrent: 8,
+            chronicle: "event.firm.machine_breakdown",
+        ),
+
+        // Wypadek przy pracy. Zdarza się tam, gdzie zmiana jest niedoobsadzona
+        // i pracuje na zajeżdżonym sprzęcie — i to jest cały model bezpieczeństwa,
+        // na jaki M8c ma dziś liczby.
+        (
+            key: "firm/workplace_accident",
+            category: Firm,
+            scope: Site,
+            trigger: (
+                base_ppm: 35,
+                gate: [MinSiteLines(1)],
+                factors: [
+                    (probe: SiteLaborPct, curve: ([(200, 30000), (700, 15000), (1000, 10000)])),
+                    (probe: SiteConditionQ, curve: ([(20, 30000), (100, 10000)])),
+                ],
+            ),
+            severity: (min_bps: 3000, max_bps: 10000, from: None),
+            duration: RangeDays(2, 7),
+            effects: [
+                SiteOutput(mul_bps: 7000, filter: Industry),
+            ],
+            cooldown_days: 45,
+            max_concurrent: 4,
+            chronicle: "event.firm.workplace_accident",
+        ),
+
+        // Pożar magazynu. Upał i zaniedbanie — długi przestój, bo odbudowa
+        // magazynu nie jest naprawą maszyny.
+        (
+            key: "firm/warehouse_fire",
+            category: Firm,
+            scope: Site,
+            trigger: (
+                base_ppm: 10,
+                gate: [MinSiteLines(1)],
+                factors: [
+                    (probe: AirTempDc, curve: ([(200, 10000), (320, 30000)])),
+                    (probe: SiteConditionQ, curve: ([(20, 25000), (100, 10000)])),
+                ],
+            ),
+            severity: (min_bps: 4000, max_bps: 10000, from: None),
+            duration: RangeDays(5, 20),
+            effects: [
+                SiteOutput(mul_bps: 3000, filter: Industry),
+            ],
+            cooldown_days: 180,
+            max_concurrent: 2,
+            chronicle: "event.firm.warehouse_fire",
+        ),
+
+        // Odejście kluczowej osoby. Zakres firmowy, bo odchodzi się z firmy,
+        // a nie z linii produkcyjnej — i skutek rozkłada się na wszystkie jej zakłady.
+        (
+            key: "firm/key_person_leaves",
+            category: Firm,
+            scope: Firm,
+            trigger: (
+                base_ppm: 60,
+                gate: [MinFirmHeadcount(8), MinFirmAgeDays(90)],
+                factors: [
+                    (probe: FirmMoraleQ, curve: ([(30, 30000), (50, 10000), (75, 5000)])),
+                    (probe: FirmWageGapPermille, curve: ([(0, 10000), (150, 30000)])),
+                ],
+            ),
+            severity: (min_bps: 2000, max_bps: 7000, from: None),
+            duration: RangeDays(20, 60),
+            effects: [
+                SiteOutput(mul_bps: 8500, filter: Any),
+            ],
+            cooldown_days: 90,
+            max_concurrent: 3,
+            chronicle: "event.firm.key_person_leaves",
+        ),
+
+        // Kradzież w sklepie. Zakres `Site` z filtrem usługowym — magazyn fabryki
+        // ma ochronę, półka nie ma. Krótka i płytka, ale widoczna w wyniku miesiąca.
+        (
+            key: "firm/shoplifting_spree",
+            category: Firm,
+            scope: Site,
+            trigger: (
+                base_ppm: 40,
+                factors: [
+                    (probe: MoodMean, curve: ([(-40, 40000), (0, 10000), (30, 6000)])),
+                    (probe: UnemploymentPermille, curve: ([(40, 10000), (150, 30000)])),
+                ],
+            ),
+            severity: (min_bps: 2000, max_bps: 8000, from: None),
+            duration: FixedDays(2),
+            effects: [
+                SiteOutput(mul_bps: 9000, filter: Service),
+            ],
+            cooldown_days: 30,
+            max_concurrent: 6,
+            chronicle: "event.firm.shoplifting_spree",
+        ),
+    ],
+)

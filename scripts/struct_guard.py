@@ -120,7 +120,12 @@ REJESTR = {
     # `LoadShed` ma trzy podstawienia i dwanaście linii, `GridTripped` dwa
     # i dziesięć. Siedem mediów nie robi czternastu zdań — rodzaj medium wchodzi
     # podstawieniem `{medium}`, tak samo jak danina w bloku M8a.
-    ("engine/ui/src/inspect/reason.rs", "fn", 754): 37,
+    # 780 po M8c: dwa ramiona zdarzeń świata (609–610), +26. `EventStarted`
+    # ma trzy podstawienia (kategoria, siła, numer) i trzynaście linii,
+    # `EventEnded` też trzy i trzynaście — a kategorii jest sześć i wchodzą
+    # jednym `{kategoria}`, tak samo jak siedem danin w M8a i siedem mediów w M8b.
+    # Blok M8 ma po M8c zajęte 600–610 i trzy podfazy przed sobą.
+    ("engine/ui/src/inspect/reason.rs", "fn", 780): 37,
     # 269 po M7d: jedna linia za `finance: bf.finance` w budowie `BankParams`.
     ("sim/economy/src/data.rs", "fn", 269): 38,
 }

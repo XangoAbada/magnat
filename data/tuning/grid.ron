@@ -12,7 +12,7 @@
 // Wszystko całkowitoliczbowe: pieniądz w groszach, moc w watach, przepływ wody
 // w mililitrach na godzinę, stawki w punktach bazowych (10 000 = 100 %).
 (
-    schema_version: 1,
+    schema_version: 2,
 
     // ── Kształt doby po stronie popytu ───────────────────────────────────────────
     // Mnożnik mocy przyłączeniowej dla każdej godziny doby, w punktach bazowych.
@@ -46,6 +46,11 @@
     tariffs: [
         (service: "Electricity", per_unit_gr:  65, standing_gr_per_month: 4_500),
         (service: "Water",       per_unit_gr: 480, standing_gr_per_month: 2_100),
+        // Gaz i ciepło — dopisane w M8c razem z popytem grzewczym (`CD-1`).
+        // Sieć bez taryfy odcinałaby odbiorców i nie wystawiała rachunku, więc
+        // wiersz musi tu być **zanim** most postawi sieć, a nie po.
+        (service: "Gas",         per_unit_gr:  31, standing_gr_per_month: 2_800),
+        (service: "Heat",        per_unit_gr:  24, standing_gr_per_month: 3_600),
     ],
 
     // ── Popyt odbiorców bez licznika ─────────────────────────────────────────────
@@ -63,6 +68,15 @@
     // nie na recepturę: w M8b sieć wodociągowa nie ma problemu z przepustowością,
     // a jej rolą jest taryfa i to, że gaśnie razem z prądem w ujęciu.
     plant_water_ml_h: 90_000,
+    // Ciepło i gaz: moc grzewcza na mieszkańca przy **pełnym obciążeniu**, czyli
+    // przy 200 stopniodniach (−5 °C). W lipcu ten sam węzeł bierze kilka procent
+    // tej liczby, bo mnożnik pogodowy sieci liczy się ze stopniodni, a nie
+    // z kalendarza — to on sprawia, że mroźny tydzień jest widoczny w bilansie.
+    //
+    // Podział ciepła i gazu jest podziałem miasta na blokowisko i zabudowę
+    // rozproszoną: sieć ciepłownicza bierze większość, gaz resztę.
+    household_heat_w: 1_400,
+    household_gas_w: 600,
 
     // ── Priorytety zrzutu obciążenia ─────────────────────────────────────────────
     // Niższy numer schodzi **później**. Ujęcie wody i instytucje idą przed

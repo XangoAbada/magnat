@@ -241,7 +241,8 @@ impl NeedDecaySystem {
         NeedDecaySystem {
             desc: SystemDesc::new("agents.NeedDecay", Cadence::EveryMinute)
                 .with_query::<(Entity, &mut Needs), ()>(world)
-                .reads_resource::<NeedTable>(world),
+                .reads_resource::<NeedTable>(world)
+                .reads_resource::<crate::worldparams::NeedModifiers>(world),
         }
     }
 }
@@ -259,7 +260,21 @@ impl System for NeedDecaySystem {
         // więc bierzemy tempa do tablicy na stosie — dwanaście liczb.
         let tempa: [u32; NEED_COUNT] = {
             let t = ctx.res::<NeedTable>();
-            std::array::from_fn(|i| t.specs[i].decay_centi_per_hour)
+            // Mnożnik zdarzeniowy wchodzi **tutaj**, a nie w tabeli: epidemia
+            // przyspiesza spadek zdrowia na czas swojego trwania, a po jej końcu
+            // świat wraca do `data/needs/needs.ron`, a nie do liczby zapisanej
+            // przez ostatnie zdarzenie (M8c §5.5).
+            //
+            // Odczyt idzie przez `world()`, a nie `res()`, bo zasób jest **opcjonalny**:
+            // świat bez zdarzeń (scenariusze M3, M4) nigdy go nie dostaje, a wartość
+            // domyślna jest jednością. Dostęp jest mimo to zadeklarowany w `desc`,
+            // więc scheduler widzi krawędź wszędzie tam, gdzie zasób istnieje.
+            let m = ctx
+                .world()
+                .get_resource::<crate::worldparams::NeedModifiers>()
+                .copied()
+                .unwrap_or_default();
+            std::array::from_fn(|i| m.decay(i, t.specs[i].decay_centi_per_hour))
         };
 
         // Równolegle po chunkach (00 §3.3): każdy wiersz pisze wyłącznie do własnego
