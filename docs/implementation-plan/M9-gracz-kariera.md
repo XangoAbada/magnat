@@ -178,7 +178,10 @@ odesłania w tekście („patrz §5.4") nadal wskazują tę samą sekcję — zm
 | `InspectionCard`, `render_reason(&DecisionReason, &Locale)` | `game::inspect` | wszystkie fazy (każda dodaje ramię) |
 | `PanelRegistry`, `PanelDesc`, `PanelId` | `game::panels` | **M10** (Brand/Rnd/Stock), M12 (panele z modów) |
 | `OverlaySpec`, `OverlayField`, `EntityFilter` | `game::overlays` | M1/M2 (`engine/render` konsumuje spec), M10 |
-| `Widget`, `LayoutNode`, `Layout`, `Table<T>`, `Series`, `GraphView`, `GanttView`, `HeatmapThumb`, `DrawList` | `engine/ui` | M10, M11, M12 |
+| `Theme` + `ColorToken`/`TextRole`, `Span`/`Rich` + `RichExt`, `TabStrip`, `Cached`/`DataSource`/`Versions`, `Table<T>` + `RowSource`/`Filter`, `Series` + `MipLevel`, `HeatmapThumb`, `CalendarFmt`, `fmt::{integer, decimal, money}`, `testing::draw*` | `engine/ui` | M10, M11, M12 |
+| `LayoutNode`, `Layout` (dokowanie), `GraphView`, `GanttView` | `engine/ui` — **powstają w `M9e`** razem z pierwszym panelem, który ich żąda (`W-2`) | M10, M11, M12 |
+| `Subject`, `SubjectKind` | `engine/core` (`K-62`) — jedenaście wariantów od `M9b`, pięć dokłada `M9c` | wszystkie fazy dopisujące byt z kartą |
+| `Shell`, `ShellAction`, ekrany powłoki | `game::screens` | M11 (ustawienia grafiki i dźwięku), M12 (modding ekranów) |
 | `LocKey`, katalogi `data/locale/*.ron`, `plural(locale, n)` | `engine/ui` | wszystkie fazy z tekstem |
 | `TimeScale`, `StopCondition` | `game::timectl` | M11 (LOD wizualne wg skali), M12 (tryb 50×) |
 | `Series` + `MetricsRecorder` (historia metryk do wykresów i dry-runu) | `game::metrics` | M10, `tools/balansator` |
@@ -449,3 +452,17 @@ Zgodnie z `K-18`. Szczegóły i uzasadnienia — tabela `DA-n` w `M9a-szkielet-g
 | X-4 | **Podwójnie buforowanego `Snapshot` dla paneli nie ma i M0 go nie dostarczy** — `magnat-sim-snapshot` niesie POD-y renderu. Buduje go **WP3 w `M9b`**; szwem, w który wejdzie, jest `game::CommandView` | Wiersz §6 „konsumuję: `Snapshot` … M0 (`ecs`, `io`)" opisywał coś, czego nikt nie jest właścicielem — przypadek (5) z `K-18`. Bez tego zapisu `M9b` zacząłby od szukania typu, którego nie ma |
 | X-5 | **Blok `StreamId` 260–279 jest nadal wolny w całości.** M9a nie losuje niczego: komenda gracza jest funkcją stanu, a nie losowaniem | `PolicyExecution = 260` zajmie `M9d` razem z odchyleniem menedżera — to tam jest pierwsze losowanie fazy |
 | X-6 | **Blok `DecisionReason` 700–799 jest nadal wolny.** M9a nie zapisuje powodów: `StartGame` i `SetPrice` to decyzje **gracza**, a wyjaśnialność z `00` §7 dotyczy decyzji agentów i firm | Bramka 5 fazy zamknie się w `M9c` (karta inspekcji) i `M9d` (`PolicyApplied`), a nie tutaj |
+
+
+## Zmiany wpisane po M9b
+
+Zgodnie z `K-18`. Szczegóły i uzasadnienia — tabela `DE-n` w `M9b-rdzen-ui.md`.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| W-1 ★ | **Drzewo retained z §5.8 nie powstało i nie powstanie.** Rdzeniem UI jest `egui` (decyzja M3 9.2, `Z-1`), a dirty-flagging dotyczy **modelu panelu**, nie drzewa widgetów. §6 „dostarczam" traci `Widget`, `LayoutNode`, `DrawList` i `Layout`, a zyskuje `Cached`, `DataSource`, `Versions`, `Theme`, `Span`/`Rich`, `TabStrip`, `RowSource` i `CalendarFmt` | §5.8 i `Z-1` mówiły dwie różne rzeczy o tym samym; postawienie drugiego stosu widgetów na `egui` byłoby dokładnie tym własnym toolkitem, którego tamta decyzja miała uniknąć (`DE-1`, `DE-2`) |
+| W-2 ★ | **`Layout` z dokowaniem, `GraphView` i `GanttView` przenoszą się do `M9e`**, `RuleEditorView` do `M9d`. Budżety §7 dla grafu i Gantta zamykają się razem z ich panelami | Reguła kolejności z §4: widget powstaje pod ekran, który go żąda. Układ doków bez paneli to plik konfiguracyjny bez czytelnika (`DE-4`, `DE-5`) |
+| W-3 | **Filtr `Table<T>` jest predykatem, nie `ConditionExpr`.** „Jedna gramatyka" zostaje obietnicą formy zapisu, a nie typu pola w tabeli; `M9e` podłącza ewaluator `sim/policy` pod `Filter` | `engine/ui` nie zależy od `sim/policy` i nie ma powodu zaczynać; pole AST wymusiłoby, żeby także lista dziesięciu slotów zapisu była opisana drzewem składniowym (`DE-6`) |
+| W-4 ★ | **`Subject` mieszka w `engine/core` od M9b** (`K-62`), z jedenastoma wariantami. `Batch`, `Offer`, `Tender`, `Case` i `Permit` dokłada `M9c` razem z decyzją, gdzie mieszkają ich identyfikatory | `Span.link` jest `Option<Subject>`, więc typ musiał powstać w tej podfazie; pozostałe pięć wymaga przeniesienia `TenderId`/`CaseId`/`PermitId` z `sim/city` albo uchwytu areny, a to jest decyzja karty inspekcji (`DE-9`) |
+| W-5 | **Polski ma cztery formy liczebnika** (`one` / `few` / `many` / `other`). Klucz liczebnikowy niesie cztery formy po stronie PL i dwie po stronie EN; `Catalog::plural_frac` obsługuje ułamki | §7 wymienia „1,5 sklepu" wprost, a kod M3 miał trzy formy. Kluczy liczebnikowych jest osiem, więc koszt był żaden (`DE-8`) |
+| W-6 | **Zapis gry jest dostępny z menu pauzy**, a majątek w wierszu slotu to zero do czasu WP4 | Bez zapisu ekran „Wczytaj" byłby listą, do której nic nie trafia — czyli ekranem, którego skutku nikt nie widzi (`R2`, `K-67`). Zero z komentarzem jest uczciwsze niż liczba udająca majątek gracza (`DE-12`) |

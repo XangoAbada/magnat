@@ -317,11 +317,13 @@ impl crate::InspectorPanel for CitizenPanel {
         ui.text("ui.card.title")
     }
 
-    fn build(&mut self, ui: &crate::UiContext, world: &magnat_ecs::World) -> String {
+    fn build(&mut self, ui: &crate::UiContext, world: &magnat_ecs::World) -> crate::Rich {
         let Some(m) = self.model(ui, world) else {
-            return ui.catalog.fmt_key(ui.locale, "ui.card.no_selection", &[]);
+            return crate::rich::lines(&ui.catalog.fmt_key(ui.locale, "ui.card.no_selection", &[]));
         };
-        m.card.render_text(&ui.catalog, ui.locale, &m.timeline())
+        // Tekst powstaje jak dotąd, a na kawałki tnie go jedna funkcja — dzięki temu
+        // złoty wydruk jest bajt w bajt ten sam, a `M9c` ma gdzie przypiąć odnośniki.
+        crate::rich::lines(&m.card.render_text(&ui.catalog, ui.locale, &m.timeline()))
     }
 }
 

@@ -18,6 +18,7 @@ use magnat_firms::panel::{EmployeeRow, FirmPanelSnapshot, ManagerRow, OutlookRow
 use magnat_firms::{FirmKey, FirmPersonality, FirmStatus, ManagerStyle, Owner, SitePnlMonth};
 use magnat_ui::inspect::firm::{FirmCard, FirmTab};
 use magnat_ui::loc::{Catalog, Locale};
+use magnat_ui::RichExt;
 
 fn e(i: u32) -> Entity {
     Entity::new(i, std::num::NonZeroU32::MIN)
@@ -162,7 +163,7 @@ fn zakladka_danin_pokazuje_podstawe_i_stawke() {
     let c = Catalog::load().expect("data/locale/");
     let karta =
         FirmCard::build(&c, Locale::Pl, &migawka()).with_taxes(&c, Locale::Pl, &obciazenia());
-    let t = karta.render_tab(&c, Locale::Pl, FirmTab::Taxes);
+    let t = karta.render_tab(&c, Locale::Pl, FirmTab::Taxes).to_plain();
     // Nazwa daniny, podstawa i stawka — każda z trzech należności.
     assert!(t.contains("VAT"), "{t}");
     assert!(
@@ -188,6 +189,7 @@ fn zakladka_danin_pokazuje_podstawe_i_stawke() {
     let pusta = FirmCard::build(&c, Locale::Pl, &migawka());
     assert!(pusta
         .render_tab(&c, Locale::Pl, FirmTab::Taxes)
+        .to_plain()
         .contains("brak danych"));
 }
 
@@ -204,7 +206,7 @@ fn karta_sklada_sie_w_obu_jezykach() {
             "nierozwinięty klucz w karcie ({l:?}):\n{t}"
         );
         for zakladka in FirmTab::ALL {
-            assert!(!karta.render_tab(&c, l, zakladka).is_empty());
+            assert!(!karta.render_tab(&c, l, zakladka).to_plain().is_empty());
         }
     }
 }
@@ -217,7 +219,9 @@ fn zakladka_kursu_nie_pokazuje_zadnej_kwoty() {
     let c = Catalog::load().expect("data/locale/");
     let s = migawka();
     for l in Locale::ALL {
-        let t = FirmCard::build(&c, l, &s).render_tab(&c, l, FirmTab::Course);
+        let t = FirmCard::build(&c, l, &s)
+            .render_tab(&c, l, FirmTab::Course)
+            .to_plain();
         assert!(
             !t.contains("zł") && !t.to_lowercase().contains("pln"),
             "kwota w zakładce kursu ({l:?}):\n{t}"
@@ -242,8 +246,12 @@ fn nierozstrzygniety_ranking_mowi_o_tym_wprost() {
         o.winner = None;
         o.trend = Trend::Flat;
     }
-    let pl = FirmCard::build(&c, Locale::Pl, &s).render_tab(&c, Locale::Pl, FirmTab::Course);
-    let en = FirmCard::build(&c, Locale::En, &s).render_tab(&c, Locale::En, FirmTab::Course);
+    let pl = FirmCard::build(&c, Locale::Pl, &s)
+        .render_tab(&c, Locale::Pl, FirmTab::Course)
+        .to_plain();
+    let en = FirmCard::build(&c, Locale::En, &s)
+        .render_tab(&c, Locale::En, FirmTab::Course)
+        .to_plain();
     assert!(pl.contains("nie rozstrzygnął"), "{pl}");
     assert!(en.contains("did not decide"), "{en}");
 }
@@ -253,7 +261,9 @@ fn zaklad_bez_rachunku_nie_udaje_zera() {
     let c = Catalog::load().expect("data/locale/");
     let mut s = migawka();
     s.sites[0].last_month = None;
-    let t = FirmCard::build(&c, Locale::Pl, &s).render_header(&c, Locale::Pl);
+    let t = FirmCard::build(&c, Locale::Pl, &s)
+        .render_header(&c, Locale::Pl)
+        .to_plain();
     assert!(t.contains("brak rachunku"), "{t}");
     assert!(s.last_result().is_none());
 }

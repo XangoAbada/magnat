@@ -29,6 +29,7 @@ pub mod money;
 pub mod rng;
 pub mod schema;
 pub mod service;
+pub mod subject;
 pub mod time;
 pub mod types;
 pub mod vocab;
@@ -49,6 +50,7 @@ pub use money::split_proportional;
 pub use rng::{mix64, rng, Rng, StreamId, NO_ENTITY};
 pub use schema::ComponentSchemaId;
 pub use service::ServiceCoverage;
+pub use subject::{Subject, SubjectKind};
 pub use time::{Cadence, DayOfWeek, MinuteOfDay, OpenHours, SimCalendar, SimClock, SimSpeed};
 pub use types::{
     DepositId, DistrictId, Energy, EventId, GoodId, JobRoleId, Mass, Money, Mood, NeedCategoryId,

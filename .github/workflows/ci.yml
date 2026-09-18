@@ -214,6 +214,13 @@ jobs:
           cargo run --release -q -p magnat-headless -- new-game --replay m9.log.ron --days 2               --hash-every 720 --threads 8 --expect m9.hashes
       - name: M9a — sesja, sloty i anulowanie generacji
         run: cargo test --release -p magnat-game -- --include-ignored
+      - name: M9b — rdzeń UI i ekrany powłoki rysują się bez karty graficznej
+        # Trzy kryteria naraz: brak zmian danych → zero alokacji (WP3), liczebniki
+        # i polskie znaki w atlasie (WP3), oraz każdy ekran powłoki w obu językach,
+        # w pseudo-lokalizacji i na pięciu skalach (WP14).
+        run: |
+          cargo test --release -p magnat-ui --test dirty --test i18n
+          cargo test --release -p magnat-game --test screens
       - name: M4 — dowód spójności mikro ↔ mezo (A1–A5, M4d/WP9)
         run: cargo test --release -p magnat-world --test lod -- --include-ignored
       - name: M4 — diagram IDM zgadza się z tabelą VDF (miernik dryfu R2)
@@ -239,7 +246,7 @@ jobs:
         # cel z `bench = true` jako benchmark, więc `--workspace` próbuje uruchomić także
         # biblioteki i binarki, które nie znają flag criteriona.
         run: |
-          cargo bench -p magnat-core -p magnat-ecs -p magnat-io                       -p magnat-voxel -p magnat-world -p magnat-nav -p magnat-spatial                       -p magnat-traffic -p magnat-economy -p magnat-firms --benches                       -- --warm-up-time 1 --measurement-time 3
+          cargo bench -p magnat-core -p magnat-ecs -p magnat-io                       -p magnat-voxel -p magnat-world -p magnat-nav -p magnat-spatial                       -p magnat-traffic -p magnat-economy -p magnat-firms -p magnat-ui --benches                       -- --warm-up-time 1 --measurement-time 3
       - name: porównanie z linią bazową (10 % ostrzeżenie, 25 % błąd — D-8)
         run: python3 scripts/bench_guard.py benches/baseline.json
 

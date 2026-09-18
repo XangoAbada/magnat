@@ -758,7 +758,7 @@ fn karta(
 ── {} ──",
         panel.title(&ui)
     );
-    print!("{}", panel.build(&ui, world));
+    print!("{}", magnat_ui::RichExt::to_plain(&panel.build(&ui, world)));
 
     // Karta inspekcji podróży (WP11) — pierwszy ekran, na którym mieszkaniec pojawia
     // się graczowi **w zdaniu**, a nie jako wiersz tabeli. Bez niej bramka 5 z §7.4

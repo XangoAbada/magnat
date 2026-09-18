@@ -114,33 +114,13 @@ impl TimeControlsWidget {
     /// Data w języku gracza: rok, miesiąc, dzień, dzień tygodnia (K-1, K-15).
     #[must_use]
     pub fn date_label(&self, c: &Catalog, l: Locale) -> String {
-        let k = self.calendar();
-        let miesiac = c.fmt_key(l, &format!("ui.month.{}", k.month_of_year()), &[]);
-        let dow = c.fmt_key(l, &format!("ui.dow.{:?}", k.day_of_week()), &[]);
-        c.fmt_key(
-            l,
-            "ui.time.date",
-            &[
-                ("rok", &k.year().to_string()),
-                ("miesiac", &miesiac),
-                ("dzien", &k.day_of_month().to_string()),
-                ("dow", &dow),
-            ],
-        )
+        crate::CalendarFmt::date(c, l, self.calendar())
     }
 
     /// Godzina w języku gracza.
     #[must_use]
     pub fn clock_label(&self, c: &Catalog, l: Locale) -> String {
-        let k = self.calendar();
-        c.fmt_key(
-            l,
-            "ui.time.clock",
-            &[
-                ("godzina", &format!("{:02}", k.hour_of_day())),
-                ("minuta", &format!("{:02}", k.minute_of_hour())),
-            ],
-        )
+        crate::CalendarFmt::clock(c, l, self.calendar())
     }
 }
 

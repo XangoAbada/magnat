@@ -20,6 +20,7 @@ use magnat_economy::{
     IncomeStatement, LoanId, LostSale, LostSaleHistogram, LostSaleTracking, LostSalesView,
     PricePolicy, ShelfRow, ShopPanelSnapshot,
 };
+use magnat_ui::RichExt;
 use magnat_ui::{Catalog, Locale, ShopCard, ShopTab, ShopView};
 use std::num::NonZeroU32;
 
@@ -273,7 +274,7 @@ fn kazda_zakladka_ma_tekst_w_obu_jezykach() {
     for l in Locale::ALL {
         let k = karta(&c, l, &s);
         for t in ShopTab::ALL {
-            let w = k.render_tab(&c, l, t);
+            let w = k.render_tab(&c, l, t).to_plain();
             assert!(!w.is_empty(), "{t:?} w {} jest pusta", l.code());
             assert!(
                 !w.contains('{'),
@@ -281,7 +282,7 @@ fn kazda_zakladka_ma_tekst_w_obu_jezykach() {
                 l.code()
             );
         }
-        assert!(!k.render_header(&c, l).contains('{'));
+        assert!(!k.render_header(&c, l).to_plain().contains('{'));
     }
 }
 
@@ -291,7 +292,9 @@ fn niesledzony_zaklad_mowi_ze_nie_ma_danych() {
     let c = Catalog::load().expect("data/locale/");
     let s = migawka(LostSaleTracking::None, true);
     for l in Locale::ALL {
-        let w = karta(&c, l, &s).render_tab(&c, l, ShopTab::Customers);
+        let w = karta(&c, l, &s)
+            .render_tab(&c, l, ShopTab::Customers)
+            .to_plain();
         assert!(
             w.contains(&c.fmt_key(l, "ui.shop.untracked", &[])),
             "{}: zakładka Klienci milczy o braku śledzenia:\n{w}",
@@ -311,8 +314,12 @@ fn obciety_dziennik_jest_widoczny() {
     // powiedzieć wprost, że nią nie jest.
     let c = Catalog::load().expect("data/locale/");
     for l in Locale::ALL {
-        let pelny = karta(&c, l, &migawka(LostSaleTracking::Full, true)).render_header(&c, l);
-        let obciety = karta(&c, l, &migawka(LostSaleTracking::Full, false)).render_header(&c, l);
+        let pelny = karta(&c, l, &migawka(LostSaleTracking::Full, true))
+            .render_header(&c, l)
+            .to_plain();
+        let obciety = karta(&c, l, &migawka(LostSaleTracking::Full, false))
+            .render_header(&c, l)
+            .to_plain();
         let adnotacja = c.fmt_key(l, "ui.shop.fin.cash_partial", &[]);
         assert!(!pelny.contains(&adnotacja), "{}: fałszywy alarm", l.code());
         assert!(

@@ -59,7 +59,12 @@ pub trait InspectorPanel {
     /// Tytuł panelu w języku gracza.
     fn title(&self, ui: &UiContext) -> String;
 
-    /// Treść panelu jako tekst — jedyna forma wymagana w M3. Widget graficzny M9
-    /// czyta ten sam model, nie drugi.
-    fn build(&mut self, ui: &UiContext, world: &World) -> String;
+    /// Treść panelu jako [`Rich`](crate::Rich) — tekst z kawałkami, z których każdy
+    /// może nieść odnośnik do podmiotu (`M9b` §5.8, `Z-7`). Widget graficzny czyta
+    /// ten sam model, nie drugi.
+    ///
+    /// Napis dla wydruku i dla złotego testu powstaje z niego przez
+    /// [`RichExt::to_plain`](crate::RichExt::to_plain) — konkatenację bez ani jednego
+    /// dodanego znaku, więc zmiana typu nie ruszyła ani jednego bajtu wydruku.
+    fn build(&mut self, ui: &UiContext, world: &World) -> crate::Rich;
 }

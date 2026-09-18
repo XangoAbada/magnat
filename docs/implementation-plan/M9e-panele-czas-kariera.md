@@ -184,3 +184,16 @@ Wymagania wyprowadzone z budżetu 15 minut:
    z dzienników playtestów.
 
 ---
+
+
+## Zmiany wpisane po M9b
+
+Zgodnie z `K-18`. Pełne uzasadnienia — tabela `DE-n` w `M9b-rdzen-ui.md`.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| DF-1 ★ | **`LayoutNode`, `Layout` i dokowanie przenoszą się tutaj** z `M9b` §5.8, razem z pierwszym panelem, który ma się gdzie zadokować | Ekrany powłoki są pełnoekranowe, a karta inspekcji jest jednym oknem — układ doków bez paneli to plik konfiguracyjny bez czytelnika (`DE-4`) |
+| DF-2 ★ | **`GraphView` i `GanttView` powstają tutaj**, razem z panelem Łańcuch dostaw i panelem Zakład; ich budżety z §7 dokumentu fazy (graf 500 węzłów ≤ 0,8 ms i ≤ 50 ms układu poza klatką, Gantt 500 pasków ≤ 0,4 ms) zamykają się z nimi, a nie w `M9b` | Zmierzenie ich w WP6 znaczyłoby zmierzenie widgetu rysującego dane zbudowane na potrzeby benchmarku (`DE-5`) |
+| DF-3 | **Rdzeń UI stoi i jest zmierzony**: `Table<T>` 100 tys. wierszy (rysowanie 145 µs, sortowanie 1,97 ms poza klatką, filtr 117 µs), `Series` z piramidą mip (wykres 8 serii × 10 lat: 80 µs), `HeatmapThumb` (78 µs). Panele biznesowe składają się z tych trzech plus `Rich`, `TabStrip` i `Theme` — nie budują własnych | Budżety §7 są spełnione z zapasem, więc panel, który ich nie dotrzyma, będzie miał winnego po swojej stronie |
+| DF-4 | **`MetricsRecorder` nie powstał** — `Series` z `engine/ui` jest gotowym pojemnikiem (`push_day`, cztery poziomy, bezstratne sumy), ale nikt jeszcze nie zapisuje do niego metryk gracza. To jest pakiet tej podfazy | §6 dokumentu fazy obiecuje `Series` + `MetricsRecorder` jako parę; połowa jest gotowa i przetestowana, druga potrzebuje wiedzieć, **które** metryki ma zapisywać, a to wie dopiero panel |
+| DF-5 | **Ekran ustawień ma dwie zakładki** („Gra", „Sterowanie"); grafika i dźwięk wchodzą z M11. Ekrany domknięcia scenariusza i spuścizny (`ui-design.md` §6.6) należą do WP12 razem z `GameState::{Succession, ScenarioEnd}` | Zakładka pusta jest gorsza od jej braku, bo obiecuje treść (`DE-11`) |

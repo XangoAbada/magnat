@@ -56,7 +56,7 @@ jest dopuszczalny jako drugi zestaw tokenów (M12), nie jako drugi projekt.
 | `bg.scene` | — (widok 3D) | pod HUD-em; UI nigdy nie zakrywa go bez powodu |
 | `bg.window` | `#14171A` | tło ekranów powłoki i paneli pełnoekranowych |
 | `bg.panel` | `#1E2226` | tło panelu zadokowanego |
-| `bg.card` | `#262B31` | karta inspekcji, wiersz wyróżniony, pole edycji |
+| `bg.card` | `#232830` | karta inspekcji, wiersz wyróżniony, pole edycji |
 | `bg.overlay` | `#14171A` @ 80% | podkład pod HUD nad sceną |
 | `line.soft` | `#2E353C` | linie siatki tabeli, separatory |
 | `line.strong` | `#3C444D` | obramowanie panelu, ramka pola |

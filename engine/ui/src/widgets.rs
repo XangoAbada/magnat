@@ -16,28 +16,37 @@
 use crate::inspect::citizen::{CitizenCard, CitizenModel};
 use crate::inspect::shop::{ShopCard, ShopTab};
 use crate::loc::{Catalog, Locale};
+use crate::rich::{Rich, Span, SpanStyle};
+use crate::theme::{ColorToken, TextRole, Theme};
 use crate::time::TimeControlsWidget;
-use magnat_core::SimSpeed;
+use magnat_core::{SimSpeed, Subject};
 
 /// Kolor paska potrzeby. Trzy progi, nie gradient: gracz ma odczytać „dobrze / słabo /
 /// źle" jednym spojrzeniem, a nie porównywać odcienie.
-fn kolor_potrzeby(level: u8, critical: bool) -> egui::Color32 {
+///
+/// Od M9b barwy idą z motywu (`data/ui/theme.ron`), a nie z literałów — to są
+/// dokładnie tokeny `danger` / `warn` / `ok`, i taki był zamysł od początku (`Z-6`).
+fn kolor_potrzeby(theme: &Theme, level: u8, critical: bool) -> egui::Color32 {
     if critical {
-        egui::Color32::from_rgb(200, 70, 60)
+        theme.color(ColorToken::Danger)
     } else if level < 50 {
-        egui::Color32::from_rgb(200, 160, 60)
+        theme.color(ColorToken::Warn)
     } else {
-        egui::Color32::from_rgb(90, 160, 100)
+        theme.color(ColorToken::Ok)
     }
 }
 
 /// Kolor bloku czynności. `ActivityKind` ma swój kolor i ma go mieć **jeden** — oś planu
 /// i oś realizacji muszą dać się porównać wzrokiem.
-fn kolor_czynnosci(kind: magnat_core::ActivityKind) -> egui::Color32 {
+///
+/// Paleta kategorii, a nie stanu: kolor rozróżnia tu **rodzaj**, nie wartość, więc
+/// mieszka obok konsumenta (`ui-design.md` §3.1). Jedyny wyjątek to praca — ta bierze
+/// `accent`, bo to, co należy do gracza i jego pracy, ma w całej grze jeden kolor.
+fn kolor_czynnosci(theme: &Theme, kind: magnat_core::ActivityKind) -> egui::Color32 {
     use magnat_core::ActivityKind as A;
     match kind {
+        A::Work => theme.color(ColorToken::Accent),
         A::Sleep => egui::Color32::from_rgb(70, 80, 130),
-        A::Work => egui::Color32::from_rgb(80, 120, 170),
         A::Eat => egui::Color32::from_rgb(180, 140, 70),
         A::Shop => egui::Color32::from_rgb(160, 110, 160),
         A::Commute => egui::Color32::from_rgb(110, 110, 110),
@@ -47,6 +56,70 @@ fn kolor_czynnosci(kind: magnat_core::ActivityKind) -> egui::Color32 {
         A::Errand => egui::Color32::from_rgb(130, 130, 90),
         A::Idle => egui::Color32::from_rgb(100, 100, 100),
     }
+}
+
+/// Rysuje [`Rich`] i zwraca podmiot, w którego odnośnik gracz właśnie kliknął.
+///
+/// Kawałki składają się w wiersze: kawałek kończący się znakiem nowej linii domyka
+/// wiersz. Dzięki temu ta sama funkcja rysuje dzisiejsze karty (jeden kawałek = jedna
+/// linia) i karty `M9c`, w których odnośnik siedzi w środku zdania.
+pub fn rich(ui: &mut egui::Ui, theme: &Theme, r: &Rich) -> Option<Subject> {
+    let mut klik = None;
+    let mut wiersz: Vec<&Span> = Vec::new();
+    ui.vertical(|ui| {
+        for s in r {
+            wiersz.push(s);
+            if s.text.ends_with('\n') {
+                klik = wiersz_rich(ui, theme, &wiersz).or(klik);
+                wiersz.clear();
+            }
+        }
+        if !wiersz.is_empty() {
+            klik = wiersz_rich(ui, theme, &wiersz).or(klik);
+        }
+    });
+    klik
+}
+
+fn wiersz_rich(ui: &mut egui::Ui, theme: &Theme, wiersz: &[&Span]) -> Option<Subject> {
+    if wiersz
+        .iter()
+        .all(|s| s.text.trim_end_matches('\n').is_empty())
+    {
+        ui.add_space(theme.gap(2));
+        return None;
+    }
+    let mut klik = None;
+    ui.horizontal_wrapped(|ui| {
+        // Bez odstępu między kawałkami: wiersz karty jest jednym zdaniem, a nie
+        // listą elementów — spacje są w treści, nie w układzie.
+        ui.spacing_mut().item_spacing.x = 0.0;
+        for s in wiersz {
+            let tekst = s.text.trim_end_matches('\n');
+            if tekst.is_empty() {
+                continue;
+            }
+            // Monospace dla wszystkiego, co stoi w kolumnie: karty składają się
+            // z wierszy wyrównanych spacjami i font proporcjonalny by je rozjechał.
+            let rt = egui::RichText::new(tekst)
+                .font(theme.mono(TextRole::Body))
+                .color(theme.span_color(s.style));
+            match s.link {
+                Some(cel) => {
+                    if ui.link(rt).clicked() {
+                        klik = Some(cel);
+                    }
+                }
+                None if s.style == SpanStyle::Emphasis => {
+                    ui.label(rt.strong());
+                }
+                None => {
+                    ui.label(rt);
+                }
+            }
+        }
+    });
+    klik
 }
 
 /// Pasek sterowania czasem: data, godzina, cztery przyciski prędkości.
@@ -80,7 +153,7 @@ pub fn time_bar(
 /// Skala jest stała — cała doba na całej dostępnej szerokości — bo oś służy do
 /// porównania planu z realizacją, a nie do oglądania jednej godziny. Rozjazd powyżej
 /// progu z [`DRIFT_HIGHLIGHT_MIN`](crate::DRIFT_HIGHLIGHT_MIN) dostaje obwódkę.
-pub fn day_timeline(ui: &mut egui::Ui, m: &CitizenModel, c: &Catalog, l: Locale) {
+pub fn day_timeline(ui: &mut egui::Ui, theme: &Theme, m: &CitizenModel, c: &Catalog, l: Locale) {
     const WYS: f32 = 18.0;
     let wiersze = m.timeline().rows(c, l);
     let szerokosc = ui.available_width().max(120.0);
@@ -94,7 +167,7 @@ pub fn day_timeline(ui: &mut egui::Ui, m: &CitizenModel, c: &Catalog, l: Locale)
         let x = rect.left() + h as f32 * 60.0 * na_minute;
         malarz.line_segment(
             [egui::pos2(x, rect.top()), egui::pos2(x, rect.bottom())],
-            egui::Stroke::new(1.0, egui::Color32::from_gray(60)),
+            egui::Stroke::new(1.0, theme.color(ColorToken::LineStrong)),
         );
     }
 
@@ -107,7 +180,7 @@ pub fn day_timeline(ui: &mut egui::Ui, m: &CitizenModel, c: &Catalog, l: Locale)
             malarz.rect_stroke(
                 r,
                 2.0,
-                egui::Stroke::new(2.0, egui::Color32::from_rgb(230, 120, 60)),
+                egui::Stroke::new(2.0, theme.color(ColorToken::Warn)),
                 egui::StrokeKind::Inside,
             );
         }
@@ -118,7 +191,7 @@ pub fn day_timeline(ui: &mut egui::Ui, m: &CitizenModel, c: &Catalog, l: Locale)
             rect.top(),
             r.start_min,
             r.end_min % 1440,
-            kolor_czynnosci(r.kind),
+            kolor_czynnosci(theme, r.kind),
             r.drifted(),
         );
     }
@@ -129,7 +202,7 @@ pub fn day_timeline(ui: &mut egui::Ui, m: &CitizenModel, c: &Catalog, l: Locale)
             rect.top() + WYS + 4.0,
             b.start_min,
             b.end_min.min(1440),
-            kolor_czynnosci(kind).gamma_multiply(0.75),
+            kolor_czynnosci(theme, kind).gamma_multiply(0.75),
             false,
         );
     }
@@ -149,7 +222,7 @@ pub fn day_timeline(ui: &mut egui::Ui, m: &CitizenModel, c: &Catalog, l: Locale)
         }
         let tekst = egui::RichText::new(wiersz).small();
         ui.label(if r.drifted() {
-            tekst.color(egui::Color32::from_rgb(230, 120, 60))
+            tekst.color(theme.color(ColorToken::Warn))
         } else {
             tekst
         });
@@ -165,7 +238,7 @@ pub fn day_timeline(ui: &mut egui::Ui, m: &CitizenModel, c: &Catalog, l: Locale)
 }
 
 /// Paski dwunastu potrzeb z tooltipem „tempo spadku i skutek deprywacji" (§5.11 pkt 2).
-pub fn needs(ui: &mut egui::Ui, card: &CitizenCard) {
+pub fn needs(ui: &mut egui::Ui, theme: &Theme, card: &CitizenCard) {
     for n in &card.needs {
         ui.horizontal(|ui| {
             ui.add_sized(
@@ -174,10 +247,10 @@ pub fn needs(ui: &mut egui::Ui, card: &CitizenCard) {
             );
             let (rect, odp) = ui.allocate_exact_size(egui::vec2(120.0, 12.0), egui::Sense::hover());
             let p = ui.painter_at(rect);
-            p.rect_filled(rect, 2.0, egui::Color32::from_gray(45));
+            p.rect_filled(rect, 2.0, theme.color(ColorToken::BgCard));
             let mut wypelnienie = rect;
             wypelnienie.set_width(rect.width() * f32::from(n.level) / 100.0);
-            p.rect_filled(wypelnienie, 2.0, kolor_potrzeby(n.level, n.critical));
+            p.rect_filled(wypelnienie, 2.0, kolor_potrzeby(theme, n.level, n.critical));
             odp.on_hover_text(&n.tooltip);
             ui.label(
                 egui::RichText::new(format!("{}", n.level))
@@ -189,7 +262,7 @@ pub fn needs(ui: &mut egui::Ui, card: &CitizenCard) {
 }
 
 /// Cała karta mieszkańca w kolejności z §5.11.
-pub fn citizen_card(ui: &mut egui::Ui, m: &CitizenModel, c: &Catalog, l: Locale) {
+pub fn citizen_card(ui: &mut egui::Ui, theme: &Theme, m: &CitizenModel, c: &Catalog, l: Locale) {
     let card = &m.card;
     ui.label(
         egui::RichText::new(c.fmt_key(
@@ -210,7 +283,7 @@ pub fn citizen_card(ui: &mut egui::Ui, m: &CitizenModel, c: &Catalog, l: Locale)
     ui.separator();
 
     ui.label(egui::RichText::new(c.fmt_key(l, "ui.card.needs", &[])).strong());
-    needs(ui, card);
+    needs(ui, theme, card);
     ui.separator();
 
     ui.label(egui::RichText::new(c.fmt_key(l, "ui.card.wealth", &[])).strong());
@@ -222,7 +295,7 @@ pub fn citizen_card(ui: &mut egui::Ui, m: &CitizenModel, c: &Catalog, l: Locale)
         ui.horizontal(|ui| {
             ui.label(egui::RichText::new(c.fmt_key(l, klucz, &[])).small());
             ui.label(
-                egui::RichText::new(crate::zlotowki(kwota))
+                egui::RichText::new(crate::fmt::money(c, l, kwota))
                     .monospace()
                     .small(),
             );
@@ -241,83 +314,77 @@ pub fn citizen_card(ui: &mut egui::Ui, m: &CitizenModel, c: &Catalog, l: Locale)
     );
     ui.separator();
 
-    day_timeline(ui, m, c, l);
+    day_timeline(ui, theme, m, c, l);
 }
 
 /// Panel sklepu: rząd zakładek, nagłówek, treść wybranej zakładki (M5e §5.12).
 ///
-/// Zakładki są przyciskami dokładnie tak jak prędkości w [`time_bar`] — osobnej
-/// abstrakcji zakładek w tym crate nie ma i nie jest potrzebna. Treść idzie z karty
-/// w monospace: to ten sam tekst, który porównuje złoty test, więc test broni tego,
-/// co widzi gracz, a nie drugiej ścieżki obok (korekta E-8).
-pub fn shop_card(ui: &mut egui::Ui, card: &ShopCard, tab: &mut ShopTab, c: &Catalog, l: Locale) {
-    ui.horizontal(|ui| {
-        for t in ShopTab::ALL {
-            if ui.selectable_label(*tab == t, t.label(c, l)).clicked() {
-                *tab = t;
-            }
-        }
-    });
+/// Zakładki idą przez [`tab_strip`](crate::tab_strip), a treść przez [`rich`] —
+/// od M9b oba są wspólne dla każdej karty w grze (`Z-8`). Zwraca podmiot, w którego
+/// odnośnik gracz kliknął; dziś karta sklepu odnośników jeszcze nie ma, wpina je `M9c`.
+pub fn shop_card(
+    ui: &mut egui::Ui,
+    theme: &Theme,
+    card: &ShopCard,
+    tab: &mut ShopTab,
+    c: &Catalog,
+    l: Locale,
+) -> Option<Subject> {
+    crate::tab_strip(ui, theme, &ShopTab::ALL, tab, |t| t.label(c, l));
     ui.separator();
-    ui.label(egui::RichText::new(card.render_header(c, l)).monospace());
+    let a = rich(ui, theme, &card.render_header(c, l));
     ui.separator();
-    ui.label(egui::RichText::new(card.render_tab(c, l, *tab)).monospace());
+    let b = rich(ui, theme, &card.render_tab(c, l, *tab));
+    a.or(b)
 }
 
 /// Panel łańcucha dostaw: rząd zakładek, nagłówek, treść wybranej zakładki (WP13).
 ///
-/// Ten sam kształt co [`shop_card`] i z tego samego powodu: treść idzie z karty
-/// w monospace, więc złoty test broni dokładnie tego, co widzi gracz, a nie drugiej
-/// ścieżki obok.
+/// Ten sam kształt co [`shop_card`] i z tego samego powodu: treść idzie z karty,
+/// więc złoty test broni dokładnie tego, co widzi gracz, a nie drugiej ścieżki obok.
 pub fn supply_card(
     ui: &mut egui::Ui,
+    theme: &Theme,
     card: &crate::SupplyCard,
     tab: &mut crate::SupplyTab,
     c: &Catalog,
     l: Locale,
-) {
-    ui.horizontal(|ui| {
-        for t in crate::SupplyTab::ALL {
-            if ui.selectable_label(*tab == t, t.label(c, l)).clicked() {
-                *tab = t;
-            }
-        }
-    });
+) -> Option<Subject> {
+    crate::tab_strip(ui, theme, &crate::SupplyTab::ALL, tab, |t| t.label(c, l));
     ui.separator();
-    ui.label(egui::RichText::new(card.render_header(c, l)).monospace());
+    let a = rich(ui, theme, &card.render_header(c, l));
     ui.separator();
-    ui.label(egui::RichText::new(card.render_tab(c, l, *tab)).monospace());
+    let b = rich(ui, theme, &card.render_tab(c, l, *tab));
+    a.or(b)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::testing;
+    use crate::RichExt;
     use magnat_core::Tick;
 
-    /// Rysuje `zawartosc` w prawdziwym kontekście `egui` i zwraca każdy tekst, który
-    /// trafił na ekran. To jest test panelu, a nie modelu: przechodzi tylko wtedy,
-    /// gdy widget faktycznie się zbudował i nie spanikował po drodze.
-    fn narysuj(mut zawartosc: impl FnMut(&mut egui::Ui)) -> Vec<String> {
-        let ctx = egui::Context::default();
-        let mut wyjscie = ctx.run_ui(egui::RawInput::default(), &mut zawartosc);
-        let ksztalty = std::mem::take(&mut wyjscie.shapes);
-        wyjscie.drop_without_applying_deltas();
-        let mut teksty = Vec::new();
-        for k in &ksztalty {
-            zbierz(&k.shape, &mut teksty);
-        }
-        teksty
-    }
-
-    fn zbierz(s: &egui::epaint::Shape, out: &mut Vec<String>) {
-        match s {
-            egui::epaint::Shape::Text(t) => out.push(t.galley.text().to_string()),
-            egui::epaint::Shape::Vec(v) => {
-                for x in v {
-                    zbierz(x, out);
-                }
-            }
-            _ => {}
+    fn pusta_migawka() -> magnat_economy::ShopPanelSnapshot {
+        magnat_economy::ShopPanelSnapshot {
+            site: magnat_core::SiteId(magnat_core::Entity::new(1, std::num::NonZeroU32::MIN)),
+            firm: magnat_core::FirmId(magnat_core::Entity::new(1, std::num::NonZeroU32::MIN)),
+            kind: magnat_core::PlaceKind::Grocery,
+            at: Tick(0),
+            tracking: magnat_economy::LostSaleTracking::Histogram,
+            shelves: Vec::new(),
+            customers: magnat_economy::CustomerStats::default(),
+            lost_sales: magnat_economy::LostSalesView::default(),
+            competition: Vec::new(),
+            finance: magnat_economy::FinanceSummary {
+                statement: magnat_economy::IncomeStatement::default(),
+                balance: magnat_economy::BalanceSheet::default(),
+                cash: magnat_economy::CashFlow::default(),
+                inventory_value: magnat_core::Money::ZERO,
+                loan: None,
+            },
+            reprices: Vec::new(),
+            good_keys: Vec::new(),
         }
     }
 
@@ -326,7 +393,7 @@ mod tests {
         let c = Catalog::load().expect("data/locale/");
         for l in Locale::ALL {
             let w = TimeControlsWidget::new(Tick(0));
-            let teksty = narysuj(|ui| {
+            let teksty = testing::draw(|ui| {
                 let wybor = time_bar(ui, &w, &c, l);
                 // Bez zdarzeń wejścia nikt nic nie kliknął.
                 assert!(wybor.is_none());
@@ -352,29 +419,11 @@ mod tests {
     #[test]
     fn panel_sklepu_rysuje_zakladki_i_wybrana_tresc() {
         let c = Catalog::load().expect("data/locale/");
+        let theme = Theme::load().expect("data/ui/theme.ron");
         // Karta z pustej migawki: widget ma się zbudować także wtedy, gdy sklep
         // dopiero powstał — pusta zakładka to nie jest przypadek brzegowy, tylko
         // pierwsza minuta każdego zakładu.
-        let s = magnat_economy::ShopPanelSnapshot {
-            site: magnat_core::SiteId(magnat_core::Entity::new(1, std::num::NonZeroU32::MIN)),
-            firm: magnat_core::FirmId(magnat_core::Entity::new(1, std::num::NonZeroU32::MIN)),
-            kind: magnat_core::PlaceKind::Grocery,
-            at: Tick(0),
-            tracking: magnat_economy::LostSaleTracking::Histogram,
-            shelves: Vec::new(),
-            customers: magnat_economy::CustomerStats::default(),
-            lost_sales: magnat_economy::LostSalesView::default(),
-            competition: Vec::new(),
-            finance: magnat_economy::FinanceSummary {
-                statement: magnat_economy::IncomeStatement::default(),
-                balance: magnat_economy::BalanceSheet::default(),
-                cash: magnat_economy::CashFlow::default(),
-                inventory_value: magnat_core::Money::ZERO,
-                loan: None,
-            },
-            reprices: Vec::new(),
-            good_keys: Vec::new(),
-        };
+        let s = pusta_migawka();
         for l in Locale::ALL {
             let card = crate::ShopCard::build(
                 &c,
@@ -386,7 +435,9 @@ mod tests {
                 },
             );
             let mut tab = ShopTab::Customers;
-            let teksty = narysuj(|ui| shop_card(ui, &card, &mut tab, &c, l));
+            let teksty = testing::draw(|ui| {
+                shop_card(ui, &theme, &card, &mut tab, &c, l);
+            });
             let razem = teksty.join(" ");
             for t in ShopTab::ALL {
                 assert!(
@@ -394,14 +445,61 @@ mod tests {
                     "{l:?}: brak zakładki {t:?} w {razem}"
                 );
             }
-            assert!(
-                razem.contains(&card.render_tab(&c, l, ShopTab::Customers)),
-                "{l:?}: widget rysuje inną zakładkę niż wybrana"
-            );
+            // Treść rysuje się wiersz po wierszu, więc sprawdzamy każdy z osobna —
+            // to jest cała zmiana wobec M5e, w którym cała zakładka była jedną etykietą.
+            for w in card
+                .render_tab(&c, l, ShopTab::Customers)
+                .to_plain()
+                .lines()
+            {
+                assert!(
+                    razem.contains(w.trim_end()),
+                    "{l:?}: widget nie narysował wiersza `{w}`"
+                );
+            }
             assert!(
                 !razem.contains('{'),
                 "{l:?}: niepodstawiony parametr: {razem}"
             );
+        }
+    }
+
+    /// Kryterium WP3: przejście z `String` na [`Rich`] nie ruszyło ani jednego bajtu
+    /// tego, co widzi gracz.
+    ///
+    /// Sprawdzamy to na trzech istniejących kartach i **dwiema drogami**: złożony
+    /// wydruk (`render_text`, forma złotego testu) musi być identyczny z konkatenacją
+    /// kawałków nagłówka i wszystkich zakładek. Gdyby cięcie na kawałki gubiło
+    /// albo dokładało choćby znak nowej linii, ta równość by pękła.
+    #[test]
+    fn skladanie_kawalkow_daje_ten_sam_wydruk_co_zloty_test() {
+        let c = Catalog::load().expect("data/locale/");
+        let s = pusta_migawka();
+        for l in Locale::ALL {
+            let card = crate::ShopCard::build(
+                &c,
+                l,
+                &crate::ShopView {
+                    snapshot: &s,
+                    kind: s.kind,
+                    period_from: Tick(0),
+                },
+            );
+            let mut zlozone = card.render_header(&c, l).to_plain();
+            for t in ShopTab::ALL {
+                zlozone.push_str(&card.render_tab(&c, l, t).to_plain());
+            }
+            assert_eq!(zlozone, card.render_text(&c, l), "karta sklepu w {l:?}");
+            // Każdy kawałek jest wierszem: kończy się znakiem nowej linii i nie
+            // zawiera go w środku. To na tym stoi przypinanie odnośników w `M9c`.
+            for kawalek in card.render_tab(&c, l, ShopTab::Shelves) {
+                assert_eq!(
+                    kawalek.text.matches('\n').count(),
+                    usize::from(kawalek.text.ends_with('\n')),
+                    "kawałek niesie więcej niż jeden wiersz: {:?}",
+                    kawalek.text
+                );
+            }
         }
     }
 }

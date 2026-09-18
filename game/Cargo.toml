@@ -34,6 +34,10 @@ magnat-events = { workspace = true }
 magnat-spatial = { workspace = true }
 ron = { workspace = true }
 serde = { workspace = true }
+# Ekrany powłoki (WP14, `DE-7`). `egui` jest czystym procesorem bez GPU — rysowanie
+# trójkątów należy do `engine/render::ui` — więc bramka R-5 (zakaz `wgpu`
+# w przebiegu bezgłowym) nie drgnęła, a każdy ekran da się narysować w CI.
+egui = { workspace = true }
 
 [lints]
 workspace = true

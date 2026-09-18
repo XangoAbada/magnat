@@ -109,29 +109,30 @@ impl FirmCard {
 
     /// Nagłówek wspólny dla zakładek.
     #[must_use]
-    pub fn render_header(&self, c: &Catalog, l: Locale) -> String {
+    pub fn render_header(&self, c: &Catalog, l: Locale) -> crate::Rich {
         use std::fmt::Write;
         let mut s = c.fmt_key(l, "ui.firm.header", &[("firma", &self.name)]);
         s.push('\n');
         for w in &self.header {
             let _ = writeln!(s, "  {w}");
         }
-        s
+        crate::rich::lines_titled(&s)
     }
 
     /// Cała treść panelu jako tekst — forma testowalna w CI bez GPU.
     #[must_use]
     pub fn render_text(&self, c: &Catalog, l: Locale) -> String {
-        let mut s = self.render_header(c, l);
+        use crate::RichExt;
+        let mut s = self.render_header(c, l).to_plain();
         for t in FirmTab::ALL {
-            s.push_str(&self.render_tab(c, l, t));
+            s.push_str(&self.render_tab(c, l, t).to_plain());
         }
         s
     }
 
     /// Jedna zakładka — tego używa widget.
     #[must_use]
-    pub fn render_tab(&self, c: &Catalog, l: Locale, tab: FirmTab) -> String {
+    pub fn render_tab(&self, c: &Catalog, l: Locale, tab: FirmTab) -> crate::Rich {
         use std::fmt::Write;
         let wiersze = match tab {
             FirmTab::Sites => &self.sites,
@@ -147,7 +148,7 @@ impl FirmCard {
         for w in wiersze {
             let _ = writeln!(s, "  {w}");
         }
-        s
+        crate::rich::lines_titled(&s)
     }
 }
 

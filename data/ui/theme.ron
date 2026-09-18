@@ -1,0 +1,55 @@
+// Tokeny wyglądu interfejsu (`docs/ui-design.md` §3, M9b §5.14, `Z-6`).
+//
+// **To jest jedyne miejsce, w którym zapisany jest kolor interfejsu.** `engine/ui`
+// nie zna żadnego z nazwy własnej — motyw jasny i tryb wysokiego kontrastu (M12)
+// mają być podmianą tego pliku, a nie przeglądem dwudziestu paneli.
+//
+// Motyw domyślny jest **ciemny**, bo interfejs leży nad sceną 3D z pełnym zakresem
+// jasności: jasny HUD nad nocnym miastem oślepia, ciemny nad południowym placem
+// nadal się czyta.
+//
+// Kontrastu pilnuje test `kontrast_spelnia_wcag`: tekst do tła co najmniej 4,5:1,
+// element interaktywny co najmniej 3:1. Zmiana koloru łamiąca ten próg nie wejdzie.
+(
+    schema_version: 1,
+    colors: {
+        // Tła — trzy warstwy głębokości i podkład pod HUD nad sceną.
+        "bg.window":      (20, 23, 26, 255),
+        "bg.panel":       (30, 34, 38, 255),
+        "bg.card":        (35, 40, 48, 255),
+        "bg.overlay":     (16, 18, 21, 204),
+
+        // Linie: siatka tabeli i obramowanie panelu.
+        "line.soft":      (46, 53, 60, 255),
+        "line.strong":    (60, 68, 77, 255),
+
+        // Tekst. `text.disabled` pojawia się **zawsze z powodem obok** (§1 pkt 3).
+        "text.primary":   (228, 232, 236, 255),
+        "text.secondary": (154, 164, 174, 255),
+        "text.disabled":  (98, 108, 118, 255),
+
+        // `accent` to zarazem kolor czynności `Work` na osi dnia: to, co należy
+        // do gracza i jego pracy, ma w całej grze jeden kolor.
+        "accent":         (80, 120, 170, 255),
+        "accent.hi":      (111, 160, 220, 255),
+
+        // Trzy kolory stanu — dokładnie te, którymi M3 malował paski potrzeb.
+        // Trzy progi, nie gradient: „dobrze / słabo / źle" jednym spojrzeniem.
+        "ok":             (90, 160, 100, 255),
+        "warn":           (200, 160, 60, 255),
+        "danger":         (200, 70, 60, 255),
+        "info":           (80, 120, 170, 255),
+    },
+    // Sześć ról z §3.2, w kolejności: micro, body, strong, title, screen, hero.
+    // Rozmiar w pikselach **logicznych** — mnożenie przez `ui_scale` robi `egui`.
+    text: [
+        (size: 11.0, strong: false),
+        (size: 13.0, strong: false),
+        (size: 13.0, strong: true),
+        (size: 15.0, strong: true),
+        (size: 20.0, strong: true),
+        (size: 28.0, strong: true),
+    ],
+    // Siatka 4 px (§3.3). Wszystkie odstępy w grze są jej wielokrotnością.
+    grid: 4,
+)

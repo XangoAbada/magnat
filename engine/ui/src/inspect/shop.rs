@@ -101,7 +101,7 @@ impl ShopCard {
     /// Nagłówek wspólny dla zakładek: co to za zakład, z kiedy są dane i jak stoją
     /// finanse. Osobno od zakładek, bo widget rysuje go nad nimi, a nie w każdej.
     #[must_use]
-    pub fn render_header(&self, c: &Catalog, l: Locale) -> String {
+    pub fn render_header(&self, c: &Catalog, l: Locale) -> crate::Rich {
         use std::fmt::Write;
         let mut s = c.fmt_key(
             l,
@@ -116,23 +116,24 @@ impl ShopCard {
         for w in &self.header {
             let _ = writeln!(s, "  {w}");
         }
-        s
+        crate::rich::lines_titled(&s)
     }
 
     /// Cała treść panelu jako tekst — wszystkie trzy zakładki pod sobą.
     /// To jest forma testowalna w CI bez GPU i to ona jest złotym wydrukiem.
     #[must_use]
     pub fn render_text(&self, c: &Catalog, l: Locale) -> String {
-        let mut s = self.render_header(c, l);
+        use crate::RichExt;
+        let mut s = self.render_header(c, l).to_plain();
         for t in ShopTab::ALL {
-            s.push_str(&self.render_tab(c, l, t));
+            s.push_str(&self.render_tab(c, l, t).to_plain());
         }
         s
     }
 
     /// Jedna zakładka — tego używa widget.
     #[must_use]
-    pub fn render_tab(&self, c: &Catalog, l: Locale, tab: ShopTab) -> String {
+    pub fn render_tab(&self, c: &Catalog, l: Locale, tab: ShopTab) -> crate::Rich {
         use std::fmt::Write;
         let wiersze = match tab {
             ShopTab::Shelves => &self.shelves,
@@ -146,7 +147,7 @@ impl ShopCard {
         for w in wiersze {
             let _ = writeln!(s, "  {w}");
         }
-        s
+        crate::rich::lines_titled(&s)
     }
 }
 

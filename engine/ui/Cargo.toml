@@ -30,6 +30,16 @@ serde = { workspace = true }
 [dev-dependencies]
 # Tylko po to, żeby złoty test mógł zbudować `LedgerEntry` z prawdziwym `EdgeId`.
 magnat-nav = { workspace = true }
+criterion = { workspace = true }
+
+# Budżety klatki z §7 dokumentu fazy M9 — tabela, wykres, mapa cieplna.
+[[bench]]
+name = "ui_bench"
+harness = false
+
+[lib]
+# Testy jednostkowe nie są benchmarkami — patrz komentarz w `engine/ecs/Cargo.toml`.
+bench = false
 
 [lints]
 workspace = true

@@ -5,27 +5,37 @@ use clap::Parser;
 #[derive(Parser, Debug)]
 #[command(
     name = "magnat",
-    about = "Symulator miasta i gospodarki — podgląd świata (M1)"
+    about = "Symulator miasta i gospodarki. Bez argumentów: menu główne i kreator świata."
 )]
 pub(crate) struct Args {
     /// Ziarno świata, dziesiętnie albo `0x…`.
-    #[arg(long, default_value = "0xC0FFEE")]
-    pub(crate) seed: String,
+    ///
+    /// **Podanie któregokolwiek parametru świata omija powłokę** i stawia miasto
+    /// od razu (M9b/WP14). Bez nich `magnat` zaczyna od menu głównego, a parametry
+    /// wybiera się w kreatorze — to jest droga dla gracza, ta niżej dla nas.
+    #[arg(long)]
+    pub(crate) seed: Option<String>,
 
     /// `4km` | `8km` | `12km` | `16km`.
-    #[arg(long, default_value = "8km")]
-    pub(crate) size: String,
+    #[arg(long)]
+    pub(crate) size: Option<String>,
 
     /// `coastal`/`nadmorski`, `mountain`/`gorski`, `lowland`/`nizinny`,
     /// `river`/`rzeczny`, `desert`/`pustynny`.
-    #[arg(long, default_value = "river")]
-    pub(crate) region: String,
+    #[arg(long)]
+    pub(crate) region: Option<String>,
 
-    #[arg(long, default_value = "1990")]
-    pub(crate) epoch: String,
+    /// `1950` | `1970` | `1990` | `2010` | `2020`.
+    #[arg(long)]
+    pub(crate) epoch: Option<String>,
 
-    #[arg(long, default_value = "mixed")]
-    pub(crate) profile: String,
+    /// `industrial` | `port` | `university` | `tourist` | `agricultural` | `mixed`.
+    #[arg(long)]
+    pub(crate) profile: Option<String>,
+
+    /// `easy` | `normal` | `hard` | `brutal`.
+    #[arg(long)]
+    pub(crate) difficulty: Option<String>,
 
     /// Liczba wątków generacji i meshingu; 0 = liczba rdzeni.
     #[arg(long, default_value_t = 0)]
@@ -123,10 +133,63 @@ pub(crate) struct Args {
     #[arg(long, default_value_t = 1)]
     pub(crate) speed: u32,
 
-    /// Język interfejsu: `pl` albo `en`. Tekst w UI zawsze pochodzi z `data/locale/`
-    /// w obu wersjach (CLAUDE.md), więc przełącznik nie ma prawa czegokolwiek zgubić.
-    #[arg(long, default_value = "pl")]
-    pub(crate) locale: String,
+    /// Język interfejsu: `pl` albo `en`. Bez tego argumentu bierze się go z profilu
+    /// gracza, czyli z tego, co wybrano w ustawieniach ostatnim razem.
+    #[arg(long)]
+    pub(crate) locale: Option<String>,
+}
+
+impl Args {
+    /// Parametry świata z wiersza poleceń albo `None`, jeśli żadnego nie podano.
+    ///
+    /// `None` znaczy „idź do menu głównego". Wystarczy **jeden** parametr, żeby ominąć
+    /// powłokę: `magnat --seed 7` ma dalej stawiać świat od razu, bo tą drogą chodzą
+    /// zrzuty, przeloty pomiarowe i test bufora identyfikatorów.
+    ///
+    /// # Errors
+    /// Nieznana wartość któregokolwiek parametru.
+    pub(crate) fn world_params(
+        &self,
+    ) -> Result<Option<magnat_world::WorldGenParams>, Box<dyn std::error::Error>> {
+        let podano = self.seed.is_some()
+            || self.size.is_some()
+            || self.region.is_some()
+            || self.epoch.is_some()
+            || self.profile.is_some()
+            || self.difficulty.is_some()
+            // `--no-city` bez ziarna też znaczy „pokaż mi teren", a nie „pokaż menu".
+            || self.no_city;
+        if !podano {
+            return Ok(None);
+        }
+        let d = magnat_world::WorldGenParams::default();
+        Ok(Some(magnat_world::WorldGenParams {
+            seed: match &self.seed {
+                Some(s) => parse_seed(s)?,
+                None => 0x00C0_FFEE,
+            },
+            size: match &self.size {
+                Some(s) => s.parse()?,
+                None => magnat_world::WorldSize::Medium8km,
+            },
+            region: match &self.region {
+                Some(s) => s.parse()?,
+                None => magnat_world::Region::River,
+            },
+            epoch: match &self.epoch {
+                Some(s) => s.parse()?,
+                None => d.epoch,
+            },
+            profile: match &self.profile {
+                Some(s) => s.parse()?,
+                None => d.profile,
+            },
+            difficulty: match &self.difficulty {
+                Some(s) => s.parse()?,
+                None => d.difficulty,
+            },
+        }))
+    }
 }
 
 /// `HH` albo `HH:MM` na minutę doby.

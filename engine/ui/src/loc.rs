@@ -39,11 +39,15 @@ impl Locale {
         }
     }
 
-    /// Ile form liczebnika ma ten język. Polski trzy (1 · 2–4 · 5+), angielski dwie.
+    /// Ile form liczebnika ma ten język.
+    ///
+    /// Polski **cztery**, nie trzy: do `one` (1), `few` (2–4) i `many` (5+) dochodzi
+    /// CLDR-owe `other`, czyli forma dla wartości **ułamkowej** — „1,5 sklepu",
+    /// a nie „1,5 sklep" ani „1,5 sklepy". Angielski dwie (`one`, `other`).
     #[must_use]
     pub const fn plural_forms(self) -> usize {
         match self {
-            Locale::Pl => 3,
+            Locale::Pl => 4,
             Locale::En => 2,
         }
     }
@@ -72,6 +76,18 @@ impl Locale {
                     2
                 }
             }
+        }
+    }
+
+    /// Indeks formy dla wartości **ułamkowej** (CLDR `other`).
+    ///
+    /// Osobna funkcja, a nie gałąź w [`Locale::plural_form`], bo ułamka nie da się
+    /// przekazać jako `u64` i udawanie, że się da, kończy się „1 sklep" przy 1,5.
+    #[must_use]
+    pub const fn plural_form_frac(self) -> usize {
+        match self {
+            Locale::Pl => 3,
+            Locale::En => 1,
         }
     }
 }
@@ -186,6 +202,24 @@ pub struct Catalog {
 impl Catalog {
     /// Wczytuje `pl.ron` i `en.ron` z `data/locale/` i sprawdza, że opisują to samo.
     pub fn load() -> Result<Catalog, LocError> {
+        Catalog::load_with(false)
+    }
+
+    /// Katalog w **pseudo-lokalizacji**: każdy napis wydłużony o 40 % i przepisany
+    /// znakami diakrytycznymi (`ui-design.md` §7, kryterium WP3 i WP14).
+    ///
+    /// Po co: napisy polskie bywają o tyle dłuższe od angielskich, a brak znaku
+    /// w atlasie fontów widać dopiero u gracza. Przekształcenie dzieje się **przy
+    /// ładowaniu**, nie przy odczycie, więc żaden panel nie ma o nim pojęcia i nie ma
+    /// gdzie go ominąć — a to jest cała wartość tego mechanizmu.
+    ///
+    /// # Errors
+    /// Jak [`Catalog::load`].
+    pub fn load_pseudo() -> Result<Catalog, LocError> {
+        Catalog::load_with(true)
+    }
+
+    fn load_with(pseudo: bool) -> Result<Catalog, LocError> {
         let dir = magnat_core::data_path("locale");
         let mut pliki: Vec<(Locale, BTreeMap<String, Entry>)> = Vec::new();
         for l in Locale::ALL {
@@ -243,6 +277,20 @@ impl Catalog {
                 entries[i].push(e);
             }
         }
+        if pseudo {
+            for jezyk in &mut entries {
+                for e in jezyk.iter_mut() {
+                    match e {
+                        Entry::One(s) => *s = pseudolokalizuj(s),
+                        Entry::Plural(f) => {
+                            for x in f.iter_mut() {
+                                *x = pseudolokalizuj(x);
+                            }
+                        }
+                    }
+                }
+            }
+        }
         Ok(Catalog { keys, entries })
     }
 
@@ -291,6 +339,25 @@ impl Catalog {
             Entry::One(s) => s,
         };
         podstaw(wzorzec, &[("n", &n.to_string())])
+    }
+
+    /// Forma liczebnikowa dla wartości **ułamkowej** (CLDR `other`): „1,5 sklepu".
+    ///
+    /// `units` jest w najmniejszej jednostce, `frac` to liczba cyfr po przecinku —
+    /// tak samo jak w [`crate::fmt::decimal`], bo to ta sama liczba widziana raz przez
+    /// gramatykę, a raz przez formatowanie. Wartość całkowita wraca do [`Catalog::plural`],
+    /// żeby „2,0 sklepu" nie wypierało „2 sklepów".
+    #[must_use]
+    pub fn plural_frac(&self, locale: Locale, key: LocKey, units: i64, frac: u32) -> String {
+        let dzielnik = 10i64.pow(frac);
+        if units % dzielnik == 0 {
+            return self.plural(locale, key, (units / dzielnik).unsigned_abs());
+        }
+        let wzorzec = match &self.entries[locale as usize][key.0 as usize] {
+            Entry::Plural(f) => f.get(locale.plural_form_frac()).map_or("", String::as_str),
+            Entry::One(s) => s,
+        };
+        podstaw(wzorzec, &[("n", &crate::fmt::decimal(locale, units, frac))])
     }
 
     /// Tekst z podstawieniami `{nazwa}`.
@@ -342,6 +409,64 @@ pub fn podstaw(wzorzec: &str, args: &[(&str, &str)]) -> String {
         reszta = &reszta[i + j + 1..];
     }
     out.push_str(reszta);
+    out
+}
+
+/// Przepisuje napis na pseudo-lokalizację: znaki diakrytyczne plus 40 % długości.
+///
+/// Podstawienia `{nazwa}` przechodzą **nietknięte** — inaczej pseudo-katalog
+/// przestałby podstawiać cokolwiek i test mierzyłby własną awarię zamiast układu.
+#[must_use]
+fn pseudolokalizuj(wzorzec: &str) -> String {
+    let podmien = |c: char| match c {
+        'a' => 'ą',
+        'c' => 'ć',
+        'e' => 'ę',
+        'l' => 'ł',
+        'n' => 'ń',
+        'o' => 'ó',
+        's' => 'ś',
+        'z' => 'ż',
+        'u' => 'ú',
+        'i' => 'í',
+        'A' => 'Ą',
+        'C' => 'Ć',
+        'E' => 'Ę',
+        'L' => 'Ł',
+        'N' => 'Ń',
+        'O' => 'Ó',
+        'S' => 'Ś',
+        'Z' => 'Ż',
+        'U' => 'Ú',
+        'I' => 'Í',
+        inny => inny,
+    };
+    let mut out = String::with_capacity(wzorzec.len() * 2);
+    out.push('[');
+    let mut w_klamrze = false;
+    let mut widoczne = 0usize;
+    for c in wzorzec.chars() {
+        match c {
+            '{' => {
+                w_klamrze = true;
+                out.push(c);
+            }
+            '}' => {
+                w_klamrze = false;
+                out.push(c);
+            }
+            _ if w_klamrze => out.push(c),
+            _ => {
+                widoczne += 1;
+                out.push(podmien(c));
+            }
+        }
+    }
+    // Wydłużenie o 40 % — tyle bywa różnicy między angielskim a polskim.
+    for _ in 0..widoczne.div_ceil(5) * 2 {
+        out.push('·');
+    }
+    out.push(']');
     out
 }
 

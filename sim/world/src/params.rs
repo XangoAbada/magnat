@@ -98,6 +98,20 @@ impl Epoch {
         }
     }
 
+    /// Klucz tekstowy epoki — ten sam, którym parsuje ją wiersz poleceń,
+    /// i człon klucza lokalizacji `ui.epoch.<key>`. Dopisane w M9b: kreator świata
+    /// (WP14) wypisuje warianty z `ALL`, a bez klucza musiałby je nazywać po swojemu.
+    #[must_use]
+    pub const fn key(self) -> &'static str {
+        match self {
+            Epoch::Y1950 => "1950",
+            Epoch::Y1970 => "1970",
+            Epoch::Y1990 => "1990",
+            Epoch::Y2010 => "2010",
+            Epoch::Y2020 => "2020",
+        }
+    }
+
     pub const ALL: &'static [Epoch] = &[
         Epoch::Y1950,
         Epoch::Y1970,
@@ -200,6 +214,27 @@ pub enum Difficulty {
     Normal,
     Hard,
     Brutal,
+}
+
+impl Difficulty {
+    /// Klucz tekstowy — ten sam, którym parsuje go wiersz poleceń, i człon klucza
+    /// lokalizacji `ui.difficulty.<key>`.
+    #[must_use]
+    pub const fn key(self) -> &'static str {
+        match self {
+            Difficulty::Easy => "easy",
+            Difficulty::Normal => "normal",
+            Difficulty::Hard => "hard",
+            Difficulty::Brutal => "brutal",
+        }
+    }
+
+    pub const ALL: &'static [Difficulty] = &[
+        Difficulty::Easy,
+        Difficulty::Normal,
+        Difficulty::Hard,
+        Difficulty::Brutal,
+    ];
 }
 
 /// Komplet parametrów generacji. W zapisie gry w całości (M1 §5.5).

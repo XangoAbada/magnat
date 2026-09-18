@@ -87,6 +87,7 @@ impl Streamer {
 
     /// Rozkład chunków po poziomach szczegółowości — do tytułu okna.
     #[must_use]
+    #[allow(dead_code)] // wraca do paska tytułu razem z panelem diagnostyki (M9e)
     pub fn opis(&self) -> String {
         let mut per_lod: BTreeMap<u8, usize> = BTreeMap::new();
         for slot in &self.na_gpu {
