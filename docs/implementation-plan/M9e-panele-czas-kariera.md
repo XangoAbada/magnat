@@ -24,7 +24,7 @@ Dziewięć paneli biznesowych z `PanelRegistry`, sterowanie czasem ze `StopCondi
 |---|---|---|---|---|
 | ✅ **WP10** | Panele biznesowe | WP5–WP9 | 9 paneli z §14.3: pulpit, zakład (Gantt), sklep, łańcuch dostaw (graf), rynek, ludzie, finanse, miasto, kronika + `PanelRegistry`; **komendy i wykonawcy** dla paneli operacyjnych (`DH-3`) | Każdy panel spełnia budżet klatki; z każdego panelu **operacyjnego** da się wydać co najmniej jedną `PlayerCommand` — lista w `PanelId::is_operational`, kronika jawnie pominięta (`DI-8`) |
 | ✅ **WP11** | Czas, śledzenie, kronika | WP5, WP10 | `TimeScale` (= `SimSpeed`, `DI-2`), `StopCondition` jako **zestaw** (`DI-1`), tryb „śledź", karta partii z pełnym śladem, magazyn kroniki zbierający dzienniki `sim/*` (`DI-4`) | Śledzenie partii od pola do półki z czasem i kosztem etapów; „zatrzymaj gdy brak towaru" działa przy 10× |
-| ✅ **WP12** | Kariera, scenariusze, porażka, onboarding | WP4, WP10, WP11 | `CareerTier`, `Scenario`/`Objective`/`Goal`, `WorldPatch`, 5 scenariuszy z §13.3 w `data/scenarios/scenarios.ron`, bankructwo osobiste, sukcesja, pomiar §20.3 z dziennika replayu | Scenariusz „Zbuduj sieć 50 sklepów" przechodzi do końca; bankructwo i śmierć nie kończą sesji; scenariusz samouczka mieści się w budżecie 12 interakcji |
+| 🔸 **WP12** | Kariera, scenariusze, porażka, onboarding | WP4, WP10, WP11 | `CareerTier`, `Scenario`/`Objective`/`Goal`, `WorldPatch`, 5 scenariuszy z §13.3 w `data/scenarios/scenarios.ron`, bankructwo osobiste, sukcesja, pomiar §20.3 z dziennika replayu | **Niespełnione w części „śmierć" i „samouczek"** — patrz `DI-33`. Domknięte: scenariusz sieci pięćdziesięciu przechodzi do końca, bankructwo nie kończy sesji, budżet dwunastu interakcji mierzony i dotrzymany |
 
 ---
 
@@ -282,3 +282,23 @@ wpisana do `R2`. Gwiazdka = usterka, która czyniła obietnicę podfazy nieprawd
 | DI-30 | **Marża „−0,50 %" wyświetlała się jako „0,50 %"** — znak brał się z części całkowitej, a ta dla wartości między −1 % a 0 jest zerem. Kolor obok liczył się poprawnie, więc tekst i kolor mówiły dwie różne rzeczy | Jedno wspólne `widgets::percent_bp`, znak z całości. Przy okazji marża pulpitu przestała jechać przez `as i32`, które przy sklepie o utargu rzędu złotówek zawijało stratę na plus |
 | DI-31 | Drobne, w jednym worku: `ComboBox` z jednym identyfikatorem dla wszystkich list (dwie listy w panelu łańcucha rozwijały się razem); klucz towaru brany z **etykiety** zamiast z katalogu; `Debug` enuma roli magazynu na ekranie; przyrost kosztu w karcie partii liczony od zera zamiast od etapu sprzed okna; wpłata na kampanię wyprowadzająca pieniądz **przed** sprawdzeniem, czy kampania istnieje; `set_assortment` zwracające `Ok` mimo niewykonania; `PanelView::table` i `filter` bez czytelnika; `day_to_minute` i `firm_of_ordinal` bez wołającego; graf z cyklem rozkładający dwa węzły na pięć warstw | Wszystkie naprawione. Trzy martwe funkcje wyszły z kodu, `Chronicle::count_event` dostał czytelnika (osiągnięcia emergentne w panelu Kronika), a `PanelView::days` — pisarza (zakres wykresu na pulpicie) |
 | DI-32 | **Kreator świata oferował jeden scenariusz.** Sześć scenariuszy z `data/scenarios/scenarios.ron` było nieosiągalnych z gry — wiersz „Scenariusz" miał na sztywno `[ScenarioId::SANDBOX]` | `Shell` czyta katalog przy starcie, a kreator pokazuje **opis wybranego** pod wierszem. Znalezione poza recenzją, przy sprawdzaniu, czy WP12 da się w ogóle zagrać |
+
+
+## Czego WP12 nie domyka
+
+Wpisane po recenzji odhaczenia. **`WP12` jest `🔸` w toku, nie `✅`**, a bramka 1
+fazy M9 wraca na otwartą: kryterium pakietu mówi „bankructwo **i śmierć** nie kończą
+sesji", a śmierć w grającej sesji nie jest w ogóle wykrywana.
+
+Reguła z `CLAUDE.md` brzmi „odhaczaj tylko to, co zweryfikowane", a testy WP12
+sprawdzały **komendy**, nie drogę, którą gracz do nich dochodzi. To jest ta sama
+klasa błędu, którą recenzja znalazła przy panelach (`DI-21`): kod jest, wejścia nie ma.
+
+| # | Czego brakuje | Co już jest | Czego trzeba |
+|---|---|---|---|
+| DI-33 ★ | **Śmierć postaci nie przełącza gry w sukcesję.** `legacy::check` nie ma ani jednego wołającego, a `GameState::{Succession, ScenarioEnd}` nie ma nikogo, kto je konstruuje — dwa warianty stanu, w które nie da się wejść (`K-67`) | `legacy::check` rozpoznaje zgon i niewypłacalność, `legacy::heir_of` wskazuje dziedzica, komendy `Succeed` i `ContinueAsNewCitizen` działają i mają test | Wołanie `legacy::check` raz na dobę w pętli gry i przejście stanu w kliencie oraz w przebiegu bezgłowym. Komentarz przy `GameState` twierdzi, że oba warianty przyszły „razem ze swoją treścią i ze swoimi ekranami" — nieprawda, poprawione |
+| DI-34 ★ | **Ekranów domknięcia scenariusza i spuścizny nie ma.** `DF-5` przypisywał je do WP12 razem z wariantami stanu; `ui-design.md` §6.6 opisuje, co mają rozliczać | `ScenarioOutcome` liczy się co dobę i ma test; `Chronicle` ma z czego złożyć kronikę dynastii | Dwa ekrany w `game::screens` i przejścia do nich. Bez nich `scenario_outcome()` ma czytelnika **wyłącznie w teście** — gracz nie dowie się, że wygrał |
+| DI-35 ★ | **Samouczka nie ma.** `Scenario::tutorial` jest flagą bez czytelnika; trzech kroków z §5.12 pkt 3 (kamera na domu, nakładka z dziurą, `OpenSite` + koszyk + cena), pomijalności i limitu czterdziestu słów nie zaimplementowano | Scenariusz „Pierwszy sklep" stawia niszę łatką i ma cele; `onboarding::measure` liczy budżet z dziennika i test go pilnuje | Skrypt samouczka (`TutorialScriptId` z §5.11) i jego wykonanie w kliencie. Metryka jest dziś **mierzona na przebiegu skryptowym testu**, a nie na drodze, którą przejdzie gracz |
+| DI-36 | **Panelu celów nie ma.** §5.11 obiecuje postęp `0..=10000 bp` „pokazywany w panelu celów"; `streak_progress_bp` nie ma czytelnika | `Goal::progress_bp`, `ScenarioState` i `fresh_objectives` liczą wszystko, czego panel potrzebuje | Zakładka celów w pulpicie albo dziesiąty panel w rejestrze |
+| DI-37 | **Gracz nie włącza i nie wyłącza warunków zatrzymania.** `StopWatch::set` i `ViewCommand::SetStopCondition` nie mają wołającego — zestaw jest uzbrojony na sztywno przy wejściu do świata | Warunki działają, zatrzask działa, `armed()` zwraca listę ze stanem | Lista warunków w interfejsie; bez niej gracz nie może wyłączyć tego, który mu przeszkadza |
+| DI-38 | **Panel sklepu nie pokazuje bieżącego celu zapasu.** `Market::restock_days` nie ma czytelnika, więc gracz naciska „7 dni", nie wiedząc, co jest ustawione teraz | Odczyt istnieje i jest przycięty do `u16` | Jeden wiersz w sekcji „Cel zapasu" |

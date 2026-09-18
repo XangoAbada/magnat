@@ -28,7 +28,7 @@ głębokości.
 | | |
 |---|---|
 | **Wejście** | M11e zamknięte (wszystkie bramki fazy M11), `master` zielony, `cargo check --workspace --all-targets` czysty. |
-| **Pakiety robocze** | R2-WP1…R2-WP26, rozdzielone na sześć podfaz `R2a`…`R2f` |
+| **Pakiety robocze** | R2-WP1…R2-WP29, rozdzielone na sześć podfaz `R2a`…`R2f` |
 | **Wynik do pokazania** | `headless m7-miasto --days 3600` z sekcją „Wykaz R2": dla każdego wiersza wykazu §11 status `zamknięta / przeniesiona / odrzucona / nie dotyczy` z liczbą, która to potwierdza. |
 | **Kryterium zamknięcia** | Kryteria R2-WP1…R2-WP26 (§4) plus siedem kryteriów akceptacji z §7. Twarde: **żadna pozycja wykazu §11 nie kończy R2 bez statusu** — zamknięta z testem albo przeniesiona z imiennym adresatem i powodem. |
 | **Poprzednia / następna** | `M11e-budzet-klatki.md` / `M12a-pamiec.md` |
@@ -172,7 +172,7 @@ dotyka 370 miejsc i każdy wcześniejszy pakiet, który dokłada powód, powięk
 | `R2c` | `R2c-rozjazdy-danych-i-kodu.md` | R2-WP12…R2-WP16 | Wiek produkcyjny, wartość czasu, substytucja, chodniki, martwe potrzeby |
 | `R2d` | `R2d-domkniecie-swiata.md` | R2-WP17…R2-WP19 | Kopalnie na złożach, gęstość firm, przechwytywanie rzek |
 | `R2e` | `R2e-dlug-i-martwy-kod.md` | R2-WP20…R2-WP23, R2-WP27, R2-WP28 | `DecisionReason`, generator dróg, martwe warianty, dokumentacja, język identyfikatorów, liczba i tekst dla gracza |
-| `R2f` | `R2f-pomiar-i-bramki.md` | R2-WP24…R2-WP26 | Filtry bramek G4/G11, testy miasta, egzekutor rejestru długu |
+| `R2f` | `R2f-pomiar-i-bramki.md` | R2-WP24…R2-WP26, R2-WP29 | Filtry bramek G4/G11, testy miasta, egzekutor rejestru długu, budżety grafu i Gantta z M9e |
 
 Tabela pakietów z rozmiarami i statusem stoi w dokumencie każdej podfazy. Zbiorczo:
 
@@ -206,6 +206,7 @@ Tabela pakietów z rozmiarami i statusem stoi w dokumencie każdej podfazy. Zbio
 | R2-WP26 | Egzekutor rejestru długu | R2f | — | S | `[ ]` |
 | R2-WP27 | Jeden język w kodzie: identyfikatory i komunikaty | R2e | — | zależny od `D-N19` | `[ ]` |
 | R2-WP28 | Liczba i tekst dla gracza bez niespodzianek | R2e | — | S | `[ ]` |
+| R2-WP29 | Budżety grafu, Gantta i panelu zmierzone | R2f | M9e | S | `[ ]` |
 
 `⇧` = kandydat do wyprzedzenia przed R2 zgodnie z §2b.
 

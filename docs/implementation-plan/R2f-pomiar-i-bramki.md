@@ -216,3 +216,21 @@ Zgodnie z `K-18`. Wpisane jest **tylko to, co wiadomo na pewno** po zamknięciu 
 | # | Zmiana | Dlaczego |
 |---|---|---|
 | | *(tabela wypełnia się w trakcie R2f)* | |
+
+
+### R2-WP29 — Budżety grafu, Gantta i panelu [S]
+
+**Zależności:** M9e (`GraphView`, `GanttView`, `Panels`).
+
+§7 dokumentu M9 podaje trzy budżety, których **nikt nie zmierzył**: graf łańcucha
+dostaw 500 węzłów / 2000 krawędzi rysowany w ≤ 0,8 ms i układany w ≤ 50 ms poza
+klatką, Gantt 500 pasków w ≤ 0,4 ms, przebudowa pojedynczego panelu w ≤ 2,0 ms.
+M9e zdał bramkę „klatka bez zmian danych nie przebudowuje modelu" testem licznika
+przebudów — i to jest inna rzecz niż czas.
+
+Benchmark idzie do `engine/ui/benches/ui_bench.rs`, obok pomiarów `Table`, `Series`
+i `HeatmapThumb` z M9b, i na tej samej uprzęży bezgłowej.
+
+**Kryterium ukończenia:** trzy pomiary w raporcie `criterion`, każdy z medianą pod
+swoim budżetem; graf i Gantt zasilone **danymi z przebiegu**, a nie zbudowanymi na
+potrzeby pomiaru (`DE-5` — dokładnie dlatego nie powstały w M9b).

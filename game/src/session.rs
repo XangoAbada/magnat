@@ -42,8 +42,11 @@ use crate::world::{stand_up, BuiltCity, StandingReport};
 /// Menu pauzy jest za to zwykłym `ShellScreen::Pause`: stan się zmienia, ale sesja
 /// zostaje w pamięci i zegar stoi, więc powrót do gry nie wczytuje niczego.
 ///
-/// Wariantów jest siedem: `Succession` i `ScenarioEnd` doszły w `M9e` razem ze
-/// swoją treścią i ze swoimi ekranami (`DF-5`).
+/// Wariantów jest siedem. `Succession` i `ScenarioEnd` doszły w `M9e` razem ze swoją
+/// **treścią** — sukcesja ma komendy i dziedzica, domknięcie scenariusza ma rozliczenie
+/// celów — ale **nie ze swoimi ekranami i nie z przejściem**: nikt ich dziś nie
+/// konstruuje, a `legacy::check` nie ma wołającego. To jest `DI-33` i `DI-34`
+/// w `M9e-panele-czas-kariera.md`, wpisane jako brak, a nie przemilczane.
 pub enum GameState {
     /// Wszystko poza rozgrywką — §5.13.
     Shell(ShellScreen),
