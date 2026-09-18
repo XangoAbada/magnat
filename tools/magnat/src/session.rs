@@ -1,16 +1,18 @@
-//! Stan gry w kliencie: powłoka, generacja świata, wejście do miasta i sloty zapisu.
+//! Stan gry w kliencie: powłoka, generacja świata i wejście do miasta.
 //!
 //! Drugi temat pliku [`crate::app`] — i dlatego osobny plik. Tam jest **klatka**:
 //! okno, kamera, render i wejście. Tutaj jest **droga do świata**: co się dzieje
-//! między menu głównym a stojącym miastem, i co robi „Zapisz" oraz „Wczytaj".
+//! między menu głównym a stojącym miastem.
 //!
 //! Granica przebiega tam, gdzie zwykle: rzeczy, które dzieją się co klatkę, zostają
-//! w `app`; rzeczy, które dzieją się przy zmianie stanu gry, są tutaj.
+//! w `app`; rzeczy, które dzieją się przy zmianie stanu gry, są tutaj. Zapis i odczyt
+//! slotu mieszkają od M9e obok, w [`crate::slots`] — to jedyna grupa metod w tym
+//! bloku, która opisywała plik na dysku, a nie przejście między stanami gry.
 //!
-//! `ponytail:` blok `impl` ma ~420 linii i zostaje jednym blokiem. Sufit nazwany:
-//! to jest jeden temat — przejścia między stanami gry — i każda z tych metod jest
-//! wołana z `wykonaj`. Podział po rzeczach („generacja", „zapisy") dałby dwa pliki
-//! po sto linii i trzeci z dyspozytorem, który i tak musi znać oba.
+//! `ponytail:` reszta zostaje jednym blokiem `impl`. Sufit nazwany: to jest jeden
+//! temat i każda z tych metod jest wołana z `wykonaj`. Podział po rzeczach
+//! („generacja", „kamera") dałby dwa pliki po sto linii i trzeci z dyspozytorem,
+//! który i tak musi znać oba.
 
 use crate::app::App;
 use crate::citizens;
@@ -19,7 +21,6 @@ use crate::{
     preview::{mapa_dalekiego_terenu, swiatla_testowe},
     stream,
 };
-use magnat_core::SimMinute;
 use magnat_game::screens::ShellAction;
 use magnat_game::shell::{NewGameParams, ShellScreen, WorldGenJob, WorldPreview};
 use magnat_game::{BuiltCity, GameState, Session, SessionOpts};
@@ -121,10 +122,11 @@ impl App {
                         self.pauza_menu = false;
                         // Ostatni ekran przed grą: kim chcesz być (WP4). Kandydaci
                         // powstają z **postawionego** świata, więc dopiero tutaj.
-                        if self.tryb_przegladu {
-                            // `--observe`: świat bez postaci i bez ekranu wyboru.
-                            // Ta sama droga, którą wybiera „Tylko oglądam", tylko
-                            // bez klikania — dla zrzutów, pomiarów i oglądania miasta.
+                        if self.shell.observe {
+                            // Tryb przeglądu: świat bez postaci i bez ekranu wyboru.
+                            // Flagę ustawia albo pozycja „Tryb przeglądu" w menu
+                            // głównym, albo `--observe` — jedna i ta sama, żeby
+                            // zrzut, pomiar i gracz szli tą samą drogą.
                             self.game = GameState::Playing(Box::new(session));
                         } else {
                             self.shell.candidates = magnat_game::player::candidates(
@@ -218,6 +220,12 @@ impl App {
         let mut akcja_edytora = magnat_game::policy::EditorAction::None;
         let mut akcja_panelu = magnat_game::PanelAction::None;
         let mut akcja_konca: Option<magnat_game::screens::ending::EndAction> = None;
+        // Esc nad grającym światem otwiera pauzę — i robi to **po stronie `egui`**,
+        // tak samo jak Esc na każdym ekranie powłoki. Czytamy go tutaj, a nie w pętli
+        // okna, bo inaczej oba miejsca widzą to samo naciśnięcie w tej samej klatce:
+        // pętla otwierała pauzę, a narysowane zaraz potem menu pauzy widziało ten sam
+        // klawisz i wracało do gry (`DE-13`).
+        let mut otworz_pauze = false;
 
         let out = ctx.clone().run_ui(wejscie, |ui| {
             if w_powloce {
@@ -250,10 +258,16 @@ impl App {
                 let (p, a) = c.draw(ui, &shell.theme, s);
                 predkosc = p;
                 akcja_panelu = a;
+                // Nad edytorem reguł Esc zamyka edytor (gałąź wyżej), więc tutaj
+                // nie dochodzi — jedno naciśnięcie, jeden skutek.
+                otworz_pauze = ui.input(|i| i.key_pressed(egui::Key::Escape));
             }
         });
         if let (Some(st), Some(w)) = (self.egui_state.as_mut(), self.window.as_ref()) {
             st.handle_platform_output(w, out.platform_output.clone());
+        }
+        if otworz_pauze {
+            self.pauza();
         }
         if let Some(a) = akcja {
             self.wykonaj(a);
@@ -285,7 +299,7 @@ impl App {
             }
             ShellAction::PlayHere => {
                 if let GameState::WorldReady { built, .. } =
-                    std::mem::replace(&mut self.game, GameState::Shell(ShellScreen::MainMenu))
+                    std::mem::replace(&mut self.game, GameState::Shell)
                 {
                     self.wejdz_do_swiata(*built);
                 }
@@ -319,6 +333,15 @@ impl App {
             ShellAction::PickCitizen(c) => self.wybierz_postac(Some(c)),
             ShellAction::PickRandomCitizen => self.wybierz_postac(None),
             ShellAction::Observe => self.wejdz_bez_postaci(),
+            // Do klienta nie ma prawa dojść: `Shell::draw` rozwiązuje cofnięcie
+            // do konkretnego celu, a ekran generacji i podgląd — jedyne spoza
+            // `ShellScreen` — zgłaszają od razu `CancelGeneration` i `BackToWizard`.
+            // Gdyby któryś z nich zaczął kiedyś zwracać `Back`, przycisk „Wstecz"
+            // przestałby działać bez jednego słowa — stąd asercja, a nie cisza.
+            ShellAction::Back => debug_assert!(
+                false,
+                "ShellAction::Back doszło do klienta — ekran spoza ShellScreen zwrócił cofnięcie, którego nikt nie rozwiązał"
+            ),
         }
     }
 
@@ -333,7 +356,7 @@ impl App {
     /// `NoCharacter`), a majątek w wierszu slotu jest zerem, bo nie ma czyjego liczyć.
     pub(crate) fn wejdz_bez_postaci(&mut self) {
         let GameState::CharacterSelect(session) =
-            std::mem::replace(&mut self.game, GameState::Shell(ShellScreen::MainMenu))
+            std::mem::replace(&mut self.game, GameState::Shell)
         else {
             return;
         };
@@ -349,7 +372,7 @@ impl App {
     /// **bez postaci**: to jest stan, w którym gracz ogląda miasto, a nie błąd.
     pub(crate) fn wybierz_postac(&mut self, kto: Option<magnat_core::CitizenId>) {
         let GameState::CharacterSelect(mut session) =
-            std::mem::replace(&mut self.game, GameState::Shell(ShellScreen::MainMenu))
+            std::mem::replace(&mut self.game, GameState::Shell)
         else {
             return;
         };
@@ -372,111 +395,43 @@ impl App {
         self.pauza_menu = false;
     }
 
+    /// Wraca do kreatora — z podglądu, z anulowanej generacji albo z ekranu postaci.
+    ///
+    /// **Porzuca świat, jeśli jakiś stoi.** Do M9e tego nie robiło i po cofnięciu
+    /// z podglądu w kliencie zostawały teren, strumieniowanie i miasto poprzedniego
+    /// przebiegu — niewidoczne, bo kreator ich nie rysuje, ale wciąż w pamięci.
     pub(crate) fn do_kreatora(&mut self) {
+        self.porzuc_swiat();
         let draft = self.shell.draft;
-        self.game = GameState::Shell(ShellScreen::NewGame { draft });
+        self.game = GameState::Shell;
         self.shell.go(ShellScreen::NewGame { draft });
     }
 
     /// Porzuca świat i wraca do menu głównego. Render zostaje bez sceny — to jest
     /// dokładnie ten stan, w którym gra startuje bez argumentów.
     pub(crate) fn opusc_swiat(&mut self) {
-        self.game = GameState::Shell(ShellScreen::MainMenu);
+        self.porzuc_swiat();
+        self.game = GameState::Shell;
+        self.shell.go(ShellScreen::MainMenu);
+    }
+
+    /// Zwalnia wszystko, co wisi na postawionym świecie. Sam `GameState` zostaje
+    /// bez zmian — ustawia go wołający, bo to on wie, dokąd gracz idzie.
+    fn porzuc_swiat(&mut self) {
         self.citizens = None;
         self.streamer = None;
         self.terrain = None;
         self.city = None;
         self.edits = Arc::new(EditIndex::default());
+        self.podglad_tex = None;
         self.pauza_menu = false;
         self.shell.has_session = false;
-        self.shell.go(ShellScreen::MainMenu);
-    }
-
-    /// Zapis slotu: nagłówek plus dziennik wejść (`DA-7`).
-    ///
-    /// Majątek w wierszu slotu to majątek gospodarstwa gracza (`M9c` WP4); świat bez
-    /// wybranej postaci zapisuje zero i to jest prawda, a nie zaślepka.
-    /// Nazwa „miasta" to nazwa pierwszej dzielnicy — własnej nazwy miasto nie ma.
-    pub(crate) fn zapisz(&mut self, id: u8) {
-        let Some(session) = self.game.session() else {
-            return;
-        };
-        let miasto = nazwa_miasta(session, self.params.seed);
-        // Majątek gracza to majątek jego gospodarstwa — jedna liczba, ta sama, którą
-        // pokazuje karta. Bez postaci zostaje zero i to jest prawda, a nie zaślepka.
-        let majatek = session
-            .player()
-            .and_then(|p| {
-                session
-                    .app
-                    .world
-                    .get::<magnat_agents::Household>(p.household.entity())
-                    .map(magnat_game::inspect::household_worth)
-            })
-            .unwrap_or(magnat_core::Money::ZERO);
-        let slot = magnat_game::SaveSlot {
-            id,
-            city: miasto,
-            game_date: SimMinute(session.tick().get()),
-            net_worth: majatek,
-            played_secs: u32::try_from(session.played_ms() / 1000).unwrap_or(u32::MAX),
-            world: self.params,
-            schema_version: magnat_game::SAVE_SCHEMA_VERSION,
-            saved_at_wall: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map_or(0, |d| d.as_secs()),
-        };
-        match magnat_game::save::write_slot(&self.zapisy, &slot, session.log()) {
-            Ok(()) => eprintln!("zapisano slot {id}"),
-            Err(e) => eprintln!("zapis slotu {id} nieudany: {e}"),
-        }
-        self.shell.refresh_slots(&self.zapisy);
-        self.pauza_menu = true;
-        self.shell.go(ShellScreen::Pause);
-    }
-
-    /// Wczytanie slotu: przewinięcie dziennika wejść.
-    ///
-    /// Kosztuje tyle, ile kosztowała rozgrywka (`DB-3`) i dlatego blokuje klatkę —
-    /// ekran mówi to wprost, zamiast udawać, że odtworzenie roku gry jest darmowe.
-    pub(crate) fn wczytaj(&mut self, id: u8) {
-        let log = match magnat_game::save::read_log(&self.zapisy, id) {
-            Ok(l) => l,
-            Err(e) => {
-                eprintln!("slot {id}: {e}");
-                return;
-            }
-        };
-        let pula = magnat_jobs::JobPool::new(self.watki);
-        let ticki = log.commands.last().map_or(0, |e| e.tick.get());
-        eprintln!("wczytuję slot {id}: odtwarzam {ticki} minut gry");
-        match magnat_game::replay_session(&log, ticki, 0, &pula) {
-            Ok((mut session, _)) => {
-                self.opusc_swiat();
-                self.params = log.header.params.world;
-                self.shell.draft = log.header.params;
-                self.terrain = Some(session.built.terrain.clone());
-                self.edits = Arc::new(session.built.city.edits.clone());
-                self.city = Some(session.built.city.clone());
-                let c = session.built.city.center;
-                self.cel = Some((c.x as i32, c.y as i32));
-                self.ustaw_kamere_startowa();
-                self.wpnij_render();
-                match citizens::Citizens::new(self.params.seed, self.shell.settings.locale) {
-                    Ok(mut ui) => {
-                        ui.warm_up(&mut session, 0, self.camera.eye());
-                        ui.set_speed(self.predkosc);
-                        ui.arm_stop_conditions();
-                        ui.start_tutorial(&session);
-                        self.citizens = Some(ui);
-                        self.game = GameState::Playing(Box::new(session));
-                        self.shell.has_session = true;
-                    }
-                    Err(e) => eprintln!("interfejs rozgrywki nieudany: {e}"),
-                }
-            }
-            Err(e) => eprintln!("slot {id}: nie udało się odtworzyć sesji: {e}"),
-        }
+        self.shell.candidates = Vec::new();
+        // Tryb przeglądu należy do **tej** rozgrywki, nie do profilu gracza:
+        // porzucony świat zabiera flagę ze sobą. Dziś nikt jej po drodze nie czyta,
+        // ale niezmiennika „w menu głównym flaga jest zgaszona" pilnowałby
+        // przypadek, a nie kod.
+        self.shell.observe = false;
     }
 
     /// Odbiera skończoną generację i przechodzi do podglądu świata.
@@ -485,7 +440,7 @@ impl App {
             return;
         }
         let GameState::Generating(job) =
-            std::mem::replace(&mut self.game, GameState::Shell(ShellScreen::MainMenu))
+            std::mem::replace(&mut self.game, GameState::Shell)
         else {
             return;
         };
@@ -525,18 +480,6 @@ impl App {
         };
         Some(ctx.load_texture("magnat.podglad", obraz, egui::TextureOptions::LINEAR))
     }
-}
-
-/// Nazwa dla wiersza slotu. Miasto nie ma własnej nazwy — bierzemy nazwę pierwszej
-/// dzielnicy, bo to jedyna prawdziwa nazwa, jaką ten świat niesie.
-fn nazwa_miasta(session: &Session, seed: u64) -> String {
-    session
-        .built
-        .city
-        .districts
-        .districts
-        .first()
-        .map_or_else(|| format!("{seed:#x}"), |d| d.name.clone())
 }
 
 // ── edytor reguł (`M9d` WP8) ────────────────────────────────────────────────────

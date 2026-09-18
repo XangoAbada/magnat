@@ -161,9 +161,41 @@ pub(crate) fn segment_row<T: Copy + PartialEq>(
     false
 }
 
-/// Tytuł ekranu powłoki plus podpowiedź o klawiszach.
-pub(crate) fn header(shell: &Shell, ui: &mut egui::Ui, title: &str) {
+/// Przycisk „Wstecz", ścieżka, tytuł ekranu i podpowiedź o klawiszach.
+///
+/// Zwraca `true`, gdy gracz kliknął „Wstecz" — ekran odpowiada na to tak samo jak
+/// na Esc, bo to jest ta sama intencja wyrażona myszą. Do M9e cofanie było wyłącznie
+/// klawiszem i nigdzie nie było go widać; gracz, który nie wiedział o Esc, nie miał
+/// z kreatora wyjścia innego niż wygenerowanie świata.
+///
+/// `sciezka` to klucze tekstów od korzenia do bieżącego ekranu. **Ekran o ścieżce
+/// jednoelementowej nie dostaje przycisku** — nie ma rodzica, do którego miałby
+/// wracać. Tak wypada menu główne i oba ekrany domknięcia.
+pub(crate) fn header(shell: &Shell, ui: &mut egui::Ui, title: &str, sciezka: &[&str]) -> bool {
     use magnat_ui::{ColorToken, TextRole};
+    let mut wstecz = false;
+    ui.horizontal_wrapped(|ui| {
+        if sciezka.len() > 1 {
+            wstecz = ui
+                .add(
+                    egui::Button::new(
+                        egui::RichText::new(shell.text("ui.shell.back"))
+                            .font(shell.theme.font(TextRole::Body))
+                            .color(shell.theme.color(ColorToken::TextPrimary)),
+                    )
+                    .fill(shell.theme.color(ColorToken::BgCard)),
+                )
+                .clicked();
+            ui.add_space(shell.theme.gap(2));
+        }
+        let kroki: Vec<String> = sciezka.iter().map(|k| shell.text(k)).collect();
+        ui.label(
+            egui::RichText::new(kroki.join(" / "))
+                .font(shell.theme.font(TextRole::Micro))
+                .color(shell.theme.color(ColorToken::TextSecondary)),
+        );
+    });
+    ui.add_space(shell.theme.gap(2));
     ui.label(
         egui::RichText::new(title)
             .font(shell.theme.font(TextRole::Screen))
@@ -175,4 +207,5 @@ pub(crate) fn header(shell: &Shell, ui: &mut egui::Ui, title: &str) {
             .color(shell.theme.color(ColorToken::TextSecondary)),
     );
     ui.add_space(shell.theme.gap(4));
+    wstecz
 }

@@ -87,3 +87,62 @@ fn pseudolokalizacja_wydluza_napis_i_zostawia_podstawienia() {
         assert!(!z.contains('{'), "niepodstawiony parametr: {z}");
     }
 }
+
+/// Ten sam pomiar co wyżej, ale na **całej treści obu plików lokalizacji**.
+///
+/// Powód jest empiryczny: podpowiedź klawiszy w powłoce („↑↓ wybór · ←→ zmiana…")
+/// wychodziła u gracza jako ciąg prostokątów, bo domyślny atlas `egui` nie ma
+/// znaków strzałek, a własnego kroju gra jeszcze nie wgrywa (`Theme::font`, M11).
+/// Lista znaków z góry by tego nie złapała — łapie to dopiero przejście po tekstach,
+/// które naprawdę jadą na ekran.
+///
+/// Test **nie czyta plików RON jako tekstu**: komentarze w nich są pełne znaków
+/// rysunkowych, których nikt nie wyświetla. Pyta katalog o wszystkie formy każdego
+/// klucza, czyli dokładnie o to, co zobaczy gracz.
+#[test]
+fn atlas_fontow_zna_wszystkie_znaki_z_lokalizacji() {
+    let c = Catalog::load().expect("data/locale/");
+    let mut znaki: std::collections::BTreeMap<char, String> = std::collections::BTreeMap::new();
+    for nazwa in c.keys() {
+        let k = c.must(nazwa);
+        for l in Locale::ALL {
+            let mut warianty = vec![c.text(l, k).to_string()];
+            // Formy liczebnikowe: 1 · 2–4 · 5+ · ułamek. Klucz nieliczebnikowy
+            // zwraca z nich ten sam napis, więc pytanie jest tanie i bezpieczne.
+            warianty.extend([0, 1, 2, 5].map(|n| c.plural(l, k, n)));
+            warianty.push(c.plural_frac(l, k, 15, 1));
+            for s in warianty {
+                for ch in s.chars() {
+                    if ch.is_whitespace() {
+                        continue;
+                    }
+                    znaki.entry(ch).or_insert_with(|| nazwa.clone());
+                }
+            }
+        }
+    }
+
+    let ctx = egui::Context::default();
+    let wszystkie: String = znaki.keys().collect();
+    let _ = testing::draw_in(&ctx, testing::input(testing::EKRAN), |ui| {
+        ui.label(&wszystkie);
+    });
+    let font = egui::FontId::proportional(13.0);
+    let zastepczy = ctx.fonts_mut(|f| f.glyph_width(&font, '\u{FFFD}'));
+
+    let mut brakujace: Vec<String> = Vec::new();
+    for (ch, klucz) in &znaki {
+        if *ch == '\u{FFFD}' {
+            continue;
+        }
+        let w = ctx.fonts_mut(|f| f.glyph_width(&font, *ch));
+        if w <= 0.0 || (w - zastepczy).abs() <= f32::EPSILON {
+            brakujace.push(format!("U+{:04X} `{ch}` (np. `{klucz}`)", *ch as u32));
+        }
+    }
+    assert!(
+        brakujace.is_empty(),
+        "znaki spoza atlasu fontów — gracz zobaczy prostokąty:\n  {}",
+        brakujace.join("\n  ")
+    );
+}

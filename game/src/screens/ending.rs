@@ -54,7 +54,7 @@ pub fn scenario_end(
         ScenarioOutcome::Lost => "ui.ending.lost",
         ScenarioOutcome::Running => "ui.ending.running",
     });
-    header(shell, ui, &tytul);
+    let _ = header(shell, ui, &tytul, &["ui.path.game"]);
 
     match session.scenario() {
         Some(sc) => {
@@ -137,7 +137,7 @@ pub fn succession(
 ) -> Option<EndAction> {
     let keys = Keys::read(ui);
     let tytul = shell.text("ui.legacy.title");
-    header(shell, ui, &tytul);
+    let _ = header(shell, ui, &tytul, &["ui.path.game"]);
 
     // Wiek **postaci**, nie świata. Dziedzic, który przejął firmy w pięćdziesiątym
     // roku gry, przeżył trzydzieści lat, a nie osiemdziesiąt — a tak właśnie brzmi

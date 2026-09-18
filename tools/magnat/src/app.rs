@@ -88,8 +88,6 @@ pub(crate) struct App {
     pub(crate) bez_ludzi: bool,
     /// `--no-economy`: świat bez rynku, czyli zachowanie sprzed M5 (`AB-2`).
     pub(crate) bez_gospodarki: bool,
-    /// `--observe`: wejście do świata bez postaci i bez ekranu wyboru (`DG-16`).
-    pub(crate) tryb_przegladu: bool,
     pub(crate) watki: usize,
     /// Ostatnia znana pozycja kursora w pikselach — bufor ID kopiuje piksel spod niej.
     pub(crate) kursor: Option<(u32, u32)>,
@@ -152,7 +150,7 @@ impl ApplicationHandler for App {
         // Świat z wiersza poleceń jest już postawiony — wystarczy go wpiąć.
         // Bez niego zostajemy w menu głównym i nie ma czego strumieniować.
         if let GameState::WorldReady { built, .. } =
-            std::mem::replace(&mut self.game, GameState::Shell(ShellScreen::MainMenu))
+            std::mem::replace(&mut self.game, GameState::Shell)
         {
             self.wejdz_do_swiata(*built);
         }
@@ -245,7 +243,7 @@ impl ApplicationHandler for App {
                 self.camera.orbit_zoom(0.9f32.powf(kroki));
             }
             WindowEvent::KeyboardInput { event, .. } if event.state == ElementState::Pressed => {
-                self.klawisz(event_loop, &event);
+                self.klawisz(&event);
             }
             WindowEvent::RedrawRequested => {
                 self.klatka();
@@ -263,23 +261,22 @@ impl ApplicationHandler for App {
 }
 
 impl App {
-    /// Klawiatura. W powłoce nie robi nic — tam klawisze obsługuje `egui` i ekrany
-    /// z `game::screens`; tutaj są wyłącznie skróty rozgrywki.
-    fn klawisz(&mut self, event_loop: &ActiveEventLoop, event: &winit::event::KeyEvent) {
-        if !self.game.is_playing() {
-            // Esc w powłoce cofa ekran; z menu głównego zamyka grę. Obsługę cofania
-            // ma `game::screens`, więc tu zostaje tylko wyjście.
-            if matches!(event.logical_key.as_ref(), Key::Named(NamedKey::Escape))
-                && matches!(self.game, GameState::Shell(ShellScreen::MainMenu))
-            {
-                event_loop.exit();
-            }
+    /// Klawiatura. W powłoce nie robi **nic** — tam klawisze należą do `egui`
+    /// i do ekranów z `game::screens`; tutaj są wyłącznie skróty rozgrywki.
+    ///
+    /// Granica jest twarda, bo do M9e nie była: ta funkcja obsługiwała Esc równolegle
+    /// z ekranem powłoki, a oba widziały **to samo** naciśnięcie w tej samej klatce.
+    /// Na ekranach powłoki wygrywało wyjście z gry, w menu pauzy — natychmiastowy
+    /// powrót do niej. Warunkiem jest `w_powloce()`, a nie `is_playing()`: menu pauzy
+    /// stoi nad grającą sesją i też jest powłoką.
+    fn klawisz(&mut self, event: &winit::event::KeyEvent) {
+        if self.w_powloce() {
             return;
         }
         match event.logical_key.as_ref() {
-            // Esc w grze otwiera menu pauzy, a nie zamyka okna: sesja zostaje
-            // w pamięci, a zegar staje przez `SimSpeed::Paused` (M9a §5.13).
-            Key::Named(NamedKey::Escape) => self.pauza(),
+            // Esc tu **nie ma** i mieć nie może: otwarcie pauzy czyta `buduj_ui`
+            // po stronie `egui`, bo tamten klawisz obsługuje też menu pauzy
+            // i oba miejsca widziałyby jedno naciśnięcie (`DE-13`).
             Key::Character("t") | Key::Character("T") => {
                 self.czas_x1000 = !self.czas_x1000;
             }
@@ -324,7 +321,7 @@ impl App {
         }
     }
 
-    fn pauza(&mut self) {
+    pub(crate) fn pauza(&mut self) {
         if let Some(c) = &mut self.citizens {
             c.set_speed(magnat_core::SimSpeed::Paused);
         }

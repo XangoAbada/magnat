@@ -1,4 +1,4 @@
-Anna Kowalska: bldg 1 → site 2
+Anna Kowalska: bldg 1 -> site 2
   left 07:20, arrived 07:54 — 34 minutes (planned: 28 minutes)
   6 minutes late
   mode chosen: car; bus would have cost 13.06 more
@@ -7,7 +7,7 @@ Options considered:
   × on foot                too far — 108 minutes one way
     bicycle                41.53 PLN = 41 minutes × 50 gr/min + 0.00 PLN + 21.03 PLN
   · public transport       34.99 PLN = 46 minutes × 50 gr/min + 2.40 PLN + 9.59 PLN
-  → own car                21.93 PLN = 28 minutes × 50 gr/min + 7.42 PLN + 0.51 PLN
+  > own car                21.93 PLN = 28 minutes × 50 gr/min + 7.42 PLN + 0.51 PLN
   × household car          someone else has the car (citizen 81)
   × taxi                   too expensive for this household — 31.80 PLN
 Travel time: driving 28 minutes · intersections 1 minute · queues 6 minutes

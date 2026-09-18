@@ -10,9 +10,10 @@ jak R1.
 
 R1 mierzył jedną rzecz — długość plików — i naprawiał ją jednym ruchem. R2 mierzy co innego:
 **rozjazd między tym, co dokumenty faz uznały za zamknięte, a tym, co robi kod**. Wykaz w §11 ma
-**67 wierszy** i powstał w czterech rzutach (dwa ostatnie wiersze wyszły z wykonania pozycji 1, 2 i 21 przed R2): 42 z przeglądu repozytorium po M7f, jeden dopisany
+**68 wierszy** i powstał w czterech rzutach (dwa ostatnie wiersze wyszły z wykonania pozycji 1, 2 i 21 przed R2): 42 z przeglądu repozytorium po M7f, jeden dopisany
 przy weryfikacji, trzy z przeglądów w trakcie M8, **dziesięć z recenzji przed commitem M9d**
-(pozycje 47–56), jeden z M9e (57) i **osiem z przeglądu sesji po M9e** (pozycje 58–65).
+(pozycje 47–56), jeden z M9e (57), **osiem z przeglądu sesji po M9e** (pozycje 58–65) i jeden z gry uruchomionej
+po M9e (68).
 Z pierwszego rzutu jedna pozycja miała pakiet, jedna okazała się rozstrzygnięta i wypadła,
 jedenaście stało zapisanych w tabelach korekt albo w rejestrze długu — **każda bez wykonawcy** —
 a dwadzieścia dziewięć nie było znanych planowi w żadnej postaci.
@@ -526,6 +527,7 @@ Ujednolicenie nagłówków jest zadaniem R2-WP23.
 ---
 | 66 | Dziecko poniżej wieku szkolnego nie blokuje dorosłego w gospodarstwie | zakres `R2-WP5` | R2-WP35 | `[ ]` |
 | 67 | Zakład sprzedający na eksport nie ma utargu w rachunku wyniku | — | R2-WP36 | `[ ]` |
+| 68 | **Strzałki `↑↓←→` wypadły z interfejsu, bo domyślny atlas `egui` ich nie ma** — do czasu M11 gra nie wgrywa własnego kroju (`Theme::font`). Napisy, które ich używały (podpowiedź klawiszy powłoki, nagłówek karty podróży, znacznik wybranej opcji), mówią to samo znakami z atlasu. Po wgraniu kroju w M11 sprawdzić, czy strzałki wracają: test `atlas_fontow_zna_wszystkie_znaki_z_lokalizacji` odpowie na to w jednym przebiegu. Sufit testu jest nazwany: chodzi po **katalogu**, więc nie widzi znaków zaszytych w kodzie rysującym (`>`, `·`, `×` w `engine/ui/src/inspect/trip.rs`, `−` w `fmt.rs`) | zapis `M9b` `DE-16` | M11 (`M11d` albo gdziekolwiek wchodzą fonty) | `[ ]` |
 
 ## 12. Szacunek wielkości
 

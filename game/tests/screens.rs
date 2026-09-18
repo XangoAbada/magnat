@@ -285,3 +285,269 @@ fn slot_w_zlej_wersji_zostaje_widoczny_i_opisany() {
     );
     std::fs::remove_dir_all(&dir).ok();
 }
+
+/// Esc cofa o jeden ekran i **nigdzie po drodze nie zamyka gry**.
+///
+/// Test istnieje, bo zamykała. Do M9e klawisz miał dwóch właścicieli: ekran powłoki
+/// w `egui` i pętla okna w `winit`. Ta druga wychodziła z gry, kiedy `GameState`
+/// mówił „menu główne" — a mówił tak także w kreatorze, w ustawieniach i na liście
+/// slotów, bo wejście w te ekrany zmieniało tylko `Shell::screen`. Od M9e cel
+/// cofnięcia jest jeden, wypisany w `Shell::cofnij`, i to on jest tutaj mierzony.
+#[test]
+fn esc_cofa_o_jeden_ekran_i_nie_zamyka_gry_po_drodze() {
+    let ctx = egui::Context::default();
+    let esc = |s: &mut Shell| -> Option<ShellAction> {
+        s.prepare(&ctx);
+        let mut akcja = None;
+        let _ = testing::draw_in(&ctx, testing::key(testing::EKRAN, egui::Key::Escape), |ui| {
+            akcja = s.draw(ui);
+        });
+        akcja
+    };
+
+    // Ekran, czy stoi sesja, oczekiwana akcja, oczekiwany ekran po cofnięciu.
+    let przypadki: Vec<(ShellScreen, bool, Option<ShellAction>, ShellScreen)> = vec![
+        // Z menu głównego nie ma dokąd wracać — dopiero tutaj Esc kończy grę.
+        (
+            ShellScreen::MainMenu,
+            false,
+            Some(ShellAction::Quit),
+            ShellScreen::MainMenu,
+        ),
+        (
+            ShellScreen::NewGame {
+                draft: magnat_game::NewGameParams::default(),
+            },
+            false,
+            None,
+            ShellScreen::MainMenu,
+        ),
+        (
+            ShellScreen::Settings {
+                tab: SettingsTab::Game,
+            },
+            false,
+            None,
+            ShellScreen::MainMenu,
+        ),
+        // Ten sam ekran osiągnięty z pauzy wraca do pauzy, a nie do menu.
+        (
+            ShellScreen::Settings {
+                tab: SettingsTab::Game,
+            },
+            true,
+            None,
+            ShellScreen::Pause,
+        ),
+        (
+            ShellScreen::Load {
+                slots: (0..10).collect(),
+                selected: None,
+            },
+            false,
+            None,
+            ShellScreen::MainMenu,
+        ),
+        (
+            ShellScreen::Load {
+                slots: (0..10).collect(),
+                selected: None,
+            },
+            true,
+            None,
+            ShellScreen::Pause,
+        ),
+        (
+            ShellScreen::Pause,
+            true,
+            Some(ShellAction::Resume),
+            ShellScreen::Pause,
+        ),
+        (
+            ShellScreen::CharacterSelect,
+            false,
+            Some(ShellAction::BackToWizard),
+            ShellScreen::CharacterSelect,
+        ),
+    ];
+
+    for (ekran, sesja, akcja_oczek, po) in przypadki {
+        let mut s = powloka(Locale::Pl);
+        s.has_session = sesja;
+        s.screen = ekran.clone();
+        let akcja = esc(&mut s);
+        assert_eq!(
+            akcja, akcja_oczek,
+            "{ekran:?} (sesja: {sesja}): Esc dał inną akcję"
+        );
+        assert_eq!(s.screen, po, "{ekran:?} (sesja: {sesja}): Esc zostawił zły ekran");
+    }
+}
+
+/// Każdy ekran powłoki poza menu głównym pokazuje klikalne „Wstecz" i ścieżkę.
+///
+/// Kryterium jest dosłowne: gracz, który nie wie o klawiszu Esc, ma widzieć wyjście.
+#[test]
+fn kazdy_ekran_poza_menu_pokazuje_wstecz_i_sciezke() {
+    for ekran in ekrany() {
+        let mut s = powloka(Locale::Pl);
+        s.has_session = matches!(ekran, ShellScreen::Pause);
+        s.screen = ekran.clone();
+        let ctx = egui::Context::default();
+        s.prepare(&ctx);
+        let (teksty, _) = testing::draw_in(&ctx, testing::input(testing::EKRAN), |ui| {
+            s.draw(ui);
+        });
+        let razem = teksty.join(" ");
+        let menu = matches!(ekran, ShellScreen::MainMenu);
+        assert_eq!(
+            razem.contains("Wstecz"),
+            !menu,
+            "{ekran:?}: przycisk Wstecz jest tam, gdzie nie powinien, albo go brak"
+        );
+        if !menu {
+            assert!(
+                razem.contains(" / "),
+                "{ekran:?}: brak ścieżki w nagłówku"
+            );
+        }
+    }
+}
+
+/// „Tryb przeglądu" z menu głównego prowadzi przez ten sam kreator, ale bez wiersza
+/// wariantu startu — bo postaci w tym trybie nie będzie (`DG-16`).
+#[test]
+fn tryb_przegladu_wchodzi_z_menu_glownego_i_chowa_wariant_startu() {
+    let mut s = powloka(Locale::Pl);
+    let ctx = egui::Context::default();
+    let klawisz = |s: &mut Shell, k: egui::Key| {
+        s.prepare(&ctx);
+        let mut akcja = None;
+        let _ = testing::draw_in(&ctx, testing::key(testing::EKRAN, k), |ui| {
+            akcja = s.draw(ui);
+        });
+        akcja
+    };
+
+    // Bez sesji lista to: Nowa gra, Tryb przeglądu, Wczytaj, Ustawienia, Wyjście.
+    klawisz(&mut s, egui::Key::ArrowDown);
+    klawisz(&mut s, egui::Key::Enter);
+    assert!(
+        matches!(s.screen, ShellScreen::NewGame { .. }),
+        "kreator się nie otworzył: {:?}",
+        s.screen
+    );
+    assert!(s.observe, "wejscie przez Tryb przegladu nie ustawilo flagi");
+
+    s.prepare(&ctx);
+    let (teksty, _) = testing::draw_in(&ctx, testing::input(testing::EKRAN), |ui| {
+        s.draw(ui);
+    });
+    let razem = teksty.join(" ");
+    // Wiersz wariantu poznaje się po **wartościach**, nie po etykiecie: etykieta
+    // brzmi „Start" i trafia się w innych napisach, a „Absolwent" i „Spadkobierca"
+    // rysuje wyłącznie ten wiersz.
+    for wariant in ["Absolwent", "Spadkobierca", "Inwestor", "Piaskownica"] {
+        assert!(
+            !razem.contains(wariant),
+            "kreator w trybie przeglądu pokazuje wariant startu ({wariant})"
+        );
+    }
+    // Pozostałe wiersze kreatora są na miejscu — ukryty ma być jeden, nie wszystkie.
+    assert!(
+        razem.contains("Scenariusz") && razem.contains("Region"),
+        "kreator w trybie przeglądu zgubił więcej niż wariant startu"
+    );
+
+    // Enter generuje świat tak samo jak w zwykłej nowej grze.
+    let akcja = klawisz(&mut s, egui::Key::Enter);
+    assert!(
+        matches!(akcja, Some(ShellAction::Generate(_))),
+        "kreator nie zamówił generacji: {akcja:?}"
+    );
+
+    // Powrót do menu kasuje tryb: następna „Nowa gra" ma być zwykłą nową grą.
+    klawisz(&mut s, egui::Key::Escape);
+    assert!(matches!(s.screen, ShellScreen::MainMenu));
+    assert!(!s.observe, "powrót do menu zostawił włączony tryb przeglądu");
+}
+
+/// Klik myszą zatwierdza slot **kliknięty**, a nie ten pod kursorem klawiatury.
+///
+/// Test istnieje, bo było odwrotnie, a w trybie „Zapisz" znaczyło to nadpisanie
+/// cudzej gry: lista slotów ma własną pętlę rysującą i czytała indeks policzony
+/// przed nią. Klawiatura działała, mysz nie — i nic tego nie mierzyło.
+#[test]
+fn klik_w_slot_zapisuje_ten_slot_a_nie_ten_pod_kursorem() {
+    let ctx = egui::Context::default();
+    let mut s = powloka(Locale::Pl);
+    s.has_session = true;
+    s.slot_mode = magnat_game::screens::slots::Mode::Save;
+    s.screen = ShellScreen::Load {
+        slots: (0..10).collect(),
+        selected: None,
+    };
+
+    // Pierwsza klatka bez myszy — `egui` musi poznać prostokąty wierszy, zanim
+    // klik ma w co trafić. Kursor klawiatury stoi na zerowym wierszu.
+    let mut gora = 0.0;
+    s.prepare(&ctx);
+    let _ = testing::draw_in(&ctx, testing::input(testing::EKRAN), |ui| {
+        gora = ui.next_widget_position().y;
+        s.draw(ui);
+    });
+
+    // Schodzimy w dół listy, aż klik w któryś wiersz coś zatwierdzi. Skanowanie,
+    // a nie wyliczony piksel: test ma mierzyć **który slot** wychodzi z kliknięcia,
+    // a nie to, czy zgadliśmy wysokość wiersza i odstępy motywu.
+    let mut trafienia: Vec<u8> = Vec::new();
+    let mut y = gora;
+    while y < 700.0 {
+        let mut akcja = None;
+        // Kursor klawiatury wraca na zerowy wiersz przed **każdym** klikiem.
+        // Bez tego test niczego nie mierzy: przy zepsutej liście klik ustawia
+        // kursor na swoim wierszu, więc następny klik i tak trafia w co innego
+        // i numery slotów zmieniają się, tyle że z opóźnieniem o jeden.
+        s.focus = 0;
+        s.prepare(&ctx);
+        let _ = testing::draw_in(&ctx, klik(testing::EKRAN, 200.0, y), |ui| {
+            akcja = s.draw(ui);
+        });
+        if let Some(ShellAction::SaveSlot(id)) = akcja {
+            trafienia.push(id);
+        }
+        y += 6.0;
+    }
+
+    assert!(
+        trafienia.len() > 3,
+        "klik w listę slotów prawie nic nie zatwierdził: {trafienia:?}"
+    );
+    // Kursor stoi za każdym razem na zerze, więc lista czytająca kursor zamiast
+    // myszy zwróciłaby dziesięć razy slot 0.
+    assert!(
+        trafienia.iter().any(|id| *id != 0),
+        "każdy klik w listę zatwierdził slot spod kursora klawiatury ({trafienia:?}), a nie kliknięty"
+    );
+}
+
+fn klik(ekran: egui::Vec2, x: f32, y: f32) -> egui::RawInput {
+    let pos = egui::pos2(x, y);
+    let mut we = testing::input(ekran);
+    we.events = vec![
+        egui::Event::PointerMoved(pos),
+        egui::Event::PointerButton {
+            pos,
+            button: egui::PointerButton::Primary,
+            pressed: true,
+            modifiers: egui::Modifiers::default(),
+        },
+        egui::Event::PointerButton {
+            pos,
+            button: egui::PointerButton::Primary,
+            pressed: false,
+            modifiers: egui::Modifiers::default(),
+        },
+    ];
+    we
+}

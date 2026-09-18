@@ -20,13 +20,18 @@ Szczegóły postępu:
 
 ```bash
 git clone <repo> && cd magnat
-cargo run --release -p magnat                 # podgląd świata (okno)
+cargo run --release -p magnat                 # gra: menu główne, kreator, miasto
 cargo run --release -p magnat-headless -- generate   # generacja bez GPU
 ```
 
 `--release` nie jest opcjonalny w praktyce: debug jest kilkadziesiąt razy wolniejszy.
 
-### `magnat` — podgląd świata
+### `magnat` — gra i podgląd świata
+
+Bez argumentów gra prowadzi od menu głównego przez kreator do miasta. Menu ma dwie drogi
+do świata: **Nowa gra** (gracz jest jednym z mieszkańców) i **Tryb przeglądu** (gracz
+nikogo nie prowadzi, ogląda i klika). Podany parametr świata omija menu i stawia miasto
+od razu — to jest droga dla zrzutów, pomiarów i testów, nie dla gracza.
 
 ```bash
 cargo run --release -p magnat -- --seed 0xC0FFEE --size 8km --region river
@@ -44,6 +49,7 @@ cargo run --release -p magnat -- --seed 0xC0FFEE --size 8km --region river
 | `--target x,y` | środek | punkt w metrach, nad którym staje kamera |
 | `--dist` | `900` | wysokość orbity kamery w metrach |
 | `--overlay` | — | nakładka na starcie: `height`, `flow`, `water`, `biome`, `temp-jan`, `temp-jul`, `precip`, `geology`, `deposits` |
+| `--observe` | — | tryb przeglądu: świat bez postaci gracza i bez ekranu wyboru |
 | `--inspect x,y` | — | wypisuje kartę inspekcji punktu i kończy, bez okna |
 | `--screenshot plik.png` | — | zrzut jednej klatki do pliku i wyjście |
 | `--screenshot-after` | `120` | ile klatek odczekać przed zrzutem (strumieniowanie) |
@@ -61,7 +67,7 @@ Sterowanie w oknie:
 | `W` `S` `A` `D` `Q` `E` | ruch w kamerze swobodnej |
 | `F3` | następna nakładka debug |
 | `T` | czas ×1000 |
-| `Esc` | wyjście |
+| `Esc` | w grze — menu pauzy; na ekranie powłoki — o jeden ekran wstecz; w menu głównym — wyjście |
 
 ### `magnat-headless` — symulacja bez GPU
 

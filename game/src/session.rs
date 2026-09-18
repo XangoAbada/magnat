@@ -33,7 +33,7 @@ use crate::command::{
     ViewCommand, ViewRecord,
 };
 use crate::replay::{Rejected, ReplayLog};
-use crate::shell::{NewGameParams, ShellScreen, WorldGenJob, WorldPreview};
+use crate::shell::{NewGameParams, WorldGenJob, WorldPreview};
 use crate::world::{stand_up, BuiltCity, StandingReport};
 
 /// Stan gry jako całości.
@@ -49,7 +49,12 @@ use crate::world::{stand_up, BuiltCity, StandingReport};
 /// dwie różne gry.
 pub enum GameState {
     /// Wszystko poza rozgrywką — §5.13.
-    Shell(ShellScreen),
+    ///
+    /// **Bez ładunku.** Który ekran powłoki jest na wierzchu, wie `Shell::screen`
+    /// i tylko on: do M9e ten wariant niósł drugą kopię tej informacji, a klient
+    /// aktualizował ją w dwóch z pięciu przejść — przez co Esc w kreatorze,
+    /// w ustawieniach i na liście slotów zamykał grę zamiast cofać.
+    Shell,
     /// Generacja świata w tle, z postępem i anulowaniem.
     Generating(WorldGenJob),
     /// Podgląd: „gram tutaj" / „losuj ponownie" / „zmień parametry".
@@ -119,7 +124,7 @@ impl GameState {
                         .map(|p| p.citizen)
                         .and_then(|c| crate::legacy::heir_of(s, c));
                     let GameState::Playing(session) =
-                        std::mem::replace(self, GameState::Shell(ShellScreen::MainMenu))
+                        std::mem::replace(self, GameState::Shell)
                     else {
                         unreachable!("wariant sprawdzony wyżej");
                     };
@@ -150,7 +155,7 @@ impl GameState {
         }
         let outcome = s.settled_outcome();
         let GameState::Playing(session) =
-            std::mem::replace(self, GameState::Shell(ShellScreen::MainMenu))
+            std::mem::replace(self, GameState::Shell)
         else {
             unreachable!("wariant sprawdzony wyżej");
         };
@@ -173,7 +178,7 @@ impl GameState {
             EndAction::NewDynasty(c) => Some(PlayerCommand::ContinueAsNewCitizen { citizen: c }),
             EndAction::KeepPlaying => None,
         };
-        let stan = std::mem::replace(self, GameState::Shell(ShellScreen::MainMenu));
+        let stan = std::mem::replace(self, GameState::Shell);
         let session = match stan {
             GameState::Succession { session, .. } | GameState::ScenarioEnd { session, .. } => {
                 session

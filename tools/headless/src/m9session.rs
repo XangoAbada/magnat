@@ -20,7 +20,7 @@ use clap::Args;
 use magnat_core::{Money, StateHash};
 use magnat_game::screens::ending::EndAction;
 use magnat_game::session::{replay, GameState};
-use magnat_game::shell::{NewGameParams, ShellScreen, WorldGenJob, WorldPreview};
+use magnat_game::shell::{NewGameParams, WorldGenJob, WorldPreview};
 use magnat_game::{PlayerCommand, SaveSlot, Session, SAVE_SCHEMA_VERSION};
 use magnat_jobs::JobPool;
 
@@ -196,12 +196,11 @@ fn zaloz(
     params: NewGameParams,
     pool: &JobPool,
 ) -> Result<Box<Session>, Box<dyn std::error::Error>> {
-    let mut stan = GameState::Shell(ShellScreen::NewGame { draft: params });
-
-    // Etap A: teren i miasto w wątku w tle, z postępem per pass.
-    if let GameState::Shell(ShellScreen::NewGame { draft }) = &stan {
-        stan = GameState::Generating(WorldGenJob::start(draft.world, pool.thread_count()));
-    }
+    // Etap A: teren i miasto w wątku w tle, z postępem per pass. Szkic kreatora
+    // jest tutaj argumentem, a nie ładunkiem stanu: który ekran powłoki stoi na
+    // wierzchu, wie od M9e wyłącznie `Shell::screen`, a przebieg bezgłowy powłoki
+    // nie ma.
+    let mut stan = GameState::Generating(WorldGenJob::start(params.world, pool.thread_count()));
     let built = match stan {
         GameState::Generating(job) => {
             let postep = job.progress().clone();

@@ -15,6 +15,7 @@ use crate::shell::{SettingsTab, ShellScreen};
 enum Poz {
     Continue,
     NewGame,
+    Observe,
     Load,
     Save,
     Settings,
@@ -27,6 +28,7 @@ impl Poz {
         match self {
             Poz::Continue => "ui.shell.continue",
             Poz::NewGame => "ui.shell.new_game",
+            Poz::Observe => "ui.shell.observe",
             Poz::Load => "ui.shell.load",
             Poz::Save => "ui.shell.save",
             Poz::Settings => "ui.shell.settings",
@@ -59,7 +61,13 @@ pub(super) fn main_menu(shell: &mut Shell, ui: &mut egui::Ui) -> Option<ShellAct
     if shell.has_session {
         pozycje.push(Poz::Continue);
     }
-    pozycje.extend([Poz::NewGame, Poz::Load, Poz::Settings, Poz::Quit]);
+    pozycje.extend([
+        Poz::NewGame,
+        Poz::Observe,
+        Poz::Load,
+        Poz::Settings,
+        Poz::Quit,
+    ]);
 
     let wybor = lista(shell, ui, &pozycje, &keys);
 
@@ -78,13 +86,16 @@ pub(super) fn main_menu(shell: &mut Shell, ui: &mut egui::Ui) -> Option<ShellAct
         .color(shell.theme.color(ColorToken::TextSecondary)),
     );
 
+    if keys.esc {
+        return Some(ShellAction::Back);
+    }
     wykonaj(shell, wybor)
 }
 
 pub(super) fn pause_menu(shell: &mut Shell, ui: &mut egui::Ui) -> Option<ShellAction> {
     let keys = Keys::read(ui);
     let tytul = shell.text("ui.shell.pause_title");
-    header(shell, ui, &tytul);
+    let wstecz = header(shell, ui, &tytul, &["ui.path.game", "ui.path.pause"]);
     let pozycje = [
         Poz::Continue,
         Poz::Save,
@@ -94,8 +105,8 @@ pub(super) fn pause_menu(shell: &mut Shell, ui: &mut egui::Ui) -> Option<ShellAc
     ];
     let wybor = lista(shell, ui, &pozycje, &keys);
     // Esc z pauzy wraca do gry — tą samą drogą, którą się w nią weszło.
-    if keys.esc {
-        return Some(ShellAction::Resume);
+    if wstecz || keys.esc {
+        return Some(ShellAction::Back);
     }
     wykonaj(shell, wybor)
 }
@@ -113,6 +124,15 @@ fn wykonaj(shell: &mut Shell, poz: Option<Poz>) -> Option<ShellAction> {
     match poz? {
         Poz::Continue => Some(ShellAction::Resume),
         Poz::NewGame => {
+            shell.observe = false;
+            let draft = shell.draft;
+            shell.go(ShellScreen::NewGame { draft });
+            None
+        }
+        // Tryb przeglądu (`DG-16`) idzie tym samym kreatorem — różni się dopiero
+        // tym, że po postawieniu świata nie ma ekranu wyboru postaci.
+        Poz::Observe => {
+            shell.observe = true;
             let draft = shell.draft;
             shell.go(ShellScreen::NewGame { draft });
             None

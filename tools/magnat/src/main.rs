@@ -21,6 +21,7 @@ mod inspect;
 mod overlay;
 mod preview;
 mod session;
+mod slots;
 mod stream;
 
 use crate::app::App;
@@ -28,7 +29,7 @@ use crate::args::{parse_hour, Args};
 use crate::preview::startowa_kamera;
 use clap::Parser;
 use magnat_core::SimMinute;
-use magnat_game::shell::{Settings, ShellScreen};
+use magnat_game::shell::Settings;
 use magnat_game::{GameState, Shell, WorldPreview};
 use magnat_voxel::{EditIndex, MaterialRegistry};
 use magnat_world::generate;
@@ -53,6 +54,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     let mut shell = Shell::new(settings)?;
     shell.refresh_slots(&zapisy);
+    // `--observe` i pozycja „Tryb przeglądu" w menu głównym ustawiają **tę samą**
+    // flagę: jedna droga do trybu bez postaci, a nie dwie obok siebie.
+    shell.observe = args.observe;
 
     // Świat z wiersza poleceń: generujemy go **przed** oknem, jak do M9a. Powłoka
     // dostaje wtedy tylko motyw i ustawienia, a gra startuje od razu w mieście.
@@ -129,7 +133,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         // Bez argumentów świata: menu główne. Teren powstanie dopiero po kreatorze.
         None => (
-            GameState::Shell(ShellScreen::MainMenu),
+            GameState::Shell,
             magnat_world::WorldGenParams::default(),
             None,
             Arc::new(EditIndex::default()),
@@ -176,7 +180,7 @@ fn uruchom(
         city,
         edits,
         centrum,
-        GameState::Shell(ShellScreen::MainMenu),
+        GameState::Shell,
     )
 }
 
@@ -256,7 +260,6 @@ fn uruchom_ze_stanem(
         citizens: None,
         bez_ludzi: args.no_city || args.no_citizens,
         bez_gospodarki: args.no_economy,
-        tryb_przegladu: args.observe,
         watki: args.threads,
         kursor: match args.pick.as_deref() {
             Some(t) => {

@@ -14,7 +14,15 @@ use super::{header, menu_list, Keys, Shell, ShellAction};
 pub(super) fn screen(shell: &mut Shell, ui: &mut egui::Ui) -> Option<ShellAction> {
     let keys = Keys::read(ui);
     let tytul = shell.text("ui.character.title");
-    header(shell, ui, &tytul);
+    let wstecz = header(
+        shell,
+        ui,
+        &tytul,
+        // Ścieżka nie wymienia podglądu świata, choć gracz przez niego przeszedł:
+        // „Wstecz" wraca do kreatora, a okruszki mają mówić, dokąd prowadzi przycisk,
+        // a nie którędy się tu weszło.
+        &["ui.path.menu", "ui.shell.new_game", "ui.path.character"],
+    );
 
     ui.label(
         egui::RichText::new(shell.fmt(
@@ -80,6 +88,12 @@ pub(super) fn screen(shell: &mut Shell, ui: &mut egui::Ui) -> Option<ShellAction
     let wybor = menu_list(shell, ui, &pozycje, &mut kursor, &keys);
     shell.focus = kursor;
 
+    // Cofnięcie z tego ekranu porzuca postawiony świat i wraca do kreatora —
+    // dokąd dokładnie, mówi `Shell::cofnij`. Do M9e tego ekranu nie dało się opuścić
+    // inaczej niż wybierając postać.
+    if wstecz || keys.esc {
+        return Some(ShellAction::Back);
+    }
     match wybor {
         Some(i) if i == obserwuj => Some(ShellAction::Observe),
         Some(i) if i == losuj => Some(ShellAction::PickRandomCitizen),

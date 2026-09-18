@@ -202,6 +202,7 @@ Reguły układu:
 │                     │  Rzeszów · rok 4 · 12,3 h    │    ukryty gdy brak      │
 │                     ├──────────────────────────────┤    zapisu               │
 │                     │  Nowa gra                    │                         │
+│                     │  Tryb przeglądu              │                         │
 │                     │  Wczytaj                     │                         │
 │                     │  Ustawienia                  │                         │
 │                     │  Wyjdź                       │                         │
@@ -214,6 +215,67 @@ Reguły układu:
 Wersja gry i wersja formatu zapisu są widoczne, bo od nich zaczyna się każde zgłoszenie błędu.
 Przełącznik języka jest tutaj, a nie tylko w ustawieniach — gracz, który nie zna polskiego, musi
 umieć go zmienić bez czytania polskiego menu.
+
+**Tryb przeglądu** (PRD §13.1) prowadzi przez ten sam kreator co „Nowa gra" i różni się dopiero
+tym, co jest za generacją: nie ma ekranu wyboru postaci, a gracz wchodzi do gotowego miasta jako
+nikt. Jest osobną pozycją, bo gracz szuka trybu w menu, a nie po drodze — wiersz „Tylko oglądam"
+na ekranie wyboru postaci zostaje, ale jest już drugą drogą do tego samego, a nie jedyną.
+
+### 6.0 Nagłówek: cofanie i ścieżka
+
+Każdy ekran powłoki poza menu głównym zaczyna się tym samym nagłówkiem:
+
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  [Wstecz]   Menu / Nowa gra / Podgląd świata                                 │  ← text.micro
+│                                                                              │
+│  Podgląd świata                                                              │  ← text.screen
+│  Góra i dół wybiera · lewo i prawo zmienia · Enter zatwierdza · Esc cofa      │  ← text.micro
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+Trzy rzeczy, które ten nagłówek ma robić i których wcześniej nie było:
+
+1. **Wyjście jest widoczne.** Esc działa dalej, ale gracz, który o nim nie wie, widzi przycisk.
+   Ekran bez wyjścia jest ślepym zaułkiem, a §1 pkt 3 ich zakazuje.
+2. **Ścieżka mówi, gdzie się jest.** Ekrany powłoki nie mają tytułu okna ani zakładek — bez
+   ścieżki „Ustawienia" osiągnięte z pauzy wyglądają tak samo jak osiągnięte z menu, choć
+   cofają się gdzie indziej.
+3. **Cel cofnięcia jest jeden.** Przycisk i klawisz prowadzą przez tę samą tabelę (`Shell::cofnij`),
+   więc nie mogą powiedzieć dwóch różnych rzeczy.
+
+Ekran, którego ścieżka ma jeden element, przycisku nie dostaje: menu główne i ekrany domknięcia
+nie mają rodzica. Znaków strzałek w nagłówku nie ma z powodu technicznego — do czasu, aż M11
+wgra własny krój, domyślny atlas `egui` ich nie zawiera i wychodzą jako prostokąty.
+
+### 6.1a Wybór postaci
+
+Ostatni ekran przed grą i pierwszy, na którym gracz widzi ludzi, a nie parametry. Lista jest
+krótka z rozmysłu: to jest wybór postaci, a nie spis ludności. Kandydat to zwykły mieszkaniec
+wygenerowanego miasta — z domem, rodziną, pracą i oszczędnościami, które już ma; predykat
+wariantu startu decyduje, kto na tę listę wchodzi, a nie co dostanie po wyborze.
+
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  [Wstecz]   Menu / Nowa gra / Podgląd świata / Wybór postaci                  │
+│                                                                              │
+│  Kim chcesz być                                                              │
+│  Wariant startu: absolwent                                                   │
+│  W trybie przeglądu klikasz po mieszkańcach, sklepach i budynkach,           │
+│  ale nie prowadzisz nikogo.                                                  │
+│                     ┌──────────────────────────────────────────┐             │
+│                     │ Anna Kowalska, 24 l., pracuje, …         │             │
+│                     │ …                                        │             │
+│                     ├──────────────────────────────────────────┤             │
+│                     │ Wylosuj postać                           │             │
+│                     │ Tylko oglądam — bez postaci              │             │
+│                     └──────────────────────────────────────────┘             │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+Świat, w którym nikt nie pasuje do predykatu, **nie jest błędem** — jest światem bez kandydata.
+Gracz widzi wtedy zdanie o tym wprost i ma dwa wyjścia, które działają: „Tylko oglądam"
+i cofnięcie do kreatora.
 
 ### 6.2 Nowa gra — kreator świata
 

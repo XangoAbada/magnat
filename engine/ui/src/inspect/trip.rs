@@ -231,8 +231,11 @@ impl TripCard {
 
         let _ = writeln!(s, "{}:", c.fmt_key(l, "ui.trip.candidates", &[]));
         for k in &self.candidates {
+            // Znaczniki są znakami, a nie tekstem do tłumaczenia — ale i tak muszą
+            // być w atlasie fontów. Strzałki w nim nie ma do czasu, aż M11 wgra
+            // własny krój (`Theme::font`), więc wybraną opcję znaczy `>`.
             let znacznik = if k.chosen {
-                "→"
+                ">"
             } else if k.runner_up {
                 "·"
             } else if k.cost.is_none() {

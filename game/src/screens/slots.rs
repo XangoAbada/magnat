@@ -13,7 +13,6 @@ use magnat_ui::{ColorToken, TextRole};
 
 use super::{header, Keys, Shell, ShellAction};
 use crate::save::{SaveError, SaveSlot};
-use crate::shell::ShellScreen;
 
 /// Po co gracz tu wszedł. Jedna lista, dwa tryby — pytanie „który slot" jest to samo.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
@@ -30,7 +29,16 @@ pub(super) fn list(shell: &mut Shell, ui: &mut egui::Ui) -> Option<ShellAction> 
         Mode::Load => "ui.slots.load_title",
         Mode::Save => "ui.slots.save_title",
     });
-    header(shell, ui, &tytul);
+    let tutaj = match mode {
+        Mode::Load => "ui.shell.load",
+        Mode::Save => "ui.shell.save",
+    };
+    let sciezka: &[&str] = if shell.has_session {
+        &["ui.path.game", "ui.path.pause", tutaj]
+    } else {
+        &["ui.path.menu", tutaj]
+    };
+    let wstecz = header(shell, ui, &tytul, sciezka);
 
     let ile = shell.slots.len();
     keys.move_focus(&mut shell.focus, ile);
@@ -69,20 +77,24 @@ pub(super) fn list(shell: &mut Shell, ui: &mut egui::Ui) -> Option<ShellAction> 
         );
     }
 
-    if keys.esc {
-        shell.go(if shell.has_session {
-            ShellScreen::Pause
-        } else {
-            ShellScreen::MainMenu
-        });
-        return None;
+    if wstecz || keys.esc {
+        return Some(ShellAction::Back);
     }
 
-    let zatwierdzone = klikniety.is_some() || keys.enter;
-    if !zatwierdzone || ile == 0 {
+    if ile == 0 {
         return None;
     }
-    let (id, stan) = (shell.slots[kursor].0, shell.slots[kursor].1.as_ref());
+    // Zatwierdzony jest slot **kliknięty**, a nie ten pod kursorem klawiatury.
+    // Do M9e ta lista czytała `kursor` policzony przed pętlą, więc klik w slot 5
+    // zapisywał slot spod kursora — a w trybie „Zapisz" znaczyło to nadpisanie
+    // cudzej gry. `menu_list` robi to dobrze od początku; ta pętla jest własna,
+    // bo wiersz slotu ma dwa kolory i szerokość 640.
+    let wybrany = match (klikniety, keys.enter) {
+        (Some(i), _) => i,
+        (None, true) => kursor,
+        (None, false) => return None,
+    };
+    let (id, stan) = (shell.slots[wybrany].0, shell.slots[wybrany].1.as_ref());
     match mode {
         Mode::Save => Some(ShellAction::SaveSlot(id)),
         // Slotu, którego nie da się odczytać, nie wczytujemy — i to nie jest cisza:

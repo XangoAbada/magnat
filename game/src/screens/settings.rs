@@ -27,7 +27,12 @@ pub(super) fn screen(
 ) -> Option<ShellAction> {
     let keys = Keys::read(ui);
     let tytul = shell.text("ui.settings.title");
-    header(shell, ui, &tytul);
+    let sciezka: &[&str] = if shell.has_session {
+        &["ui.path.game", "ui.path.pause", "ui.shell.settings"]
+    } else {
+        &["ui.path.menu", "ui.shell.settings"]
+    };
+    let wstecz_naglowek = header(shell, ui, &tytul, sciezka);
 
     let zakladki = [SettingsTab::Game, SettingsTab::Controls];
     let mut wybrana = tab;
@@ -118,13 +123,8 @@ pub(super) fn screen(
 
     ui.add_space(shell.theme.gap(4));
     let wstecz = ui.button(shell.text("ui.shell.back")).clicked();
-    if wstecz || keys.esc {
-        shell.go(if shell.has_session {
-            ShellScreen::Pause
-        } else {
-            ShellScreen::MainMenu
-        });
-        return None;
+    if wstecz || wstecz_naglowek || keys.esc {
+        return Some(ShellAction::Back);
     }
     zmiana.then_some(ShellAction::SettingsChanged)
 }

@@ -66,6 +66,12 @@ pub enum ShellAction {
     /// Tryb przeglądu: wejście do świata **bez postaci**. Gracz ogląda i klika,
     /// ale nie jest niczyim mieszkańcem i nie ma czym wydawać komend.
     Observe,
+    /// „Cofnij" — bez celu. Dokąd, wie [`Shell::cofnij`] i tylko on.
+    ///
+    /// Ekran zgłasza samą intencję, bo jego jedyną wiedzą jest to, że gracz
+    /// nacisnął Esc albo kliknął „Wstecz". Do M9e każdy ekran znał swojego rodzica
+    /// sam i dwa znały go inaczej dla myszy niż dla klawiatury.
+    Back,
 }
 
 /// Pozycja kursora na ekranie. Jedna liczba, bo każdy ekran powłoki jest listą wierszy.
@@ -94,6 +100,12 @@ pub struct Shell {
     /// Kandydaci na postać gracza — wypełnia je klient po postawieniu świata.
     /// Dane, nie referencja: ekran ma być rysowalny w teście bez sesji.
     pub candidates: Vec<crate::player::Candidate>,
+    /// Czy gracz wszedł w kreator przez „Tryb przeglądu" (`DG-16`).
+    ///
+    /// **Nie jedzie w `NewGameParams`** i nie ma go w kopercie `StartGame`: tryb
+    /// przeglądu jest brakiem komendy `SetCharacter`, a nie wariantem startu.
+    /// To jest stan powłoki — pytanie „czy pokazać ekran wyboru postaci", nic więcej.
+    pub observe: bool,
     /// Scenariusze do wyboru w kreatorze: numer, klucz tytułu i klucz opisu.
     ///
     /// Numer jest **pozycją w `data/scenarios/scenarios.ron`** i to on jedzie
@@ -117,6 +129,7 @@ impl Shell {
             has_session: false,
             draft: NewGameParams::default(),
             slot_mode: slots::Mode::default(),
+            observe: false,
             candidates: Vec::new(),
             scenarios: scenariusze(),
         })
@@ -147,6 +160,45 @@ impl Shell {
     pub fn go(&mut self, screen: ShellScreen) {
         self.screen = screen;
         self.focus = 0;
+    }
+
+    /// Dokąd prowadzi „Wstecz" i Esc z bieżącego ekranu — **jedyna** tabela rodziców.
+    ///
+    /// Zwraca `None`, gdy cofnięcie jest zmianą samego ekranu i powłoka wykonała je
+    /// tutaj; `Some(akcja)`, gdy potrzebuje pętli gry (wyjście, powrót do sesji,
+    /// porzucenie postawionego świata).
+    ///
+    /// Ekran generacji i podgląd świata **nie są** wariantami [`ShellScreen`] — stoją
+    /// nad `GameState::Generating` i `WorldReady` — więc cofają się u siebie, przez
+    /// `CancelGeneration` i `BackToWizard`.
+    fn cofnij(&mut self) -> Option<ShellAction> {
+        match self.screen {
+            // Z menu głównego nie ma dokąd wracać — jest tylko wyjście z gry.
+            ShellScreen::MainMenu => Some(ShellAction::Quit),
+            ShellScreen::NewGame { .. } => {
+                self.observe = false;
+                self.go(ShellScreen::MainMenu);
+                None
+            }
+            // Sloty i ustawienia są osiągalne z obu menu, więc rodzic zależy
+            // od tego, czy jest do czego wracać.
+            ShellScreen::Load { .. } | ShellScreen::Settings { .. } => {
+                let rodzic = if self.has_session {
+                    ShellScreen::Pause
+                } else {
+                    ShellScreen::MainMenu
+                };
+                self.go(rodzic);
+                None
+            }
+            ShellScreen::Pause => Some(ShellAction::Resume),
+            // `ponytail:` świat przepada i trzeba go wygenerować od nowa. Sufit
+            // nazwany: trzymanie `BuiltCity` przy życiu tylko po to, żeby wrócić
+            // do podglądu bez generacji, kosztuje pamięć całego miasta. Generacja
+            // jest deterministyczna, a ziarno zostaje w szkicu kreatora, więc
+            // to samo „Generuj" daje ten sam świat (`00` §3).
+            ShellScreen::CharacterSelect => Some(ShellAction::BackToWizard),
+        }
     }
 
     /// Odświeża listę slotów z katalogu zapisów.
@@ -180,7 +232,7 @@ impl Shell {
     /// Rysuje bieżący ekran powłoki.
     pub fn draw(&mut self, ui: &mut egui::Ui) -> Option<ShellAction> {
         let tlo = self.tlo();
-        egui::CentralPanel::default()
+        let akcja = egui::CentralPanel::default()
             .frame(tlo)
             .show(ui, |ui| match self.screen.clone() {
                 ShellScreen::MainMenu => menu::main_menu(self, ui),
@@ -190,7 +242,13 @@ impl Shell {
                 ShellScreen::Settings { tab } => settings::screen(self, ui, tab),
                 ShellScreen::CharacterSelect => character::screen(self, ui),
             })
-            .inner
+            .inner;
+        // Cofnięcie rozwiązuje się **tutaj**, a nie w ekranie: ekran wie tylko,
+        // że gracz chce się cofnąć, a nie dokąd.
+        match akcja {
+            Some(ShellAction::Back) => self.cofnij(),
+            inna => inna,
+        }
     }
 
     /// Ekran generacji: pasek postępu z prawdziwą nazwą etapu i anulowanie (§5.14 pkt 1).

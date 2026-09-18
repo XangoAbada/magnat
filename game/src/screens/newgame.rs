@@ -43,18 +43,34 @@ const ROWS: [Row; 8] = [
 
 pub(super) fn wizard(shell: &mut Shell, ui: &mut egui::Ui) -> Option<ShellAction> {
     let keys = Keys::read(ui);
-    let tytul = shell.text("ui.newgame.title");
-    header(shell, ui, &tytul);
+    // W trybie przeglądu kreator ma inny tytuł i o jeden wiersz mniej: wariant startu
+    // opisuje postać gracza, a w tym trybie postaci nie będzie (`DG-16`).
+    let tytul = shell.text(if shell.observe {
+        "ui.newgame.observe_title"
+    } else {
+        "ui.newgame.title"
+    });
+    let sciezka: &[&str] = if shell.observe {
+        &["ui.path.menu", "ui.shell.observe"]
+    } else {
+        &["ui.path.menu", "ui.shell.new_game"]
+    };
+    let wstecz = header(shell, ui, &tytul, sciezka);
 
     let ShellScreen::NewGame { mut draft } = shell.screen.clone() else {
         return None;
     };
-    keys.move_focus(&mut shell.focus, ROWS.len());
-    let kursor = ROWS[shell.focus.min(ROWS.len() - 1)];
+    let wiersze: &[Row] = if shell.observe {
+        &ROWS[..ROWS.len() - 1]
+    } else {
+        &ROWS
+    };
+    keys.move_focus(&mut shell.focus, wiersze.len());
+    let kursor = wiersze[shell.focus.min(wiersze.len() - 1)];
 
-    for row in ROWS {
-        let aktywny = row == kursor;
-        wiersz(shell, ui, row, &mut draft, aktywny, &keys);
+    for row in wiersze {
+        let aktywny = *row == kursor;
+        wiersz(shell, ui, *row, &mut draft, aktywny, &keys);
     }
 
     ui.add_space(shell.theme.gap(4));
@@ -73,9 +89,8 @@ pub(super) fn wizard(shell: &mut Shell, ui: &mut egui::Ui) -> Option<ShellAction
     shell.draft = draft;
     shell.screen = ShellScreen::NewGame { draft };
 
-    if keys.esc {
-        shell.go(ShellScreen::MainMenu);
-        return None;
+    if wstecz || keys.esc {
+        return Some(ShellAction::Back);
     }
     // Enter zatwierdza cały ekran, nie wiersz: parametry mają wartości domyślne,
     // więc gracz, który niczego nie zmienia, generuje świat jednym klawiszem.
@@ -267,7 +282,17 @@ pub(super) fn generating(
     let keys = Keys::read(ui);
     let opis = opis_swiata(shell, &shell.draft);
     let tytul = shell.fmt("ui.gen.title", &[("opis", &opis)]);
-    header(shell, ui, &tytul);
+    let krok = if shell.observe {
+        "ui.shell.observe"
+    } else {
+        "ui.shell.new_game"
+    };
+    let wstecz = header(
+        shell,
+        ui,
+        &tytul,
+        &["ui.path.menu", krok, "ui.path.generating"],
+    );
 
     let (done, total) = (progress.done(), progress.total());
     let ulamek = f32::from(done) / f32::from(total.max(1));
@@ -293,7 +318,9 @@ pub(super) fn generating(
     ui.add_space(shell.theme.gap(4));
 
     let anuluj = ui.button(shell.text("ui.gen.cancel")).clicked();
-    if anuluj || keys.esc {
+    // Ekran generacji nie jest wariantem `ShellScreen`, więc cofa się u siebie:
+    // `Shell::cofnij` nie ma jak go rozpoznać.
+    if anuluj || wstecz || keys.esc {
         return Some(ShellAction::CancelGeneration);
     }
     None
@@ -307,7 +334,17 @@ pub(super) fn preview(
 ) -> Option<ShellAction> {
     let keys = Keys::read(ui);
     let tytul = shell.text("ui.preview.title");
-    header(shell, ui, &tytul);
+    let krok = if shell.observe {
+        "ui.shell.observe"
+    } else {
+        "ui.shell.new_game"
+    };
+    let wstecz = header(
+        shell,
+        ui,
+        &tytul,
+        &["ui.path.menu", krok, "ui.path.preview"],
+    );
 
     let l = shell.locale();
     ui.horizontal_top(|ui| {
@@ -396,7 +433,9 @@ pub(super) fn preview(
     let wybor = super::menu_list(shell, ui, &etykiety, &mut kursor, &keys);
     shell.focus = kursor;
 
-    if keys.esc {
+    // Podgląd, jak ekran generacji, stoi nad `GameState::WorldReady`, a nie nad
+    // wariantem `ShellScreen` — cofa się więc u siebie.
+    if wstecz || keys.esc {
         return Some(ShellAction::BackToWizard);
     }
     match wybor? {
