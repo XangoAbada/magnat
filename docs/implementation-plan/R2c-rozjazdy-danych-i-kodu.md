@@ -148,7 +148,7 @@ zadaniem kalibracyjnym z własnym wierszem, nie powodem do cofnięcia naprawy (r
 o substytut towaru — a `B2b::serve` ma dla tej akcji **puste ramię `match`**. Szósty szczebel
 jest więc przejściem do siódmego: zakład idzie z „szukam zamiennika" prosto w `Halted`.
 
-Dane są gotowe i ładowane: `Substitute` istnieje w katalogu dóbr, a `M6c` `AG-6` i `M6b` `AF-9`
+Dane są gotowe i ładowane: `Substitute` istnieje w katalogu dóbr, a `M6` `AG-6` i `M6b` `AF-9`
 zapisały, że szczebel był nieosiągalny z braku substytutów i że jeden dopisano. Tego, że wykonawcy
 nie ma, nie zapisał nikt — korekty opisują dane, nie ramię `match`.
 

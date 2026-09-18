@@ -6,9 +6,9 @@ dokumentu R2.
 | | |
 |---|---|
 | **Wejście** | R2a zamknięte — R2-WP8 i R2-WP10 dotykają rozwiązania gospodarstwa, które R2-WP4 właśnie przedefiniował (gospodarstwo z opiekunem nie rozwiązuje się przy śmierci ostatniego dorosłego). |
-| **Pakiety robocze** | R2-WP7…R2-WP11 |
+| **Pakiety robocze** | R2-WP7…R2-WP11, R2-WP30, R2-WP32 |
 | **Wynik do pokazania** | `headless m5shop --days 3600` z rozszerzoną sekcją „pieniądz": osobny wiersz dla gospodarstw rozwiązanych, dla spadków i dla kwot, które dziś znikają. Dziś ta sekcja domyka się co do grosza **tylko dlatego, że gospodarstwa nie są kontami w `Books`**. |
-| **Kryterium zamknięcia** | Kryteria R2-WP7…R2-WP11 plus: w przebiegu dziesięcioletnim **suma sald gospodarstw plus rejestr emisji zgadza się co do grosza po tysiącu rozwiązanych gospodarstw**, a liczba zakładów produkcyjnych z niezerowym utargiem równa się liczbie zakładów produkcyjnych. |
+| **Kryterium zamknięcia** | Kryteria R2-WP7…R2-WP11, R2-WP30 i R2-WP32 plus: w przebiegu dziesięcioletnim **suma sald gospodarstw plus rejestr emisji zgadza się co do grosza po tysiącu rozwiązanych gospodarstw**, a liczba zakładów produkcyjnych z niezerowym utargiem równa się liczbie zakładów produkcyjnych. Po R2-WP32 niezmiennik świata domyka się **z ruchem w scenariuszu**, a nie tylko bez niego. |
 | **Poprzednia / następna** | `R2a-rodzina-i-cykl-zycia.md` / `R2c-rozjazdy-danych-i-kodu.md` |
 
 ---
@@ -42,6 +42,8 @@ naprawia rozwiązanie gospodarstwa — bo test, który nie umie zobaczyć usterk
 | R2-WP9 | Dochód gospodarstwa po zdarzeniu życiowym | — | S | `[ ]` |
 | R2-WP10 | Dziedziczenie ponad gotówkę osobistą | R2-WP8 | M | `[ ]` |
 | R2-WP11 | Skala ekwiwalentna gospodarstwa | — | S | `[ ]` |
+| R2-WP30 | Lista płac obciąża pracodawcę | R2-WP7 | M | `[ ]` |
+| R2-WP32 | Konta stacji, przewoźnika, taksówki i parkingu | — | L | `[ ]` |
 
 ---
 
@@ -255,6 +257,127 @@ wychodzi — zadanie kalibracyjne z własnym wierszem, nie cofnięcie naprawy.
 
 ---
 
+### R2-WP30 — Lista płac obciąża pracodawcę
+
+**Pozycja wykazu:** 58. Zapisana siedem razy: `M7b`, `M7f`, `M8a`, `M8d`, `M8e`, `M8` `CJ-9`
+i `sim/city/src/rule.rs` w komentarzu nad regułą pensji nauczyciela. `CJ-9` kazał dopisać ją
+do wykazu R2 i **to się nie stało** — pozycja weszła tu dopiero z przeglądu sesji.
+
+**Przyczyna.** Są dwie ścieżki wypłaty i idzie nimi ten sam pieniądz dwa razy — a raczej ani razu,
+bo druga nie ma końca.
+
+`FirmSystem::run` woła `Firms::run_payroll` o północy i odkłada wynik w `PayrollOutbox`.
+Skrzynka istnieje z dobrego powodu: `sim/firms` nie może sięgnąć po `Books`, bo zależność idzie
+`economy → firms`, nie odwrotnie. Ten sam wzorzec działa dla rozliczeń B2B z M6 i dla decyzji
+AI (`DecisionOutbox`, konsument w `sim/economy::ai_run`). Tyle że `PayrollOutbox::take()` nie ma
+w repozytorium **ani jednego wołającego** — poza dwiema linijkami rejestrującymi sam zasób
+(`game/src/world/full.rs`, `labor.rs`).
+
+Gospodarstwo dostaje więc pieniądze zupełnie inną drogą: `pay_incomes` w `sim/economy/src/systems.rs`
+przelewa `Household.income_monthly` z konta `market.rest_of_world()`. To jest **denormalizacja
+dochodu**, nie lista płac zakładu: kwota bierze się z pola gospodarstwa, źródłem jest konto
+techniczne „reszta świata", a `FirmBooks` pracodawcy nie widzi tej operacji w ogóle.
+
+Trzy skutki, wszystkie zapisane wcześniej i żaden domknięty:
+
+- **Rachunek wyniku zakładu nie zna kosztu pracy**, więc marża zakładu produkcyjnego jest fikcją
+  nawet po R2-WP7 — stąd zależność tego pakietu od tamtego.
+- **Miasto nie może być pracodawcą.** `CH-4` opisuje łańcuch „budżet → pensja nauczyciela →
+  jakość szkoły"; `sim/city/src/rule.rs` mówi w komentarzu wprost, że wymaga `FirmKey` dla miasta
+  **i konsumenta skrzynki**. Pierwsze da się zrobić w godzinę, drugiego nie ma.
+- **Pieniądz wchodzi do gospodarstw z konta, które nie ma pokrycia w gospodarce.** Niezmiennik P1
+  tego nie łapie, bo `rest_of_world` jest kontem emisyjnym i ma prawo schodzić poniżej zera.
+
+**Szew.** Konsument skrzynki idzie do `sim/economy`, obok `absorb_settlements` — to jest ten sam
+kształt (skrzynka z `sim/firms`, księgowanie po stronie ekonomii) i ta sama kadencja doby.
+`pay_incomes` przestaje być źródłem wypłaty i zostaje **wyłącznie** dla dochodów spoza etatu
+(emerytury, świadczenia), czyli dla tego, co naprawdę przychodzi z zewnątrz obiegu.
+
+Potrącenie PIT zostaje tam, gdzie jest (`market.withhold`, hak M8) — zmienia się płatnik, nie
+mechanizm. To jest ważne, bo M8a wpięła akcyzę i PIT w dwa **prawdziwe** punkty i R2 nie ma prawa
+ich przestawić.
+
+**Zakres.**
+
+| Co | Gdzie |
+|---|---|
+| `absorb_payroll(world, market, t)` — konsument `PayrollOutbox::take()` | nowy moduł `sim/economy/src/payroll.rs` |
+| Wypłata obciąża `FirmBooks` pracodawcy i uznaje gospodarstwo; potrącenie PIT bez zmian | tamże + `sim/economy/src/books.rs` |
+| `pay_incomes` traci ramię „płaca" i zostaje przy dochodach spoza etatu | `sim/economy/src/systems.rs` |
+| `hr_costs` ze skrzynki wchodzą do `SitePnlMonth` jako koszt pracy | `sim/firms/src/panel.rs` |
+| `FirmKey` dla miasta i wypłaty placówek publicznych tą samą drogą (`CH-4`) | `sim/city/src/rule.rs`, `sim/firms/src/registry.rs` |
+
+**Ostrzeżenie o determinizmie.** Pakiet zmienia hash: salda firm przestają być nietknięte przez
+płace, a `SitePnlMonth` dostaje niezerowy koszt pracy. Zmiana jest zamierzona i idzie w commicie
+razem z zapisem, o ile zmieniły się liczby w scenariuszu odniesienia.
+
+**Kryterium:** test odtwarzający — zakład z trzema etatami po domknięciu doby ma saldo mniejsze
+dokładnie o sumę płac brutto, a suma sald gospodarstw większa o sumę netto; różnica siedzi
+w `PitPayable`. Przed naprawą saldo zakładu **nie zmienia się w ogóle**, a `PayrollOutbox.pending`
+rośnie w nieskończoność — drugi test sprawdza właśnie to: po dziesięciu dobach skrzynka jest
+pusta, dziś ma dziesięć dób wypłat. Trzeci test: nauczyciel zatrudniony przez miasto dostaje
+pensję z budżetu miasta, a `SpendCategory::Education` maleje o tę kwotę.
+
+---
+
+### R2-WP32 — Konta stacji, przewoźnika, taksówki i parkingu
+
+**Pozycja wykazu:** 60. To jest **decyzja otwarta nr 16 fazy M5**, która trzyma bramkę 7 tamtej
+fazy od M5c i nie należała do żadnego pakietu M5…M9.
+
+**Przyczyna.** Niezmiennik świata brzmi `society::total_money + Books::total_balance() == const`.
+Mieszkaniec płaci za paliwo, bilet, taryfę i parking z komponentu `Wealth` — a druga strona tych
+czterech płatności to `FuelLedger` i `FareLedger` w `sim/traffic`, czyli **rejestry, nie konta**.
+Oba wchodzą do hasha (to jest pieniądz i M4 wiedział o tym, pisząc je), ale żaden nie ma konta
+w `Books`, więc grosz wychodzi z jednej sumy i nie wchodzi do drugiej.
+
+Pomiar z M5c po dopisaniu obu rejestrów do sumy: **−5,6 tys. zł przez 31 dób i +63,2 tys. zł
+przez 40 dób** na 100 mln zł w mieście 28 tys. mieszkańców. Ze **zmianą znaku**, czyli kanałów
+bez pary jest co najmniej dwa i działają w przeciwne strony. Po M5d ta sama liczba wynosi
+**+163,0 tys. zł przez 40 dób** — i to nie jest regres M5d: pieniądz kredytowy zwiększył wydatki
+na dojazdy, więc kanał bez pary przepuszcza proporcjonalnie więcej. **Błąd jest mnożnikowy, nie
+addytywny**, i każda faza dokładająca wydatki na transport go powiększa.
+
+Podejrzany numer jeden jest nazwany: `FareLedger.taxi_revenue` rośnie o 200 tys. zł przez 40 dób,
+a w `sim/traffic` nie ma odpowiadającego mu zapisu po stronie `Wealth`.
+
+**Dlaczego nie zrobiła tego M5d.** Bo punkt żądał uzgodnienia z M4 **przed** wpięciem konta:
+wciągnięcie stacji do M5d oznaczałoby odziedziczenie kanału bez pary razem z kontem, czyli
+zabetonowanie usterki pod nowym adresem. Warunek nadal obowiązuje i jest pierwszym krokiem
+pakietu.
+
+**Szew.** Najpierw **znaleźć kanał bez pary**, potem dawać konta — odwrotna kolejność zamienia
+pomiar w zgadywanie. Krok pierwszy jest testem, nie kodem produkcyjnym: przebieg z rozbiciem
+salda per kanał, dzień po dniu, aż znak się zmieni.
+
+Konta idą tam, gdzie mają właściciela w fikcji świata: stacja paliw jest zakładem firmy
+(`M5` `T-2` mówi wprost „M5 podmienia ciało na ofertę w `sim/economy`"), przewoźnik i parking
+są jednostkami miasta po M8, a taksówka — zgodnie z `M4` `D5` — nie ma encji firmy i dostaje
+konto techniczne z jawnie nazwanym właścicielem, dopóki jej nie dostanie.
+
+**Zakres.**
+
+| Co | Gdzie |
+|---|---|
+| Przebieg diagnostyczny: saldo świata z rozbiciem na kanały ruchu, doba po dobie | `tools/headless/src/m7_miasto.rs` (sekcja istnieje, brakuje rozbicia) |
+| Stacja paliw jako zakład z księgą; `FuelLedger.revenue` staje się przychodem zakładu | `sim/traffic/src/systems.rs`, `sim/economy/src/market/` |
+| Bilet i paliwo taboru: konto operatora komunikacji (jednostka miasta po M8b) | `sim/city`, `FareLedger.transit_revenue`, `transit_fuel_cost` |
+| Taryfa taksówkowa: konto techniczne z właścicielem nazwanym w `TxKind` | `sim/economy/src/books.rs` |
+| Opłata parkingowa: przychód miasta, nie rejestr | `FareLedger.parking_revenue` → `CityBudget` |
+| Niezmiennik świata **bez wyłączeń** jako bramka scenariusza, nie pomiar obok (`K-72`) | `tools/headless`, `sim/economy/tests/` |
+
+**Ostrzeżenie o determinizmie.** Pakiet zmienia hash dwa razy: raz przez przeniesienie kwot
+z rejestrów do kont, raz przez zniknięcie pól rejestrów z funkcji haszującej `sim/traffic`.
+Oba kroki idą w osobnych commitach, żeby dało się je rozdzielić przy porównaniu.
+
+**Kryterium:** test odtwarzający — przebieg 40-dobowy scenariusza z ruchem domyka niezmiennik
+świata z tolerancją **zero groszy**. Przed naprawą rozjazd wynosi +163,0 tys. zł i rośnie razem
+z liczbą dób, co drugi test sprawdza wprost: rozjazd po 80 dobach jest ponad dwukrotnie większy
+niż po 40, bo jest mnożnikowy. Bramka scenariusza `m5shop` przestaje być zawężona przez `W-17`
+i wraca do pełnego brzmienia z `U-17`.
+
+---
+
 ## 5.6 Decyzje otwarte tej podfazy
 
 **`D-N9` — Czy dług idzie za wyprowadzającym się z gniazda.** Propozycja: nie. Dwudziestopięciolatek
@@ -266,6 +389,14 @@ wiąże kredyt z gospodarstwem, nie z osobą. *Blokująca dla R2-WP8.*
 i woda zużywają się per osoba mniej niż liniowo (jedno oświetlenie, jedno ogrzewanie), więc
 liniowość jest tu gorszym przybliżeniem niż w żywności. Wariant „skala tylko dla żywności"
 jest łatwiejszy do obrony liczbowo, ale wymaga dwóch skal w danych. *Nieblokująca.*
+
+**`D-N20` — Czy taksówka dostaje encję przewoźnika, czy konto techniczne.** Propozycja: konto
+techniczne z właścicielem nazwanym w `TxKind`. `M4` `D5` rozstrzygnęło, że taksówka jest opcją
+transportową z taryfą z `data/roads/mode_choice.ron`, bez encji firmy i bez floty, i **kurs nie
+wjeżdża na sieć** — encja przewoźnika wymagałaby floty, kierowców i etatów, czyli mechaniki,
+której R2 nie wprowadza (§2 „czego to nie jest"). Wariant odwrotny jest lepszy docelowo i ma
+naturalny adres: M10d (rynek kontroli nad firmą) albo osobna faza usług. Jeśli decyzja pójdzie
+odwrotnie, R2-WP32 rośnie z `L` do `XL` i przestaje mieścić się w R2. *Blokująca dla R2-WP32.*
 
 ---
 

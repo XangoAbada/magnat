@@ -10,11 +10,12 @@ jak R1.
 
 R1 mierzył jedną rzecz — długość plików — i naprawiał ją jednym ruchem. R2 mierzy co innego:
 **rozjazd między tym, co dokumenty faz uznały za zamknięte, a tym, co robi kod**. Wykaz w §11 ma
-**56 wierszy** i powstał w trzech rzutach: 42 z przeglądu repozytorium po M7f, jeden dopisany
-przy weryfikacji, trzy z przeglądów w trakcie M8, a **dziesięć z recenzji przed commitem M9d**
-(pozycje 47–56). Z pierwszego rzutu jedna pozycja miała pakiet, jedna okazała się rozstrzygnięta
-i wypadła, jedenaście stało zapisanych w tabelach korekt albo w rejestrze długu — **każda bez
-wykonawcy** — a dwadzieścia dziewięć nie było znanych planowi w żadnej postaci.
+**65 wierszy** i powstał w czterech rzutach: 42 z przeglądu repozytorium po M7f, jeden dopisany
+przy weryfikacji, trzy z przeglądów w trakcie M8, **dziesięć z recenzji przed commitem M9d**
+(pozycje 47–56), jeden z M9e (57) i **osiem z przeglądu sesji po M9e** (pozycje 58–65).
+Z pierwszego rzutu jedna pozycja miała pakiet, jedna okazała się rozstrzygnięta i wypadła,
+jedenaście stało zapisanych w tabelach korekt albo w rejestrze długu — **każda bez wykonawcy** —
+a dwadzieścia dziewięć nie było znanych planowi w żadnej postaci.
 
 **Rzut z M9d różni się od poprzednich i dlatego warto go opisać osobno.** Nie wyszedł z przeglądu
 repozytorium, tylko z **recenzji jednej podfazy przed jej commitem** — i znalazł dziesięć pozycji,
@@ -25,12 +26,22 @@ wobec przeglądu okresowego: **recenzja jednej podfazy dała jedną czwartą wyk
 dla R2-WP26 (egzekutor rejestru długu): próg wychwytu leży w kadencji przeglądu, a nie w jego
 głębokości.
 
+**Rzut czwarty (58–65) nie czytał w ogóle kodu — czytał zapis sesji.** Metoda: wszystkie prompty
+i końcowe podsumowania 62 sesji od 13 do 18 września, zestawione z planem. Pytanie brzmiało
+„co zostało powiedziane i nigdzie nie zapisane", a nie „co jest zepsute". Wynik jest inny
+jakościowo od trzech poprzednich rzutów: **z ośmiu pozycji sześć było w dokumentach zapisanych,
+tylko pod adresem, który nie istnieje albo już minął**. Dwie z nich miały jawny wiersz „idzie do
+R2" w tabeli korekt fazy, której R2 nigdy nie zobaczyło (poz. 58, 59), a dwie były otwartą
+decyzją w dokumencie, który sam się zamknął (poz. 60, 61). To jest ta sama klasa co cztery
+pozycje rejestru długu z §5.13 `R2e` — z tą różnicą, że rejestr długu ma bramkę, a tabele korekt
+nie mają żadnej. Stąd poz. 64 i rozszerzenie R2-WP26.
+
 | | |
 |---|---|
 | **Wejście** | M11e zamknięte (wszystkie bramki fazy M11), `master` zielony, `cargo check --workspace --all-targets` czysty. |
-| **Pakiety robocze** | R2-WP1…R2-WP29, rozdzielone na sześć podfaz `R2a`…`R2f` |
+| **Pakiety robocze** | R2-WP1…R2-WP34, rozdzielone na sześć podfaz `R2a`…`R2f` |
 | **Wynik do pokazania** | `headless m7-miasto --days 3600` z sekcją „Wykaz R2": dla każdego wiersza wykazu §11 status `zamknięta / przeniesiona / odrzucona / nie dotyczy` z liczbą, która to potwierdza. |
-| **Kryterium zamknięcia** | Kryteria R2-WP1…R2-WP26 (§4) plus siedem kryteriów akceptacji z §7. Twarde: **żadna pozycja wykazu §11 nie kończy R2 bez statusu** — zamknięta z testem albo przeniesiona z imiennym adresatem i powodem. |
+| **Kryterium zamknięcia** | Kryteria R2-WP1…R2-WP34 (§4) plus siedem kryteriów akceptacji z §7. Twarde: **żadna pozycja wykazu §11 nie kończy R2 bez statusu** — zamknięta z testem albo przeniesiona z imiennym adresatem i powodem. |
 | **Poprzednia / następna** | `M11e-budzet-klatki.md` / `M12a-pamiec.md` |
 
 ---
@@ -168,11 +179,11 @@ dotyka 370 miejsc i każdy wcześniejszy pakiet, który dokłada powód, powięk
 | Podfaza | Dokument | Pakiety | Temat |
 |---|---|---|---|
 | `R2a` | `R2a-rodzina-i-cykl-zycia.md` | R2-WP1…R2-WP6 | Cykl szkolny, graf rodziny, gospodarstwo, sieroctwo, wykształcenie, tożsamość |
-| `R2b` | `R2b-pieniadz-gospodarstwa.md` | R2-WP7…R2-WP11 | Utarg zakładu, majątek przy rozwiązaniu, dochód po zdarzeniu, dziedziczenie, skala ekwiwalentna |
+| `R2b` | `R2b-pieniadz-gospodarstwa.md` | R2-WP7…R2-WP11, R2-WP30, R2-WP32 | Utarg zakładu, majątek przy rozwiązaniu, dochód po zdarzeniu, dziedziczenie, skala ekwiwalentna, lista płac, konta ruchu |
 | `R2c` | `R2c-rozjazdy-danych-i-kodu.md` | R2-WP12…R2-WP16 | Wiek produkcyjny, wartość czasu, substytucja, chodniki, martwe potrzeby |
 | `R2d` | `R2d-domkniecie-swiata.md` | R2-WP17…R2-WP19 | Kopalnie na złożach, gęstość firm, przechwytywanie rzek |
-| `R2e` | `R2e-dlug-i-martwy-kod.md` | R2-WP20…R2-WP23, R2-WP27, R2-WP28 | `DecisionReason`, generator dróg, martwe warianty, dokumentacja, język identyfikatorów, liczba i tekst dla gracza |
-| `R2f` | `R2f-pomiar-i-bramki.md` | R2-WP24…R2-WP26, R2-WP29 | Filtry bramek G4/G11, testy miasta, egzekutor rejestru długu, budżety grafu i Gantta z M9e |
+| `R2e` | `R2e-dlug-i-martwy-kod.md` | R2-WP20…R2-WP23, R2-WP27, R2-WP28, R2-WP31 | `DecisionReason`, generator dróg, martwe warianty, dokumentacja, język identyfikatorów, liczba i tekst dla gracza, rozdzielenie urzędu |
+| `R2f` | `R2f-pomiar-i-bramki.md` | R2-WP24…R2-WP26, R2-WP29, R2-WP33, R2-WP34 | Filtry bramek G4/G11, testy miasta, egzekutor rejestru długu **i poprawek wędrujących w przód**, budżety grafu i Gantta z M9e, linia bazowa benchmarków, scenariusz eksportu |
 
 Tabela pakietów z rozmiarami i statusem stoi w dokumencie każdej podfazy. Zbiorczo:
 
@@ -203,12 +214,23 @@ Tabela pakietów z rozmiarami i statusem stoi w dokumencie każdej podfazy. Zbio
 | R2-WP23 | Dokumentacja wejściowa i zakresy strumieni | R2e | — | S | `[ ]` |
 | R2-WP24 | Bramka bezrobocia naprawdę mierzy bezrobocie | R2f | — | M | `[ ]` |
 | R2-WP25 | Testy miasta wychodzą z `#[ignore]` | R2f | — | M | `[ ]` |
-| R2-WP26 | Egzekutor rejestru długu | R2f | — | S | `[ ]` |
+| R2-WP26 | Egzekutor rejestru długu i poprawek wędrujących w przód | R2f | — | M | `[ ]` |
 | R2-WP27 | Jeden język w kodzie: identyfikatory i komunikaty | R2e | — | zależny od `D-N19` | `[ ]` |
 | R2-WP28 | Liczba i tekst dla gracza bez niespodzianek | R2e | — | S | `[ ]` |
 | R2-WP29 | Budżety grafu, Gantta i panelu zmierzone | R2f | M9e | S | `[ ]` |
+| R2-WP30 | Lista płac obciąża pracodawcę | R2b | R2-WP7 | M | `[ ]` |
+| R2-WP31 | Wpłata poza rejestrem to nie praktyka monopolistyczna | R2e | — | M | `[ ]` |
+| R2-WP32 | Konta stacji, przewoźnika, taksówki i parkingu | R2b | — | L | `[ ]` |
+| R2-WP33 | Linia bazowa benchmarków mierzy wszystkie | R2f | — | S | `[ ]` |
+| R2-WP34 | Scenariusz `export_drains` i druga połowa kryterium WP9 M6 | R2f | R2-WP32 | M | `[ ]` |
 
 `⇧` = kandydat do wyprzedzenia przed R2 zgodnie z §2b.
+
+Pakiety R2-WP30…R2-WP34 pochodzą z rzutu czwartego i mają wspólną cechę: **każdy był już komuś
+przypisany i adres wygasł**. R2-WP30 był przenoszony sześć razy (M7b → M7f → M8a → M8d → M8e →
+`CJ-9`), R2-WP32 jest decyzją otwartą nr 16 fazy M5, która trzyma bramkę 7 tamtej fazy,
+R2-WP33 to `D-R8` z R1, R2-WP34 to `AH-12`/`AI-8` z M6c wskazujące na M6e, które zamknęło się
+bez tego scenariusza.
 
 ---
 
@@ -230,8 +252,10 @@ i zapisana.
 ## 6. Co to zmienia w dokumentach faz wcześniejszych
 
 Zgodnie z `K-18` wiedza zdobyta teraz wraca do dokumentu, którego dotyczy — nie czeka, aż ktoś
-do niego dojdzie. R2 wymaga sześciu wpisów w dokumentach wcześniejszych i **żaden z nich nie jest
-przeprojektowaniem tamtej fazy**:
+do niego dojdzie. R2 wymaga jedenastu wpisów w dokumentach wcześniejszych i **żaden z nich nie jest
+przeprojektowaniem tamtej fazy**. Cztery ostatnie wiersze pochodzą z rzutu czwartego i mają jeden
+kształt: dokument fazy ma tam otwartą pozycję z adresem, którego nie ma — wpis nadaje jej adres,
+a nie zmienia jej treści:
 
 | Dokument | Wpis |
 |---|---|
@@ -242,6 +266,10 @@ przeprojektowaniem tamtej fazy**:
 | `M10e-relacje-i-zwiazki.md` | Warunek składowej grafu wśród pracowników zakładu liczy dziś uczniów. Do §5.9 wiersz o poz. 11 |
 | `M6-lancuch-dostaw.md` | `AH-3` twierdzi, że `Carrier::Pipeline` wozi ropę wewnątrz miasta — ścieżki wykonania nie ma. Sprostowanie w tabeli korekt |
 | `R1-refaktor-po-M5.md` | Pozycje 24, 33, 34, 35, 37, 38 rejestru dostają adresata `R2` zamiast pustego pola albo „żadna z M6–M12" |
+| `M5-gospodarka-detaliczna.md` | Decyzja otwarta nr 16 (konta stacji paliw, przewoźnika, taksówki i parkingu) dostaje adresata: R2-WP32. Do §9.16 zdanie zamykające i wiersz w tabeli korekt — bramka 7 fazy M5 zostaje otwarta do R2, ale **z nazwanym wykonawcą**, a nie bez niego |
+| `M8-miasto-jako-aktor.md` (`CJ-9`) | Obie pozycje obiecane wykazowi R2 istnieją teraz jako 58 i 59. Wiersz w tabeli korekt z datą wpisania — bo między obietnicą a wpisem minęły dwie podfazy M9 |
+| `R1-refaktor-po-M5.md` (`D-R8`) | Decyzja „odnowić linię bazową w pierwszym commicie po R1" nie miała adresata i R1 zamknęło się bez niej. Adresat: R2-WP33. Wiersz przy `D-R8` |
+| `M6-lancuch-dostaw.md` (`AI-8`) | Scenariusz `export_drains` z §7.7 miał powstać w M6e i nie powstał; kryterium WP9 zostało zawężone, a pomiar przeniesiony donikąd. Adresat: R2-WP34 |
 
 ---
 
@@ -261,8 +289,11 @@ przeprojektowaniem tamtej fazy**:
 5. **Bramka G11 świeci czerwono na dzisiejszym świecie i zielono po R2-WP18.** To jest test
    samej bramki: przy bezrobociu 0,2 % ma padać, a jeśli nie pada, to jej filtry ją wyłączają
    i trzeba je nazwać. G4 przestaje być doradcza albo dostaje nową widełkę z pomiarem.
-6. **Rejestr długu strukturalnego nie ma pozycji bez adresata.** Pozycja bez fazy-właściciela jest
-   błędem bramki `struct_guard`, nie wpisem w tabeli.
+6. **Rejestr długu strukturalnego nie ma pozycji bez adresata, a tabela korekt nie ma obietnicy
+   bez pokrycia.** Pozycja bez fazy-właściciela jest błędem bramki `struct_guard`, nie wpisem
+   w tabeli; wiersz korekty wskazujący dokument, w którym nie ma jej treści, jest błędem
+   `plan_guard`. Obie bramki muszą **zaświecić na czerwono na stanie sprzed R2** — inaczej
+   sprawdzają co innego, niż myślą.
 7. **`README.md` opisuje stan repozytorium**, a nie stan sprzed sześciu faz. Weryfikacja: test CI
    porównuje deklarowaną fazę z ostatnim odhaczonym wierszem `00-postep.md`.
 
@@ -351,9 +382,15 @@ i staje się osobnym commitem bez żadnej innej zmiany — tak samo jak `cargo f
 
 ## 10. Wpisy wymagane w `00-konwencje-i-kontrakty.md` §4a
 
-Cztery zmiany R2 dotykają kontraktów z dokumentu 00 i zgodnie z jego §4a wymagają wpisu `K-n`.
-Pierwszy wolny numer to **`K-58`**. Wpisy powstają w commicie pakietu, który zmianę wprowadza,
-a nie z góry.
+Sześć zmian R2 dotyka kontraktów z dokumentu 00 i zgodnie z jego §4a wymaga wpisu `K-n`.
+Wpisy powstają w commicie pakietu, który zmianę wprowadza, a nie z góry.
+
+**Numeracja sprawdzona 2026-09-18.** R2 zarezerwowało `K-58`…`K-61`, kiedy pierwszym wolnym
+numerem był `K-58`. W międzyczasie M8 i M9 zajęły `K-62`…`K-71`, a `K-60` **wykonała M8c** —
+dokładnie w tej treści, w której był zarezerwowany (wiek produkcyjny jako dana). `K-58`, `K-59`
+i `K-61` są nadal wolne i zostają przy swoich pakietach; dwa wpisy z rzutu czwartego dostają
+**`K-72` i `K-73`**, bo pierwszy wolny numer jest teraz tam. To jest powód, dla którego rezerwuje
+się numery w tabeli, a nie w głowie.
 
 | Numer | Pakiet | Treść |
 |---|---|---|
@@ -361,10 +398,12 @@ a nie z góry.
 | `K-59` | R2-WP2 | `RelationKind` dostaje wariant `Grandparent`. Kolejność wariantów jest kontraktem zapisu gry — dopisywać wolno wyłącznie na końcu |
 | `K-60` | R2-WP12 | Wiek produkcyjny jest **daną**, nie stałą w kodzie. Jedno źródło: `data/demography/demography.ron`, pole `ages.labour_force`. Statystyka bezrobocia i model makro czytają to samo pole |
 | `K-61` | R2-WP8 | Rozwiązanie gospodarstwa domowego jest **operacją księgową**: salda przechodzą do spadkobierców albo na konto techniczne, nigdy nie znikają razem z encją. Niezmiennik P1 obejmuje gospodarstwa |
+| `K-72` | R2-WP32 | Rejestry ruchu (`FuelLedger`, `FareLedger`, opłaty parkingowe) przestają być rejestrami i stają się **kontami w `Books`**. Niezmiennik świata `society::total_money + Books::total_balance() == const` obowiązuje wtedy bez wyłączeń i jest bramką scenariusza, nie pomiarem wypisywanym obok |
+| `K-73` | R2-WP31 | `AgencyKind` dostaje wariant `Prosecution` **na końcu** listy — kolejność wariantów jest kontraktem indeksu zapisu gry. Przesłanka „wpłata poza rejestrem wpłat kampanijnych" przechodzi z urzędu antymonopolowego do niego |
 
 ---
 
-## 11. Wykaz — 57 wierszy
+## 11. Wykaz — 65 wierszy
 
 Numeracja jest numeracją przeglądu i nie zmienia się. Kolumna „Plan" mówi, co wiedziały dokumenty
 przed R2: `—` = nieznane planowi, `zapis` = zapisane jako znana usterka bez wykonawcy,
@@ -374,9 +413,9 @@ przed R2: `—` = nieznane planowi, `zapis` = zapisane jako znana usterka bez wy
 |---|---|---|---|---|
 | 1 ⇧ | Dziecko urodzone w grze nie dostaje flagi ucznia ani szkoły | — | R2-WP1 | `[ ]` |
 | 2 ⇧ | Zakład produkcyjny nigdy nie ma utargu; tier taktyczny go nie zamknie | zapis `M7e` `BC-8` | R2-WP7 | `[ ]` |
-| 3 | Szczebel `Substituted` kaskady ma puste ramię `match` | zapis `M6c` `AG-6` | R2-WP14 | `[ ]` |
+| 3 | Szczebel `Substituted` kaskady ma puste ramię `match` | zapis `M6` `AG-6` | R2-WP14 | `[ ]` |
 | 4 | Wartość czasu zamrożona na stanie z generacji świata | — | R2-WP13 | `[ ]` |
-| 5 | Zero zakładów wydobywczych ze złożem w mieście 4 km | zapis `M6e` `AQ-8` | R2-WP17 | `[ ]` |
+| 5 | Zero zakładów wydobywczych ze złożem w mieście 4 km | zapis `M6` `AQ-8` | R2-WP17 | `[ ]` |
 | 6 | Gęstość firm ~10× za niska; bezrobocie 0,2 % przy 12 032 wakatach | zapis `00-postep` `BF-4`/`BF-10` | R2-WP18 | `[ ]` |
 | 7 ⇧ | `WORKING_AGE` w kodzie (2 miejsca) vs `work_start`/`retirement` w danych | — | R2-WP12 | `[x]` **wykonane w M8c** (`K-60`) |
 | 8 | Rodzeństwo z zasiedlenia i napływu bez relacji `Sibling` | — | R2-WP2 | `[ ]` |
@@ -419,7 +458,6 @@ przed R2: `—` = nieznane planowi, `zapis` = zapisane jako znana usterka bez wy
 | 44 | **`README.md` opisywał stan „M1 zamknięte"** przez siedem faz — poprawione w M8c na „M8c zamknięte". Pozycja 36 zostaje, bo jej treścią jest **test CI pilnujący opisu**, a nie jednorazowa poprawka | — | R2-WP23 (test) | `[~]` tekst poprawiony w M8c, testu nadal nie ma |
 | 45 | **Wartość gruntu nie zmienia się w trakcie gry.** Jedyne dwa zapisy `Parcel.land_value_per_m2` w całym repozytorium to `city::value::pass_1` i `pass_2`, obie wołane raz przy generacji miasta (`city/mod.rs`). Każdy kanał skutku kończący się na wartości gruntu — parki, zaległy wywóz odpadów, hałas — jest przez to **niewykonalny**, a nie tylko odłożony. Znalezione w M8d przy kanałach skutków usług publicznych (`CG-3`) | — | **bez pakietu** — kandydat na R2-WP27, bo żaden istniejący go nie obejmuje | `[ ]` |
 | 46 | **`ServiceKind::Waste` nie ma żadnego archetypu w `data/buildings/public.ron`.** `SpendCategory::Waste` ma udział w planie wydatków od M8a, więc miasto wydaje pieniądze na usługę, której w mieście nie ma — pokrycie wywozu odpadów jest zerowe w każdej dzielnicy i takie zostanie, dopóki ktoś nie dopisze archetypu. Znalezione w M8d (`CG-4`) | — | R2-WP22 (martwe warianty i nieużywane pola) | `[ ]` |
-
 | 47 | **Identyfikatory prywatne są po polsku w całym repozytorium**, wbrew `00` §6 i `CLAUDE.md` („kod i identyfikatory po angielsku, bez wyjątków"). Publiczne API jest angielskie, prywatne nazwy polskie — w `sim/economy`, `sim/world`, `sim/agents`, `game/` i `tools/magnat`. Nie jest to usterka jednej podfazy, tylko **druga, niezapisana konwencja** przejmowana z pliku do pliku od M5 | — | R2-WP27 (`D-N19`) | `[ ]` |
 | 48 | **Komunikaty deweloperskie `eprintln!` są po polsku** w kliencie i w scenariuszach (`tools/magnat/src/session.rs`, `tools/headless`). Ta sama nieuzgodniona konwencja co pozycja 47, ale inna reguła: to nie jest identyfikator ani tekst gracza, tylko trzecia kategoria, której `00` §6 nie nazywa | — | R2-WP27 | `[ ]` |
 | 49 | **Postać tekstowa polityki drukuje separator dziesiętny `.` niezależnie od języka** (`game::policy::text::procent`), a ta liczba trafia na ekran w zakładkach „reguły" i „tekst" edytora. Polski gracz czyta „98.55 %" zamiast „98,55 %" | — | R2-WP28 | `[ ]` |
@@ -431,6 +469,14 @@ przed R2: `—` = nieznane planowi, `zapis` = zapisane jako znana usterka bez wy
 | 55 | **Trzy z pięciu dziedzin polityki nie mają wykonawcy** (`Hr`, `Production`, `Logistics`). Walidator odrzuca je jawnie (`DomainNotAvailable`), więc cichej polityki nie ma — ale `Action::domain()` rozcina przy okazji **dwie z sześciu polityk przykładowych z `M9d` §5.6** na dwie każdą, bo przecena jest cenowa, a wycofanie z półki i zamówienie zapasowe. Czy dziedzina ma zostać granicą polityki, czy tylko granicą akcji — decyzja otwarta nr 13 fazy M9 | zapis `M9d` `DF-2` | R2-WP22 (weryfikacja po decyzji) | `[ ]` |
 | 56 ⇧ | **Dry-run nie zna salda, nastroju załogi ani wakatów.** Ślad doby zakładu (`PolicyTrace`) niesie półkę, bo o niej mówi polityka cenowa i zapasowa. Reguła oparta na `saldo`, `nastrój_załogi` albo `wolne_etaty` wychodzi w podglądzie jako „nie wiem" (`DrySummary.blind`), choć w wykonaniu się odpala. Sufit nazwany w kodzie, adresat wskazany: panel finansów `M9e` | zapis `M9d` `DF-6` | ⇧ `M9e` (WP10) | `[ ]` |
 | 57 | **Cel zapasu firmy AI dla towaru bez historii sprzedaży wychodzi w milisztukach.** `ai_run::apply` przy `OpsAction::SetRestockDays` liczy zapas dobowy jako `obrót_7d / 7` z podłogą **jednej milisztuki**; dla towaru, który jeszcze się nie sprzedawał, cel „na N dni" wychodzi N tysięcznych sztuki. Sklep przestaje ten towar zamawiać, a sterownik ceny — liczący zapełnienie jako `ilość / cel` — widzi magazyn przepełniony i schodzi do podłogi marży | `sim/economy/src/ai_run/apply.rs`, ramię `OpsAction::SetRestockDays`; ścieżka gracza (`Market::set_restock_days`) dostała w M9e wyjście `restock_without_history`, ścieżka AI **nie** | R2-WP22 | [ ] |
+| 58 | **Wypłaty płyną z „reszty świata", a lista płac firm rośnie w skrzynce, której nikt nie opróżnia.** `PayrollOutbox::take()` nie ma w repozytorium ani jednego wołającego; pensje trafiają do gospodarstwa przez `pay_incomes` z konta `rest_of_world`, więc płaca **nie obciąża pracodawcy**. Blokuje łańcuch „budżet miasta → pensja nauczyciela → jakość szkoły" (`CH-4`), bo miasto nie może być pracodawcą, dopóki wypłata nie ma odbiorcy. Pozycja przenoszona **sześć razy** (M7b → M7f → M8a → M8d → M8e → `CJ-9`) | zapis `M8` `CJ-9` — wiersz kazał dopisać ją do tego wykazu i nie została dopisana | R2-WP30 | `[ ]` |
+| 59 | **Urząd antymonopolowy ściga przestępstwo.** Od M8e prowadzi sprawy z dwóch przesłanek: udziału rynkowego i wpłaty poza rejestrem wpłat kampanijnych. Druga nie jest praktyką ograniczającą konkurencję, tylko czynem karalnym, i należy do innego urzędu. Rozdzielenie wymaga szóstego wariantu `AgencyKind` — dopisywanego **na końcu**, bo kolejność wariantów jest kontraktem indeksu | zapis `M8` `CJ-9` — jak wyżej | R2-WP31 (`K-73`) | `[ ]` |
+| 60 | **Niezmiennik pieniądza świata nie domyka się, kiedy w scenariuszu jeździ ruch.** Mieszkaniec płaci za paliwo, bilet i taryfę z komponentu `Wealth`, a drugą stroną jest `FuelLedger`/`FareLedger` z `sim/traffic` — **rejestr, nie konto**. Kanałów bez pary jest co najmniej dwa i działają w przeciwne strony; taryfa taksówkowa jest podejrzanym numer jeden. Rozjazd rośnie razem z wydatkami na dojazdy: +63,2 tys. zł na 40 dób po M5c, **+163,0 tys. zł po M5d** — czyli jest **mnożnikowy, nie addytywny** | decyzja otwarta nr 16 `M5` §9 — trzyma **bramkę 7 fazy M5** i nie należała do żadnego pakietu M5…M9 | R2-WP32 (`K-72`) | `[ ]` |
+| 61 | **Trzynaście z czterdziestu jeden benchmarków nie ma wpisu w linii bazowej**, więc `bench_guard` nie mierzy dla nich niczego — i robi to cicho, bo brak wpisu jest informacją, nie błędem. Dotyczy całego planera (`plan_day`, `plan_day_explained`, `replan`), mikro pieszych, `estimate` z cache, trzech pozycji demografii, Etapu 8 i czterech pozycji indeksu parcel. Ta sama klasa co poz. 38b: bramka raportuje zielono, nie sprawdzając tego, co myśli, że sprawdza | `R1` `D-R8` — opisane w `00-postep.md` jako „otwarte z adresem", **adresu nigdy nie wpisano** | R2-WP33 | `[ ]` |
+| 62 | **Scenariusz `export_drains` nie istnieje.** `M6` §7.7 wymienia go jako test kryterium WP9 („eksport mierzalnie podnosi ceny lokalne"); `AH-12` zawęziło kryterium do samego drenażu masy, a `AI-8` przeniosło pomiar cen za WP11. M6e zamknęło się bez niego i nie ma go ani w `data/scenarios/`, ani nigdzie w kodzie. Druga połowa kryterium fazy M6 nie została zmierzona i nic tego nie pilnuje | zapis `M6c` `AH-12`, `M6` `AI-8` — adresat `M6e` wyczerpany | R2-WP34 | `[ ]` |
+| 63 | **`UtilityKind` i `UtilityService` żyją w kodzie obie naraz.** `CB-1` w M8 zarządziło zmianę nazwy; wykonana jest w połowie — oba identyfikatory są w `engine/core` (`vocab.rs`, `decision.rs`, `lib.rs`) i oba mają czytelników. Dwie nazwy na jedno pojęcie to dokładnie ten rodzaj długu, który R2-WP22 zbiera | zapis `M8` `CB-1` (zarządzone, niedokończone) | R2-WP22 | `[ ]` |
+| 64 ★ | **Poprawka wędrująca w przód nie ma egzekutora po stronie adresata.** Tabela korekt fazy potrafi wskazać dokument docelowy, a rzeczy w nim nie ma — sprawdzenie dwudziestu wierszy wskazujących inny plik dało **osiem trafień bez pokrycia pod wskazanym adresem**, w tym obie pozycje `CJ-9`. Dla rejestru długu tę samą chorobę leczy R2-WP26; dla tabel korekt nie ma nic. To jest przyczyna, dla której pozycje 58–62 w ogóle powstały | — | R2-WP26 (rozszerzenie zakresu) | `[ ]` |
+| 65 | **`CLAUDE.md` mówi o trzech formach liczebnika polskiego, kod ma cztery.** Reguła lokalizacji brzmi „polski ma trzy formy (1 · 2–4 · 5+)"; `Locale::plural_forms` zwraca dla polskiego **4**, bo `DE-8` w M9b dołożyło CLDR-owe `other` dla wartości ułamkowych („1,5 sklepu"). Kod ma rację, reguła jest nieaktualna — a to jest dokument, który każda nowa sesja czyta jako wiążący | zapis `M9b` `DE-8` (zmiana wykonana, reguła nietknięta) | R2-WP23 | `[ ]` |
 
 **Bilans wejściowy:** 1 pozycja miała pakiet (37), 1 okazała się rozstrzygnięta i wypadła
 z wykazu (38), 11 było zapisanych jako znana usterka **bez wykonawcy**, a 29 nie było znanych
@@ -441,6 +487,18 @@ powstały (55, 56 — obie z adresatem, ale bez pakietu), osiem nie było znanyc
 z dziesięciu to kod starszy niż M9d: konwencja nazw ciągnie się od M5, `RemoveFromShelf`
 i promień metryki od M7c, `Catalog::must` od M3. Nowe są trzy i wszystkie dotyczą liczby albo
 tekstu na granicy interfejsu (49, 51, 52).
+
+**Rzut przeglądu sesji (58–65)** ma inny rozkład niż wszystkie poprzednie i to jest jego jedyny
+ciekawy wynik. Trzy wcześniejsze rzuty czytały kod i znajdowały rzeczy, o których plan nie
+wiedział — tu jest odwrotnie: **sześć z ośmiu pozycji plan znał i zapisał**, a mimo to nie miały
+wykonawcy. Dwie były wprost zaadresowane do tego wykazu i nie dojechały (58, 59), dwie były
+decyzją otwartą w dokumencie, który zamknął się bez niej (60 — bramka 7 fazy M5, 61 — `D-R8`
+z R1), jedna miała adresata, który zamknął się wcześniej (62), jedna była zarządzona i wykonana
+w połowie (63). Tylko 64 i 65 są nowe, a 64 opisuje mechanizm, który wyprodukował pozostałe.
+
+Wniosek jest wąski i dlatego wart zapisania: **liczba pozycji, które plan „zna", nie mówi nic
+o tym, ile z nich ktoś zrobi.** Adres bez egzekutora jest dokładnie tak samo skuteczny jak brak
+adresu, tylko dłużej wygląda na rozwiązany.
 
 Dziura jest jednorodna, a nie zbieraniną: **18 z 29 nieznanych** to demografia, rodzina, cykl
 życia i majątek gospodarstwa (1, 7–12, 16–28, 31). Reszta rozkłada się na higienę repozytorium
@@ -460,12 +518,12 @@ Ujednolicenie nagłówków jest zadaniem R2-WP23.
 | Podfaza | Pakiety | Pliki dotknięte | Testy nowe | Rozmiar |
 |---|---|---|---|---|
 | `R2a` | 6 | ~14 w `sim/agents`, `sim/world/population` | 11 | L |
-| `R2b` | 5 | ~9 w `sim/economy`, `sim/agents`, `sim/firms` | 8 | M |
+| `R2b` | 7 | ~14 w `sim/economy`, `sim/agents`, `sim/firms`, `sim/traffic`, `sim/city` | 13 | L |
 | `R2c` | 5 | ~11 w `sim/traffic`, `sim/supply`, `sim/agents`, `data/` | 9 | M |
 | `R2d` | 3 | ~7 w `sim/world` | 5 | L |
-| `R2e` | 6 | ~370 miejsc w 10 crate'ach (sam R2-WP20); R2-WP27 zależny od `D-N19` | 8 | L |
-| `R2f` | 3 | `tools/balansator`, `sim/world/tests`, `scripts/` | 3 | M |
-| **Razem** | **28** | — | **44** | — |
+| `R2e` | 7 | ~370 miejsc w 10 crate'ach (sam R2-WP20); R2-WP27 zależny od `D-N19` | 10 | L |
+| `R2f` | 6 | `tools/balansator`, `sim/world/tests`, `scripts/`, `benches/`, `data/scenarios/` | 7 | L |
+| **Razem** | **34** | — | **55** | — |
 
 Szacunek liczby testów jest dolną granicą: kryterium akceptacji nr 2 wymaga testu, który padał,
 dla **każdego** pakietu, a pakiety wielotematyczne (R2-WP2, R2-WP22) potrzebują go dla każdego

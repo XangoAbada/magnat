@@ -45,7 +45,7 @@ naprawy i wchodzi tu tylko dlatego, że dotyka tego samego generatora i tej same
 
 ### R2-WP17 — Kopalnia staje na złożu
 
-**Pozycja wykazu:** 5. Zapisana jako `AQ-8` w `M6e` z adresem M7; M7 zamknięte bez niej.
+**Pozycja wykazu:** 5. Zapisana jako `AQ-8` w `M6-lancuch-dostaw.md` z adresem M7; M7 zamknięte bez niej.
 
 **Przyczyna.** Etap 7 generatora rozstawia zakłady dwiema drogami. Pierwsza — klastry przemysłowe
 z szablonami łańcuchów (`data/chains/templates.ron`) — sprawdza dopasowanie do złoża. Druga —

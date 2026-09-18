@@ -6,9 +6,9 @@ dokumentu R2. Ostatnia podfaza — zamyka R2 i wystawia rachunek.
 | | |
 |---|---|
 | **Wejście** | R2a…R2e zamknięte. R2-WP24 mierzy skutek R2-WP18, więc nie ma sensu wcześniej; R2-WP26 egzekwuje regułę na rejestrze, który R2e właśnie posprzątał. |
-| **Pakiety robocze** | R2-WP24…R2-WP26 |
+| **Pakiety robocze** | R2-WP24…R2-WP26, R2-WP29, R2-WP33, R2-WP34 |
 | **Wynik do pokazania** | Raport balansatora z biegu nocnego, w którym **wszystkie jedenaście bramek ma werdykt** — dziś dwie są odfiltrowane, a jedna jest doradcza. Plus wyjście `struct_guard --all` z listą pozycji rejestru bez adresata: ma być pusta. |
-| **Kryterium zamknięcia** | Kryteria R2-WP24…R2-WP26 plus siedem kryteriów akceptacji z `R2` §7. To jest moment, w którym R2 się zamyka. |
+| **Kryterium zamknięcia** | Kryteria R2-WP24…R2-WP26, R2-WP29, R2-WP33 i R2-WP34 plus siedem kryteriów akceptacji z `R2` §7. To jest moment, w którym R2 się zamyka. |
 | **Poprzednia / następna** | `R2e-dlug-i-martwy-kod.md` / `M12a-pamiec.md` |
 
 ---
@@ -34,6 +34,11 @@ Czwarta rzecz jest o piętro wyżej i dotyczy samego procesu: **reguła „pozyc
 adresata" nie ma egzekutora** (§5.13 w `R2e`). Cztery pozycje przeżyły sześć faz z adresatem
 skreślonym, nieistniejącym albo takim, który nie zadziałał.
 
+Piąta jest tą samą chorobą w drugim miejscu: **poprawka wędrująca w przód też nie ma egzekutora**.
+Tabela korekt potrafi wskazać dokument docelowy, a rzeczy w nim nie ma — i tak zniknęły obie
+pozycje, które `M8` `CJ-9` obiecał temu dokumentowi. Obie połówki naprawia R2-WP26, bo to jedna
+przyczyna i jeden wzorzec skryptu.
+
 ---
 
 ## 5.17 Pakiety robocze
@@ -42,7 +47,10 @@ skreślonym, nieistniejącym albo takim, który nie zadziałał.
 |---|---|---|---|---|
 | R2-WP24 | Bramka bezrobocia naprawdę mierzy bezrobocie | R2-WP18 | M | `[ ]` |
 | R2-WP25 | Testy miasta wychodzą z `#[ignore]` | — | M | `[ ]` |
-| R2-WP26 | Egzekutor rejestru długu | R2e | S | `[ ]` |
+| R2-WP26 | Egzekutor rejestru długu i poprawek wędrujących w przód | R2e | M | `[ ]` |
+| R2-WP29 | Budżety grafu, Gantta i panelu zmierzone | M9e | S | `[ ]` |
+| R2-WP33 | Linia bazowa benchmarków mierzy wszystkie | — | S | `[ ]` |
+| R2-WP34 | Scenariusz `export_drains` | R2-WP32 | M | `[ ]` |
 
 ---
 
@@ -134,9 +142,9 @@ na maszynie CI. Macierz hashy dla 4 km i 16 km identyczna bit w bit przed i po.
 
 ---
 
-### R2-WP26 — Egzekutor rejestru długu
+### R2-WP26 — Egzekutor rejestru długu i poprawek wędrujących w przód
 
-**Pozycja wykazu:** 35.
+**Pozycje wykazu:** 35, 64.
 
 **Przyczyna.** Reguła z R1 brzmi: pozycja rejestru ma adresata — fazę, która ją otworzy z powodu
 innego niż liczba linii. Reguła jest dobra i w trzydziestu przypadkach zadziałała. W czterech nie,
@@ -157,6 +165,29 @@ nie jest już odhaczona w `00-postep.md`.
 Pozycja, której adresat zamknął się bez niej, jest **błędem bramki**, nie wpisem w tabeli. To jest
 dokładnie ta klasa, która przeżyła sześć faz.
 
+**Druga połowa pakietu, dopisana po przeglądzie sesji (poz. 64).** Rejestr długu ma przynajmniej
+regułę, którą da się egzekwować. **Tabele korekt nie mają żadnej** — a niosą dokładnie ten sam
+rodzaj zobowiązania: wiersz mówi „to idzie do `M10-glebia.md`" albo „dwie pozycje do wykazu R2",
+i nikt nigdy nie sprawdza, czy dojechało. Sprawdzenie dwudziestu takich wierszy wskazujących inny
+plik dało **osiem bez pokrycia pod wskazanym adresem**. Większość okazała się nieszkodliwa — rzecz
+istniała w kodzie albo w dokumencie sąsiednim — ale dwa przypadki były prawdziwą stratą i oba
+dotyczyły tego dokumentu: `M8` `CJ-9` obiecał wykazowi R2 dwie pozycje, których w nim nie było
+(dziś 58 i 59).
+
+Mechanizm psucia jest ten sam co przy rejestrze: **wiedzę ma ten, kto ją właśnie zdobył**, a wpis
+w cudzym dokumencie jest jedyną rzeczą, która ją przenosi. Jeśli wpis nie powstanie albo powstanie
+pod adresem, którego nikt nie odwiedzi, K-18 działa na papierze.
+
+**Szew dla drugiej połowy.** Osobny skrypt, nie rozbudowa `struct_guard` — bo to jest sprawdzenie
+dokumentów, a nie kodu, i nie ma powodu, żeby bramka strukturalna padała przez markdown. Parsowanie
+jest proste, bo tabele mają ustalony kształt po ujednoliceniu nagłówków w R2-WP23: wiersz z nazwą
+pliku `.md` w drugiej kolumnie deklaruje adresata.
+
+Sprawdzenie jest **słabe i takie ma być**: czy plik docelowy istnieje i czy zawiera kod korekty
+albo charakterystyczny identyfikator z jej treści. Silniejsze sprawdzenie (czy rzecz naprawdę
+została opisana) wymagałoby czytania ze zrozumieniem i skończyłoby się wyłączeniem bramki po
+trzecim fałszywym alarmie — dokładnie tak, jak `AD-6` opisuje los bramki, która przeszkadza.
+
 **Zakres.**
 
 | Co | Gdzie |
@@ -167,12 +198,109 @@ dokładnie ta klasa, która przeżyła sześć faz.
 | Pozycja bez adresata albo z adresatem przeterminowanym → kod wyjścia 1 w trybie `--all` | tamże |
 | Ten sam test dla pozycji oznaczonych „dziś nie planuje go żadna z M6–M12" — taki wpis jest dopuszczalny **tylko z datą przeglądu** | tamże |
 | Wiersz w `CLAUDE.md` przy regule przeglądu strukturalnego | `CLAUDE.md` |
+| `scripts/plan_guard.py`: wiersz tabeli korekt wskazujący plik `.md` musi mieć w nim pokrycie — kod korekty albo identyfikator z treści | nowy skrypt |
+| Wiersz wskazujący dokument **odhaczony** w `00-postep.md` bez pokrycia → kod wyjścia 1 | tamże |
+| Job w CI obok `struct-guard`, bez `continue-on-error` | `.github/workflows/ci.yml` |
 
-**Kryterium:** test odtwarzający — rejestr z pozycją wskazującą na fazę odhaczoną w `00-postep.md`
-daje kod wyjścia 1 z nazwą pozycji. Przed naprawą skrypt jej nie widzi. `python scripts/struct_guard.py
---all` na repozytorium po R2e przechodzi, czyli wszystkie czterdzieści jeden pozycji ma adresata,
-który istnieje i jeszcze nie minął. Self-test skryptu rozszerzony o ten przypadek — bo bramka,
-która nigdy nie świeci na czerwono, nie jest bramką.
+**Kryterium:** test odtwarzający dla obu połówek. Pierwsza — rejestr z pozycją wskazującą na fazę
+odhaczoną w `00-postep.md` daje kod wyjścia 1 z nazwą pozycji; przed naprawą skrypt jej nie widzi.
+`python scripts/struct_guard.py --all` na repozytorium po R2e przechodzi, czyli wszystkie
+czterdzieści jeden pozycji ma adresata, który istnieje i jeszcze nie minął. Druga — `plan_guard`
+uruchomiony na **stanie sprzed R2** znajduje `CJ-9` i wypisuje go jako niespełnioną obietnicę;
+uruchomiony na stanie po R2 przechodzi. Self-test obu skryptów rozszerzony o te przypadki — bo
+bramka, która nigdy nie świeci na czerwono, nie jest bramką.
+
+---
+
+### R2-WP33 — Linia bazowa benchmarków mierzy wszystkie
+
+**Pozycja wykazu:** 61. To jest `D-R8` z R1 — decyzja otwarta z propozycją domyślną, opisana
+w `00-postep.md` jako „otwarta świadomie i z adresem". Adresu nie wpisano nigdzie i R1 zamknęło
+się bez niej.
+
+**Przyczyna.** `benches/baseline.json` nie był aktualizowany od M3. Z czterdziestu jeden pozycji
+**trzynaście zgłasza `NOWY — brak w linii bazowej`**: cały planer (`plan_day`,
+`plan_day_explained`, `replan`), mikro pieszych, `estimate` z cache, trzy pozycje demografii
+i społeczeństwa, Etap 8 (`m3d-1`), cztery pozycje indeksu parcel i jeden shard potrzeb.
+
+Dla nich `bench_guard` **nie mierzy niczego — i robi to cicho**, bo brak wpisu jest informacją,
+nie błędem. To jest ta sama klasa co pozycja 38b: bramka raportuje zielono, nie sprawdzając tego,
+co myśli, że sprawdza. Różnica jest taka, że G11 miała przynajmniej filtr, który dało się nazwać;
+tutaj nie ma nawet tego.
+
+Znalezione przy domknięciu R1, przy **pierwszym w całym R1** przebiegu kryterium akceptacji nr 3 —
+czyli sam fakt, że bramka chodziła raz na dwanaście pakietów, jest częścią usterki.
+
+**Szew.** Odnowienie linii bazowej idzie **osobnym commitem**, bez żadnej innej zmiany — tak samo
+jak `cargo fmt` całego repozytorium i z tego samego powodu: zapisanie liczb razem ze zmianą, która
+na nie wpływa, zamienia dowód w założenie. Commit powstaje **po R2e**, bo wcześniejsze pakiety R2
+zmieniają wydajność w miejscach, które właśnie mierzymy.
+
+Drugi krok jest ważniejszy od pierwszego: **brak wpisu przestaje być informacją i staje się
+błędem**. Benchmark bez linii bazowej to benchmark, którego nikt nie ogląda.
+
+Trzeci krok zamyka pytanie, którego `D-R8` nie rozstrzygnął: kiedy linię bazową się odnawia.
+Propozycja jest w `D-N21`.
+
+**Zakres.**
+
+| Co | Gdzie |
+|---|---|
+| Odnowienie `benches/baseline.json` na sprzęcie odniesienia, osobnym commitem | `benches/baseline.json` |
+| `bench_guard`: pozycja bez wpisu w linii bazowej → kod wyjścia 1, nie komunikat `NOWY` | `scripts/bench_guard.py` |
+| Wyjątek dla benchmarku **nowego w tym commicie**: dopuszczalny tylko razem z dopisaniem go do linii bazowej w tym samym commicie | tamże |
+| Reguła odnawiania linii bazowej zapisana przy `D-8` | `M0-fundament-silnika.md`, `CLAUDE.md` |
+| Tabela w `D-R8` uzupełniona o stan po R2 | `R1-refaktor-po-M5.md` |
+
+**Kryterium:** test odtwarzający — `bench_guard` uruchomiony na linii bazowej z usuniętą jedną
+pozycją zwraca kod wyjścia 1 i nazwę brakującego benchmarku. Przed naprawą zwraca zero i słowo
+`NOWY`. Po odnowieniu wszystkie czterdzieści jeden pozycji ma wpis, a `--all` przechodzi.
+Self-test skryptu rozszerzony o ten przypadek.
+
+---
+
+### R2-WP34 — Scenariusz `export_drains`
+
+**Pozycja wykazu:** 62. Zależny od R2-WP32, bo mierzy ceny w przebiegu z ruchem, a do R2-WP32
+niezmiennik świata w takim przebiegu się nie domyka.
+
+**Przyczyna.** `M6` §7.7 wymienia `export_drains` jako test kryterium WP9: „wzrost ceny
+zewnętrznej o 40 % → mierzalny odpływ masy **i wzrost cen lokalnych**, bez zaprogramowanej
+reguły". Kryterium ma dwie połowy i tylko pierwsza została zmierzona.
+
+`AH-12` w M6c zawęziło kryterium do samego drenażu masy — słusznie, bo ceny nie drgną, dopóki
+półka nie kupuje z rynku B2B — a `AI-8` przeniosło pomiar cen **za WP11**, czyli do M6e. M6e
+zamknęło się bez niego. Scenariusza nie ma ani w `data/scenarios/`, ani nigdzie w kodzie: nazwa
+`export_drains` występuje wyłącznie w dwóch dokumentach planu.
+
+Skutek: **druga połowa kryterium fazy M6 nie została zmierzona i nic tego nie pilnuje**. Faza jest
+odhaczona, kryterium jest zawężone, a zawężenie miało być tymczasowe.
+
+To jest ten sam wzorzec co poz. 64: zawężenie z adresatem jest dobrą praktyką dokładnie tak długo,
+jak długo ktoś sprawdza adresata.
+
+**Szew.** Scenariusz idzie do `tools/headless` obok pozostałych, na tej samej uprzęży co `m6rynek`.
+Szok jest jednorazowy i deterministyczny: cena zewnętrzna towaru z wysokim udziałem eksportu rośnie
+o 40 % w ustalonej dobie, reszta świata bez zmian. Mierzy się dwie krzywe — masa wychodząca
+z miasta i cena półkowa tego samego towaru — i pyta o **kierunek i opóźnienie**, nie o wartość.
+
+Żadnej reguły „eksport podnosi ceny" się nie pisze i to jest sedno testu: jeśli cena nie drgnie,
+to znaczy, że kanał między rynkiem B2B a półką nie istnieje, i to jest wynik, a nie porażka
+pomiaru.
+
+**Zakres.**
+
+| Co | Gdzie |
+|---|---|
+| Scenariusz `export_drains` z szokiem ceny zewnętrznej +40 % w ustalonej dobie | `tools/headless/src/export_drains.rs`, `data/scenarios/` |
+| Pomiar: masa wychodząca z miasta i mediana ceny półkowej towaru, doba po dobie | tamże |
+| Wpięcie do biegu nocnego obok pozostałych scenariuszy | `.github/workflows/ci.yml` |
+| Kryterium WP9 w `M6` §7.7 wraca do pełnego brzmienia albo dostaje wiersz z powodem zawężenia **na stałe** | `M6-lancuch-dostaw.md` |
+
+**Kryterium:** przebieg scenariusza pokazuje odpływ masy (to działa dziś) **oraz** wzrost mediany
+ceny półkowej tego samego towaru w ciągu 14 dób od szoku. Jeśli cena nie drgnie, pakiet zamyka się
+pomiarem i wierszem w tabeli korekt `M6` nazywającym brakujące ogniwo — to jest dopuszczalne
+zamknięcie i lepsze niż dzisiejszy brak pomiaru, bo zostawia liczbę zamiast ciszy.
 
 ---
 
@@ -183,8 +311,8 @@ Ostatni krok podfazy i całego dokumentu. Nie jest pakietem, bo nie wytwarza kod
 1. Wykaz `R2` §11 wypełniony do końca: każdy wiersz ma status `zamknięta` z numerem testu,
    `przeniesiona` z imiennym adresatem i powodem, `odrzucona` z powodem albo `nie dotyczy`.
 2. Rejestr długu w `R1`: pozycje zamknięte przez R2 przekreślone, numeracja nowych ciągła od **42**.
-3. Cztery wpisy `K-58`…`K-61` w `00-konwencje-i-kontrakty.md` §4a — te, które faktycznie powstały.
-4. Sześć wpisów w dokumentach faz wcześniejszych wg `R2` §6.
+3. Sześć wpisów `K-58`…`K-63` w `00-konwencje-i-kontrakty.md` §4a — te, które faktycznie powstały.
+4. Jedenaście wpisów w dokumentach faz wcześniejszych wg `R2` §6.
 5. `00-postep.md`: sekcja R2 odhaczona, linia w dzienniku z datą, zakresem i tym, co wyszło poza
    plan.
 6. Tabela „Zmiany wpisane po R2" w każdym dokumencie podfazy, wypełniona.
@@ -202,21 +330,18 @@ nie jako pominięcie. Filtr, który wyklucza bramkę zawsze, jest wyłączeniem 
 okrężnie. Wariant łagodniejszy — sam raport bez błędu — jest tym, co mamy dziś, i to właśnie
 naprawiamy. *Blokująca dla R2-WP24.*
 
+**`D-N21` — Kiedy odnawia się linia bazowa benchmarków.** Pytanie zostawione otwarte przez `D-R8`
+w R1. `D-8` z M0 mówi „przy świadomej zmianie wydajności", a praktyka sześciu faz pokazała, że
+wtedy nie robi tego nikt. Propozycja: **przy zamknięciu każdej fazy**, jednym commitem bez innych
+zmian, z zapisem sprzętu odniesienia. Wariant z M0 jest czystszy teoretycznie i przegrał
+empirycznie. *Blokująca dla R2-WP33.*
+
 **`D-N18` — Czy rozmiar świata 2 km wchodzi do gry, czy zostaje tylko w testach.** Propozycja:
 tylko w testach, z konstruktorem niedostępnym z CLI. Miasto 2 km ma ~10 tys. mieszkańców, czyli
 poniżej progu, przy którym którykolwiek mechanizm ekonomiczny ma sens, a jego obecność w kreatorze
 świata (M9a) obiecywałaby graczowi rozgrywkę, której nie ma. *Nieblokująca.*
 
 ---
-
-## Zmiany wpisane po R2f
-
-Zgodnie z `K-18`. Wpisane jest **tylko to, co wiadomo na pewno** po zamknięciu R2f.
-
-| # | Zmiana | Dlaczego |
-|---|---|---|
-| | *(tabela wypełnia się w trakcie R2f)* | |
-
 
 ### R2-WP29 — Budżety grafu, Gantta i panelu [S]
 
@@ -234,3 +359,13 @@ i `HeatmapThumb` z M9b, i na tej samej uprzęży bezgłowej.
 **Kryterium ukończenia:** trzy pomiary w raporcie `criterion`, każdy z medianą pod
 swoim budżetem; graf i Gantt zasilone **danymi z przebiegu**, a nie zbudowanymi na
 potrzeby pomiaru (`DE-5` — dokładnie dlatego nie powstały w M9b).
+
+---
+
+## Zmiany wpisane po R2f
+
+Zgodnie z `K-18`. Wpisane jest **tylko to, co wiadomo na pewno** po zamknięciu R2f.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| | *(tabela wypełnia się w trakcie R2f)* | |

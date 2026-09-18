@@ -6,9 +6,9 @@ dokumentu R2.
 | | |
 |---|---|
 | **Wejście** | **Wszystkie pozostałe podfazy R2 zamknięte.** R2-WP20 dotyka 370 miejsc w dziesięciu crate'ach i każdy wcześniejszy pakiet, który dokłada powód decyzji, powiększyłby jego zakres. R2-WP21…R2-WP23 nie mają tego ograniczenia i mogą pójść wcześniej. |
-| **Pakiety robocze** | R2-WP20…R2-WP23, R2-WP27, R2-WP28 |
+| **Pakiety robocze** | R2-WP20…R2-WP23, R2-WP27, R2-WP28, R2-WP31 |
 | **Wynik do pokazania** | `python scripts/struct_guard.py --all` bez ani jednego przekroczenia progu błędu, oraz `engine/ui/src/inspect/reason.rs` rozpadnięty na trzy pliki, z których żaden nie przekracza 400 linii. |
-| **Kryterium zamknięcia** | Kryteria R2-WP20…R2-WP23 plus: **rejestr długu strukturalnego nie ma pozycji bez adresata**, a każda pozycja zamknięta przez R2 ma przekreślenie i wiersz w „Zmiany wpisane po R2". |
+| **Kryterium zamknięcia** | Kryteria R2-WP20…R2-WP23, R2-WP27, R2-WP28 i R2-WP31 plus: **rejestr długu strukturalnego nie ma pozycji bez adresata**, a każda pozycja zamknięta przez R2 ma przekreślenie i wiersz w „Zmiany wpisane po R2". |
 | **Poprzednia / następna** | `R2d-domkniecie-swiata.md` / `R2f-pomiar-i-bramki.md` |
 
 ---
@@ -46,6 +46,7 @@ niego. To jest zadanie R2-WP26 w następnej podfazie; tutaj zamykamy same pozycj
 | R2-WP22 | Martwe warianty i nieużywane pola | — | M | `[ ]` |
 | R2-WP23 | Dokumentacja wejściowa i zakresy strumieni | — | S | `[ ]` |
 | R2-WP28 | Liczba i tekst dla gracza bez niespodzianek | — | S | `[ ]` |
+| R2-WP31 | Wpłata poza rejestrem to nie praktyka monopolistyczna | — | M | `[ ]` |
 | R2-WP27 | Jeden język w kodzie: identyfikatory i komunikaty | `D-N19` | zależny od decyzji | `[ ]` |
 | R2-WP20 | Podział `DecisionReason` | wszystkie pozostałe pakiety R2 | L | `[ ]` |
 
@@ -153,7 +154,7 @@ Pozycje 33–35 rejestru dostają przekreślenie.
 
 ### R2-WP22 — Martwe warianty i nieużywane pola
 
-**Pozycje wykazu:** 29, 30, 31, 32, 52, 53, 54, 55.
+**Pozycje wykazu:** 29, 30, 31, 32, 52, 53, 54, 55, 63.
 
 **Przyczyna.** Osiem miejsc, w których typ deklaruje coś, czego nikt nie konstruuje, nie czyta
 albo nie obsługuje. Reguła YAGNI z `CLAUDE.md` mówi o tym wprost: brak drugiego konsumenta = brak
@@ -174,6 +175,7 @@ go wybiera z listy, jest obietnicą bez pokrycia.
 | `Action::RemoveFromShelf` (poz. 53) | Akcja przechodzi walidator, wykonuje się i **nie robi nic**: wykonawca zwraca `PolicyOutcome::Blind`, bo zwolnienie oferty w arenie razem z linią półki nie ma ścieżki. Gracz wybiera ją z listy edytora | Zostaje i **dostaje wykonawcę**. Ścieżka jest ta sama, którą zamyka zakład w `M7d`, więc powstaje raz, a nie dwa razy. Wariant odwrotny — usunąć akcję z języka — kosztuje politykę „Nabiał — nie wyrzucamy" z `M9d` §5.6, czyli jedną z sześciu sztandarowych |
 | `radius_m` w trzech metrykach konkurencyjnych (poz. 54) | Pole wchodzi do walidatora (limit 10 km) i **nie wchodzi do odczytu**: obraz konkurencji sklepu powstaje jednym promieniem obserwacji. Reguła z 3 km i z 5 km dostają tę samą liczbę, a gracz widzi dwie różne reguły | `observe_competitors` dostaje **drugi promień** — ten, o który pyta polityka zakładu. Koszt jest ograniczony limitem dwóch metryk konkurencyjnych na politykę (`MAX_COMPETITIVE`), więc promieni na sklep jest najwyżej trzy. Wariant odwrotny — wyrzucić pole z języka — łamie PRD §6.3, które cytuje „w promieniu 3 km" jako treść reguły |
 | `Qty` bez arytmetyki z punktami bazowymi (poz. 52) | `Money` ma `mul_ratio` przez `i128`, `Qty` nie ma nic, więc wykonawca polityki opakowuje ilość w `Money`, żeby przemnożyć ją przez odchyłkę menedżera. Wynik jest poprawny, typ kłamie | `Qty` dostaje `mul_ratio` o tej samej sygnaturze i tym samym zaokrągleniu. To jest pięć linii w `engine/core` i usuwa opakowanie z `sim/economy`; przy okazji ta sama dziura zamyka się dla `Mass`, `Volume` i `Energy`, które mają ją identycznie |
+| `UtilityKind` i `UtilityService` naraz (poz. 63) | `CB-1` w M8 zarządziło zmianę nazwy na `UtilityService`. Wykonana jest w połowie: oba identyfikatory siedzą w `engine/core` (`vocab.rs`, `decision.rs`, `lib.rs`) i oba mają czytelników. Dwie nazwy na jedno pojęcie kosztują przy każdym `match` i przy każdym czytaniu | Zostaje **jedna** — `UtilityService`, zgodnie z `CB-1`. To jest przemianowanie mechaniczne, ale dotyka wariantów enumu, czyli kontraktu zapisu gry: kolejność wariantów zostaje bez zmian, zmienia się sama nazwa typu. Gdyby okazało się, że oba typy znaczą co innego, pozycja zamyka się wierszem w tabeli korekt nazywającym różnicę — i to też jest zamknięcie |
 | Dziedziny `Hr`, `Production`, `Logistics` (poz. 55) | Walidator odrzuca je jawnie (`DomainNotAvailable`), więc **cichej polityki nie ma** — to jest już rozwiązane. Otwarte zostaje co innego: `Action::domain()` rozcina dwie z sześciu polityk przykładowych `M9d` §5.6 na dwie każdą | **Weryfikacja, nie naprawa.** Rozstrzyga decyzja otwarta nr 13 fazy M9 (dziedzina jako granica polityki czy tylko akcji). Jeśli padnie „granica akcji", pakiet zamyka pozycję jednym testem; jeśli „granica polityki", pozycja zamyka się poprawką w §5.6 dokumentu `M9d` i nic w kodzie się nie zmienia |
 
 **Ostrzeżenie o determinizmie.** Usunięcie dwóch pól z `Household` zmienia rozmiar komponentu
@@ -194,7 +196,7 @@ powtórką.
 
 ### R2-WP23 — Dokumentacja wejściowa i zakresy strumieni
 
-**Pozycje wykazu:** 36, 37 (weryfikacja).
+**Pozycje wykazu:** 36, 37 (weryfikacja), 65.
 
 **Przyczyna.** Dwie rzeczy, obie o tym, że **opis rozjechał się z rzeczą**.
 
@@ -215,6 +217,15 @@ wpisane po implementacji MX" (5), „Korekty projektu technicznego MX" (2), „K
 w trakcie MX" (1). Przegląd po samym pierwszym wariancie gubi wpisy; tak zniknęła z wykazu
 pozycja 38. Koszt jest realny: wpis, którego nie da się znaleźć, jest wpisem, którego nie ma.
 
+Czwarta rzecz jest tej samej natury i dotyczy dokumentu, który czyta **każda nowa sesja**.
+`CLAUDE.md` mówi w regule lokalizacji: „polski ma trzy formy (1 · 2–4 · 5+)". Kod mówi cztery —
+`Locale::plural_forms` zwraca dla polskiego `4`, bo `DE-8` w M9b dołożyło CLDR-owe `other` dla
+wartości ułamkowych („1,5 sklepu", a nie „1,5 sklep" ani „1,5 sklepy"). Zmiana była świadoma,
+opisana i przetestowana; nikt tylko nie wrócił do reguły. Rozjazd jest groźniejszy niż wygląda,
+bo reguła jest **wiążąca dla każdej przyszłej fazy dokładającej tekst**: faza, która ją wykona
+dosłownie, napisze wpis `Plural` o trzech formach, a `Catalog::load` sprawdza równość zbiorów
+kluczy, nie liczbę form w kluczu.
+
 **Zakres.**
 
 | Co | Gdzie |
@@ -224,11 +235,14 @@ pozycja 38. Koszt jest realny: wpis, którego nie da się znaleźć, jest wpisem
 | Weryfikacja wariantów `StreamId` w bloku 240–259; dopisanie brakujących | `engine/core/src/rng.rs` |
 | Ujednolicenie nagłówków tabel korekt do „Zmiany wpisane po MX" we wszystkich dokumentach planu | `docs/implementation-plan/*.md` |
 | Nazwa joba balansatora w CI mówi „G1–G11", nie „G1–G9" | `.github/workflows/ci.yml` |
+| Reguła liczebnika w `CLAUDE.md` mówi „cztery formy (1 · 2–4 · 5+ · ułamek)", zgodnie z `DE-8` | `CLAUDE.md` |
+| Test lokalizacji: wpis `Plural` z liczbą form inną niż `Locale::plural_forms` jest błędem wczytania, nie cichym brakiem | `engine/ui/src/loc.rs` + `data/locale/` |
 
 **Kryterium:** test CI pada na dzisiejszym `README.md` i przechodzi po poprawce. `grep` po
 nagłówkach tabel korekt w `docs/implementation-plan/` zwraca jeden wariant, nie cztery. Test
 jednostkowy `StreamId` — żaden numer w bloku 240–259 nie jest użyty dwa razy i każdy wariant
-zadeklarowany w `K-4` istnieje w enumie.
+zadeklarowany w `K-4` istnieje w enumie. Test lokalizacji: katalog z polskim wpisem `Plural`
+o trzech formach **nie wczytuje się** — dziś wczytuje się i gubi formę ułamkową po cichu.
 
 ---
 
@@ -287,6 +301,58 @@ idzie przez `fmt`, a separator przez język).
 sama polityka zapisana tekstem ma kropkę w obu. Brak klucza w ścieżce rysowania daje pustą etykietę
 i nie panikuje — test rysuje kartę z katalogiem pozbawionym jednego klucza. Polityka z numerem
 komunikatu spoza katalogu nie przechodzi edytora.
+
+---
+
+### R2-WP31 — Wpłata poza rejestrem to nie praktyka monopolistyczna
+
+**Pozycja wykazu:** 59. `M8` `CJ-9` kazał dopisać ją do wykazu R2 i to się nie stało; weszła tu
+z przeglądu sesji.
+
+**Przyczyna.** Urząd antymonopolowy prowadzi od M8e sprawy z dwóch przesłanek i tylko jedna jest
+jego. Pierwsza — udział rynkowy ponad `antitrust_share_bp` (`sim/city/src/law.rs`) — jest
+praktyką ograniczającą konkurencję i jest na miejscu. Druga — wpłata na kampanię poza rejestrem
+wpłat (`sim/city/src/ballot.rs`) — jest **czynem karalnym**, a nie praktyką rynkową, i trafiła
+tutaj z braku adresata. Komentarz nad tamtym kodem mówi o tym wprost: „wpłata poza rejestrem jest
+sprawą dla prokuratury — a tę prowadzi urząd antymonopolowy, bo to on w tej fazie zajmuje się
+tym, co firma robi poza rynkiem".
+
+To nie jest usterka wykonania: M8e zrobiło **jedną ścieżkę zamiast dwóch** świadomie i zapisało
+powód (`K-11`, `K-13` — drugie wejście do tego samego skutku jest gorsze niż jedno wejście
+z niewłaściwą etykietą). Otwarte zostaje to, co ta etykieta robi graczowi: histogram spraw per
+urząd w panelu miasta pokazuje aferę korupcyjną jako postępowanie antymonopolowe, a karta sprawy
+(`DecisionReason::CaseOpened`) nazywa ją tak samo. Gracz czyta, że jego firma jest za duża,
+podczas gdy powodem jest łapówka.
+
+**Szew.** Szósty wariant `AgencyKind` — `Prosecution` — dopisany **na końcu** listy, bo kolejność
+jest kontraktem: `as_index()` indeksuje histogram spraw w panelu miasta, a `AGENCY_KIND_COUNT`
+wchodzi do rozmiaru tablicy. Wpięcie to jedna linia w `ballot.rs` i wpis w `data/city/`; reszta —
+dowody, kara, księgowanie — chodzi tą samą drogą co dotąd, bo `Enforcement::otworz` nie wie,
+który urząd prowadzi sprawę.
+
+Czego pakiet **nie robi**: nie wprowadza postępowania karnego jako mechaniki, nie dokłada
+sankcji innych niż istniejące i nie rusza `ballot.rs` poza jedną linią. Prokuratura jest tu nazwą
+dla sprawy, która i tak się toczy.
+
+**Zakres.**
+
+| Co | Gdzie |
+|---|---|
+| `AgencyKind::Prosecution` na końcu listy wariantów (`K-73`) | `engine/core/src/vocab.rs` |
+| Wpłata poza rejestrem otwiera sprawę w prokuraturze, nie w urzędzie antymonopolowym | `sim/city/src/ballot.rs` |
+| Progi i strojenie szóstego urzędu | `data/city/government.ron` |
+| Teksty `LocKey` dla nowego urzędu w `pl` i `en` — w tej samej zmianie | `data/locale/pl.ron`, `en.ron` |
+| Histogram spraw w panelu miasta ma sześć słupków, nie pięć | `engine/ui`, karta miasta |
+
+**Ostrzeżenie o determinizmie.** Dopisanie wariantu na końcu enumu nie zmienia indeksów
+istniejących, ale zmienia `AGENCY_KIND_COUNT`, a przez to rozmiar histogramu w zapisie gry.
+Zmiana idzie przed M12b, tak jak reszta pakietów ruszających format.
+
+**Kryterium:** test odtwarzający — firma wpłaca na kampanię poza rejestrem, po ujawnieniu sprawa
+ma `agency == Prosecution`, a histogram urzędu antymonopolowego **nie rośnie**. Przed naprawą
+rośnie i to jest jedyna widoczna różnica. Drugi test: firma z udziałem ponad progiem dalej trafia
+do urzędu antymonopolowego — czyli pierwsza przesłanka nie przeniosła się razem z drugą. Trzeci:
+oba języki mają komplet kluczy dla szóstego urzędu, bo inaczej `Catalog::load` pada (i tak ma być).
 
 ---
 

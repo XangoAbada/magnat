@@ -868,3 +868,14 @@ Zgodnie z `K-18`. Wpisane jest **tylko to, co wiadomo na pewno** po zamknięciu 
 | ★ | **`tools/headless` ma od M5e target biblioteczny** (`src/lib.rs` z `pub mod population; pub mod retail;`) i **trzech konsumentów**: własną binarkę, `tools/magnat` i `tools/balansator`. Most „zakłady Etapu 7 → rynek detaliczny" (`retail::setup`) mieszka w crate'cie, którego nazwa mówi „headless", a który nie jest już wyłącznie headlessem | Wykonanie decyzji otwartej nr 10 fazy M5 (balansator jako biblioteka, nie proces). **Nazwa jest długiem strukturalnym i należy do R1**, nie do M5: klient graficzny zależny od `magnat-headless` czyta się jak pomyłka, a nie jak decyzja. Dwie drogi wyjścia, obie tanie, bo chodzi o `git mv` i jedną linię w `Cargo.toml` każdego konsumenta: (a) przemianowanie crate'u na `tools/harness`, (b) wydzielenie samego mostu do `tools/retail-bridge`. **Wariantu „przenieść most do `sim/economy`" nie ma**: `sim/economy` nie zna `CityData` i znać go nie może — most z definicji potrzebuje obu stron |
 | | **`tools/balansator` powstał i od razu ma dwóch mieszkańców**: bramki G1–G9 oraz przeniesiony z headlessa `calibrate-vdf` (`T-1`) | R1 dostaje go jako crate **nowy**, czyli taki, który rodzi się z granicami — tak samo jak moduły M5c i M5d. Nie ma tam nic do podziału i to jest obserwacja, nie zaniedbanie |
 | | **`engine/ui` zależy od `magnat-economy`** od M5e (panel sklepu czyta `ShopPanelSnapshot`) | Kierunek jest jednostronny i taki zostaje: `sim/economy` nie widzi interfejsu. Precedens `magnat-traffic` z M4d (`S-15`). R1 nie ma tu nic do zrobienia — zapisane, żeby skrypt kontroli strukturalnej nie zgłosił tego jako nowej krawędzi bez uzasadnienia |
+
+---
+
+## Zmiany wpisane po M9e
+
+Zgodnie z `K-18`. Wpis powstał przy przeglądzie zapisu sesji po M9e — nie z pracy nad R1.
+Prefiks `T-n`.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| T-1 ★ | **`D-R8` dostaje wykonawcę: `R2-WP33` w `R2f-pomiar-i-bramki.md`.** Propozycja domyślna („odnowić linię bazową w pierwszym commicie po R1, osobno od refaktoru") zostaje bez zmian; dochodzi druga połowa, której `D-R8` nie miał: **brak wpisu w linii bazowej przestaje być informacją i staje się błędem** `bench_guard`. Pytanie „kiedy odnawia się linię bazową" ma teraz propozycję jako `D-N21` w `R2f` §5.19: przy zamknięciu każdej fazy | `00-postep.md` opisuje `D-R7` i `D-R8` jako „otwarte, świadomie i **z adresem**". `D-R7` adres dostał (poz. 40 wykazu R2, pakiet `R2-WP25`); `D-R8` nie dostał go nigdzie i R1 zamknęło się bez niego. Przez sześć faz trzynaście z czterdziestu jeden benchmarków nie było mierzone przez nic — i to jest ta sama choroba, co bramka G11 chodząca tylko nocą: raport świeci zielono, bo nie ma czego porównać |
