@@ -33,6 +33,8 @@
 pub mod cache;
 pub mod chart;
 pub mod fmt;
+pub mod gantt;
+pub mod graph;
 pub mod heatmap;
 pub mod inspect;
 pub mod loc;
@@ -49,6 +51,8 @@ pub mod widgets;
 pub use cache::{Cached, DataSource, Versions};
 pub use chart::{chart, MipLevel, Sample, Series, SeriesKey};
 pub use fmt::CalendarFmt;
+pub use gantt::{BarState, GanttBar, GanttView};
+pub use graph::{GraphEdge, GraphNode, GraphView};
 pub use heatmap::HeatmapThumb;
 pub use inspect::card::{gone_span, CardTab, CardTabKind, InspectionCard, MAX_CARD_TABS};
 pub use inspect::citizen::{zlotowki, CitizenCard, CitizenModel, CitizenPanel, NeedRow, StatusRow};

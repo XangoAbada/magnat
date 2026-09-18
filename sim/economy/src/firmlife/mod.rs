@@ -29,7 +29,10 @@ pub mod expand;
 pub mod founding;
 
 pub use chains::{ChainCatalog, ChainSpec, CHAINS_SCHEMA_VERSION};
-pub use founding::{founding_score, FoundingIntent, FoundingParams};
+pub use founding::{
+    districts_with_seed, found, founding_score, retail_site_type, Found, FoundingIntent,
+    FoundingParams,
+};
 
 /// Co doba zrobiła z populacją firm.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

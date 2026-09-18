@@ -30,7 +30,7 @@ pub mod slots;
 use magnat_ui::{Catalog, Locale, Theme};
 
 use crate::save::{SaveError, SaveSlot};
-use crate::shell::{NewGameParams, Settings, ShellScreen};
+use crate::shell::{NewGameParams, ScenarioId, Settings, ShellScreen};
 
 /// Co powłoka każe zrobić pętli gry. Rysowanie niczego nie wykonuje samo — świat
 /// stawia [`crate::session`], a wyjście z gry należy do pętli okna.
@@ -93,6 +93,12 @@ pub struct Shell {
     /// Kandydaci na postać gracza — wypełnia je klient po postawieniu świata.
     /// Dane, nie referencja: ekran ma być rysowalny w teście bez sesji.
     pub candidates: Vec<crate::player::Candidate>,
+    /// Scenariusze do wyboru w kreatorze: numer, klucz tytułu i klucz opisu.
+    ///
+    /// Numer jest **pozycją w `data/scenarios/scenarios.ron`** i to on jedzie
+    /// w kopercie `StartGame` (`K-71`). Lista jest tu, a nie w ekranie, bo ekran
+    /// ma się rysować w teście bez czytania dysku.
+    pub scenarios: Vec<(ScenarioId, String, String)>,
 }
 
 impl Shell {
@@ -111,6 +117,7 @@ impl Shell {
             draft: NewGameParams::default(),
             slot_mode: slots::Mode::default(),
             candidates: Vec::new(),
+            scenarios: scenariusze(),
         })
     }
 
@@ -211,6 +218,33 @@ impl Shell {
             .show(ui, |ui| newgame::preview(self, ui, preview, mapa))
             .inner
     }
+}
+
+/// Scenariusze z katalogu, a przy jego braku sam tryb otwarty.
+///
+/// Brak katalogu **nie jest błędem startu gry**: scenariusz jest warstwą nad
+/// światem, a świat stoi i bez niego. To ta sama odpowiedź, którą daje
+/// `Session::load_scenario` — dwie różne byłyby menu obiecującym coś, czego
+/// sesja potem nie wczyta.
+fn scenariusze() -> Vec<(ScenarioId, String, String)> {
+    let Ok(k) = crate::scenario::ScenarioCatalog::load() else {
+        return vec![(
+            ScenarioId::SANDBOX,
+            "ui.scenario.sandbox.title".to_string(),
+            "ui.scenario.sandbox.brief".to_string(),
+        )];
+    };
+    k.scenarios
+        .iter()
+        .enumerate()
+        .map(|(i, sc)| {
+            (
+                ScenarioId(u16::try_from(i).unwrap_or(0)),
+                sc.title.clone(),
+                sc.brief.clone(),
+            )
+        })
+        .collect()
 }
 
 pub(crate) use controls::{header, menu_list, segment_row, Keys};

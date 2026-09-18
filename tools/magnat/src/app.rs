@@ -305,6 +305,9 @@ impl App {
             // Edytor reguł dla zaznaczonego zakładu (`M9d` WP8). Bez zaznaczenia
             // nie ma czego edytować — polityka jest zawsze polityką **czegoś**.
             Key::Character("r") | Key::Character("R") => self.otworz_edytor(),
+            // Tryb „śledź" (§5.10): kamera idzie za zaznaczonym mieszkańcem,
+            // a `LodPin` trzyma go w warstwie Mikro także przy 10×.
+            Key::Character("g") | Key::Character("G") => self.przelacz_sledzenie(),
             Key::Character("1") => self.camera.to_orbit(600.0),
             Key::Character("2") => self.camera.to_free(),
             Key::Character("3") => {

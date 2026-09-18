@@ -392,3 +392,15 @@ Zgodnie z `K-18`. Gwiazdka = zmiana zakresu albo kryterium. Wymaganie produktowe
 |---|---|---|
 | ★ | **Pojazd wchodzi do bufora identyfikatorów** — dopisany do zakresu wpisu „po M5e" wyżej, który wymieniał tylko `BuildingId` i `SiteId`. Pass `pick_id` rysuje pojazdy tą samą geometrią co pass sceny, tak jak robi to już dla pieszych (Z-4) | Rekord pojazdu w `M11a` §„Rekord pojazdu" **już niesie `entity_lo` z komentarzem „picking"**, a `M9c` §5.7 ma `Subject::Vehicle` i `FollowTarget::Vehicle` od początku. Brakowało wyłącznie zdania, które zobowiązuje warstwę rysującą do wpisania tego id do bufora — czyli łańcuch był cały poza jednym ogniwem, i to takim, którego nikt by nie szukał, bo z obu stron wygląda na gotowy. Karta pojazdu ma pokazać właściciela i stan (`VehicleOwner`, `VehicleCondition`, `VehicleLocation` istnieją w `sim/traffic` od M4) |
 | | **Pass `pick_id` musi wypełniać bufor także przy wyłączonym LOD mikro dla pojazdów** — albo jawnie powiedzieć w `M11e`, że przy `X50` pojazdów nie ma i kliknięcie w nie nie istnieje | `M12c` wyłącza warstwę Mikro w trybie 50× z konstrukcji — pojazdów wtedy nie ma w ogóle, więc „klikalne jest wszystko, co widoczne" nadal się trzyma, ale tylko jeśli nie rysujemy pojazdu, który nie ma id. To ma być sprawdzone testem, nie założone |
+
+
+## Zmiany wpisane po M9e
+
+Zgodnie z `K-18`. Szczegóły — tabela `DI-n` w `M9e-panele-czas-kariera.md`.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| DL-1 ★ | **Widok 3D dzieli ekran z dokiem lewym (320 px) i z kartą inspekcji.** Dok jest `egui::Panel::left` o stałej szerokości, więc kamera dostaje **węższy prostokąt**, a nie całe okno | `docs/ui-design.md` §5 wymaga, żeby widok świata był widoczny zawsze; panel pełnoekranowy istnieje wyłącznie dla kroniki i edytora reguł. Budżet klatki M11 liczy się od tej chwili dla kadru, który jest o 320 px węższy — i to jest liczba na korzyść, byle jej nie przeoczyć przy pomiarach |
+| DL-2 ★ | **Tryb „śledź" ma cel i przypięcie, a nie ma kamery.** `game::timectl::Follow` trzyma `FollowTarget` i woła `player::pin_micro`; przesuwanie kamery za celem należy do klienta i do M11 | Przypięcie do warstwy Mikro jest **mechanizmem symulacji** (`DG-8`) i musiało powstać razem z warunkiem, który go używa. Kamera jest prezentacją i M11 jest jej właścicielem — dwie kamery rozjechałyby się przy pierwszym trybie orbitalnym |
+| DL-3 | **Karta partii istnieje i pokazuje pełny ślad „od pola do półki"** (`game::inspect::batch`, `CardTabKind::History`). Wyrobisko i pojazd z §14.4 mają dokąd prowadzić | Decyzja otwarta nr 3 dokumentu M9 zamknięta: M6 dał pełny łańcuch, degradacji do „ostatnich trzech etapów" nie było |
+| DL-4 | **`GanttView` i `GraphView` są w `engine/ui` i rysują się bez GPU** — tak samo jak reszta widgetów. M11 nie dokłada im renderera, tylko ewentualnie budżet | Oba powstały razem z pierwszym panelem, który ich zażądał (`DF-2`) |

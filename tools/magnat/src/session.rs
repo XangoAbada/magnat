@@ -110,6 +110,11 @@ impl App {
                         // zegar zostawiłby zdarzenia w przeszłości.
                         c.warm_up(&mut session, self.godzina_startu, self.camera.eye());
                         c.set_speed(self.predkosc);
+                        // Gotowy zestaw warunków „zatrzymaj, gdy…" (§5.10) —
+                        // uzbrojony od razu, bo gracz ma go **wyłączać**, a nie
+                        // składać: warunek, który trzeba najpierw znaleźć, nie
+                        // zatrzyma pierwszej katastrofy.
+                        c.arm_stop_conditions();
                         self.citizens = Some(c);
                         self.shell.has_session = true;
                         self.pauza_menu = false;
@@ -210,6 +215,7 @@ impl App {
         let gra = &self.game;
         let redaktor = &mut self.redaktor;
         let mut akcja_edytora = magnat_game::policy::EditorAction::None;
+        let mut akcja_panelu = magnat_game::PanelAction::None;
 
         let out = ctx.clone().run_ui(wejscie, |ui| {
             if w_powloce {
@@ -225,7 +231,9 @@ impl App {
                     r.view
                         .draw(ui, &shell.theme, &shell.catalog, shell.settings.locale, &r.goods);
             } else if let (Some(c), Some(s)) = (citizens.as_mut(), gra.session()) {
-                predkosc = c.draw(ui, &shell.theme, s);
+                let (p, a) = c.draw(ui, &shell.theme, s);
+                predkosc = p;
+                akcja_panelu = a;
             }
         });
         if let (Some(st), Some(w)) = (self.egui_state.as_mut(), self.window.as_ref()) {
@@ -235,6 +243,7 @@ impl App {
             self.wykonaj(a);
         }
         self.wykonaj_edytor(akcja_edytora);
+        self.wykonaj_panel(akcja_panelu);
         Some((out, predkosc))
     }
 
@@ -435,6 +444,7 @@ impl App {
                     Ok(mut ui) => {
                         ui.warm_up(&mut session, 0, self.camera.eye());
                         ui.set_speed(self.predkosc);
+                        ui.arm_stop_conditions();
                         self.citizens = Some(ui);
                         self.game = GameState::Playing(Box::new(session));
                         self.shell.has_session = true;

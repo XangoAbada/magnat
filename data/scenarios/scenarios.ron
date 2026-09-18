@@ -1,0 +1,125 @@
+// Scenariusze rozgrywki (M9e WP12, PRD §13.3).
+//
+// # Po co ten plik istnieje
+//
+// Scenariusz to **świat plus cele plus łatki**, a wszystkie trzy są danymi. Cel
+// wpisany w kod wymagałby rekompilacji przy każdej zmianie progu, a próg jest
+// dokładnie tym, co się stroi po pierwszym playteście. Moddowalne od pierwszego
+// dnia (CLAUDE.md, „rozszerzanie przez dane").
+//
+// # Czego ten plik NIE robi
+//
+// Nie opisuje świata: ziarno, rozmiar, region i epokę wybiera gracz w kreatorze,
+// a scenariusz kładzie się **na dowolnym** wygenerowanym mieście. Dzięki temu
+// „Zbuduj sieć 50 sklepów" da się zagrać w metropolii i w miasteczku, a nie
+// wyłącznie w jednym zapisanym świecie.
+//
+// # Kolejność jest kontraktem zapisu gry
+//
+// Numer pozycji jest `ScenarioId` w kopercie `StartGame`, więc dopisywać wolno
+// **wyłącznie na końcu**. Klucz tekstowy jest drugą tożsamością i to on nie
+// zmienia się nigdy.
+//
+// # Jeden plik, a nie `*.ron` po jednym na scenariusz
+//
+// Katalog `data/scenarios/` należy od M6 do zapasu startowego zakładów
+// (`initial_stock.ron`). Ładowarka po masce próbowałaby go wczytać jako scenariusz.
+(
+    schema_version: 1,
+    scenarios: [
+        // 0 — tryb otwarty. Bez celów i bez limitu: gracz sam decyduje, po co gra.
+        (
+            key: "sandbox",
+            title: "ui.scenario.sandbox.title",
+            brief: "ui.scenario.sandbox.brief",
+        ),
+
+        // 1 — samouczek. Pierwsza dzielnica traci sklepy jednego rodzaju, więc nisza jest widoczna
+        // z nakładki zasięgu, a nie z tekstu. Cel jest jeden i mieści się
+        // w dwunastu interakcjach (§5.12).
+        (
+            key: "first_shop",
+            title: "ui.scenario.first_shop.title",
+            brief: "ui.scenario.first_shop.brief",
+            tutorial: true,
+            patches: [ClearShopKind(district_ordinal: 0)],
+            objectives: [
+                (
+                    id: (0),
+                    title: "ui.scenario.first_shop.obj_open",
+                    goal: SiteCount(min: 1),
+                ),
+                (
+                    id: (1),
+                    title: "ui.scenario.first_shop.obj_worth",
+                    goal: NetWorth(min: 2000000),
+                    reveal_after: Some((0)),
+                ),
+            ],
+        ),
+
+        // 2 — „Zbuduj sieć 50 sklepów". Bez limitu czasu: to jest cel na dekady,
+        // a nie wyścig.
+        (
+            key: "chain_50",
+            title: "ui.scenario.chain_50.title",
+            brief: "ui.scenario.chain_50.brief",
+            objectives: [
+                (
+                    id: (0),
+                    title: "ui.scenario.chain_50.obj",
+                    goal: SiteCount(min: 50),
+                ),
+            ],
+        ),
+
+        // 3 — „Zmonopolizuj pieczywo w 10 lat". Ćwierć obrotu miasta jednym towarem;
+        // 10 lat gry to 3600 dób (`K-1`).
+        (
+            key: "bread_monopoly",
+            title: "ui.scenario.bread_monopoly.title",
+            brief: "ui.scenario.bread_monopoly.brief",
+            time_limit_days: Some(3600),
+            objectives: [
+                (
+                    id: (0),
+                    title: "ui.scenario.bread_monopoly.obj",
+                    goal: MarketShare(good: "food_bread_wheat", min_bp: 2500),
+                    deadline_days: Some(3600),
+                ),
+            ],
+        ),
+
+        // 4 — „Uratuj upadający zakład". Łatka zdejmuje gotówkę z pierwszego zakładu
+        // miasta, a cel każe utrzymać go wypłacalnym przez rok gry.
+        (
+            key: "save_the_mill",
+            title: "ui.scenario.save_the_mill.title",
+            brief: "ui.scenario.save_the_mill.brief",
+            patches: [IndebtSite(ordinal: 0, amount: 100000000)],
+            objectives: [
+                (
+                    id: (0),
+                    title: "ui.scenario.save_the_mill.obj",
+                    goal: SiteSolvent(ordinal: 0, for_days: 360),
+                    deadline_days: Some(1800),
+                ),
+            ],
+        ),
+
+        // 5 — „Zostań największym pracodawcą". Dwa warunki naraz: liczba etatów
+        // i pierwsze miejsce w mieście.
+        (
+            key: "biggest_employer",
+            title: "ui.scenario.biggest_employer.title",
+            brief: "ui.scenario.biggest_employer.brief",
+            objectives: [
+                (
+                    id: (0),
+                    title: "ui.scenario.biggest_employer.obj",
+                    goal: Employment(min_headcount: 200, rank: Some(1)),
+                ),
+            ],
+        ),
+    ],
+)

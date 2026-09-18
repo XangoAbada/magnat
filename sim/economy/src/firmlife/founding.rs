@@ -80,6 +80,13 @@ impl Default for FoundingParams {
 /// Zamiar założenia firmy — co, gdzie i za ile.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct FoundingIntent {
+    /// Kto zostaje udziałowcem. Mieszkaniec przy przeglądzie niszy, [`Owner::Player`]
+    /// przy komendzie gracza — jedna droga dla obu (`K-11`), bo drugi zakładacz firm
+    /// rozjechałby się z pierwszym przy pierwszej zmianie w rejestrze.
+    pub owner: Owner,
+    /// Gospodarstwo, z którego wychodzi kapitał. Osobno od właściciela, bo gracz jest
+    /// `Owner::Player`, a płaci jako mieszkaniec — to jest ta sama osoba po dwóch
+    /// stronach granicy własności.
     pub citizen: CitizenId,
     pub district: u16,
     pub kind: PlaceKind,
@@ -147,9 +154,9 @@ pub fn scan_day(world: &mut World, market: &Market, t: Tick) -> FirmLifeDay {
         // `zaloz` zwraca kwotę **faktycznie wniesioną**, a nie zamierzoną: między
         // oceną kandydata a przelewem gospodarstwo mogło już wydać część oszczędności,
         // a raport ma mówić o pieniądzu, który się ruszył.
-        if let Some(wniesiony) = zaloz(world, market, &zamiar, typ_sklepu, t) {
+        if let Some(f) = found(world, market, &zamiar, typ_sklepu, t) {
             d.founded += 1;
-            d.capital_own = Money(d.capital_own.get() + wniesiony.get());
+            d.capital_own = Money(d.capital_own.get() + f.capital.get());
         }
     }
     d
@@ -269,6 +276,7 @@ fn kandydaci(
         };
         let (kind, _) = nisze[&district];
         out.push(FoundingIntent {
+            owner: Owner::Citizen(CitizenId(*e)),
             citizen: CitizenId(*e),
             district,
             kind,
@@ -289,10 +297,30 @@ fn wlasciciele(world: &World) -> std::collections::BTreeSet<u32> {
                 .flat_map(|(_, firm)| firm.owners.iter())
                 .filter_map(|s| match s.owner {
                     Owner::Citizen(c) => Some(c.0.index()),
+                    // Firma gracza ma właściciela `Owner::Player`, ale prowadzi ją
+                    // **mieszkaniec** — bez tego ramienia dobowy przegląd niszy
+                    // zakładałby mu drugą firmę za jego własne oszczędności.
+                    Owner::Player => player_index(world),
                     _ => None,
                 })
                 .collect()
         })
+}
+
+/// Indeks mieszkańca, który jest postacią gracza. `None` w świecie bez gracza.
+///
+/// Znacznik siedzi w `Identity` (bit 2) od M3 i jest jedynym miejscem, po którym
+/// `sim/*` poznaje postać gracza — `game/` stoi wyżej i nie ma jak o nią zapytać.
+fn player_index(world: &World) -> Option<u32> {
+    let pop = world.get_resource::<Population>()?;
+    pop.citizens()
+        .iter()
+        .find(|e| {
+            world
+                .get::<Identity>(**e)
+                .is_some_and(|i| i.flags & Identity::FLAG_PLAYER != 0)
+        })
+        .map(|e| e.index())
 }
 
 /// Zakłada firmę: rejestr, rachunek, przelew kapitału, lokal z półką.
@@ -301,13 +329,13 @@ fn wlasciciele(world: &World) -> std::collections::BTreeSet<u32> {
 /// zrobić**, tylko w jednym miejscu: pieniądz przenosi się dopiero wtedy, gdy sklep
 /// już stoi. Odwrotna kolejność zostawiałaby przy nieudanym otwarciu gotówkę na
 /// koncie firmy, której nie ma.
-fn zaloz(
+pub fn found(
     world: &mut World,
     market: &Market,
     zamiar: &FoundingIntent,
     typ: magnat_firms::SiteTypeId,
     t: Tick,
-) -> Option<Money> {
+) -> Option<Found> {
     let wzor = market
         .shop_seeds()
         .into_iter()
@@ -323,7 +351,7 @@ fn zaloz(
             nazwa_firmy(key),
             SimMinute(t.get()),
             magnat_core::DistrictId(zamiar.district),
-            Owner::Citizen(zamiar.citizen),
+            zamiar.owner,
         )
     });
     let spec = katalog.get(typ);
@@ -399,7 +427,47 @@ fn zaloz(
         }
         market.record_capital(nowy, wniesiony, t);
     }
-    Some(wniesiony)
+    Some(Found {
+        firm: key,
+        site: nowy,
+        capital: wniesiony,
+    })
+}
+
+/// Co powstało: firma, jej pierwszy zakład i kapitał, który się **naprawdę** ruszył.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Found {
+    pub firm: magnat_firms::FirmKey,
+    pub site: magnat_core::SiteId,
+    pub capital: Money,
+}
+
+/// Pierwszy typ zakładu handlowego w katalogu — wejście dla gracza, który zakłada
+/// firmę z panelu, a nie z przeglądu niszy.
+#[must_use]
+pub fn retail_site_type(world: &World) -> Option<magnat_firms::SiteTypeId> {
+    world
+        .get_resource::<SiteTypeCatalog>()?
+        .iter()
+        .find(|(_, s)| s.category == SiteTypeCategory::Retail)
+        .map(|(id, _)| id)
+}
+
+/// Dzielnice, w których stoi lokal handlowy do wejścia — wejście panelu „otwórz punkt".
+///
+/// Gracz wybiera z tej listy, bo `found` i `open_all` wchodzą do lokalu, który **już
+/// stoi** (`ponytail:` w obu: budowy nie ma). Dzielnica bez wzoru lokalu nie ma czego
+/// zaproponować i nie pojawia się na liście — zamiast odrzucać komendę po kliknięciu.
+#[must_use]
+pub fn districts_with_seed(market: &Market) -> Vec<(u16, PlaceKind)> {
+    let mut out: Vec<(u16, PlaceKind)> = Vec::new();
+    for s in market.shop_seeds() {
+        if !out.iter().any(|(d, _)| *d == s.district) {
+            out.push((s.district, s.kind));
+        }
+    }
+    out.sort_unstable_by_key(|(d, _)| *d);
+    out
 }
 
 /// Pierwszy wolny klucz zakładu ponad wszystkim, co już w mieście stoi.

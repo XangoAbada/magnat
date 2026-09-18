@@ -279,11 +279,41 @@ impl MarketInner {
     /// Miara jest celowo prosta i jawna: sklep pożycza pod **zapasy i koszty stałe**,
     /// nie pod inwestycję (ta jest w M7). Ocena idzie przez DSCR liczone z księgi.
     fn maybe_borrow_working_capital(&mut self, i: usize, books: &mut Books, t: Tick) {
+        let konto = self.shops[i].account;
+        let slots = self.shops[i].shelf.slots;
+        let (czynsz, media, place) = self.data.costs.monthly(slots);
+        let miesieczne = Money(czynsz.get() + media.get() + place.get());
+        let saldo = books.balance(konto).unwrap_or(Money::ZERO);
+        if saldo.get() >= miesieczne.get() {
+            return;
+        }
+        let _ = self.borrow_working_capital(i, books, t);
+    }
+
+    /// Sam wniosek, bez progu „zostało mniej niż miesiąc kosztów".
+    ///
+    /// Osobno, bo próg jest **powodem, dla którego sklep pyta**, a nie częścią
+    /// pytania: gracz pyta, bo tak zdecydował, i ma dostać tę samą ocenę tym samym
+    /// wzorem. Dwie ścieżki do jednego banku rozjechałyby się przy pierwszej zmianie
+    /// widełek (`K-11` w wydaniu kredytowym).
+    pub(crate) fn borrow_working_capital(
+        &mut self,
+        i: usize,
+        books: &mut Books,
+        t: Tick,
+    ) -> Result<crate::books::LoanId, RejectCredit> {
         let Some(bank) = self.bank else {
-            return;
+            return Err(RejectCredit::NoLender);
         };
+        // Zamknięty sklep nie obsługuje kredytu: dobowa pętla pomija go przy
+        // `service_working_capital`, więc rata nigdy by nie wyszła. Bez tego
+        // strażnika zakład zamknięty przez UOKiK (`sim/city::law`) dostawałby
+        // z panelu darmową gotówkę i zobowiązanie widmo.
+        if self.shops[i].closed {
+            return Err(RejectCredit::NoLender);
+        }
         if self.shops[i].loan.is_some() {
-            return;
+            return Err(RejectCredit::DscrTooLow);
         }
         let (site, konto, slots) = (
             self.shops[i].site,
@@ -292,10 +322,6 @@ impl MarketInner {
         );
         let (czynsz, media, place) = self.data.costs.monthly(slots);
         let miesieczne = Money(czynsz.get() + media.get() + place.get());
-        let saldo = books.balance(konto).unwrap_or(Money::ZERO);
-        if saldo.get() >= miesieczne.get() {
-            return;
-        }
         let params = self.data.bank;
         let produkt = params.products.working_capital;
         let kwota = Money(miesieczne.get().saturating_mul(3));
@@ -328,8 +354,20 @@ impl MarketInner {
         let reason = decyzja.reason();
         self.log_budget(site.entity().index(), reason);
         let CreditDecision::Approved { limit, rate_bp, .. } = decyzja else {
-            return;
+            let CreditDecision::Rejected { cause, .. } = decyzja else {
+                unreachable!("decyzja kredytowa ma dwa warianty")
+            };
+            return Err(cause);
         };
+        // **Najpierw pieniądz, potem wpis do rejestru.** Odwrotna kolejność zostawiała
+        // przy nieudanej kreacji depozytu kredyt w `self.loans`, którego nikt nie ma
+        // i nikt nie spłaca — a gracz może ponawiać wniosek z panelu, więc osieroconych
+        // wpisów byłoby tyle, ile kliknięć. `LoanId` nadaje się z długości rejestru,
+        // więc podglądnięcie go przed wstawieniem jest tanie i dokładne.
+        let id = crate::books::LoanId(u32::try_from(self.loans.len()).unwrap_or(u32::MAX));
+        if books.create_credit(konto, limit, id, reason, t).is_err() {
+            return Err(RejectCredit::NoLender);
+        }
         let id = self.loans.open(
             AccountOwner::Firm(self.shops[i].firm),
             bank.firm,
@@ -339,9 +377,6 @@ impl MarketInner {
             produkt.term_months,
             Tick(t.get() + crate::credit::TICKS_PER_MONTH),
         );
-        if books.create_credit(konto, limit, id, reason, t).is_err() {
-            return;
-        }
         let _ = ledger::post(
             &mut self.shops[i].ledger,
             JournalEntry::new(
@@ -354,5 +389,30 @@ impl MarketInner {
             ),
         );
         self.shops[i].loan = Some(id);
+        Ok(id)
+    }
+}
+
+impl Market {
+    /// Wniosek o kredyt obrotowy złożony **przez gracza** z panelu Finanse.
+    ///
+    /// Ta sama ocena, ten sam bank i ta sama księga co przy wniosku, który sklep
+    /// składa sam przy pustej kasie — różni się wyłącznie tym, kto nacisnął.
+    ///
+    /// # Errors
+    /// [`RejectCredit`] — powód odmowy, ten sam, który trafia do dziennika decyzji.
+    pub fn request_working_capital(
+        &self,
+        books: &mut Books,
+        site: SiteId,
+        t: Tick,
+    ) -> Result<crate::books::LoanId, RejectCredit> {
+        let mut m = self.lock();
+        let i = m
+            .by_site
+            .get(&site)
+            .copied()
+            .ok_or(RejectCredit::NoLender)? as usize;
+        m.borrow_working_capital(i, books, t)
     }
 }

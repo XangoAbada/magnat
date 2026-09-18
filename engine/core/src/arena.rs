@@ -118,7 +118,9 @@ impl<T> ArenaHandle<T> {
 /// `None`, gdy się nie zgadza. Pomylenie areny (uchwyt partii użyty jako uchwyt oferty)
 /// przestaje być błędem kompilacji i staje się pustą kartą — dlatego `to_handle`
 /// woła się **wyłącznie** w miejscu, które wie, o którą arenę pyta.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[derive(
+    Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, serde::Serialize, serde::Deserialize,
+)]
 pub struct ArenaRef {
     index: u32,
     generation: NonZeroU32,

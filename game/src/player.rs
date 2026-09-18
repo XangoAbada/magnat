@@ -219,6 +219,13 @@ pub struct PlayerCharacter {
     pub owned_sites: Vec<SiteId>,
     /// Kapitał, który postać dostała na starcie — wiersz slotu zapisu i karta.
     pub capital: Money,
+    /// Kogo gracz wskazał na dziedzica. `None` = wybierze go `legacy::heir_of`
+    /// po śmierci, deterministycznie i bez losowania.
+    pub heir: Option<CitizenId>,
+    /// Ile razy gracz ogłosił upadłość osobistą. Liczba do kroniki i do tytułu —
+    /// **nie** do oceny kredytowej: tę bank wystawia z zaległości, które po
+    /// upadłości zostają w księgach.
+    pub bankruptcies: u8,
 }
 
 /// Jeden wiersz listy wyboru postaci.
@@ -360,6 +367,29 @@ pub fn take_role(
         Vec::new()
     };
 
+    // Spadkobierca dziedziczy **firmę**, a nie wskaźnik na zakład. Bez przepisania
+    // własności w rejestrze `precheck` odmawiałby mu każdej komendy dotyczącej
+    // własnego sklepu — „to nie jest twój zakład" — a gracz miałby rację, czując
+    // się oszukanym. Wykryte testem WP10 (`DI-1`).
+    for site in &owned_sites {
+        let firma = world
+            .get_resource::<magnat_firms::Firms>()
+            .and_then(|f| f.site(*site))
+            .map(|z| z.firm);
+        if let (Some(key), Some(firms)) = (
+            firma,
+            world.get_resource_mut::<magnat_firms::Firms>(),
+        ) {
+            if let Some(f) = firms.get_mut(key) {
+                f.owners.clear();
+                f.owners.push(magnat_firms::OwnerShare {
+                    owner: magnat_firms::Owner::Player,
+                    bp: magnat_firms::Firm::SHARES_TOTAL,
+                });
+            }
+        }
+    }
+
     // Zakład gracza jest zakładem śledzonym: to jest ta flaga, którą ustawia `game/`,
     // a `sim/economy` ją tylko czyta (`Z-3` z M5e). Bez niej karta „dlaczego Anna
     // nie kupiła u mnie" nie ma z czego powstać.
@@ -378,6 +408,8 @@ pub fn take_role(
         autonomy: PlayerAutonomy::default(),
         owned_sites,
         capital: kapital,
+        heir: None,
+        bankruptcies: 0,
     })
 }
 

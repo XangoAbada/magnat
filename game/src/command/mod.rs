@@ -27,6 +27,13 @@
 //! i z tego samego powodu: dziennik wejść jest artefaktem zapisu gry, a kolejność
 //! wariantów jest w nim liczbą.
 
+pub(crate) mod check;
+pub(crate) mod error;
+pub(crate) mod exec;
+
+pub use check::precheck;
+pub use error::CommandError;
+
 use magnat_core::{CitizenId, GoodId, Money, SiteId, Tick};
 use magnat_economy::Market;
 use serde::{Deserialize, Serialize};
@@ -104,6 +111,136 @@ pub enum PlayerCommand {
     },
     /// Zdejmij politykę z zakładu — od tej chwili ceny stoją tam, gdzie stanęły.
     DetachPolicy { site: SiteId },
+
+    // ── M9e: komendy paneli biznesowych (WP10) ───────────────────────────────
+    //
+    // Każda z nich ma **wykonawcę i panel**, z którego się ją wydaje — to jest ta
+    // sama reguła, którą `DC-1` postawił dla komend postaci. Lista paneli, z których
+    // da się coś zrobić, stoi w `PanelId::is_operational`.
+    /// Załóż firmę i pierwszy sklep w dzielnicy.
+    ///
+    /// Idzie **tą samą drogą co firma zakładana przez mieszkańca**
+    /// (`magnat_economy::firmlife::found`): jeden rejestr, jedno konto, jeden lokal,
+    /// jeden przelew kapitału. Druga ścieżka zakładania firm rozjechałaby się
+    /// z pierwszą przy pierwszej zmianie w rejestrze (`K-11`).
+    FoundFirm { district: u16, capital: Money },
+    /// Otwórz kolejny punkt w dzielnicy. Nakład idzie z rachunku firmy — tyle,
+    /// ile na nim stoi, bo zakład bez kapitału obrotowego jest poprawnym wynikiem.
+    OpenSite { district: u16, capex: Money },
+    /// Zamknij zakład: półka schodzi, załoga odchodzi, rejestr o tym wie.
+    CloseSite { site: SiteId },
+    /// Ustaw asortyment półki. Towary **kluczami tekstowymi** (00 §5), tak samo jak
+    /// w `SetPrice`, i przycinane do liczby wyłożeń — gracz wybiera z listy,
+    /// a ile się zmieści, wie półka.
+    SetShelfAssortment { site: SiteId, goods: Vec<String> },
+    /// Zatrudnij wskazanego mieszkańca na wskazane stanowisko.
+    HireCandidate {
+        site: SiteId,
+        citizen: CitizenId,
+        role: u16,
+    },
+    /// Ile wolno menedżerowi tego zakładu bez pytania właściciela.
+    ///
+    /// **To, a nie „przypisz menedżera", jest decyzją gracza.** Menedżerem zostaje
+    /// najlepszy człowiek na stanowisku kierowniczym i wybiera go `reconcile_managers`
+    /// codziennie — komenda „postaw tego" byłaby nadpisywana następnej doby, czyli
+    /// byłaby wariantem bez skutku (`K-67`). Gracz stawia menedżera **zatrudniając
+    /// go** na stanowisko kierownicze (`HireCandidate`), a tutaj mówi, ile mu wolno.
+    /// To jest ta decyzja, której `AttachPolicy` świadomie nie podejmowało.
+    SetDelegationAutonomy { site: SiteId, autonomy: Autonomy },
+    /// Złóż podanie o pracę. **Podanie, nie przyjęcie oferty**: w tej gospodarce
+    /// etat wygrywa się zgłoszeniem i doborem, a nie kliknięciem „przyjmuję"
+    /// (`DH-2` — zbiór komend metryki §5.12 wymienia tę, która istnieje).
+    ///
+    /// Oferta jedzie **bitami uchwytu areny** (`ArenaHandle::to_bits`), bo oferty są
+    /// poza ECS (`K-16`) i ich uchwyt nie jest encją. Uchwyt po wygaśnięciu oferty
+    /// nigdy nie jest ponownie ważny, więc replay odrzuci podanie tak samo jak gra.
+    ApplyForJob { offer: u64 },
+    /// Poproś bank o kredyt obrotowy na zakład.
+    TakeLoan { site: SiteId },
+    /// Wpłać na kampanię kandydata (`K-66`). Pieniądz wychodzi z gospodarstwa
+    /// gracza i jedzie kanałem `TxKind::CampaignDonation`.
+    BackCandidate { candidate: u8, amount: Money },
+    /// Złóż wniosek o pozwolenie. Urząd przerabia go w kolejce, tak samo jak wniosek
+    /// firmy — `Applicant::Player` czekał w `sim/city` od M8d na kogoś, kto go wyda.
+    ///
+    /// Rodzaj jedzie **indeksem `PermitKind`**, którego kolejność jest kontraktem
+    /// (`K-64`), a nie nazwą: dziennik wejść ma być mały.
+    ApplyForPermit { kind: u8 },
+    /// Przestaw cel zapasu towaru w zakładzie — na ile dób sklep ma się zatowarować.
+    SetRestockTarget {
+        site: SiteId,
+        good: String,
+        days: u16,
+    },
+
+    // ── M9e: porażka i dziedziczenie (WP12) ──────────────────────────────────
+    /// Ogłoś upadłość osobistą. Zakłady idą do likwidacji, zobowiązania **zostają**
+    /// razem z zaległościami — i to je widzi bank przy następnym wniosku.
+    /// `GameState` pozostaje `Playing`: gra się nie kończy (§13.4).
+    DeclarePersonalBankruptcy,
+    /// Wskaż dziedzica. Bez tego wybiera go [`crate::legacy::heir_of`] po śmierci.
+    SetHeir { citizen: CitizenId },
+    /// Dziedzic przejmuje rolę. Własność firm przechodzi sama — `Owner::Player` jest
+    /// rolą, a nie osobą. **Nie przechodzą relacje ani umiejętności**: należą do
+    /// komponentu nowego mieszkańca i nikt ich nie przepisuje.
+    Succeed { citizen: CitizenId },
+    /// Nowa dynastia w tym samym świecie. Firm poprzedniej nie dziedziczy nikt,
+    /// więc idą do likwidacji — inaczej miasto zapełniłoby się zakładami bez
+    /// właściciela, którymi nikt nigdy nie pokieruje.
+    ContinueAsNewCitizen { citizen: CitizenId },
+}
+
+/// Ile wolno menedżerowi bez pytania właściciela.
+///
+/// Powtórzenie `magnat_firms::Autonomy` w kopercie komendy, a nie jego reeksport:
+/// koperta jedzie do dziennika wejść i jej kształt jest **kontraktem zapisu**,
+/// a `sim/firms` ma prawo swój enum przestawić. Dyskryminanty są tu wieczne.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
+pub enum Autonomy {
+    /// Wyłącznie ceny — tyle, ile dostaje zastępstwo po odejściu menedżera.
+    #[default]
+    PricesOnly,
+    /// Ceny i obsada.
+    PricesAndStaff,
+    /// Wszystko, co polityka umie wykonać.
+    Full,
+}
+
+impl Autonomy {
+    pub const ALL: [Autonomy; 3] = [
+        Autonomy::PricesOnly,
+        Autonomy::PricesAndStaff,
+        Autonomy::Full,
+    ];
+
+    #[must_use]
+    pub const fn to_firms(self) -> magnat_firms::Autonomy {
+        match self {
+            Autonomy::PricesOnly => magnat_firms::Autonomy::PricesOnly,
+            Autonomy::PricesAndStaff => magnat_firms::Autonomy::PricesAndStaff,
+            Autonomy::Full => magnat_firms::Autonomy::Full,
+        }
+    }
+
+    #[must_use]
+    pub const fn from_firms(a: magnat_firms::Autonomy) -> Autonomy {
+        match a {
+            magnat_firms::Autonomy::PricesOnly => Autonomy::PricesOnly,
+            magnat_firms::Autonomy::PricesAndStaff => Autonomy::PricesAndStaff,
+            magnat_firms::Autonomy::Full => Autonomy::Full,
+        }
+    }
+
+    /// Klucz tekstu: `ui.autonomy.<key>`.
+    #[must_use]
+    pub const fn key(self) -> &'static str {
+        match self {
+            Autonomy::PricesOnly => "prices_only",
+            Autonomy::PricesAndStaff => "prices_and_staff",
+            Autonomy::Full => "full",
+        }
+    }
 }
 
 /// Komenda zmieniająca **widok**, nie świat. Nie wchodzi do hasha stanu.
@@ -111,6 +248,18 @@ pub enum PlayerCommand {
 pub enum ViewCommand {
     SetTimeScale(magnat_core::SimSpeed),
     SaveGame { slot: u8 },
+    /// Gracz otworzył panel. **To jest nośnik metryki onboardingu** (§5.12): liczba
+    /// otwartych paneli do pierwszej sensownej decyzji liczy się z tego strumienia,
+    /// a nie z osobnej telemetrii.
+    OpenPanel(crate::panels::PanelId),
+    ClosePanel(crate::panels::PanelId),
+    /// Warunek zatrzymania włączony albo wyłączony (§5.10).
+    SetStopCondition {
+        id: crate::timectl::StopConditionId,
+        on: bool,
+    },
+    /// Tryb „śledź". `None` kończy śledzenie.
+    Follow(Option<crate::timectl::FollowTarget>),
 }
 
 /// Wpis strumienia widoku: co i **kiedy naprawdę** — znacznik czasu rzeczywistego
@@ -122,80 +271,6 @@ pub struct ViewRecord {
     pub cmd: ViewCommand,
 }
 
-/// Dlaczego komenda się nie wykonała. Enum z parametrami, nie napis — renderuje
-/// go i18n, a nie `format!` w miejscu odrzucenia (§5.5).
-#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
-pub enum CommandError {
-    /// Gospodarka wyłączona (`--no-economy`): nie ma rynku, do którego mówić.
-    NoMarket,
-    SiteNotFound {
-        site: SiteId,
-    },
-    UnknownGood {
-        key: String,
-    },
-    /// Sklep nie ma tego towaru na półce.
-    NotOnShelf {
-        site: SiteId,
-        key: String,
-    },
-    /// Cena ujemna albo zero. Pieniądz jest `i64` w groszach, więc jedno i drugie
-    /// da się wpisać, i jedno i drugie znaczy „oddaję towar za darmo".
-    PriceNotPositive {
-        price: Money,
-    },
-    /// Wskazany mieszkaniec nie istnieje albo nie żyje.
-    CitizenNotFound {
-        citizen: CitizenId,
-    },
-    /// Gra nie ma jeszcze postaci — nie ma komu ustawić autonomii.
-    NoCharacter,
-    /// Postać już jest. Drugi wybór dawałby drugi kapitał startowy, więc jest błędem,
-    /// a nie przeprowadzką; dziedziczenie po śmierci to osobna komenda (`M9e`).
-    CharacterAlreadySet,
-    /// Świat nie ma rejestru firm — scenariusz postawił sam rynek detaliczny.
-    NoFirms,
-    /// Zakład należy do kogoś innego. Gracz przypina reguły **swoim** zakładom;
-    /// cudzą politykę wolno obejrzeć, a nie podmienić.
-    NotYourSite { site: SiteId },
-    /// Polityka nie przeszła walidatora. Liczba uwag, nie ich lista: pełną
-    /// diagnostykę pokazuje edytor **przed** kliknięciem, a koperta komendy jedzie
-    /// do dziennika wejść i ma być mała.
-    PolicyInvalid { notes: u16 },
-    /// Zakład nie ma przypiętej polityki, więc nie ma czego zdejmować.
-    NoPolicy { site: SiteId },
-}
-
-impl std::fmt::Display for CommandError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            CommandError::NoMarket => write!(f, "gospodarka jest wyłączona"),
-            CommandError::SiteNotFound { site } => write!(f, "nie ma zakładu {site:?}"),
-            CommandError::UnknownGood { key } => write!(f, "nie ma towaru o kluczu {key}"),
-            CommandError::NotOnShelf { site, key } => {
-                write!(f, "zakład {site:?} nie ma na półce towaru {key}")
-            }
-            CommandError::PriceNotPositive { price } => {
-                write!(f, "cena {} gr nie jest dodatnia", price.get())
-            }
-            CommandError::CitizenNotFound { citizen } => {
-                write!(f, "nie ma mieszkańca {citizen:?}")
-            }
-            CommandError::NoCharacter => write!(f, "gra nie ma jeszcze postaci"),
-            CommandError::CharacterAlreadySet => write!(f, "postać jest już wybrana"),
-            CommandError::NoFirms => write!(f, "świat nie ma rejestru firm"),
-            CommandError::NotYourSite { site } => write!(f, "zakład {site:?} nie jest twój"),
-            CommandError::PolicyInvalid { notes } => {
-                write!(f, "polityka ma {notes} uwag walidatora")
-            }
-            CommandError::NoPolicy { site } => {
-                write!(f, "zakład {site:?} nie ma przypiętej polityki")
-            }
-        }
-    }
-}
-
-impl std::error::Error for CommandError {}
 
 /// To, co komenda widzi ze świata.
 ///
@@ -217,92 +292,6 @@ pub struct CommandView<'a> {
     pub has_character: bool,
 }
 
-/// Sprawdza, czy komendę wolno wykonać. **Nie zmienia niczego.**
-///
-/// # Errors
-/// [`CommandError`] opisujący, czego brakuje.
-pub fn precheck(view: &CommandView<'_>, cmd: &PlayerCommand) -> Result<(), CommandError> {
-    match cmd {
-        // Koperta bootstrapowa: świat powstaje **przed** sesją, więc nie ma tu czego
-        // sprawdzać ani czego wykonać. Jej treścią są parametry, z których replay
-        // odtwarza grę (§5.13).
-        PlayerCommand::StartGame { .. } => Ok(()),
-        PlayerCommand::SetPrice { site, good, price } => {
-            if price.get() <= 0 {
-                return Err(CommandError::PriceNotPositive { price: *price });
-            }
-            let market = view.market.ok_or(CommandError::NoMarket)?;
-            let g = resolve_good(market, good)?;
-            if market.price_at(*site, g).is_none() {
-                return Err(zgub_sklep(market, *site, good));
-            }
-            Ok(())
-        }
-        PlayerCommand::SetCharacter { citizen } => {
-            if view.has_character {
-                return Err(CommandError::CharacterAlreadySet);
-            }
-            let zyje = view.world.is_some_and(|w| {
-                w.get::<magnat_agents::Identity>(citizen.entity())
-                    .is_some_and(magnat_agents::Identity::is_alive)
-            });
-            if zyje {
-                Ok(())
-            } else {
-                Err(CommandError::CitizenNotFound { citizen: *citizen })
-            }
-        }
-        PlayerCommand::SetAutonomy { .. } => {
-            if view.has_character {
-                Ok(())
-            } else {
-                Err(CommandError::NoCharacter)
-            }
-        }
-        PlayerCommand::AttachPolicy { site, policy } => {
-            moj_zaklad(view, *site)?;
-            magnat_policy::validate(policy).map_err(|e| CommandError::PolicyInvalid {
-                notes: u16::try_from(e.0.len()).unwrap_or(u16::MAX),
-            })
-        }
-        PlayerCommand::DetachPolicy { site } => {
-            let firms = moj_zaklad(view, *site)?;
-            if firms
-                .site(*site)
-                .is_some_and(|s| s.delegation.is_some())
-            {
-                Ok(())
-            } else {
-                Err(CommandError::NoPolicy { site: *site })
-            }
-        }
-    }
-}
-
-/// Zakład, do którego gracz ma prawo przypiąć regułę.
-///
-/// Własność sprawdza się **tutaj**, a nie przy wykonaniu, bo panel ma wygasić
-/// przycisk z powodem, zanim gracz kliknie — to jest cała treść jednej funkcji
-/// `precheck` dla obu stron.
-fn moj_zaklad<'a>(
-    view: &CommandView<'a>,
-    site: SiteId,
-) -> Result<&'a magnat_firms::Firms, CommandError> {
-    let firms = view
-        .world
-        .and_then(magnat_ecs::World::get_resource::<magnat_firms::Firms>)
-        .ok_or(CommandError::NoFirms)?;
-    let z = firms.site(site).ok_or(CommandError::SiteNotFound { site })?;
-    let moj = firms
-        .get(z.firm)
-        .is_some_and(|f| f.owners.iter().any(|o| o.owner == magnat_firms::Owner::Player));
-    if moj {
-        Ok(firms)
-    } else {
-        Err(CommandError::NotYourSite { site })
-    }
-}
-
 /// Wykonuje komendę. Wołane **wyłącznie** po udanym [`precheck`], w punkcie
 /// synchronizacji przed systemami ticku.
 ///
@@ -318,6 +307,24 @@ pub fn apply(view: &CommandView<'_>, cmd: &PlayerCommand) -> Result<(), CommandE
         // Obie komendy postaci zmieniają świat i sesję, więc wykonuje je
         // `Session::apply_due` — tu jest tylko walidacja, wspólna dla obu stron.
         PlayerCommand::SetCharacter { .. } | PlayerCommand::SetAutonomy { .. } => Ok(()),
+        // Komendy paneli biznesowych sięgają do `&mut World` — rejestru firm, ksiąg,
+        // rynku pracy i strony publicznej. Wykonuje je `exec::run` z sesji; tutaj
+        // zostaje walidacja, ta sama, którą panel woła przy wygaszaniu przycisku.
+        PlayerCommand::FoundFirm { .. }
+        | PlayerCommand::OpenSite { .. }
+        | PlayerCommand::CloseSite { .. }
+        | PlayerCommand::HireCandidate { .. }
+        | PlayerCommand::SetDelegationAutonomy { .. }
+        | PlayerCommand::ApplyForJob { .. }
+        | PlayerCommand::TakeLoan { .. }
+        | PlayerCommand::BackCandidate { .. }
+        | PlayerCommand::ApplyForPermit { .. }
+        | PlayerCommand::SetShelfAssortment { .. }
+        | PlayerCommand::SetRestockTarget { .. }
+        | PlayerCommand::DeclarePersonalBankruptcy
+        | PlayerCommand::SetHeir { .. }
+        | PlayerCommand::Succeed { .. }
+        | PlayerCommand::ContinueAsNewCitizen { .. } => Ok(()),
         PlayerCommand::SetPrice { site, good, price } => {
             let market = view.market.ok_or(CommandError::NoMarket)?;
             let g = resolve_good(market, good)?;
@@ -335,7 +342,7 @@ pub fn apply(view: &CommandView<'_>, cmd: &PlayerCommand) -> Result<(), CommandE
     }
 }
 
-fn resolve_good(market: &Market, key: &str) -> Result<GoodId, CommandError> {
+pub(crate) fn resolve_good(market: &Market, key: &str) -> Result<GoodId, CommandError> {
     market
         .good_of_key(key)
         .ok_or_else(|| CommandError::UnknownGood {
@@ -345,7 +352,7 @@ fn resolve_good(market: &Market, key: &str) -> Result<GoodId, CommandError> {
 
 /// Rozróżnia „nie ma takiego zakładu" od „ma, ale nie handluje tym towarem".
 /// Bez tego gracz dostawałby jeden komunikat na dwa różne błędy.
-fn zgub_sklep(market: &Market, site: SiteId, key: &str) -> CommandError {
+pub(crate) fn zgub_sklep(market: &Market, site: SiteId, key: &str) -> CommandError {
     if market.sites().contains(&site) {
         CommandError::NotOnShelf {
             site,

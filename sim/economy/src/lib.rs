@@ -54,6 +54,7 @@ pub mod cpi;
 pub mod credit;
 pub mod data;
 pub mod firmlife;
+pub mod owner_ops;
 pub mod kernel;
 pub mod labor;
 pub mod ledger;

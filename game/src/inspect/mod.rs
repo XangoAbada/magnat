@@ -21,6 +21,7 @@
 //! [`resolve`] zwraca `false`, a `None` nie jest błędem, tylko normalnym stanem
 //! świata, który się zmienia. Odnośnik prowadzący w pustkę jest gorszy od jego braku.
 
+mod batch;
 mod business;
 mod citizen;
 mod city;
@@ -64,6 +65,12 @@ impl<'a> CardCtx<'a> {
     #[must_use]
     pub fn fmt(&self, key: &str, args: &[(&str, &str)]) -> String {
         self.c.fmt_key(self.l, key, args)
+    }
+
+    /// Kwota w języku gracza — jeden przelicznik dla wszystkich kart.
+    #[must_use]
+    pub fn money_str(&self, m: magnat_core::Money) -> String {
+        magnat_ui::fmt::money(self.c, self.l, m)
     }
 
     /// Wiersz tekstu bez odnośnika.
@@ -132,10 +139,11 @@ impl<'a> CardCtx<'a> {
 /// `core` zna typ uchwytu, ale nie zna świata. `false` **nie jest błędem** — firma
 /// upadła, mieszkaniec zmarł, partia została sprzedana.
 ///
-/// `ponytail:` podmioty, których rejestru karta jeszcze nie otwiera (umowa, partia,
-/// oferta, przetarg, sprawa, pozwolenie, zdarzenie), odpowiadają `true`: mamy ich
-/// identyfikator i nic poza nim. Sufit znika razem z ich kartami w `M9e`, gdzie
-/// powstają panele Kronika i Miasto — dopiero one czytają te rejestry.
+/// `ponytail:` podmioty, których rejestru karta nie otwiera (umowa, oferta, przetarg,
+/// sprawa, pozwolenie, zdarzenie), odpowiadają `true`: mamy ich identyfikator i nic
+/// poza nim. **Partia od `M9e` odpowiada prawdą** — jej ślad czyta `batch::card`.
+/// Dla pozostałych sufit zostaje: rejestry przetargów i spraw są w `sim/city`,
+/// a pytanie „czy ten przetarg jeszcze trwa" nie ma dziś czytelnika poza kroniką.
 #[must_use]
 pub fn resolve(session: &Session, subject: Subject) -> bool {
     match subject {
@@ -172,9 +180,9 @@ pub fn card(ctx: &CardCtx<'_>, subject: Subject) -> InspectionCard {
         Subject::Parcel(p) => city::parcel_card(ctx, p),
         Subject::District(d) => city::district_card(ctx, d),
         Subject::Government => city::government_card(ctx),
+        Subject::Batch(b) => batch::card(ctx, b),
         Subject::Contract(_)
         | Subject::Event(_)
-        | Subject::Batch(_)
         | Subject::Offer(_)
         | Subject::Tender(_)
         | Subject::Case(_)

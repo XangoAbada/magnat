@@ -410,6 +410,119 @@ impl Market {
         true
     }
 
+    /// Ustawia asortyment półki: dokłada brakujące linie, zdejmuje te spoza listy.
+    ///
+    /// **To jest wykonawca [`AssortmentPolicy::Manual`]**, którego ten wariant do tej
+    /// pory nie miał — pole istniało od M5b i nikt go nie czytał, czyli było dokładnie
+    /// tym, przed czym broni `K-67`. Komenda gracza `SetShelfAssortment` wchodzi tędy.
+    ///
+    /// Linia zdjęta z półki **nie zabiera towaru z zaplecza**: zapas leży w magazynie
+    /// M6 i zostaje tam, gdzie leżał. Znika ekspozycja i oferta, czyli to, co widzi
+    /// kupujący — a to jest cała treść słowa „asortyment".
+    ///
+    /// Zwraca liczbę linii po zmianie; `None`, gdy rynek nie zna tego zakładu.
+    /// Lista dłuższa od półki jest **przycinana**, a nie odrzucana: gracz wybiera
+    /// z listy, a ile się zmieści, wie półka.
+    pub fn set_assortment(&self, site: SiteId, goods: &[GoodId], t: Tick) -> Option<u16> {
+        let mut m = self.lock();
+        let i = m.by_site.get(&site).copied()? as usize;
+        if m.shops[i].closed {
+            return None;
+        }
+        let slots = usize::from(m.shops[i].shelf.slots);
+        let mut chciane: Vec<GoodId> = Vec::new();
+        for g in goods {
+            if !chciane.contains(g) && m.goods.spec(*g).is_some() {
+                chciane.push(*g);
+            }
+        }
+        chciane.truncate(slots);
+
+        // Zdjęcie: linia, oferta, sterownik i polityka zamówień schodzą razem.
+        // Zostawienie któregokolwiek z nich znaczyłoby sklep, który dalej zamawia
+        // towar, którego nie sprzedaje.
+        let do_zdjecia: Vec<GoodId> = m.shops[i]
+            .shelf
+            .lines
+            .iter()
+            .map(|l| l.good)
+            .filter(|g| !chciane.contains(g))
+            .collect();
+        for g in do_zdjecia {
+            let Some(pos) = m.shops[i].shelf.lines.iter().position(|l| l.good == g) else {
+                continue;
+            };
+            let linia = m.shops[i].shelf.lines.remove(pos);
+            m.offers.remove(linia.offer);
+            m.shops[i].controllers.remove(&g);
+            m.shops[i].inventory.reorder.remove(&g);
+            if let Some(cat) = m.goods.spec(g).map(|s| CategoryId::Stock(s.cat)) {
+                m.index.mark_dirty(cat);
+            }
+        }
+
+        // Dołożenie: nowa linia startuje z ceny katalogowej i polityki stałej.
+        // Stałej, a nie dynamicznej, z tego samego powodu, dla którego `SetPrice`
+        // przestawia sterownik na `Fixed`: gracz właśnie wybrał ten towar ręcznie
+        // i pierwsza przecena nie ma prawa go zaskoczyć.
+        for g in chciane {
+            if m.shops[i].shelf.line(g).is_some() {
+                continue;
+            }
+            let Some(spec) = m.goods.spec(g).copied() else {
+                continue;
+            };
+            let firma = m.shops[i].firm;
+            let offer = m.offers.insert(Offer {
+                seller: firma,
+                site,
+                good: spec.good,
+                unit_price: spec.retail_price(),
+                price_basis: PriceBasis::GrossRetail,
+                available: Qty::ZERO,
+                quality: spec.quality,
+                category: CategoryId::Stock(spec.cat),
+                since: t,
+                price_rev: 0,
+            });
+            if !m.shops[i].shelf.insert(ShelfLine {
+                good: spec.good,
+                facings: 1,
+                offer,
+            }) {
+                m.offers.remove(offer);
+                continue;
+            }
+            m.shops[i].controllers.insert(
+                spec.good,
+                PriceController::new(
+                    PricePolicy::Fixed {
+                        price: spec.retail_price(),
+                    },
+                    spec.retail_price(),
+                    t,
+                ),
+            );
+            let krotnosc = if spec.shelf_life_days > 0 {
+                BACKROOM_MULTIPLE.min(i64::from(spec.shelf_life_days))
+            } else {
+                BACKROOM_MULTIPLE
+            };
+            m.shops[i].inventory.reorder.insert(
+                spec.good,
+                ReorderPolicy {
+                    point: Qty(SHELF_UNITS_PER_FACING * REORDER_POINT_MULTIPLE.min(krotnosc)),
+                    target: Qty(SHELF_UNITS_PER_FACING * krotnosc),
+                    lead_time_days: spec.lead_time_days,
+                },
+            );
+            m.index.mark_dirty(CategoryId::Stock(spec.cat));
+        }
+        let linie = m.shops[i].shelf.lines.iter().map(|l| l.good).collect();
+        m.shops[i].assortment = AssortmentPolicy::Manual { goods: linie };
+        u16::try_from(m.shops[i].shelf.lines.len()).ok()
+    }
+
     /// Czy zakład handlowy jest zamknięty. `false` także dla zakładu, którego rynek
     /// w ogóle nie zna — pytanie brzmi „czy przestał sprzedawać", a zakład
     /// produkcyjny nigdy nie zaczął.

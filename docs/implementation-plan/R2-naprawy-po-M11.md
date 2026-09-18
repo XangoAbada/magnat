@@ -363,7 +363,7 @@ a nie z góry.
 
 ---
 
-## 11. Wykaz — 56 wierszy
+## 11. Wykaz — 57 wierszy
 
 Numeracja jest numeracją przeglądu i nie zmienia się. Kolumna „Plan" mówi, co wiedziały dokumenty
 przed R2: `—` = nieznane planowi, `zapis` = zapisane jako znana usterka bez wykonawcy,
@@ -429,6 +429,7 @@ przed R2: `—` = nieznane planowi, `zapis` = zapisane jako znana usterka bez wy
 | 54 | **Promień metryki konkurencyjnej jest ignorowany.** `radius_m` jest polem `Metric::CheapestCompetitorPrice`, `AvgCompetitorPrice` i `CompetitorCount`, wchodzi do walidatora (limit 10 km) i **nie wchodzi do odczytu**: obraz konkurencji sklepu powstaje jednym promieniem obserwacji dla całego sklepu. Reguła z 3 km i reguła z 5 km dostają tę samą liczbę, a gracz widzi dwie różne reguły | — | R2-WP22 | `[ ]` |
 | 55 | **Trzy z pięciu dziedzin polityki nie mają wykonawcy** (`Hr`, `Production`, `Logistics`). Walidator odrzuca je jawnie (`DomainNotAvailable`), więc cichej polityki nie ma — ale `Action::domain()` rozcina przy okazji **dwie z sześciu polityk przykładowych z `M9d` §5.6** na dwie każdą, bo przecena jest cenowa, a wycofanie z półki i zamówienie zapasowe. Czy dziedzina ma zostać granicą polityki, czy tylko granicą akcji — decyzja otwarta nr 13 fazy M9 | zapis `M9d` `DF-2` | R2-WP22 (weryfikacja po decyzji) | `[ ]` |
 | 56 ⇧ | **Dry-run nie zna salda, nastroju załogi ani wakatów.** Ślad doby zakładu (`PolicyTrace`) niesie półkę, bo o niej mówi polityka cenowa i zapasowa. Reguła oparta na `saldo`, `nastrój_załogi` albo `wolne_etaty` wychodzi w podglądzie jako „nie wiem" (`DrySummary.blind`), choć w wykonaniu się odpala. Sufit nazwany w kodzie, adresat wskazany: panel finansów `M9e` | zapis `M9d` `DF-6` | ⇧ `M9e` (WP10) | `[ ]` |
+| 57 | **Cel zapasu firmy AI dla towaru bez historii sprzedaży wychodzi w milisztukach.** `ai_run::apply` przy `OpsAction::SetRestockDays` liczy zapas dobowy jako `obrót_7d / 7` z podłogą **jednej milisztuki**; dla towaru, który jeszcze się nie sprzedawał, cel „na N dni" wychodzi N tysięcznych sztuki. Sklep przestaje ten towar zamawiać, a sterownik ceny — liczący zapełnienie jako `ilość / cel` — widzi magazyn przepełniony i schodzi do podłogi marży | `sim/economy/src/ai_run/apply.rs`, ramię `OpsAction::SetRestockDays`; ścieżka gracza (`Market::set_restock_days`) dostała w M9e wyjście `restock_without_history`, ścieżka AI **nie** | R2-WP22 | [ ] |
 
 **Bilans wejściowy:** 1 pozycja miała pakiet (37), 1 okazała się rozstrzygnięta i wypadła
 z wykazu (38), 11 było zapisanych jako znana usterka **bez wykonawcy**, a 29 nie było znanych

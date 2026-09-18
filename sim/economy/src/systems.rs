@@ -669,7 +669,12 @@ fn run_firm_ai(world: &mut World, market: &Market, t: Tick) {
 /// upadłości: firma zamykająca nierentowny zakład nadal istnieje i nadal ma konto.
 /// Gdy na nim nie starcza, kwota zostaje zaległością — ta sama gałąź, którą
 /// `close_month` obsługuje niezapłacony czynsz.
-pub(crate) fn close_site(world: &mut World, market: &Market, site: magnat_core::SiteId, t: Tick) {
+pub(crate) fn close_site(
+    world: &mut World,
+    market: &Market,
+    site: magnat_core::SiteId,
+    t: Tick,
+) {
     let Some(mut firms) = world
         .get_resource_mut::<magnat_firms::Firms>()
         .map(std::mem::take)

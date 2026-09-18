@@ -67,7 +67,7 @@ pub struct Legenda {
 }
 
 pub struct Citizens {
-    ui: UiContext,
+    pub(crate) ui: UiContext,
     panel: CitizenPanel,
     /// Rekordy dla renderera, wypełniane co klatkę wprost przez warstwę Mikro.
     peds: Vec<PedestrianRecord>,
@@ -87,13 +87,23 @@ pub struct Citizens {
     filtr: Option<magnat_game::EntityFilter>,
     /// Wersje źródeł danych dla modeli paneli (`M9b` §5.8): model przebudowuje się
     /// wyłącznie wtedy, gdy któreś z nich drgnęło.
-    wersje: magnat_ui::Versions,
+    pub(crate) wersje: magnat_ui::Versions,
     /// Model karty mieszkańca — paski potrzeb i płótno doby rysują się z niego,
     /// bo to są **wykresy**, a nie tekst. Treść karty idzie osobno, przez `karta`.
     model: magnat_ui::Cached<Option<magnat_ui::CitizenModel>>,
     /// Karta inspekcji zaznaczonego podmiotu. **To jest miejsce, w którym kryterium
     /// WP3 ma skutek**: bez zmiany danych klatka nie buduje modelu i nie alokuje.
     karta: magnat_ui::Cached<Option<magnat_ui::InspectionCard>>,
+    /// Dok lewy: panele biznesowe (`M9e` WP10). Prawy należy do karty inspekcji
+    /// i ta różnica jest stała — zamiana miejscami psuje nawyk (`ui-design.md` §5).
+    pub(crate) panele: magnat_game::Panels,
+    /// Warunki „zatrzymaj, gdy…" (`M9e` WP11). Strona widoku: pauza to `SimSpeed`,
+    /// a prędkość nie wchodzi do hasha, więc zatrzymanie nie zmienia wyniku.
+    pub(crate) stop: magnat_game::StopWatch,
+    /// Tryb „śledź": kamera idzie za mieszkańcem, a `LodPin` trzyma go w Mikro.
+    pub(crate) follow: magnat_game::timectl::Follow,
+    /// Ostatnie trafienie warunku — zdanie w pasie alertów, dopóki gracz nie ruszy.
+    pub(crate) trafienie: Option<magnat_game::StopHit>,
 }
 
 /// Co unieważnia kartę mieszkańca: świat (potrzeby, majątek), zaznaczenie, minuta
@@ -132,6 +142,10 @@ impl Citizens {
             dzien: 0,
             pokaz_karte: false,
             wersje: magnat_ui::Versions::new(),
+            panele: magnat_game::Panels::default(),
+            stop: magnat_game::StopWatch::default(),
+            follow: magnat_game::timectl::Follow::default(),
+            trafienie: None,
             model: magnat_ui::Cached::new(&ZRODLA_KARTY),
             karta: magnat_ui::Cached::new(&ZRODLA_KARTY_INSPEKCJI),
         })
@@ -175,7 +189,17 @@ impl Citizens {
 
     pub fn set_speed(&mut self, s: SimSpeed) {
         self.ui.time.set_speed(s);
+        // Gracz ruszył grę dalej — wiersz o zatrzymaniu przestał być odpowiedzią
+        // na pytanie „czemu stoi".
+        self.trafienie = None;
     }
+
+    /// Zaznaczony podmiot — wejście trybu „śledź".
+    #[must_use]
+    pub fn selected(&self) -> Option<magnat_core::Subject> {
+        self.nav.current()
+    }
+
 
     pub fn toggle_pause(&mut self) {
         self.ui.time.toggle_pause();
@@ -220,6 +244,14 @@ impl Citizens {
         if minut > 0 {
             self.wersje.bump(magnat_ui::DataSource::Clock);
             self.wersje.bump(magnat_ui::DataSource::World);
+            self.panele.sync(session);
+            // Warunki sprawdzają się **na stanie, który już jest**: nic nie liczą
+            // i nic nie zapisują. Trafienie stawia zegar na pauzie na granicy klatki.
+            let cel = !session.fresh_objectives().is_empty();
+            if let Some(h) = self.stop.check(session, cel) {
+                self.trafienie = Some(h);
+                self.ui.time.set_speed(SimSpeed::Paused);
+            }
         }
         let t = self.ui.time.clock().tick();
         self.dzien = t.0 / 1440;
@@ -434,7 +466,7 @@ impl Citizens {
         ui: &mut egui::Ui,
         theme: &Theme,
         session: &Session,
-    ) -> Option<SimSpeed> {
+    ) -> (Option<SimSpeed>, magnat_game::PanelAction) {
         // Rozbicie na pola, bo `Cached::get` pożycza `self` mutowalnie, a budowniczy
         // modelu czyta `panel` i `ui` — kompilator nie zna granicy między polami
         // struktury, dopóki mu jej nie pokażemy.
@@ -559,6 +591,17 @@ impl Citizens {
         }
 
         self.zakladka = zakladka_lokalna;
+
+        let akcja_panelu = crate::dock::draw(
+            ui,
+            theme,
+            session,
+            &self.ui.catalog,
+            self.ui.locale,
+            &mut self.panele,
+            self.trafienie,
+        );
+
         if zamknij {
             self.pokaz_karte = false;
         }
@@ -569,6 +612,11 @@ impl Citizens {
         } else if let Some(s) = skok {
             self.idz_do(s);
         }
-        wybor
+        if let magnat_game::PanelAction::Show(s) = akcja_panelu {
+            self.idz_do(s);
+            self.pokaz_karte = true;
+        }
+        (wybor, akcja_panelu)
     }
+
 }

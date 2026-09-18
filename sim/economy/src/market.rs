@@ -106,6 +106,7 @@ mod lifecycle;
 mod price_day;
 mod readout;
 mod restock;
+pub use restock::{dzienny_zapas, restock_from_days, restock_without_history};
 mod tax;
 
 /// Zaklepana transakcja: półka już zdjęta, pieniądz jeszcze nie.

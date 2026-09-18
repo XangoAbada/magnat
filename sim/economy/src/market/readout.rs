@@ -373,4 +373,62 @@ impl Market {
             .copied()
             .map(|i| m.shops[i as usize].account)
     }
+
+    /// Udział zbioru zakładów w obrocie towarem, w punktach bazowych obrotu miasta.
+    ///
+    /// Obrót to sztuki sprzedane w oknie siedmiu dób — ta sama liczba, którą panel
+    /// sklepu pokazuje w kolumnie „rotacja". **Nie zapas na półce**: udział liczony
+    /// z tego, co leży, mówiłby, kto ma największy magazyn, a nie kto sprzedaje.
+    ///
+    /// `district` zawęża rynek do jednej dzielnicy; `None` bierze całe miasto.
+    /// `None` w wyniku znaczy „tego towaru nikt tu w tym tygodniu nie sprzedał",
+    /// a to jest **inne zdanie** niż udział zero.
+    ///
+    /// Stoi tutaj, a nie u wołającego, z tego samego powodu co `balance_sample`:
+    /// wnętrze rynku jest za zamkiem, a cel scenariusza i tytuł kariery nie mają
+    /// prawa go otwierać.
+    #[must_use]
+    pub fn turnover_share_bp(
+        &self,
+        good: GoodId,
+        district: Option<DistrictId>,
+        sites: &[SiteId],
+    ) -> Option<u16> {
+        let m = self.lock();
+        let mut caly = 0i64;
+        let mut nasz = 0i64;
+        for i in m.by_site.values() {
+            let s = &m.shops[*i as usize];
+            if s.closed || district.is_some_and(|d| d.0 != s.district) {
+                continue;
+            }
+            let Some(pc) = s.controllers.get(&good) else {
+                continue;
+            };
+            let obrot = pc.turnover_7d().get();
+            caly = caly.saturating_add(obrot);
+            if sites.contains(&s.site) {
+                nasz = nasz.saturating_add(obrot);
+            }
+        }
+        if caly <= 0 {
+            return None;
+        }
+        let bp = nasz.saturating_mul(10_000) / caly;
+        Some(u16::try_from(bp.clamp(0, 10_000)).unwrap_or(0))
+    }
+
+    /// Towary, którymi handluje wskazany zakład — wejście pytania o udział w rynku.
+    #[must_use]
+    pub fn goods_of(&self, site: SiteId) -> Vec<GoodId> {
+        let m = self.lock();
+        m.by_site.get(&site).map_or_else(Vec::new, |i| {
+            m.shops[*i as usize]
+                .shelf
+                .lines
+                .iter()
+                .map(|l| l.good)
+                .collect()
+        })
+    }
 }

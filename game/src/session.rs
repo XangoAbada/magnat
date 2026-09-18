@@ -29,7 +29,7 @@ use magnat_ecs::App;
 use magnat_jobs::JobPool;
 
 use crate::command::{
-    apply, precheck, CommandEnvelope, CommandError, CommandView, PlayerCommand, PlayerId,
+    precheck, CommandEnvelope, CommandError, CommandView, PlayerCommand, PlayerId,
     ViewCommand, ViewRecord,
 };
 use crate::replay::{Rejected, ReplayLog};
@@ -42,9 +42,8 @@ use crate::world::{stand_up, BuiltCity, StandingReport};
 /// Menu pauzy jest za to zwykłym `ShellScreen::Pause`: stan się zmienia, ale sesja
 /// zostaje w pamięci i zegar stoi, więc powrót do gry nie wczytuje niczego.
 ///
-/// Wariantów jest pięć, a nie siedem: `Succession` i `ScenarioEnd` przychodzą z WP12
-/// (`M9e`) razem ze swoją treścią. Wariant stanu, w który nie da się wejść, wygląda
-/// tak samo jak działający (`K-67`).
+/// Wariantów jest siedem: `Succession` i `ScenarioEnd` doszły w `M9e` razem ze
+/// swoją treścią i ze swoimi ekranami (`DF-5`).
 pub enum GameState {
     /// Wszystko poza rozgrywką — §5.13.
     Shell(ShellScreen),
@@ -61,6 +60,18 @@ pub enum GameState {
     /// z parametrów, bo predykat wariantu pyta o wiek, pracę i oszczędności.
     CharacterSelect(Box<Session>),
     Playing(Box<Session>),
+    /// Postać zmarła. Świat tyka dalej — gracz wybiera dziedzica albo nową dynastię.
+    /// Sesja zostaje: sukcesja jest komendą w tym samym świecie, a nie nową grą.
+    Succession {
+        session: Box<Session>,
+        /// Kogo proponuje gra. `None` = nie ma dziedzica i zostaje ekran spuścizny.
+        heir: Option<magnat_core::CitizenId>,
+    },
+    /// Scenariusz się domknął: cele rozliczone, gra czeka na decyzję gracza.
+    ScenarioEnd {
+        session: Box<Session>,
+        outcome: crate::scenario::ScenarioOutcome,
+    },
 }
 
 impl GameState {
@@ -74,7 +85,10 @@ impl GameState {
     #[must_use]
     pub fn session(&self) -> Option<&Session> {
         match self {
-            GameState::Playing(s) | GameState::CharacterSelect(s) => Some(s),
+            GameState::Playing(s)
+            | GameState::CharacterSelect(s)
+            | GameState::Succession { session: s, .. }
+            | GameState::ScenarioEnd { session: s, .. } => Some(s),
             _ => None,
         }
     }
@@ -82,7 +96,10 @@ impl GameState {
     #[must_use]
     pub fn session_mut(&mut self) -> Option<&mut Session> {
         match self {
-            GameState::Playing(s) | GameState::CharacterSelect(s) => Some(s),
+            GameState::Playing(s)
+            | GameState::CharacterSelect(s)
+            | GameState::Succession { session: s, .. }
+            | GameState::ScenarioEnd { session: s, .. } => Some(s),
             _ => None,
         }
     }
@@ -103,6 +120,22 @@ pub struct Session {
     /// Postać gracza. `None` do czasu `SetCharacter` — świat wtedy stoi i tyka,
     /// ale gracz nie ma jeszcze ciała.
     player: Option<crate::PlayerCharacter>,
+    /// Historia metryk gracza do wykresów (`DF-4`). Strona widoku: nie wchodzi
+    /// do hasha stanu i nie zmienia wyniku symulacji.
+    metrics: crate::metrics::MetricsRecorder,
+    /// Kronika: dziennik świata i gracza. Widok pochodny — zbiera raz na dobę to,
+    /// co i tak już leży w dziennikach `sim/*` (`game::chronicle`).
+    chronicle: crate::chronicle::Chronicle,
+    /// Scenariusz i postęp jego celów.
+    ///
+    /// Stoi **w sesji**, a nie w kliencie, bo rozstrzyga o tym, czy gra jest wygrana,
+    /// a to nie jest sprawa okna: przebieg bezgłowy musi dostać tę samą odpowiedź.
+    /// Wynika w całości z koperty `StartGame` i ze stanu świata, więc replay odtwarza
+    /// go bez zapisywania czegokolwiek osobno.
+    scenario: Option<crate::scenario::Scenario>,
+    scenario_state: crate::scenario::ScenarioState,
+    /// Cele domknięte w ostatniej dobie — wejście warunku „cel osiągnięty" i kroniki.
+    fresh_objectives: Vec<crate::scenario::ObjectiveId>,
     /// Czas realny spędzony w sesji. Liczony z `dt` podawanego przez wołającego,
     /// **nigdy z `Instant::now()`** — w kodzie sesji zegar ścienny jest zakazany
     /// (00 §3.5), a ta liczba i tak jest metadaną slotu, nie stanem.
@@ -131,7 +164,13 @@ impl Session {
             next_seq: 0,
             player: None,
             played_ms: 0,
+            metrics: crate::metrics::MetricsRecorder::default(),
+            chronicle: crate::chronicle::Chronicle::default(),
+            scenario: None,
+            scenario_state: crate::scenario::ScenarioState::default(),
+            fresh_objectives: Vec::new(),
         };
+        s.load_scenario(params.scenario);
         // Świat już stoi, więc ta koperta niczego nie wykonuje — niesie za to
         // wszystko, czego trzeba, żeby go odtworzyć (§5.13).
         s.submit_at(
@@ -183,6 +222,62 @@ impl Session {
         }
     }
 
+    /// Historia metryk gracza — wejście wykresów w panelach.
+    #[must_use]
+    pub fn metrics(&self) -> &crate::metrics::MetricsRecorder {
+        &self.metrics
+    }
+
+    /// Wczytuje scenariusz z katalogu i stosuje jego łatki.
+    ///
+    /// Łatki idą **przed pierwszym tickiem**, więc hash zostaje funkcją
+    /// `(ziarno, lista łatek)` — dokładnie tak, jak zapowiadała decyzja otwarta
+    /// nr 9 dokumentu fazy. Brak katalogu nie jest błędem gry: scenariusz jest
+    /// warstwą nad światem, a świat stoi i bez niego.
+    fn load_scenario(&mut self, id: crate::ScenarioId) {
+        let Ok(katalog) = crate::scenario::ScenarioCatalog::load() else {
+            return;
+        };
+        let Some(sc) = katalog.by_id(id).cloned() else {
+            return;
+        };
+        crate::scenario::apply_patches(self, &sc.patches);
+        self.scenario = Some(sc);
+    }
+
+    /// Scenariusz tej gry, jeśli jakiś jest.
+    #[must_use]
+    pub fn scenario(&self) -> Option<&crate::scenario::Scenario> {
+        self.scenario.as_ref()
+    }
+
+    #[must_use]
+    pub fn scenario_state(&self) -> &crate::scenario::ScenarioState {
+        &self.scenario_state
+    }
+
+    /// Jak stoi scenariusz. `Running` także wtedy, gdy scenariusza nie ma — tryb
+    /// otwarty nie da się wygrać ani przegrać i to jest jego treść.
+    #[must_use]
+    pub fn scenario_outcome(&self) -> crate::scenario::ScenarioOutcome {
+        self.scenario.as_ref().map_or(
+            crate::scenario::ScenarioOutcome::Running,
+            |sc| self.scenario_state.outcome(self, sc),
+        )
+    }
+
+    /// Cele domknięte w ostatniej przeliczonej dobie.
+    #[must_use]
+    pub fn fresh_objectives(&self) -> &[crate::scenario::ObjectiveId] {
+        &self.fresh_objectives
+    }
+
+    /// Kronika — wejście panelu Kronika i osiągnięć emergentnych.
+    #[must_use]
+    pub fn chronicle(&self) -> &crate::chronicle::Chronicle {
+        &self.chronicle
+    }
+
     /// Postać gracza, jeśli została wybrana.
     #[must_use]
     pub fn player(&self) -> Option<&crate::PlayerCharacter> {
@@ -223,12 +318,31 @@ impl Session {
     }
 
     /// Wykonuje `minutes` ticków; `dt_ms` dolicza się do czasu gry w slocie.
+    ///
+    /// Po każdej minucie zapisuje metryki doby, jeśli właśnie minęła. Metryki są
+    /// **stroną widoku** — nie dotykają świata i nie wchodzą do hasha (00 §3.6) —
+    /// ale prowadzi je krok sesji, a nie klient: inaczej wykres w oknie pokazywałby
+    /// inną historię niż ta, którą mierzy przebieg bezgłowy.
     pub fn step(&mut self, minutes: u32, dt_ms: u64) {
         self.played_ms += dt_ms;
         for _ in 0..minutes {
             let t = Tick(self.app.world.tick.get() + 1);
             self.apply_due(t);
             self.app.tick();
+            let mut m = std::mem::take(&mut self.metrics);
+            m.maybe_record(self);
+            self.metrics = m;
+            let mut k = std::mem::take(&mut self.chronicle);
+            k.harvest(self);
+            self.chronicle = k;
+            if let Some(sc) = self.scenario.clone() {
+                let mut st = std::mem::take(&mut self.scenario_state);
+                let swieze = st.step(self, &sc);
+                self.scenario_state = st;
+                if !swieze.is_empty() {
+                    self.fresh_objectives = swieze;
+                }
+            }
         }
     }
 
@@ -260,77 +374,23 @@ impl Session {
     /// Wykonanie jednej komendy.
     ///
     /// Komendy, którym wystarczy rynek, idą przez [`apply`] — tę samą funkcję, którą
-    /// woła panel przy wygaszaniu przycisku. Komendy postaci zmieniają **świat i sesję**
-    /// naraz (znacznik gracza w `Identity`, kapitał w księgach, przypięcie LOD), więc
-    /// muszą stać tutaj: `apply` dostaje widok, a nie `&mut World`, i tak ma zostać.
+    /// woła panel przy wygaszaniu przycisku. Reszta zmienia **świat i sesję** naraz
+    /// (znacznik gracza w `Identity`, kapitał w księgach, rejestr firm, rynek pracy),
+    /// więc mieszka w [`crate::command::exec`]: `apply` dostaje widok, a nie
+    /// `&mut World`, i tak ma zostać.
     fn wykonaj(&mut self, t: Tick, cmd: &PlayerCommand) -> Result<(), CommandError> {
-        match cmd {
-            PlayerCommand::SetCharacter { citizen } => {
-                precheck(&self.view(), cmd)?;
-                let postac = crate::player::take_role(
-                    &mut self.app.world,
-                    self.market.as_ref(),
-                    self.log.header.params.variant,
-                    *citizen,
-                    t,
-                )
-                .ok_or(CommandError::CitizenNotFound { citizen: *citizen })?;
-                self.player = Some(postac);
-                Ok(())
-            }
-            PlayerCommand::SetAutonomy { field, control } => {
-                precheck(&self.view(), cmd)?;
-                let p = self.player.as_mut().ok_or(CommandError::NoCharacter)?;
-                p.autonomy.set(*field, *control);
-                Ok(())
-            }
-            PlayerCommand::AttachPolicy { site, policy } => {
-                precheck(&self.view(), cmd)?;
-                // Przypięcie włącza **śledzenie zakładu**: bez niego nie ma śladu doby,
-                // a bez śladu dry-run nie ma na czym pracować (`Z-3` fazy: poziom
-                // śledzenia idzie za własnością, a nie za otwartym oknem).
-                if let Some(m) = self.market.as_ref() {
-                    m.set_tracking(*site, magnat_economy::LostSaleTracking::Full);
-                }
-                let firms = self
-                    .app
-                    .world
-                    .get_resource_mut::<magnat_firms::Firms>()
-                    .ok_or(CommandError::NoFirms)?;
-                let z = firms
-                    .site_mut(*site)
-                    .ok_or(CommandError::SiteNotFound { site: *site })?;
-                match z.delegation.as_mut() {
-                    // Zakład, który już ma menedżera, dostaje **nową regułę**, a nie
-                    // nowe pełnomocnictwo: gracz zmienia politykę, a nie zwalnia człowieka.
-                    Some(d) => d.policy = (**policy).clone(),
-                    None => {
-                        z.delegation = Some(magnat_firms::SiteDelegation {
-                            manager: None,
-                            policy: (**policy).clone(),
-                            autonomy: magnat_firms::Autonomy::Full,
-                            report_freq: magnat_core::Cadence::EveryMonth,
-                            last_run: magnat_core::Tick(0),
-                        });
-                    }
-                }
-                Ok(())
-            }
-            PlayerCommand::DetachPolicy { site } => {
-                precheck(&self.view(), cmd)?;
-                let firms = self
-                    .app
-                    .world
-                    .get_resource_mut::<magnat_firms::Firms>()
-                    .ok_or(CommandError::NoFirms)?;
-                let z = firms
-                    .site_mut(*site)
-                    .ok_or(CommandError::SiteNotFound { site: *site })?;
-                z.delegation = None;
-                Ok(())
-            }
-            _ => apply(&self.view(), cmd),
-        }
+        crate::command::exec::run(self, t, cmd)
+    }
+
+    /// Wariant startu z nagłówka dziennika — łatkę kapitału stosuje `SetCharacter`.
+    pub(crate) fn variant(&self) -> crate::StartVariant {
+        self.log.header.params.variant
+    }
+
+    /// Postać gracza na zapis. `pub(crate)`, bo zmienia ją **wyłącznie** wykonawca
+    /// komendy — panel dostaje `&Session` i zmienić jej nie może.
+    pub(crate) fn player_mut(&mut self) -> &mut Option<crate::PlayerCharacter> {
+        &mut self.player
     }
 
     /// Przewija `ticks` ticków, zbierając hash stanu co `hash_every` (0 = nie liczyć).
@@ -434,8 +494,14 @@ pub fn replay(
         next_seq: log.commands.len() as u64,
         played_ms: 0,
         player: None,
+        metrics: crate::metrics::MetricsRecorder::default(),
+        chronicle: crate::chronicle::Chronicle::default(),
+        scenario: None,
+        scenario_state: crate::scenario::ScenarioState::default(),
+        fresh_objectives: Vec::new(),
     };
     s.log.commands = log.commands.clone();
+    s.load_scenario(params.scenario);
 
     let hashe = s.run_hashing(ticks, hash_every);
 

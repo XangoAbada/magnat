@@ -670,3 +670,17 @@ dostarczalnym artefaktem (świat „zużyty" na starcie) i ona jedna blokuje M12
 WP10.12 (ubezpieczenia), WP10.11 (przejęcia — giełda działa bez nich), WP10.7 (media — kanały
 reklamowe działają bez redakcji). **Nie do wycięcia:** WP10.1–10.4 (świat startowy i spójność LOD),
 WP10.5 (bez niej §7.6 nie jest zrealizowane w ogóle).
+
+
+## Zmiany wpisane po M9e
+
+Zgodnie z `K-18`. Szczegóły — tabela `DI-n` w `M9e-panele-czas-kariera.md`.
+Gwiazdka = zmiana zakresu albo kryterium.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| DK-1 ★ | **Kronika gracza nie przyjmuje zgłoszeń — czyta dzienniki.** `M10f` („Kroniki i domknięcie") ma w zależnościach „M9 (podsystem kroniki)", ale tego podsystemu nie wolno wołać: `game/` stoi **nad** wszystkimi `sim/*`. Zdarzenie M10, które ma trafić do kroniki gracza, zapisuje się **u siebie** — w `Events::chronicle()`, w pierścieniu decyzji firmy albo w nowym dzienniku `sim/macro` — a `game::chronicle::Chronicle::harvest` dokłada dla niego źródło | Zależność w drugą stronę zamknęłaby cykl, którego Cargo nie zbuduje (`DI-4`). Praktycznie to jest **mniej** pracy, nie więcej: zdarzenie i tak musi zostawić ślad po stronie symulacji, żeby przeżyć zapis gry |
+| DK-2 ★ | **`DryRunResult.chronicle: Vec<ChronicleEvent>` zostaje typem M10 i nie jest tym samym co `game::chronicle::ChronicleEntry`.** Historia „na sucho" opisuje osiemdziesiąt lat, których nikt nie rozegrał, i ma własne `provenance: DryRun`; kronika gracza opisuje grę, która się toczy | Dwa typy o jednej nazwie rozjechałyby się przy pierwszej zmianie, a łączenie ich dałoby kronikę, w której zdarzenie wymyślone i przeżyte wyglądają tak samo. Most między nimi jest jednokierunkowy: `harvest` może dołożyć źródło „historia sprzed gry", odwrotnie nie |
+| DK-3 | **Panele marki, R&D i giełdy dokłada się przez `PanelRegistry::register`, bez dotykania kodu M9.** `PanelId::{Brand, Rnd, Stock}` istnieją i `is_reserved()` mówi o nich prawdę — nie ma ich w rejestrze. `PanelDesc` niesie klucz tytułu, listę źródeł danych, funkcję budującą model i funkcję rysującą | Wykonanie decyzji otwartej nr 11 dokumentu M9. Uwaga praktyczna: `PanelModel` jest **enumem**, więc panel M10 dokłada do niego wariant — to jedyne miejsce, w którym M10 dotyka `game::panels` (`DI-6`) |
+| DK-4 | **`OverlayField::BrandAwareness` nadal nie ma wpisu w `data/ui/overlays.ron`** i `overlays::build` zwraca dla niego `None`, a nie raster zer. M10 dokłada wpis razem z marką | Bez zmian od `M9c` (`DG-1`); powtórzone tutaj, bo M10 jest pierwszą fazą, która to naprawi |
+| DK-5 | **`Trend` z `K-52` ma już czytelnika po stronie gracza**: karta firmy i pulpit rysują z niego kierunek. Kwoty z prognozy do UI nie idą i nie pójdą (`R15`) | Kanał jest gotowy — M10 wypełnia `StrategicOutlooks`, a nie buduje drogi do okna |

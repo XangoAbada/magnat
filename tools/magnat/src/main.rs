@@ -16,6 +16,7 @@ mod app;
 mod args;
 mod bench;
 mod citizens;
+mod dock;
 mod inspect;
 mod overlay;
 mod preview;

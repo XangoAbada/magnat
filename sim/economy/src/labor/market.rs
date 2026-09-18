@@ -85,6 +85,49 @@ impl LaborMarket {
     }
 
     /// Publikacja oferty. Wejście gracza (M9) i mostu stawiającego miasto.
+    /// Zdejmuje mieszkańca z listy szukających pracy.
+    ///
+    /// Jedyne wejście spoza doboru: właściciel, który zatrudnił kogoś ręcznie
+    /// (`owner_ops::hire`), musi zamknąć tę samą pozycję, którą zamknąłby dobór —
+    /// inaczej ten sam człowiek liczyłby się jako bezrobotny i jako pracownik.
+    pub fn drop_seeker(&mut self, c: CitizenId) {
+        self.seekers.remove(&c);
+    }
+
+    /// Kto szuka pracy — wejście panelu Ludzie.
+    ///
+    /// Kolejność po `CitizenId`, czyli deterministyczna; `limit` przycina listę,
+    /// bo panel pokazuje kandydatów, a nie spis powszechny bezrobotnych.
+    #[must_use]
+    pub fn seekers_list(&self, limit: usize) -> Vec<(CitizenId, Seeker)> {
+        self.seekers
+            .iter()
+            .take(limit)
+            .map(|(c, s)| (*c, *s))
+            .collect()
+    }
+
+    /// Oferta po uchwycie. `None` znaczy „wygasła albo obsadzona" — normalny stan
+    /// rynku, a nie błąd wołającego.
+    #[must_use]
+    pub fn offer(&self, id: JobOfferId) -> Option<&JobOffer> {
+        self.offers.get(id)
+    }
+
+    /// Otwarte oferty, które widzi **poszukujący**: bez ofert bezpośrednich
+    /// skierowanych do kogoś innego.
+    ///
+    /// To jest ta sama granica informacji, którą trzyma dobór: oferta z `targeted`
+    /// jest niewidoczna dla całej reszty miasta, więc gracz też jej nie widzi.
+    /// Kolejność idzie po indeksie areny, czyli jest deterministyczna.
+    #[must_use]
+    pub fn offers_for(&self, who: CitizenId) -> Vec<(JobOfferId, &JobOffer)> {
+        self.offers
+            .iter()
+            .filter(|(_, o)| o.slots > 0 && o.targeted.is_none_or(|t| t == who))
+            .collect()
+    }
+
     pub fn post_offer(&mut self, draft: JobOffer) -> JobOfferId {
         let id = self.offers.insert(draft);
         self.index.mark_dirty();

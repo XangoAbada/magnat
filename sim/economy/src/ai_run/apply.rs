@@ -54,11 +54,14 @@ impl Market {
                 let Some(i) = m.by_site.get(&site).copied().map(|i| i as usize) else {
                     return;
                 };
-                let dziennie = m.shops[i]
+                let obrot = m.shops[i]
                     .controllers
                     .get(&good)
-                    .map_or(0, |pc| (pc.turnover_7d().get() / 7).max(0));
-                let cel = Qty((dziennie.max(1)).saturating_mul(i64::from(days)));
+                    .map_or(Qty::ZERO, crate::pricing::PriceController::turnover_7d);
+                // **Ta sama funkcja, którą woła panel gracza.** Druga kopia wzoru
+                // rozjechałaby się przy pierwszej zmianie, a rozjazd widać dopiero
+                // jako inny wynik bramki (`K-11`).
+                let (cel, punkt) = crate::market::restock_from_days(obrot, days);
                 let stare = m.shops[i]
                     .inventory
                     .reorder
@@ -67,9 +70,7 @@ impl Market {
                 m.shops[i].inventory.reorder.insert(
                     good,
                     ReorderPolicy {
-                        // Punkt zamówienia przy trzech dziesiątych celu — ta sama
-                        // proporcja, którą wykonawca polityk stosuje przy `OrderUpTo`.
-                        point: Qty(cel.get() * 3 / 10),
+                        point: punkt,
                         target: cel,
                         lead_time_days: stare,
                     },

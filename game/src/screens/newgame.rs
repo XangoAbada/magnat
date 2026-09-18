@@ -197,17 +197,33 @@ fn wiersz(
                 keys,
             );
         }
-        // Scenariuszy jest dziś jeden (tryb otwarty) i to jest stan prawdziwy,
-        // a nie zaślepka: katalog `data/scenarios/*.ron` projektuje WP12 (`M9e`).
+        // Scenariusze idą z `data/scenarios/scenarios.ron` (`K-71`). Podpowiedź pod
+        // wierszem to **opis wybranego**, a nie jedno zdanie o samym wyborze:
+        // gracz ma przeczytać, w co się pakuje, zanim naciśnie „Generuj".
         Row::Scenario => {
+            let lista: Vec<ScenarioId> = shell.scenarios.iter().map(|(id, _, _)| *id).collect();
+            let opis = shell
+                .scenarios
+                .iter()
+                .find(|(id, _, _)| *id == draft.scenario)
+                .map_or_else(
+                    || shell.text("ui.newgame.scenario.hint"),
+                    |(_, _, brief)| c.fmt_key(l, brief, &[]),
+                );
+            let tytuly = shell.scenarios.clone();
             segment_row(
                 shell,
                 ui,
                 &shell.text("ui.newgame.scenario"),
-                Some(&shell.text("ui.newgame.scenario.hint")),
-                &[ScenarioId::SANDBOX],
+                Some(&opis),
+                &lista,
                 &mut draft.scenario,
-                |_| c.fmt_key(l, "ui.scenario.sandbox", &[]),
+                |v| {
+                    tytuly
+                        .iter()
+                        .find(|(id, _, _)| *id == v)
+                        .map_or_else(String::new, |(_, t, _)| c.fmt_key(l, t, &[]))
+                },
                 aktywny,
                 keys,
             );

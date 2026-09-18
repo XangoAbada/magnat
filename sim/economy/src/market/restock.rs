@@ -10,6 +10,56 @@ use super::*;
 use magnat_core::Mass;
 
 impl Market {
+    /// Przestawia cel zapasu towaru: na ile dób obrotu sklep ma się zatowarować.
+    ///
+    /// Punkt zamówienia idzie za celem w stałej proporcji — jedna liczba zamiast
+    /// dwóch, bo gracz odpowiada na pytanie „na ile dni", a nie „przy jakim stanie
+    /// zamawiać". Obrót liczy sklep sam i to on zamienia doby na sztuki.
+    ///
+    /// Zwraca `false`, gdy zakład albo towar są rynkowi nieznane.
+    pub fn set_restock_days(&self, site: SiteId, good: GoodId, days: u16) -> bool {
+        let mut m = self.lock();
+        let Some(i) = m.by_site.get(&site).copied().map(|i| i as usize) else {
+            return false;
+        };
+        let obrot = m.shops[i]
+            .controllers
+            .get(&good)
+            .map_or(Qty::ZERO, crate::pricing::PriceController::turnover_7d);
+        let (cel, punkt) = if obrot.get() > 0 {
+            restock_from_days(obrot, days)
+        } else {
+            restock_without_history(days)
+        };
+        let Some(r) = m.shops[i].inventory.reorder.get_mut(&good) else {
+            return false;
+        };
+        r.target = cel;
+        r.point = punkt;
+        true
+    }
+
+    /// Cel zapasu towaru w dobach obrotu — odwrotność [`Market::set_restock_days`].
+    #[must_use]
+    pub fn restock_days(&self, site: SiteId, good: GoodId) -> Option<u16> {
+        let m = self.lock();
+        let i = m.by_site.get(&site).copied()? as usize;
+        let cel = m.shops[i].inventory.reorder.get(&good)?.target.get();
+        let obrot = m.shops[i]
+            .controllers
+            .get(&good)
+            .map_or(Qty::ZERO, crate::pricing::PriceController::turnover_7d);
+        let na_dobe = if obrot.get() > 0 {
+            dzienny_zapas(obrot)
+        } else {
+            SHELF_UNITS_PER_FACING
+        };
+        // Przycięcie zamiast `None`: cel domyślny (osiem wyłożeń przy zerowym
+        // obrocie) wypada poza `u16` i „nie wiem" byłoby wtedy złą odpowiedzią —
+        // panel ma pokazać „dużo", a nie pustkę.
+        Some(u16::try_from(cel / na_dobe).unwrap_or(u16::MAX))
+    }
+
     /// Uzupełnienie półek z zaplecza (§5.3, co godzinę).
     ///
     /// Sufitem wyłożenia jest ekspozycja (`facings`), a nie zapas — półka mieści tyle,
@@ -472,4 +522,51 @@ impl Market {
         }
         razem
     }
+}
+
+/// Zapas dobowy z tygodnia obrotu — **jedna reguła dla gracza i dla AI**.
+///
+/// **Brak historii to nie to samo co mały obrót** i na tym stoi cała ta funkcja.
+/// Towar, który sprzedaje się wolno, ma dostać cel proporcjonalny do tego, jak
+/// wolno się sprzedaje. Towar dopiero co dołożony na półkę ma `turnover_7d == 0`
+/// i proporcji nie ma z czego policzyć — dostaje więc **jedno wyłożenie na dobę**,
+/// czyli tyle, ile daje mu `open_shop` przy stawianiu sklepu.
+///
+/// Poprzednia wersja miała jedną podłogę na oba przypadki, równą **jednej
+/// milisztuce**, więc cel „siedem dni zapasu" dla świeżego towaru wychodził siedem
+/// tysięcznych sztuki. Skutki były dwa i oba ciche: sklep przestawał ten towar
+/// zamawiać, a sterownik ceny — liczący zapełnienie jako `ilość / cel` — widział
+/// magazyn przepełniony i schodził do podłogi marży. Wyszło przy recenzji przed
+/// commitem `M9e`, kiedy ta liczba dostała drugie wejście: pokrętło w panelu gracza.
+#[must_use]
+pub fn dzienny_zapas(turnover_7d: Qty) -> i64 {
+    (turnover_7d.get() / 7).max(1)
+}
+
+/// Cel i punkt zamówienia z „na ile dób ma starczyć".
+///
+/// Punkt zamówienia to **trzy dziesiąte celu** — tyle, ile stosuje wykonawca
+/// polityk przy `OrderUpTo`. Gracz i AI kręcą tym samym pokrętłem, więc nie mają
+/// prawa kręcić nim inaczej (`K-11`).
+#[must_use]
+pub fn restock_from_days(turnover_7d: Qty, days: u16) -> (Qty, Qty) {
+    let cel = dzienny_zapas(turnover_7d).saturating_mul(i64::from(days.max(1)));
+    (Qty(cel), Qty(cel * 3 / 10))
+}
+
+/// Cel domyślny towaru **bez historii sprzedaży** — tyle, ile daje `open_shop`.
+///
+/// To nie jest druga reguła na to samo pytanie, tylko odpowiedź na pytanie, którego
+/// tier taktyczny nigdy nie zadaje. AI ustawia cel dla towarów, **które sprzedaje**,
+/// więc ma z czego policzyć proporcję. Gracz ustawia go z panelu także dla towaru,
+/// który przed chwilą położył na półce — a tam `turnover_7d` jest zerem i „zapas na
+/// siedem dni" wychodzi siedem milisztuk, czyli „nie zamawiaj tego nigdy".
+///
+/// `ponytail:` sufit nazwany. Ta sama degeneracja siedzi w ścieżce AI
+/// (`ai_run::apply`) i tam **zostaje**: jej naprawa zmienia zachowanie firm, więc
+/// należy do przebiegu z balansatorem, a nie do podfazy interfejsu. Wpisane do `R2`.
+#[must_use]
+pub fn restock_without_history(days: u16) -> (Qty, Qty) {
+    let cel = SHELF_UNITS_PER_FACING.saturating_mul(i64::from(days.max(1)));
+    (Qty(cel), Qty(cel * 3 / 10))
 }

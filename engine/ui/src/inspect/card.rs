@@ -28,6 +28,10 @@ use magnat_core::Subject;
 pub enum CardTabKind {
     /// Stan bieżący: potrzeby, gotówka, zdrowie, zużycie — zależnie od podmiotu.
     State,
+    /// Historia podmiotu: ślad partii „od pola do półki", przebieg pojazdu, przeszłość
+    /// firmy. Wchodzi w `M9e` razem z pierwszą kartą, która ma czym ją wypełnić
+    /// (`DF-8`) — zakładka bez treści jest gorsza od jej braku.
+    History,
     /// Dzień: plan wobec realizacji (mieszkaniec).
     Day,
     /// Rodzina: gospodarstwo, krewni, znajomi.
@@ -55,6 +59,7 @@ impl CardTabKind {
     pub const fn key(self) -> &'static str {
         match self {
             CardTabKind::State => "state",
+            CardTabKind::History => "history",
             CardTabKind::Day => "day",
             CardTabKind::Family => "family",
             CardTabKind::Wealth => "wealth",
@@ -67,8 +72,9 @@ impl CardTabKind {
         }
     }
 
-    pub const ALL: [CardTabKind; 10] = [
+    pub const ALL: [CardTabKind; 11] = [
         CardTabKind::State,
+        CardTabKind::History,
         CardTabKind::Day,
         CardTabKind::Family,
         CardTabKind::Wealth,
