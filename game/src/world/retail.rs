@@ -376,6 +376,12 @@ pub fn setup(
         magnat_policy::PolicyCatalog::load_default()?,
     );
 
+    // Kalibracja jakości wykonania polityk (M9d WP9). Wchodzi **tutaj**, a nie
+    // do hasha: jest daną z `data/tuning/`, tak samo jak katalog presetów. Błąd
+    // pliku zatrzymuje stawianie świata — świat bez tej tabeli wykonywałby reguły
+    // bezbłędnie i natychmiast, a wtedy zatrudnienie menedżera nie miałoby skutku.
+    world.insert_resource(magnat_economy::PolicyTuning::load_default()?);
+
     // **To jest cała podmiana z `Z-1`**: rynek zamiast atrapy miejsc z M3.
     *world.resource_mut::<AgentSources>() = AgentSources::new(Box::new(market.clone()), travel);
 

@@ -152,6 +152,11 @@ impl System for MarketSystem {
             //     czyli że asymetria informacji ma dziurę wielkości jednego kroku.
             refresh_board(ctx.world_mut(), &market, t);
             market.observe_competitors(t);
+            // 4b. Ślad doby zakładów śledzonych (M9d WP8) — **między obserwacją
+            //     a wykonaniem**, czyli na dokładnie tych liczbach, które zobaczy
+            //     polityka. Zapis w innym miejscu doby dałby dry-run mówiący o innym
+            //     świecie niż ten, w którym reguła się wykona.
+            market.record_policy_trace(t);
             // 4a. Polityki zdelegowanych zakładów (M7c WP7) — **między obserwacją
             //     a przeceną**. Reguła czyta świeży obraz konkurencji i ustawia
             //     sterownik ceny, a `reprice_all` go wykonuje razem z ogranicznikiem
@@ -559,7 +564,14 @@ fn run_policies(world: &mut World, market: &Market, t: Tick) {
     else {
         return;
     };
-    market.run_policies(&mut firms, &salda, t);
+    // Kalibracja menedżera jest **zasobem świata**, a nie stałą: świat bez niej
+    // wykonuje polityki dokładnie i natychmiast (`ManagerExecution::flawless`),
+    // a plik ładuje `game::world` przy stawianiu gry. Scenariusz stawiający sam
+    // wycinek gospodarki nie musi go mieć, żeby się uruchomić.
+    let krzywa = world
+        .get_resource::<crate::manager_exec::PolicyTuning>()
+        .map(|t| t.manager);
+    market.run_policies(&mut firms, &salda, krzywa.as_ref(), t);
     *world.resource_mut::<magnat_firms::Firms>() = firms;
 }
 

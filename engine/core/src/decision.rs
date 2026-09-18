@@ -337,12 +337,23 @@ pub enum DecisionReason {
     /// wróciłaby tylnymi drzwiami w karcie inspekcji.
     ///
     /// `rule` to indeks reguły w polityce (0..=7 — twardy limit ośmiu reguł z M9d §5.6),
-    /// `action` — rodzaj wykonanej akcji. Pełne wejścia i różnicę „cel vs. wykonanie"
-    /// pokazuje dry-run M9; do 24 bajtów wchodzi to, po czym gracz tę decyzję odnajdzie.
+    /// `action` — rodzaj wykonanej akcji. Pełnych wejść reguły tu nie ma i być nie może:
+    /// `Metric` mieszka w `sim/policy`, a `core` od niego nie zależy. Odtwarza je na
+    /// żądanie `magnat_policy::inputs` przy otwarciu karty — dlatego ta funkcja istnieje.
+    ///
+    /// **Dwa pola dokłada M9d WP9 i one wejść nie zastępują.** `lag_days` to wiek obrazu
+    /// konkurencji, na którym menedżer pracował, `deviation_bp` — o ile punktów bazowych
+    /// spudłował wobec wartości, którą reguła wyliczyła. Jedno i drugie da się poznać
+    /// **wyłącznie w chwili wykonania**: dzień później obraz konkurencji jest już inny,
+    /// a rzut menedżera nie zostawia po sobie śladu nigdzie indziej. Bez nich zdanie
+    /// „cel 6,38 zł, menedżer ustawił 6,44 zł" z §5.6 nie miałoby z czego powstać.
+    /// Zero w obu znaczy „wykonano dokładnie i na świeżych danych".
     PolicyApplied {
         policy: PolicyId,
         rule: u8,
         action: ActionKind,
+        lag_days: u8,
+        deviation_bp: i16,
     } = 503,
     /// Zakład dostał menedżera albo go stracił (M7c WP7, PRD §7.5).
     ///

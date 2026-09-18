@@ -101,7 +101,7 @@ fn preset(key: &str, domain: PolicyDomain) -> FirmPolicy {
 fn doba(m: &Market, f: &mut Firms, t: Tick) -> magnat_economy::PolicyDay {
     m.expire_goods(t);
     m.observe_competitors(t);
-    let d = m.run_policies(f, &std::collections::BTreeMap::new(), t);
+    let d = m.run_policies(f, &std::collections::BTreeMap::new(), None, t);
     m.reprice_all(t);
     d
 }
@@ -242,13 +242,14 @@ fn martwa_strefa_wstrzymuje_polityke_a_nie_gasi_jej() {
     // Godzinę później — martwa strefa ma sześć godzin.
     let druga = b
         .market
-        .run_policies(&mut f, &std::collections::BTreeMap::new(), Tick(DOBA + 60));
+        .run_policies(&mut f, &std::collections::BTreeMap::new(), None, Tick(DOBA + 60));
     assert_eq!(druga.on_cooldown, 1, "martwa strefa nie zadziałała");
     assert_eq!(druga.applied, 0);
     // Po sześciu godzinach polityka wraca do pracy.
     let trzecia = b.market.run_policies(
         &mut f,
         &std::collections::BTreeMap::new(),
+        None,
         Tick(DOBA + 6 * 60),
     );
     assert_eq!(trzecia.on_cooldown, 0, "martwa strefa nie wygasła");
@@ -265,6 +266,7 @@ fn martwa_strefa_wstrzymuje_polityke_a_nie_gasi_jej() {
     let w_srodku = b.market.run_policies(
         &mut f,
         &std::collections::BTreeMap::new(),
+        None,
         Tick(2 * DOBA + 60),
     );
     assert_eq!(
@@ -545,7 +547,7 @@ fn dyskont_faktycznie_schodzi_ponizej_najtanszego_konkurenta() {
     for d in 1..=2u64 {
         b.market.observe_competitors(Tick(d * DOBA));
         b.market
-            .run_policies(&mut f, &std::collections::BTreeMap::new(), Tick(d * DOBA));
+            .run_policies(&mut f, &std::collections::BTreeMap::new(), None, Tick(d * DOBA));
     }
 
     // Mierzymy **wyjście reguły**, czyli sterownik ceny, a nie cenę w ofercie:

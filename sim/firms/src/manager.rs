@@ -285,7 +285,15 @@ impl SiteDelegation {
     /// Czy martwa strefa polityki już minęła.
     #[must_use]
     pub fn ready(&self, now: magnat_core::Tick) -> bool {
-        let strefa = u64::from(self.policy.cooldown_h) * 60;
+        self.ready_after(now, 0)
+    }
+
+    /// Jak [`SiteDelegation::ready`], ale z dodatkowymi godzinami zwłoki menedżera
+    /// (M9d WP9). Słaby menedżer reaguje rzadziej, więc jego martwa strefa jest dłuższa
+    /// niż ta, którą ustawił właściciel polityki — i to jest cała treść tego argumentu.
+    #[must_use]
+    pub fn ready_after(&self, now: magnat_core::Tick, extra_h: u8) -> bool {
+        let strefa = (u64::from(self.policy.cooldown_h) + u64::from(extra_h)) * 60;
         // Zakład, który jeszcze nigdy nie wykonał polityki, wykonuje ją od razu —
         // inaczej pierwszy dzień delegowania byłby dniem bez zarządzania.
         self.last_run.0 == 0 || now.0.saturating_sub(self.last_run.0) >= strefa

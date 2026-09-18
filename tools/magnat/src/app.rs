@@ -99,6 +99,12 @@ pub(crate) struct App {
     pub(crate) predkosc: magnat_core::SimSpeed,
     /// Dzień roku dla **słońca**. Symulacja liczy własną dobę od zera.
     pub(crate) dzien_slonca: u64,
+    /// Edytor reguł otwarty nad światem (`M9d` WP8). `None` = zamknięty.
+    ///
+    /// Stan ekranu, a nie stan gry: świat pod spodem tyka dalej, a polityka wchodzi
+    /// dopiero komendą `AttachPolicy`. Dzięki temu wyjście z edytora niczego nie cofa,
+    /// bo niczego jeszcze nie zmieniło.
+    pub(crate) redaktor: Option<crate::session::Redaktor>,
 }
 
 impl ApplicationHandler for App {
@@ -296,6 +302,9 @@ impl App {
                     c.toggle_card();
                 }
             }
+            // Edytor reguł dla zaznaczonego zakładu (`M9d` WP8). Bez zaznaczenia
+            // nie ma czego edytować — polityka jest zawsze polityką **czegoś**.
+            Key::Character("r") | Key::Character("R") => self.otworz_edytor(),
             Key::Character("1") => self.camera.to_orbit(600.0),
             Key::Character("2") => self.camera.to_free(),
             Key::Character("3") => {

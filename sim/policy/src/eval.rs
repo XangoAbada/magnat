@@ -107,6 +107,12 @@ fn decyzja(policy: PolicyId, rule: u8, action: &Action) -> Decided<&Action> {
             policy,
             rule,
             action: kind,
+            // Ewaluator nie zna menedżera i znać go nie ma: wiek danych i odchyłkę
+            // ręki dopisuje **wykonawca** (`sim/economy`), bo tylko on je widzi.
+            // Zero znaczy „wykonano dokładnie i na świeżych danych" — i tak jest
+            // w każdym świecie bez modelu menedżera.
+            lag_days: 0,
+            deviation_bp: 0,
         },
     )
 }
@@ -358,7 +364,9 @@ mod tests {
             DecisionReason::PolicyApplied {
                 policy: PolicyId(1),
                 rule: 0,
-                action: ActionKind::SetPrice
+                action: ActionKind::SetPrice,
+                lag_days: 0,
+                deviation_bp: 0,
             }
         );
     }
@@ -385,7 +393,9 @@ mod tests {
             DecisionReason::PolicyApplied {
                 policy: PolicyId(1),
                 rule: FALLBACK_RULE,
-                action: ActionKind::Alert
+                action: ActionKind::Alert,
+                lag_days: 0,
+                deviation_bp: 0,
             }
         );
     }

@@ -195,6 +195,7 @@ fn uruchom_ze_stanem(
     let event_loop = EventLoop::new()?;
     event_loop.set_control_flow(ControlFlow::Poll);
     let mut app = App {
+        redaktor: None,
         terrain,
         materials,
         params,

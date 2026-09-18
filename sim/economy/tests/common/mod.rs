@@ -145,7 +145,12 @@ pub fn bench_w_dzielnicy(seed: u64, pos: &[Vec2], dzielnica: Option<u16>) -> Ben
         None,
         Money::ZERO,
     );
-    books.endow(rest, Money(1_000_000_000), Tick(0)).unwrap();
+    // Miliard groszy wystarczał do M9c, bo żaden test nie stawiał więcej niż kilka
+    // sklepów. Bramka wydajnościowa M9d stawia dwieście, a każdy bierze 50 mln
+    // kapitału — więc zasilenie rośnie z liczbą sklepów. Dla małych świtów wartość
+    // się nie zmienia, więc żaden istniejący test nie drgnął.
+    let zasilenie = Money(1_000_000_000.max(pos.len() as i64 * 60_000_000));
+    books.endow(rest, zasilenie, Tick(0)).unwrap();
 
     let market = Market::new(
         spec(),

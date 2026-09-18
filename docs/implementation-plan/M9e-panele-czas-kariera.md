@@ -71,7 +71,7 @@ przypięty w układzie nowego gracza (onboarding, §5.12).
 
 | Panel | Zawartość | Główne widgety | Konsumuje z | Odświeżanie |
 |---|---|---|---|---|
-| **Pulpit firmy** | przepływy pieniężne (30 dni / 12 mies.), alerty (niedobór, strajk, awaria, eskalacja polityki), KPI: marża, **obrót netto** (bez VAT, K-7), zatrudnienie, płynność | wykres, lista alertów, kafelki KPI | M5 (księgowość), M7 (HR), M8 (zdarzenia), M9 (eskalacje) | `EveryHour` |
+| **Pulpit firmy** | przepływy pieniężne (30 dni / 12 mies.), alerty (niedobór, strajk, awaria, **eskalacja polityki — `Market::policy_inbox()`**), KPI: marża, **obrót netto** (bez VAT, K-7), zatrudnienie, płynność | wykres, lista alertów, kafelki KPI | M5 (księgowość, **skrzynka eskalacji polityk** — `DH-1`), M7 (HR), M8 (zdarzenia), M9 (eskalacje) | `EveryHour` |
 | **Zakład** | produkcja (bieżące zlecenia), magazyn wg partii, załoga i zmiany, maszyny i ich stan, **dostawy jako Gantt**, koszty w rozbiciu | Gantt, `Table<Batch>`, `Table<Employee>`, wykres kosztów | M6 (produkcja, partie), M7 (załoga), M4 (dostawy) | `EveryHour`, Gantt `EveryMinute` przy otwartym |
 | **Sklep** | półki (asortyment, ceny, rotacja, dni do przydatności), klienci (skąd, kto, dlaczego), **utracone wizyty z powodami**, konkurencja w zasięgu z ich cenami. **Wszystkie ceny detaliczne pokazywane brutto, porównanie z konkurentem zawsze brutto do brutto (K-7)**; kolumna netto opcjonalna i jawnie podpisana | `Table<ShelfRow>`, histogram powodów, minimapa zasięgu, lista `LostSale` | M5 (transakcje, użyteczność, `Offer.price_basis`), M9 (`LostSale`) | `EveryHour` |
 | **Łańcuch dostaw** | graf dostawców i odbiorców z przepływami (grubość = wolumen), kontrakty, **ryzyka: jeden dostawca = czerwony węzeł**, czas i koszt na krawędzi | `GraphView`, `Table<Contract>` | M6 (zlecenia, kontrakty), M4 (czas transportu) | przy zmianie topologii; przepływy `EveryDay` |
@@ -152,7 +152,10 @@ ciekawszy niż kara pieniężna. Brak dziedzica → ekran „spuścizna" z kroni
 ### 5.12 Onboarding — przełożenie §20.3 na wymagania
 
 Metryka: **czas do pierwszej sensownej decyzji < 15 min**. Definicja operacyjna: pierwsza
-`PlayerCommand` z zestawu `{SetPrice, OpenSite, AcceptJobOffer, HireCandidate}`.
+`PlayerCommand` z zestawu `{SetPrice, AttachPolicy, OpenSite, AcceptJobOffer, HireCandidate}`.
+Po M9d istnieją z tego **dwie pierwsze**; pozostałe trzy wchodzą w WP10 i WP12 razem
+ze swoimi panelami (`DH-2`). Do tego czasu metryka jest mierzalna, ale mierzy węższy
+zbiór decyzji, niż będzie mierzyła po domknięciu fazy.
 
 Pomiar bez osobnej telemetrii: strumień `ViewCommand` niesie `wall_ms`, a strumień
 `PlayerCommand` — `seq`. Czas do pierwszej sensownej decyzji liczymy **offline z dziennika
@@ -211,3 +214,18 @@ Zgodnie z `K-18`. Szczegóły — tabela `DG-n` w `M9c-gracz-inspekcja-nakladki.
 | DF-9 | **`PlayerCharacter` istnieje i niesie `owned_sites: Vec<SiteId>`**, ale własność jest **listą**, a nie udziałem w firmie. `FoundFirm`, `OpenSite` i przeniesienie udziałów należą do tej podfazy razem ze ścieżką kariery; `CareerTier::derive` też | `ponytail:` sufit nazwany w kodzie. Lista wystarcza do jedynej rzeczy, do której była potrzebna w M9c: oznaczenia zakładów gracza jako śledzonych |
 | DF-10 | **Nakładki danych i filtry encji stoją** (`game::overlays`, dziewięć pól z §14.2 plus legenda i dwa filtry). Panel Rynek i panel Sklep mają z czego brać mapę zasięgu i cen — wołają `overlays::build`, a nie liczą własnej | Raster po działkach jest jeden i mieszka w `sim/world` (`DG-9`) |
 | DF-11 | **Tryb śledzenia dostaje gotowe przypięcie LOD** (`player::pin_micro`, `MAX_PINNED = 8`). `FollowTarget` z §5.10 dokłada tylko kamerę i oś czasu doby | Decyzja §9 pkt 2 dokumentu fazy wykonana w M9c (`DG-8`) |
+
+
+## Zmiany wpisane po M9d
+
+Zgodnie z `K-18`. Szczegóły i uzasadnienia — tabela `DF-n` w `M9d-jezyk-regul.md`.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| DH-1 ★ | **Skrzynka eskalacji polityk jest gotowa i należy do `sim/economy`, nie do M9.** `PolicyAlert` (tick, zakład, polityka, numer reguły, numer komunikatu, waga, `ask`) trafia do pierścienia 64 wpisów dla zakładów **śledzonych**; czyta się ją `Market::policy_inbox()`, czyści `clear_policy_inbox()`. Odwzorowanie numeru komunikatu na tekst jest po stronie UI: klucze `ui.policy.msg.<n>` | Wiersz „Pulpit firmy" wypisywał eskalację polityki jako byt M9. Nie jest: akcje `Alert` i `AskPlayer` wykonują się w symulacji tysiące razy na dobę, także wtedy, gdy żadnego okna nie ma (`AX-2`). Panel ma ją **pokazać**, a nie wyprodukować. `ask` odróżnia „wiedz o tym" od „zdecyduj" — przy `ask` polityka zatrzymuje się na tym towarze do najbliższego wykonania, więc wpis w pulpicie jest jedyną drogą, którą gracz się o tym dowie |
+| DH-2 ★ | **Definicja metryki onboardingu wymienia komendy, których nie ma.** Po M9d `PlayerCommand` ma sześć wariantów: `StartGame`, `SetPrice`, `SetCharacter`, `SetAutonomy`, `AttachPolicy`, `DetachPolicy`. `OpenSite`, `AcceptJobOffer` i `HireCandidate` wchodzą dopiero z tą podfazą | `X-2`: wariant wchodzi razem ze swoim wykonawcą i ze swoim panelem. Metryka §20.3 jest dziś mierzalna po `SetPrice` i `AttachPolicy`; zbiór rośnie razem z WP10 i WP12 |
+| DH-3 ★ | **Kryterium WP10 „z każdego panelu da się wydać co najmniej jedną `PlayerCommand`" jest dziś niespełnialne dla pięciu paneli** (Finanse, Miasto, Ludzie, Kronika, Łańcuch dostaw), bo dla żadnego z nich nie istnieje komenda, a opis WP10 nie wymienia ich dokładania. Kryterium zostaje, ale **opis pakietu rośnie o komendy**: panel bez komendy jest panelem tylko do oglądania i wtedy kryterium ma go jawnie pomijać, a nie udawać, że go obejmuje | Przypadek (3) z `K-18`: kryterium spełnione tożsamościowo albo niemierzalne. Rozstrzygnięcie na starcie M9e: albo każdy z pięciu dostaje komendę i wykonawcę, albo kryterium mówi „z każdego panelu **operacyjnego**" i wylicza, które to są. Drugiego nie da się wybrać po cichu — trzeba wypisać listę |
+| DH-4 | **Edytor reguł istnieje i ma ekran** (`game::policy::RuleEditorView`, cztery zakładki: reguły, uwagi, próba na ostatnich dobach, zapis tekstowy). Klient otwiera go klawiszem `R` na zaznaczonym zakładzie. **Czego nie ma:** dokładania reguł i akcji z klawiatury — ekran pokazuje politykę, diagnozuje ją i pozwala przypiąć | Sufit nazwany w kodzie: wybór zakładu i towaru należy do panelu firmy, czyli do WP10. Dopisanie tego w M9d znaczyłoby budowanie panelu przed panelem |
+| DH-5 | **Dry-run liczy się ze śladu doby** (`Market::dry_run` po `PolicyTrace` — 30 dób faktów zakładu śledzonego), a nie z `Series`/`MetricsRecorder`. `Series` istnieje od `M9b` i jest wykresem; `MetricsRecorder` z §6 dokumentu fazy **nie istnieje** i jest zadaniem tej podfazy | §5.6 pkt 8 mówił „na tych samych seriach, które zasilają wykresy". Ślad faktów jest bliższy prawdzie, bo niesie **dokładnie to**, co widzi reguła. Kiedy `MetricsRecorder` powstanie, dry-run go **nie potrzebuje** — potrzebuje go nakładka „co by ustawiła" na wykresie ceny |
+| DH-7 | **`ScopeConflict` czeka na przypinanie polityki do grupy i do firmy.** Dziś polityka przypina się wyłącznie do zakładu, a zakład ma najwyżej jedną (`SiteDelegation`) — dwa zakresy nie mają gdzie się spotkać. Diagnoza wraca razem z `PolicyScope::Group`/`Firm`, czyli razem z panelem firmy, który pozwoli wybrać grupę | Wariant, którego nie da się wywołać, przechodzi każdy test i wygląda tak samo jak działający (`K-67`). Wpisane tutaj, bo to WP10 stawia panel, w którym grupa zakładów w ogóle powstaje |
+| DH-6 | **`PolicyRunner` jako osobny system ECS nie powstał i rozłożenia `(i*37) % 1440` nie ma.** Budżet z §7 („≤ 1 ms na dobę, 200 zakładów") jest spełniony bez rozproszenia | Zmierzone: 200 zakładów z polityką dyskontową liczy się poniżej milisekundy w wydaniu optymalizowanym. Wpisane tutaj, żeby panel wydajności z WP10 nie szukał systemu, którego nie ma |

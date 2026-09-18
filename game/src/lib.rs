@@ -31,6 +31,7 @@ pub mod command;
 pub mod inspect;
 pub mod overlays;
 pub mod player;
+pub mod policy;
 pub mod replay;
 pub mod save;
 pub mod screens;
@@ -43,6 +44,7 @@ pub use command::{
     ViewCommand, ViewRecord,
 };
 pub use overlays::{EntityFilter, OverlayField, OverlayField2d};
+pub use policy::{dry_run, DrySummary, Edit, EditError, GoodKeys, Note, RuleEditor};
 pub use player::{
     AutonomyField, Candidate, Control, PlayerAutonomy, PlayerCharacter, StartVariant,
     CANDIDATES_SHOWN,

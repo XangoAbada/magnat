@@ -190,6 +190,31 @@ pub fn action_kind(c: &Catalog, l: Locale, a: ActionKind) -> String {
     c.fmt_key(l, &format!("ui.action_kind.{}", a.name()), &[])
 }
 
+/// Dopisek o ręce menedżera przy zastosowanej polityce (M9d WP9).
+///
+/// Pusty, gdy menedżer wykonał regułę dokładnie i na świeżych danych — a wtedy nie
+/// ma o czym mówić. Zdanie rośnie **tylko wtedy, gdy niesie informację**: „dane sprzed
+/// 4 dni, menedżer spudłował o 0,9 %" jest odpowiedzią na „czemu cena jest inna niż
+/// w regule", a ten sam dopisek z zerami byłby szumem w każdej karcie.
+#[must_use]
+pub fn reka_menedzera(c: &Catalog, l: Locale, lag_days: u8, deviation_bp: i16) -> String {
+    if lag_days <= 1 && deviation_bp == 0 {
+        return String::new();
+    }
+    let dni = c.plural(l, c.must("ui.unit.days"), u64::from(lag_days));
+    if deviation_bp == 0 {
+        return c.fmt_key(l, "ui.reason.PolicyLag", &[("dni", &dni)]);
+    }
+    // Punkty bazowe na procenty z jednym miejscem po przecinku — gracz nie czyta bp.
+    // 10 000 bp = 100 %, więc dziesiąta część procenta to dziesięć punktów bazowych.
+    let procent = crate::fmt::decimal(l, i64::from(deviation_bp) / 10, 1);
+    c.fmt_key(
+        l,
+        "ui.reason.PolicyDeviation",
+        &[("dni", &dni), ("odchylenie", &procent)],
+    )
+}
+
 /// Rodzaj cennika w kontrakcie dostawy (M6c §5.8). Dwa słowa zamiast wariantu enuma:
 /// gracza obchodzi wyłącznie to, czy cena stoi, czy chodzi za indeksem — `Collar`
 /// jest indeksowany z klamrą, więc po jego stronie zdania nic się nie zmienia.
@@ -715,18 +740,23 @@ pub fn describe(c: &Catalog, l: Locale, r: DecisionReason) -> String {
             policy,
             rule: u8::MAX,
             action,
+            lag_days,
+            deviation_bp,
         } => c.fmt_key(
             l,
             "ui.reason.PolicyFallback",
             &[
                 ("polityka", &policy.get().to_string()),
                 ("akcja", &action_kind(c, l, action)),
+                ("menedzer", &reka_menedzera(c, l, lag_days, deviation_bp)),
             ],
         ),
         DecisionReason::PolicyApplied {
             policy,
             rule,
             action,
+            lag_days,
+            deviation_bp,
         } => c.fmt_key(
             l,
             "ui.reason.PolicyApplied",
@@ -736,6 +766,7 @@ pub fn describe(c: &Catalog, l: Locale, r: DecisionReason) -> String {
                 // wierszami listy, a pierwszy wiersz nie jest wierszem zerowym.
                 ("regula", &(u16::from(rule) + 1).to_string()),
                 ("akcja", &action_kind(c, l, action)),
+                ("menedzer", &reka_menedzera(c, l, lag_days, deviation_bp)),
             ],
         ),
         DecisionReason::ManagerAssigned {
@@ -1547,6 +1578,17 @@ mod tests {
                 policy: magnat_core::PolicyId(3),
                 rule: 0,
                 action: ActionKind::SetPrice,
+                lag_days: 4,
+                deviation_bp: 90,
+            },
+            // Menedżer doskonały nie dokłada zdania — trzeci wpis sprawdza tę gałąź,
+            // bo pusty dopisek jest tu decyzją, a nie brakiem tekstu.
+            DecisionReason::PolicyApplied {
+                policy: magnat_core::PolicyId(3),
+                rule: 2,
+                action: ActionKind::Markdown,
+                lag_days: 1,
+                deviation_bp: 0,
             },
             // Reguła zapasowa wybiera **inny klucz** lokalizacji, więc bez drugiego
             // wpisu połowa ramienia zostałaby niesprawdzona — ten sam powód, dla
@@ -1555,6 +1597,8 @@ mod tests {
                 policy: magnat_core::PolicyId(3),
                 rule: u8::MAX,
                 action: ActionKind::SetMargin,
+                lag_days: 7,
+                deviation_bp: -250,
             },
             DecisionReason::ManagerAssigned {
                 site: magnat_core::SiteId(magnat_core::Entity::new(7, std::num::NonZeroU32::MIN)),
@@ -1769,7 +1813,10 @@ mod tests {
         // Po M8d pięć powodów usług, urzędów i egzekucji (611..=615) plus **ósmy
         // wpis dwukrotny**: `RemedyImposed` stoi dwa razy, bo kara z kwotą i kara
         // bez kwoty wybierają inne klucze lokalizacji. Razem 78 + 6 = 84.
-        assert_eq!(wszystkie().len(), 84);
+        // Po M9d **trzeci wpis `PolicyApplied`**: menedżer doskonały nie dokłada
+        // dopisku o wieku danych i odchyłce, a menedżer słaby dokłada — to są dwa
+        // różne zdania z jednego ramienia, więc oba muszą tu stać. Razem 85.
+        assert_eq!(wszystkie().len(), 85);
     }
 
     #[test]

@@ -331,7 +331,7 @@ pub(crate) struct MarketInner {
     /// miasto. `BTreeMap`, więc kolejność idzie po `SiteId`, a nie po kolejności
     /// dostaw (00 §3.2).
     pub(crate) b2b_outbox: BTreeMap<SiteId, crate::shop::B2bTax>,
-    seed: u64,
+    pub(crate) seed: u64,
     tick: Tick,
     stats: MarketStats,
     // bufory wielokrotnego użytku — gorąca ścieżka nie zaczyna się od alokacji (§7.3)
@@ -343,6 +343,9 @@ pub(crate) struct MarketInner {
     /// Bufory obserwacji konkurencji — dobowy przelot, nie wolno mu alokować.
     obs_buf: Vec<(GoodId, Money, u32, SiteId)>,
     entry_buf: Vec<CompetitorEntry>,
+    /// Skrzynka eskalacji polityk zakładów śledzonych (M9d WP9). Poza hashem,
+    /// tak samo jak dziennik przecen: prowadzą ją wyłącznie zakłady oznaczone.
+    pub(crate) inbox: Vec<crate::policy_run::PolicyAlert>,
 }
 
 /// Rynek detaliczny: stan współdzielony między zasobem świata a `PlaceProvider`em.
@@ -403,6 +406,7 @@ impl Market {
             deliv_buf: Vec::new(),
             obs_buf: Vec::new(),
             entry_buf: Vec::new(),
+            inbox: Vec::new(),
         })))
     }
 

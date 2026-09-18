@@ -156,8 +156,8 @@ REJESTR = {
     # aktorze rozcina razem z nim ten `match`, bo to jest ten sam podział widziany
     # z drugiej strony. Do tego czasu funkcja rośnie liniowo z liczbą wariantów
     # i jest to wzrost, który da się przewidzieć co do rzędu wielkości.
-    ("engine/ui/src/inspect/reason.rs", "fn", 972): 37,
-    ("engine/ui/src/inspect/reason.rs", "plik", 1329): 37,
+    ("engine/ui/src/inspect/reason.rs", "fn", 978): 37,
+    ("engine/ui/src/inspect/reason.rs", "plik", 1360): 37,
     # 269 po M7d: jedna linia za `finance: bf.finance` w budowie `BankParams`.
     ("sim/economy/src/data.rs", "fn", 269): 38,
 }

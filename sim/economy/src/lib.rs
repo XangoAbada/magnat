@@ -57,6 +57,7 @@ pub mod firmlife;
 pub mod kernel;
 pub mod labor;
 pub mod ledger;
+pub mod manager_exec;
 pub mod market;
 pub mod offer;
 pub mod panel;
@@ -118,7 +119,14 @@ pub use panel::{
     BalanceSample, CompetitorRow, CustomerStats, FinanceSummary, LostSalesView, PriceDist,
     ShelfRow, ShopPanelSnapshot,
 };
-pub use policy_run::{preset_for, PolicyDay};
+pub use manager_exec::{
+    ManagerCurve, ManagerExecution, PolicyTuning, PolicyTuningError,
+    POLICY_TUNING_SCHEMA_VERSION,
+};
+pub use policy_run::{
+    preset_for, DryDay, DryRun, GoodFacts, PolicyAlert, PolicyDay, PolicyOutcome, PolicyTrace,
+    TraceDay, MAX_COVER, POLICY_INBOX, TRACE_DAYS,
+};
 pub use pricing::{
     preview_price, reprice, CompetitorEntry, CompetitorRef, CompetitorSnapshot, FirmPricing,
     ObservedElasticity, PriceController, PriceExperiment, PricePolicy, PricingCtx,

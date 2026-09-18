@@ -284,6 +284,51 @@ impl Session {
                 p.autonomy.set(*field, *control);
                 Ok(())
             }
+            PlayerCommand::AttachPolicy { site, policy } => {
+                precheck(&self.view(), cmd)?;
+                // Przypięcie włącza **śledzenie zakładu**: bez niego nie ma śladu doby,
+                // a bez śladu dry-run nie ma na czym pracować (`Z-3` fazy: poziom
+                // śledzenia idzie za własnością, a nie za otwartym oknem).
+                if let Some(m) = self.market.as_ref() {
+                    m.set_tracking(*site, magnat_economy::LostSaleTracking::Full);
+                }
+                let firms = self
+                    .app
+                    .world
+                    .get_resource_mut::<magnat_firms::Firms>()
+                    .ok_or(CommandError::NoFirms)?;
+                let z = firms
+                    .site_mut(*site)
+                    .ok_or(CommandError::SiteNotFound { site: *site })?;
+                match z.delegation.as_mut() {
+                    // Zakład, który już ma menedżera, dostaje **nową regułę**, a nie
+                    // nowe pełnomocnictwo: gracz zmienia politykę, a nie zwalnia człowieka.
+                    Some(d) => d.policy = (**policy).clone(),
+                    None => {
+                        z.delegation = Some(magnat_firms::SiteDelegation {
+                            manager: None,
+                            policy: (**policy).clone(),
+                            autonomy: magnat_firms::Autonomy::Full,
+                            report_freq: magnat_core::Cadence::EveryMonth,
+                            last_run: magnat_core::Tick(0),
+                        });
+                    }
+                }
+                Ok(())
+            }
+            PlayerCommand::DetachPolicy { site } => {
+                precheck(&self.view(), cmd)?;
+                let firms = self
+                    .app
+                    .world
+                    .get_resource_mut::<magnat_firms::Firms>()
+                    .ok_or(CommandError::NoFirms)?;
+                let z = firms
+                    .site_mut(*site)
+                    .ok_or(CommandError::SiteNotFound { site: *site })?;
+                z.delegation = None;
+                Ok(())
+            }
             _ => apply(&self.view(), cmd),
         }
     }

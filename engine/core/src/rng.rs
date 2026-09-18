@@ -241,6 +241,17 @@ pub enum StreamId {
     // `PolicyKind`. Strumień „na wybór działania" opisywałby losowość, której ta
     // faza świadomie nie ma — burmistrz rzucający kostką nie dałby się przewidzieć
     // graczowi, a §1 dokumentu fazy obiecuje drugiego gracza, nie ruletkę.
+    /// Odchylenie menedżera przy wykonaniu polityki zakładu (M9d §5.6, blok M9
+    /// 260–279 z `K-4`). Klucz: indeks encji menedżera (albo zakładu, gdy zakładem
+    /// nikt nie zarządza) i tick wykonania.
+    ///
+    /// **Jeden strumień na dwa losowania** — błąd wykonania i pominięty cykl — bo
+    /// klucz je rozdziela, a wartości `StreamId` są wieczne. Opóźnienie informacji
+    /// i zwłoka reakcji **nie losują**: pierwsze jest wiekiem obrazu konkurencji,
+    /// drugie wydłużeniem martwej strefy, a oba są funkcjami umiejętności.
+    PolicyExecution = 260,
+    // 261–279 zostaje wolne dla M9 (`K-4`). M9a–M9c nie losowały niczego:
+    // komenda gracza jest funkcją stanu, a nie rzutem.
 }
 
 /// Encja zastępcza dla losowania bez encji (zdarzenie globalne, generator świata).

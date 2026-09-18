@@ -91,6 +91,19 @@ pub enum PlayerCommand {
         field: crate::player::AutonomyField,
         control: crate::player::Control,
     },
+    /// Przypnij politykę do zakładu (M9d WP8). Polityka jedzie **całym drzewem**,
+    /// a nie kluczem presetu: gracz ją właśnie zbudował i nigdzie jeszcze nie stoi.
+    ///
+    /// Pełnomocnictwo jest zawsze `Autonomy::Full` i to nie jest uproszczenie:
+    /// autonomia mówi, ile wolno **menedżerowi** bez pytania właściciela, a tu
+    /// właściciel przypina regułę samemu sobie. Wybór autonomii wchodzi razem
+    /// z zatrudnianiem menedżera, czyli w `M9e`.
+    AttachPolicy {
+        site: SiteId,
+        policy: Box<magnat_policy::Policy>,
+    },
+    /// Zdejmij politykę z zakładu — od tej chwili ceny stoją tam, gdzie stanęły.
+    DetachPolicy { site: SiteId },
 }
 
 /// Komenda zmieniająca **widok**, nie świat. Nie wchodzi do hasha stanu.
@@ -140,6 +153,17 @@ pub enum CommandError {
     /// Postać już jest. Drugi wybór dawałby drugi kapitał startowy, więc jest błędem,
     /// a nie przeprowadzką; dziedziczenie po śmierci to osobna komenda (`M9e`).
     CharacterAlreadySet,
+    /// Świat nie ma rejestru firm — scenariusz postawił sam rynek detaliczny.
+    NoFirms,
+    /// Zakład należy do kogoś innego. Gracz przypina reguły **swoim** zakładom;
+    /// cudzą politykę wolno obejrzeć, a nie podmienić.
+    NotYourSite { site: SiteId },
+    /// Polityka nie przeszła walidatora. Liczba uwag, nie ich lista: pełną
+    /// diagnostykę pokazuje edytor **przed** kliknięciem, a koperta komendy jedzie
+    /// do dziennika wejść i ma być mała.
+    PolicyInvalid { notes: u16 },
+    /// Zakład nie ma przypiętej polityki, więc nie ma czego zdejmować.
+    NoPolicy { site: SiteId },
 }
 
 impl std::fmt::Display for CommandError {
@@ -159,6 +183,14 @@ impl std::fmt::Display for CommandError {
             }
             CommandError::NoCharacter => write!(f, "gra nie ma jeszcze postaci"),
             CommandError::CharacterAlreadySet => write!(f, "postać jest już wybrana"),
+            CommandError::NoFirms => write!(f, "świat nie ma rejestru firm"),
+            CommandError::NotYourSite { site } => write!(f, "zakład {site:?} nie jest twój"),
+            CommandError::PolicyInvalid { notes } => {
+                write!(f, "polityka ma {notes} uwag walidatora")
+            }
+            CommandError::NoPolicy { site } => {
+                write!(f, "zakład {site:?} nie ma przypiętej polityki")
+            }
         }
     }
 }
@@ -227,6 +259,47 @@ pub fn precheck(view: &CommandView<'_>, cmd: &PlayerCommand) -> Result<(), Comma
                 Err(CommandError::NoCharacter)
             }
         }
+        PlayerCommand::AttachPolicy { site, policy } => {
+            moj_zaklad(view, *site)?;
+            magnat_policy::validate(policy).map_err(|e| CommandError::PolicyInvalid {
+                notes: u16::try_from(e.0.len()).unwrap_or(u16::MAX),
+            })
+        }
+        PlayerCommand::DetachPolicy { site } => {
+            let firms = moj_zaklad(view, *site)?;
+            if firms
+                .site(*site)
+                .is_some_and(|s| s.delegation.is_some())
+            {
+                Ok(())
+            } else {
+                Err(CommandError::NoPolicy { site: *site })
+            }
+        }
+    }
+}
+
+/// Zakład, do którego gracz ma prawo przypiąć regułę.
+///
+/// Własność sprawdza się **tutaj**, a nie przy wykonaniu, bo panel ma wygasić
+/// przycisk z powodem, zanim gracz kliknie — to jest cała treść jednej funkcji
+/// `precheck` dla obu stron.
+fn moj_zaklad<'a>(
+    view: &CommandView<'a>,
+    site: SiteId,
+) -> Result<&'a magnat_firms::Firms, CommandError> {
+    let firms = view
+        .world
+        .and_then(magnat_ecs::World::get_resource::<magnat_firms::Firms>)
+        .ok_or(CommandError::NoFirms)?;
+    let z = firms.site(site).ok_or(CommandError::SiteNotFound { site })?;
+    let moj = firms
+        .get(z.firm)
+        .is_some_and(|f| f.owners.iter().any(|o| o.owner == magnat_firms::Owner::Player));
+    if moj {
+        Ok(firms)
+    } else {
+        Err(CommandError::NotYourSite { site })
     }
 }
 
@@ -239,6 +312,9 @@ pub fn apply(view: &CommandView<'_>, cmd: &PlayerCommand) -> Result<(), CommandE
     precheck(view, cmd)?;
     match cmd {
         PlayerCommand::StartGame { .. } => Ok(()),
+        // Polityki zmieniają rejestr firm, czyli zasób świata na mutowalnie —
+        // wykonuje je `Session::apply_due` z tego samego powodu co komendy postaci.
+        PlayerCommand::AttachPolicy { .. } | PlayerCommand::DetachPolicy { .. } => Ok(()),
         // Obie komendy postaci zmieniają świat i sesję, więc wykonuje je
         // `Session::apply_due` — tu jest tylko walidacja, wspólna dla obu stron.
         PlayerCommand::SetCharacter { .. } | PlayerCommand::SetAutonomy { .. } => Ok(()),

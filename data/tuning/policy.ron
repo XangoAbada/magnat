@@ -1,0 +1,45 @@
+// Kalibracja wykonania polityk przez menedżerów (M9d WP9, `K-35`).
+//
+// Tu siedzi **jedno** odwzorowanie: umiejętność „zarządzanie" mieszkańca → jakość,
+// z jaką wykona on regułę przypiętą do zakładu. Krzywa jest daną, a nie kodem,
+// bo decyzja otwarta nr 5 fazy M9 tak stanowi i bo to jest liczba, którą wolno
+// przestawić bez zmiany znaczenia modelu — dokładnie kryterium `data/tuning/`.
+//
+// Krańce: `worst` = umiejętność 0, `best` = umiejętność 100. Między nimi interpolacja
+// liniowa całkowitoliczbowa. Każda z czterech par **musi maleć** wraz z umiejętnością;
+// odwrócona para zatrzymuje ładowanie, bo dałaby świat, w którym lepszy menedżer
+// psuje więcej.
+//
+// Skąd te liczby: §5.6 dokumentu M9d podaje je wprost („7 → 1", „48 → 1",
+// „±400 bp → ±0 bp", „1500 bp → 0 bp"). Jedyne odstępstwo to `reaction_delay_h_best`,
+// które wynosi 0, a nie 1: menedżer doskonały ma nie dokładać ani godziny do martwej
+// strefy, inaczej dry-run z `skill = 100` nie mógłby zgodzić się z wykonaniem
+// co do ticku (§7, tolerancja 0).
+(
+    schema_version: 1,
+    manager: (
+        // Zakład bez menedżera: zastępstwo po odejściu i zakład gracza, który
+        // nie stoi w nim na zmianie. Trzydzieści na sto to podłoga „bez nadzoru" —
+        // sklep działa, ale reaguje na świat sprzed pięciu dni i co siódmy cykl
+        // mu ucieka.
+        unsupervised_skill: 30,
+
+        // Wiek obrazu konkurencji, na którym pracuje reguła. Te same widełki
+        // 1..=7 dób, które ma `CompetitorSnapshot` od M5c — menedżer ustawia
+        // w nich zakład, a nie zakłada własnego licznika.
+        info_lag_days_worst: 7,
+        info_lag_days_best: 1,
+
+        // Zwłoka reakcji jako wydłużenie martwej strefy polityki.
+        reaction_delay_h_worst: 48,
+        reaction_delay_h_best: 0,
+
+        // Rozrzut wykonania: ±4 % u najgorszego, zero u najlepszego.
+        exec_error_bp_worst: 400,
+        exec_error_bp_best: 0,
+
+        // Pominięty cykl: 15 % u najgorszego, zero u najlepszego.
+        skip_chance_bp_worst: 1500,
+        skip_chance_bp_best: 0,
+    ),
+)

@@ -29,6 +29,18 @@ use magnat_world::TerrainQuery;
 use std::sync::Arc;
 use std::time::Instant;
 
+/// Edytor reguł otwarty nad grającym światem (`M9d` WP8).
+///
+/// Trzyma **zakład**, bo polityka jest zawsze polityką czegoś, i **klucze towarów**,
+/// bo postać tekstowa zapisuje towar kluczem, a nie indeksem (00 §5). Jedno i drugie
+/// jest kopią zrobioną przy otwarciu: ekran nie ma prawa sięgać do świata w klatce.
+pub(crate) struct Redaktor {
+    pub(crate) site: magnat_core::SiteId,
+    pub(crate) view: magnat_game::policy::RuleEditorView,
+    pub(crate) goods: magnat_game::policy::GoodKeys,
+}
+
+
 impl App {
     /// Wpina postawione miasto do renderu i zaczyna grę (etap B: zaludnienie).
     ///
@@ -196,6 +208,8 @@ impl App {
         let shell = &mut self.shell;
         let citizens = &mut self.citizens;
         let gra = &self.game;
+        let redaktor = &mut self.redaktor;
+        let mut akcja_edytora = magnat_game::policy::EditorAction::None;
 
         let out = ctx.clone().run_ui(wejscie, |ui| {
             if w_powloce {
@@ -206,6 +220,10 @@ impl App {
                     }
                     _ => shell.draw(ui),
                 };
+            } else if let Some(r) = redaktor.as_mut() {
+                akcja_edytora =
+                    r.view
+                        .draw(ui, &shell.theme, &shell.catalog, shell.settings.locale, &r.goods);
             } else if let (Some(c), Some(s)) = (citizens.as_mut(), gra.session()) {
                 predkosc = c.draw(ui, &shell.theme, s);
             }
@@ -216,6 +234,7 @@ impl App {
         if let Some(a) = akcja {
             self.wykonaj(a);
         }
+        self.wykonaj_edytor(akcja_edytora);
         Some((out, predkosc))
     }
 
@@ -485,4 +504,68 @@ fn nazwa_miasta(session: &Session, seed: u64) -> String {
         .districts
         .first()
         .map_or_else(|| format!("{seed:#x}"), |d| d.name.clone())
+}
+
+// ── edytor reguł (`M9d` WP8) ────────────────────────────────────────────────────
+//
+// Osobny blok `impl`, bo to jest inny temat niż przejścia między stanami gry:
+// świat pod edytorem **tyka dalej**, a ekran nad nim jest stanem klienta, nie gry.
+// Podział jest zarazem odpowiedzią na próg strukturalny (CLAUDE.md).
+
+impl App {
+    /// Otwiera edytor reguł dla zaznaczonego zakładu.
+    ///
+    /// Punkt wyjścia to polityka, która na tym zakładzie **już stoi**; zakład bez
+    /// polityki dostaje preset „Kurs stały" z `data/policies/`, czyli ten sam,
+    /// od którego zaczyna firma AI. Pusty formularz byłby uczciwy i bezużyteczny —
+    /// gracz uczy się języka, patrząc na regułę, która działa.
+    pub(crate) fn otworz_edytor(&mut self) {
+        if self.redaktor.is_some() {
+            self.redaktor = None;
+            return;
+        }
+        let Some(site) = self.citizens.as_ref().and_then(citizens::Citizens::wybrany_zaklad) else {
+            eprintln!("edytor reguł: najpierw kliknij w zakład");
+            return;
+        };
+        let Some(session) = self.game.session() else {
+            return;
+        };
+        let Some(market) = session.market.as_ref() else {
+            eprintln!("edytor reguł: gospodarka jest wyłączona");
+            return;
+        };
+        let Some((edytor, polityka)) = magnat_game::policy::open_for(session, site) else {
+            eprintln!("edytor reguł: tej polityki formularz nie umie pokazać");
+            return;
+        };
+        let mut view = magnat_game::policy::RuleEditorView::new(edytor);
+        view.set_dry(&market.dry_run(site, &polityka));
+        self.redaktor = Some(Redaktor {
+            site,
+            view,
+            goods: magnat_game::policy::good_keys(market),
+        });
+    }
+
+    /// Wykonuje to, o co poprosił edytor reguł.
+    fn wykonaj_edytor(&mut self, a: magnat_game::policy::EditorAction) {
+        use magnat_game::policy::EditorAction as A;
+        match a {
+            A::None => {}
+            A::Close => self.redaktor = None,
+            A::Attach => {
+                let Some(r) = self.redaktor.take() else { return };
+                let polityka = r.view.editor.policy();
+                if let Some(s) = self.game.session_mut() {
+                    if let Err(e) = s.submit(magnat_game::PlayerCommand::AttachPolicy {
+                        site: r.site,
+                        policy: Box::new(polityka),
+                    }) {
+                        eprintln!("polityka odrzucona: {e}");
+                    }
+                }
+            }
+        }
+    }
 }

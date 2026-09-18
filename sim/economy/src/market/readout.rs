@@ -289,3 +289,88 @@ impl Market {
         })
     }
 }
+
+// ── odczyty zakładu dla polityk i paneli (M7c WP7, M9d WP8) ─────────────────────
+//
+// Mieszkają tu, a nie przy wykonawcy polityk, bo to są **odczyty**, a nie krok
+// doby: czyta je test, panel sklepu i edytor reguł. Przeprowadzka z `policy_run`
+// przy M9d — tam rosły obok pętli, z którą nie mają nic wspólnego poza historią.
+
+impl Market {
+    /// Cel zamówienia towaru w sklepie — po nim widać, czy polityka zapasu zadziałała.
+    #[must_use]
+    pub fn reorder_target(&self, site: SiteId, good: GoodId) -> Option<Qty> {
+        let m = self.lock();
+        let s = &m.shops[*m.by_site.get(&site)? as usize];
+        s.inventory.reorder.get(&good).map(|r| r.target)
+    }
+
+    /// Polityka cenowa sterownika — po niej widać, czy regułę wykonano ceną stałą,
+    /// czy marżą. Odczyt dla testów i dla panelu M9.
+    #[must_use]
+    pub fn price_policy(&self, site: SiteId, good: GoodId) -> Option<PricePolicy> {
+        let m = self.lock();
+        let s = &m.shops[*m.by_site.get(&site)? as usize];
+        s.controllers.get(&good).map(|pc| pc.policy)
+    }
+
+    /// Cena półkowa towaru w zakładzie, brutto. Odczyt dla testów i dla panelu.
+    #[must_use]
+    pub fn shelf_price(&self, site: SiteId, good: GoodId) -> Option<Money> {
+        let m = self.lock();
+        let s = &m.shops[*m.by_site.get(&site)? as usize];
+        s.controllers.get(&good).map(|pc| pc.current)
+    }
+
+    /// Podgląd obrazu konkurencji — wyłącznie do testów i do panelu.
+    #[must_use]
+    pub fn competitor_entry(&self, site: SiteId, good: GoodId) -> Option<(Money, Money, u32)> {
+        let m = self.lock();
+        let s = &m.shops[*m.by_site.get(&site)? as usize];
+        s.observed
+            .get(good)
+            .map(|e| (e.cheapest, e.median, e.offers))
+    }
+
+    /// Wiek obrazu konkurencji, którym pracuje zakład. Odczyt dla testu i dla panelu:
+    /// to jest ta sama liczba, którą ustawia menedżer, a nie druga jej kopia.
+    #[must_use]
+    pub fn competitor_delay_days(&self, site: SiteId) -> Option<u8> {
+        let m = self.lock();
+        m.by_site
+            .get(&site)
+            .map(|i| m.shops[*i as usize].observed.delay_days)
+    }
+
+    /// Stawka VAT w punktach bazowych — przelicznik jawnej konwersji `brutto`/`netto`
+    /// (`K-7`). Czytana z silnika podatkowego, a nie wpisana: do M8 wynosi zero, ale
+    /// edytor reguł ma po niej sprowadzać koszt i cenę półkową do jednej podstawy.
+    #[must_use]
+    pub fn vat_bp(&self) -> i32 {
+        let m = self.lock();
+        let brutto = m.tax.gross_from_net(GoodId(0), Money(10_000));
+        i32::try_from(brutto.get() - 10_000).unwrap_or(0)
+    }
+
+    /// Rachunki bieżące zakładów handlowych — wejście metryki `saldo` w regule.
+    ///
+    /// Osobno od [`Market::run_policies`], bo saldo prowadzi `Books`, a `Books`
+    /// i rejestr firm nie dają się pożyczyć ze świata naraz. Wołający czyta jedno,
+    /// potem drugie — i to jest cała treść tej funkcji.
+    #[must_use]
+    pub fn shop_accounts(&self) -> Vec<(SiteId, crate::books::AccountId)> {
+        let m = self.lock();
+        m.shops.iter().map(|s| (s.site, s.account)).collect()
+    }
+
+    /// Rachunek bieżący jednego zakładu handlowego. `None` dla zakładu, którego
+    /// rynek detaliczny nie zna — zakład produkcyjny ma konto w `plants`.
+    #[must_use]
+    pub fn shop_account(&self, site: SiteId) -> Option<crate::books::AccountId> {
+        let m = self.lock();
+        m.by_site
+            .get(&site)
+            .copied()
+            .map(|i| m.shops[i as usize].account)
+    }
+}

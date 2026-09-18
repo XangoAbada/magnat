@@ -112,6 +112,7 @@ impl Market {
             observed: CompetitorSnapshot::new(osobowosc.delay_days),
             ledger: Ledger::new(seed.site, seed.firm, t),
             reprice_log: Vec::new(),
+            trace: crate::policy_run::PolicyTrace::default(),
             depreciation_monthly: Money::ZERO,
             loan: None,
             opened: t,

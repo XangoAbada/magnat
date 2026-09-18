@@ -360,6 +360,9 @@ pub struct Shop {
     /// Nie wchodzi do hasha z tego samego powodu co pierścień utraconych sprzedaży:
     /// prowadzi go wyłącznie zakład oznaczony, a oznaczenie nie jest stanem świata.
     pub reprice_log: Vec<magnat_core::DecisionReason>,
+    /// Ślad ostatnich dób dla dry-runu polityk (M9d WP8). Jak `reprice_log`:
+    /// prowadzi go wyłącznie zakład oznaczony i nie wchodzi do hasha stanu.
+    pub trace: crate::policy_run::PolicyTrace,
     /// Miesięczny odpis amortyzacyjny wyposażenia, liniowy.
     pub depreciation_monthly: Money,
     // ── M5d ──
