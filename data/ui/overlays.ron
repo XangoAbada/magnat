@@ -131,5 +131,108 @@
                 (1_000, (255, 235, 195, 232)),
             ],
         ),
+        // ── nakładki danych miejskich (M9c/WP7, PRD §14.2) ───────────────────────
+        //
+        // Siedem pozostałych pozycji listy z §14.2. Wszystkie stemplują się działkami
+        // albo punktami, a nie krawędziami, bo opisują **miejsce**, a nie przejazd.
+        // Paleta jest ta sama co wszędzie: jasność rośnie monotonicznie, więc nakładka
+        // czyta się na wydruku i przy deuteranopii.
+        (
+            key: "household_income",
+            loc_key: "overlay.household_income",
+            unit: "zł/mies.",
+            // Progi wokół mediany dochodu gospodarstwa w mieście z epoki startowej.
+            stops: [
+                (0,         (20, 15, 55, 190)),
+                (150_000,   (70, 30, 100, 196)),
+                (300_000,   (130, 45, 105, 202)),
+                (500_000,   (190, 70, 85, 210)),
+                (800_000,   (235, 125, 60, 218)),
+                (1_400_000, (252, 190, 90, 226)),
+                (2_500_000, (255, 245, 220, 232)),
+            ],
+        ),
+        (
+            key: "shop_catchment",
+            loc_key: "overlay.shop_catchment",
+            unit: "klientów/tydz.",
+            stops: [
+                (0,    (20, 15, 55, 120)),
+                (5,    (70, 35, 100, 170)),
+                (20,   (140, 55, 105, 190)),
+                (60,   (205, 95, 70, 205)),
+                (150,  (245, 165, 70, 220)),
+                (400,  (255, 245, 220, 232)),
+            ],
+        ),
+        (
+            key: "product_price",
+            loc_key: "overlay.product_price",
+            unit: "gr/szt.",
+            stops: [
+                (0,      (20, 15, 55, 150)),
+                (200,    (70, 30, 100, 190)),
+                (500,    (140, 50, 105, 200)),
+                (1_000,  (205, 85, 75, 210)),
+                (2_000,  (245, 155, 65, 220)),
+                (5_000,  (255, 245, 220, 232)),
+            ],
+        ),
+        (
+            key: "unemployment",
+            loc_key: "overlay.unemployment",
+            unit: "‰ siły roboczej",
+            // Wiek produkcyjny bierze się z `data/demography/demography.ron` (`K-60`),
+            // a nie ze stałej w kodzie — dlatego próg jest w promilach, nie w osobach.
+            stops: [
+                (0,   (20, 15, 55, 150)),
+                (30,  (65, 35, 95, 185)),
+                (60,  (130, 55, 100, 198)),
+                (100, (200, 90, 75, 210)),
+                (160, (245, 155, 65, 220)),
+                (250, (255, 245, 220, 232)),
+            ],
+        ),
+        (
+            key: "health",
+            loc_key: "overlay.health",
+            unit: "zdrowie 0–100",
+            // Odwrotnie niż reszta: **jasne znaczy zdrowe**. Skala jest oceną, a nie
+            // ryzykiem, więc czytelnik ma szukać jasnych plam, nie ciemnych.
+            stops: [
+                (0,   (20, 15, 55, 210)),
+                (40,  (75, 40, 95, 208)),
+                (60,  (140, 65, 95, 205)),
+                (75,  (200, 105, 80, 200)),
+                (88,  (245, 175, 90, 196)),
+                (100, (255, 245, 220, 190)),
+            ],
+        ),
+        (
+            key: "pollution",
+            loc_key: "overlay.pollution",
+            unit: "g pyłu/min",
+            stops: [
+                (0,     (20, 15, 55, 60)),
+                (50,    (60, 30, 90, 150)),
+                (200,   (125, 50, 100, 180)),
+                (600,   (195, 85, 75, 200)),
+                (1_500, (243, 150, 65, 216)),
+                (4_000, (255, 245, 220, 232)),
+            ],
+        ),
+        (
+            key: "good_flow",
+            loc_key: "overlay.good_flow",
+            unit: "kg w drodze",
+            stops: [
+                (0,       (20, 15, 55, 70)),
+                (100,     (65, 35, 95, 160)),
+                (1_000,   (135, 55, 100, 185)),
+                (10_000,  (200, 95, 75, 205)),
+                (50_000,  (245, 160, 70, 220)),
+                (200_000, (255, 245, 220, 232)),
+            ],
+        ),
     ],
 )

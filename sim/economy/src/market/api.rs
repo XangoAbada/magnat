@@ -365,6 +365,45 @@ impl Market {
         })
     }
 
+    /// Czy ten mieszkaniec kupił ostatnio w tym zakładzie — filtr „tylko klienci
+    /// mojego sklepu" (PRD §14.2). Odpowiada `false` dla zakładów nieśledzonych:
+    /// pierścień kupujących prowadzą wyłącznie zakłady gracza.
+    #[must_use]
+    pub fn is_customer(&self, site: SiteId, citizen: CitizenId) -> bool {
+        let m = self.lock();
+        m.by_site
+            .get(&site)
+            .is_some_and(|i| m.shops[*i as usize].customers.bought(citizen))
+    }
+
+    /// Utracone sprzedaże **tego mieszkańca** we wszystkich śledzonych zakładach,
+    /// od najstarszej do najnowszej (M9c §5.7).
+    ///
+    /// To jest druga strona tego samego pytania co [`Market::lost_sales`]: tam gracz
+    /// pyta „kto u mnie nie kupił", tutaj „dlaczego **ona** u mnie nie kupiła".
+    /// Sufit jest znany i zamierzony: zapis prowadzą wyłącznie zakłady śledzone
+    /// (`LostSaleTracking::Full`), czyli w praktyce zakłady gracza — dla całego miasta
+    /// byłby to pierścień na każdym z tysięcy sklepów, czyli koszt bez czytelnika.
+    #[must_use]
+    pub fn lost_sales_of_citizen(&self, citizen: CitizenId) -> Vec<(SiteId, LostSale)> {
+        let m = self.lock();
+        // Kolejność: po zakładzie (`BTreeMap`), potem po czasie wpisu — a nie po
+        // kolejności zamków. Karta ma pokazywać to samo przy każdym otwarciu.
+        let mut out: Vec<(SiteId, LostSale)> = m
+            .by_site
+            .iter()
+            .flat_map(|(site, i)| {
+                m.shops[*i as usize]
+                    .lost
+                    .iter()
+                    .filter(|s| s.citizen == citizen)
+                    .map(move |s| (*site, *s))
+            })
+            .collect();
+        out.sort_by_key(|(site, s)| (s.when.get(), site.entity().index()));
+        out
+    }
+
     #[must_use]
     pub fn lost_histogram(&self, site: SiteId) -> Option<LostSaleHistogram> {
         let m = self.lock();

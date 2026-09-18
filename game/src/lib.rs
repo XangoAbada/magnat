@@ -28,6 +28,9 @@
 #![forbid(unsafe_code)]
 
 pub mod command;
+pub mod inspect;
+pub mod overlays;
+pub mod player;
 pub mod replay;
 pub mod save;
 pub mod screens;
@@ -39,12 +42,17 @@ pub use command::{
     apply, precheck, CommandEnvelope, CommandError, CommandView, PlayerCommand, PlayerId,
     ViewCommand, ViewRecord,
 };
+pub use overlays::{EntityFilter, OverlayField, OverlayField2d};
+pub use player::{
+    AutonomyField, Candidate, Control, PlayerAutonomy, PlayerCharacter, StartVariant,
+    CANDIDATES_SHOWN,
+};
 pub use replay::{ReplayError, ReplayHeader, ReplayLog, REPLAY_SCHEMA_VERSION};
 pub use save::{SaveError, SaveSlot, SAVE_SCHEMA_VERSION};
 pub use screens::{Shell, ShellAction};
 pub use session::{replay as replay_session, GameState, ReplayMismatch, Session};
 pub use shell::{
-    GenProgress, GenWatch, NewGameParams, ScenarioId, Settings, ShellScreen, StartVariant,
-    WorldGenJob, WorldPreview,
+    GenProgress, GenWatch, NewGameParams, ScenarioId, Settings, ShellScreen, WorldGenJob,
+    WorldPreview,
 };
 pub use world::{stand_up, BuiltCity, SessionOpts, Standing, StandingReport};

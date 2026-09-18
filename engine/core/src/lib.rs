@@ -35,7 +35,7 @@ pub mod types;
 pub mod vocab;
 pub mod weather;
 
-pub use arena::{Arena, ArenaChunk, ArenaHandle, ArenaKind};
+pub use arena::{Arena, ArenaChunk, ArenaHandle, ArenaKind, ArenaRef};
 pub use assets::{data_dir, data_path};
 pub use collections::{seeded_map, seeded_set, SeededMap, SeededMapExt, SeededSet};
 pub use decision::DecisionReason;
@@ -53,8 +53,9 @@ pub use service::ServiceCoverage;
 pub use subject::{Subject, SubjectKind};
 pub use time::{Cadence, DayOfWeek, MinuteOfDay, OpenHours, SimCalendar, SimClock, SimSpeed};
 pub use types::{
-    DepositId, DistrictId, Energy, EventId, GoodId, JobRoleId, Mass, Money, Mood, NeedCategoryId,
-    PolicyId, Qty, RecipeId, SimInstant, SimMinute, TariffClassId, Tick, Volume, Q,
+    CaseId, DepositId, DistrictId, Energy, EventId, GoodId, JobRoleId, Mass, Money, Mood,
+    NeedCategoryId, PermitId, PolicyId, Qty, RecipeId, SimInstant, SimMinute, TariffClassId,
+    TenderId, Tick, Volume, Q,
 };
 pub use vocab::{
     AbateReason, ActionKind, ActivityKind, AgencyKind, BankruptcyTrigger, Biome, BodyType,

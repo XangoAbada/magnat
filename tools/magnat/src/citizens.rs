@@ -21,10 +21,11 @@
 //! tym samym tickiem (§5.11). Klatka o dowolnej długości przy dowolnej prędkości daje ten
 //! sam ciąg ticków — ta sama ścieżka, na której stoi test `det_speed_invariance`.
 //!
-//! `ponytail:` blok `impl` ma ~360 linii i zostaje jednym blokiem. Sufit nazwany:
+//! `ponytail:` blok `impl` ma ~450 linii i zostaje jednym blokiem. Sufit nazwany:
 //! to jest jeden temat — stan interfejsu rozgrywki — a podział na „panele" i „warstwę
 //! Mikro" przeciąłby `advance`, które dotyka obu. Punkt podziału przyjdzie sam razem
-//! z panelami biznesowymi `M9e`: wtedy panele wyprowadzą się do własnego rejestru.
+//! z panelami biznesowymi `M9e`: wtedy panele wyprowadzą się do własnego rejestru,
+//! a tutaj zostanie wejście, kadr i nawigacja po kartach. Wiersz 41 rejestru długu.
 //!
 //! ### Warstwa Mikro chodzi tylko w kadrze
 //!
@@ -33,12 +34,13 @@
 //! ani o minutę, bo warstwa Mikro nie ma prawa zapisu do stanu (00 §4).
 
 use magnat_agents::{AgentSources, Population, Trace};
+use magnat_core::Subject;
 use magnat_core::{SimSpeed, Tick};
-use magnat_economy::{LostSaleTracking, ShopPanelSnapshot};
+use magnat_economy::LostSaleTracking;
+use magnat_game::inspect::CardCtx;
 use magnat_game::Session;
 use magnat_sim_snapshot::PedestrianRecord;
-use magnat_ui::{CitizenPanel, Locale, Selection, Theme, UiContext};
-use magnat_ui::{ShopTab, ShopView};
+use magnat_ui::{CitizenPanel, InspectionNav, Locale, Theme, UiContext};
 
 /// Promień okna warstwy Mikro w metrach.
 ///
@@ -54,6 +56,16 @@ const MICRO_RADIUS_M: u32 = 900;
 /// headless; okno ma pokazać miasto, a nie zdać test statystyczny.
 pub(crate) const SWAPS: u32 = 50_000;
 
+/// Legenda otwartej nakładki danych (§5.10). Dane, nie referencja: nakładka przelicza
+/// się przy przełączeniu, a HUD rysuje ją w każdej klatce.
+pub struct Legenda {
+    /// Klucz nakładki — człon `ui.overlay.<key>` w `data/locale/`.
+    pub key: &'static str,
+    pub stops: Vec<(u8, i64)>,
+    pub unit: String,
+    pub palette: [[u8; 4]; 256],
+}
+
 pub struct Citizens {
     ui: UiContext,
     panel: CitizenPanel,
@@ -64,22 +76,24 @@ pub struct Citizens {
     /// Czy panel jest widoczny. Karta bez zaznaczenia pokazuje komunikat, więc panel
     /// da się otworzyć, zanim gracz w kogokolwiek kliknie.
     pokaz_karte: bool,
-    /// Migawka otwartego sklepu. **Podwójne buforowanie w wersji, która tu wystarcza**:
-    /// panel czyta zawsze poprzednią migawkę, a nowa powstaje raz na godzinę gry.
-    /// Nie ma tu wyścigu do rozwiązania — symulacja i render chodzą w jednym wątku
-    /// pętli klatki — jest za to koszt: składanie migawki bierze zamek rynku, więc
-    /// robienie tego co klatkę kosztowałoby tyle, ile panel jest wart.
-    sklep: Option<ShopPanelSnapshot>,
-    zakladka: ShopTab,
-    pokaz_sklep: bool,
+    /// Stos „wstecz/dalej" karty inspekcji (`M9c` §5.7). To **on** jest zaznaczeniem:
+    /// `UiContext::selection` idzie za nim, a nie odwrotnie.
+    nav: InspectionNav,
+    /// Wybrana zakładka karty — indeks w `InspectionCard::tabs`.
+    zakladka: usize,
+    /// Legenda otwartej nakładki danych. `None` = nakładka terenu albo żadna.
+    legenda: Option<Legenda>,
+    /// Filtr encji rysowanych w świecie (§14.2). `None` = wszyscy.
+    filtr: Option<magnat_game::EntityFilter>,
     /// Wersje źródeł danych dla modeli paneli (`M9b` §5.8): model przebudowuje się
     /// wyłącznie wtedy, gdy któreś z nich drgnęło.
     wersje: magnat_ui::Versions,
-    /// Model karty mieszkańca. **To jest miejsce, w którym kryterium WP3 ma skutek**:
-    /// bez zmiany danych klatka nie buduje modelu i nie alokuje ani bajtu.
+    /// Model karty mieszkańca — paski potrzeb i płótno doby rysują się z niego,
+    /// bo to są **wykresy**, a nie tekst. Treść karty idzie osobno, przez `karta`.
     model: magnat_ui::Cached<Option<magnat_ui::CitizenModel>>,
-    /// Model karty sklepu — ta sama zasada, inne źródło.
-    karta_sklepu: magnat_ui::Cached<Option<magnat_ui::ShopCard>>,
+    /// Karta inspekcji zaznaczonego podmiotu. **To jest miejsce, w którym kryterium
+    /// WP3 ma skutek**: bez zmiany danych klatka nie buduje modelu i nie alokuje.
+    karta: magnat_ui::Cached<Option<magnat_ui::InspectionCard>>,
 }
 
 /// Co unieważnia kartę mieszkańca: świat (potrzeby, majątek), zaznaczenie, minuta
@@ -91,10 +105,17 @@ static ZRODLA_KARTY: [magnat_ui::DataSource; 4] = [
     magnat_ui::DataSource::Locale,
 ];
 
-/// Kartę sklepu unieważnia wyłącznie nowa migawka rynku i zmiana języka — migawka
-/// powstaje raz na godzinę gry, więc karta też.
-static ZRODLA_SKLEPU: [magnat_ui::DataSource; 2] =
-    [magnat_ui::DataSource::Market, magnat_ui::DataSource::Locale];
+/// Co unieważnia kartę inspekcji: zaznaczenie, minuta świata, język i rynek.
+///
+/// **Minuta, a nie klatka** — i to jest cała oszczędność: karta zakładu składa migawkę
+/// panelu, a ta bierze zamek rynku. Przy 60 klatkach na sekundę i prędkości 10× rynek
+/// jest odpytywany dziesięć razy na sekundę, a nie sześćdziesiąt.
+static ZRODLA_KARTY_INSPEKCJI: [magnat_ui::DataSource; 4] = [
+    magnat_ui::DataSource::Selection,
+    magnat_ui::DataSource::Clock,
+    magnat_ui::DataSource::Locale,
+    magnat_ui::DataSource::Market,
+];
 
 impl Citizens {
     /// # Errors
@@ -103,24 +124,32 @@ impl Citizens {
         Ok(Citizens {
             ui: UiContext::new(locale, Tick(0))?,
             panel: CitizenPanel { day: 0, seed },
-            sklep: None,
-            zakladka: ShopTab::default(),
-            pokaz_sklep: false,
+            zakladka: 0,
+            legenda: None,
+            filtr: None,
+            nav: InspectionNav::new(),
             peds: Vec::new(),
             dzien: 0,
             pokaz_karte: false,
             wersje: magnat_ui::Versions::new(),
             model: magnat_ui::Cached::new(&ZRODLA_KARTY),
-            karta_sklepu: magnat_ui::Cached::new(&ZRODLA_SKLEPU),
+            karta: magnat_ui::Cached::new(&ZRODLA_KARTY_INSPEKCJI),
         })
     }
 
-    /// Karta zaznaczonego mieszkańca jako tekst — **ta sama funkcja**, którą wypisuje
-    /// `headless m3day --inspect` i której broni złoty test (korekta E-8).
+    /// Karta zaznaczonego podmiotu jako tekst — do konsoli deweloperskiej.
+    ///
+    /// **Ta sama funkcja, którą rysuje okno** (`game::inspect::card`), a nie drugi
+    /// wydruk obok niej: konsola ma pokazywać to, co widzi gracz, inaczej diagnostyka
+    /// odpowiada na inne pytanie niż zadane. Złotego wydruku dnia broni osobno
+    /// `CitizenPanel` w `engine/ui` — tamtędy chodzi `headless m3day --inspect`.
     #[must_use]
     pub fn card_text(&mut self, session: &Session) -> String {
-        use magnat_ui::{InspectorPanel, RichExt};
-        self.panel.build(&self.ui, &session.app.world).to_plain()
+        let Some(p) = self.nav.current() else {
+            return self.ui.text("ui.card.no_selection");
+        };
+        let (c, l) = (&self.ui.catalog, self.ui.locale);
+        magnat_game::inspect::card(&CardCtx::new(c, l, session), p).render_text(c, l)
     }
 
     pub fn set_locale(&mut self, l: Locale) {
@@ -195,32 +224,7 @@ impl Citizens {
         let t = self.ui.time.clock().tick();
         self.dzien = t.0 / 1440;
         self.panel.day = self.dzien;
-        self.odswiez_sklep(session, t, false);
         t
-    }
-
-    /// Składa migawkę otwartego sklepu, jeśli minęła godzina gry albo panel właśnie
-    /// się otworzył (`wymus`). Kadencja `EveryHour` z §5.11: wszystko, co panel
-    /// pokazuje, i tak zmienia się co najwyżej raz na dobę poza stanem półki.
-    fn odswiez_sklep(&mut self, session: &Session, t: Tick, wymus: bool) {
-        if !self.pokaz_sklep {
-            return;
-        }
-        let (Some(m), Some(stary)) = (session.market.as_ref(), self.sklep.as_ref()) else {
-            return;
-        };
-        if !wymus && t.get() / 60 == stary.at.get() / 60 {
-            return;
-        }
-        let site = stary.site;
-        // Okres rachunku wyników to **bieżący miesiąc gry**, nie cała historia:
-        // RZiS od początku świata pokazywałby sumę, a nie to, jak sklep radzi
-        // sobie teraz — czyli nie odpowiadałby na pytanie, które gracz zadaje.
-        let od = Tick(t.get() - t.get() % magnat_core::time::MINUTES_PER_MONTH);
-        if let Some(s) = m.shop_panel(site, od, t) {
-            self.sklep = Some(s);
-            self.wersje.bump(magnat_ui::DataSource::Market);
-        }
     }
 
     /// Otwiera panel sklepu stojącego najbliżej punktu trafienia.
@@ -246,15 +250,60 @@ impl Citizens {
         // a `sim/economy` tylko czyta (`U-22`). Poziom nie wchodzi do hasha, więc
         // kliknięcie „pokaż" nie zmienia świata.
         m.set_tracking(site, LostSaleTracking::Full);
-        let t = self.ui.time.clock().tick();
-        let od = Tick(t.get() - t.get() % magnat_core::time::MINUTES_PER_MONTH);
-        self.sklep = m.shop_panel(site, od, t);
-        self.pokaz_sklep = self.sklep.is_some();
-        self.wersje.bump(magnat_ui::DataSource::Market);
-        self.pokaz_sklep
+        self.idz_do(Subject::Site(site));
+        true
+    }
+
+    /// Zaznaczony zakład — przedmiot nakładki „zasięg sklepu".
+    #[must_use]
+    pub fn wybrany_zaklad(&self) -> Option<magnat_core::SiteId> {
+        match self.nav.current() {
+            Some(Subject::Site(s)) => Some(s),
+            _ => None,
+        }
+    }
+
+    /// Legenda nakładki danych — nazwa, podziałki i jednostka.
+    pub fn set_legend(&mut self, l: Option<Legenda>) {
+        self.legenda = l;
+    }
+
+    /// Otwiera kartę podmiotu i odkłada poprzednią na stos wstecz.
+    pub fn idz_do(&mut self, s: Subject) {
+        if self.nav.current() != Some(s) {
+            // Zakładka wraca na pierwszą przy zmianie **rodzaju** podmiotu: gracz,
+            // który patrzył na „Dlaczego" u mieszkanki, nie ma trafić na czwartą
+            // zakładkę zakładu (`ui-design.md` §4).
+            if self.nav.current().map(Subject::kind) != Some(s.kind()) {
+                self.zakladka = 0;
+            }
+            self.nav.go(s);
+            self.ui.selection = Some(s);
+            self.pokaz_karte = true;
+            self.wersje.bump(magnat_ui::DataSource::Selection);
+        }
+    }
+
+    /// Wstecz i dalej po stosie kart (`ViewCommand::NavigateBack`/`Forward`).
+    pub fn nawiguj(&mut self, wstecz: bool) -> bool {
+        let ruszyl = if wstecz {
+            self.nav.back()
+        } else {
+            self.nav.forward()
+        };
+        if ruszyl {
+            self.ui.selection = self.nav.current();
+            self.zakladka = 0;
+            self.wersje.bump(magnat_ui::DataSource::Selection);
+        }
+        ruszyl
     }
 
     /// Ustawia okno warstwy Mikro na kadr i przepisuje pieszych dla renderera.
+    ///
+    /// Filtr encji (§14.2) działa **tutaj**, a nie w warstwie Mikro: warstwa jest
+    /// wspólna dla renderu i dla śledzenia, a filtr jest preferencją widoku i nie ma
+    /// prawa zmienić tego, kogo symulacja liczy.
     pub fn pedestrians(&mut self, session: &Session, eye: glam::DVec3) -> &[PedestrianRecord] {
         let Some(z) = session.app.world.resource::<AgentSources>().get() else {
             self.peds.clear();
@@ -263,7 +312,26 @@ impl Citizens {
         z.travel
             .set_micro_window(Some((eye.x as i32, eye.y as i32)), MICRO_RADIUS_M);
         z.travel.micro_snapshot(&mut self.peds);
+        if let Some(f) = self.filtr {
+            self.peds.retain(|p| f.accepts(session, p.entity));
+        }
         &self.peds
+    }
+
+    /// Przełącza filtr encji: wszyscy → moi klienci → moi pracownicy → wszyscy.
+    ///
+    /// Oba filtry potrzebują **wskazanego zakładu**, więc bez zaznaczonego zakładu
+    /// przełącznik gaśnie i mówi o tym w konsoli — filtr bez przedmiotu ukrywałby
+    /// wszystkich i wyglądał jak zepsuty render.
+    pub fn przelacz_filtr(&mut self) -> Option<&'static str> {
+        use magnat_game::EntityFilter as F;
+        let site = self.wybrany_zaklad();
+        self.filtr = match (self.filtr, site) {
+            (None, Some(s)) => Some(F::MyCustomers { site: s }),
+            (Some(F::MyCustomers { .. }), Some(s)) => Some(F::MyEmployees { site: s }),
+            _ => None,
+        };
+        self.filtr.map(magnat_game::EntityFilter::key)
     }
 
     /// Raster nakładki ruchu z **bieżącej minuty symulacji** (WP11).
@@ -334,7 +402,7 @@ impl Citizens {
                 .to_vec(),
         );
         match lista.by_entity_index(entity_index) {
-            Selection::Citizen(c) => {
+            Some(magnat_core::Subject::Citizen(c)) => {
                 // Dwa bufory śledzenia, bo dwie różne rzeczy: `Trace` zbiera zdarzenia
                 // DES (co mieszkaniec robił), `TrafficOracle::watch` włącza rejestr
                 // krawędź po krawędzi i porównanie środków transportu (jak jechał
@@ -351,9 +419,7 @@ impl Citizens {
                     .resource::<magnat_traffic::TrafficServices>()
                     .oracle
                     .watch(entity_index);
-                self.ui.selection = Selection::Citizen(c);
-                self.pokaz_karte = true;
-                self.wersje.bump(magnat_ui::DataSource::Selection);
+                self.idz_do(Subject::Citizen(c));
                 true
             }
             _ => false,
@@ -377,45 +443,47 @@ impl Citizens {
             panel,
             wersje,
             model,
-            karta_sklepu,
-            sklep,
+            karta,
+            nav,
             pokaz_karte,
             zakladka,
             ..
         } = self;
         let (catalog, locale) = (&uictx.catalog, uictx.locale);
         let zegar = uictx.time;
-        // **Tu działa dirty-flagging (`M9b` §5.8):** bez zmiany świata, zaznaczenia,
-        // minuty i języka model nie powstaje po raz drugi — a to on kosztuje, nie
+        let podmiot = nav.current();
+        // **Tu działa dirty-flagging (`M9b` §5.8):** bez zmiany zaznaczenia, minuty,
+        // języka i rynku karta nie powstaje po raz drugi — a to ona kosztuje, nie
         // rysowanie kilkuset widgetów.
-        let model = pokaz_karte
+        let karta = pokaz_karte
+            .then(|| {
+                karta
+                    .get(wersje, || {
+                        podmiot.map(|p| {
+                            magnat_game::inspect::card(&CardCtx::new(catalog, locale, session), p)
+                        })
+                    })
+                    .as_ref()
+            })
+            .flatten();
+        // Paski potrzeb i płótno doby to **wykresy**, a nie tekst — rysują się z modelu
+        // mieszkańca, obok treści zakładki. Karta i model czytają ten sam świat, więc
+        // rozjechać się nie mogą; różni je forma, nie liczba.
+        let model = matches!(podmiot, Some(Subject::Citizen(_)))
             .then(|| {
                 model
                     .get(wersje, || panel.model(uictx, &session.app.world))
                     .as_ref()
             })
             .flatten();
-        let karta_sklepu = karta_sklepu
-            .get(wersje, || {
-                sklep.as_ref().map(|s| {
-                    magnat_ui::ShopCard::build(
-                        catalog,
-                        locale,
-                        &ShopView {
-                            snapshot: s,
-                            kind: s.kind,
-                            period_from: Tick(
-                                s.at.get() - s.at.get() % magnat_core::time::MINUTES_PER_MONTH,
-                            ),
-                        },
-                    )
-                })
-            })
-            .as_ref();
+
         let mut wybor = None;
         let mut zamknij = false;
-        let mut zamknij_sklep = false;
-        let mut zakladka = *zakladka;
+        let mut zakladka_lokalna = *zakladka;
+        let mut skok = None;
+        let mut wstecz = false;
+        let mut dalej = false;
+        let (moze_wstecz, moze_dalej) = (nav.can_go_back(), nav.can_go_forward());
 
         egui::Area::new(egui::Id::new("magnat.time"))
             .fixed_pos(egui::pos2(12.0, 12.0))
@@ -426,38 +494,80 @@ impl Citizens {
                     }
                 });
             });
-        if let Some(m) = model {
+
+        if let Some(l) = &self.legenda {
+            // Prawy dolny róg — tam, gdzie legendę stawia `ui-design.md` §5.
+            egui::Area::new(egui::Id::new("magnat.legenda"))
+                .anchor(egui::Align2::RIGHT_BOTTOM, egui::vec2(-12.0, -12.0))
+                .show(ui.ctx(), |ui| {
+                    egui::Frame::popup(ui.style()).show(ui, |ui| {
+                        magnat_ui::widgets::overlay_legend(
+                            ui,
+                            theme,
+                            &catalog.fmt_key(locale, &format!("ui.overlay.{}", l.key), &[]),
+                            &l.unit,
+                            &l.stops,
+                            &l.palette,
+                        );
+                    });
+                });
+        }
+
+        if let Some(k) = karta {
             let mut otwarte = true;
-            egui::Window::new(catalog.fmt_key(locale, "ui.card.title", &[]))
+            egui::Window::new(catalog.fmt_key(locale, "ui.card.inspection", &[]))
                 .open(&mut otwarte)
                 .default_pos(egui::pos2(12.0, 70.0))
-                .default_size(egui::vec2(460.0, 760.0))
+                .default_size(egui::vec2(520.0, 780.0))
                 .vscroll(true)
                 .show(ui.ctx(), |ui| {
-                    magnat_ui::widgets::citizen_card(ui, theme, m, catalog, locale);
+                    ui.horizontal(|ui| {
+                        wstecz = ui
+                            .add_enabled(
+                                moze_wstecz,
+                                egui::Button::new(catalog.fmt_key(locale, "ui.card.back", &[])),
+                            )
+                            .clicked();
+                        dalej = ui
+                            .add_enabled(
+                                moze_dalej,
+                                egui::Button::new(catalog.fmt_key(locale, "ui.card.forward", &[])),
+                            )
+                            .clicked();
+                    });
+                    skok = magnat_ui::widgets::inspection_card(
+                        ui,
+                        theme,
+                        k,
+                        &mut zakladka_lokalna,
+                        catalog,
+                        locale,
+                    );
+                    if let Some(m) = model {
+                        match k.tabs.get(zakladka_lokalna).map(|t| t.kind) {
+                            Some(magnat_ui::CardTabKind::State) => {
+                                magnat_ui::widgets::needs(ui, theme, &m.card);
+                            }
+                            Some(magnat_ui::CardTabKind::Day) => {
+                                magnat_ui::widgets::day_timeline(ui, theme, m, catalog, locale);
+                            }
+                            _ => {}
+                        }
+                    }
                 });
             zamknij = !otwarte;
         }
-        if let Some(k) = karta_sklepu {
-            let mut otwarte = true;
-            egui::Window::new(catalog.fmt_key(locale, "ui.shop.title", &[]))
-                .open(&mut otwarte)
-                .default_pos(egui::pos2(500.0, 70.0))
-                .default_size(egui::vec2(560.0, 760.0))
-                .vscroll(true)
-                .show(ui.ctx(), |ui| {
-                    magnat_ui::widgets::shop_card(ui, theme, k, &mut zakladka, catalog, locale);
-                });
-            zamknij_sklep = !otwarte;
-        }
 
-        self.zakladka = zakladka;
+        self.zakladka = zakladka_lokalna;
         if zamknij {
             self.pokaz_karte = false;
         }
-        if zamknij_sklep {
-            self.pokaz_sklep = false;
-            self.sklep = None;
+        if wstecz {
+            self.nawiguj(true);
+        } else if dalej {
+            self.nawiguj(false);
+        } else if let Some(s) = skok {
+            self.idz_do(s);
         }
         wybor
     }

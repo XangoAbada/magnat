@@ -31,9 +31,7 @@ use magnat_agents::Trace;
 use magnat_core::{SimSpeed, Tick};
 use magnat_headless::population::{swiat_agentow, zaludnij, zbuduj_miasto};
 use magnat_traffic::{FuelLedger, TrafficNetwork, TrafficSystem, VehicleWearSystem, UL_PER_ML};
-use magnat_ui::{
-    CitizenPanel, InspectorPanel, ListPicker, Selection, TimeControlsWidget, UiContext,
-};
+use magnat_ui::{CitizenPanel, InspectorPanel, ListPicker, TimeControlsWidget, UiContext};
 
 #[derive(Args, Debug)]
 pub struct M3DayArgs {
@@ -212,7 +210,7 @@ pub fn run(a: &M3DayArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
     let wybrany = a.inspect.and_then(|n| {
         let picker = ListPicker::new(app.world.resource::<Population>().citizens().to_vec());
         match picker.by_index(n) {
-            Selection::Citizen(c) => {
+            Some(magnat_core::Subject::Citizen(c)) => {
                 // Dwa bufory śledzenia, bo dwie różne rzeczy: `Trace` zbiera zdarzenia
                 // DES (co mieszkaniec robił), `TrafficOracle::watch` włącza rejestr
                 // krawędź po krawędzi i zapamiętywanie porównania środków transportu
@@ -751,7 +749,7 @@ fn karta(
     locale: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut ui = UiContext::new(locale.parse()?, Tick(day * 1440))?;
-    ui.selection = Selection::Citizen(citizen);
+    ui.selection = Some(magnat_core::Subject::Citizen(citizen));
     let mut panel = CitizenPanel { day, seed };
     println!(
         "

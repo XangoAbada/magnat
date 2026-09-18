@@ -361,3 +361,14 @@ Zgodnie z `K-18`.
 | DD-1 | **`RuleEditorView` należy do tej podfazy**, a nie do WP6 w `M9b`. Rdzeń UI daje mu `TabStrip`, `Theme`, `Rich` i `Table<T>`; edytor składa z nich swój ekran | Reguła kolejności z §4 dokumentu fazy: widget powstaje pod ekran, który go żąda, a pierwszym konsumentem edytora reguł jest edytor reguł (`DE-5`) |
 | DD-2 | **Filtr tabeli jest predykatem `Fn(u32) -> bool`** (`magnat_ui::table::Filter`). Ewaluator `sim/policy` ma pod niego podstawić domknięcie — to jest miejsce, w którym „jedna gramatyka dla reguł i filtrów" staje się kodem | `engine/ui` nie zależy od `sim/policy` i nie ma powodu zaczynać (`DE-6`) |
 | DD-3 | **`StreamId::PolicyExecution = 260` jest nadal wolny**, a blok M9 (260–279) nietknięty: M9b nie losuje niczego | Odchylenie menedżera jest pierwszym losowaniem fazy i wchodzi razem z WP9 |
+
+
+## Zmiany wpisane po M9c
+
+Zgodnie z `K-18`. Szczegóły — tabela `DG-n` w `M9c-gracz-inspekcja-nakladki.md`.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| DD-4 ★ | **Gramatyka nie musi obsłużyć filtra encji ani predykatu wyboru postaci.** Oba miały być `ConditionExpr` (§5.10 i §5.3) i oba nim **nie są**: filtr nakładki ma dwa konkretne warianty, a predykat kandydata jest funkcją nad wiekiem, pracą i oszczędnościami | Metryki języka reguł opisują **firmę** — cenę, zapas, kadry — i nie mają czym zapytać „czy ten pieszy kupił u mnie" ani „ile ten mieszkaniec ma lat". Obietnica „jedna gramatyka dla reguł, filtrów, celów i warunków zatrzymania" zostaje przy tym w mocy tam, gdzie ma czytelnika: filtr **tabeli** (`DD-2`), cele scenariusza i warunki zatrzymania (`M9e`) — czyli wszędzie, gdzie pytanie dotyczy firmy i jej zakładów (`DG-4`, `DG-5`) |
+| DD-5 | **`PlayerCommand` ma cztery warianty po M9c** (`StartGame`, `SetPrice`, `SetCharacter`, `SetAutonomy`). Komendy polityk (`CreatePolicy`, `AttachPolicy`, …) dopisują się **na końcu** enuma, tak samo jak dotąd | Kolejność wariantów jest kontraktem dziennika wejść. Dodatkowo: komenda, która zmienia świat **i** sesję naraz, idzie przez `Session::wykonaj`, a nie `command::apply` — `apply` dostaje widok, nie `&mut World` |
+| DD-6 | **Karta zakładu ma już zakładkę „Dlaczego"** z powodami przecen (`Shop::reprice_log`), a karta firmy — z dziennika decyzji (`Firm::log`). `PolicyApplied` wpadnie do obu **bez zmian w karcie**: wystarczy, że `sim/policy` zapisze powód tam, gdzie pozostałe | `DecisionReason::PolicyApplied = 503` istnieje od M7c i ma ramię w `describe`. To jest cała integracja edytora z kartą inspekcji |

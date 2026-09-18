@@ -429,7 +429,7 @@ fn zbierz_oferty(
     //    przechodzi każdy test, bo żaden nie pytał, czy ktokolwiek staje;
     // 3. w przeddzień terminu — jedno przejście, termin składania ofert ma treść,
     //    a kolejność kroków w obrębie doby przestaje cokolwiek znaczyć.
-    let otwarte: Vec<(crate::tender::TenderId, TenderSubject, Money)> = city
+    let otwarte: Vec<(magnat_core::TenderId, TenderSubject, Money)> = city
         .tenders
         .all()
         .iter()

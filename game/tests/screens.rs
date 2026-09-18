@@ -26,7 +26,24 @@ fn ekrany() -> Vec<ShellScreen> {
             tab: SettingsTab::Controls,
         },
         ShellScreen::Pause,
+        ShellScreen::CharacterSelect,
     ]
+}
+
+/// Dwóch kandydatów na postać — ekran wyboru rysuje wiersze z ich danych, więc
+/// pusta lista nie sprawdziłaby podstawień.
+fn kandydaci() -> Vec<magnat_game::Candidate> {
+    (1..=2)
+        .map(|i| magnat_game::Candidate {
+            citizen: magnat_core::CitizenId(magnat_core::Entity::new(i, std::num::NonZeroU32::MIN)),
+            name: format!("Anna Kowalska {i}"),
+            age_years: 30 + i,
+            employed: i % 2 == 0,
+            savings: magnat_core::Money(123_456),
+            household_size: 3,
+            district: 0,
+        })
+        .collect()
 }
 
 fn powloka(locale: Locale) -> Shell {
@@ -38,6 +55,7 @@ fn powloka(locale: Locale) -> Shell {
     // Lista slotów bez katalogu zapisów: dziesięć pustych wierszy. To jest stan
     // świeżej instalacji i on też musi się narysować.
     s.refresh_slots(std::path::Path::new("nie-ma-takiego-katalogu"));
+    s.candidates = kandydaci();
     s
 }
 

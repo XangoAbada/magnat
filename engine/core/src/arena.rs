@@ -103,6 +103,68 @@ impl<T> ArenaHandle<T> {
     }
 }
 
+/// Uchwyt do slotu areny **bez typu zawartości** — adres, a nie dostęp.
+///
+/// Powstał dla [`crate::Subject`] (`K-62`): karta inspekcji musi umieć wskazać partię
+/// towaru i ofertę, a te dwie kategorie są arenami (`K-16`) parametryzowanymi typem,
+/// którego `core` nie zna i znać nie ma — `Batch` należy do `sim/supply`, `Offer`
+/// do `sim/economy`. Zatarcie parametru jest tańsze niż przeniesienie obu struktur
+/// do `core` i uczciwsze niż surowe `u64` w publicznym enumie, bo nazywa moment
+/// przejścia granicy: [`ArenaRef::of`] po jednej stronie, [`ArenaRef::to_handle`]
+/// po drugiej.
+///
+/// Zatarcie typu **nie osłabia bezpieczeństwa uchwytu**: generacja dalej odróżnia
+/// slot ponownie użyty od tego samego slotu sprzed zwolnienia, a `Arena::get` zwraca
+/// `None`, gdy się nie zgadza. Pomylenie areny (uchwyt partii użyty jako uchwyt oferty)
+/// przestaje być błędem kompilacji i staje się pustą kartą — dlatego `to_handle`
+/// woła się **wyłącznie** w miejscu, które wie, o którą arenę pyta.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+pub struct ArenaRef {
+    index: u32,
+    generation: NonZeroU32,
+}
+
+impl ArenaRef {
+    #[inline]
+    #[must_use]
+    pub const fn of<T>(h: ArenaHandle<T>) -> ArenaRef {
+        ArenaRef {
+            index: h.index,
+            generation: h.generation,
+        }
+    }
+
+    /// Przywraca parametr typu. Wołający odpowiada za to, że to ta arena.
+    #[inline]
+    #[must_use]
+    pub const fn to_handle<T>(self) -> ArenaHandle<T> {
+        ArenaHandle {
+            index: self.index,
+            generation: self.generation,
+            _t: PhantomData,
+        }
+    }
+
+    #[inline]
+    #[must_use]
+    pub const fn index(self) -> u32 {
+        self.index
+    }
+
+    #[inline]
+    #[must_use]
+    pub const fn generation(self) -> u32 {
+        self.generation.get()
+    }
+}
+
+impl<T> From<ArenaHandle<T>> for ArenaRef {
+    #[inline]
+    fn from(h: ArenaHandle<T>) -> ArenaRef {
+        ArenaRef::of(h)
+    }
+}
+
 enum Slot<T> {
     Occupied { generation: NonZeroU32, value: T },
     Vacant { generation: NonZeroU32 },

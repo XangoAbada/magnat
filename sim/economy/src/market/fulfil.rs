@@ -166,6 +166,7 @@ impl Market {
                 intent.district,
                 magnat_agents::SocialClass::of(intent.status),
                 dominant,
+                intent.buyer,
             );
         }
         // Koszyk CPI liczy się z **cen transakcyjnych**, więc wchodzi tutaj, a nie

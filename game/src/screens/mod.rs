@@ -20,6 +20,7 @@
 //! W menu głównym nie ma jeszcze świata, więc te ekrany jako jedyne w grze nie czytają
 //! `&Snapshot` (§5.14). Granica z §5.2 nie jest naruszona, tylko nieużywana.
 
+mod character;
 mod controls;
 mod menu;
 mod newgame;
@@ -57,6 +58,10 @@ pub enum ShellAction {
     BackToWizard,
     /// Ustawienia się zmieniły: język albo skala — trzeba je nałożyć bez restartu.
     SettingsChanged,
+    /// Gracz wybrał postać z listy kandydatów.
+    PickCitizen(magnat_core::CitizenId),
+    /// „Wylosuj postać" — wybór z ziarna świata, nie z zegara.
+    PickRandomCitizen,
 }
 
 /// Pozycja kursora na ekranie. Jedna liczba, bo każdy ekran powłoki jest listą wierszy.
@@ -82,6 +87,9 @@ pub struct Shell {
     /// Po co gracz wszedł na listę slotów. Tryb, a nie osobny ekran: pytanie
     /// „który slot" jest w obu przypadkach to samo.
     pub slot_mode: slots::Mode,
+    /// Kandydaci na postać gracza — wypełnia je klient po postawieniu świata.
+    /// Dane, nie referencja: ekran ma być rysowalny w teście bez sesji.
+    pub candidates: Vec<crate::player::Candidate>,
 }
 
 impl Shell {
@@ -99,6 +107,7 @@ impl Shell {
             has_session: false,
             draft: NewGameParams::default(),
             slot_mode: slots::Mode::default(),
+            candidates: Vec::new(),
         })
     }
 
@@ -168,6 +177,7 @@ impl Shell {
                 ShellScreen::NewGame { .. } => newgame::wizard(self, ui),
                 ShellScreen::Load { .. } => slots::list(self, ui),
                 ShellScreen::Settings { tab } => settings::screen(self, ui, tab),
+                ShellScreen::CharacterSelect => character::screen(self, ui),
             })
             .inner
     }

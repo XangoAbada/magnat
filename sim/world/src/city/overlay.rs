@@ -159,6 +159,25 @@ pub const OVERLAY_CELL_M: u16 = 16;
 /// pokazywałoby gradient tam, gdzie go nie ma.
 #[must_use]
 pub fn land_value_raster(city: &CityData, spec: &OverlaySpec) -> (u32, f32, Vec<u8>) {
+    parcel_raster(city, spec, |p| p.land_value_per_m2.0)
+}
+
+/// Raster stemplowany działkami: dla każdej komórki wartość działki, na której leży
+/// jej środek. `value` mówi, **co** jest tą wartością.
+///
+/// Uogólnienie [`land_value_raster`] wykonane w `M9c` (WP7): nakładki danych z PRD
+/// §14.2 różnią się wyłącznie liczbą, którą stemplują — dochód gospodarstw, bezrobocie
+/// i ceny idą po działkach tą samą drogą co wartość gruntu. Druga kopia tej pętli
+/// rozjechałaby się z pierwszą przy pierwszej zmianie rozdzielczości.
+///
+/// Wartość poza zakresem progów przycina [`OverlaySpec::index_of`]; komórka, której
+/// nie pokryła żadna działka, zostaje na indeksie 0 (brak danych).
+#[must_use]
+pub fn parcel_raster(
+    city: &CityData,
+    spec: &OverlaySpec,
+    value: impl Fn(&crate::city::parcels::Parcel) -> i64,
+) -> (u32, f32, Vec<u8>) {
     let bok = f32::from(OVERLAY_CELL_M);
     let dim = ((city.plan.map_size_m() as f32 / bok).ceil() as usize).max(1);
     let mut v = vec![0u8; dim * dim];
@@ -173,7 +192,7 @@ pub fn land_value_raster(city: &CityData, spec: &OverlaySpec) -> (u32, f32, Vec<
             lo = Vec2::new(lo.x.min(q.x), lo.y.min(q.y));
             hi = Vec2::new(hi.x.max(q.x), hi.y.max(q.y));
         }
-        let idx = spec.index_of(p.land_value_per_m2.0);
+        let idx = spec.index_of(value(p));
         let (x0, x1) = (
             ((lo.x / bok).floor().max(0.0)) as usize,
             (((hi.x / bok).ceil()) as usize).min(dim - 1),

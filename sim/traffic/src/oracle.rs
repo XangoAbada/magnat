@@ -708,6 +708,10 @@ impl TravelOracle for OracleHandle {
         self.0.micro.set_window(center, radius_m);
     }
 
+    fn set_micro_pins(&self, citizens: &[u32]) {
+        self.0.micro.set_pinned(citizens);
+    }
+
     fn micro_snapshot(&self, out: &mut Vec<magnat_sim_snapshot::PedestrianRecord>) {
         self.0.micro.snapshot(out);
     }

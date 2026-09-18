@@ -563,6 +563,11 @@ pub trait TravelOracle: Send + Sync {
     /// koniec jego trasy się w nim mieści. Promień 0 = warstwa wyłączona (`Z-6`).
     fn set_micro_window(&self, _center: Option<(i32, i32)>, _radius_m: u32) {}
 
+    /// Mieszkańcy, którzy zostają w warstwie Mikro **niezależnie od kadru** (`LodPin`,
+    /// M9 §9 pkt 2): postać gracza i cel trybu „śledź". Lista jest krótka i to jest
+    /// jej cena — przypięty mieszkaniec liczy się mikro także poza ekranem.
+    fn set_micro_pins(&self, _citizens: &[u32]) {}
+
     /// Zrzut dla renderera — **w docelowej strukturze**, nie w krotce pośredniej.
     ///
     /// Renderer bierze `&[PedestrianRecord]`, więc zrzut do krotki kazał wołającemu

@@ -153,6 +153,26 @@ scalar_newtype! {
     EventId(u32)
 }
 
+scalar_newtype! {
+    /// Przetarg ogłoszony przez radę miasta (M8e §5.7).
+    ///
+    /// Mieszka w `core` z tego samego powodu co `EventId`: jest adresem karty
+    /// inspekcji (`Subject::Tender`, `K-62`), a `core` nie może zależeć od `sim/city`.
+    /// Numer jest monotoniczny w obrębie gry — rozstrzygnięty przetarg zostaje
+    /// w kronice pod swoim numerem.
+    TenderId(u32)
+}
+
+scalar_newtype! {
+    /// Sprawa urzędowa prowadzona przez jeden z pięciu urzędów kontrolnych (M8d §5.6).
+    CaseId(u32)
+}
+
+scalar_newtype! {
+    /// Wniosek o pozwolenie złożony w urzędzie miasta (M8d §5.4).
+    PermitId(u32)
+}
+
 /// Skala 0..=100: jakość, zaspokojenie potrzeby, poziom umiejętności.
 /// Konstruktor przycina do zakresu — wartość spoza skali nigdy nie powstaje.
 #[derive(

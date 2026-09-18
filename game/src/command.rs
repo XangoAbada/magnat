@@ -82,6 +82,15 @@ pub enum PlayerCommand {
         good: String,
         price: Money,
     },
+    /// Wybór postaci gracza (WP4). Osobna komenda, a nie pole `StartGame`, bo lista
+    /// kandydatów powstaje **z postawionego świata** — w chwili, gdy koperta startowa
+    /// już jest w dzienniku. Replay odtwarza wybór z tej komendy, nie z listy.
+    SetCharacter { citizen: CitizenId },
+    /// Które decyzje mieszkańca gracz przejmuje, a które zostają autopilotowi M3.
+    SetAutonomy {
+        field: crate::player::AutonomyField,
+        control: crate::player::Control,
+    },
 }
 
 /// Komenda zmieniająca **widok**, nie świat. Nie wchodzi do hasha stanu.
@@ -122,6 +131,15 @@ pub enum CommandError {
     PriceNotPositive {
         price: Money,
     },
+    /// Wskazany mieszkaniec nie istnieje albo nie żyje.
+    CitizenNotFound {
+        citizen: CitizenId,
+    },
+    /// Gra nie ma jeszcze postaci — nie ma komu ustawić autonomii.
+    NoCharacter,
+    /// Postać już jest. Drugi wybór dawałby drugi kapitał startowy, więc jest błędem,
+    /// a nie przeprowadzką; dziedziczenie po śmierci to osobna komenda (`M9e`).
+    CharacterAlreadySet,
 }
 
 impl std::fmt::Display for CommandError {
@@ -136,6 +154,11 @@ impl std::fmt::Display for CommandError {
             CommandError::PriceNotPositive { price } => {
                 write!(f, "cena {} gr nie jest dodatnia", price.get())
             }
+            CommandError::CitizenNotFound { citizen } => {
+                write!(f, "nie ma mieszkańca {citizen:?}")
+            }
+            CommandError::NoCharacter => write!(f, "gra nie ma jeszcze postaci"),
+            CommandError::CharacterAlreadySet => write!(f, "postać jest już wybrana"),
         }
     }
 }
@@ -154,6 +177,12 @@ impl std::error::Error for CommandError {}
 /// a ta funkcja nie drgnie — bo nie zagląda do `&World`.
 pub struct CommandView<'a> {
     pub market: Option<&'a Market>,
+    /// Świat ECS — komendy dotyczące mieszkańców sprawdzają w nim, czy podmiot
+    /// istnieje. `Option`, bo panel może pytać, zanim świat stanie.
+    pub world: Option<&'a magnat_ecs::World>,
+    /// Czy gra ma już postać. Panel wygasza „wybierz postać" po jej wyborze i musi
+    /// znać powód **przed** kliknięciem, a nie po odrzuceniu komendy.
+    pub has_character: bool,
 }
 
 /// Sprawdza, czy komendę wolno wykonać. **Nie zmienia niczego.**
@@ -177,6 +206,27 @@ pub fn precheck(view: &CommandView<'_>, cmd: &PlayerCommand) -> Result<(), Comma
             }
             Ok(())
         }
+        PlayerCommand::SetCharacter { citizen } => {
+            if view.has_character {
+                return Err(CommandError::CharacterAlreadySet);
+            }
+            let zyje = view.world.is_some_and(|w| {
+                w.get::<magnat_agents::Identity>(citizen.entity())
+                    .is_some_and(magnat_agents::Identity::is_alive)
+            });
+            if zyje {
+                Ok(())
+            } else {
+                Err(CommandError::CitizenNotFound { citizen: *citizen })
+            }
+        }
+        PlayerCommand::SetAutonomy { .. } => {
+            if view.has_character {
+                Ok(())
+            } else {
+                Err(CommandError::NoCharacter)
+            }
+        }
     }
 }
 
@@ -189,6 +239,9 @@ pub fn apply(view: &CommandView<'_>, cmd: &PlayerCommand) -> Result<(), CommandE
     precheck(view, cmd)?;
     match cmd {
         PlayerCommand::StartGame { .. } => Ok(()),
+        // Obie komendy postaci zmieniają świat i sesję, więc wykonuje je
+        // `Session::apply_due` — tu jest tylko walidacja, wspólna dla obu stron.
+        PlayerCommand::SetCharacter { .. } | PlayerCommand::SetAutonomy { .. } => Ok(()),
         PlayerCommand::SetPrice { site, good, price } => {
             let market = view.market.ok_or(CommandError::NoMarket)?;
             let g = resolve_good(market, good)?;

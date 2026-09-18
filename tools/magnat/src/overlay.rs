@@ -35,11 +35,21 @@ pub enum Nakladka {
     Izochrona,
     Parkingi,
     ObciazenieLinii,
+    /// M9c, WP7 — pozostałe **nakładki danych** z PRD §14.2. Liczy je `game::overlays`,
+    /// bo pytają o mieszkańców, rynek i zakłady naraz; klient je tylko przełącza
+    /// i rysuje legendę.
+    DochodGD,
+    ZasiegSklepu,
+    CenaTowaru,
+    Bezrobocie,
+    Zdrowie,
+    Zanieczyszczenie,
+    PrzeplywTowaru,
 }
 
 impl Nakladka {
     /// Kolejność przełączania klawiszem `F3`.
-    const KOLEJNOSC: [Nakladka; 16] = [
+    const KOLEJNOSC: [Nakladka; 23] = [
         Nakladka::Brak,
         Nakladka::Wysokosc,
         Nakladka::Splyw,
@@ -56,6 +66,13 @@ impl Nakladka {
         Nakladka::Izochrona,
         Nakladka::Parkingi,
         Nakladka::ObciazenieLinii,
+        Nakladka::DochodGD,
+        Nakladka::ZasiegSklepu,
+        Nakladka::CenaTowaru,
+        Nakladka::Bezrobocie,
+        Nakladka::Zdrowie,
+        Nakladka::Zanieczyszczenie,
+        Nakladka::PrzeplywTowaru,
     ];
 
     #[must_use]
@@ -85,6 +102,13 @@ impl Nakladka {
             "isochrone" => Nakladka::Izochrona,
             "parking" => Nakladka::Parkingi,
             "transit-load" => Nakladka::ObciazenieLinii,
+            "household-income" => Nakladka::DochodGD,
+            "shop-catchment" => Nakladka::ZasiegSklepu,
+            "product-price" => Nakladka::CenaTowaru,
+            "unemployment" => Nakladka::Bezrobocie,
+            "health" => Nakladka::Zdrowie,
+            "pollution" => Nakladka::Zanieczyszczenie,
+            "good-flow" => Nakladka::PrzeplywTowaru,
             _ => return None,
         })
     }
@@ -111,7 +135,65 @@ impl Nakladka {
             Nakladka::Izochrona => "czas dojazdu",
             Nakladka::Parkingi => "obłożenie parkingów",
             Nakladka::ObciazenieLinii => "obciążenie linii",
+            // Dziewięć nakładek danych z §14.2 ma nazwy w `data/locale/`
+            // (`ui.overlay.<klucz>`) i to one trafiają do legendy; ta tabela zostaje
+            // dla konsoli i dla nakładek terenu, których gracz nie widzi w HUD-zie.
+            Nakladka::DochodGD => "dochód gospodarstw",
+            Nakladka::ZasiegSklepu => "zasięg sklepu",
+            Nakladka::CenaTowaru => "cena produktu",
+            Nakladka::Bezrobocie => "bezrobocie",
+            Nakladka::Zdrowie => "zdrowie",
+            Nakladka::Zanieczyszczenie => "zanieczyszczenie",
+            Nakladka::PrzeplywTowaru => "przepływ towaru",
         }
+    }
+
+    /// Czy to jest jedna z dziewięciu nakładek danych z §14.2.
+    ///
+    /// Osobno od [`Nakladka::pole_danych`], bo tamta zwraca `None` także wtedy, gdy
+    /// nakładka jest danymi, ale brakuje jej przedmiotu (sklepu do zasięgu). Bez tego
+    /// rozróżnienia zasięg bez wybranego sklepu wpadałby w gałąź nakładek terenu.
+    #[must_use]
+    pub const fn jest_danymi(self) -> bool {
+        matches!(
+            self,
+            Nakladka::WartoscGruntu
+                | Nakladka::Natezenie
+                | Nakladka::DochodGD
+                | Nakladka::ZasiegSklepu
+                | Nakladka::CenaTowaru
+                | Nakladka::Bezrobocie
+                | Nakladka::Zdrowie
+                | Nakladka::Zanieczyszczenie
+                | Nakladka::PrzeplywTowaru
+        )
+    }
+
+    /// Pole danych z PRD §14.2, jeśli ta nakładka nim jest.
+    ///
+    /// Dziewięć pozycji listy liczy `game::overlays`, bo pytają naraz o mieszkańców,
+    /// rynek, zakłady i miasto. `site` i `good` są parametrami dwóch z nich: zasięg
+    /// dotyczy **konkretnego** sklepu, a cena i przepływ **konkretnego** towaru —
+    /// nakładka bez wskazanego przedmiotu nie ma o co zapytać.
+    #[must_use]
+    pub fn pole_danych(
+        self,
+        site: Option<magnat_core::SiteId>,
+        good: magnat_core::GoodId,
+    ) -> Option<magnat_game::OverlayField> {
+        use magnat_game::OverlayField as F;
+        Some(match self {
+            Nakladka::WartoscGruntu => F::LandValue,
+            Nakladka::Natezenie => F::Traffic,
+            Nakladka::DochodGD => F::HouseholdIncome,
+            Nakladka::ZasiegSklepu => F::ShopCatchment { site: site? },
+            Nakladka::CenaTowaru => F::ProductPrice { good },
+            Nakladka::Bezrobocie => F::Unemployment,
+            Nakladka::Zdrowie => F::Health,
+            Nakladka::Zanieczyszczenie => F::Pollution,
+            Nakladka::PrzeplywTowaru => F::GoodFlow { good },
+            _ => return None,
+        })
     }
 
     /// Pole ruchu, które ta nakładka rysuje — `None` dla nakładek terenu i miasta.
@@ -162,8 +244,9 @@ pub fn zbuduj(terrain: &Terrain, city: Option<&CityData>, co: Nakladka) -> Optio
         return wartosc_gruntu(city?);
     }
     // Ruch ma własne źródło (zrzut symulacji), więc tutaj kończy się cicho: wołający
-    // buduje go przez `Citizens::pole_ruchu`, bo tylko on trzyma świat.
-    if co.pole_ruchu().is_some() {
+    // buduje go przez `Citizens::pole_ruchu`, bo tylko on trzyma świat. Tak samo
+    // nakładki danych z §14.2 — te liczy `game::overlays`.
+    if co.pole_ruchu().is_some() || co.jest_danymi() {
         return None;
     }
     let dane = terrain.data();
@@ -232,7 +315,14 @@ pub fn zbuduj(terrain: &Terrain, city: Option<&CityData>, co: Nakladka) -> Optio
                 | Nakladka::Korki
                 | Nakladka::Izochrona
                 | Nakladka::Parkingi
-                | Nakladka::ObciazenieLinii => 0,
+                | Nakladka::ObciazenieLinii
+                | Nakladka::DochodGD
+                | Nakladka::ZasiegSklepu
+                | Nakladka::CenaTowaru
+                | Nakladka::Bezrobocie
+                | Nakladka::Zdrowie
+                | Nakladka::Zanieczyszczenie
+                | Nakladka::PrzeplywTowaru => 0,
             };
         }
     }

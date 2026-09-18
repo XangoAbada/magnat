@@ -379,7 +379,21 @@ pub struct MicroLayer {
     /// Sufit rysowania (§7.3): pojazd ponad limitem zostaje w mezo **bez skutku
     /// ekonomicznego**, bo mezo działa dla każdej krawędzi niezależnie od kadru.
     cap: AtomicU32,
+    /// Mieszkańcy przypięci do warstwy Mikro niezależnie od kadru (`LodPin`, M9 §9 pkt 2).
+    ///
+    /// Postać gracza i cel trybu „śledź" mają zostać widoczni także wtedy, gdy kamera
+    /// patrzy gdzie indziej — inaczej „śledź tego mieszkańca" znaczyłoby „patrz na
+    /// niego tak długo, jak na niego patrzysz". Sufit to [`MAX_PINNED`] i jest twardy:
+    /// przypięcie kosztuje symulację mikro poza kadrem, więc ma być decyzją, a nie
+    /// nawykiem. `u32::MAX` = wolne miejsce.
+    ///
+    /// **Poza hashem stanu**, tak samo jak okno: warstwa Mikro jest wizualizatorem
+    /// bez prawa zapisu do stanu ekonomicznego (00 §4).
+    pinned: [AtomicU32; MAX_PINNED],
 }
+
+/// Ilu mieszkańców da się przypiąć do warstwy Mikro naraz (M9 §8, ryzyko LOD).
+pub const MAX_PINNED: usize = 8;
 
 /// Domyślny sufit liczby jednostek w kadrze (§7.3). Duża bryła liczy się podwójnie.
 pub const MICRO_UNIT_CAP: u32 = 3_000;
@@ -399,7 +413,28 @@ impl MicroLayer {
             center: (AtomicI32::new(0), AtomicI32::new(0)),
             radius_m: AtomicU32::new(0),
             cap: AtomicU32::new(MICRO_UNIT_CAP),
+            pinned: std::array::from_fn(|_| AtomicU32::new(u32::MAX)),
         }
+    }
+
+    /// Przypina mieszkańców do warstwy Mikro. Lista krótsza niż [`MAX_PINNED`]
+    /// zwalnia pozostałe miejsca; pusta gasi przypięcie zupełnie.
+    pub fn set_pinned(&self, citizens: &[u32]) {
+        for (slot, v) in self.pinned.iter().enumerate() {
+            v.store(
+                citizens.get(slot).copied().unwrap_or(u32::MAX),
+                Ordering::Relaxed,
+            );
+        }
+    }
+
+    #[must_use]
+    pub fn is_pinned(&self, citizen: u32) -> bool {
+        citizen != u32::MAX
+            && self
+                .pinned
+                .iter()
+                .any(|v| v.load(Ordering::Relaxed) == citizen)
     }
 
     #[must_use]
@@ -454,7 +489,11 @@ impl MicroLayer {
         if route.len() < 2 {
             return;
         }
-        if !self.contains(route[0]) && !self.contains(route[route.len() - 1]) {
+        // Przypięty mieszkaniec wchodzi do warstwy także spoza kadru (`LodPin`).
+        if !self.is_pinned(citizen)
+            && !self.contains(route[0])
+            && !self.contains(route[route.len() - 1])
+        {
             return;
         }
         self.peds

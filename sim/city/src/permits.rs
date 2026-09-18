@@ -21,13 +21,11 @@
 //! kryterium ukończenia WP7 i jedyna własność, której ten moduł musi dowieść.
 
 use magnat_core::{
-    DayOfWeek, DecisionReason, DistrictId, HashState, Money, PermitKind, SiteId, StateHasher, Tick,
+    DayOfWeek, DecisionReason, DistrictId, HashState, Money, PermitId, PermitKind, SiteId,
+    StateHasher, Tick,
 };
 
 use crate::tuning::CityTuning;
-
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
-pub struct PermitId(pub u32);
 
 /// Kto składa wniosek.
 ///

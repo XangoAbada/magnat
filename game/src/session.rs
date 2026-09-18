@@ -42,9 +42,9 @@ use crate::world::{stand_up, BuiltCity, StandingReport};
 /// Menu pauzy jest za to zwykłym `ShellScreen::Pause`: stan się zmienia, ale sesja
 /// zostaje w pamięci i zegar stoi, więc powrót do gry nie wczytuje niczego.
 ///
-/// Wariantów jest cztery, a nie siedem: `CharacterSelect` przychodzi z WP4 (`M9c`),
-/// `Succession` i `ScenarioEnd` z WP12 (`M9e`) — razem ze swoją treścią. Wariant
-/// stanu, w który nie da się wejść, wygląda tak samo jak działający (`K-67`).
+/// Wariantów jest pięć, a nie siedem: `Succession` i `ScenarioEnd` przychodzą z WP12
+/// (`M9e`) razem ze swoją treścią. Wariant stanu, w który nie da się wejść, wygląda
+/// tak samo jak działający (`K-67`).
 pub enum GameState {
     /// Wszystko poza rozgrywką — §5.13.
     Shell(ShellScreen),
@@ -55,6 +55,11 @@ pub enum GameState {
         preview: Box<WorldPreview>,
         built: Box<BuiltCity>,
     },
+    /// Świat stoi, ale gracz nie ma jeszcze ciała: wybór postaci (WP4).
+    ///
+    /// Sesja jest już tutaj — kandydaci powstają **z postawionego świata**, a nie
+    /// z parametrów, bo predykat wariantu pyta o wiek, pracę i oszczędności.
+    CharacterSelect(Box<Session>),
     Playing(Box<Session>),
 }
 
@@ -64,10 +69,12 @@ impl GameState {
         matches!(self, GameState::Playing(_))
     }
 
+    /// Sesja, jeśli świat stoi — także w trakcie wyboru postaci, bo ekran kandydatów
+    /// czyta z niej populację.
     #[must_use]
     pub fn session(&self) -> Option<&Session> {
         match self {
-            GameState::Playing(s) => Some(s),
+            GameState::Playing(s) | GameState::CharacterSelect(s) => Some(s),
             _ => None,
         }
     }
@@ -75,7 +82,7 @@ impl GameState {
     #[must_use]
     pub fn session_mut(&mut self) -> Option<&mut Session> {
         match self {
-            GameState::Playing(s) => Some(s),
+            GameState::Playing(s) | GameState::CharacterSelect(s) => Some(s),
             _ => None,
         }
     }
@@ -93,6 +100,9 @@ pub struct Session {
     /// Koperty czekające na swój tick.
     pending: Vec<CommandEnvelope>,
     next_seq: u64,
+    /// Postać gracza. `None` do czasu `SetCharacter` — świat wtedy stoi i tyka,
+    /// ale gracz nie ma jeszcze ciała.
+    player: Option<crate::PlayerCharacter>,
     /// Czas realny spędzony w sesji. Liczony z `dt` podawanego przez wołającego,
     /// **nigdy z `Instant::now()`** — w kodzie sesji zegar ścienny jest zakazany
     /// (00 §3.5), a ta liczba i tak jest metadaną slotu, nie stanem.
@@ -119,6 +129,7 @@ impl Session {
             log: ReplayLog::new(params),
             pending: Vec::new(),
             next_seq: 0,
+            player: None,
             played_ms: 0,
         };
         // Świat już stoi, więc ta koperta niczego nie wykonuje — niesie za to
@@ -138,6 +149,13 @@ impl Session {
     #[must_use]
     pub fn tick(&self) -> Tick {
         self.app.world.tick
+    }
+
+    /// Ziarno świata — karta mieszkańca odtwarza z niego plan dnia. Jedno źródło:
+    /// nagłówek dziennika wejść, czyli to samo, z czego odtwarza się cała sesja.
+    #[must_use]
+    pub fn seed(&self) -> u64 {
+        self.log.header.params.world.seed
     }
 
     #[must_use]
@@ -160,7 +178,15 @@ impl Session {
     pub fn view(&self) -> CommandView<'_> {
         CommandView {
             market: self.market.as_ref(),
+            world: Some(&self.app.world),
+            has_character: self.player.is_some(),
         }
+    }
+
+    /// Postać gracza, jeśli została wybrana.
+    #[must_use]
+    pub fn player(&self) -> Option<&crate::PlayerCharacter> {
+        self.player.as_ref()
     }
 
     /// Zgłasza komendę gracza na **najbliższy** tick.
@@ -222,15 +248,43 @@ impl Session {
         });
         due.sort_by_key(|e| (e.actor, e.seq));
         for e in due {
-            let widok = CommandView {
-                market: self.market.as_ref(),
-            };
-            if let Err(err) = apply(&widok, &e.cmd) {
+            if let Err(err) = self.wykonaj(t, &e.cmd) {
                 self.log.rejected.push(Rejected {
                     seq: e.seq,
                     error: err,
                 });
             }
+        }
+    }
+
+    /// Wykonanie jednej komendy.
+    ///
+    /// Komendy, którym wystarczy rynek, idą przez [`apply`] — tę samą funkcję, którą
+    /// woła panel przy wygaszaniu przycisku. Komendy postaci zmieniają **świat i sesję**
+    /// naraz (znacznik gracza w `Identity`, kapitał w księgach, przypięcie LOD), więc
+    /// muszą stać tutaj: `apply` dostaje widok, a nie `&mut World`, i tak ma zostać.
+    fn wykonaj(&mut self, t: Tick, cmd: &PlayerCommand) -> Result<(), CommandError> {
+        match cmd {
+            PlayerCommand::SetCharacter { citizen } => {
+                precheck(&self.view(), cmd)?;
+                let postac = crate::player::take_role(
+                    &mut self.app.world,
+                    self.market.as_ref(),
+                    self.log.header.params.variant,
+                    *citizen,
+                    t,
+                )
+                .ok_or(CommandError::CitizenNotFound { citizen: *citizen })?;
+                self.player = Some(postac);
+                Ok(())
+            }
+            PlayerCommand::SetAutonomy { field, control } => {
+                precheck(&self.view(), cmd)?;
+                let p = self.player.as_mut().ok_or(CommandError::NoCharacter)?;
+                p.autonomy.set(*field, *control);
+                Ok(())
+            }
+            _ => apply(&self.view(), cmd),
         }
     }
 
@@ -334,6 +388,7 @@ pub fn replay(
         pending: log.commands.clone(),
         next_seq: log.commands.len() as u64,
         played_ms: 0,
+        player: None,
     };
     s.log.commands = log.commands.clone();
 

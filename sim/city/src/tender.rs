@@ -18,11 +18,10 @@
 
 use std::collections::BTreeMap;
 
-use magnat_core::{DecisionReason, DistrictId, Money, SiteId, StateHasher, TenderKind, Tick, Q};
+use magnat_core::{
+    DecisionReason, DistrictId, Money, SiteId, StateHasher, TenderId, TenderKind, Tick, Q,
+};
 use magnat_firms::FirmKey;
-
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
-pub struct TenderId(pub u32);
 
 /// Przedmiot przetargu: rodzaj plus identyfikator (dzielnica albo linia).
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]

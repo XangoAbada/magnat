@@ -276,6 +276,12 @@ impl App {
                 self.czas_x1000 = !self.czas_x1000;
             }
             Key::Named(NamedKey::F3) => self.przelacz_nakladke(),
+            Key::Named(NamedKey::F4) => {
+                if let Some(c) = &mut self.citizens {
+                    let f = c.przelacz_filtr();
+                    eprintln!("filtr encji: {}", f.unwrap_or("wszyscy"));
+                }
+            }
             // Sterowanie czasem (§5.11, decyzja 9.1). Spacja wraca do prędkości
             // sprzed pauzy, a nie zawsze do 1×.
             Key::Named(NamedKey::Space) => {
@@ -414,15 +420,17 @@ impl App {
         // Nakładki ruchu mają własne źródło — zrzut symulacji, nie dane generatora.
         // Bez zaludnionego świata po prostu nie ma czego rysować i nakładka gaśnie;
         // to jest uczciwsze niż pokazanie pustej mapy, która wygląda jak brak korków.
+        // Dziewięć nakładek danych z §14.2 liczy `game::overlays` — pytają naraz
+        // o mieszkańców, rynek i zakłady, więc potrzebują sesji, a nie terenu.
+        let dane = self.pole_danych();
         let ruch = self.nakladka.pole_ruchu().and_then(|f| {
             let rozmiar = self.city.as_deref()?.plan.map_size_m().max(1) as u32;
             let s = self.game.session()?;
             self.citizens.as_ref()?.pole_ruchu(s, f, rozmiar)
         });
-        let pole = match ruch {
-            Some(p) => Some(p),
-            None => overlay::zbuduj(&terrain, self.city.as_deref(), self.nakladka),
-        };
+        let pole = dane
+            .or(ruch)
+            .or_else(|| overlay::zbuduj(&terrain, self.city.as_deref(), self.nakladka));
         let Some(renderer) = self.renderer.as_mut() else {
             return;
         };
@@ -439,6 +447,53 @@ impl App {
             None => renderer.set_overlay(None),
         }
         eprintln!("nakładka: {}", self.nakladka.nazwa());
+    }
+
+    /// Pole nakładki danych z §14.2 razem z legendą dla HUD-u.
+    ///
+    /// Zwraca `None`, gdy nakładka nie jest daną (teren, ruch), gdy świat jeszcze nie
+    /// stoi albo gdy nakładce brakuje przedmiotu — zasięg bez wybranego sklepu nie ma
+    /// czego pokazać i gaśnie, zamiast rysować pustą mapę.
+    fn pole_danych(&mut self) -> Option<overlay::Pole> {
+        if !self.nakladka.jest_danymi() {
+            self.ustaw_legende(None);
+            return None;
+        }
+        let site = self
+            .citizens
+            .as_ref()
+            .and_then(crate::citizens::Citizens::wybrany_zaklad);
+        let good = magnat_core::GoodId(0);
+        let field = self.nakladka.pole_danych(site, good);
+        let pole = field
+            .zip(self.game.session())
+            .and_then(|(f, s)| magnat_game::overlays::build(s, f));
+        match pole {
+            Some(p) => {
+                self.ustaw_legende(field.map(|f| crate::citizens::Legenda {
+                    key: f.key(),
+                    stops: p.legend.clone(),
+                    unit: p.unit.clone(),
+                    palette: p.palette,
+                }));
+                Some(overlay::Pole {
+                    dim: p.dim,
+                    cell_m: p.cell_m,
+                    values: p.values,
+                    palette: p.palette,
+                })
+            }
+            None => {
+                self.ustaw_legende(None);
+                None
+            }
+        }
+    }
+
+    fn ustaw_legende(&mut self, l: Option<crate::citizens::Legenda>) {
+        if let Some(c) = &mut self.citizens {
+            c.set_legend(l);
+        }
     }
 
     /// Ile metrów na płaszczyźnie celu odpowiada jednemu pikselowi ekranu.

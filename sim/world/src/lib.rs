@@ -53,7 +53,7 @@ pub use city::value::{land_value_at, AccessFields, LandValueBreakdown, LandValue
 // M6 (`SiteSeed.{archetype, recipes, capacity_scale}`, `ClosureReport`) i M7 (`FirmSeed`).
 pub use city::catalog::{Catalog, CatalogError, Good, GoodUnit, Recipe, RecipeSource};
 pub use city::inspect::{parcel_at, parcel_card};
-pub use city::overlay::{OverlaySpec, OverlayTable, OVERLAY_CELL_M};
+pub use city::overlay::{parcel_raster, OverlaySpec, OverlayTable, OVERLAY_CELL_M};
 pub use city::sites::{
     supply_closure_check, Archetype, ClosureReport, FirmSeed, SectorId, SiteArchetypeId,
     SiteCatalog, SiteReport, SiteSeed, SiteSet,

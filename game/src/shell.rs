@@ -38,6 +38,9 @@ pub enum ShellScreen {
         tab: SettingsTab,
     },
     Pause,
+    /// Wybór postaci: ostatni ekran przed grą (`M9c` WP4). Świat już stoi, więc
+    /// lista kandydatów jest w [`crate::screens::Shell`], tak samo jak lista slotów.
+    CharacterSelect,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -61,25 +64,10 @@ impl ScenarioId {
     pub const SANDBOX: ScenarioId = ScenarioId(0);
 }
 
-/// Wariant startu (PRD §13.1).
-///
-/// Wartość jedzie w kopercie `StartGame` od M9a, choć **skutek** (kapitał, praca,
-/// dom, spadek) dokłada dopiero WP4 w `M9c`. Powód jest formatowy, nie ozdobny:
-/// dopisanie pola do koperty po nagraniu pierwszych dzienników unieważniłoby je.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
-pub enum StartVariant {
-    /// Absolwent bez kapitału — pożyczka od rodziny.
-    Graduate,
-    /// Doświadczony pracownik z oszczędnościami.
-    #[default]
-    Worker,
-    /// Spadkobierca małej firmy.
-    Heir,
-    /// Inwestor z zewnątrz: kapitał, brak sieci znajomości.
-    Investor,
-    /// Piaskownica — dowolny kapitał.
-    Sandbox,
-}
+/// Wariant startu mieszka od `M9c` w [`crate::player`] razem z resztą postaci
+/// (`DC-3`). Stary adres zostaje, bo niesie go koperta `StartGame` od M9a, a format
+/// koperty ma być stabilny.
+pub use crate::player::StartVariant;
 
 /// Wejście do założenia nowej gry. Serializowalne — narzędzie bezgłowe bierze je
 /// z pliku RON, klient z kreatora, test z literału. Trzy drogi, jedna struktura.

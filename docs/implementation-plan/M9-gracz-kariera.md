@@ -166,7 +166,7 @@ odesłania w tekście („patrz §5.4") nadal wskazują tę samą sekcję — zm
 | `PlayerCommand`, `ViewCommand`, `CommandEnvelope`, `CommandError` | `game::command` | M10 (nowe komendy: marka, R&D, giełda), M12 (mody) |
 | `fn precheck(&Snapshot, &PlayerCommand) -> Result<(), CommandError>` | `game::command` | wszystkie panele, M10 |
 | `ReplayLog` (nagłówek, strumień autorytatywny, strumień widoku) + odtwarzacz | `game::session` | `engine/devtools` (§16.5), M12 (zgłoszenia błędów) |
-| `PlayerCharacter`, `PlayerAutonomy`, `CareerTier::derive`, `StartVariant` | `game::player` | M10 (progresja), M12 |
+| `PlayerCharacter`, `PlayerAutonomy`, `StartVariant`, `Candidate`, `candidates`, `take_role`, `pin_micro` | `game::player` | M10 (progresja), M12. `CareerTier::derive` dokłada `M9e` razem ze ścieżką kariery |
 | `ShellScreen`, `NewGameParams`, `WorldGenJob`, `WorldPreview`, `SaveSlot`, `Settings` | `game::session` | M11 (ustawienia grafiki i dźwięku), M12 (wersjonowanie slotów, modding ekranów) |
 | `Theme` + `data/ui/theme.ron` (tokeny z `docs/ui-design.md`) | `engine/ui` | M10, M11, **M12** (motyw jasny, wysoki kontrast, mody) |
 | **Projekt** języka: `Policy`, `Rule`, `ConditionExpr`, `Expr`, `Metric`, `Action`, `PolicyScope`, `PriceBasis` w wyrażeniach | `sim/policy` (**właściciel crate'a: M7**, K-11; autor języka: M9) | M7, M10, M12 |
@@ -175,9 +175,10 @@ odesłania w tekście („patrz §5.4") nadal wskazują tę samą sekcję — zm
 | `RuleEditor` + `Diagnostic` + dry-run „30 dni" + serializator tekstowy | `game::policy` | M10, M12 |
 | `Scenario`, `Objective`, `Goal`, format `data/scenarios/*.ron` | `game::scenario` | M10 (cele marki/R&D), M12 |
 | `ChronicleEntry`, `ChronicleKind`, `chronicle::record()`, `chronicle::query()` | `game::chronicle` | **wszystkie fazy** — każdy system zgłasza swoje zdarzenia |
-| `InspectionCard`, `render_reason(&DecisionReason, &Locale)` | `game::inspect` | wszystkie fazy (każda dodaje ramię) |
+| `InspectionCard`, `CardTab`, `CardTabKind`, `InspectionNav`, widget `inspection_card` | kształt i widget w `engine/ui`, **treść w `game::inspect`** (`DG-2`) | wszystkie fazy (każda dodaje ramię w `card`) |
+| `render_reason` = `magnat_ui::describe(&Catalog, Locale, DecisionReason)` | `engine/ui::inspect::reason` | wszystkie fazy (każda dodaje ramię) |
 | `PanelRegistry`, `PanelDesc`, `PanelId` | `game::panels` | **M10** (Brand/Rnd/Stock), M12 (panele z modów) |
-| `OverlaySpec`, `OverlayField`, `EntityFilter` | `game::overlays` | M1/M2 (`engine/render` konsumuje spec), M10 |
+| `OverlayField`, `OverlayField2d`, `EntityFilter`, `overlays::build` | `game::overlays` (nazwa `OverlaySpec` należy od M2 do palety w `sim/world`, `K-19`) | M1/M2 (`engine/render` konsumuje pole), M10 |
 | `Theme` + `ColorToken`/`TextRole`, `Span`/`Rich` + `RichExt`, `TabStrip`, `Cached`/`DataSource`/`Versions`, `Table<T>` + `RowSource`/`Filter`, `Series` + `MipLevel`, `HeatmapThumb`, `CalendarFmt`, `fmt::{integer, decimal, money}`, `testing::draw*` | `engine/ui` | M10, M11, M12 |
 | `LayoutNode`, `Layout` (dokowanie), `GraphView`, `GanttView` | `engine/ui` — **powstają w `M9e`** razem z pierwszym panelem, który ich żąda (`W-2`) | M10, M11, M12 |
 | `Subject`, `SubjectKind` | `engine/core` (`K-62`) — jedenaście wariantów od `M9b`, pięć dokłada `M9c` | wszystkie fazy dopisujące byt z kartą |
@@ -356,8 +357,8 @@ blok `StreamId` 260–279 (**K-4**), kalendarz 360 dni = 12 × 30 (**K-1**).
 
 | # | Decyzja | Kontekst | Propozycja M9 | Z kim | Status |
 |---|---|---|---|---|---|
-| 1 | **Kto zapisuje `LostSale`** i jakim kosztem | Bez tego nie ma odpowiedzi „dlaczego Anna nie kupiła" — sedno §14.1 | `sim/economy` zapisuje, ale wyłącznie dla zakładów z flagą `observed_by_player`: histogram dobowy zawsze, bufor 256 wpisów dla oznaczonych. Flagę ustawia `game/` przy zmianie własności | **M5** | przekazane właścicielowi (M5) |
-| 2 | **`LodPin`** — czy M3/M4 gwarantują Mikro dla wskazanych encji przy 10× i 50× | Postać gracza i tryb „śledź" nie mają sensu w mezo | ≤ 8 przypiętych encji; przy `X50` przypięcie kosztuje i jest komunikowane | **M3, M4** | przekazane właścicielowi (M3/M4) |
+| 1 | **Kto zapisuje `LostSale`** i jakim kosztem | Bez tego nie ma odpowiedzi „dlaczego Anna nie kupiła" — sedno §14.1 | `sim/economy` zapisuje, ale wyłącznie dla zakładów z flagą `observed_by_player`: histogram dobowy zawsze, bufor 256 wpisów dla oznaczonych. Flagę ustawia `game/` przy zmianie własności | **M5** | **zamknięte w M5e i wykonane w M9c**: `LostSaleTracking::Full`, pierścień 256 z `went_to`, flagę ustawia `game/` przy wyborze postaci i przy otwarciu karty zakładu |
+| 2 | **`LodPin`** — czy M3/M4 gwarantują Mikro dla wskazanych encji przy 10× i 50× | Postać gracza i tryb „śledź" nie mają sensu w mezo | ≤ 8 przypiętych encji; przy `X50` przypięcie kosztuje i jest komunikowane | **M3, M4** | **wykonane w M9c wg propozycji domyślnej** (`DG-8`): `MicroLayer::set_pinned`, `MAX_PINNED = 8`, bramka w `enter`. Ani M3, ani M4 tego nie zrobiły |
 | 3 | **Głębokość `BatchProvenance`** | §14.4: „od pola do półki, z czasem i kosztem na każdym etapie". Pełny łańcuch dla milionów partii jest drogi | Pełny łańcuch tylko dla partii dotkniętych przez zakłady gracza; dla reszty ostatnie 3 etapy. Jeśli M6 nie da rady — panel degraduje się do „ostatnie 3 etapy" i trzeba to przyznać w PRD | **M6** | przekazane właścicielowi (M6) |
 | 4 | **Czy w kalendarzu 12 × 30 istnieje tydzień 7-dniowy** | K-1 daje 360 dni = 12 × 30, ale 30 nie dzieli się przez 7. Dotyczy `Metric::DayOfWeek`, `WeekSchedule` w `SetOpeningHours`/`SetOwnShift` i rytmu „weekendowego" popytu | Albo tydzień 7-dniowy dryfujący względem miesiąca (realizm, ale brzydka arytmetyka osi), albo dekada 10-dniowa z „wolnym" co 10. dzień. **Rekomendacja: tydzień 7-dniowy dryfujący** — rytm tygodniowy jest mocno widoczny w handlu detalicznym i szkoda go stracić; piramida mip wykresów i tak używa dekad, więc nic nie traci. Typ `DayOfWeek` musi pochodzić z kalendarza w `engine/core`, nie z `game/` | **M0**, M3, M8 | otwarte |
 | 5 | **Odwzorowanie umiejętności menedżera na jakość wykonania** | Kto jest właścicielem krzywej `from_skill` | M7 jest właścicielem umiejętności, M9 odwzorowania. Krzywa w `data/` (moddowalna), nie w kodzie | M7 | otwarte |
@@ -366,7 +367,7 @@ blok `StreamId` 260–279 (**K-4**), kalendarz 360 dni = 12 × 30 (**K-1**).
 | 8 | **Podatek spadkowy i prawo spadkowe** przy sukcesji | §13.4 wymaga przejścia majątku; stawka to prawo miejskie | M8 dostarcza stawkę i tryb; M9 wykonuje transfer i sprawdza własność pieniądza | **M8** | otwarte |
 | 9 | **`WorldPatch` dla scenariuszy** („Uratuj upadającą hutę") | Scenariusz musi deterministycznie zmodyfikować wygenerowany świat, nie łamiąc kontraktu hasha | Łatki stosowane jako komendy w ticku 0, po generacji, przed pierwszym systemem — wtedy hash pozostaje funkcją `(seed, lista łatek)` | **M1, M2** | otwarte |
 | 10 | **Czy `actor: PlayerId` zostaje w kopercie komendy** | §18.2 wskazuje lockstep jako możliwość; koszt 2 bajty na komendę | Zostaje. Dwa bajty teraz są tańsze niż migracja formatu replayu później | — | otwarte |
-| 11 | **Rezerwacje dla M10** | `OverlayField::BrandAwareness`, `Goal::ProductLaunched`, `LostToCompetitor { dominant: Brand }`, `PanelId::{Brand, Rnd, Stock}` | Warianty istnieją od M9 jako nieaktywne, M10 je zasila bez zmiany typów | **M10** | otwarte |
+| 11 | **Rezerwacje dla M10** | `OverlayField::BrandAwareness`, `Goal::ProductLaunched`, `PanelId::{Brand, Rnd, Stock}` | Warianty istnieją od M9 jako nieaktywne, M10 je zasila bez zmiany typów | **M10** | **częściowo wykonane w M9c**: `OverlayField::BrandAwareness` istnieje i **nie ma wpisu w `data/ui/overlays.ron`** — `build` zwraca `None`, a nie raster zer. `LostToCompetitor { dominant: Brand }` skreślone razem z całą rodziną (`DG-1`); marka wejdzie jako składnik `UtilityKind`, który już jest |
 | 12 | **Kto jest właścicielem `Series`/`MetricsRecorder`** | Balansator (M5) też chce historii metryk | `game/` zapisuje serie dla gracza; `tools/balansator` ma własny zapis headless. Wspólny jest tylko typ `Series` w `engine/ui` | M5, M12 | otwarte |
 
 ---
@@ -466,3 +467,18 @@ Zgodnie z `K-18`. Szczegóły i uzasadnienia — tabela `DE-n` w `M9b-rdzen-ui.m
 | W-4 ★ | **`Subject` mieszka w `engine/core` od M9b** (`K-62`), z jedenastoma wariantami. `Batch`, `Offer`, `Tender`, `Case` i `Permit` dokłada `M9c` razem z decyzją, gdzie mieszkają ich identyfikatory | `Span.link` jest `Option<Subject>`, więc typ musiał powstać w tej podfazie; pozostałe pięć wymaga przeniesienia `TenderId`/`CaseId`/`PermitId` z `sim/city` albo uchwytu areny, a to jest decyzja karty inspekcji (`DE-9`) |
 | W-5 | **Polski ma cztery formy liczebnika** (`one` / `few` / `many` / `other`). Klucz liczebnikowy niesie cztery formy po stronie PL i dwie po stronie EN; `Catalog::plural_frac` obsługuje ułamki | §7 wymienia „1,5 sklepu" wprost, a kod M3 miał trzy formy. Kluczy liczebnikowych jest osiem, więc koszt był żaden (`DE-8`) |
 | W-6 | **Zapis gry jest dostępny z menu pauzy**, a majątek w wierszu slotu to zero do czasu WP4 | Bez zapisu ekran „Wczytaj" byłby listą, do której nic nie trafia — czyli ekranem, którego skutku nikt nie widzi (`R2`, `K-67`). Zero z komentarzem jest uczciwsze niż liczba udająca majątek gracza (`DE-12`) |
+
+
+## Zmiany wpisane po M9c
+
+Zgodnie z `K-18`. Szczegóły i uzasadnienia — tabela `DG-n` w `M9c-gracz-inspekcja-nakladki.md`.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| V-1 ★ | **Blok `DecisionReason` 700–799 zostaje wolny w całości.** Rodzina powodów „dlaczego Anna nie kupiła" (`NotInChoiceSet`, `LostToCompetitor`, `AccessBarrier`, `SubstituteChosen`, `SoftmaxDraw`) **nie powstaje**; odpowiedź składa `LostSale` z M5e (`RejectCause` + `went_to`) | Osiem wariantów `RejectCause` pokrywa każdy wiersz tamtej tabeli, który ma dziś skutek w symulacji. Warianty dla mechanik, których nie ma (kolejka do kasy, brak parkingu przy sklepie, zamknięcie), byłyby powodami, których nikt nie zapisze — `K-67` (`DG-1`) |
+| V-2 ★ | **`Subject` ma szesnaście wariantów, a `TenderId`/`CaseId`/`PermitId` mieszkają w `engine/core`** (`K-69`). Partia i oferta jadą jako `ArenaRef` — uchwyt areny z zatartym typem | Wykonanie `K-62` i domknięcie `DE-9`. `core` nie może zależeć od `sim/city` ani znać `Batch`/`Offer` |
+| V-3 ★ | **Karta inspekcji jest jedna dla wszystkich podmiotów**, a karta sklepu przestaje być osobnym oknem. Dok prawy ma jedną kartę i historię (`ui-design.md` §5), a nie stos okien | Odnośnik z karty mieszkanki do sklepu otwierałby inaczej trzecie okno (`DG-14`) |
+| V-4 ★ | **`EntityFilter` i predykat wyboru postaci nie są `ConditionExpr`.** Filtr ma dwa warianty (`MyCustomers`, `MyEmployees`); „cysterny z paliwem" nie powstaje, bo klient rysuje pieszych, a nie pojazdy | Metryki języka reguł opisują firmę, nie mieszkańca — drzewo składniowe bez nich byłoby pustą ramą (`DG-4`, `DG-5`). Konsekwencja dla `M9d`: gramatyka nie musi obsłużyć ani filtra encji, ani predykatu kandydata |
+| V-5 | **`PlayerCommand` ma cztery warianty**: `StartGame`, `SetPrice`, `SetCharacter`, `SetAutonomy`. Dwa ostatnie wykonuje `Session`, a nie `command::apply` — zmieniają świat **i** sesję naraz | `apply` dostaje widok, nie `&mut World`, i tak ma zostać (`DG-6`). `CommandView` rośnie o `world` i `has_character`, bo panel musi znać powód **przed** kliknięciem |
+| V-6 | **`GameState` ma pięć wariantów**: doszedł `CharacterSelect(Box<Session>)`. Świat stoi i nie tyka, dopóki gracz nie wybierze postaci | Kandydaci powstają z postawionego świata, bo predykat pyta o wiek, pracę i oszczędności |
+| V-7 | **Dziewięć nakładek z §14.2 liczy `game::overlays::build`**, a raster po działkach jest jeden (`magnat_world::parcel_raster`). Klient przełącza je klawiszem `F3` w tej samej pętli co nakładki terenu i rysuje legendę z `data/ui/overlays.ron` | Sześć z dziewięciu różni się wyłącznie stemplowaną liczbą (`DG-9`) |

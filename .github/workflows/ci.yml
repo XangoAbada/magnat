@@ -212,7 +212,12 @@ jobs:
           RON
           cargo run --release -q -p magnat-headless -- new-game --from m9params.ron --days 2               --hash-every 720 --price 250 --threads 1 --record m9.log.ron --out m9.hashes
           cargo run --release -q -p magnat-headless -- new-game --replay m9.log.ron --days 2               --hash-every 720 --threads 8 --expect m9.hashes
-      - name: M9a — sesja, sloty i anulowanie generacji
+      - name: M9a/M9c — sesja i sloty, postać gracza, karta inspekcji, nakładki
+        # Cztery kryteria M9c naraz (`game/tests/inspect.rs`): pięć wariantów startu
+        # daje różne listy kandydatów i kapitał wchodzi do gospodarstwa (WP4); z karty
+        # mieszkanki da się dojść do domu, gospodarstwa i pracodawcy i wrócić (WP5);
+        # zakładka „Dlaczego" nazywa konkurenta i robi z niego odnośnik w obu językach
+        # (WP5); dziewięć nakładek z §14.2 buduje pole, a rezerwacja M10 milczy (WP7).
         run: cargo test --release -p magnat-game -- --include-ignored
       - name: M9b — rdzeń UI i ekrany powłoki rysują się bez karty graficznej
         # Trzy kryteria naraz: brak zmian danych → zero alokacji (WP3), liczebniki

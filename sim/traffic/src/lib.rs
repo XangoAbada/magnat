@@ -42,7 +42,7 @@ pub use mezo::{
 pub use micro::{
     equilibrium_speed_cms, idm_speed_dkmh, IdmParams, MicroLayer, MicroVehicle, Pedestrian,
     PedestrianBuffer, VehicleBuffer, VehicleFeed, CALIBRATION_VEHICLE_CM, IDM_SCHEMA_VERSION,
-    MICRO_UNIT_CAP, NO_EDGE,
+    MAX_PINNED, MICRO_UNIT_CAP, NO_EDGE,
 };
 pub use mode::{
     evaluate_modes, Candidate, DiscomfortBreakdown, GeneralizedCost, Infeasible, ModeChoiceParams,

@@ -338,6 +338,71 @@ pub fn shop_card(
     a.or(b)
 }
 
+/// Legenda nakładki danych (M9c §5.10, `ui-design.md` §4).
+///
+/// Nazwa pola, skala z liczbami i jednostka — bez tego mapa cieplna jest obrazkiem,
+/// a nie przyrządem: gracz widzi, że gdzieś jest „czerwono", i nie wie, czy to dużo.
+/// Barwy przychodzą **z palety nakładki** (`data/ui/overlays.ron`, `K-19`), więc
+/// legenda i mapa nie mogą pokazywać dwóch różnych skal.
+pub fn overlay_legend(
+    ui: &mut egui::Ui,
+    theme: &Theme,
+    name: &str,
+    unit: &str,
+    stops: &[(u8, i64)],
+    palette: &[[u8; 4]; 256],
+) {
+    ui.label(
+        egui::RichText::new(name)
+            .font(theme.font(crate::TextRole::Title))
+            .color(theme.color(crate::ColorToken::TextPrimary)),
+    );
+    for (idx, wartosc) in stops.iter().rev() {
+        ui.horizontal(|ui| {
+            let c = palette[*idx as usize];
+            let (rect, _) = ui
+                .allocate_exact_size(egui::vec2(theme.gap(4), theme.gap(3)), egui::Sense::hover());
+            ui.painter().rect_filled(
+                rect,
+                1.0,
+                egui::Color32::from_rgba_unmultiplied(c[0], c[1], c[2], 255),
+            );
+            ui.label(
+                egui::RichText::new(format!("{wartosc} {unit}"))
+                    .font(theme.font(crate::TextRole::Micro))
+                    .color(theme.color(crate::ColorToken::TextSecondary)),
+            );
+        });
+    }
+}
+
+/// Karta inspekcji: nagłówek z tożsamością nad rzędem zakładek (M9c §5.7).
+///
+/// `tab` jest **indeksem w `card.tabs`**, a nie rodzajem zakładki, i trzyma go
+/// wołający — karta tego samego rodzaju podmiotu ma zachować wybór, a karta innego
+/// rodzaju wrócić na pierwszą (`docs/ui-design.md` §4). Zwraca podmiot, w którego
+/// odnośnik gracz kliknął: to jest jedyna droga, którą klik w nazwę zmienia kartę.
+pub fn inspection_card(
+    ui: &mut egui::Ui,
+    theme: &Theme,
+    card: &crate::InspectionCard,
+    tab: &mut usize,
+    c: &Catalog,
+    l: Locale,
+) -> Option<Subject> {
+    let naglowek = rich(ui, theme, &card.header);
+    if card.tabs.is_empty() {
+        return naglowek;
+    }
+    *tab = (*tab).min(card.tabs.len() - 1);
+    ui.separator();
+    let rodzaje: Vec<usize> = (0..card.tabs.len()).collect();
+    crate::tab_strip(ui, theme, &rodzaje, tab, |i| card.tabs[i].kind.title(c, l));
+    ui.separator();
+    let tresc = rich(ui, theme, &card.tabs[*tab].body);
+    naglowek.or(tresc)
+}
+
 /// Panel łańcucha dostaw: rząd zakładek, nagłówek, treść wybranej zakładki (WP13).
 ///
 /// Ten sam kształt co [`shop_card`] i z tego samego powodu: treść idzie z karty,

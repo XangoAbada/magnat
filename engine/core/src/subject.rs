@@ -14,20 +14,23 @@
 //! mieszkał w interfejsie, każda faza dopisująca wariant powodu musiałaby zależeć
 //! od `engine/ui` — czyli dokładnie ta zależność, którą `K-8` wypycha do `core`.
 //!
-//! # Czego tu nie ma
+//! # Gdzie mieszkają identyfikatory pięciu ostatnich wariantów (`M9c`, `K-69`)
 //!
-//! `Batch`, `Offer`, `Tender`, `Case` i `Permit` (`DE-9`). Pierwsze dwa to uchwyty aren
-//! (`K-16`) parametryzowane typem, którego `core` nie zna; pozostałe trzy siedzą
-//! w `sim/city`. Dokłada je `M9c` razem z decyzją, gdzie ich identyfikatory mają mieszkać.
+//! `TenderId`, `CaseId` i `PermitId` **przeprowadziły się tutaj** z `sim/city` — to ten
+//! sam ruch co przy `RoadClass` (`K-23`) i `DepositId` (`K-39`), i z tego samego powodu:
+//! `core` nie może zależeć od `sim/city`, a duplikat rozjechałby się przy pierwszej
+//! zmianie. `Batch` i `Offer` są arenami (`K-16`), więc jadą jako [`crate::ArenaRef`] —
+//! uchwyt z zatartym parametrem typu, bo `core` nie zna ani partii, ani oferty.
 //!
 //! **To nie jest uniwersalny `EntityRef`.** `Subject` adresuje to, co ma **kartę**,
 //! a nie każdą encję ECS: usługa publiczna jedzie jako [`Subject::Site`], bo
 //! `PublicService.site` jest `SiteId`, a wybory są zakładką karty rady.
 
+use crate::arena::ArenaRef;
 use crate::ids::{
     BuildingId, CitizenId, ContractId, FirmId, HouseholdId, ParcelId, SiteId, VehicleId,
 };
-use crate::types::{DistrictId, EventId};
+use crate::types::{CaseId, DistrictId, EventId, PermitId, TenderId};
 
 /// Podmiot, który ma własną kartę inspekcji.
 ///
@@ -49,6 +52,14 @@ pub enum Subject {
     Event(EventId),
     /// Rada miasta. Jedna na świat, więc bez identyfikatora.
     Government,
+    /// Partia towaru (`sim/supply`, arena `K-16`).
+    Batch(ArenaRef),
+    /// Oferta na półce albo w hurcie (`sim/economy`, arena `K-16`).
+    Offer(ArenaRef),
+    Tender(TenderId),
+    /// Sprawa urzędowa (M8d).
+    Case(CaseId),
+    Permit(PermitId),
 }
 
 /// Rodzaj podmiotu bez ładunku — do wyboru układu zakładek i ikony.
@@ -68,6 +79,11 @@ pub enum SubjectKind {
     District,
     Event,
     Government,
+    Batch,
+    Offer,
+    Tender,
+    Case,
+    Permit,
 }
 
 impl SubjectKind {
@@ -86,10 +102,15 @@ impl SubjectKind {
             SubjectKind::District => "district",
             SubjectKind::Event => "event",
             SubjectKind::Government => "government",
+            SubjectKind::Batch => "batch",
+            SubjectKind::Offer => "offer",
+            SubjectKind::Tender => "tender",
+            SubjectKind::Case => "case",
+            SubjectKind::Permit => "permit",
         }
     }
 
-    pub const ALL: [SubjectKind; 11] = [
+    pub const ALL: [SubjectKind; 16] = [
         SubjectKind::Citizen,
         SubjectKind::Household,
         SubjectKind::Firm,
@@ -101,6 +122,11 @@ impl SubjectKind {
         SubjectKind::District,
         SubjectKind::Event,
         SubjectKind::Government,
+        SubjectKind::Batch,
+        SubjectKind::Offer,
+        SubjectKind::Tender,
+        SubjectKind::Case,
+        SubjectKind::Permit,
     ];
 }
 
@@ -119,6 +145,11 @@ impl Subject {
             Subject::District(_) => SubjectKind::District,
             Subject::Event(_) => SubjectKind::Event,
             Subject::Government => SubjectKind::Government,
+            Subject::Batch(_) => SubjectKind::Batch,
+            Subject::Offer(_) => SubjectKind::Offer,
+            Subject::Tender(_) => SubjectKind::Tender,
+            Subject::Case(_) => SubjectKind::Case,
+            Subject::Permit(_) => SubjectKind::Permit,
         }
     }
 
@@ -135,7 +166,14 @@ impl Subject {
             Subject::Parcel(x) => Some(x.0),
             Subject::Vehicle(x) => Some(x.0),
             Subject::Contract(x) => Some(x.0),
-            Subject::District(_) | Subject::Event(_) | Subject::Government => None,
+            Subject::District(_)
+            | Subject::Event(_)
+            | Subject::Government
+            | Subject::Batch(_)
+            | Subject::Offer(_)
+            | Subject::Tender(_)
+            | Subject::Case(_)
+            | Subject::Permit(_) => None,
         }
     }
 }
@@ -163,6 +201,15 @@ mod tests {
             Subject::District(DistrictId(9)),
             Subject::Event(EventId(10)),
             Subject::Government,
+            Subject::Batch(ArenaRef::of(
+                crate::ArenaHandle::<()>::from_bits((1 << 32) | 11).expect("uchwyt"),
+            )),
+            Subject::Offer(ArenaRef::of(
+                crate::ArenaHandle::<()>::from_bits((1 << 32) | 12).expect("uchwyt"),
+            )),
+            Subject::Tender(TenderId(13)),
+            Subject::Case(CaseId(14)),
+            Subject::Permit(PermitId(15)),
         ];
         // Pokrycie: każdy rodzaj ma swój wariant i odwrotnie. Wariant dopisany bez
         // rodzaju złamie `kind()`, rodzaj dopisany bez wariantu — ten test.

@@ -260,11 +260,35 @@ pub struct ShopCustomers {
     day: u32,
     /// Łączna liczba zakupów od włączenia śledzenia.
     pub total: u32,
+    /// Ostatni kupujący — pierścień [`RECENT_BUYERS`] wpisów, prowadzony wyłącznie
+    /// przez zakłady śledzone, tak samo jak pierścień utraconych sprzedaży.
+    ///
+    /// Po co osobno od `by_district`: filtr „pokaż tylko klientów mojego sklepu"
+    /// (PRD §14.2) pyta o **osobę**, a rozkład po dzielnicach odpowiada o zbiorze.
+    /// Koszt przy graczu z 200 sklepami to 200 × 256 × 4 B ≈ 200 kB.
+    buyers: Vec<magnat_core::CitizenId>,
+    buyers_head: usize,
 }
 
+/// Ilu ostatnich kupujących pamięta zakład śledzony.
+pub const RECENT_BUYERS: usize = 256;
+
 impl ShopCustomers {
+    /// Czy ten mieszkaniec jest wśród ostatnich kupujących.
+    #[must_use]
+    pub fn bought(&self, citizen: magnat_core::CitizenId) -> bool {
+        self.buyers.contains(&citizen)
+    }
+
     /// Zapis jednego zakupu. Wołane tylko dla zakładów śledzonych.
-    pub fn record(&mut self, day: u32, district: u16, class: SocialClass, driver: UtilityKind) {
+    pub fn record(
+        &mut self,
+        day: u32,
+        district: u16,
+        class: SocialClass,
+        driver: UtilityKind,
+        buyer: magnat_core::CitizenId,
+    ) {
         if self.day != day {
             // Doby pominięte (sklep bez klientów) też muszą się wyzerować, inaczej
             // tydzień temu zostałby w oknie jako „dzisiaj".
@@ -279,6 +303,12 @@ impl ShopCustomers {
         self.by_driver[driver.as_index()] += 1;
         self.daily[(day % 7) as usize] += 1;
         self.total += 1;
+        if self.buyers.len() < RECENT_BUYERS {
+            self.buyers.push(buyer);
+        } else {
+            self.buyers[self.buyers_head] = buyer;
+            self.buyers_head = (self.buyers_head + 1) % RECENT_BUYERS;
+        }
     }
 }
 

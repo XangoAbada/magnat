@@ -5,6 +5,7 @@
 //! ozdobą — dzięki niemu złoty test wydruku i testy karty biegną w CI bez GPU, a M11
 //! może zmienić styl bez dotykania treści.
 
+pub mod card;
 pub mod citizen;
 pub mod firm;
 pub mod reason;
@@ -38,7 +39,7 @@ impl UiContext {
         Ok(UiContext {
             catalog: Catalog::load()?,
             locale,
-            selection: Selection::None,
+            selection: None,
             time: TimeControlsWidget::new(start),
         })
     }

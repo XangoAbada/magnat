@@ -7,7 +7,7 @@
 //! Granica przebiega tam, gdzie zwykle: rzeczy, które dzieją się co klatkę, zostają
 //! w `app`; rzeczy, które dzieją się przy zmianie stanu gry, są tutaj.
 //!
-//! `ponytail:` blok `impl` ma ~370 linii i zostaje jednym blokiem. Sufit nazwany:
+//! `ponytail:` blok `impl` ma ~420 linii i zostaje jednym blokiem. Sufit nazwany:
 //! to jest jeden temat — przejścia między stanami gry — i każda z tych metod jest
 //! wołana z `wykonaj`. Podział po rzeczach („generacja", „zapisy") dałby dwa pliki
 //! po sto linii i trzeci z dyspozytorem, który i tak musi znać oba.
@@ -99,9 +99,17 @@ impl App {
                         c.warm_up(&mut session, self.godzina_startu, self.camera.eye());
                         c.set_speed(self.predkosc);
                         self.citizens = Some(c);
-                        self.game = GameState::Playing(Box::new(session));
                         self.shell.has_session = true;
                         self.pauza_menu = false;
+                        // Ostatni ekran przed grą: kim chcesz być (WP4). Kandydaci
+                        // powstają z **postawionego** świata, więc dopiero tutaj.
+                        self.shell.candidates = magnat_game::player::candidates(
+                            &session.app.world,
+                            self.shell.draft.variant,
+                            session.tick().get() / 1440,
+                        );
+                        self.shell.go(ShellScreen::CharacterSelect);
+                        self.game = GameState::CharacterSelect(Box::new(session));
                     }
                     Err(e) => eprintln!("interfejs rozgrywki nieudany: {e}"),
                 }
@@ -251,7 +259,39 @@ impl App {
             }
             ShellAction::SaveSlot(id) => self.zapisz(id),
             ShellAction::LoadSlot(id) => self.wczytaj(id),
+            ShellAction::PickCitizen(c) => self.wybierz_postac(Some(c)),
+            ShellAction::PickRandomCitizen => self.wybierz_postac(None),
         }
+    }
+
+    /// Wybór postaci: komenda do dziennika, a potem świat rusza.
+    ///
+    /// `None` znaczy „wylosuj" — losowanie jest funkcją ziarna świata, nie zegara,
+    /// więc replay odtworzy je z tej samej koperty. Świat bez kandydata wchodzi do gry
+    /// **bez postaci**: to jest stan, w którym gracz ogląda miasto, a nie błąd.
+    pub(crate) fn wybierz_postac(&mut self, kto: Option<magnat_core::CitizenId>) {
+        let GameState::CharacterSelect(mut session) =
+            std::mem::replace(&mut self.game, GameState::Shell(ShellScreen::MainMenu))
+        else {
+            return;
+        };
+        let wybor = kto
+            .or_else(|| magnat_game::player::pick_random(&self.shell.candidates, self.params.seed));
+        if let Some(c) = wybor {
+            if let Err(e) = session.submit(magnat_game::PlayerCommand::SetCharacter { citizen: c })
+            {
+                eprintln!("wybór postaci odrzucony: {e}");
+            }
+            // Komenda stosuje się na najbliższym ticku, więc jeden krok — inaczej
+            // gracz stałby na ekranie, którego skutku nie widać.
+            session.step(1, 0);
+            if let Some(cz) = &mut self.citizens {
+                cz.idz_do(magnat_core::Subject::Citizen(c));
+            }
+        }
+        self.shell.candidates = Vec::new();
+        self.game = GameState::Playing(session);
+        self.pauza_menu = false;
     }
 
     pub(crate) fn do_kreatora(&mut self) {
@@ -276,20 +316,31 @@ impl App {
 
     /// Zapis slotu: nagłówek plus dziennik wejść (`DA-7`).
     ///
-    /// `ponytail:` majątek gracza jest zerem, bo **postaci gracza jeszcze nie ma** —
-    /// wnosi ją WP4 w `M9c`. Sufit nazwany: dopóki `PlayerCharacter` nie istnieje,
-    /// liczba w tym polu byłaby wzięta z sufitu, a wiersz slotu udawałby, że wie.
+    /// Majątek w wierszu slotu to majątek gospodarstwa gracza (`M9c` WP4); świat bez
+    /// wybranej postaci zapisuje zero i to jest prawda, a nie zaślepka.
     /// Nazwa „miasta" to nazwa pierwszej dzielnicy — własnej nazwy miasto nie ma.
     pub(crate) fn zapisz(&mut self, id: u8) {
         let Some(session) = self.game.session() else {
             return;
         };
         let miasto = nazwa_miasta(session, self.params.seed);
+        // Majątek gracza to majątek jego gospodarstwa — jedna liczba, ta sama, którą
+        // pokazuje karta. Bez postaci zostaje zero i to jest prawda, a nie zaślepka.
+        let majatek = session
+            .player()
+            .and_then(|p| {
+                session
+                    .app
+                    .world
+                    .get::<magnat_agents::Household>(p.household.entity())
+                    .map(magnat_game::inspect::household_worth)
+            })
+            .unwrap_or(magnat_core::Money::ZERO);
         let slot = magnat_game::SaveSlot {
             id,
             city: miasto,
             game_date: SimMinute(session.tick().get()),
-            net_worth: magnat_core::Money::ZERO,
+            net_worth: majatek,
             played_secs: u32::try_from(session.played_ms() / 1000).unwrap_or(u32::MAX),
             world: self.params,
             schema_version: magnat_game::SAVE_SCHEMA_VERSION,

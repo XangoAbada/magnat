@@ -256,26 +256,28 @@ impl CitizenModel {
     }
 }
 
-impl CitizenPanel {
-    /// Zbiera wszystko, co karta pokazuje. `None` = nie ma kogo pokazać: brak zaznaczenia,
+impl CitizenModel {
+    /// Zbiera wszystko, co karta mieszkańca pokazuje. `None` = nie ma kogo pokazać:
     /// encja znikła (zgon, wyprowadzka) albo świat nie ma jeszcze wpiętych źródeł.
+    ///
+    /// Osobno od [`CitizenPanel::model`], bo kartę składa od `M9c` także `game::inspect`,
+    /// a ono nie ma `UiContext` — ma podmiot, o który gracz kliknął.
     #[must_use]
-    pub fn model(&self, ui: &crate::UiContext, world: &magnat_ecs::World) -> Option<CitizenModel> {
-        let (c, l) = (&ui.catalog, ui.locale);
-        let citizen = ui.selection.citizen()?;
-        let snap = CitizenSnapshot::of(world, citizen.entity(), self.day)?;
+    pub fn of(
+        c: &Catalog,
+        l: Locale,
+        world: &magnat_ecs::World,
+        citizen: magnat_core::CitizenId,
+        day: u64,
+        seed: u64,
+    ) -> Option<CitizenModel> {
+        let snap = CitizenSnapshot::of(world, citizen.entity(), day)?;
         let z = world.resource::<magnat_agents::AgentSources>().get()?;
         let table = world.resource::<NeedTable>();
 
         let mut canvas = magnat_agents::DayCanvas::new();
         let mut log = magnat_agents::ReasonLog::new();
-        let ctx = snap.ctx(
-            self.seed,
-            self.day,
-            table,
-            z.places.as_ref(),
-            z.travel.as_ref(),
-        );
+        let ctx = snap.ctx(seed, day, table, z.places.as_ref(), z.travel.as_ref());
         magnat_agents::plan_day_explained(&ctx, &mut canvas, &mut log);
 
         let actual = crate::actual_from_trace(
@@ -288,7 +290,7 @@ impl CitizenPanel {
         // plan i nie ma prawa udawać dzisiejszego.
         let stored = world
             .get::<magnat_agents::PlanRef>(citizen.entity())
-            .filter(|p| p.plan_day == (self.day % 65_536) as u16)
+            .filter(|p| p.plan_day == (day % 65_536) as u16)
             .map(|p| {
                 magnat_agents::load_plan(p, world.resource::<magnat_agents::PlanSlab>()).to_vec()
             })
@@ -298,7 +300,7 @@ impl CitizenPanel {
             l,
             &snap,
             table,
-            naglowek(c, l, &snap, self.day),
+            naglowek(c, l, &snap, day),
             world.get::<magnat_agents::Household>(snap.household),
             None,
         );
@@ -309,6 +311,15 @@ impl CitizenPanel {
             actual,
             stored,
         })
+    }
+}
+
+impl CitizenPanel {
+    /// Karta zaznaczonego mieszkańca. `None` = nikt nie jest zaznaczony.
+    #[must_use]
+    pub fn model(&self, ui: &crate::UiContext, world: &magnat_ecs::World) -> Option<CitizenModel> {
+        let citizen = crate::selected_citizen(ui.selection)?;
+        CitizenModel::of(&ui.catalog, ui.locale, world, citizen, self.day, self.seed)
     }
 }
 

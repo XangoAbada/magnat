@@ -26,8 +26,8 @@
 //! pieniądzem miasta spoza jego księgi.
 
 use magnat_core::{
-    AgencyKind, DecisionReason, FirmId, HashState, Mass, Money, RemedyKind, SiteId, StateHasher,
-    TaxKind, Tick, AGENCY_KIND_COUNT, Q,
+    AgencyKind, CaseId, DecisionReason, FirmId, HashState, Mass, Money, RemedyKind, SiteId,
+    StateHasher, TaxKind, Tick, AGENCY_KIND_COUNT, Q,
 };
 use magnat_economy::Market;
 use magnat_firms::Firms;
@@ -35,9 +35,6 @@ use magnat_firms::Firms;
 use crate::charge::TaxPayer;
 use crate::city::{due_on_day, City};
 use crate::tuning::CityTuning;
-
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
-pub struct CaseId(pub u32);
 
 /// Środek zaradczy. Wariant z ładunkiem; słownik bez ładunku to `RemedyKind`
 /// w `engine/core` (histogram kar ma liczyć kary, nie pary).

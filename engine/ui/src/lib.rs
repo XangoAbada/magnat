@@ -50,6 +50,7 @@ pub use cache::{Cached, DataSource, Versions};
 pub use chart::{chart, MipLevel, Sample, Series, SeriesKey};
 pub use fmt::CalendarFmt;
 pub use heatmap::HeatmapThumb;
+pub use inspect::card::{gone_span, CardTab, CardTabKind, InspectionCard, MAX_CARD_TABS};
 pub use inspect::citizen::{zlotowki, CitizenCard, CitizenModel, CitizenPanel, NeedRow, StatusRow};
 pub use inspect::reason::{describe, zegar};
 pub use inspect::shop::{ShopCard, ShopTab, ShopView};
@@ -66,7 +67,9 @@ pub use inspect::{InspectorPanel, UiContext};
 pub use loc::{Catalog, LocKey, Locale};
 pub use names::full_name;
 pub use rich::{lines, lines_titled, Rich, RichExt, Span, SpanStyle};
-pub use selection::{ListPicker, NoPicker, PickResult, Picker, Selection};
+pub use selection::{
+    selected_citizen, InspectionNav, ListPicker, NoPicker, PickResult, Picker, Selection, NAV_DEPTH,
+};
 pub use table::{Align, Column, ColumnId, RowSource, SortDir, Table};
 pub use tabs::tab_strip;
 pub use theme::{ColorToken, TextRole, Theme};

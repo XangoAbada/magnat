@@ -64,11 +64,9 @@ pub use gov::{
     agency_staffing, approval_step, tax_burden_bp, ApprovalInput, Axis, Goals, GovError, GovTuning,
     Government, Preference, Signals, GOVERNMENT_SCHEMA_VERSION,
 };
-pub use law::{Agency, Case, CaseId, Enforcement, Remedy};
+pub use law::{Agency, Case, Enforcement, Remedy};
 pub use mayor::{decide_month, os_dzialania};
-pub use permits::{
-    process_queue, Applicant, Permit, PermitId, PermitOffice, PermitRegistry, PermitStatus,
-};
+pub use permits::{process_queue, Applicant, Permit, PermitOffice, PermitRegistry, PermitStatus};
 pub use policy::{CouncilVote, Policy, PolicyRecord, PolicySet};
 pub use services::{
     publish_coverage, update_quality, DistrictPopulation, PublicService, PublicServices,
@@ -77,7 +75,7 @@ pub use settle::{abate_bankrupt, age_overdue, settle_due, SettleReport};
 pub use systems::{register_city, CitySystem};
 pub use tender::{
     due_this_month, score_bp, subject_district, Bid, BidCriteria, ServiceContract, Tender,
-    TenderId, TenderOutcome, TenderRegistry, TenderSubject,
+    TenderOutcome, TenderRegistry, TenderSubject,
 };
 pub use tuning::{CityTuning, TuningError, CITY_TUNING_SCHEMA_VERSION};
 pub use world::licenses_from_catalog;
