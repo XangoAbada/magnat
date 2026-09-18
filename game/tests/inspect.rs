@@ -236,6 +236,47 @@ fn karta_mieszkanca_mowi_dlaczego_nie_kupil_i_u_kogo_kupil() {
     }
 }
 
+/// Tryb przeglądu (`DG-16`): świat gra **bez postaci gracza**, a karty działają.
+///
+/// To jest cały mechanizm: brak komendy `SetCharacter`. Test pilnuje, żeby brak
+/// postaci nie był brakiem gry — świat ma tykać, karty mieszkańca i zakładu mają się
+/// budować, a komenda dotycząca postaci ma się odrzucić z nazwanym powodem, a nie
+/// wywrócić sesję.
+#[test]
+#[ignore = "pełne miasto — uruchamiane z --release"]
+fn tryb_przegladu_gra_bez_postaci() {
+    let mut s = swiat(StartVariant::Worker);
+    let c = katalog();
+    let hash_przed = s.state_hash();
+    s.step(1440, 0);
+
+    assert!(s.player().is_none(), "tryb przeglądu dorobił się postaci");
+    assert_ne!(hash_przed, s.state_hash(), "świat bez postaci nie tyka");
+
+    // Klikanie po świecie działa: mieszkaniec i zakład mają karty w obu językach.
+    let market = s.market.clone().expect("gospodarka włączona");
+    let site = market.sites()[0];
+    let citizen = magnat_core::CitizenId(
+        *s.app
+            .world
+            .resource::<magnat_agents::Population>()
+            .citizens()
+            .first()
+            .expect("miasto ma mieszkańców"),
+    );
+    wydruk(&s, &c, Subject::Citizen(citizen));
+    wydruk(&s, &c, Subject::Site(site));
+
+    // Komenda postaci bez postaci: odrzucenie z nazwanym powodem, nie panika.
+    let err = s
+        .submit(PlayerCommand::SetAutonomy {
+            field: magnat_game::AutonomyField::Shopping,
+            control: magnat_game::Control::Manual,
+        })
+        .expect_err("autonomia bez postaci");
+    assert_eq!(err, magnat_game::CommandError::NoCharacter);
+}
+
 /// Kryterium WP5: **każdy** wariant `Subject` renderuje się w obu językach, a cel,
 /// którego nie ma, renderuje się bez odnośnika (`Z-5`).
 #[test]

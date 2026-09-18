@@ -121,6 +121,15 @@ pub(crate) struct Args {
     #[arg(long, default_value_t = false)]
     pub(crate) no_economy: bool,
 
+    /// Wchodzi do świata **bez postaci gracza** i bez ekranu wyboru: tryb przeglądu.
+    ///
+    /// To samo, co „Tylko oglądam" na ekranie wyboru postaci, tylko bez klikania.
+    /// Istnieje dla tej samej drogi co `--no-city` i `--pick`: zrzut, pomiar i obejrzenie
+    /// miasta nie potrzebują postaci, a ekran wyboru jest wtedy jednym naciśnięciem
+    /// klawisza w środku skryptu.
+    #[arg(long, default_value_t = false)]
+    pub(crate) observe: bool,
+
     /// Sprawdza bufor ID bez rąk: ustawia kursor na piksel `x,y`, przewija kilka klatek
     /// i wypisuje, w kogo trafiono (kryterium WP11: „kliknięcie w pieszego daje
     /// `CitizenId`"). Bez tego jedynym sposobem sprawdzenia selekcji jest mysz.

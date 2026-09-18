@@ -29,6 +29,13 @@ pub(super) fn screen(shell: &mut Shell, ui: &mut egui::Ui) -> Option<ShellAction
     );
     ui.add_space(shell.theme.gap(4));
 
+    ui.label(
+        egui::RichText::new(shell.text("ui.character.observe.hint"))
+            .font(shell.theme.font(TextRole::Micro))
+            .color(shell.theme.color(ColorToken::TextSecondary)),
+    );
+    ui.add_space(shell.theme.gap(2));
+
     if shell.candidates.is_empty() {
         // Świat bez kandydata nie jest błędem — jest światem, w którym nikt nie
         // spełnia predykatu wariantu. Gracz ma wtedy jedno wyjście i ono jest widoczne.
@@ -64,6 +71,8 @@ pub(super) fn screen(shell: &mut Shell, ui: &mut egui::Ui) -> Option<ShellAction
         .collect();
     let losuj = pozycje.len();
     pozycje.push(shell.text("ui.character.random"));
+    let obserwuj = pozycje.len();
+    pozycje.push(shell.text("ui.character.observe"));
 
     // Kursor trzyma powłoka i wraca do niej po rysowaniu — ten sam wzorzec co
     // w menu głównym, bo `menu_list` bierze `&Shell` i `&mut Focus` osobno.
@@ -72,6 +81,7 @@ pub(super) fn screen(shell: &mut Shell, ui: &mut egui::Ui) -> Option<ShellAction
     shell.focus = kursor;
 
     match wybor {
+        Some(i) if i == obserwuj => Some(ShellAction::Observe),
         Some(i) if i == losuj => Some(ShellAction::PickRandomCitizen),
         Some(i) => shell
             .candidates

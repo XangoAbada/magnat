@@ -254,6 +254,7 @@ fn uruchom_ze_stanem(
         citizens: None,
         bez_ludzi: args.no_city || args.no_citizens,
         bez_gospodarki: args.no_economy,
+        tryb_przegladu: args.observe,
         watki: args.threads,
         kursor: match args.pick.as_deref() {
             Some(t) => {

@@ -62,6 +62,9 @@ pub enum ShellAction {
     PickCitizen(magnat_core::CitizenId),
     /// „Wylosuj postać" — wybór z ziarna świata, nie z zegara.
     PickRandomCitizen,
+    /// Tryb przeglądu: wejście do świata **bez postaci**. Gracz ogląda i klika,
+    /// ale nie jest niczyim mieszkańcem i nie ma czym wydawać komend.
+    Observe,
 }
 
 /// Pozycja kursora na ekranie. Jedna liczba, bo każdy ekran powłoki jest listą wierszy.

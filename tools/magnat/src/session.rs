@@ -103,13 +103,20 @@ impl App {
                         self.pauza_menu = false;
                         // Ostatni ekran przed grą: kim chcesz być (WP4). Kandydaci
                         // powstają z **postawionego** świata, więc dopiero tutaj.
-                        self.shell.candidates = magnat_game::player::candidates(
-                            &session.app.world,
-                            self.shell.draft.variant,
-                            session.tick().get() / 1440,
-                        );
-                        self.shell.go(ShellScreen::CharacterSelect);
-                        self.game = GameState::CharacterSelect(Box::new(session));
+                        if self.tryb_przegladu {
+                            // `--observe`: świat bez postaci i bez ekranu wyboru.
+                            // Ta sama droga, którą wybiera „Tylko oglądam", tylko
+                            // bez klikania — dla zrzutów, pomiarów i oglądania miasta.
+                            self.game = GameState::Playing(Box::new(session));
+                        } else {
+                            self.shell.candidates = magnat_game::player::candidates(
+                                &session.app.world,
+                                self.shell.draft.variant,
+                                session.tick().get() / 1440,
+                            );
+                            self.shell.go(ShellScreen::CharacterSelect);
+                            self.game = GameState::CharacterSelect(Box::new(session));
+                        }
                     }
                     Err(e) => eprintln!("interfejs rozgrywki nieudany: {e}"),
                 }
@@ -261,7 +268,28 @@ impl App {
             ShellAction::LoadSlot(id) => self.wczytaj(id),
             ShellAction::PickCitizen(c) => self.wybierz_postac(Some(c)),
             ShellAction::PickRandomCitizen => self.wybierz_postac(None),
+            ShellAction::Observe => self.wejdz_bez_postaci(),
         }
+    }
+
+    /// Tryb przeglądu: świat rusza **bez postaci gracza**.
+    ///
+    /// Nie jest to wariant startu, tylko jego brak: `Session::player` zostaje `None`,
+    /// a dziennik wejść nie dostaje `SetCharacter`. Dzięki temu replay odtwarza tryb
+    /// przeglądu **z samej nieobecności komendy** i nie trzeba go nigdzie zapisywać.
+    ///
+    /// Co z tego wynika dla gracza: klika, ogląda karty i nakładki, przewija czas —
+    /// ale nie ma czym wydać komendy dotyczącej postaci (`precheck` odpowiada
+    /// `NoCharacter`), a majątek w wierszu slotu jest zerem, bo nie ma czyjego liczyć.
+    pub(crate) fn wejdz_bez_postaci(&mut self) {
+        let GameState::CharacterSelect(session) =
+            std::mem::replace(&mut self.game, GameState::Shell(ShellScreen::MainMenu))
+        else {
+            return;
+        };
+        self.shell.candidates = Vec::new();
+        self.game = GameState::Playing(session);
+        self.pauza_menu = false;
     }
 
     /// Wybór postaci: komenda do dziennika, a potem świat rusza.

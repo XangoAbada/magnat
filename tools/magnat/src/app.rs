@@ -88,6 +88,8 @@ pub(crate) struct App {
     pub(crate) bez_ludzi: bool,
     /// `--no-economy`: świat bez rynku, czyli zachowanie sprzed M5 (`AB-2`).
     pub(crate) bez_gospodarki: bool,
+    /// `--observe`: wejście do świata bez postaci i bez ekranu wyboru (`DG-16`).
+    pub(crate) tryb_przegladu: bool,
     pub(crate) watki: usize,
     /// Ostatnia znana pozycja kursora w pikselach — bufor ID kopiuje piksel spod niej.
     pub(crate) kursor: Option<(u32, u32)>,

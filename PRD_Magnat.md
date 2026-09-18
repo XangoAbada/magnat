@@ -544,6 +544,8 @@ Mieszkańcy zakładają firmy (§5.6); firmy bankrutują; sieci zewnętrzne wcho
 
 Gracz wybiera (lub losuje) mieszkańca jako postać: z jego domem, rodziną, pracą, oszczędnościami, znajomymi. Warianty startu: absolwent bez kapitału (pożyczka od rodziny), doświadczony pracownik z oszczędnościami, spadkobierca małej firmy, inwestor z zewnątrz (kapitał, brak sieci), tryb sandbox (dowolny kapitał).
 
+**Tryb przeglądu** jest szóstą drogą i nie jest wariantem startu, tylko jego brakiem: gracz wchodzi do gotowego miasta **bez postaci** i ogląda je — klika mieszkańców, sklepy, zakłady i budynki, przewija czas, włącza nakładki danych. Nikogo nie prowadzi, więc nie ma czym wydać komendy, a majątek w wierszu zapisu jest zerem. Istnieje po to, żeby miasto dało się poznać, zanim zdecyduje się, kim w nim być — i dlatego wyjście z niego prowadzi przez nową grę, a nie przez wybór postaci w locie (to jest `SetCharacter` w środku rozgrywki i należy do sukcesji, §13.4).
+
 ### 13.2 Ścieżka
 
 1. **Pracownik:** gracz może pracować (dochód, umiejętności, relacje, obserwacja branży od środka). Zdobywa wiedzę o mieście przez życie w nim.
