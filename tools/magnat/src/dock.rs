@@ -12,7 +12,7 @@ use magnat_game::{PanelAction, PanelCtx, Panels, Session, StopHit, StopWatch, Vi
 use magnat_ui::{Catalog, Locale, Theme};
 
 /// Szerokość doku w punktach logicznych (`ui-design.md` §5).
-const DOK_PX: f32 = 320.0;
+pub(crate) const DOK_PX: f32 = 320.0;
 
 /// Stan widoku, który dok zmienia: panele, warunki zatrzymania i samouczek.
 ///
@@ -62,13 +62,20 @@ pub(crate) fn draw(
             });
         });
 
-    pasek_samouczka(ui, &ctx, samouczek);
+    // Co zostało po pasku czasu i doku — czyli widok 3D. Warstwy kotwiczone liczą
+    // kotwicę względem prostokąta z `constrain_to`, a domyślny (`Context::content_rect`)
+    // to ekran minus wcięcia systemowe, **nie** minus panele. Bez tego „u góry na środku"
+    // znaczyłoby „na pasku czasu".
+    let wolne = ui.available_rect_before_wrap();
+
+    pasek_samouczka(ui, &ctx, samouczek, wolne);
 
     // Pas alertów na dole: **jeden wiersz** o zatrzymaniu, bo to on tłumaczy,
     // czemu gra stanęła. Alert bez możliwej akcji jest wpisem kroniki, nie alertem
     // (`ui-design.md` §4) — ten ma akcję oczywistą: ruszyć zegar.
     if let Some(h) = trafienie {
         egui::Area::new(egui::Id::new("magnat.stop"))
+            .constrain_to(wolne)
             .anchor(egui::Align2::CENTER_BOTTOM, egui::vec2(0.0, -12.0))
             .show(ui.ctx(), |ui| {
                 egui::Frame::popup(ui.style()).show(ui, |ui| {
@@ -89,6 +96,7 @@ fn pasek_samouczka(
     ui: &mut egui::Ui,
     ctx: &PanelCtx<'_>,
     samouczek: &mut Option<magnat_game::Tutorial>,
+    wolne: egui::Rect,
 ) {
     let Some(t) = samouczek.as_mut() else {
         return;
@@ -97,6 +105,7 @@ fn pasek_samouczka(
         return;
     };
     egui::Area::new(egui::Id::new("magnat.tutorial"))
+        .constrain_to(wolne)
         .anchor(egui::Align2::CENTER_TOP, egui::vec2(0.0, 12.0))
         .show(ui.ctx(), |ui| {
             egui::Frame::popup(ui.style()).show(ui, |ui| {

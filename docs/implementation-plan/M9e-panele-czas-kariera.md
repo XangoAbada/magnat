@@ -303,3 +303,14 @@ Dlatego czwarta kolumna mówi o **drodze wejścia**, a nie o tym, że kod powsta
 | DI-36 | **Panelu celów nie było.** §5.11 obiecuje postęp `0..=10000 bp` pokazywany w panelu celów, a `streak_progress_bp` nie miał czytelnika | `Goal::progress_bp`, `ScenarioState` i `fresh_objectives` liczą wszystko, czego panel potrzebuje | **Sekcja „Cele scenariusza” w pulpicie**, nie dziesiąty panel: gracz patrzy tam po to samo — jak mi idzie — a panel odwiedzany raz na dobę jest listą, nie narzędziem. Cele ukryte za `reveal_after` nie pokazują się przed czasem. Znak przed nazwą, bo kolor nigdy nie jest jedynym nośnikiem |
 | DI-37 | **Gracz nie włączał i nie wyłączał warunków zatrzymania.** `StopWatch::set` i `ViewCommand::SetStopCondition` nie miały wołającego — zestaw był uzbrojony na sztywno przy wejściu do świata | Warunki działają, zatrzask działa, `armed()` zwraca listę ze stanem | Lista w doku lewym, zwinięta domyślnie. Przełączenie idzie do **dziennika wejść** przez `Panels::push_view` — jedna kolejka zdarzeń widoku, nie druga, bo z niej liczy się metryka onboardingu i odtwarza się zgłoszenie błędu |
 | DI-38 | **Panel sklepu nie pokazywał bieżącego celu zapasu.** `Market::restock_days` nie miał czytelnika, więc gracz naciskał „7 dni”, nie wiedząc, co jest ustawione teraz | Odczyt istnieje i jest przycięty do `u16` | Wiersz „teraz: N dni zapasu” nad przyciskami; brak celu mówi „cel automatyczny”, a nie pokazuje zera |
+
+
+## Zmiany wpisane po M9e
+
+Zgodnie z `K-18`. Wyszło z gry uruchomionej po domknięciu WP12 — z jedynego miejsca,
+w którym widać ekran rozgrywki złożony w całość, a nie każdy element osobno w teście.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| DI-39 | **Pasek czasu jest panelem, nie pływającą warstwą.** `egui::Panel::top("magnat.czas")` rysowany przed dokiem; warstwy kotwiczone (pasek samouczka, pas alertów) dostają `constrain_to` z wolnym obszarem policzonym po doku, a karta inspekcji startuje obok doku, nie na nim | Pasek stał w lewym górnym rogu jako `Area` z pozycją `(12, 12)` wpisaną na sztywno, a dok lewy to `Panel::left` zaczynający się od `y = 0`. Warstwa pływająca **nie rezerwuje** miejsca, więc kolizja z pierwszą pozycją doku była pewna, a nie przypadkowa — i tak samo zaczynała karta inspekcji (okno 520 × 780 na pozycji `(12, 70)`, czyli w całości na doku). Kotwica `Align2` liczy się względem `Context::content_rect`, czyli ekranu minus wcięcia systemowe — panele jej nie obchodzą, stąd `constrain_to`. `ui-design.md` §5 rysował ten układ od początku; kod go nie realizował. Test `pasek_czasu_rezerwuje_pas_u_gory` w `tools/magnat` pyta o wolny prostokąt po narysowaniu paska i doku — przed naprawą pokazywał `y = 0` |
+

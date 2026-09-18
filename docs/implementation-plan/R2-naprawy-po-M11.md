@@ -416,7 +416,7 @@ się numery w tabeli, a nie w głowie.
 
 ---
 
-## 11. Wykaz — 67 wierszy
+## 11. Wykaz — 69 wierszy
 
 Numeracja jest numeracją przeglądu i nie zmienia się. Kolumna „Plan" mówi, co wiedziały dokumenty
 przed R2: `—` = nieznane planowi, `zapis` = zapisane jako znana usterka bez wykonawcy,
@@ -528,6 +528,7 @@ Ujednolicenie nagłówków jest zadaniem R2-WP23.
 | 66 | Dziecko poniżej wieku szkolnego nie blokuje dorosłego w gospodarstwie | zakres `R2-WP5` | R2-WP35 | `[ ]` |
 | 67 | Zakład sprzedający na eksport nie ma utargu w rachunku wyniku | — | R2-WP36 | `[ ]` |
 | 68 | **Strzałki `↑↓←→` wypadły z interfejsu, bo domyślny atlas `egui` ich nie ma** — do czasu M11 gra nie wgrywa własnego kroju (`Theme::font`). Napisy, które ich używały (podpowiedź klawiszy powłoki, nagłówek karty podróży, znacznik wybranej opcji), mówią to samo znakami z atlasu. Po wgraniu kroju w M11 sprawdzić, czy strzałki wracają: test `atlas_fontow_zna_wszystkie_znaki_z_lokalizacji` odpowie na to w jednym przebiegu. Sufit testu jest nazwany: chodzi po **katalogu**, więc nie widzi znaków zaszytych w kodzie rysującym (`>`, `·`, `×` w `engine/ui/src/inspect/trip.rs`, `−` w `fmt.rs`) | zapis `M9b` `DE-16` | M11 (`M11d` albo gdziekolwiek wchodzą fonty) | `[ ]` |
+| 69 | **Ekran rozgrywki ma dwie z trzech rzeczy, które rysuje `ui-design.md` §5.** Inspekcja jest przeciągalnym oknem `egui` (`tools/magnat/src/citizens.rs`), a nie **dokiem prawym** — więc „lewy prowadzi, prawy pokazuje klikniętego" jest regułą dokumentu, nie ekranu. Pasek czasu nie niesie gotówki ani jej zmiany, choć §5 rysuje je po jego prawej stronie: gracz widzi stan konta tylko po otwarciu pulpitu. Oba są brakiem treści, a nie usterką — układ po naprawie `DI-39` jest już taki, że dok prawy ma gdzie stanąć | zapis `M9e` `DI-39` | — | `[ ]` |
 
 ## 12. Szacunek wielkości
 

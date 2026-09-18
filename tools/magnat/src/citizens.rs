@@ -518,7 +518,6 @@ impl Citizens {
             })
             .flatten();
 
-        let mut wybor = None;
         let mut zamknij = false;
         let mut zakladka_lokalna = *zakladka;
         let mut skok = None;
@@ -526,15 +525,10 @@ impl Citizens {
         let mut dalej = false;
         let (moze_wstecz, moze_dalej) = (nav.can_go_back(), nav.can_go_forward());
 
-        egui::Area::new(egui::Id::new("magnat.time"))
-            .fixed_pos(egui::pos2(12.0, 12.0))
-            .show(ui.ctx(), |ui| {
-                egui::Frame::popup(ui.style()).show(ui, |ui| {
-                    if let Some(s) = magnat_ui::widgets::time_bar(ui, &zegar, catalog, locale) {
-                        wybor = Some(s);
-                    }
-                });
-            });
+        let wybor = pasek_czasu(ui, &zegar, catalog, locale);
+        // Wolny obszar liczy się **po** pasku czasu: wszystko, co ustawia się samo,
+        // ma startować pod nim, a nie na nim.
+        let wolne = ui.available_rect_before_wrap();
 
         if let Some(l) = &self.legenda {
             // Prawy dolny róg — tam, gdzie legendę stawia `ui-design.md` §5.
@@ -558,7 +552,7 @@ impl Citizens {
             let mut otwarte = true;
             egui::Window::new(catalog.fmt_key(locale, "ui.card.inspection", &[]))
                 .open(&mut otwarte)
-                .default_pos(egui::pos2(12.0, 70.0))
+                .default_pos(wolne.left_top() + egui::vec2(crate::dock::DOK_PX + 12.0, 12.0))
                 .default_size(egui::vec2(520.0, 780.0))
                 .vscroll(true)
                 .show(ui.ctx(), |ui| {
@@ -632,4 +626,62 @@ impl Citizens {
         (wybor, akcja_panelu)
     }
 
+}
+
+/// Pas czasu u góry ekranu: data, zegar i prędkość (`ui-design.md` §5).
+///
+/// **Panel, a nie pływające `Area`** — i to jest cała różnica. `Area` pozycjonuje się
+/// w przestrzeni ekranu i nie rezerwuje niczego, więc pasek wpisany na sztywno w lewy
+/// górny róg leżał na pierwszej pozycji doku. `Panel::top` przesuwa kursor rodzica,
+/// więc dok rysowany niżej sam zaczyna się pod paskiem — bez dobierania liczb.
+///
+/// Osobna funkcja, bo test ma ją zawołać bez `Session`.
+pub(crate) fn pasek_czasu(
+    ui: &mut egui::Ui,
+    zegar: &magnat_ui::TimeControlsWidget,
+    catalog: &magnat_ui::Catalog,
+    locale: Locale,
+) -> Option<SimSpeed> {
+    egui::Panel::top("magnat.czas")
+        .show(ui, |ui| {
+            magnat_ui::widgets::time_bar(ui, zegar, catalog, locale)
+        })
+        .inner
+}
+
+#[cfg(test)]
+mod tests {
+    use magnat_ui::{testing, Catalog, Locale, TimeControlsWidget};
+
+    /// Pasek czasu ma **zabrać** pas u góry, a nie położyć się na doku.
+    ///
+    /// Test rysuje pasek i zaraz pod nim dok tej samej szerokości co w grze, a potem
+    /// pyta o wolny prostokąt. Przed naprawą pierwsze twierdzenie padało: pływające
+    /// `Area` nie rezerwuje nic, więc wolny obszar zaczynał się w `y = 0` — dokładnie
+    /// tam, gdzie zaczyna się dok.
+    #[test]
+    fn pasek_czasu_rezerwuje_pas_u_gory() {
+        let c = Catalog::load().expect("data/locale/");
+        let w = TimeControlsWidget::new(magnat_core::Tick(0));
+        let ctx = egui::Context::default();
+        let mut wolne = egui::Rect::NOTHING;
+        testing::draw_in(&ctx, testing::input(testing::EKRAN), |ui| {
+            super::pasek_czasu(ui, &w, &c, Locale::Pl);
+            egui::Panel::left("test.dok")
+                .resizable(false)
+                .exact_size(crate::dock::DOK_PX)
+                .show(ui, |ui| {
+                    ui.label("dok");
+                });
+            wolne = ui.available_rect_before_wrap();
+        });
+        assert!(
+            wolne.top() > 20.0,
+            "pasek czasu nie zarezerwował pasa u góry: {wolne:?}"
+        );
+        assert!(
+            wolne.left() >= crate::dock::DOK_PX,
+            "dok nie zarezerwował szerokości: {wolne:?}"
+        );
+    }
 }
