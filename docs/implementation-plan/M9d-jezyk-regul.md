@@ -378,6 +378,11 @@ Zgodnie z `K-18`. Szczegóły — tabela `DG-n` w `M9c-gracz-inspekcja-nakladki.
 
 Zgodnie z `K-18`. Gwiazdka = zmiana zakresu albo kryterium.
 
+**Dziesięć usterek z recenzji przedcommitowej poszło do `R2-naprawy-po-M11.md` §11 jako pozycje
+47–56**, bo żadna z nich nie należy do tej podfazy: siedem stało w kodzie od M5–M7c, trzy dotyczą
+liczby i tekstu na granicy interfejsu. Tabela niżej wypisuje **zmiany planu**, a nie usterki —
+te dwie rzeczy mają w tym repozytorium osobne miejsca i warto, żeby nie zaczęły się mieszać.
+
 | # | Zmiana | Dlaczego |
 |---|---|---|
 | DF-1 ★ | **`ManagerExecution` mieszka w `sim/economy`, nie w `game::policy`.** §6 dokumentu fazy wpisywał ją do `game/`; adres jest niewykonalny i wychodzi przy pierwszej próbie | Politykę wykonuje `Market::run_policies` wołane z systemu ECS, a `sim/economy` **nie zależy i nie może zależeć** od `game/` — zależność idzie w drugą stronę. Odchylenie menedżera jest krokiem **wewnątrz** doby polityk, więc mieszka tam, gdzie doba. W `game/` zostaje to, co naprawdę jest warstwą gracza: edytor, diagnostyka, dry-run i postać tekstowa |

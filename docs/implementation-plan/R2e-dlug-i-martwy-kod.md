@@ -6,7 +6,7 @@ dokumentu R2.
 | | |
 |---|---|
 | **Wejście** | **Wszystkie pozostałe podfazy R2 zamknięte.** R2-WP20 dotyka 370 miejsc w dziesięciu crate'ach i każdy wcześniejszy pakiet, który dokłada powód decyzji, powiększyłby jego zakres. R2-WP21…R2-WP23 nie mają tego ograniczenia i mogą pójść wcześniej. |
-| **Pakiety robocze** | R2-WP20…R2-WP23 |
+| **Pakiety robocze** | R2-WP20…R2-WP23, R2-WP27, R2-WP28 |
 | **Wynik do pokazania** | `python scripts/struct_guard.py --all` bez ani jednego przekroczenia progu błędu, oraz `engine/ui/src/inspect/reason.rs` rozpadnięty na trzy pliki, z których żaden nie przekracza 400 linii. |
 | **Kryterium zamknięcia** | Kryteria R2-WP20…R2-WP23 plus: **rejestr długu strukturalnego nie ma pozycji bez adresata**, a każda pozycja zamknięta przez R2 ma przekreślenie i wiersz w „Zmiany wpisane po R2". |
 | **Poprzednia / następna** | `R2d-domkniecie-swiata.md` / `R2f-pomiar-i-bramki.md` |
@@ -43,8 +43,10 @@ niego. To jest zadanie R2-WP26 w następnej podfazie; tutaj zamykamy same pozycj
 | WP | Nazwa | Zależy od | Rozmiar | Status |
 |---|---|---|---|---|
 | R2-WP21 | Generator dróg: rozcięcie `lsystem.rs` | — | M | `[ ]` |
-| R2-WP22 | Martwe warianty i nieużywane pola | — | S | `[ ]` |
+| R2-WP22 | Martwe warianty i nieużywane pola | — | M | `[ ]` |
 | R2-WP23 | Dokumentacja wejściowa i zakresy strumieni | — | S | `[ ]` |
+| R2-WP28 | Liczba i tekst dla gracza bez niespodzianek | — | S | `[ ]` |
+| R2-WP27 | Jeden język w kodzie: identyfikatory i komunikaty | `D-N19` | zależny od decyzji | `[ ]` |
 | R2-WP20 | Podział `DecisionReason` | wszystkie pozostałe pakiety R2 | L | `[ ]` |
 
 Kolejność w tabeli jest kolejnością wykonania, nie numeryczną — R2-WP20 idzie ostatni z powodu
@@ -151,11 +153,16 @@ Pozycje 33–35 rejestru dostają przekreślenie.
 
 ### R2-WP22 — Martwe warianty i nieużywane pola
 
-**Pozycje wykazu:** 29, 30, 31, 32.
+**Pozycje wykazu:** 29, 30, 31, 32, 52, 53, 54, 55.
 
-**Przyczyna.** Cztery miejsca, w których typ deklaruje coś, czego nikt nie konstruuje, nie czyta
+**Przyczyna.** Osiem miejsc, w których typ deklaruje coś, czego nikt nie konstruuje, nie czyta
 albo nie obsługuje. Reguła YAGNI z `CLAUDE.md` mówi o tym wprost: brak drugiego konsumenta = brak
 abstrakcji. Tutaj bywa gorzej — nie ma pierwszego.
+
+**Cztery ostatnie pozycje przyszły z recenzji przed commitem `M9d`** i różnią się od pierwszych
+czterech jedną rzeczą: wszystkie leżą na drodze, którą **gracz właśnie dostał do ręki**. Wariant
+akcji bez wykonawcy w polityce firmy AI jest długiem; ten sam wariant w edytorze, w którym gracz
+go wybiera z listy, jest obietnicą bez pokrycia.
 
 | Co | Stan | Rozstrzygnięcie |
 |---|---|---|
@@ -164,16 +171,24 @@ abstrakcji. Tutaj bywa gorzej — nie ma pierwszego.
 | `Household.shopper_rotation` | Pole w komponencie, czytane wyłącznie przez funkcję haszującą. Rotacja kupującego liczy się z numeru doby | Znika z komponentu. Zmniejsza `Household` i upraszcza hash |
 | `Household.vehicle_slots` | Jak wyżej. Flota jest w `sim/traffic`, powiązanie idzie przez `VehicleOwner` | Znika z komponentu |
 | `MachineClassId` bez `data/machines/classes.ron` | Świadomy `ponytail:` z nazwaną ścieżką wyjścia; zapisany jako `AF-4 ★` w `M6b`, skutek w `M7d` `BA-4` | Zostaje jako skrót, ale **wyjście dostaje adresata**: katalog powstaje w M12d (modding) razem z pozostałymi katalogami rozszerzalnymi, albo nie powstaje nigdy i wtedy `ponytail:` zmienia się w decyzję |
+| `Action::RemoveFromShelf` (poz. 53) | Akcja przechodzi walidator, wykonuje się i **nie robi nic**: wykonawca zwraca `PolicyOutcome::Blind`, bo zwolnienie oferty w arenie razem z linią półki nie ma ścieżki. Gracz wybiera ją z listy edytora | Zostaje i **dostaje wykonawcę**. Ścieżka jest ta sama, którą zamyka zakład w `M7d`, więc powstaje raz, a nie dwa razy. Wariant odwrotny — usunąć akcję z języka — kosztuje politykę „Nabiał — nie wyrzucamy" z `M9d` §5.6, czyli jedną z sześciu sztandarowych |
+| `radius_m` w trzech metrykach konkurencyjnych (poz. 54) | Pole wchodzi do walidatora (limit 10 km) i **nie wchodzi do odczytu**: obraz konkurencji sklepu powstaje jednym promieniem obserwacji. Reguła z 3 km i z 5 km dostają tę samą liczbę, a gracz widzi dwie różne reguły | `observe_competitors` dostaje **drugi promień** — ten, o który pyta polityka zakładu. Koszt jest ograniczony limitem dwóch metryk konkurencyjnych na politykę (`MAX_COMPETITIVE`), więc promieni na sklep jest najwyżej trzy. Wariant odwrotny — wyrzucić pole z języka — łamie PRD §6.3, które cytuje „w promieniu 3 km" jako treść reguły |
+| `Qty` bez arytmetyki z punktami bazowymi (poz. 52) | `Money` ma `mul_ratio` przez `i128`, `Qty` nie ma nic, więc wykonawca polityki opakowuje ilość w `Money`, żeby przemnożyć ją przez odchyłkę menedżera. Wynik jest poprawny, typ kłamie | `Qty` dostaje `mul_ratio` o tej samej sygnaturze i tym samym zaokrągleniu. To jest pięć linii w `engine/core` i usuwa opakowanie z `sim/economy`; przy okazji ta sama dziura zamyka się dla `Mass`, `Volume` i `Energy`, które mają ją identycznie |
+| Dziedziny `Hr`, `Production`, `Logistics` (poz. 55) | Walidator odrzuca je jawnie (`DomainNotAvailable`), więc **cichej polityki nie ma** — to jest już rozwiązane. Otwarte zostaje co innego: `Action::domain()` rozcina dwie z sześciu polityk przykładowych `M9d` §5.6 na dwie każdą | **Weryfikacja, nie naprawa.** Rozstrzyga decyzja otwarta nr 13 fazy M9 (dziedzina jako granica polityki czy tylko akcji). Jeśli padnie „granica akcji", pakiet zamyka pozycję jednym testem; jeśli „granica polityki", pozycja zamyka się poprawką w §5.6 dokumentu `M9d` i nic w kodzie się nie zmienia |
 
 **Ostrzeżenie o determinizmie.** Usunięcie dwóch pól z `Household` zmienia rozmiar komponentu
 i jego reprezentację w hashu — tak samo jak usunięcie wariantu potrzeby w R2-WP16. Oba pakiety
 zmieniają format zapisu gry i oba stoją przed M12b.
 
-**Kryterium:** cztery testy odtwarzające, po jednym na temat. Dla `TripPurpose::Escort` —
+**Kryterium:** siedem testów odtwarzających, po jednym na temat. Dla `TripPurpose::Escort` —
 odprowadzenie dziecka wycenia czas mnożnikiem 1,50, a nie 1,30; przed naprawą oba są równe.
-Dla usuwanych pól i wariantów — test statyczny: w kodzie symulacji nie ma wariantu enumu ani pola
-publicznego, którego nikt nie konstruuje i nie czyta poza funkcją haszującą. Ten test zostaje
-w repozytorium i chroni przed powtórką.
+Dla `RemoveFromShelf` — polityka wycofująca towar zdejmuje linię z półki i zwalnia ofertę; przed
+naprawą oferta stoi dalej. Dla `radius_m` — dwie reguły o promieniach 1 km i 8 km na tym samym
+zakładzie dają **różne** ceny; przed naprawą identyczne. Dla `Qty::mul_ratio` — wektor testowy
+zaokrąglania zgodny co do jednostki z `Money::mul_ratio`. Dla usuwanych pól i wariantów — test
+statyczny: w kodzie symulacji nie ma wariantu enumu ani pola publicznego, którego nikt nie
+konstruuje i nie czyta poza funkcją haszującą. Ten test zostaje w repozytorium i chroni przed
+powtórką.
 
 ---
 
@@ -217,6 +232,64 @@ zadeklarowany w `K-4` istnieje w enumie.
 
 ---
 
+### R2-WP27 — Jeden język w kodzie: identyfikatory i komunikaty
+
+**Pozycje wykazu:** 47, 48.
+
+**Przyczyna.** `00` §6 i `CLAUDE.md` mówią: „kod i identyfikatory po angielsku, bez wyjątków —
+również w nowych fazach". Kod mówi co innego i mówi to konsekwentnie od M5: publiczne API jest
+angielskie, a **prywatne nazwy są polskie** — `zbierz_fakty`, `rozstrzygnij`, `zastosuj`, `wykonaj`,
+`warunek`, `klauzula`, `Wynik`, `Slownik` i dziesiątki innych, w `sim/economy`, `sim/world`,
+`sim/agents`, `game/` i `tools/magnat`. Do tego dochodzą komunikaty deweloperskie `eprintln!`,
+które są po polsku i **nie mieszczą się w żadnej z dwóch kategorii `00` §6**: nie są ani kodem,
+ani tekstem gracza.
+
+To nie jest usterka jednej podfazy. To jest **druga, niezapisana konwencja**, którą każda faza
+przejmowała z pliku, który rozszerzała — i która przez siedem faz nie została ani razu nazwana.
+Dlatego pakiet nie zaczyna się od przemianowania, tylko od rozstrzygnięcia, **która z dwóch
+konwencji jest prawdziwa**.
+
+**Rozstrzygnięcie:** decyzja otwarta `D-N19` w §9 dokumentu R2. Propozycja domyślna: reguła
+zaczyna opisywać to, co jest — angielski obowiązuje wszędzie, gdzie nazwa przekracza granicę
+crate'u, a prywatna nazwa wewnątrz modułu idzie w języku komentarzy tego modułu. Wariant odwrotny
+(przemianowanie) jest mechaniczny, dotyka każdego crate'u i **musi być osobnym commitem bez żadnej
+innej zmiany**, tak samo jak `cargo fmt` całego repozytorium.
+
+**Zakres przy propozycji domyślnej (`S`):** poprawka brzmienia w `00` §6 i w `CLAUDE.md`, plus
+trzecia kategoria dla komunikatów deweloperskich — angielski, bo czyta je ten sam człowiek, który
+czyta `panic!` i komunikaty `cargo`, a te i tak są angielskie.
+
+**Zakres przy wariancie odwrotnym (`XL`):** przemianowanie wszystkich prywatnych identyfikatorów,
+jeden commit, zero zmian zachowania, obowiązkowy przebieg `cargo test --workspace` przed i po
+z identycznym łańcuchem hashy stanu.
+
+**Kryterium:** test w CI, który czyta regułę z `00` §6 i sprawdza ją na kodzie — lista symboli
+publicznych bez znaku spoza ASCII przy propozycji domyślnej, lista **wszystkich** symboli przy
+wariancie odwrotnym. Bez tego testu pakiet zamyka jeden rozjazd i zostawia drogę drugiemu.
+
+---
+
+### R2-WP28 — Liczba i tekst dla gracza bez niespodzianek
+
+**Pozycje wykazu:** 49, 50, 51.
+
+**Przyczyna.** Trzy miejsca, w których warstwa prezentacji robi coś innego, niż obiecuje
+`CLAUDE.md` („każdy tekst widoczny dla gracza powstaje w obu wersjach") i `M9b` (formatowanie liczb
+idzie przez `fmt`, a separator przez język).
+
+| Co | Stan | Rozstrzygnięcie |
+|---|---|---|
+| Separator dziesiętny w postaci tekstowej polityki (poz. 49) | `game::policy::text::procent` drukuje `.` niezależnie od języka, bo tekst polityki **musi wrócić z parsera co do znaku**. Ta sama funkcja zasila jednak ekran: gracz czyta „98.55 %" zamiast „98,55 %" | **Rozdzielenie zapisu od widoku.** Serializator zostaje przy kropce i to jest właściwe — format wymiany nie ma języka. Ekran dostaje własną drogę przez `magnat_ui::fmt::decimal`, czyli tę samą, którą idzie każda inna liczba w interfejsie. Koszt: jedna funkcja obok istniejącej, nie parametr w niej |
+| `Catalog::must` panikuje (poz. 50) | Rozwija `Option` przez `expect`, a woła go kod budujący kartę inspekcji i ekran edytora reguł. Literówka w nazwie klucza wywraca klatkę. `Catalog::load` sprawdza **równość zbiorów** `pl`/`en` i tego nie łapie: klucz, którego nie ma w żadnym z dwóch plików, przechodzi walidację | `must` zostaje dla kodu, który woła się raz przy starcie, i **znika ze ścieżki rysowania**: tam wchodzi odczyt zwracający `Option`, a brak klucza daje pusty napis i wpis w dzienniku deweloperskim. Klatka gry nie ma prawa paść od brakującego tekstu |
+| Komunikat polityki spoza katalogu (poz. 51) | `Action::Alert`/`AskPlayer` niosą numer (`msg: u16`, `AX-2`), a `data/locale/` ma trzy wpisy `ui.policy.msg.*`. Numer spoza katalogu daje regułę bez zdania i wpis w skrzynce eskalacji bez treści | **Walidator języka dostaje sprawdzenie numeru komunikatu.** Zakres dopuszczalnych numerów jest daną (rozmiar tabeli komunikatów), więc `sim/policy` go nie zna — sprawdza go edytor, tam gdzie `BelowCost`, i z tego samego powodu: potrzebuje katalogu, którego walidator języka nie widzi |
+
+**Kryterium:** trzy testy. Liczba procentowa na ekranie ma przecinek w `pl` i kropkę w `en`, a ta
+sama polityka zapisana tekstem ma kropkę w obu. Brak klucza w ścieżce rysowania daje pustą etykietę
+i nie panikuje — test rysuje kartę z katalogiem pozbawionym jednego klucza. Polityka z numerem
+komunikatu spoza katalogu nie przechodzi edytora.
+
+---
+
 ## 5.15 Decyzje otwarte tej podfazy
 
 **`D-N15` — Czy podział `DecisionReason` idzie po aktorze, czy po fazie.** Propozycja: po aktorze
@@ -224,6 +297,9 @@ zadeklarowany w `K-4` istnieje w enumie.
 towaru" powstał w M5, a należy do mieszkańca, który stoi przed pustą półką, i tam zostanie na
 zawsze. Podział po fazie dałby dziś ten sam rezultat, a za trzy fazy wymagałby przenoszenia
 wariantów między enumami. *Blokująca dla R2-WP20.*
+
+**`D-N19` jest w §9 dokumentu R2, a nie tutaj** — dotyczy całego repozytorium, a nie tej podfazy,
+i blokuje wyłącznie R2-WP27.
 
 **`D-N16` — Czy `MachineClassId` dostaje katalog w M12d, czy zostaje wyprowadzany z receptur.**
 Propozycja: dostaje katalog, razem z pozostałymi katalogami rozszerzalnymi moddingu. Klasa maszyny

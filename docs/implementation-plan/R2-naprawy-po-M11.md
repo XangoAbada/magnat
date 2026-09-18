@@ -10,10 +10,20 @@ jak R1.
 
 R1 mierzył jedną rzecz — długość plików — i naprawiał ją jednym ruchem. R2 mierzy co innego:
 **rozjazd między tym, co dokumenty faz uznały za zamknięte, a tym, co robi kod**. Wykaz w §11 ma
-43 wiersze: 42 z przeglądu repozytorium po M7f i jeden dopisany przy weryfikacji. Jedna pozycja
-miała pakiet, jedna okazała się rozstrzygnięta i wypadła, jedenaście stało zapisanych w tabelach
-korekt albo w rejestrze długu — **każda bez wykonawcy** — a dwadzieścia dziewięć nie było znanych
-planowi w żadnej postaci.
+**56 wierszy** i powstał w trzech rzutach: 42 z przeglądu repozytorium po M7f, jeden dopisany
+przy weryfikacji, trzy z przeglądów w trakcie M8, a **dziesięć z recenzji przed commitem M9d**
+(pozycje 47–56). Z pierwszego rzutu jedna pozycja miała pakiet, jedna okazała się rozstrzygnięta
+i wypadła, jedenaście stało zapisanych w tabelach korekt albo w rejestrze długu — **każda bez
+wykonawcy** — a dwadzieścia dziewięć nie było znanych planowi w żadnej postaci.
+
+**Rzut z M9d różni się od poprzednich i dlatego warto go opisać osobno.** Nie wyszedł z przeglądu
+repozytorium, tylko z **recenzji jednej podfazy przed jej commitem** — i znalazł dziesięć pozycji,
+z których żadna nie miała wykonawcy. Osiem z nich dotyczy rzeczy, które stały w kodzie od M6–M7c
+i przeżyły po kilka podfaz: wariant akcji bez wykonawcy, pole bez czytelnika, typ bez arytmetyki,
+konwencja nazw łamana w każdym crate'cie. To jest miara skuteczności recenzji przedcommitowej
+wobec przeglądu okresowego: **recenzja jednej podfazy dała jedną czwartą wykazu R2**. Wniosek
+dla R2-WP26 (egzekutor rejestru długu): próg wychwytu leży w kadencji przeglądu, a nie w jego
+głębokości.
 
 | | |
 |---|---|
@@ -161,7 +171,7 @@ dotyka 370 miejsc i każdy wcześniejszy pakiet, który dokłada powód, powięk
 | `R2b` | `R2b-pieniadz-gospodarstwa.md` | R2-WP7…R2-WP11 | Utarg zakładu, majątek przy rozwiązaniu, dochód po zdarzeniu, dziedziczenie, skala ekwiwalentna |
 | `R2c` | `R2c-rozjazdy-danych-i-kodu.md` | R2-WP12…R2-WP16 | Wiek produkcyjny, wartość czasu, substytucja, chodniki, martwe potrzeby |
 | `R2d` | `R2d-domkniecie-swiata.md` | R2-WP17…R2-WP19 | Kopalnie na złożach, gęstość firm, przechwytywanie rzek |
-| `R2e` | `R2e-dlug-i-martwy-kod.md` | R2-WP20…R2-WP23 | `DecisionReason`, generator dróg, martwe warianty, dokumentacja |
+| `R2e` | `R2e-dlug-i-martwy-kod.md` | R2-WP20…R2-WP23, R2-WP27, R2-WP28 | `DecisionReason`, generator dróg, martwe warianty, dokumentacja, język identyfikatorów, liczba i tekst dla gracza |
 | `R2f` | `R2f-pomiar-i-bramki.md` | R2-WP24…R2-WP26 | Filtry bramek G4/G11, testy miasta, egzekutor rejestru długu |
 
 Tabela pakietów z rozmiarami i statusem stoi w dokumencie każdej podfazy. Zbiorczo:
@@ -189,11 +199,13 @@ Tabela pakietów z rozmiarami i statusem stoi w dokumencie każdej podfazy. Zbio
 | R2-WP19 | Przechwytywanie rzek w erozji | R2d | — | M | `[ ]` |
 | R2-WP20 | Podział `DecisionReason` | R2e | wszystkie pozostałe | L | `[ ]` |
 | R2-WP21 | Generator dróg: rozcięcie `lsystem.rs` | R2e | — | M | `[ ]` |
-| R2-WP22 | Martwe warianty i nieużywane pola | R2e | — | S | `[ ]` |
+| R2-WP22 | Martwe warianty i nieużywane pola | R2e | — | M | `[ ]` |
 | R2-WP23 | Dokumentacja wejściowa i zakresy strumieni | R2e | — | S | `[ ]` |
 | R2-WP24 | Bramka bezrobocia naprawdę mierzy bezrobocie | R2f | — | M | `[ ]` |
 | R2-WP25 | Testy miasta wychodzą z `#[ignore]` | R2f | — | M | `[ ]` |
 | R2-WP26 | Egzekutor rejestru długu | R2f | — | S | `[ ]` |
+| R2-WP27 | Jeden język w kodzie: identyfikatory i komunikaty | R2e | — | zależny od `D-N19` | `[ ]` |
+| R2-WP28 | Liczba i tekst dla gracza bez niespodzianek | R2e | — | S | `[ ]` |
 
 `⇧` = kandydat do wyprzedzenia przed R2 zgodnie z §2b.
 
@@ -313,6 +325,27 @@ kończy się pomiarem i decyzją, nie kodem. Powód sufitu: Etap 7 jest jedynym 
 w którym naprawa może wymagać przeprojektowania, a nie domknięcia — a wtedy należy do własnej
 fazy, nie do dokumentu napraw. *Blokująca dla R2-WP18.*
 
+**`D-N19` — Czy identyfikatory prywatne przechodzą na angielski, czy reguła się zmienia.**
+`00` §6 i `CLAUDE.md` mówią: „kod i identyfikatory po angielsku, bez wyjątków — również w nowych
+fazach". Kod mówi co innego i mówi to konsekwentnie od M5: **publiczne API jest angielskie,
+a prywatne nazwy są polskie** w `sim/economy`, `sim/world`, `sim/agents`, `game/` i `tools/magnat`
+(`zbierz_fakty`, `rozstrzygnij`, `zastosuj`, `wykonaj`, `warunek`, `klauzula`, `Wynik`, `Slownik`,
+dziesiątki innych). To nie jest niedbalstwo jednej podfazy — to jest **druga, niezapisana
+konwencja**, którą każda faza przejmowała z pliku, który rozszerzała.
+
+Propozycja: **reguła się zmienia i zaczyna opisywać to, co jest.** Nowe brzmienie: angielski
+obowiązuje wszędzie, gdzie nazwa przekracza granicę crate'u (typy publiczne, funkcje publiczne,
+pola publiczne, klucze danych, warianty enumów) — i tam jest bez wyjątków. Prywatna nazwa wewnątrz
+modułu idzie w języku komentarzy tego modułu, czyli po polsku, bo czyta ją ten sam człowiek i w tym
+samym zdaniu co komentarz nad nią.
+
+Argument za: przemianowanie jest mechaniczne, ale dotyka **każdego crate'u w repozytorium**,
+zatapia recenzję każdego commita, w którym wypadnie, i nie zmienia ani jednego zachowania.
+Argument przeciw: reguła pisana pod istniejący kod przestaje być regułą, a następny rozjazd
+uzasadni się tym precedensem. Jeśli decyzja pójdzie odwrotnie, R2-WP27 rośnie z `S` do `XL`
+i staje się osobnym commitem bez żadnej innej zmiany — tak samo jak `cargo fmt` całego repo.
+*Blokująca dla R2-WP27; nieblokująca dla reszty R2.*
+
 ---
 
 ## 10. Wpisy wymagane w `00-konwencje-i-kontrakty.md` §4a
@@ -330,7 +363,7 @@ a nie z góry.
 
 ---
 
-## 11. Wykaz — 46 wierszy
+## 11. Wykaz — 56 wierszy
 
 Numeracja jest numeracją przeglądu i nie zmienia się. Kolumna „Plan" mówi, co wiedziały dokumenty
 przed R2: `—` = nieznane planowi, `zapis` = zapisane jako znana usterka bez wykonawcy,
@@ -386,9 +419,26 @@ przed R2: `—` = nieznane planowi, `zapis` = zapisane jako znana usterka bez wy
 | 45 | **Wartość gruntu nie zmienia się w trakcie gry.** Jedyne dwa zapisy `Parcel.land_value_per_m2` w całym repozytorium to `city::value::pass_1` i `pass_2`, obie wołane raz przy generacji miasta (`city/mod.rs`). Każdy kanał skutku kończący się na wartości gruntu — parki, zaległy wywóz odpadów, hałas — jest przez to **niewykonalny**, a nie tylko odłożony. Znalezione w M8d przy kanałach skutków usług publicznych (`CG-3`) | — | **bez pakietu** — kandydat na R2-WP27, bo żaden istniejący go nie obejmuje | `[ ]` |
 | 46 | **`ServiceKind::Waste` nie ma żadnego archetypu w `data/buildings/public.ron`.** `SpendCategory::Waste` ma udział w planie wydatków od M8a, więc miasto wydaje pieniądze na usługę, której w mieście nie ma — pokrycie wywozu odpadów jest zerowe w każdej dzielnicy i takie zostanie, dopóki ktoś nie dopisze archetypu. Znalezione w M8d (`CG-4`) | — | R2-WP22 (martwe warianty i nieużywane pola) | `[ ]` |
 
+| 47 | **Identyfikatory prywatne są po polsku w całym repozytorium**, wbrew `00` §6 i `CLAUDE.md` („kod i identyfikatory po angielsku, bez wyjątków"). Publiczne API jest angielskie, prywatne nazwy polskie — w `sim/economy`, `sim/world`, `sim/agents`, `game/` i `tools/magnat`. Nie jest to usterka jednej podfazy, tylko **druga, niezapisana konwencja** przejmowana z pliku do pliku od M5 | — | R2-WP27 (`D-N19`) | `[ ]` |
+| 48 | **Komunikaty deweloperskie `eprintln!` są po polsku** w kliencie i w scenariuszach (`tools/magnat/src/session.rs`, `tools/headless`). Ta sama nieuzgodniona konwencja co pozycja 47, ale inna reguła: to nie jest identyfikator ani tekst gracza, tylko trzecia kategoria, której `00` §6 nie nazywa | — | R2-WP27 | `[ ]` |
+| 49 | **Postać tekstowa polityki drukuje separator dziesiętny `.` niezależnie od języka** (`game::policy::text::procent`), a ta liczba trafia na ekran w zakładkach „reguły" i „tekst" edytora. Polski gracz czyta „98.55 %" zamiast „98,55 %" | — | R2-WP28 | `[ ]` |
+| 50 | **Brak klucza lokalizacji panikuje w ścieżce rysowania.** `Catalog::must` rozwija `Option` przez `expect`, a woła go kod budujący kartę inspekcji i ekran edytora reguł. Literówka w nazwie klucza wywraca klatkę zamiast pokazać pusty napis — a `Catalog::load` sprawdza **równość zbiorów** `pl`/`en`, nie obecność konkretnego klucza | — | R2-WP28 | `[ ]` |
+| 51 | **Komunikat polityki spoza katalogu nie ma tekstu.** `Action::Alert`/`AskPlayer` niosą numer (`msg: u16`, `AX-2`), a `data/locale/` ma trzy wpisy `ui.policy.msg.*`. Edytor pokazuje wtedy regułę bez zdania, a skrzynka eskalacji (M9e) pokaże wpis bez treści. Brakuje walidacji: numer komunikatu spoza katalogu ma być błędem walidatora, a nie pustym miejscem | — | R2-WP28 | `[ ]` |
+| 52 | **`Qty` nie ma arytmetyki z punktami bazowymi.** `Money` ma `mul_ratio` przez `i128`, `Qty` nie ma nic — więc wykonawca polityki opakowuje ilość w `Money`, żeby przemnożyć ją przez odchyłkę menedżera (`sim/economy/src/policy_run/decide.rs`). Wynik jest poprawny, typ kłamie | — | R2-WP22 | `[ ]` |
+| 53 | **`Action::RemoveFromShelf` nie ma wykonawcy.** Polityka „wycofaj z półki" przechodzi walidator (akcja jest w dziedzinie `Stock`), wykonuje się i **nie robi nic** — wykonawca zwraca `PolicyOutcome::Blind`, bo zwolnienie oferty w arenie razem z linią półki nie ma jeszcze ścieżki. To jest dokładnie ten przypadek, przed którym broni `K-67`: reguła, która wygląda na działającą | — | R2-WP22 | `[ ]` |
+| 54 | **Promień metryki konkurencyjnej jest ignorowany.** `radius_m` jest polem `Metric::CheapestCompetitorPrice`, `AvgCompetitorPrice` i `CompetitorCount`, wchodzi do walidatora (limit 10 km) i **nie wchodzi do odczytu**: obraz konkurencji sklepu powstaje jednym promieniem obserwacji dla całego sklepu. Reguła z 3 km i reguła z 5 km dostają tę samą liczbę, a gracz widzi dwie różne reguły | — | R2-WP22 | `[ ]` |
+| 55 | **Trzy z pięciu dziedzin polityki nie mają wykonawcy** (`Hr`, `Production`, `Logistics`). Walidator odrzuca je jawnie (`DomainNotAvailable`), więc cichej polityki nie ma — ale `Action::domain()` rozcina przy okazji **dwie z sześciu polityk przykładowych z `M9d` §5.6** na dwie każdą, bo przecena jest cenowa, a wycofanie z półki i zamówienie zapasowe. Czy dziedzina ma zostać granicą polityki, czy tylko granicą akcji — decyzja otwarta nr 13 fazy M9 | zapis `M9d` `DF-2` | R2-WP22 (weryfikacja po decyzji) | `[ ]` |
+| 56 ⇧ | **Dry-run nie zna salda, nastroju załogi ani wakatów.** Ślad doby zakładu (`PolicyTrace`) niesie półkę, bo o niej mówi polityka cenowa i zapasowa. Reguła oparta na `saldo`, `nastrój_załogi` albo `wolne_etaty` wychodzi w podglądzie jako „nie wiem" (`DrySummary.blind`), choć w wykonaniu się odpala. Sufit nazwany w kodzie, adresat wskazany: panel finansów `M9e` | zapis `M9d` `DF-6` | ⇧ `M9e` (WP10) | `[ ]` |
+
 **Bilans wejściowy:** 1 pozycja miała pakiet (37), 1 okazała się rozstrzygnięta i wypadła
 z wykazu (38), 11 było zapisanych jako znana usterka **bez wykonawcy**, a 29 nie było znanych
 planowi w żadnej postaci. Doszła jedna pozycja znaleziona przy weryfikacji sprostowania (38b).
+
+**Rzut M9d (47–56):** dwie pozycje były zapisane w tabeli korekt tej samej podfazy, w której
+powstały (55, 56 — obie z adresatem, ale bez pakietu), osiem nie było znanych planowi. Siedem
+z dziesięciu to kod starszy niż M9d: konwencja nazw ciągnie się od M5, `RemoveFromShelf`
+i promień metryki od M7c, `Catalog::must` od M3. Nowe są trzy i wszystkie dotyczą liczby albo
+tekstu na granicy interfejsu (49, 51, 52).
 
 Dziura jest jednorodna, a nie zbieraniną: **18 z 29 nieznanych** to demografia, rodzina, cykl
 życia i majątek gospodarstwa (1, 7–12, 16–28, 31). Reszta rozkłada się na higienę repozytorium
@@ -411,9 +461,9 @@ Ujednolicenie nagłówków jest zadaniem R2-WP23.
 | `R2b` | 5 | ~9 w `sim/economy`, `sim/agents`, `sim/firms` | 8 | M |
 | `R2c` | 5 | ~11 w `sim/traffic`, `sim/supply`, `sim/agents`, `data/` | 9 | M |
 | `R2d` | 3 | ~7 w `sim/world` | 5 | L |
-| `R2e` | 4 | ~370 miejsc w 10 crate'ach (sam R2-WP20) | 4 | L |
+| `R2e` | 6 | ~370 miejsc w 10 crate'ach (sam R2-WP20); R2-WP27 zależny od `D-N19` | 8 | L |
 | `R2f` | 3 | `tools/balansator`, `sim/world/tests`, `scripts/` | 3 | M |
-| **Razem** | **26** | — | **40** | — |
+| **Razem** | **28** | — | **44** | — |
 
 Szacunek liczby testów jest dolną granicą: kryterium akceptacji nr 2 wymaga testu, który padał,
 dla **każdego** pakietu, a pakiety wielotematyczne (R2-WP2, R2-WP22) potrzebują go dla każdego
