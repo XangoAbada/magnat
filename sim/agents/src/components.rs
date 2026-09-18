@@ -378,10 +378,34 @@ impl Employment {
     /// Poniedziałek–piątek. Punkt wyjścia, nie stała: maska weekendowa to `0b110_0000`.
     pub const WEEKDAYS: u8 = 0b001_1111;
 
+    /// Czy `site` w ogóle na coś wskazuje. **To nie jest „pracuje"** — uczeń ma
+    /// w `site` swoją szkołę (`E-19` w M3d), więc przechodzi przez ten warunek tak
+    /// samo jak pracownik. Pytanie „czy pracuje" ma własną metodę niżej i to jej
+    /// używa kod, który liczy zatrudnienie, płace i relacje w zakładzie.
     #[inline]
     #[must_use]
     pub const fn has_job(&self) -> bool {
         self.site != Employment::NO_SITE
+    }
+
+    #[inline]
+    #[must_use]
+    pub const fn is_pupil(&self) -> bool {
+        self.flags & (Employment::FLAG_PUPIL | Employment::FLAG_STUDENT) != 0
+    }
+
+    /// Czy mieszkaniec **pracuje**: ma miejsce i nie jest ono szkołą (`R2-WP1`).
+    ///
+    /// Rozdzielenie ucznia od pracownika idzie jawną metodą, a nie nową flagą, bo
+    /// flaga już jest — brakowało tylko jednego miejsca, w którym obie odpowiedzi
+    /// spotykają się w jednym wyrażeniu. Przed tą metodą uczeń wchodził do indeksu
+    /// miejsc pracy i dostawał relacje `Colleague` z klasą, a `M10e` §5.9 liczy
+    /// warunek uzwiązkowienia właśnie na spójnej składowej tego indeksu — pierwszą
+    /// kandydatką do uzwiązkowienia była szkoła podstawowa.
+    #[inline]
+    #[must_use]
+    pub const fn is_employed(&self) -> bool {
+        self.has_job() && !self.is_pupil()
     }
 
     /// Czy pracuje w tym dniu tygodnia. **Jedyna** droga do tej odpowiedzi — liczenie

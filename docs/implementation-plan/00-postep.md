@@ -469,19 +469,19 @@ Podfazy — porcje wykonawcze; kryterium zamknięcia każdej jest w jej dokumenc
 - [x] **M9b** Rdzeń UI — `M9b-rdzen-ui.md` (WP3, WP6, WP14)
 - [x] **M9c** Gracz, inspekcja, nakładki — `M9c-gracz-inspekcja-nakladki.md` (WP4, WP5, WP7)
 - [x] **M9d** Język reguł — `M9d-jezyk-regul.md` (WP8, WP9)
-- [~] **M9e** Panele, czas, kariera — `M9e-panele-czas-kariera.md` (WP10, WP11, WP12)
-  — WP10 i WP11 zamknięte; **WP12 w toku**: sukcesja, ekrany domknięcia i samouczek
-  nie mają drogi wejścia w grającej sesji (`DI-33`…`DI-35` w dokumencie podfazy)
+- [x] **M9e** Panele, czas, kariera — `M9e-panele-czas-kariera.md` (WP10, WP11, WP12)
 
 Bramki fazy:
 
-- [ ] **1. Pakiety robocze** — WP1–WP11, WP13 i WP14 zamknięte wg własnych kryteriów;
-  **WP12 jest `🔸` w toku**. `DH-3` rozstrzygnięte na starcie M9e: kryterium WP10 obejmuje
-  panele **operacyjne**, a kronika jest jawnie pominięta i mówi to o sobie
-  (`PanelId::is_operational`). Czego WP12 nie domyka: śmierć postaci nie przełącza gry
-  w sukcesję (`legacy::check` bez wołającego), ekranów domknięcia scenariusza i spuścizny
-  nie ma, samouczek jest flagą w danych bez wykonania. Kod pod każdą z tych trzech rzeczy
-  istnieje i ma testy — brakuje **drogi, którą gracz do nich dochodzi** (`DI-33`…`DI-35`)
+- [x] **1. Pakiety robocze** — WP1–WP14 zamknięte wg własnych kryteriów. `DH-3` rozstrzygnięte
+  na starcie M9e: kryterium WP10 obejmuje panele **operacyjne**, a kronika jest jawnie
+  pominięta i mówi to o sobie (`PanelId::is_operational`). **WP12 domknięty 2026-09-18**:
+  sześć braków `DI-33`…`DI-38` miało wspólną przyczynę — kod był, wejścia nie było.
+  Śmierć postaci przełącza grę w sukcesję (`GameState::settle` woła `legacy::check` raz
+  na dobę, w oknie i w przebiegu bezgłowym), ekrany domknięcia scenariusza i spuścizny
+  stoją w `game::screens::ending`, samouczek ma trzy pomijalne kroki, cele scenariusza
+  weszły do pulpitu, warunki zatrzymania da się wyłączać, a panel sklepu pokazuje bieżący
+  cel zapasu
 - [x] **2. Determinizm** — `sesja_odtwarza_sie_z_dziennika` (rok gry, łańcuch hashy co 1000 ticków)
   zielony po dołożeniu paneli, kroniki i scenariuszy. `uklad_paneli_nie_zmienia_hasha_stanu`:
   przypięcie panelu, zwinięcie go i przerysowanie wszystkich dziewięciu nie ruszają hasha —
@@ -505,8 +505,11 @@ Bramki fazy:
   `CardTabKind::History`. Poprawki wędrujące w przód: `DK-n` w M10, `DL-n` w M11, `DM-n` w M12
 - [x] **7. Decyzje otwarte** — zamknięte 3, 9, 11, 12 (i wcześniej 1, 2, 5); 6 i 8 **zawężone**
   z zapisanym pytaniem, które zostało; 4, 7, 10, 13 bez zmian
-- [ ] **Faza ukończona** — artefakt: gra uruchamiana bez wiersza poleceń, pełna ścieżka kariery,
-  panele biznesowe, automatyzacja polityk. Brakuje domknięcia WP12: patrz bramka 1
+- [x] **Faza ukończona** — artefakt: gra uruchamiana bez wiersza poleceń, pełna ścieżka kariery,
+  panele biznesowe, automatyzacja polityk. Wszystkie siedem bramek zamknięte. **Co zostaje
+  jako dług z imieniem**: budżety grafu i Gantta nie są zmierzone (`R2-WP29` w `R2f`),
+  a podatek spadkowy przy sukcesji nie istnieje — decyzja otwarta nr 8 fazy zostaje
+  z jednym pytaniem: ósma danina w `TaxKind` czy dziedziczenie wolne od podatku
 
 ### M10 — Głębia
 `M10-glebia.md` · wymaga: M9
@@ -552,7 +555,7 @@ kończy R2 bez statusu** — zamknięta z testem, przeniesiona z imiennym adresa
 z powodem albo „nie dotyczy".
 
 Powstał z jednego przeglądu repozytorium po M7f i dwóch przeglądów celowanych, a urósł w trzech
-kolejnych rzutach. **Wykaz ma 65 wierszy.** Z pierwszego rzutu: jedna pozycja miała pakiet, jedna
+kolejnych rzutach. **Wykaz ma 67 wierszy** — dwa ostatnie wiersze wyszły z wykonania pozycji 1, 2 i 21 przed R2 (`R2-WP35`, `R2-WP36`). Z pierwszego rzutu: jedna pozycja miała pakiet, jedna
 okazała się rozstrzygnięta, jedenaście stało zapisanych w tabelach korekt albo w rejestrze długu —
 **każda bez wykonawcy** — a dwadzieścia dziewięć nie było znanych planowi. Osiemnaście z tych
 dwudziestu dziewięciu to jeden obszar: demografia, rodzina, cykl życia i majątek gospodarstwa.
@@ -590,7 +593,10 @@ przeprowadzką tej pozycji.
 produkcyjny jest daną (`ages.labour_force` w `data/demography/demography.ron`, `K-60`);
 obie stałe `WORKING_AGE` zniknęły, `DEMOGRAPHY_SCHEMA_VERSION` idzie z 1 na 2, a walidator
 sprawdza granice wobec `school_start` i `ages.max`. `R2-WP12` zostaje w `R2c` jako wykonany.
-Pozostałe cztery pozycje (1, 2, 11, 21) czekają na swoje adresy bez zmian.
+**Pozycje 1, 2 i 21 wykonane 2026-09-18** (`K-74`, `K-75`) — już po zamknięciu M8d, które
+było ich adresem, i na polecenie właściciela produktu, a nie z pracy nad fazą. Uczeń
+dostaje placówkę i wykształcenie, zakład produkcyjny dostaje utarg. Czeka **jedna**
+pozycja wyprzedzająca: 11, adres `M10e`.
 
 ### M12 — Skala i jakość
 `M12-skala-i-jakosc.md` · wymaga: M11
@@ -617,6 +623,8 @@ Jedna linia na zamknięty pakiet roboczy lub bramkę. Najnowsze na górze.
 
 | Data | Faza | Co zamknięto | Uwagi |
 |---|---|---|---|
+| 2026-09-18 | M9 | **WP12 domknięty — bramka 1 i faza M9 zamknięte.** Sześć braków `DI-33`…`DI-38` miało jedną przyczynę: kod był, wejścia nie było. `Session::doba_gracza` woła `legacy::check` raz na dobę i odkłada fakt, a stan gry przełącza **`GameState::settle`** — jedna funkcja dla okna i dla przebiegu bezgłowego, bo sesja stoi **pod** stanem gry i nie ma prawa go zmieniać sama. Do tego dwa ekrany domknięcia (`game::screens::ending`: koniec scenariusza z rozliczeniem każdego celu, spuścizna z kroniką dynastii i wyborem dziedzica), samouczek na trzy pomijalne kroki (`game::tutorial`, każdy kończy się **faktem ze świata**, nie upływem czasu), cele scenariusza w pulpicie, przełącznik warunków zatrzymania w doku i bieżący cel zapasu w panelu sklepu. Dwa nowe wpisy w rejestrze długu R1 (51, 52) | **`TutorialScriptId` z §5.11 nie powstaje, i to jest jedyna rzecz w tym wpisie, która zmienia plan.** Identyfikator wybiera **jeden z wielu** skryptów, a skrypt jest jeden — numer wskazujący zawsze tę samą pozycję to numer bez zbioru. `Scenario::tutorial` zostaje `bool` i dopiero teraz ma czytelnika. Drugi wniosek jest procesowy i powtarza się trzeci raz w tej fazie: **wszystkie sześć braków to symbole publiczne bez wołającego** — `legacy::check`, `scenario_outcome`, `Scenario::tutorial`, `streak_progress_bp`, `StopWatch::set`, `Market::restock_days`. Każdy miał test, każdy się kompilował, żaden nie miał drogi, którą gracz do niego dochodzi. Pytanie „kto to woła” trzeba zadawać **każdemu** nowemu symbolowi przed odhaczeniem, a nie temu, o którym się pamięta |
+| 2026-09-18 | R2 | **Pozycje 1, 2 i 21 wykazu wykonane przed R2** — pakiety `R2-WP1`, `R2-WP5` i `R2-WP7`, kontrakty `K-74` i `K-75`. **(1) Cykl szkolny ma treść**: siedmiolatek dostaje placówkę (`places::nearest_school` — jedna reguła dla Etapu 8 i dla dobowego cyklu, bez losowania, więc bez numeru `StreamId`), a w `school_end` ją zwalnia. **(2) `Employment::is_employed()` = `has_job() && !is_pupil()`** i szesnaście plików przeszło na nią — uczeń wypadł z indeksu miejsc pracy, z faktuów rynku pracy, ze statystyki pracujących i z puli wakatów; klasa dostaje `Acquaintance` z własnego indeksu. **(3) `Vitals::edu_level` rośnie przy wyjściu ze szkoły** wg tabeli `education` w `demography.ron` (schemat 2→3, doszedł też `ages.childcare_end`). **(4) Zakład produkcyjny ma utarg**: `Settlement` niesie `seller_site` i `seller_cogs`, `absorb_settlements` zbiera je per zakład, a `close_month_with` wypuszcza tą samą listą, którą oddaje sklepom. Sześć nowych testów, każdy padał przed naprawą | **Trzy usterki, których plan nie znał, wyszły przy okazji — wszystkie z tej samej myśli, że `site` znaczy „praca”.** Rocznik uczniów z Etapu 8 tracił flagę w pierwszym roku gry (cykl pytał `has_job()`, a uczniowie mają szkołę w `site`); absolwent trzymał klucz szkoły do końca życia i dla rynku pracy wyglądał na zatrudnionego; `release_job_of` oddałoby szkołę do puli wakatów, czyli **tworzyło miejsce pracy z niczego** przy każdym zmarłym dziecku. Żadnej z nich nie było w wykazie R2. Drugi wniosek: **adres wygasł po raz siódmy**. Pozycje miały iść do M8d „jako warunek wejścia”; M8d zamknęło się bez nich, a wykonano je dopiero na polecenie właściciela produktu, dwie podfazy później. Hash stanu zmienia się świadomie: `SitePnlMonth` fabryki przestaje być zerem, a `SocialIndex` ma trzecią listę |
 | 2026-09-18 | R2 | **Wykaz R2 rośnie z 57 do 65 pozycji — rzut z przeglądu zapisu sesji.** Metoda inna niż w trzech poprzednich rzutach: nie czytano kodu, tylko wszystkie prompty i końcowe podsumowania **62 sesji** z 13–18 września, i zestawiono je z planem. Pytanie brzmiało „co zostało powiedziane i nigdzie nie zapisane". Osiem pozycji (58–65) i pięć nowych pakietów: `R2-WP30` (lista płac obciąża pracodawcę — `PayrollOutbox::take()` bez wołającego, wypłaty z konta `rest_of_world`), `R2-WP31` (szósty urząd `AgencyKind::Prosecution`, `K-73`), `R2-WP32` (konta stacji paliw, przewoźnika, taksówki i parkingu — decyzja 16 fazy M5, `K-62`), `R2-WP33` (`D-R8`: 13 z 41 benchmarków bez linii bazowej), `R2-WP34` (scenariusz `export_drains`). Dwie pozycje trafiły do pakietów istniejących: 63 (`UtilityKind`/`UtilityService` naraz) do `R2-WP22`, 65 (`CLAUDE.md` mówi o trzech formach liczebnika, kod ma cztery) do `R2-WP23`. Cztery dokumenty dostały wpis nadający adres temu, co go nie miało: `M5` (`AB-1`), `M6` (`AR-1`, `AR-2`), `M8` (`CK-1`, `CK-2`), `R1` (`T-1`) | **Sześć z ośmiu pozycji plan już znał** — i to jest jedyny wniosek wart zapisania. Dwie były zaadresowane **wprost do wykazu R2** przez `M8` `CJ-9` i nie dojechały; `CJ-9` kończy się zdaniem „to jest dokładnie ten wzorzec, który `R2-WP26` ma złapać" i sam mu uległ. Dwie były decyzją otwartą w dokumencie, który zamknął się bez niej — decyzja 16 trzymała bramkę 7 fazy M5 przez cztery fazy bez właściciela, a `00-postep` opisywał `D-R8` jako „otwarte z adresem", którego nigdy nie było. Stąd poz. 64 i **druga połowa `R2-WP26`**: rejestr długu ma egzekutora od R1, tabele korekt nie mają żadnego, choć niosą ten sam rodzaj zobowiązania. Sprawdzenie dwudziestu wierszy wskazujących inny dokument dało osiem bez pokrycia pod wskazanym adresem. Wniosek: **adres bez egzekutora działa tak samo jak brak adresu, tylko dłużej wygląda na rozwiązany** |
 | 2026-09-18 | M9 | **Korekta odhaczenia M9e: WP12 wraca na „w toku", bramka 1 i „faza ukończona" na otwarte.** Trzy rzeczy z WP12 mają kod i testy, ale nie mają **drogi wejścia w grającej sesji**: `legacy::check` (wykrycie śmierci) nie ma wołającego, `GameState::{Succession, ScenarioEnd}` nie ma nikogo, kto je konstruuje, a `Scenario::tutorial` jest flagą bez czytelnika. Do tego ekranów domknięcia scenariusza i spuścizny (`DF-5`) nie ma, panelu celów nie ma, a gracz nie może wyłączyć warunku zatrzymania. Sześć pozycji `DI-33`…`DI-38` w dokumencie podfazy; benchmarki grafu i Gantta dostały pakiet `R2-WP27` w `R2f` zamiast odesłania w próżnię; M10 dostało `DK-6` o strajku i celu produktowym | **Odhaczyłem pakiet, którego kryterium brzmi „bankructwo *i śmierć* nie kończą sesji", a śmierć nie jest w grze wykrywana.** Testy WP12 sprawdzały komendy — `Succeed` wydaną ręcznie — a nie drogę, którą gracz do nich dochodzi. To jest **ta sama klasa błędu**, którą recenzja znalazła przy panelach osiem godzin wcześniej (`DI-21`: siedem paneli bez wejścia), i nie rozpoznałem jej po raz drugi, bo w tamtym miejscu szukałem jej w kliencie, a tutaj w symulacji. Wniosek dla następnej podfazy: pytanie „kto to woła" trzeba zadać **każdemu** nowemu publicznemu symbolowi przed odhaczeniem, a nie tylko temu, o którym się pamięta |
 | 2026-09-18 | M9 | **M9e — panele, czas, kariera (WP10, WP11, WP12); podfaza i faza M9 zamknięte.** Dziewięć paneli biznesowych w doku lewym, każdy z własnym modelem pod stemplami źródeł (`Panels`, `PanelRegistry`, `PanelDesc` jako dana dla M10 i M12). **Osiem paneli dostało komendy i wykonawców** — `FoundFirm`, `OpenSite`, `CloseSite`, `SetShelfAssortment`, `SetRestockTarget`, `HireCandidate`, `SetDelegationAutonomy`, `ApplyForJob`, `TakeLoan`, `BackCandidate`, `ApplyForPermit` — wszystkie tą samą drogą, którą chodzi AI (`firmlife::found`, `expand::open_all`, `owner_ops`, `Market::request_working_capital`, `Election::back_candidate`). `GraphView` i `GanttView` w `engine/ui`. Czas: dziewięć gotowych warunków „zatrzymaj, gdy…", tryb „śledź" z przypięciem do Mikro, kronika zbierająca dzienniki `sim/*`, karta partii „od pola do półki". Kariera: `CareerTier` wyprowadzany z faktów, sześć scenariuszy w `data/scenarios/scenarios.ron`, dwie łatki świata, upadłość osobista i sukcesja, pomiar onboardingu z dziennika replayu. Trzydzieści dwie poprawki `DI-n` w dokumencie podfazy, z czego **dwanaście z recenzji przed commitem**; wykaz `R2` rośnie o jedną pozycję (57) | **Cztery kryteria pękły przy pierwszym uruchomieniu testów i każde pokazało coś, czego plan nie widział.** Spadkobierca dostawał zakład, którego w rejestrze firm nie był właścicielem — więc `precheck` odmawiał mu każdej komendy dotyczącej własnego sklepu (`DI-10`). Łatka samouczka zamknęła 83 sklepy z 83, bo w mieście testowym wszystkie stoją w jednej dzielnicy: nisza to brakujący **rodzaj** sklepu, a nie martwa dzielnica (`DI-11`). Warunek zatrzymania milczał przez pierwszą dobę, bo licznik godzin startował od zera, które jest prawdziwą godziną (`DI-13`). A panel sklepu pokazywał cudze teksty, bo `ui.shop.*` należy od M5e do **karty** zakładu (`DI-16`). Wniosek: test klikający po siatce punktów doku znalazł trzy z tych czterech — sprawdzenie „czy przycisk istnieje" nie znalazłoby żadnej. **Recenzja przed commitem dołożyła dwanaście kolejnych i dwie z nich unieważniały obietnicę podfazy**: siedem z dziewięciu paneli było w grze nieosiągalnych (`min_tier` nie miał czytelnika), a komenda „złóż wniosek o pozwolenie" wywalała grę przy otwarciu kroniki — brakującym kluczem tekstu. Obu nie znalazł żaden test, bo obie leżą **poza** ścieżką, którą testy chodzą: pierwsza w kliencie, druga za komendą, której test nie wydaje |

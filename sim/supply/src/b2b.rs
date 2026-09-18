@@ -74,6 +74,20 @@ pub struct Settlement {
     /// czytelnika po stronie księgi.
     pub deliver_to: SiteId,
     pub seller: SellerRef,
+    /// Zakład, **z którego** towar wyjechał; `None` przy imporcie zza granicy.
+    ///
+    /// Dopisane w `R2-WP7`. Sam `FirmId` nie wystarczał do niczego, co nazywa
+    /// wynik: firma z trzema zakładami dostawała jedną kwotę i nie było jej jak
+    /// rozdzielić na linie, więc `Firms::post_revenue` nie miało kogo obciążyć
+    /// utargiem i `SitePnlMonth.revenue` zakładu produkcyjnego zostawał zerem.
+    /// Rozstrzygnięcie zna zakład sprzedawcy w chwili konstrukcji — pole tylko
+    /// przenosi to, co już było wiadomo.
+    pub seller_site: Option<SiteId>,
+    /// Koszt własny sprzedawcy dla tej wysyłki — to, ile partia kosztowała **jego**,
+    /// zanim zmieniła właściciela. Liczy ją `Store::resell`, czyli to samo miejsce,
+    /// które dopisuje ją do księgi kontrolnej magazynu: marża zakładu jest wtedy
+    /// liczona z partii, a nie z miesięcznej średniej.
+    pub seller_cogs: Money,
     pub good: GoodId,
     pub mass: Mass,
     pub net: Money,

@@ -22,6 +22,7 @@
 
 mod character;
 mod controls;
+pub mod ending;
 mod menu;
 mod newgame;
 mod settings;

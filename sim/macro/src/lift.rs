@@ -143,7 +143,7 @@ fn zbierz_ludzi(world: &World) -> Vec<Osoba> {
             district,
             class: SocialClass::of(Q::new(v.status)).as_index() as u8,
             age_years: lata,
-            employed: emp.is_some_and(|e| e.has_job()),
+            employed: emp.is_some_and(|e| e.is_employed()),
             in_labour_force: wiek.is_some_and(|(lo, hi)| lata >= lo && lata <= hi),
             skills,
             needs,

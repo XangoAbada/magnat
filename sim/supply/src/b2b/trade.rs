@@ -552,7 +552,10 @@ impl B2b {
             wynik.push(Settlement {
                 buyer: p.buyer,
                 deliver_to: p.deliver_to,
+                // Import: sprzedawcą jest zagranica, więc zakładu sprzedającego nie ma.
                 seller: SellerRef::External(p.node),
+                seller_site: None,
+                seller_cogs: Money::ZERO,
                 good: p.good,
                 mass: p.mass,
                 net: p.paid,
@@ -667,6 +670,17 @@ impl B2b {
             buyer: FirmId(site_wezla.entity()),
             deliver_to: site_wezla,
             seller: SellerRef::Firm(seller),
+            // **Eksport nie wchodzi do rachunku wyniku zakładu** i to jest decyzja,
+            // nie przeoczenie. Masa schodzi z bilansu dopiero po rozładunku w węźle
+            // (`absorb_exports`), więc w tej chwili nie ma czym zmierzyć kosztu
+            // własnego — a utarg bez kosztu pokazałby fabryce sto procent marży
+            // i tier taktyczny trzymałby eksportera bez względu na wynik. Zero utargu
+            // znaczy w `margin_bp()` „nie wiem" i to jest uczciwsza odpowiedź niż
+            // fałszywy zysk. `ponytail:` sufit z drogą wyjścia: `Store::export` zwraca
+            // koszt (`trade.rs`, `absorb_exports` wyrzuca go do `_koszt`), brakuje
+            // wyłącznie pamięci, **który zakład** wysłał towar do węzła.
+            seller_site: None,
+            seller_cogs: Money::ZERO,
             good,
             mass,
             net: netto,

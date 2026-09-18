@@ -332,6 +332,17 @@ pub(crate) struct MarketInner {
     /// miasto. `BTreeMap`, więc kolejność idzie po `SiteId`, a nie po kolejności
     /// dostaw (00 §3.2).
     pub(crate) b2b_outbox: BTreeMap<SiteId, crate::shop::B2bTax>,
+    /// Utarg i koszt własny **hurtowy** zakładu, narastająco w bieżącym miesiącu
+    /// (`R2-WP7`). Po `SiteId`, więc kolejność idzie po kluczu, a nie po kolejności
+    /// dostaw (00 §3.2). Opróżnia to `close_month_with`.
+    ///
+    /// Zakład produkcyjny nie ma księgi (`close.rs` domyka okres wyłącznie sklepom),
+    /// więc bez tego licznika jego `SitePnlMonth.revenue` zostawał zerem — a zero
+    /// znaczy w `margin_bp()` „nie wiem", nie „strata". Tier taktyczny AI przerywa
+    /// liczenie miesięcy straty na pierwszym miesiącu bez pomiaru, więc fabryka była
+    /// **strukturalnie odporna na zamknięcie**, niezależnie od tego, jak długo
+    /// przynosiła straty.
+    pub(crate) wholesale_pnl: BTreeMap<SiteId, (Money, Money)>,
     pub(crate) seed: u64,
     tick: Tick,
     stats: MarketStats,
@@ -397,6 +408,7 @@ impl Market {
             rest_of_world,
             tax: Box::new(NoTax),
             b2b_outbox: BTreeMap::new(),
+            wholesale_pnl: BTreeMap::new(),
             seed,
             tick: Tick(0),
             stats: MarketStats::default(),
@@ -697,6 +709,15 @@ impl HashState for Market {
         for (site, t) in &m.b2b_outbox {
             site.entity().hash_state(h);
             t.hash_state(h);
+        }
+        // Utarg hurtowy narastający w miesiącu **jest stanem**: między dostawą
+        // a domknięciem miesiąca jest jedynym śladem po wyniku zakładu, tak samo
+        // jak `b2b_outbox` jest jedynym śladem po naliczonej daninie.
+        h.write_u32(m.wholesale_pnl.len() as u32);
+        for (site, (utarg, koszt)) in &m.wholesale_pnl {
+            site.entity().hash_state(h);
+            utarg.hash_state(h);
+            koszt.hash_state(h);
         }
         m.loans.hash_state(h);
         h.write_u8(u8::from(m.bank.is_some()));

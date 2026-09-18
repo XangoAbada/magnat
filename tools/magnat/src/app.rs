@@ -469,6 +469,13 @@ impl App {
     /// stoi albo gdy nakładce brakuje przedmiotu — zasięg bez wybranego sklepu nie ma
     /// czego pokazać i gaśnie, zamiast rysować pustą mapę.
     fn pole_danych(&mut self) -> Option<overlay::Pole> {
+        // Drugi krok samouczka kończy się **włączeniem** nakładki zasięgu, a nie
+        // tym, że miała co narysować (`DI-35`): gracz bez wybranego sklepu robi
+        // dokładnie to, o co go poproszono, i ma iść dalej.
+        let zasieg = self.nakladka == overlay::Nakladka::ZasiegSklepu;
+        if let Some(c) = self.citizens.as_mut() {
+            c.zasieg_wlaczony = zasieg;
+        }
         if !self.nakladka.jest_danymi() {
             self.ustaw_legende(None);
             return None;
@@ -621,6 +628,10 @@ impl App {
                     self.minute = SimMinute(self.dzien_slonca * 1440 + t.0);
                 }
             }
+            // Zgon postaci i domknięcie scenariusza przełączają stan gry (`DI-33`,
+            // `DI-34`). Decyzja jest w `game/`, a nie tutaj: przebieg bezgłowy musi
+            // dostać tę samą odpowiedź co okno.
+            self.game.settle();
         } else if self.terrain.is_some() && self.citizens.is_none() {
             let mnoznik = if self.czas_x1000 { 1000.0 } else { 1.0 };
             self.minute = SimMinute(self.minute.0 + (dt * mnoznik) as u64);

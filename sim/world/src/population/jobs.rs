@@ -205,47 +205,32 @@ fn gospodarstwo_mieszkanca(world: &World, c: Entity) -> Option<Entity> {
 /// (`household::roles` wymaga `site != NO_SITE`). Zwraca liczbę uczniów, dla których
 /// miasto nie miało ani jednej szkoły w zasięgu — to jest liczba do raportu, nie
 /// do wygładzenia.
+/// Reguła wyboru placówki mieszka w `sim/agents::places::nearest_school`, bo ma
+/// **dwóch wołających**: ten krok generatora i dobowy cykl życia (`R2-WP1`), który
+/// posyła do szkoły siedmiolatka urodzonego w grze. Dwie kopie rozjechałyby się przy
+/// pierwszej zmianie promieni, a rozjazd byłoby widać jako dziecko chodzące do innej
+/// szkoły niż jego rówieśnik spod tego samego adresu.
 pub(super) fn przypisz_szkoly(
     world: &mut World,
     mieszkancy: &[Entity],
     places: &PlaceTable,
 ) -> u32 {
-    /// Promienie szukania szkoły: kwartał, dzielnica, pół miasta.
-    const PROMIENIE: [f32; 3] = [800.0, 2500.0, 8000.0];
     let mut bez = 0u32;
     for c in mieszkancy {
-        let uczen = world
-            .get::<Employment>(*c)
-            .is_some_and(|e| e.flags & Employment::FLAG_PUPIL != 0);
+        let uczen = world.get::<Employment>(*c).is_some_and(Employment::is_pupil);
         if !uczen {
             continue;
         }
-        let Some(dom) = world.get::<Residence>(*c).and_then(home_place) else {
-            bez += 1;
-            continue;
-        };
-        let Some(at) = places.coord_of(dom) else {
-            bez += 1;
-            continue;
-        };
-        let mut najblizsza: Option<(i64, u32)> = None;
-        for r in PROMIENIE {
-            places.for_each_near(PlaceKind::Education, at, r, |e| {
-                let d = e.at.distance_sq_xy(at);
-                let klucz = magnat_agents::knowledge_key(e.place).unwrap_or(u32::MAX);
-                if najblizsza.is_none_or(|(bd, bk)| (d, klucz) < (bd, bk)) {
-                    najblizsza = Some((d, klucz));
-                }
-            });
-            if najblizsza.is_some() {
-                break;
-            }
-        }
-        match najblizsza {
-            Some((_, klucz)) => {
+        let szkola = world
+            .get::<Residence>(*c)
+            .and_then(home_place)
+            .and_then(|dom| places.coord_of(dom))
+            .and_then(|at| magnat_agents::nearest_school(places, at));
+        match szkola {
+            Some(klucz) => {
                 if let Some(e) = world.get_mut::<Employment>(*c) {
                     e.site = klucz;
-                    e.work_days = 0b001_1111;
+                    e.work_days = Employment::WEEKDAYS;
                     e.shift = ShiftKind::Early as u8;
                 }
             }

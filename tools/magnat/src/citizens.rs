@@ -104,6 +104,12 @@ pub struct Citizens {
     pub(crate) follow: magnat_game::timectl::Follow,
     /// Ostatnie trafienie warunku — zdanie w pasie alertów, dopóki gracz nie ruszy.
     pub(crate) trafienie: Option<magnat_game::StopHit>,
+    /// Samouczek, jeśli scenariusz o niego prosi (`DI-35`). Strona widoku: nie
+    /// dotyka świata, nie wchodzi do hasha i nie wydaje komend za gracza.
+    pub(crate) samouczek: Option<magnat_game::Tutorial>,
+    /// Czy gracz ma dziś włączoną nakładkę zasięgu sklepu — drugi krok samouczka
+    /// kończy się tym faktem, a nakładkę wybiera `App`, nie ten moduł.
+    pub(crate) zasieg_wlaczony: bool,
 }
 
 /// Co unieważnia kartę mieszkańca: świat (potrzeby, majątek), zaznaczenie, minuta
@@ -146,6 +152,8 @@ impl Citizens {
             stop: magnat_game::StopWatch::default(),
             follow: magnat_game::timectl::Follow::default(),
             trafienie: None,
+            samouczek: None,
+            zasieg_wlaczony: false,
             model: magnat_ui::Cached::new(&ZRODLA_KARTY),
             karta: magnat_ui::Cached::new(&ZRODLA_KARTY_INSPEKCJI),
         })
@@ -245,6 +253,7 @@ impl Citizens {
             self.wersje.bump(magnat_ui::DataSource::Clock);
             self.wersje.bump(magnat_ui::DataSource::World);
             self.panele.sync(session);
+            self.tutorial_tick(session);
             // Warunki sprawdzają się **na stanie, który już jest**: nic nie liczą
             // i nic nie zapisują. Trafienie stawia zegar na pauzie na granicy klatki.
             let cel = !session.fresh_objectives().is_empty();
@@ -598,7 +607,11 @@ impl Citizens {
             session,
             &self.ui.catalog,
             self.ui.locale,
-            &mut self.panele,
+            crate::dock::Dok {
+                panele: &mut self.panele,
+                stop: &mut self.stop,
+                samouczek: &mut self.samouczek,
+            },
             self.trafienie,
         );
 

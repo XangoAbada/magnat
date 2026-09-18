@@ -111,7 +111,7 @@ fn krok_umiejetnosci(
         }
         // Tydzień pracy w roli podnosi ją o punkt; tydzień bez niej odbiera tyle,
         // ile mówi `decay` (setne punktu na dobę × 7).
-        if emp.has_job() && emp.role == s.role {
+        if emp.is_employed() && emp.role == s.role {
             s.level = s.level.saturating_add(1).min(100);
         } else {
             let ubytek = (u32::from(s.decay) * 7 / 100).max(1) as u8;

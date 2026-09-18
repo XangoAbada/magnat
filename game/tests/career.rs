@@ -9,7 +9,8 @@ use magnat_game::scenario::ScenarioOutcome;
 use magnat_game::session::Session;
 use magnat_game::shell::{NewGameParams, ScenarioId};
 use magnat_game::world::{population, SessionOpts};
-use magnat_game::{GenWatch, PlayerCommand};
+use magnat_game::screens::ending::EndAction;
+use magnat_game::{GameState, GenWatch, PlayerCommand};
 use magnat_jobs::JobPool;
 use magnat_world::{Difficulty, EconomyProfile, Epoch, Region, WorldGenParams, WorldSize};
 
@@ -105,6 +106,86 @@ fn siec_piecdziesieciu_sklepow_domyka_scenariusz() {
         CareerTier::Company,
         "pięćdziesiąt sklepów jednej branży to firma, nie grupa"
     );
+
+    // **Droga wejścia**, a nie sam wynik (`DI-34`). Do domknięcia `WP12` test kończył
+    // się na `scenario_outcome()` — i to on był jedynym czytelnikiem tej funkcji,
+    // więc gracz nie dowiadywał się, że wygrał.
+    let mut stan = GameState::Playing(Box::new(s));
+    assert!(stan.settle(), "domknięty scenariusz nie przełączył stanu gry");
+    assert!(
+        matches!(
+            stan,
+            GameState::ScenarioEnd {
+                outcome: ScenarioOutcome::Won,
+                ..
+            }
+        ),
+        "wygrany scenariusz nie doprowadził do ekranu domknięcia"
+    );
+    // Ekran nie jest ślepym zaułkiem: „graj dalej” wraca do gry w tym samym świecie.
+    assert!(stan.apply_end(EndAction::KeepPlaying));
+    assert!(stan.is_playing(), "„graj dalej” nie wróciło do gry");
+    // I pokazuje się **raz**: cel raz osiągnięty zostaje osiągnięty, więc bez pamięci
+    // o obejrzanym ekranie gracz wracałby na niego co dobę.
+    stan.session_mut().expect("sesja").step(1_441, 0);
+    assert!(!stan.settle(), "ekran domknięcia wrócił po „graj dalej”");
+    assert!(stan.is_playing());
+}
+
+/// Kryterium WP12: **śmierć** postaci przełącza grę w sukcesję.
+///
+/// To jest `DI-33`. Do domknięcia `WP12` `legacy::check` nie miał ani jednego
+/// wołającego, więc zgon postaci nie zmieniał w grze nic: gracz sterował trupem.
+///
+/// Test zabija postać **tak, jak robi to demografia**: gasi flagę życia, zdejmuje
+/// mieszkańca ze spisu i **despawnuje encję** (`demography::day::smierc` kończy się
+/// `cmd.despawn`). To nie jest ozdoba testu — gdyby zostawić samą flagę, `heir_of`
+/// znalazłoby dziedzica przez `Identity`, którego w prawdziwej grze już nie ma,
+/// i test przechodziłby przy zepsutej sukcesji.
+#[test]
+#[ignore = "pełne miasto - uruchamiane z --release"]
+fn smierc_postaci_przelacza_gre_w_sukcesje() {
+    let mut s = swiat(ScenarioId::SANDBOX, StartVariant::Heir);
+    let kto = s.player().expect("postać").citizen;
+    let dziedzic = magnat_game::legacy::heir_of(&s, kto);
+
+    if let Some(id) = s
+        .app
+        .world
+        .get_mut::<magnat_agents::Identity>(kto.entity())
+    {
+        id.flags &= !magnat_agents::Identity::FLAG_ALIVE;
+    }
+    s.app
+        .world
+        .resource_mut::<magnat_agents::Population>()
+        .remove_citizen(kto.entity());
+    assert!(s.app.world.despawn(kto.entity()), "encja postaci nie znikła");
+    // Cykl życia gracza sprawdza się raz na dobę, tak samo jak cele scenariusza.
+    s.step(1_441, 0);
+
+    let mut stan = GameState::Playing(Box::new(s));
+    assert!(stan.settle(), "zgon postaci nie przełączył stanu gry");
+    let GameState::Succession { heir, .. } = &stan else {
+        panic!("po zgonie gra nie weszła w sukcesję");
+    };
+    assert_eq!(*heir, dziedzic, "gra proponuje innego dziedzica niż `heir_of`");
+
+    match dziedzic {
+        Some(h) => {
+            assert!(stan.apply_end(EndAction::Succeed(h)));
+            stan.session_mut().expect("sesja").step(2, 0);
+            assert!(stan.is_playing(), "sukcesja nie wróciła do gry");
+            assert_eq!(
+                stan.session().and_then(|x| x.player()).map(|p| p.citizen),
+                Some(h),
+                "rola nie przeszła na dziedzica"
+            );
+        }
+        // Gospodarstwo jednoosobowe: brak dziedzica jest normalnym stanem świata
+        // i prowadzi do ekranu spuścizny, a nie do końca gry (§13.4).
+        None => assert!(matches!(stan, GameState::Succession { heir: None, .. })),
+    }
 }
 
 /// Kryterium WP12: bankructwo **nie kończy sesji**.

@@ -316,7 +316,7 @@ fn losuj_klase(r: &mut magnat_core::Rng, catalog: &VehicleCatalog) -> VehicleCla
 fn dorosly_z_praca(world: &World, c: Entity) -> bool {
     world
         .get::<magnat_agents::Employment>(c)
-        .is_some_and(magnat_agents::Employment::has_job)
+        .is_some_and(magnat_agents::Employment::is_employed)
 }
 
 fn hh_entity(world: &World, index: u32) -> Option<Entity> {

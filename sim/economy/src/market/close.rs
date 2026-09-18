@@ -144,6 +144,28 @@ impl Market {
                 ));
             }
         }
+        // Zakłady produkcyjne: utarg hurtowy zebrany przez `absorb_settlements`
+        // (`R2-WP7`). Nie przechodzi przez `ledger::close_period`, bo zakład księgi
+        // nie ma — ale wchodzi do tej samej listy, więc `post_revenue` ma jednego
+        // wołającego i jedną drogę, tak samo jak przed tą naprawą.
+        //
+        // Zakład, który w tym miesiącu nic nie wysłał, **nie dostaje wpisu**: wpis
+        // z zerowym utargiem znaczyłby w `margin_bp()` „nie wiem", czyli dokładnie
+        // to, co ta naprawa usuwa.
+        for (site, (utarg, koszt)) in std::mem::take(&mut m.wholesale_pnl) {
+            // Sklep sprzedający hurtowo ma już wiersz z domknięcia własnej księgi —
+            // ale sprzedaż B2B **nie zapisuje sprzedawcy nic w `LedgerAccount::Revenue`**,
+            // więc tamten wiersz jej nie zawiera. Dopisujemy do niego, zamiast pchać
+            // drugi: `post_revenue` **nadpisuje** wpis miesiąca, więc druga pozycja
+            // skasowałaby utarg detaliczny kwotą samego hurtu.
+            match wyniki.iter_mut().find(|(s, _, _, _)| *s == site) {
+                Some(w) => {
+                    w.2 = Money(w.2.get() + utarg.get());
+                    w.3 = Money(w.3.get() + koszt.get());
+                }
+                None => wyniki.push((site, miesiac, utarg, koszt)),
+            }
+        }
         (suma, wyniki)
     }
 }

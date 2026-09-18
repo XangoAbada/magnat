@@ -548,12 +548,13 @@ impl B2b {
                     .is_ok();
                 let cena =
                     Money((i128::from(d.unit_price.0) * i128::from(masa.0) / 1_000_000) as i64);
+                let mut koszt_sprzedawcy = Money::ZERO;
                 if wyslane {
                     // Zmiana właściciela przeszacowuje koszt własny na cenę zapłaconą
                     // (`AP-7`) — tak samo jak przy sprzedaży spotowej.
                     if let Some(o) = transport.get(id) {
                         let cargo = o.cargo.clone();
-                        store.resell(&cargo, cena);
+                        koszt_sprzedawcy = store.resell(&cargo, cena);
                     }
                 }
                 if let Some(c) = self.contracts.get_mut(&idx) {
@@ -563,6 +564,8 @@ impl B2b {
                             buyer: c.buyer,
                             deliver_to: c.deliver_to,
                             seller: SellerRef::Firm(c.seller),
+                            seller_site: Some(c.deliver_from),
+                            seller_cogs: koszt_sprzedawcy,
                             good: d.good,
                             mass: masa,
                             net: cena,

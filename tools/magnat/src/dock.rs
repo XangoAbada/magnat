@@ -8,11 +8,21 @@
 //! Widok 3D zostaje widoczny zawsze: panel pełnoekranowy istnieje wyłącznie dla
 //! kroniki i edytora reguł.
 
-use magnat_game::{PanelAction, PanelCtx, Panels, Session, StopHit};
+use magnat_game::{PanelAction, PanelCtx, Panels, Session, StopHit, StopWatch, ViewCommand};
 use magnat_ui::{Catalog, Locale, Theme};
 
 /// Szerokość doku w punktach logicznych (`ui-design.md` §5).
 const DOK_PX: f32 = 320.0;
+
+/// Stan widoku, który dok zmienia: panele, warunki zatrzymania i samouczek.
+///
+/// Jedna paczka zamiast trzech osobnych `&mut` w sygnaturze — wszystkie trzy są polami
+/// `Citizens` i żyją dokładnie tak długo, jak ta klatka.
+pub(crate) struct Dok<'a> {
+    pub panele: &'a mut Panels,
+    pub stop: &'a mut StopWatch,
+    pub samouczek: &'a mut Option<magnat_game::Tutorial>,
+}
 
 /// Rysuje dok i pas alertów. Zwraca to, o co poprosił panel.
 pub(crate) fn draw(
@@ -21,9 +31,14 @@ pub(crate) fn draw(
     session: &Session,
     catalog: &Catalog,
     locale: Locale,
-    panele: &mut Panels,
+    dok: Dok<'_>,
     trafienie: Option<StopHit>,
 ) -> PanelAction {
+    let Dok {
+        panele,
+        stop,
+        samouczek,
+    } = dok;
     let holdings = magnat_game::Holdings::of(session);
     let ctx = PanelCtx {
         theme,
@@ -43,8 +58,11 @@ pub(crate) fn draw(
                 if a != PanelAction::None {
                     akcja = a;
                 }
+                warunki(ui, &ctx, panele, stop);
             });
         });
+
+    pasek_samouczka(ui, &ctx, samouczek);
 
     // Pas alertów na dole: **jeden wiersz** o zatrzymaniu, bo to on tłumaczy,
     // czemu gra stanęła. Alert bez możliwej akcji jest wpisem kroniki, nie alertem
@@ -60,6 +78,74 @@ pub(crate) fn draw(
             });
     }
     akcja
+}
+
+/// Pasek samouczka u góry ekranu (`DI-35`).
+///
+/// **Nie jest oknem modalnym** i to jest warunek z §5.12 pkt 4, nie estetyka: świat
+/// pod paskiem tyka, a każde kliknięcie w mapę dochodzi tam, gdzie zawsze. Dwa
+/// przyciski, bo pomijalny ma być **krok** i **całość**.
+fn pasek_samouczka(
+    ui: &mut egui::Ui,
+    ctx: &PanelCtx<'_>,
+    samouczek: &mut Option<magnat_game::Tutorial>,
+) {
+    let Some(t) = samouczek.as_mut() else {
+        return;
+    };
+    let Some(krok) = t.step() else {
+        return;
+    };
+    egui::Area::new(egui::Id::new("magnat.tutorial"))
+        .anchor(egui::Align2::CENTER_TOP, egui::vec2(0.0, 12.0))
+        .show(ui.ctx(), |ui| {
+            egui::Frame::popup(ui.style()).show(ui, |ui| {
+                ui.set_max_width(520.0);
+                ui.label(
+                    egui::RichText::new(ctx.text(&format!("ui.tutorial.{}.title", krok.key())))
+                        .font(ctx.theme.font(magnat_ui::TextRole::Title)),
+                );
+                ui.label(
+                    egui::RichText::new(ctx.text(&format!("ui.tutorial.{}.hint", krok.key())))
+                        .font(ctx.theme.font(magnat_ui::TextRole::Body)),
+                );
+                ui.horizontal(|ui| {
+                    if ui.button(ctx.text("ui.tutorial.skip_step")).clicked() {
+                        t.skip_step();
+                    }
+                    if ui.button(ctx.text("ui.tutorial.skip_all")).clicked() {
+                        t.skip_all();
+                    }
+                });
+            });
+        });
+}
+
+/// Lista warunków „zatrzymaj, gdy…" (`DI-37`).
+///
+/// Do domknięcia `WP12` zestaw był uzbrojony na sztywno przy wejściu do świata,
+/// a `StopWatch::set` i `ViewCommand::SetStopCondition` nie miały ani jednego
+/// wołającego — gracz nie mógł wyłączyć warunku, który mu przeszkadzał. Warunki
+/// **wyłączone zostają na liście**: gracz ma je znaleźć tam, gdzie je zostawił.
+///
+/// Zwinięte domyślnie, bo to jest ustawienie, a nie codzienna decyzja — a dok należy
+/// do tego, co gracz prowadzi.
+fn warunki(ui: &mut egui::Ui, ctx: &PanelCtx<'_>, panele: &mut Panels, stop: &mut StopWatch) {
+    ui.add_space(ctx.theme.gap(4));
+    egui::CollapsingHeader::new(ctx.text("ui.stop.list"))
+        .default_open(false)
+        .show(ui, |ui| {
+            for (id, c, on) in stop.armed() {
+                let mut wlaczony = on;
+                let etykieta = ctx.text(&format!("ui.stop.{}", c.key()));
+                if ui.checkbox(&mut wlaczony, etykieta).changed() {
+                    stop.set(id, wlaczony);
+                    // Do dziennika wejść, tak samo jak otwarcie panelu: strumień
+                    // widoku jest tym, z czego liczy się metryka i odtwarza zgłoszenie.
+                    panele.push_view(ViewCommand::SetStopCondition { id, on: wlaczony });
+                }
+            }
+        });
 }
 
 impl crate::app::App {
@@ -146,6 +232,39 @@ impl crate::citizens::Citizens {
     /// Kogo śledzi kamera.
     pub(crate) fn following(&self) -> Option<magnat_game::FollowTarget> {
         self.follow.target()
+    }
+
+    /// Uruchamia samouczek, jeśli scenariusz tej gry o niego prosi (`DI-35`).
+    /// Wołane raz, po wejściu do świata — tak samo jak uzbrojenie warunków.
+    pub(crate) fn start_tutorial(&mut self, session: &Session) {
+        self.samouczek = magnat_game::Tutorial::start(session);
+        if let Some(v) = self.samouczek.and_then(|t| t.speed()) {
+            self.set_speed(v);
+        }
+    }
+
+    /// Przesuwa samouczek faktami ze świata i z widoku.
+    ///
+    /// Postęp składa się z dwóch źródeł, bo takie są kroki: śledzenie i nakładka
+    /// należą do widoku, a otwarty sklep z ceną do sesji. `game::tutorial` nie
+    /// zagląda do klienta — dostaje trzy bity i tyle mu wystarcza.
+    pub(crate) fn tutorial_tick(&mut self, session: &Session) {
+        let Some(t) = self.samouczek.as_mut() else {
+            return;
+        };
+        let mut p = magnat_game::TutorialProgress::of(session);
+        p.following_self = match (self.follow.target(), session.player()) {
+            (Some(magnat_game::FollowTarget::Citizen(c)), Some(g)) => c == g.citizen,
+            _ => false,
+        };
+        p.catchment_shown = self.zasieg_wlaczony;
+        t.advance(&p);
+        // Skończony samouczek **znika**, zamiast stać jako `Some` do końca gry:
+        // `TutorialProgress::of` przechodzi cały dziennik wejść, więc trzymanie go
+        // przy życiu kosztowałoby coraz więcej za odpowiedź, która już się nie zmieni.
+        if t.is_done() {
+            self.samouczek = None;
+        }
     }
 
     /// Podbija stempel źródła — po komendzie gracza panele mają się przebudować.

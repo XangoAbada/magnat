@@ -86,11 +86,11 @@ pub use needs::{
     NeedTable, NeedTableError, DECAY_SHARDS,
 };
 pub use places::{
-    choose_place, default_hours, home_of, knowledge_key, place_from_key, site_of, walk_minutes,
-    CitizenView, EmptyPlaces, FlakyPlaces, FulfilOutcome, FulfilRequest, InfinitePlaces,
-    KnowledgeView, OpenHours, PanickingPlaces, PlaceCandidate, PlaceEntry, PlaceProvider,
-    PlaceTable, StraightLineTravel, TravelEstimate, TravelOracle, TripHandle, TripRequest,
-    BASE_SPEED_M_PER_MIN, MAX_CANDIDATES, MAX_ON_ROUTE, SITE_KEY_BASE,
+    choose_place, default_hours, home_of, knowledge_key, nearest_school, place_from_key, site_of,
+    walk_minutes, CitizenView, EmptyPlaces, FlakyPlaces, FulfilOutcome, FulfilRequest,
+    InfinitePlaces, KnowledgeView, OpenHours, PanickingPlaces, PlaceCandidate, PlaceCatalog,
+    PlaceEntry, PlaceProvider, PlaceTable, StraightLineTravel, TravelEstimate, TravelOracle,
+    TripHandle, TripRequest, BASE_SPEED_M_PER_MIN, MAX_CANDIDATES, MAX_ON_ROUTE, SITE_KEY_BASE,
 };
 pub use planner::{
     load_plan, plan_day, plan_day_explained, render_day_debug, replan, replan_explained_into,

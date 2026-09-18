@@ -43,10 +43,10 @@ use crate::world::{stand_up, BuiltCity, StandingReport};
 /// zostaje w pamięci i zegar stoi, więc powrót do gry nie wczytuje niczego.
 ///
 /// Wariantów jest siedem. `Succession` i `ScenarioEnd` doszły w `M9e` razem ze swoją
-/// **treścią** — sukcesja ma komendy i dziedzica, domknięcie scenariusza ma rozliczenie
-/// celów — ale **nie ze swoimi ekranami i nie z przejściem**: nikt ich dziś nie
-/// konstruuje, a `legacy::check` nie ma wołającego. To jest `DI-33` i `DI-34`
-/// w `M9e-panele-czas-kariera.md`, wpisane jako brak, a nie przemilczane.
+/// treścią, a **drogę wejścia** dostały przy domknięciu `WP12` (`DI-33`, `DI-34`):
+/// buduje je [`GameState::settle`], wołane raz na klatkę przez klienta i raz na dobę
+/// przez przebieg bezgłowy. Jedna droga, nie dwie — inaczej okno i bramka mierzyłyby
+/// dwie różne gry.
 pub enum GameState {
     /// Wszystko poza rozgrywką — §5.13.
     Shell(ShellScreen),
@@ -96,6 +96,106 @@ impl GameState {
         }
     }
 
+    /// Rozlicza to, co sesja zgłosiła w ostatniej dobie: śmierć postaci, jej
+    /// niewypłacalność i domknięcie scenariusza. Zwraca `true`, gdy stan się zmienił.
+    ///
+    /// **Stan gry stoi nad sesją**, więc sesja nie przełącza go sama: `step` odkłada
+    /// fakt, a decyzję podejmuje to miejsce. Dzięki temu klient graficzny i przebieg
+    /// bezgłowy rozliczają zgon tą samą drogą, a nie każdy swoją.
+    ///
+    /// Kolejność jest kontraktem: **najpierw życie, potem scenariusz**. Gracz, który
+    /// umarł w tej samej dobie, w której domknął ostatni cel, dostaje sukcesję —
+    /// scenariusz rozliczy się jego dziedzicowi, bo świat tyka dalej.
+    pub fn settle(&mut self) -> bool {
+        let GameState::Playing(s) = self else {
+            return false;
+        };
+        if let Some(zdarzenie) = s.life_event() {
+            s.clear_life_event();
+            match zdarzenie {
+                crate::legacy::LifeEvent::Died => {
+                    let heir = s
+                        .player()
+                        .map(|p| p.citizen)
+                        .and_then(|c| crate::legacy::heir_of(s, c));
+                    let GameState::Playing(session) =
+                        std::mem::replace(self, GameState::Shell(ShellScreen::MainMenu))
+                    else {
+                        unreachable!("wariant sprawdzony wyżej");
+                    };
+                    *self = GameState::Succession { session, heir };
+                    return true;
+                }
+                // Niewypłacalność **nie kończy gry** (§13.4): majątek idzie do
+                // likwidacji, dług zostaje z harmonogramem, a gracz wraca na etat.
+                // Ekranu porażki nie ma i nie będzie — jest wpis w kronice.
+                //
+                // Upadłość wydaje się **tylko wtedy, gdy jest co likwidować**.
+                // `legacy::check` pyta o ujemne saldo i brak zakładu z dodatnim
+                // kapitałem, a oba te warunki po upadłości zostają prawdziwe —
+                // bez tego strażnika gracz z długiem ogłaszałby upadłość co dobę
+                // do końca życia, a licznik `bankruptcies` liczyłby doby zamiast
+                // upadłości. Zadłużony pracownik bez firmy nie ma czego oddać
+                // wierzycielom i to jest dokładnie stan, w którym §13.4 każe grać dalej.
+                crate::legacy::LifeEvent::Insolvent => {
+                    if !crate::career::Holdings::of(s).sites.is_empty() {
+                        let _ = s.submit(PlayerCommand::DeclarePersonalBankruptcy);
+                    }
+                    return false;
+                }
+            }
+        }
+        if s.ending_seen || s.settled_outcome() == crate::scenario::ScenarioOutcome::Running {
+            return false;
+        }
+        let outcome = s.settled_outcome();
+        let GameState::Playing(session) =
+            std::mem::replace(self, GameState::Shell(ShellScreen::MainMenu))
+        else {
+            unreachable!("wariant sprawdzony wyżej");
+        };
+        *self = GameState::ScenarioEnd { session, outcome };
+        true
+    }
+
+    /// Wykonuje wybór gracza z ekranu domknięcia (`DI-34`).
+    ///
+    /// Zwraca `false`, gdy gracz chce wyjść do menu — to jedyna odpowiedź, której
+    /// stan gry nie umie wykonać sam, bo porzucenie sesji należy do pętli okna.
+    ///
+    /// Komenda idzie zwykłą drogą, przez `submit`, więc ląduje w dzienniku wejść
+    /// i replay odtworzy sukcesję tak samo jak każdą inną decyzję gracza.
+    pub fn apply_end(&mut self, a: crate::screens::ending::EndAction) -> bool {
+        use crate::screens::ending::EndAction;
+        let cmd = match a {
+            EndAction::ToMenu => return false,
+            EndAction::Succeed(c) => Some(PlayerCommand::Succeed { citizen: c }),
+            EndAction::NewDynasty(c) => Some(PlayerCommand::ContinueAsNewCitizen { citizen: c }),
+            EndAction::KeepPlaying => None,
+        };
+        let stan = std::mem::replace(self, GameState::Shell(ShellScreen::MainMenu));
+        let session = match stan {
+            GameState::Succession { session, .. } | GameState::ScenarioEnd { session, .. } => {
+                session
+            }
+            inny => {
+                *self = inny;
+                return true;
+            }
+        };
+        *self = GameState::Playing(session);
+        if let GameState::Playing(s) = &mut *self {
+            // Ekran domknięcia pokazuje się **raz**: wynik scenariusza zostaje
+            // `Won` do końca gry, więc bez tego „graj dalej" wracałoby na ten sam
+            // ekran przy najbliższej dobie.
+            s.dismiss_ending();
+            if let Some(c) = cmd {
+                let _ = s.submit(c);
+            }
+        }
+        true
+    }
+
     #[must_use]
     pub fn session_mut(&mut self) -> Option<&mut Session> {
         match self {
@@ -139,6 +239,23 @@ pub struct Session {
     scenario_state: crate::scenario::ScenarioState,
     /// Cele domknięte w ostatniej dobie — wejście warunku „cel osiągnięty" i kroniki.
     fresh_objectives: Vec<crate::scenario::ObjectiveId>,
+    /// Doba ostatniego sprawdzenia cyklu życia gracza i domknięcia scenariusza.
+    ///
+    /// `u64::MAX`, nie zero: zero jest **pierwszą godziną gry**, a licznik startujący
+    /// od prawdziwej wartości milczy przez pierwszą dobę (`DI-13`).
+    legacy_day: u64,
+    /// Co się stało postaci gracza i jeszcze nie zostało obsłużone (`DI-33`).
+    /// Czyta i kasuje to [`GameState::settle`] — sesja nie zmienia stanu gry sama,
+    /// bo stan gry stoi **nad** nią.
+    life_event: Option<crate::legacy::LifeEvent>,
+    /// Jak stał scenariusz po ostatniej przeliczonej dobie (`DI-34`).
+    outcome: crate::scenario::ScenarioOutcome,
+    /// Czy gracz widział już ekran domknięcia tego scenariusza.
+    ///
+    /// Bez tego „graj dalej" nie działa: wynik zostaje `Won` na zawsze (cel raz
+    /// osiągnięty zostaje osiągnięty), więc następna doba znów przełączałaby grę
+    /// w ekran końca — i gracz siedziałby w pętli zamiast grać.
+    ending_seen: bool,
     /// Czas realny spędzony w sesji. Liczony z `dt` podawanego przez wołającego,
     /// **nigdy z `Instant::now()`** — w kodzie sesji zegar ścienny jest zakazany
     /// (00 §3.5), a ta liczba i tak jest metadaną slotu, nie stanem.
@@ -172,6 +289,10 @@ impl Session {
             scenario: None,
             scenario_state: crate::scenario::ScenarioState::default(),
             fresh_objectives: Vec::new(),
+            legacy_day: u64::MAX,
+            life_event: None,
+            outcome: crate::scenario::ScenarioOutcome::Running,
+            ending_seen: false,
         };
         s.load_scenario(params.scenario);
         // Świat już stoi, więc ta koperta niczego nie wykonuje — niesie za to
@@ -346,7 +467,59 @@ impl Session {
                     self.fresh_objectives = swieze;
                 }
             }
+            self.doba_gracza();
         }
+    }
+
+    /// Raz na dobę: czy postać gracza jeszcze żyje i czy scenariusz się domknął.
+    ///
+    /// Do `M9e` nikt tego nie pytał. `legacy::check` nie miał ani jednego wołającego,
+    /// więc śmierć postaci nie przełączała gry w sukcesję, a `scenario_outcome()`
+    /// miał czytelnika **wyłącznie w teście** — gracz nie dowiadywał się, że wygrał
+    /// (`DI-33`, `DI-34`). Kod pod obie rzeczy istniał; brakowało drogi wejścia.
+    ///
+    /// Raz na dobę, a nie co minutę: zgon przychodzi z demografii, która sama jest
+    /// dobowa, a cele scenariusza liczą się `EveryDay` z tego samego powodu.
+    fn doba_gracza(&mut self) {
+        let doba = self.app.world.tick.get() / magnat_core::time::MINUTES_PER_DAY;
+        if doba == self.legacy_day {
+            return;
+        }
+        self.legacy_day = doba;
+        if self.player.is_none() {
+            return;
+        }
+        if self.life_event.is_none() {
+            self.life_event = crate::legacy::check(self);
+        }
+        self.outcome = self.scenario_outcome();
+    }
+
+    /// Co się stało postaci gracza, a jeszcze nie zostało rozliczone.
+    #[must_use]
+    pub fn life_event(&self) -> Option<crate::legacy::LifeEvent> {
+        self.life_event
+    }
+
+    /// Kasuje zdarzenie po rozliczeniu. Woła to [`GameState::settle`], bo tylko ono
+    /// wie, czy przejście stanu faktycznie nastąpiło.
+    pub fn clear_life_event(&mut self) {
+        self.life_event = None;
+    }
+
+    /// Odnotowuje, że gracz widział ekran domknięcia i wybrał „graj dalej".
+    pub fn dismiss_ending(&mut self) {
+        self.ending_seen = true;
+    }
+
+    /// Wynik scenariusza z ostatniej przeliczonej doby — `Running`, dopóki trwa.
+    ///
+    /// To jest wartość **zapamiętana**, a nie liczona na żądanie: rozliczenie celów
+    /// chodzi po zakładach gracza i po rynku, więc pytanie o nie w każdej klatce
+    /// kosztowałoby tyle, co doba symulacji.
+    #[must_use]
+    pub fn settled_outcome(&self) -> crate::scenario::ScenarioOutcome {
+        self.outcome
     }
 
     /// Stosuje koperty należne tickowi `t`, w kolejności `(actor, seq)` (00 §3.4).
@@ -386,7 +559,11 @@ impl Session {
     }
 
     /// Wariant startu z nagłówka dziennika — łatkę kapitału stosuje `SetCharacter`.
-    pub(crate) fn variant(&self) -> crate::StartVariant {
+    ///
+    /// Publiczny, bo pyta o niego ekran spuścizny: nowa dynastia dobiera kandydata
+    /// tym samym predykatem, którym gracz wybierał pierwszą postać (`DI-34`).
+    #[must_use]
+    pub fn variant(&self) -> crate::StartVariant {
         self.log.header.params.variant
     }
 
@@ -502,6 +679,10 @@ pub fn replay(
         scenario: None,
         scenario_state: crate::scenario::ScenarioState::default(),
         fresh_objectives: Vec::new(),
+        legacy_day: u64::MAX,
+        life_event: None,
+        outcome: crate::scenario::ScenarioOutcome::Running,
+        ending_seen: false,
     };
     s.log.commands = log.commands.clone();
     s.load_scenario(params.scenario);

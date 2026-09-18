@@ -47,10 +47,14 @@ pub fn register_society(world: &mut World, demography: demography::DemographyTab
     world.insert_resource(StatusDistribution::default());
     world.insert_resource(CityFacts::default());
     world.insert_resource(SocialIndex::new());
+    // Katalog miejsc: dobowy cykl życia szuka w nim szkoły dla siedmiolatka (`R2-WP1`).
+    // Świat bez miasta zostaje z pustym katalogiem i wtedy uczeń ma samą flagę.
+    world.insert_resource(crate::places::PlaceCatalog::default());
 
     // Tabela demografii **nie jest** haszowana: to dane wejściowe, nie stan świata —
-    // ta sama zasada co przy `NeedTable` w M3a. Reszta jest stanem i wchodzi do hasha,
-    // bo od niej zależy, co się wydarzy jutro.
+    // ta sama zasada co przy `NeedTable` w M3a. `PlaceCatalog` też nie — katalog miejsc
+    // jest daną miasta. Reszta jest stanem i wchodzi do hasha, bo od niej zależy,
+    // co się wydarzy jutro.
     world.register_resource_hash::<Population>();
     world.register_resource_hash::<demography::LifeQueue>();
     world.register_resource_hash::<crate::household::HouseholdOverflow>();

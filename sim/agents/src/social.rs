@@ -280,19 +280,23 @@ pub fn status_of(
 /// wykwalifikowanego rzemieślnika od lekarza. Znika, gdy Etap 8 (M3d) wsypie tabelę
 /// z `data/jobs/`, i wtedy ta gałąź przestaje się wykonywać.
 fn prestiz(input: &StatusInput, facts: &CityFacts) -> u8 {
-    if input.employment.has_job() {
+    let f = input.employment.flags;
+    // Uczeń **przed** tabelą prestiżu ról (`R2-WP1`). Uczeń z generacji ma w `role`
+    // rolę odziedziczoną po losowaniu cech, więc pod `has_job()` dostawał prestiż
+    // zawodu, którego nie wykonuje — a gałąź „uczeń 45" była pod spodem i nigdy
+    // się nie wykonywała.
+    if input.employment.is_pupil() {
+        return 45;
+    }
+    if input.employment.is_employed() {
         if let Some(p) = facts.prestige(input.employment.role) {
             return p;
         }
     }
-    let f = input.employment.flags;
     if f & Employment::FLAG_RETIRED != 0 {
         return 40;
     }
-    if f & (Employment::FLAG_PUPIL | Employment::FLAG_STUDENT) != 0 {
-        return 45;
-    }
-    if !input.employment.has_job() {
+    if !input.employment.is_employed() {
         return 10;
     }
     (40 + input.skill_in_role.get() / 2).min(100)
@@ -450,6 +454,7 @@ fn status_rodzicow(world: &World, e: Entity) -> Option<u8> {
 #[derive(Clone, Debug, Default)]
 pub struct SocialIndex {
     by_site: Vec<(u32, u32)>,
+    by_school: Vec<(u32, u32)>,
     by_building: Vec<(u32, u32)>,
 }
 
@@ -461,11 +466,19 @@ impl SocialIndex {
 
     pub fn rebuild(&mut self, world: &World) {
         self.by_site.clear();
+        self.by_school.clear();
         self.by_building.clear();
         for e in world.resource::<Population>().citizens() {
             if let Some(emp) = world.get::<Employment>(*e) {
-                if emp.has_job() {
+                // **Uczeń nie jest pracownikiem** (`R2-WP1`). Do M8d szkoła siedziała
+                // w tym samym indeksie co zakład, więc `coworkers(szkoła)` zwracało
+                // całą klasę — a `M10e` §5.9 liczy warunek powstania związku zawodowego
+                // na spójnej składowej grafu relacji **wśród pracowników zakładu**.
+                // Pierwszą kandydatką do uzwiązkowienia była szkoła podstawowa.
+                if emp.is_employed() {
                     self.by_site.push((emp.site, e.index()));
+                } else if emp.is_pupil() && emp.has_job() {
+                    self.by_school.push((emp.site, e.index()));
                 }
             }
             if let Some(res) = world.get::<crate::components::Residence>(*e) {
@@ -476,6 +489,7 @@ impl SocialIndex {
             }
         }
         self.by_site.sort_unstable();
+        self.by_school.sort_unstable();
         self.by_building.sort_unstable();
     }
 
@@ -490,6 +504,13 @@ impl SocialIndex {
         SocialIndex::grupa(&self.by_site, site)
     }
 
+    /// Koledzy z klasy. Osobne wejście od `coworkers`, bo osobny indeks — i to jest
+    /// cała treść `D-N7`: relacja jest `Acquaintance`, a nie nowy wariant `Classmate`.
+    #[must_use]
+    pub fn classmates(&self, school: u32) -> &[(u32, u32)] {
+        SocialIndex::grupa(&self.by_school, school)
+    }
+
     /// Sąsiedzi z **kwartału**, nie z budynku — klucz pochodzi z `CityFacts::block`.
     #[must_use]
     pub fn neighbours(&self, block: u32) -> &[(u32, u32)] {
@@ -501,6 +522,11 @@ impl HashState for SocialIndex {
     fn hash_state(&self, h: &mut StateHasher) {
         h.write_u64(self.by_site.len() as u64);
         for (a, b) in &self.by_site {
+            h.write_u32(*a);
+            h.write_u32(*b);
+        }
+        h.write_u64(self.by_school.len() as u64);
+        for (a, b) in &self.by_school {
             h.write_u32(*a);
             h.write_u32(*b);
         }
@@ -556,9 +582,10 @@ fn kontakty(
     params: &crate::demography::table::SocialParams,
     raport: &mut SocialReport,
 ) {
-    let site = world
-        .get::<Employment>(e)
-        .filter(|x| x.has_job())
+    let emp = world.get::<Employment>(e).copied();
+    let site = emp.filter(Employment::is_employed).map(|x| x.site);
+    let szkola = emp
+        .filter(|x| x.is_pupil() && x.has_job())
         .map(|x| x.site);
     let building = world
         .get::<crate::components::Residence>(e)
@@ -579,6 +606,25 @@ fn kontakty(
             nowe.push((
                 kto,
                 RelationKind::Colleague as u8,
+                params.coworker_gain_per_week,
+                params.coworker_max,
+            ));
+        }
+    }
+    // Klasa daje `Acquaintance`, nie `Colleague` (`D-N7`): osobny wariant kosztowałby
+    // miejsce w enumie, który jest kontraktem zapisu gry, i nie miałby konsumenta —
+    // nikt nie pyta, czy znajomy jest kolegą z klasy. Wagi są te same co w zakładzie,
+    // bo klasa jest tym samym rodzajem codziennego kontaktu.
+    if let Some(sz) = szkola {
+        let grupa = world.resource::<SocialIndex>().classmates(sz);
+        for kto in bliscy(grupa, e.index(), params.close_contacts)
+            .as_slice()
+            .iter()
+            .copied()
+        {
+            nowe.push((
+                kto,
+                RelationKind::Acquaintance as u8,
                 params.coworker_gain_per_week,
                 params.coworker_max,
             ));
@@ -605,10 +651,10 @@ fn kontakty(
         let Some(inny) = demography::citizen_by_index(world, kto) else {
             continue;
         };
-        let kind = if kind == RelationKind::Colleague as u8 {
-            RelationKind::Colleague
-        } else {
-            RelationKind::Neighbour
+        let kind = match kind {
+            k if k == RelationKind::Colleague as u8 => RelationKind::Colleague,
+            k if k == RelationKind::Acquaintance as u8 => RelationKind::Acquaintance,
+            _ => RelationKind::Neighbour,
         };
         wzmocnij(world, e, inny, kind, gain, max, day);
         wzmocnij(world, inny, e, kind, gain, max, day);

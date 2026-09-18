@@ -148,27 +148,49 @@ fn hazardy(world: &mut World, day: u64, hooks: &mut dyn InheritanceHook, raport:
         //
         //     Zapis i wypis idą tym samym progiem co reszta cyklu życia: na
         //     najbliższej dobie shardu po przekroczeniu wieku, tak samo jak
-        //     emerytura wyżej. Uczeń nie dostaje przy tym etatu w szkole — miejsce
-        //     w placówce rozdaje pula wakatów (`Vacancies`), a pojemność obwodu
-        //     liczy M8d z normatywu; flaga mówi „chodzi do szkoły", a nie „pracuje".
+        //     emerytura wyżej.
+        //
+        //     `R2-WP1` dokłada do flagi **placówkę** i **wyjście ze szkoły**. Uczeń
+        //     bez placówki nie jest odprowadzany (`household::roles` wymaga
+        //     `site != NO_SITE`) i nie ma szkoły w planie dnia, więc sama flaga
+        //     zostawiała dziecko urodzone w grze poza całym mechanizmem. Wyjście
+        //     zwalnia `site`, bo osiemnastolatek z kluczem szkoły w komponencie
+        //     wygląda dla rynku pracy na zatrudnionego — i wyglądał tak do końca
+        //     życia, skoro nikt tego pola nie kasował.
         let w_szkole = world
             .get::<Employment>(e)
-            .is_some_and(|x| x.flags & Employment::FLAG_PUPIL != 0);
+            .is_some_and(Employment::is_pupil);
         // Etat wygrywa z wiekiem. Przy dzisiejszych danych (`school_end == work_start`)
         // te dwa stany się nie stykają, ale `labour_force.min` jest niższe od obu,
         // więc pracujący nastolatek jest możliwy — a oznaczony jako uczeń zniknąłby
         // z liczby pracujących w gospodarstwie, nie oddając przy tym etatu.
-        let pracuje = world.get::<Employment>(e).is_some_and(Employment::has_job);
+        //
+        // **`is_employed`, nie `has_job`**: uczeń z generacji ma w `site` szkołę, więc
+        // pod `has_job` wyglądał na pracującego i cykl zdejmował mu flagę przy pierwszej
+        // jego dobie shardu — czyli rocznik z Etapu 8 przestawał być uczniami w ciągu
+        // pierwszego roku gry, zachowując przy tym przypisaną szkołę.
+        let pracuje = world
+            .get::<Employment>(e)
+            .is_some_and(Employment::is_employed);
         let wiek_szkolny =
             !pracuje && wiek >= i32::from(ages.school_start) && wiek < i32::from(ages.school_end);
         if wiek_szkolny != w_szkole {
-            if let Some(emp) = world.get_mut::<Employment>(e) {
-                if wiek_szkolny {
-                    emp.flags |= Employment::FLAG_PUPIL;
-                } else {
-                    emp.flags &= !Employment::FLAG_PUPIL;
-                }
+            if wiek_szkolny {
+                do_szkoly(world, e);
+            } else {
+                ze_szkoly(world, e, day, &tabela);
+                raport.reasons.push((
+                    e.index(),
+                    DecisionReason::LifeEvent {
+                        kind: LifeEventKind::LeftSchool,
+                    },
+                ));
             }
+        } else if wiek_szkolny && !world.get::<Employment>(e).is_some_and(Employment::has_job) {
+            // Uczeń, który placówki nie dostał (miasto bez szkoły w zasięgu w chwili
+            // wejścia, albo szkoła postawiona później), próbuje ponownie. Bez tego
+            // jedna nieudana doba zostawiałaby go bez szkoły na całe jedenaście lat.
+            do_szkoly(world, e);
         }
 
         // 3. Choroba. C-9: choroba **obniża `Health`** zamiast dokładać flagę do
@@ -218,6 +240,109 @@ fn hazardy(world: &mut World, day: u64, hooks: &mut dyn InheritanceHook, raport:
             }
         }
         magnat_ecs::flush_commands(world, std::slice::from_mut(&mut cmd));
+    }
+}
+
+// ── szkoła ──────────────────────────────────────────────────────────────────────
+
+/// Wejście do szkoły: flaga plus placówka.
+///
+/// Placówkę wybiera ta sama reguła, którą Etap 8 generatora rozdaje szkoły całemu
+/// rocznikowi (`places::nearest_school`) — jedna wiedza, jedna implementacja. Świat
+/// bez katalogu miejsc albo bez szkoły w zasięgu zostawia ucznia z samą flagą;
+/// następna doba shardu spróbuje ponownie.
+fn do_szkoly(world: &mut World, e: Entity) {
+    let dom = world
+        .get::<Residence>(e)
+        .and_then(crate::places::home_of)
+        .and_then(|p| {
+            world
+                .get_resource::<crate::places::PlaceCatalog>()
+                .and_then(|k| k.get().and_then(|t| t.coord_of(p)))
+        });
+    let szkola = dom.and_then(|at| {
+        world
+            .get_resource::<crate::places::PlaceCatalog>()
+            .and_then(|k| k.get().and_then(|t| crate::places::nearest_school(t, at)))
+    });
+    if let Some(emp) = world.get_mut::<Employment>(e) {
+        emp.flags |= Employment::FLAG_PUPIL;
+        // Bezrobotny uczeń to nieprawda w obie strony: siedmiolatek nie szuka pracy
+        // i nie wchodzi do mianownika stopy bezrobocia (`labour_force.min` = 16).
+        emp.flags &= !Employment::FLAG_UNEMPLOYED;
+        if let Some(klucz) = szkola {
+            emp.site = klucz;
+            emp.work_days = Employment::WEEKDAYS;
+            emp.shift = crate::components::ShiftKind::Early as u8;
+        }
+    }
+}
+
+/// Wyjście ze szkoły: placówka zwolniona, wykształcenie policzone.
+///
+/// Zwolnienie `site` jest tu połową naprawy, a nie sprzątaniem: absolwent z kluczem
+/// szkoły w komponencie wygląda dla rynku pracy i dla indeksu relacji na kogoś, kto
+/// ma miejsce — więc nie szuka pracy i nie zasila puli kandydatów.
+fn ze_szkoly(world: &mut World, e: Entity, day: u64, tabela: &DemographyTable) {
+    let ages = tabela.ages();
+    let lat = world
+        .get::<Identity>(e)
+        .map_or(0, |i| i.age_years(day as i32))
+        .clamp(0, i32::from(u8::MAX));
+    // Ile lat faktycznie przechodził: od `school_start` do dziś, przycięte do pełnego
+    // cyklu. Piętnastolatek, który wziął etat, ma osiem lat nauki, a nie jedenaście.
+    // `ponytail:` lata nauki liczą się od `school_start`, a nie od dnia, w którym
+    // ten mieszkaniec faktycznie wszedł do szkoły — bo nikt tego dnia nie pamięta.
+    // Sufit jest widoczny w zachowaniu: przybysz, który przyjechał w wieku czternastu
+    // lat z flagą ucznia, wyjdzie stąd z wykształceniem pełnego cyklu za cztery lata
+    // chodzenia. Droga wyjścia kosztuje bajt na mieszkańca (wiek wejścia w `Employment`)
+    // i należy do fazy, która będzie miała dla niego drugiego czytelnika.
+    let lat_nauki = (lat.min(i32::from(ages.school_end)) - i32::from(ages.school_start)).max(0);
+    let mut chodzil = false;
+    if let Some(emp) = world.get_mut::<Employment>(e) {
+        // Obie flagi, nie jedna: `is_pupil()` pyta o `FLAG_PUPIL | FLAG_STUDENT`,
+        // więc zdjęcie samej pierwszej zostawiłoby studenta w stanie, z którego
+        // cykl próbowałby go wypisywać ze szkoły raz na rok do końca życia —
+        // zabierając mu przy okazji etat, gdyby jakiś zdążył dostać.
+        emp.flags &= !(Employment::FLAG_PUPIL | Employment::FLAG_STUDENT);
+        if emp.site != Employment::NO_SITE {
+            chodzil = true;
+            emp.site = Employment::NO_SITE;
+            emp.work_days = 0;
+        }
+        // Kto wychodzi ze szkoły w wieku produkcyjnym, wchodzi na rynek pracy;
+        // kto wcześniej (praca zamiast szkoły), ma już etat i flaga byłaby
+        // nieprawdą — dlatego pyta o wiek, a nie o samo wyjście. **Poza gałęzią
+        // placówki**: uczeń, któremu miasto nigdy szkoły nie dało, jest w wieku
+        // osiemnastu lat tak samo bezrobotny jak ten, który ją skończył.
+        if lat >= i32::from(ages.labour_force.min) && !emp.is_employed() {
+            emp.flags |= Employment::FLAG_UNEMPLOYED;
+        }
+    }
+    // Wykształcenie dostaje ten, kto **miał do czego chodzić**. Miasto bez szkoły
+    // w zasięgu zostawia dziecko z samą flagą wieku szkolnego — i wtedy osiemnastka
+    // wychodzi z zerem, a nie z wykształceniem średnim z tabeli. To jest cały wpływ
+    // sieci placówek na kapitał ludzki, dopóki M8d nie doda jakości pojedynczej szkoły.
+    if chodzil {
+        edukacja(world, e, lat_nauki as u16, tabela);
+    }
+}
+
+/// Wykształcenie po wyjściu ze szkoły (`R2-WP5`).
+///
+/// Do tej naprawy `Vitals::edu_level` ustawiał **wyłącznie** Etap 8 generatora, a
+/// noworodek dostawał `Vitals::default()`, czyli zero. Skutek był cichy i rósł z każdym
+/// rocznikiem: `skill_ceiling` (`sim/firms::hr`) liczy sufit umiejętności z wykształcenia,
+/// więc każdy urodzony w grze miał sufit „bez wykształcenia" do końca życia — gorszy
+/// niż ktokolwiek z generacji.
+///
+/// Poziom **nigdy nie spada**. Przybysz z wyższym wykształceniem, który dokończył tu
+/// dwa lata szkoły, nie ma go stracić dlatego, że lokalny licznik lat nauki zaczął
+/// się liczyć od jego przyjazdu.
+fn edukacja(world: &mut World, e: Entity, lat_nauki: u16, tabela: &DemographyTable) {
+    let poziom = tabela.education_level(lat_nauki);
+    if let Some(v) = world.get_mut::<Vitals>(e) {
+        v.edu_level = v.edu_level.max(poziom);
     }
 }
 

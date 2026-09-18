@@ -37,12 +37,13 @@ populacji.
 
 | WP | Nazwa | Zależy od | Rozmiar | Status |
 |---|---|---|---|---|
-| R2-WP1 ⇧ | Cykl szkolny w trakcie gry | — | M | `[ ]` |
+| R2-WP1 ⇧ | Cykl szkolny w trakcie gry | — | M | `[x]` **wykonane przed R2 (2026-09-18)** jako warunek wejścia M8d, zgodnie z propozycją domyślną `D-N1` (`K-74`) |
 | R2-WP2 | Graf rodziny: rodzeństwo, dziadkowie, ochrona wpisu | — | M | `[ ]` |
 | R2-WP3 | Gospodarstwo bez cichego przepełnienia | — | S | `[ ]` |
 | R2-WP4 | Opiekun prawny i gospodarstwo osierocone | R2-WP3 | M | `[ ]` |
-| R2-WP5 | Wykształcenie jako stan zmienny | R2-WP1 | M | `[ ]` |
+| R2-WP5 | Wykształcenie jako stan zmienny | R2-WP1 | M | `[x]` **wykonane przed R2 (2026-09-18)** jako warunek wejścia M8d, zgodnie z propozycją domyślną `D-N1` (`K-74`) |
 | R2-WP6 | Tożsamość rodzinna: nazwisko i cechy | R2-WP2 | S | `[ ]` |
+| R2-WP35 | Opieka nad dzieckiem poniżej wieku szkolnego | R2-WP1 | M | `[ ]` |
 
 `⇧` = kandydat do wyprzedzenia przed R2 zgodnie z `R2` §2b (`D-N1`).
 
@@ -86,10 +87,18 @@ obok `has_job()` — to jest dokładnie ta lista.
 | Uczeń poza indeksem miejsc pracy | `sim/agents/src/social.rs` — `by_site` bierze `is_employed()` |
 | Relacja klasowa jako `Acquaintance`, nie `Colleague` | `social.rs`; wariant `Classmate` **nie powstaje** (`D-N7`) |
 
-**Ostrzeżenie o determinizmie.** Wejście do szkoły losuje placówkę spośród wolnych miejsc
-w obwodzie, więc potrzebuje strumienia. Zakres M8 (`K-4`: 240–259) jest zajęty przez zdarzenia;
-cykl szkolny należy do M3 tematycznie, więc bierze wolny numer z **bloku M3 (140–159)**, a nie
-dokłada się do M8. Numer wpisuje się do `StreamId` razem z komentarzem, że pochodzi z R2.
+**Ostrzeżenie o determinizmie — skorygowane przy wykonaniu.** Pakiet **nie zajmuje numeru
+`StreamId`**: placówkę wybiera ta sama reguła, którą rozdaje je Etap 8 — najbliższa, a przy
+równej odległości ta o niższym kluczu — czyli funkcja czysta bez losowania. Strumień
+opisywałby mechanizm, którego nie ma. Reguła mieszka w `places::nearest_school` i ma dwóch
+wołających: generator i dobowy cykl życia.
+
+Pierwotne brzmienie tego akapitu zakładało, że wybór jest **losowaniem spośród wolnych miejsc
+w obwodzie**, i rezerwowało pod nie wolny numer z bloku M3 (140–159). Pojemności placówki
+reguła nie zna i nie sprawdza: normatyw obwodu liczy M8d (`ServiceCoverage`, `K-64`),
+a przeciążona szkoła obniża jakość usługi, nie odsyła ucznia. Gdyby M8d zmieniło to
+rozstrzygnięcie, numer strumienia trzeba będzie wtedy zająć — i wtedy hash każdego świata
+z uczniami przestanie się zgadzać z wcześniejszym.
 
 **Kryterium:** test odtwarzający — dziecko urodzone w ticku 0 ma w wieku 7 lat flagę ucznia
 i niezerowe `Employment.site`, a w wieku 18 nie ma ani jednego, ani drugiego; przed naprawą test
@@ -240,18 +249,21 @@ ma `ServiceKind::School(Level)` z poziomem jako parametrem — czyli miejsce jes
 `school_end` i ukończenie kursu wykupionego komendą gracza. Wariant ciągły wymagałby trzeciego
 pola na mieszkańca i nie ma konsumenta, który odróżniłby go od skokowego.
 
-Poziom szkoły nie powstaje w R2 — powstaje `data/demography/education.ron` z tabelą „ile lat
-w szkole daje jaki `edu_level`", a `M8d` podepnie pod nią poziomy placówek. To jest mniejszy
+Poziom szkoły nie powstaje w R2. **Tabela „ile lat w szkole daje jaki `edu_level`” weszła
+do `data/demography/demography.ron` jako pole `education`, a nie do osobnego pliku
+`education.ron`** — walidator musi sprawdzić ją wobec `ages` (próg wyższy niż pełny cykl
+szkolny jest nieosiągalny), a osobny plik powtarzałby te same granice w drugim miejscu.
+`M8d` podepnie pod nią poziomy placówek. To jest mniejszy
 zakres niż wygląda: tabela ma tyle wierszy, ile `edu_level` ma wartości.
 
 **Zakres.**
 
 | Co | Gdzie |
 |---|---|
-| `edu_level` rośnie przy wyjściu ze szkoły, wg lat faktycznie przechodzonych | `demography/day.rs`, obok R2-WP1 |
+| `edu_level` rośnie przy wyjściu ze szkoły, wg lat faktycznie przechodzonych — **i tylko temu, kto miał placówkę**: miasto bez szkoły w zasięgu zostawia dziecko z samą flagą wieku szkolnego | `demography/day.rs`, obok R2-WP1 |
 | `data/demography/education.ron` — próg lat → poziom, z walidatorem pokrycia | nowy plik, ładowany przez `DemographyTable` |
-| Żłobek i przedszkole jako **przedział wieku bez instytucji**: dziecko poniżej `school_start` blokuje slot dorosłego, jeśli w gospodarstwie nie ma drugiego dorosłego niepracującego | `planner/commitments.rs` |
-| `data/demography/demography.ron`: `ages.childcare_end` = `school_start` jako osobne pole | — |
+| ~~Żłobek i przedszkole jako przedział wieku bez instytucji~~ — **wyszło z pakietu do `R2-WP35`** (pozycja 66 wykazu). Blokada slotu dorosłego zmienia podaż pracy całego miasta, więc jest własną naprawą z własnym przebiegiem balansatora, a nie polem przy okazji (`R2` §3 pkt 2) | `planner/commitments.rs`, `household::roles` |
+| ~~`ages.childcare_end` jako osobne pole~~ — **nie powstaje przed swoim czytelnikiem**: liczba, której nikt nie czyta, wygląda w danych tak samo jak działająca | — |
 
 **Ostrzeżenie o determinizmie.** Ten pakiet zmienia rozkład wykształcenia w populacji, a przez
 niego rozkład płac i dochodów. Kryterium mierzy zbieżność, nie równość — patrz ryzyko `N-1`
@@ -297,6 +309,31 @@ i wymagają wpisu `K-n`.
 nie ma w `docs/implementation-plan/`. Skaner bierze listę plików `M*.md` i `R*.md` i porównuje
 z odesłaniami w komentarzach. To jest jedyny test, który ten pakiet zostawia, i jest celowo
 mechaniczny: pakiet nie zmienia zachowania, więc nie ma czego odtwarzać.
+
+---
+
+### R2-WP35 — Opieka nad dzieckiem poniżej wieku szkolnego
+
+**Pozycja wykazu:** 66. Wyszła z `R2-WP5` przy jego wykonaniu, zgodnie z `R2` §3 pkt 2
+(„jedna naprawa, jeden powód”).
+
+**Przyczyna.** `ages.school_start` wynosi 7, więc dziecko 0–6 lat nie ma żadnej instytucji,
+a rodzic nie ma z tego powodu żadnego ograniczenia w planie dnia. `M3` §2 odesłało żłobki
+i przedszkola do M8, `M8d` §5.3 ma `ServiceKind::School(Level)` z poziomem jako parametrem —
+miejsce jest, treści nie ma.
+
+**Dlaczego osobno od `R2-WP5`.** Blokada slotu dorosłego **zmienia podaż pracy całego
+miasta**: gospodarstwo z dwulatkiem i jednym dorosłym traci pracownika. To przechodzi
+przez stopę bezrobocia, przez płace i przez bramkę G11, więc wymaga przebiegu
+z balansatorem — a `R2-WP5` miał domknąć wykształcenie i domknął je.
+
+**Zakres.** `ages.childcare_end` w `data/demography/demography.ron` (schemat 3 → 4),
+rola opiekuńcza w `household::roles`, zobowiązanie całodobowe w `planner/commitments.rs`,
+i **pomiar**: o ile spada podaż pracy i czy bramka G11 zostaje w paśmie.
+
+**Kryterium:** test odtwarzający — gospodarstwo z jednym dorosłym i dzieckiem poniżej
+`childcare_end` nie ma tego dorosłego w `job_seekers`, a z dwojgiem dorosłych ma jednego;
+przebieg dziesięcioletni pokazuje stopę bezrobocia w paśmie G11 mimo ubytku podaży.
 
 ---
 

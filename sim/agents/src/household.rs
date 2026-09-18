@@ -357,8 +357,8 @@ impl MemberView {
         MemberView {
             citizen,
             age_years: identity.age_years(today),
-            is_pupil: employment.flags & Employment::FLAG_PUPIL != 0,
-            works: employment.has_job() && employment.flags & Employment::FLAG_PUPIL == 0,
+            is_pupil: employment.is_pupil(),
+            works: employment.is_employed(),
             shift: employment.shift_kind(),
             site: employment.site,
             partnered_inside,

@@ -267,7 +267,7 @@ pub fn candidates(world: &World, variant: StartVariant, day: u64) -> Vec<Candida
         let wiek = id.age_years(day as i32).max(0) as u32;
         let praca = world
             .get::<Employment>(*e)
-            .is_some_and(magnat_agents::Employment::has_job);
+            .is_some_and(magnat_agents::Employment::is_employed);
         let hh = magnat_agents::household_by_index(world, id.household)
             .and_then(|h| world.get::<Household>(h).copied());
         let oszczednosci = hh.map_or(Money::ZERO, |h| {

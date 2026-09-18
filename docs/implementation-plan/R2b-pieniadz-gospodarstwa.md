@@ -37,13 +37,14 @@ naprawia rozwiązanie gospodarstwa — bo test, który nie umie zobaczyć usterk
 
 | WP | Nazwa | Zależy od | Rozmiar | Status |
 |---|---|---|---|---|
-| R2-WP7 ⇧ | Utarg zakładu produkcyjnego | — | M | `[ ]` |
+| R2-WP7 ⇧ | Utarg zakładu produkcyjnego | — | M | `[x]` **wykonane przed R2 (2026-09-18)** jako warunek wejścia M8d, zgodnie z propozycją domyślną `D-N1` (`K-75`) |
 | R2-WP8 | Majątek gospodarstwa przy rozwiązaniu i podziale | — | M | `[ ]` |
 | R2-WP9 | Dochód gospodarstwa po zdarzeniu życiowym | — | S | `[ ]` |
 | R2-WP10 | Dziedziczenie ponad gotówkę osobistą | R2-WP8 | M | `[ ]` |
 | R2-WP11 | Skala ekwiwalentna gospodarstwa | — | S | `[ ]` |
 | R2-WP30 | Lista płac obciąża pracodawcę | R2-WP7 | M | `[ ]` |
 | R2-WP32 | Konta stacji, przewoźnika, taksówki i parkingu | — | L | `[ ]` |
+| R2-WP36 | Utarg eksportowy zakładu produkcyjnego | R2-WP7 | S | `[ ]` |
 
 ---
 
@@ -81,8 +82,8 @@ centralnego firmy, który nie jest zakładem produkcyjnym. Taki utarg idzie na z
 | Co | Gdzie |
 |---|---|
 | `Settlement` niesie `seller_site: Option<SiteId>` obok `seller` | `sim/supply/src/b2b/rfq.rs` (rozstrzygnięcie zna zakład sprzedawcy) |
-| `absorb_settlements` woła `post_revenue` dla zakładu sprzedającego | `sim/economy/src/market/restock.rs` |
-| Koszt własny sprzedaży hurtowej z partii, nie ze średniej | tamże, przez istniejące `take_cogs` |
+| `absorb_settlements` zbiera utarg zakładu sprzedającego do licznika miesięcznego, a `close_month_with` wypuszcza go **tą samą listą**, którą oddaje sklepom — `post_revenue` zostaje przy jednym wołającym | `sim/economy/src/market/restock.rs`, `close.rs` |
+| Koszt własny sprzedaży hurtowej z partii, nie ze średniej | **`Store::resell` zwraca koszt własny sprzedawcy** (tę samą liczbę, którą dopisuje do księgi kontrolnej magazynu), a `Settlement::seller_cogs` przenosi ją dalej — `take_cogs` nie było tu potrzebne |
 | `SitePnlMonth` zakładu produkcyjnego wchodzi do karty firmy | `sim/firms/src/panel.rs` — pole jest, dziś zawsze zerowe |
 
 **Ostrzeżenie o determinizmie.** Ten pakiet zmienia hash stanu: `SitePnlMonth` wchodzi do
@@ -95,6 +96,33 @@ zwraca `None`. Drugi test: zakład produkcyjny z trwałą stratą zostaje zamkni
 taktyczny najpóźniej po trzech miesiącach — dziś nie zostaje zamknięty nigdy. Przebieg
 dziesięcioletni: liczba zakładów produkcyjnych z niezerowym utargiem = liczba zakładów
 produkcyjnych, które w tym miesiącu cokolwiek wysłały.
+
+---
+
+### R2-WP36 — Utarg eksportowy zakładu produkcyjnego
+
+**Pozycja wykazu:** 67. Wyszła z `R2-WP7` przy jego wykonaniu.
+
+**Przyczyna.** Sprzedaż na eksport nie przechodzi przez `Store::resell`: masa schodzi
+z bilansu dopiero po rozładunku w węźle granicznym (`B2b::absorb_exports`), więc w chwili
+budowania `Settlement` nie ma czym zmierzyć kosztu własnego. `R2-WP7` postawił tam
+`seller_site: None`, czyli **eksport nie wchodzi do rachunku wyniku zakładu**.
+
+Alternatywa — policzyć utarg bez kosztu — byłaby gorsza od zera: fabryka pokazałaby sto
+procent marży, a tier taktyczny trzymałby eksportera bez względu na rzeczywisty wynik.
+Zero znaczy w `margin_bp()` „nie wiem” i to jest uczciwsza odpowiedź. Skutek zostaje
+jednak ten sam co przed `R2-WP7`: **zakład produkujący wyłącznie na eksport jest
+strukturalnie odporny na zamknięcie.**
+
+**Szew.** `Store::export` **już zwraca koszt** (`absorb_exports` wyrzuca go do `_koszt`).
+Brakuje wyłącznie pamięci, **który zakład** wysłał towar do węzła — partia to wie
+(`BatchOrigin::site`), więc pytanie jest o to, czy brać ją z partii, czy zapamiętać
+przy zleceniu transportowym.
+
+**Kryterium:** test odtwarzający — zakład sprzedający wyłącznie na eksport ma po
+domknięciu miesiąca niezerowy `SitePnlMonth.revenue` **i** niezerowy `cogs`, a jego
+`margin_bp()` odpowiada różnicy ceny eksportowej i kosztu wytworzenia. Przed naprawą
+utarg jest zerem.
 
 ---
 

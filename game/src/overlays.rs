@@ -271,7 +271,7 @@ fn bezrobocie_dzielnic(session: &Session) -> Vec<i64> {
         }
         let d = usize::from(res.district).min(n - 1);
         sila[d] += 1;
-        if !emp.has_job() {
+        if !emp.is_employed() {
             bez[d] += 1;
         }
     }

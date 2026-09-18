@@ -44,6 +44,9 @@ mod widgets;
 
 pub use layout::{Layout, Panels};
 pub use widgets::Sev;
+// Jedno formatowanie procentu w całej grze (`DI-30`): ekran domknięcia scenariusza
+// pokazuje postęp celu tą samą funkcją, którą panel pokazuje marżę.
+pub use widgets::percent_bp;
 
 use magnat_core::Subject;
 use magnat_ui::{Cached, Catalog, DataSource, Locale, Theme, Versions};

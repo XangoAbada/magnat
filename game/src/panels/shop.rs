@@ -178,6 +178,22 @@ fn render(
     });
 
     section(ui, th, &ctx.text("ui.panel.shop.restock"));
+    // Co jest ustawione **teraz** (`DI-38`). Bez tego gracz naciskał „7 dni",
+    // nie wiedząc, czy to zmiana, czy potwierdzenie tego, co już stoi — a odczyt
+    // (`Market::restock_days`) istniał od M9e i nie miał ani jednego czytelnika.
+    let biezacy = ctx
+        .session
+        .market
+        .as_ref()
+        .and_then(|m| m.restock_days(site, w.good));
+    ui.label(
+        egui::RichText::new(match biezacy {
+            Some(d) => ctx.fmt("ui.panel.shop.restock_now", &[("dni", &d.to_string())]),
+            None => ctx.text("ui.panel.shop.restock_auto"),
+        })
+        .font(th.font(TextRole::Micro))
+        .color(th.color(ColorToken::TextSecondary)),
+    );
     ui.horizontal(|ui| {
         for dni in [3u16, 7, 14] {
             let cmd = PlayerCommand::SetRestockTarget {

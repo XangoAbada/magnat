@@ -115,6 +115,7 @@ impl App {
                         // składać: warunek, który trzeba najpierw znaleźć, nie
                         // zatrzyma pierwszej katastrofy.
                         c.arm_stop_conditions();
+                        c.start_tutorial(&session);
                         self.citizens = Some(c);
                         self.shell.has_session = true;
                         self.pauza_menu = false;
@@ -216,6 +217,7 @@ impl App {
         let redaktor = &mut self.redaktor;
         let mut akcja_edytora = magnat_game::policy::EditorAction::None;
         let mut akcja_panelu = magnat_game::PanelAction::None;
+        let mut akcja_konca: Option<magnat_game::screens::ending::EndAction> = None;
 
         let out = ctx.clone().run_ui(wejscie, |ui| {
             if w_powloce {
@@ -223,6 +225,20 @@ impl App {
                     (Some(p), _) => shell.draw_generating(ui, p),
                     (None, GameState::WorldReady { preview, .. }) => {
                         shell.draw_preview(ui, preview, tex.as_ref())
+                    }
+                    // Ekrany domknięcia stoją poza powłoką, bo za nimi jest sesja:
+                    // świat tyka dalej, a gracz decyduje, kto go poprowadzi.
+                    (None, GameState::Succession { session, heir }) => {
+                        akcja_konca = magnat_game::screens::ending::succession(
+                            shell, ui, session, *heir,
+                        );
+                        None
+                    }
+                    (None, GameState::ScenarioEnd { session, outcome }) => {
+                        akcja_konca = magnat_game::screens::ending::scenario_end(
+                            shell, ui, session, *outcome,
+                        );
+                        None
                     }
                     _ => shell.draw(ui),
                 };
@@ -241,6 +257,12 @@ impl App {
         }
         if let Some(a) = akcja {
             self.wykonaj(a);
+        }
+        if let Some(a) = akcja_konca {
+            self.shell.focus = 0;
+            if !self.game.apply_end(a) {
+                self.opusc_swiat();
+            }
         }
         self.wykonaj_edytor(akcja_edytora);
         self.wykonaj_panel(akcja_panelu);
@@ -445,6 +467,7 @@ impl App {
                         ui.warm_up(&mut session, 0, self.camera.eye());
                         ui.set_speed(self.predkosc);
                         ui.arm_stop_conditions();
+                        ui.start_tutorial(&session);
                         self.citizens = Some(ui);
                         self.game = GameState::Playing(Box::new(session));
                         self.shell.has_session = true;

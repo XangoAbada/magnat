@@ -17,7 +17,8 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::Args;
-use magnat_core::Money;
+use magnat_core::{Money, StateHash};
+use magnat_game::screens::ending::EndAction;
 use magnat_game::session::{replay, GameState};
 use magnat_game::shell::{NewGameParams, ShellScreen, WorldGenJob, WorldPreview};
 use magnat_game::{PlayerCommand, SaveSlot, Session, SAVE_SCHEMA_VERSION};
@@ -77,15 +78,27 @@ pub fn run(a: &M9SessionArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
     };
     let params: NewGameParams = ron::from_str(&std::fs::read_to_string(from)?)?;
 
-    let mut session = zaloz(params, &pool)?;
+    let session = zaloz(params, &pool)?;
     let ticki = u64::from(a.days) * 1440;
 
-    // Doba pierwsza — bez gracza. Potem gracz wydaje komendy i gra dalej.
-    let mut hashe = session.run_hashing(1440.min(ticki), a.hash_every);
-    komendy_gracza(&mut session, a.price);
-    hashe.extend(session.run_hashing(ticki.saturating_sub(1440), a.hash_every));
+    // Sesja jedzie w `GameState`, a nie obok niego, bo zgon postaci i domknięcie
+    // scenariusza przełączają **stan gry** (`DI-33`, `DI-34`) — a przebieg bezgłowy
+    // ma przechodzić przez to samo, co okno. Do domknięcia `WP12` trzymał samą sesję
+    // i dlatego nie było czym zauważyć, że `legacy::check` nie ma wołającego.
+    let mut stan = GameState::Playing(session);
 
-    raport(&session);
+    // Doba pierwsza — bez gracza. Potem gracz wydaje komendy i gra dalej.
+    let mut hashe = przebieg(&mut stan, 1440.min(ticki), a.hash_every);
+    if let Some(s) = stan.session_mut() {
+        komendy_gracza(s, a.price);
+    }
+    hashe.extend(przebieg(&mut stan, ticki.saturating_sub(1440), a.hash_every));
+
+    let Some(session) = stan.session() else {
+        eprintln!("sesja przepadła w trakcie przebiegu");
+        return Ok(ExitCode::from(1));
+    };
+    raport(session);
     if let Some(p) = &a.record {
         session.log().save(p)?;
         eprintln!(
@@ -96,7 +109,7 @@ pub fn run(a: &M9SessionArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
         );
     }
     if let Some(dir) = &a.slot_dir {
-        let slot = slot_z_sesji(&session, 0);
+        let slot = slot_z_sesji(session, 0);
         magnat_game::save::write_slot(dir, &slot, session.log())?;
         let back = magnat_game::save::read_header(dir, 0)?;
         eprintln!(
@@ -107,6 +120,75 @@ pub fn run(a: &M9SessionArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
         );
     }
     porownaj(a, &hashe)
+}
+
+/// Przewija `ticki`, rozliczając po każdej dobie to, co zgłosiła sesja.
+///
+/// Rozliczenie idzie przez [`GameState::settle`] — tę samą funkcję, którą woła okno.
+/// Przebieg bezgłowy odpowiada za gracza w jedyny sposób, który nie zatrzymuje biegu:
+/// dziedzic przejmuje firmy, brak dziedzica zaczyna nową dynastię, a domknięty
+/// scenariusz gra dalej. Wybór jest wypisany na stderr, więc bramka go widzi.
+fn przebieg(stan: &mut GameState, ticki: u64, hash_every: u64) -> Vec<(u64, StateHash)> {
+    let mut out = Vec::new();
+    let mut zostalo = ticki;
+    while zostalo > 0 {
+        let krok = zostalo.min(1440);
+        let Some(s) = stan.session_mut() else {
+            break;
+        };
+        out.extend(s.run_hashing(krok, hash_every));
+        zostalo -= krok;
+        if !stan.settle() {
+            continue;
+        }
+        let wybor = match stan {
+            GameState::Succession { session, heir } => {
+                let doba = session.tick().get() / 1440;
+                match heir {
+                    Some(h) => {
+                        eprintln!("  doba {doba}: postać zmarła, firmy przejmuje dziedzic");
+                        Some(EndAction::Succeed(*h))
+                    }
+                    // Bez dziedzica przebieg zaczyna **nową dynastię**, a nie zostaje
+                    // w sukcesji: stan, z którego nikt nie wychodzi, zatrzymałby
+                    // rozliczanie scenariusza do końca przebiegu — `settle` zwraca
+                    // wtedy `false` przy każdej dobie i bramka mierzy ciszę.
+                    None => nowa_dynastia(session).map(|k| {
+                        eprintln!("  doba {doba}: postać zmarła bez dziedzica — nowa dynastia");
+                        EndAction::NewDynasty(k)
+                    }),
+                }
+            }
+            GameState::ScenarioEnd { session, outcome } => {
+                let doba = session.tick().get() / 1440;
+                eprintln!("  doba {doba}: scenariusz domknięty — {outcome:?}");
+                Some(EndAction::KeepPlaying)
+            }
+            _ => continue,
+        };
+        match wybor {
+            Some(w) => {
+                stan.apply_end(w);
+            }
+            // Świat bez ani jednego kandydata na postać: dalsza gra nie ma komu
+            // przypaść. Przebieg kończy się tutaj i mówi o tym wprost, zamiast
+            // dowozić ticki, których nikt już nie rozlicza.
+            None => {
+                eprintln!("  przebieg przerwany: nie ma komu przejąć gry");
+                break;
+            }
+        }
+    }
+    out
+}
+
+/// Pierwszy mieszkaniec spełniający predykat wariantu startu — ta sama droga,
+/// którą gracz wybiera postać w oknie.
+fn nowa_dynastia(session: &Session) -> Option<magnat_core::CitizenId> {
+    let doba = session.tick().get() / 1440;
+    magnat_game::player::candidates(&session.app.world, session.variant(), doba)
+        .first()
+        .map(|k| k.citizen)
 }
 
 /// Zakłada grę tą samą drogą, którą pójdzie klient: przez `GameState`.

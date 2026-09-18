@@ -188,6 +188,12 @@ pub fn generate_population(
 
     // ── krok 0: most ────────────────────────────────────────────────────────────
     let places = Arc::new(PlaceTable::build(katalog_miejsc(city)));
+    // Katalog trafia też do świata jako zasób, bo dobowy cykl życia szuka w nim szkoły
+    // dla siedmiolatka (`R2-WP1`), a `Sources` jest wtedy wyjęte z ECS. Ten sam `Arc`,
+    // nie kopia — drugi katalog przestałby opisywać to samo miasto przy pierwszej
+    // przebudowie.
+    *world.resource_mut::<magnat_agents::PlaceCatalog>() =
+        magnat_agents::PlaceCatalog::new(places.clone());
     crate::traffic_build::register_vehicle_components(world);
     *world.resource_mut::<CityFacts>() = fakty_miasta(city, &jobs_table);
 

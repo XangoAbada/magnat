@@ -241,9 +241,12 @@ impl Store {
     /// zszedł z jego bilansu), `paid_in` o cenę kupującego. Dzięki temu
     /// [`Store::check_cost`] domyka się co do grosza, a różnica jest tym, czym jest —
     /// wynikiem sprzedawcy, a nie zgubionym groszem.
-    pub fn resell(&mut self, cargo: &[BatchId], price: Money) {
+    /// Zwraca **koszt własny sprzedawcy** — tę samą liczbę, którą dopisuje do `cogs`.
+    /// Rozliczenie B2B niesie ją dalej jako `Settlement::seller_cogs`, żeby rachunek
+    /// wyniku zakładu produkcyjnego liczył marżę z partii, a nie ze średniej (`R2-WP7`).
+    pub fn resell(&mut self, cargo: &[BatchId], price: Money) -> Money {
         if cargo.is_empty() || price.0 <= 0 {
-            return;
+            return Money::ZERO;
         }
         let stary: i64 = cargo
             .iter()
@@ -255,7 +258,7 @@ impl Store {
             .map(|b| self.batches.get(*b).map_or(0, |x| x.mass.0.max(0) as u64))
             .collect();
         if wagi.iter().all(|w| *w == 0) {
-            return;
+            return Money::ZERO;
         }
         // Podział sumuje się do kwoty dzielonej co do grosza (00 §2); reszta trafia
         // do pierwszej partii wg ustalonego porządku, czyli kolejności ładowania.
@@ -267,6 +270,7 @@ impl Store {
         }
         self.cogs = Money(self.cogs.0 + stary);
         self.paid_in = Money(self.paid_in.0 + price.0);
+        Money(stary)
     }
 }
 

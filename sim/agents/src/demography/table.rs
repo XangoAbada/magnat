@@ -37,6 +37,13 @@ pub struct Ages {
     pub labour_force: Range8,
 }
 
+/// Próg lat nauki i poziom wykształcenia, który daje (`R2-WP5`).
+#[derive(Clone, Copy, Debug, Deserialize)]
+pub struct EduStep {
+    pub years: u16,
+    pub level: u8,
+}
+
 #[derive(Clone, Copy, Debug, Deserialize)]
 pub struct Range8 {
     pub min: u8,
@@ -129,6 +136,7 @@ pub(super) struct DemographyFile {
     status_weights: StatusWeights,
     migration: MigrationParams,
     social: SocialParams,
+    education: Vec<EduStep>,
 }
 
 /// Tabela hazardów demograficznych — zasób świata, czytany, nigdy zmieniany w biegu.
@@ -145,6 +153,7 @@ pub enum DemographyError {
     AgeGap { at: u8, table: &'static str },
     StatusWeights(u16),
     LabourForce { min: u8, max: u8 },
+    Education(String),
 }
 
 impl std::fmt::Display for DemographyError {
@@ -167,6 +176,7 @@ impl std::fmt::Display for DemographyError {
                 f,
                 "data/demography: wagi statusu sumują się do {s}, a mają do 100"
             ),
+            DemographyError::Education(m) => write!(f, "data/demography: education — {m}"),
             DemographyError::LabourForce { min, max } => write!(
                 f,
                 "data/demography: ages.labour_force ({min}, {max}) wychodzi poza                  [school_start, ages.max] albo ma odwrócone granice"
@@ -182,6 +192,51 @@ impl From<std::io::Error> for DemographyError {
         DemographyError::Io(e)
     }
 }
+
+/// Walidacja tabeli wykształcenia (`R2-WP5`).
+///
+/// Sprawdzane jest jedno: czy tabela **da się osiągnąć**. Próg wyższy niż pełny cykl
+/// szkolny opisuje poziom, którego nikt nigdy nie dostanie — i wygląda w danych
+/// dokładnie tak samo jak próg działający.
+fn edukacja_ok(f: &DemographyFile) -> Result<(), DemographyError> {
+    let ages = f.ages;
+    if ages.school_end <= ages.school_start {
+        return Err(DemographyError::Education(format!(
+            "school_end {} nie jest większe od school_start {}",
+            ages.school_end, ages.school_start
+        )));
+    }
+    let pelny = u16::from(ages.school_end - ages.school_start);
+    if f.education.is_empty() {
+        return Err(DemographyError::Education("tabela jest pusta".into()));
+    }
+    let mut ostatni = (0u16, 0u8);
+    for (i, s) in f.education.iter().enumerate() {
+        if s.level > EDU_LEVEL_MAX {
+            return Err(DemographyError::Education(format!(
+                "poziom {} spoza EduLevel (0..={EDU_LEVEL_MAX})",
+                s.level
+            )));
+        }
+        if s.years > pelny {
+            return Err(DemographyError::Education(format!(
+                "próg {} lat jest nieosiągalny — pełny cykl to {pelny} lat",
+                s.years
+            )));
+        }
+        if i > 0 && (s.years <= ostatni.0 || s.level <= ostatni.1) {
+            return Err(DemographyError::Education(
+                "progi i poziomy muszą rosnąć".into(),
+            ));
+        }
+        ostatni = (s.years, s.level);
+    }
+    Ok(())
+}
+
+/// Najwyższy `EduLevel` (`Higher`). Tu, bo walidator danych musi znać granicę enuma
+/// z `components`, a nie zgadywać jej z liczby wierszy tabeli.
+const EDU_LEVEL_MAX: u8 = 4;
 
 impl DemographyTable {
     /// Wczytanie i **walidacja przed użyciem** (00 §5).
@@ -211,6 +266,7 @@ impl DemographyTable {
                 max: lf.max,
             });
         }
+        edukacja_ok(&f)?;
         Ok(DemographyTable { f })
     }
 
@@ -246,6 +302,18 @@ impl DemographyTable {
     #[must_use]
     pub fn gestation_days(&self) -> u16 {
         self.f.gestation_days
+    }
+
+    /// Poziom wykształcenia po `years` latach szkoły — najwyższy osiągnięty próg.
+    #[must_use]
+    pub fn education_level(&self, years: u16) -> u8 {
+        self.f
+            .education
+            .iter()
+            .filter(|s| years >= s.years)
+            .map(|s| s.level)
+            .max()
+            .unwrap_or(0)
     }
 
     /// Roczny hazard zgonu na 100 000, po korekcie o zdrowie.

@@ -44,6 +44,7 @@ pub mod save;
 pub mod screens;
 pub mod session;
 pub mod timectl;
+pub mod tutorial;
 pub mod shell;
 pub mod world;
 
@@ -71,6 +72,7 @@ pub use scenario::{
 pub use replay::{ReplayError, ReplayHeader, ReplayLog, REPLAY_SCHEMA_VERSION};
 pub use save::{SaveError, SaveSlot, SAVE_SCHEMA_VERSION};
 pub use screens::{Shell, ShellAction};
+pub use tutorial::{Progress as TutorialProgress, Step as TutorialStep, Tutorial};
 pub use timectl::{
     FollowTarget, StopCondition, StopConditionId, StopHit, StopWatch, TimeScale,
 };

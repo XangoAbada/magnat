@@ -456,7 +456,7 @@ fn odplyw(world: &mut World, day: u64, raport: &mut MigrationReport) {
             dorosli += 1;
             if world
                 .get::<Employment>(c)
-                .is_some_and(|e| e.has_job() || e.flags & Employment::FLAG_RETIRED != 0)
+                .is_some_and(|e| e.is_employed() || e.flags & Employment::FLAG_RETIRED != 0)
             {
                 pracujacy += 1;
             }
@@ -614,7 +614,10 @@ pub fn release_job_of(world: &mut World, c: Entity) {
     let Some(emp) = world.get::<Employment>(c).copied() else {
         return;
     };
-    if !emp.has_job() {
+    // `is_employed`, nie `has_job`: uczeń ma w `site` szkołę, a szkoła nie jest
+    // etatem wziętym z puli wakatów — oddanie jej do `Vacancies` **tworzyłoby**
+    // miejsce pracy z niczego, raz na każde dziecko, które umiera albo się wyprowadza.
+    if !emp.is_employed() {
         return;
     }
     world.resource_mut::<Vacancies>().release_job(JobSlot {
@@ -987,7 +990,7 @@ pub fn shock_retire_jobs(world: &mut World, n: usize) -> u32 {
         .citizens()
         .iter()
         .copied()
-        .filter(|e| world.get::<Employment>(*e).is_some_and(Employment::has_job))
+        .filter(|e| world.get::<Employment>(*e).is_some_and(Employment::is_employed))
         .collect();
     zatrudnieni.reverse();
     for e in zatrudnieni.into_iter().take(zostalo) {
@@ -1062,7 +1065,7 @@ fn usamodzielnienie(world: &mut World, day: u64, raport: &mut MigrationReport) {
             continue;
         }
         // Brak lokalu. Kto ma pracę, czeka; kto nie ma — wyjeżdża.
-        if world.get::<Employment>(e).is_some_and(Employment::has_job) {
+        if world.get::<Employment>(e).is_some_and(Employment::is_employed) {
             continue;
         }
         demography::day::opusc_gospodarstwo(world, e, day, &mut cmd);

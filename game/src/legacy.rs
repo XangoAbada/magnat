@@ -81,16 +81,35 @@ pub fn check(session: &Session) -> Option<LifeEvent> {
 /// od niczego poza kolejnością powstania mieszkańca.
 ///
 /// `None` znaczy „nie ma komu" i prowadzi do ekranu spuścizny, a nie do końca gry.
+///
+/// # Dlaczego gospodarstwo bierze się z dwóch miejsc
+///
+/// Zgon w `sim/agents` **despawnuje** mieszkańca w tej samej dobie, w której go
+/// wykrywa (`demography::day::smierc` kończy się `cmd.despawn`), więc w chwili,
+/// gdy gra pyta o dziedzica, `Identity` zmarłego już nie istnieje. Pytanie o nie
+/// dawało wtedy `None` **zawsze**, czyli sukcesja po prawdziwej śmierci nigdy nie
+/// miała kandydata, a `Succeed` i `SetHeir` były komendami bez drogi wejścia.
+/// Dlatego indeks gospodarstwa czyta się z komponentu, gdy jeszcze jest, a z postaci
+/// gracza, gdy już go nie ma — to jest to samo gospodarstwo, tylko zapamiętane
+/// przy wyborze postaci.
 #[must_use]
 pub fn heir_of(session: &Session, of: CitizenId) -> Option<CitizenId> {
     let w = &session.app.world;
-    let id = *w.get::<magnat_agents::Identity>(of.entity())?;
-    let hh_e = magnat_agents::household_by_index(w, id.household)?;
+    let hh_index = w
+        .get::<magnat_agents::Identity>(of.entity())
+        .map(|i| i.household)
+        .or_else(|| {
+            session
+                .player()
+                .filter(|p| p.citizen == of)
+                .map(|p| p.household.entity().index())
+        })?;
+    let hh_e = magnat_agents::household_by_index(w, hh_index)?;
     let gd = *w.get::<magnat_agents::Household>(hh_e)?;
     let overflow = w.resource::<magnat_agents::HouseholdOverflow>();
     let dzis = i32::try_from(session.tick().get() / magnat_core::time::MINUTES_PER_DAY)
         .unwrap_or(i32::MAX);
-    let mut kandydaci: Vec<CitizenId> = magnat_agents::members_of(id.household, &gd, overflow)
+    let mut kandydaci: Vec<CitizenId> = magnat_agents::members_of(hh_index, &gd, overflow)
         .iter()
         .filter_map(|i| magnat_agents::citizen_by_index(w, *i).map(CitizenId))
         .filter(|c| *c != of)

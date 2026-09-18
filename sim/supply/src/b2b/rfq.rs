@@ -606,16 +606,20 @@ impl B2b {
         // Towar zmienił właściciela — koszt własny musi stać się **ceną zapłaconą**
         // przez kupującego, a nie zostać kosztem wytworzenia sprzedawcy (`AP-7`).
         let cena = q.goods_value(masa);
-        if let Some(o) = transport.get(id) {
+        let koszt_sprzedawcy = if let Some(o) = transport.get(id) {
             let cargo = o.cargo.clone();
-            store.resell(&cargo, cena);
-        }
+            store.resell(&cargo, cena)
+        } else {
+            Money::ZERO
+        };
         let _ = t;
         self.spot[good.0 as usize].record(q.price, masa);
         Some(Settlement {
             buyer: FirmId(do_zakladu.entity()),
             deliver_to: do_zakladu,
             seller: SellerRef::Firm(q.seller),
+            seller_site: Some(q.from_site),
+            seller_cogs: koszt_sprzedawcy,
             good,
             mass: masa,
             net: cena,

@@ -439,8 +439,14 @@ vocab_enum! {
     ///
     /// Tu, a nie w `sim/agents`, z tego samego powodu co `MigrationKind`. M7 czyta
     /// `Retired` (zwolnienie etatu), M8 `Died` i `FellIll` (usługi publiczne).
+    ///
+    /// `LeftSchool` dopisany **na końcu** przez `R2-WP1` — kolejność wariantów jest
+    /// kontraktem zapisu gry, więc nowy wariant wchodzi wyłącznie za ostatnim. Nazwa
+    /// jest neutralna z rozmysłu: tym samym przejściem wychodzi ze szkoły absolwent
+    /// w wieku `school_end` i piętnastolatek, który wziął etat. Ile lat faktycznie
+    /// przechodził, mówi `edu_level`, a nie nazwa zdarzenia.
     LifeEventKind {
-        Born, Conceived, Retired, FellIll, Recovered, Died,
+        Born, Conceived, Retired, FellIll, Recovered, Died, LeftSchool,
     }
 }
 

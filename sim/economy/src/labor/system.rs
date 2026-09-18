@@ -221,8 +221,11 @@ impl Workforce for WorldWorkforce<'_> {
             .get::<Personality>(c.0)
             .copied()
             .unwrap_or_default();
+        // `is_employed`, nie `has_job`: uczeń ma w `site` szkołę (`R2-WP1`), a pod
+        // `has_job` wchodził do faktów jako zatrudniony — z rolą odziedziczoną po
+        // losowaniu cech, w zakładzie, który jest szkołą.
         let job = emp
-            .has_job()
+            .is_employed()
             .then(|| (site_id(emp.site), JobRoleId(emp.role)));
         let best_role = self.world.get::<Skills>(c.0).and_then(najlepszy_zawod);
         let chory = self
@@ -261,7 +264,7 @@ impl Workforce for WorldWorkforce<'_> {
             // Zatrudnieni rozglądają się rzadko i **rozproszeni po dobach** — inaczej
             // całe miasto składałoby aplikacje tego samego dnia, a rynek pracy dostawał
             // pik raz na dziesięć dób zamiast równego strumienia.
-            if emp.has_job() && e.index() % co_ile != dzisiejsza_zmiana {
+            if emp.is_employed() && e.index() % co_ile != dzisiejsza_zmiana {
                 continue;
             }
             if !w_sile_roboczej(id, emp, dzis, &wiek) {
@@ -346,7 +349,7 @@ impl Workforce for WorldWorkforce<'_> {
                 continue;
             }
             sila += 1;
-            if !emp.has_job() {
+            if !emp.is_employed() {
                 bez_pracy += 1;
             }
         }

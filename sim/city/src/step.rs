@@ -275,7 +275,7 @@ fn policz_obsade_i_ludnosc(city: &mut City, world: &mut World) {
         if let Some(l) = ludnosc.get_mut(res.district as usize) {
             *l += 1;
         }
-        if emp.has_job() {
+        if emp.is_employed() {
             *obsada.entry(u64::from(emp.site)).or_insert(0) += 1;
         }
     }

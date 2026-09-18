@@ -159,6 +159,64 @@ impl PlaceTable {
     }
 }
 
+/// Promienie szukania szkoły: kwartał, dzielnica, pół miasta.
+const PROMIENIE_SZKOLY: [f32; 3] = [800.0, 2500.0, 8000.0];
+
+/// Najbliższa szkoła dla mieszkańca spod `at`, jako klucz wiedzy (`Employment.site`).
+///
+/// Jedna reguła dla dwóch wołających: Etap 8 generatora rozdaje szkoły całemu rocznikowi
+/// naraz, a dobowy cykl życia (`R2-WP1`) pojedynczemu siedmiolatkowi — i muszą wybierać
+/// tak samo, bo inaczej dziecko urodzone w grze chodziłoby do innej szkoły niż jego
+/// rówieśnik z generacji, przy tym samym domu. Rozstrzygnięcie jest deterministyczne
+/// **bez losowania**: najbliższa, a przy równej odległości ta o niższym kluczu. Stąd
+/// ten pakiet nie zajmuje numeru `StreamId`, choć plan R2a taki numer zapowiadał.
+///
+/// Pojemności placówki reguła nie zna i nie sprawdza — normatyw obwodu liczy M8d
+/// (`ServiceCoverage`), a przeciążona szkoła obniża jakość usługi, nie odsyła ucznia.
+#[must_use]
+pub fn nearest_school(places: &PlaceTable, at: WorldCoord) -> Option<u32> {
+    let mut najblizsza: Option<(i64, u32)> = None;
+    for r in PROMIENIE_SZKOLY {
+        places.for_each_near(PlaceKind::Education, at, r, |e| {
+            let d = e.at.distance_sq_xy(at);
+            let klucz = knowledge_key(e.place).unwrap_or(u32::MAX);
+            if najblizsza.is_none_or(|(bd, bk)| (d, klucz) < (bd, bk)) {
+                najblizsza = Some((d, klucz));
+            }
+        });
+        if najblizsza.is_some() {
+            break;
+        }
+    }
+    najblizsza.map(|(_, klucz)| klucz)
+}
+
+/// Katalog miejsc jako zasób świata.
+///
+/// Ten sam `Arc`, który dostaje `Market` i `TrafficOracle` — nie druga kopia. Zasób
+/// istnieje, bo `Sources` jest na czas minuty **wyjmowane** z ECS (pętla doby trzyma
+/// `&mut World` obok), więc dobowy przebieg demografii nie ma jak przez nie sięgnąć
+/// po katalog, a szkoła dla siedmiolatka jest potrzebna dokładnie tam.
+///
+/// Nie wchodzi do hasha stanu: katalog jest daną miasta, a nie stanem symulacji —
+/// powstaje raz, przy zaludnianiu, i potem się go tylko czyta. Świat bez katalogu
+/// (scenariusze M3 bez miasta) dostaje `None` i wtedy uczeń zostaje bez placówki,
+/// tak samo jak dziś.
+#[derive(Clone, Default)]
+pub struct PlaceCatalog(Option<std::sync::Arc<PlaceTable>>);
+
+impl PlaceCatalog {
+    #[must_use]
+    pub fn new(places: std::sync::Arc<PlaceTable>) -> PlaceCatalog {
+        PlaceCatalog(Some(places))
+    }
+
+    #[must_use]
+    pub fn get(&self) -> Option<&PlaceTable> {
+        self.0.as_deref()
+    }
+}
+
 /// Współrzędne świata są w centymetrach (`WorldCoord`), indeks przestrzenny w metrach.
 /// Jedna funkcja na całą konwersję, żeby dzielenie przez 100 nie rozlazło się po kodzie.
 #[inline]

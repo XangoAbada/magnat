@@ -40,9 +40,17 @@ pub(super) mod table;
 
 pub use day::step_day;
 pub use month::{compatibility, przeklasyfikuj};
-pub use table::{Ages, DemographyError, DemographyTable, StatusWeights};
+pub use table::{Ages, DemographyError, DemographyTable, EduStep, StatusWeights};
 
-pub const DEMOGRAPHY_SCHEMA_VERSION: u32 = 2;
+/// Wersja schematu `data/demography/demography.ron`. 2 → 3 przy `R2-WP5`:
+/// doszła tabela `education` (lata nauki → `EduLevel`).
+///
+/// **`ages.childcare_end` tu nie ma i to jest decyzja.** Opieka nad dzieckiem poniżej
+/// wieku szkolnego blokuje dorosłego w gospodarstwie, czyli zmienia podaż pracy całego
+/// miasta — to jest własna naprawa z własnym przebiegiem balansatora, a nie pole przy
+/// okazji (`R2` §3 pkt 2). Liczba bez czytelnika wygląda w danych dokładnie tak samo
+/// jak działająca, więc nie wchodzi tu przed swoim konsumentem.
+pub const DEMOGRAPHY_SCHEMA_VERSION: u32 = 3;
 
 /// Ile dób dzieli dwa losowania hazardów tego samego mieszkańca (§5.6, sharding 1/360).
 pub const DEMOGRAPHY_SHARDS: u64 = 360;

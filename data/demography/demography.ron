@@ -8,7 +8,7 @@
 // kryterium WP7 mówi, że populacja po 100 latach ma zostać w przedziale [0,5×, 2,0×].
 // Balansator M5 i historia „na sucho" M10 przestroją je na epoki.
 (
-    schema_version: 2,
+    schema_version: 3,
 
     ages: (
         // Od tego wieku mieszkaniec jest dorosły: może odprowadzać, robić zakupy,
@@ -35,6 +35,26 @@
         // Dwa pojęcia, dwie pary liczb, **jedno źródło każdej z nich**.
         labour_force: (min: 16, max: 74),
     ),
+
+    // Ile lat szkoły daje jaki `EduLevel` (0 None, 1 Primary, 2 Vocational,
+    // 3 Secondary, 4 Higher). Próg domknięty od dołu: „co najmniej tyle lat".
+    //
+    // `ponytail:` sufit nazwany wprost — absolwent pełnego cyklu dostaje **zawsze**
+    // ten sam poziom, więc rocznik urodzony w grze jest pod względem wykształcenia
+    // jednorodny, a rocznik z Etapu 8 nie jest. Różnicuje ich dopiero jakość placówki
+    // i to jest właściwy adres: `ServiceCoverage` z M8d (`K-64`) zna szkołę per
+    // dzielnica i to on ma prawo powiedzieć, że jedna uczy lepiej niż druga. Do tego
+    // czasu wariancja wykształcenia w populacji maleje z każdym pokoleniem.
+    //
+    // Tabela jest niezależna od epoki, choć rozkład wykształcenia dorosłych w
+    // `population.ron` od epoki zależy. To też jest sufit: w świecie średniowiecznym
+    // absolwent wyjdzie lepiej wykształcony niż populacja, w której się urodził.
+    // Epokę wnosi poziom placówki (`ServiceKind::School`), czyli znowu M8d.
+    education: [
+        (years:  1, level: 1),
+        (years:  8, level: 2),
+        (years: 11, level: 3),
+    ],
 
     // Umieralność roczna na 100 000 osób, pasmami wieku. Zakresy są domknięte obustronnie
     // i muszą pokrywać 0..=`ages.max` bez dziur — walidator to sprawdza.

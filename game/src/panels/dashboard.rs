@@ -26,6 +26,21 @@ pub(super) const DESC: PanelDesc = PanelDesc {
     min_tier: None,
 };
 
+/// Jeden cel scenariusza w pulpicie (`DI-36`).
+///
+/// §5.11 obiecuje postęp `0..=10000 bp` „pokazywany w panelu celów", a `Goal::progress_bp`
+/// i `streak_progress_bp` liczyły go od `M9e` bez jednego czytelnika. Cele wchodzą
+/// do **pulpitu**, a nie do dziesiątego panelu: gracz patrzy tam po to samo — „jak mi
+/// idzie" — a panel, do którego zagląda się raz na dobę, jest listą, nie narzędziem.
+pub struct GoalRow {
+    /// Klucz tytułu celu; tekst powstaje przy rysowaniu, nigdy wcześniej.
+    pub title: String,
+    pub progress_bp: u16,
+    pub done: bool,
+    pub failed: bool,
+    pub optional: bool,
+}
+
 /// Jeden alert pulpitu: waga, zdanie i podmiot, którego kartę otwiera kliknięcie.
 pub struct Alert {
     pub sev: Sev,
@@ -52,6 +67,8 @@ pub struct Model {
     /// Saldo rachunku firmy — **stąd** idzie nakład na nowy punkt, a nie z portfela
     /// domowego. Dwa różne konta i dwie różne decyzje.
     pub firm_cash: Money,
+    /// Cele scenariusza. Pusta lista w trybie otwartym — i wtedy sekcji nie ma.
+    pub goals: Vec<GoalRow>,
 }
 
 fn build(ctx: &PanelCtx<'_>) -> PanelModel {
@@ -94,7 +111,30 @@ fn build(ctx: &PanelCtx<'_>) -> PanelModel {
         has_firm: !h.firms.is_empty(),
         capital: cash,
         firm_cash: saldo_firmy(ctx),
+        goals: cele(ctx),
     })
+}
+
+/// Cele scenariusza z postępem. Ujawnione dopiero wtedy, gdy warunek ujawnienia
+/// jest spełniony — cel zapowiadany przed czasem psuje scenariusz z zaskoczeniem.
+fn cele(ctx: &PanelCtx<'_>) -> Vec<GoalRow> {
+    let s = ctx.session;
+    let Some(sc) = s.scenario() else {
+        return Vec::new();
+    };
+    let stan = s.scenario_state();
+    sc.objectives
+        .iter()
+        .filter(|o| o.reveal_after.is_none_or(|r| stan.is_done(r)))
+        .map(|o| GoalRow {
+            title: o.title.clone(),
+            progress_bp: crate::scenario::streak_progress_bp(stan, o)
+                .max(o.goal.progress_bp(s, ctx.holdings)),
+            done: stan.is_done(o.id),
+            failed: stan.is_failed(o.id),
+            optional: o.optional,
+        })
+        .collect()
 }
 
 /// Saldo rachunku pierwszej firmy gracza. Zero, gdy firmy nie ma albo nie ma ksiąg.
@@ -255,6 +295,29 @@ fn render(
             if let Some(s) = a.subject {
                 akcja = PanelAction::Show(s);
             }
+        }
+    }
+
+    if !m.goals.is_empty() {
+        section(ui, th, &ctx.text("ui.dashboard.goals"));
+        for g in &m.goals {
+            // Znak przed tekstem, bo kolor nigdy nie jest jedynym nośnikiem
+            // (`ui-design.md` §3.1): „✓", „✗" i kropka pełna albo pusta.
+            let znak = if g.done {
+                "✓"
+            } else if g.failed {
+                "✗"
+            } else if g.optional {
+                "○"
+            } else {
+                "●"
+            };
+            row(
+                ui,
+                th,
+                &format!("{znak} {}", ctx.text(&g.title)),
+                &super::widgets::percent_bp(i32::from(g.progress_bp)),
+            );
         }
     }
 

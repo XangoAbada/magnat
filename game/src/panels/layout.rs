@@ -170,6 +170,16 @@ impl Panels {
         std::mem::take(&mut self.view_events)
     }
 
+    /// Dokłada zdarzenie widoku spoza paneli — dziś jedno: włączenie i wyłączenie
+    /// warunku zatrzymania (`DI-37`).
+    ///
+    /// Jedna kolejka, nie druga: strumień widoku jest wejściem metryki onboardingu
+    /// i zgłoszeń błędów, więc rozdzielenie go na dwa źródła kazałoby każdemu
+    /// czytelnikowi pamiętać o obu.
+    pub fn push_view(&mut self, c: crate::ViewCommand) {
+        self.view_events.push(c);
+    }
+
     fn state_of(&mut self, id: PanelId) -> Option<&mut PanelState> {
         let i = self.state.iter().position(|(p, _)| *p == id);
         match i {

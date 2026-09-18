@@ -279,7 +279,7 @@ fn praca(ctx: &CardCtx<'_>, citizen: CitizenId) -> Rich {
         return out;
     };
     match magnat_agents::places::place_from_key(e.site) {
-        Some(magnat_core::PlaceRef::Site(s)) if e.has_job() => {
+        Some(magnat_core::PlaceRef::Site(s)) if e.is_employed() => {
             ctx.link_line(&mut out, "ui.card.employer", Subject::Site(s));
         }
         _ => ctx.line(&mut out, "ui.card.no_job", &[]),

@@ -162,7 +162,7 @@ pub(super) fn relacje_startowe(
     let mut w_kwartale: BTreeMap<u32, Vec<Entity>> = BTreeMap::new();
     for c in mieszkancy {
         if let Some(e) = world.get::<Employment>(*c) {
-            if e.has_job() && e.flags & Employment::FLAG_PUPIL == 0 {
+            if e.is_employed() {
                 w_zakladzie.entry(e.site).or_default().push(*c);
             }
         }

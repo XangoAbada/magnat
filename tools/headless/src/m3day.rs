@@ -866,7 +866,7 @@ fn potrzeby(world: &magnat_ecs::World) {
         for (i, v) in n.level.iter().enumerate() {
             suma[i] += u64::from(*v);
         }
-        if world.get::<Employment>(*e).is_some_and(|x| !x.has_job()) {
+        if world.get::<Employment>(*e).is_some_and(|x| !x.is_employed()) {
             bez_pracy += 1;
         }
         if world

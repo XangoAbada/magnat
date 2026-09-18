@@ -510,13 +510,38 @@ impl Market {
             //
             // Zakład księgi zakładowej nie ma i mieć nie będzie do M7 — dla niego
             // zostaje sam przelew, a rachunek wyniku dopisze faza, która go zaprojektuje.
-            if let Some(i) = sklep {
+            let zaplacono = if let Some(i) = sklep {
                 post_receipt(&mut m.shops[i].ledger, kwota, t);
-                if books.transfer(account, odbiorca, kwota, memo, t).is_ok() {
+                let ok = books.transfer(account, odbiorca, kwota, memo, t).is_ok();
+                if ok {
                     post_purchase(&mut m.shops[i].ledger, kwota, t);
                 }
+                ok
             } else {
-                let _ = books.transfer(account, odbiorca, kwota, memo, t);
+                books.transfer(account, odbiorca, kwota, memo, t).is_ok()
+            };
+            // **Utarg sprzedawcy** (`R2-WP7`). Zakład produkcyjny nie ma księgi, więc
+            // wynik zbiera się tutaj — po stronie odbierającej, która jako jedyna zna
+            // naraz zakład sprzedający, kwotę i koszt własny partii. Rozszerzanie
+            // `Settlement` o `SiteId` było tańsze niż przebudowa rynku B2B, bo
+            // rozstrzygnięcie i tak ten zakład znało.
+            //
+            // Utarg jest **netto** (`K-7`): cło idzie do miasta, nie do sprzedawcy.
+            //
+            // **Tylko za to, co kupujący faktycznie zapłacił.** Nieudany przelew
+            // zostawia po stronie zakładu-kupującego zero śladu (księgi zakładowej
+            // nie ma, więc nie ma gdzie postawić zobowiązania), więc zaksięgowanie
+            // sprzedawcy przychodu z takiej dostawy dołożyłoby do rachunku wyniku
+            // pieniądz, którego w `Books` nie ma po żadnej stronie.
+            if zaplacono {
+                if let Some(skad) = s.seller_site {
+                    let w = m
+                        .wholesale_pnl
+                        .entry(skad)
+                        .or_insert((Money::ZERO, Money::ZERO));
+                    w.0 = Money(w.0.get() + s.net.get());
+                    w.1 = Money(w.1.get() + s.seller_cogs.get());
+                }
             }
             razem = Money(razem.get() + kwota.get());
         }

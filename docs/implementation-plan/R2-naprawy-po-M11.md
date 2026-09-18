@@ -10,7 +10,7 @@ jak R1.
 
 R1 mierzył jedną rzecz — długość plików — i naprawiał ją jednym ruchem. R2 mierzy co innego:
 **rozjazd między tym, co dokumenty faz uznały za zamknięte, a tym, co robi kod**. Wykaz w §11 ma
-**65 wierszy** i powstał w czterech rzutach: 42 z przeglądu repozytorium po M7f, jeden dopisany
+**67 wierszy** i powstał w czterech rzutach (dwa ostatnie wiersze wyszły z wykonania pozycji 1, 2 i 21 przed R2): 42 z przeglądu repozytorium po M7f, jeden dopisany
 przy weryfikacji, trzy z przeglądów w trakcie M8, **dziesięć z recenzji przed commitem M9d**
 (pozycje 47–56), jeden z M9e (57) i **osiem z przeglądu sesji po M9e** (pozycje 58–65).
 Z pierwszego rzutu jedna pozycja miała pakiet, jedna okazała się rozstrzygnięta i wypadła,
@@ -135,6 +135,16 @@ tego samego dnia, obie bez niej. To jest szósta przeprowadzka tej pozycji (`AR-
 `BB-7` → `BD-6` → `BF-7` → `BC-8`) i najlepszy dowód, że mechanizm „pozycja ma adresata" nie działa
 bez egzekutora — czyli dokładnie to, co naprawia R2-WP26.
 
+**Wykonane 2026-09-18: pozycje 1, 2 i 21.** Cykl szkolny z placówką, wykształcenie jako stan
+zmienny (`R2-WP1`, `R2-WP5`, `K-74`) i utarg zakładu produkcyjnego (`R2-WP7`, `K-75`).
+Test T4a fazy M8 ma od tej chwili co mierzyć: osiemnastolatek urodzony w grze kończy szkołę
+z `edu_level` z tabeli, a nie z zerem. **Adres wygasł po raz siódmy i nikt tego nie zauważył**
+— M8d zamknęło się bez nich, a wykonano je dopiero na polecenie właściciela produktu, po M9e.
+To jest dokładnie ten wzorzec, który `R2-WP26` ma złapać, i trzeci jego przypadek w wykazie.
+Zostaje **jedna** pozycja wyprzedzająca: 11, adres `M10e`. Po `R2-WP1` jest częściowo
+rozbrojona — uczeń wypadł z indeksu miejsc pracy, więc szkoła przestała być pierwszą
+kandydatką do związku zawodowego; `M10e` zostaje z samym warunkiem.
+
 **Propozycja, którą przyjmuję jako domyślną:** pozycje 1, 2, 7, 11 i 21 są wyjęte z R2 i wykonane
 jako **warunek wejścia** odpowiednio M8d (1, 2, 21), M8c (7) i M10e (11) — każda to jeden pakiet
 wielkości `S`, dopisany do dokumentu tamtej podfazy zgodnie z `K-18`. M8d jest adresem pozycji 2,
@@ -189,13 +199,13 @@ Tabela pakietów z rozmiarami i statusem stoi w dokumencie każdej podfazy. Zbio
 
 | WP | Nazwa | Podfaza | Zależy od | Rozmiar | Status |
 |---|---|---|---|---|---|
-| R2-WP1 ⇧ | Cykl szkolny w trakcie gry | R2a | — | M | `[ ]` |
+| R2-WP1 ⇧ | Cykl szkolny w trakcie gry | R2a | — | M | `[x]` **przed R2** (`K-74`) |
 | R2-WP2 | Graf rodziny: rodzeństwo, dziadkowie, ochrona wpisu | R2a | — | M | `[ ]` |
 | R2-WP3 | Gospodarstwo bez cichego przepełnienia | R2a | — | S | `[ ]` |
 | R2-WP4 | Opiekun prawny i gospodarstwo osierocone | R2a | R2-WP3 | M | `[ ]` |
-| R2-WP5 | Wykształcenie jako stan zmienny | R2a | R2-WP1 | M | `[ ]` |
+| R2-WP5 | Wykształcenie jako stan zmienny | R2a | R2-WP1 | M | `[x]` **przed R2** (`K-74`) |
 | R2-WP6 | Tożsamość rodzinna: nazwisko i cechy | R2a | R2-WP2 | S | `[ ]` |
-| R2-WP7 ⇧ | Utarg zakładu produkcyjnego | R2b | — | M | `[ ]` |
+| R2-WP7 ⇧ | Utarg zakładu produkcyjnego | R2b | — | M | `[x]` **przed R2** (`K-75`) |
 | R2-WP8 | Majątek gospodarstwa przy rozwiązaniu i podziale | R2b | — | M | `[ ]` |
 | R2-WP9 | Dochód gospodarstwa po zdarzeniu życiowym | R2b | — | S | `[ ]` |
 | R2-WP10 | Dziedziczenie ponad gotówkę osobistą | R2b | R2-WP8 | M | `[ ]` |
@@ -223,6 +233,8 @@ Tabela pakietów z rozmiarami i statusem stoi w dokumencie każdej podfazy. Zbio
 | R2-WP32 | Konta stacji, przewoźnika, taksówki i parkingu | R2b | — | L | `[ ]` |
 | R2-WP33 | Linia bazowa benchmarków mierzy wszystkie | R2f | — | S | `[ ]` |
 | R2-WP34 | Scenariusz `export_drains` i druga połowa kryterium WP9 M6 | R2f | R2-WP32 | M | `[ ]` |
+| R2-WP35 | Opieka nad dzieckiem poniżej wieku szkolnego | R2a | R2-WP1 | M | `[ ]` |
+| R2-WP36 | Utarg eksportowy zakładu produkcyjnego | R2b | R2-WP7 | S | `[ ]` |
 
 `⇧` = kandydat do wyprzedzenia przed R2 zgodnie z §2b.
 
@@ -403,7 +415,7 @@ się numery w tabeli, a nie w głowie.
 
 ---
 
-## 11. Wykaz — 65 wierszy
+## 11. Wykaz — 67 wierszy
 
 Numeracja jest numeracją przeglądu i nie zmienia się. Kolumna „Plan" mówi, co wiedziały dokumenty
 przed R2: `—` = nieznane planowi, `zapis` = zapisane jako znana usterka bez wykonawcy,
@@ -411,8 +423,8 @@ przed R2: `—` = nieznane planowi, `zapis` = zapisane jako znana usterka bez wy
 
 | # | Usterka | Plan | Pakiet | Status |
 |---|---|---|---|---|
-| 1 ⇧ | Dziecko urodzone w grze nie dostaje flagi ucznia ani szkoły | — | R2-WP1 | `[ ]` |
-| 2 ⇧ | Zakład produkcyjny nigdy nie ma utargu; tier taktyczny go nie zamknie | zapis `M7e` `BC-8` | R2-WP7 | `[ ]` |
+| 1 ⇧ | Dziecko urodzone w grze nie dostaje flagi ucznia ani szkoły | — | R2-WP1 | `[x]` **wykonane przed R2** (`K-74`) |
+| 2 ⇧ | Zakład produkcyjny nigdy nie ma utargu; tier taktyczny go nie zamknie | zapis `M7e` `BC-8` | R2-WP7 | `[x]` **wykonane przed R2** (`K-75`) |
 | 3 | Szczebel `Substituted` kaskady ma puste ramię `match` | zapis `M6` `AG-6` | R2-WP14 | `[ ]` |
 | 4 | Wartość czasu zamrożona na stanie z generacji świata | — | R2-WP13 | `[ ]` |
 | 5 | Zero zakładów wydobywczych ze złożem w mieście 4 km | zapis `M6` `AQ-8` | R2-WP17 | `[ ]` |
@@ -431,7 +443,7 @@ przed R2: `—` = nieznane planowi, `zapis` = zapisane jako znana usterka bez wy
 | 18 | `InheritanceHook` to zaślepka; dziedziczona tylko gotówka osobista | decyzja otwarta `M3` §9.10 | R2-WP10 | `[ ]` |
 | 19 | Wyprowadzka z gniazda i rozstanie nie przenoszą środków | — | R2-WP8 | `[ ]` |
 | 20 | Brak opiekuna, kurateli i sieroctwa | — | R2-WP4 | `[ ]` |
-| 21 | Nikt nie zdobywa wykształcenia w trakcie gry | — | R2-WP5 | `[ ]` |
+| 21 | Nikt nie zdobywa wykształcenia w trakcie gry | — | R2-WP5 | `[x]` **wykonane przed R2** (`K-74`) |
 | 22 | Brak żłobka i przedszkola dla dzieci 0–6 lat | zakres `M3` §2 → M8 | R2-WP5 | `[ ]` |
 | 23 | Dziecko konsumuje tyle co dorosły | — | R2-WP11 | `[ ]` |
 | 24 | Relacja rodzinna nie chroniona przed wypchnięciem z slabu | — | R2-WP2 | `[ ]` |
@@ -512,6 +524,8 @@ po samym pierwszym gubi część wpisów — tak zniknęła pozycja 38, zapisana
 Ujednolicenie nagłówków jest zadaniem R2-WP23.
 
 ---
+| 66 | Dziecko poniżej wieku szkolnego nie blokuje dorosłego w gospodarstwie | zakres `R2-WP5` | R2-WP35 | `[ ]` |
+| 67 | Zakład sprzedający na eksport nie ma utargu w rachunku wyniku | — | R2-WP36 | `[ ]` |
 
 ## 12. Szacunek wielkości
 
