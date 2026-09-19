@@ -197,6 +197,36 @@ impl CameraState {
         };
     }
 
+    /// Przypina widok pierwszoosobowy do encji (M11c §5.7).
+    ///
+    /// `anchor` niesie `entity_lo` postaci gracza; pozycję oka podaje potem
+    /// [`CameraState::set_eye`] z rekordu snapshotu. Kamera **nie chodzi sama** — postać
+    /// gracza jest zwykłym agentem, a tryb pierwszoosobowy tylko ją ogląda.
+    pub fn set_anchor(&mut self, anchor: Option<u64>) {
+        if let CameraMode::FirstPerson { anchor: a, .. } = &mut self.mode {
+            *a = anchor;
+        }
+    }
+
+    /// Kotwica widoku pierwszoosobowego, jeśli jest.
+    #[must_use]
+    pub fn anchor(&self) -> Option<u64> {
+        match self.mode {
+            CameraMode::FirstPerson { anchor, .. } => anchor,
+            _ => None,
+        }
+    }
+
+    /// Stawia oko przypiętej kamery w zadanym punkcie (grunt pod postacią, w metrach).
+    ///
+    /// Bierze **grunt**, a nie oko: wysokość oczu jest własnością kamery (`eye_height_m`)
+    /// i dokłada ją `eye()`, więc podanie tu gotowej rzędnej oka podniosłoby ją dwa razy.
+    pub fn set_eye(&mut self, ground: DVec3) {
+        if let CameraMode::FirstPerson { pos, .. } = &mut self.mode {
+            *pos = ground;
+        }
+    }
+
     /// Przełącza na orbitę wokół punktu oddalonego o `dist` w kierunku patrzenia.
     pub fn to_orbit(&mut self, dist: f32) {
         let (yaw, pitch) = self.katy();

@@ -20,13 +20,20 @@ use magnat_world::{
 use std::sync::Arc;
 
 fn teren(seed: u64, region: Region) -> Terrain {
+    teren_profil(seed, region, EconomyProfile::Mixed)
+}
+
+/// Teren dla zadanego profilu gospodarczego. Profil wchodzi do generacji **terenu**,
+/// nie tylko miasta — złoża zależą od niego, więc test o kopalniach musi podać ten sam
+/// profil w obu miejscach, inaczej sprawdza świat, którego nikt nie postawi.
+fn teren_profil(seed: u64, region: Region, profile: EconomyProfile) -> Terrain {
     let pool = JobPool::new(0);
     let params = WorldGenParams {
         seed,
         size: WorldSize::Small4km,
         region,
         epoch: Epoch::Y1990,
-        profile: EconomyProfile::Mixed,
+        profile,
         difficulty: Difficulty::Normal,
     };
     let (data, _) = generate(params, &pool).unwrap();
@@ -496,4 +503,58 @@ fn hierarchia_klas_jest_monotoniczna() {
         assert!(a.max_slope_pct <= b.max_slope_pct);
     }
     let _ = blocks::BlockId(0);
+}
+
+/// `R2-WP17`: **kopalnia stoi na złożu, i w ogóle stoi.**
+///
+/// Do tej poprawki w wygenerowanym mieście nie było **ani jednego** zakładu
+/// wydobywczego z przypisanym złożem, więc cały model wyczerpywania złoża — napisany
+/// i przetestowany w `sim/supply/tests/mining.rs` — nie uruchamiał się nigdy.
+/// Przyczyny były dwie i obie są tu zamknięte: zakład wydobywczy szukał działki
+/// **w strefie**, a nie **na złożu**, oraz odpadał na progu skali `SCALE_MIN` razem
+/// z każdym innym zakładem, którego wyrób da się sprowadzić.
+///
+/// Pięć regionów, bo złoża są własnością terenu i jeden region niczego nie dowodzi.
+#[test]
+#[ignore = "generuje świat i miasto dla pięciu regionów — CI uruchamia jawnie przez --include-ignored"]
+fn kopalnia_stoi_na_zlozu() {
+    for region in [
+        Region::Coastal,
+        Region::Mountain,
+        Region::Lowland,
+        Region::River,
+        Region::Desert,
+    ] {
+        let t = teren_profil(1, region, EconomyProfile::Industrial);
+        let p = plan(1, region, EconomyProfile::Industrial);
+        let city = generate_city(&p, &t, t.materials(), &JobPool::new(0)).unwrap();
+        let r = &city.sites.report;
+        println!(
+            "{region:?}: {} zakładów wydobywczych, {} na złożu",
+            r.extraction_sites, r.extraction_on_deposit
+        );
+        assert!(
+            r.extraction_sites > 0,
+            "{region:?}: zero zakładów wydobywczych — kryterium byłoby spełnione tożsamościowo"
+        );
+        assert_eq!(
+            r.extraction_sites, r.extraction_on_deposit,
+            "{region:?}: zakład wydobywczy bez złoża pod spodem"
+        );
+        // Identyfikator musi wskazywać **istniejące** złoże wymaganego rodzaju, a nie
+        // liczbę, która przypadkiem wygląda podobnie (`K-39`).
+        for s in &city.sites.sites {
+            let a = city.site_catalog.get(s.archetype);
+            let Some(want) = a.spec.needs_deposit else {
+                continue;
+            };
+            let d = s.deposit.expect("zakład wydobywczy bez złoża");
+            assert_eq!(
+                t.deposit(d).resource,
+                want,
+                "{region:?}: {} stoi na złożu innego surowca",
+                a.key()
+            );
+        }
+    }
 }

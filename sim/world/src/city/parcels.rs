@@ -623,7 +623,11 @@ fn push_street(
 ) {
     let spec = super::road::spec(class);
     let (pa, pb) = (net.nodes[a.0 as usize].pos, net.nodes[b.0 as usize].pos);
-    let mut flags = RoadFlags::SIDEWALK;
+    let mut flags = if super::road::has_sidewalk(class) {
+        RoadFlags::SIDEWALK
+    } else {
+        RoadFlags::NONE
+    };
     if spec.lanes_bwd == 0 {
         flags = flags.with(RoadFlags::ONEWAY);
     }
@@ -708,7 +712,16 @@ fn build_street_index(net: &RoadNetwork, map_m: f32) -> CsrGrid<SegmentId> {
     CsrGrid::build(spec, items.into_iter())
 }
 
-/// Front działki: najbliższy odcinek jezdni i rzut krawędzi frontowej na jego oś.
+/// Front działki: najbliższy odcinek jezdni **z chodnikiem** i rzut krawędzi frontowej
+/// na jego oś.
+///
+/// „Z chodnikiem" dołożone w `R2-WP15`: adres działki jest przy ulicy, a nie przy
+/// obwodnicy. Do tej poprawki front brał się z jednego najbliższego odcinka, więc
+/// kwartał przylegający do drogi szybkiego ruchu adresował się do niej — a po tym,
+/// jak autostrada straciła chodnik, taka parcela nie miała dojścia pieszo w ogóle.
+/// Szukamy więc wśród najbliższych i bierzemy pierwszy z chodnikiem;
+/// dopiero gdy żaden go nie ma, zostaje najbliższy i chodnik dosypuje mu Etap 5
+/// (`dosyp_chodniki_przy_parcelach`).
 fn frontage_for(
     net: &RoadNetwork,
     index: &CsrGrid<SegmentId>,
@@ -717,10 +730,16 @@ fn frontage_for(
     gateway: bool,
 ) -> Frontage {
     let mut kandydaci: Vec<(f32, SegmentId)> = Vec::new();
-    index.k_nearest(mid, 1, &mut kandydaci);
-    let Some(&(_, seg)) = kandydaci.first() else {
+    // Szesnaście, nie cztery: indeks trzyma **próbki wzdłuż osi**, a nie odcinki,
+    // więc cztery najbliższe punkty bywają czterema próbkami tego samego odcinka.
+    index.k_nearest(mid, 16, &mut kandydaci);
+    let Some(&(_, najblizszy)) = kandydaci.first() else {
         return Frontage::NONE;
     };
+    let seg = kandydaci
+        .iter()
+        .find(|(_, s)| super::road::has_sidewalk(net.segments[s.0 as usize].class))
+        .map_or(najblizszy, |(_, s)| *s);
     let s = &net.segments[seg.0 as usize];
     let (a, b) = (net.nodes[s.a.0 as usize].pos, net.nodes[s.b.0 as usize].pos);
     let dl = (b - a).length().max(1.0);

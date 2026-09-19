@@ -27,16 +27,21 @@ use magnat_agents::components::{AgentState, Employment, Identity, Residence};
 use magnat_agents::household::Household;
 use magnat_agents::social::StatusDistribution;
 use magnat_agents::{demography, AgentSources};
-use magnat_core::{Entity, Money};
+use magnat_core::{CitizenId, Entity, Money, SiteId};
 use magnat_ecs::World;
 use magnat_sim_snapshot::{
     dist2_mm, select_top_k, AgeBand, Appearance, Candidate, CitizenRenderRec, OutfitTier,
-    PedestrianRecord, RenderSnapshot, VehicleRecord, VehicleRenderRec, ViewQuery,
+    PedestrianRecord, RenderSnapshot, SiteRenderRec, VehicleRecord, VehicleRenderRec, ViewQuery,
     CITIZEN_FLAG_PLAYER_OWNED, MAX_DISTRICTS,
 };
 use magnat_traffic::{TrafficServices, VehicleOwner};
 use magnat_voxel::{anim, ClipKind, ClipLibrary, PaletteLibrary, WorkStyle};
 use magnat_world::CityData;
+
+/// Wysokość oka nad gruntem w metrach. Ta sama liczba, którą klient podaje kamerze
+/// w trybie pierwszoosobowym — jedno miejsce, bo dwa rozjechałyby się przy pierwszej
+/// zmianie wzrostu postaci.
+pub const EYE_HEIGHT_M: f32 = 1.65;
 
 /// Bufory robocze wypełniacza.
 ///
@@ -63,6 +68,17 @@ pub struct SnapshotFiller {
     /// Czy encje dostają klip, czy pozę spoczynkową. Wyłącza to `--no-anim` i służy
     /// wyłącznie do pomiaru z kryterium WP3 — w grze zawsze jest włączone.
     animations: bool,
+    /// Zakłady miasta: `(SiteId, pozycja w mm, dzielnica)`, wyliczone raz przy związaniu.
+    ///
+    /// Pozycja jest w `CityData`, a nie w ECS, więc `fill` po samym `&World` by jej nie
+    /// dosięgnął. Tablica jest sortowana po `SiteId`, bo tak samo indeksuje ją `Plant`.
+    sites: Vec<(SiteId, [i32; 3])>,
+    /// Postać gracza, jeśli już jest. `PlayerCharacter` mieszka w sesji, a nie w świecie,
+    /// więc wypełniacz dostaje ją setterem — tak samo jak `animations`.
+    player: Option<CitizenId>,
+    /// Kafel atlasu szyldów per `SiteId`, nadany przez klienta (WP9). Pusty wektor
+    /// znaczy „nikt jeszcze nie rozdał numerów", a nie „żadna firma nie ma szyldu".
+    signs: Vec<(SiteId, u16)>,
 }
 
 impl Default for SnapshotFiller {
@@ -76,6 +92,9 @@ impl Default for SnapshotFiller {
             clips: ClipLibrary::builtin(),
             style_by_role: None,
             animations: true,
+            sites: Vec::new(),
+            player: None,
+            signs: Vec::new(),
         }
     }
 }
@@ -108,6 +127,29 @@ impl SnapshotFiller {
                 .id_of(d.kind.key(), epoka)
                 .map_or(0, |p| p.0);
         }
+        // Pozycja zakładu to **wejście budynku**, a nie środek bryły: szyld wisi nad
+        // drzwiami, a nie nad dachem, i tam samo gracz podchodzi. Wysokość to nadproże
+        // parteru, czyli tyle, ile trzeba, żeby napis był nad głowami i pod oknem piętra.
+        self.sites.clear();
+        for (i, s) in city.sites.sites.iter().enumerate() {
+            let b = &city.buildings.buildings[s.building.0.index() as usize];
+            let z = b.aabb.min.z
+                + (f32::from(b.floor_heights_dm.first().copied().unwrap_or(30)) * 0.1 - 0.7)
+                    .max(2.5);
+            let p = b.entrances.first().map_or(
+                [
+                    (b.aabb.min.x + b.aabb.max.x) * 0.5,
+                    (b.aabb.min.y + b.aabb.max.y) * 0.5,
+                    z,
+                ],
+                |e| [e.pos.x, e.pos.y, z],
+            );
+            self.sites.push((
+                magnat_world::city::sites::site_id(i as u32),
+                to_mm(p),
+            ));
+        }
+        self.sites.sort_unstable_by_key(|(s, _)| *s);
     }
 
     /// Wiąże z miastem, jeśli to inne miasto niż poprzednio. Wołane z pętli klatki:
@@ -122,6 +164,20 @@ impl SnapshotFiller {
     /// Włącza albo wyłącza klipy animacji (scena pomiarowa `--no-anim`).
     pub fn set_animations(&mut self, on: bool) {
         self.animations = on;
+    }
+
+    /// Wskazuje postać gracza — kotwicę trybu pierwszoosobowego (M11c §5.7).
+    ///
+    /// Setter, a nie argument `fill`, bo `PlayerCharacter` mieszka w [`crate::Session`],
+    /// a nie w świecie ECS: gracz jest bytem sesji, a `fill` widzi wyłącznie świat.
+    pub fn set_player(&mut self, citizen: Option<CitizenId>) {
+        self.player = citizen;
+    }
+
+    /// Rozdaje kafle atlasu szyldów (WP9). Wejściem jest lista `(zakład, kafel)`,
+    /// posortowana po zakładzie; `0` znaczy „bez szyldu".
+    pub fn set_signs(&mut self, signs: Vec<(SiteId, u16)>) {
+        self.signs = signs;
     }
 
     /// Odwzorowanie „rola zawodowa → styl animacji pracy", liczone raz na sesję.
@@ -185,6 +241,75 @@ impl SnapshotFiller {
 
         self.fill_citizens(world, view, doba, seed, keep, out);
         self.fill_vehicles(world, view, out);
+        self.fill_sites(world, view, out);
+        self.fill_player(world, out);
+    }
+
+    /// Zakłady widoczne w kadrze (M11c §5.7, WP5 i WP9).
+    ///
+    /// `activity`, `stock_fill` i awaria pochodzą z `magnat_supply`, więc **zakład
+    /// handlowy ich nie ma** — sklep nie jest linią produkcyjną. Dostaje wtedy zapas
+    /// pełny i aktywność neutralną: regały w sklepie mają stać pełne, dopóki M11d nie
+    /// podłączy stanu półki.
+    fn fill_sites(&mut self, world: &World, view: &ViewQuery, out: &mut RenderSnapshot) {
+        if self.sites.is_empty() {
+            return;
+        }
+        let chain = world.get_resource::<magnat_supply::ChainHandle>();
+        self.cands.clear();
+        for (i, (_, pos)) in self.sites.iter().enumerate() {
+            if !view.aabb.contains(*pos) {
+                continue;
+            }
+            self.cands.push(Candidate {
+                dist2: dist2_mm(*pos, view.eye),
+                entity: i as u32,
+                src: i as u32,
+            });
+        }
+        select_top_k(&mut self.cands, view.caps.sites as usize);
+        for c in &self.cands {
+            let (id, pos) = self.sites[c.src as usize];
+            let mut rec = SiteRenderRec {
+                entity_lo: id.0.index(),
+                pos,
+                sign_id: self
+                    .signs
+                    .binary_search_by_key(&id, |(s, _)| *s)
+                    .map_or(0, |i| self.signs[i].1),
+                activity: 128,
+                stock_fill: 255,
+                ..Default::default()
+            };
+            if let Some(ch) = chain {
+                let c = ch.lock();
+                if let Some(zaklad) = c.plant.get(id) {
+                    rec.activity = zaklad.activity();
+                    rec.stock_fill = magnat_supply::plant::stock_fill(&c.store, zaklad);
+                    if zaklad.is_fault() {
+                        rec.flags |= magnat_sim_snapshot::SITE_FAULT;
+                    }
+                }
+            }
+            out.sites.push(rec);
+        }
+    }
+
+    /// Postać gracza: pozycja oka dla trybu pierwszoosobowego (M11c §5.7, `G-3`).
+    ///
+    /// Oko bierze się z **warstwy Mikro**, a nie z komponentu: pozycja mieszkańca istnieje
+    /// wyłącznie wtedy, gdy jest on w kadrze albo przypięty (`player::pin_micro`), i to
+    /// jest właściwe źródło — ta sama liczba, którą widzi renderer dla każdego innego
+    /// pieszego. `citizen == 0` znaczy „gracz jeszcze nie wybrał postaci".
+    fn fill_player(&mut self, world: &World, out: &mut RenderSnapshot) {
+        let Some(gracz) = self.player else { return };
+        let idx = gracz.0.index();
+        out.player.citizen = idx;
+        if let Some(p) = self.peds.iter().find(|p| p.entity == idx) {
+            out.player.eye = to_mm([p.pos[0], p.pos[1], p.pos[2] + EYE_HEIGHT_M]);
+            out.player.yaw = yaw_u16(p.heading);
+        }
+        let _ = world;
     }
 
     fn fill_citizens(

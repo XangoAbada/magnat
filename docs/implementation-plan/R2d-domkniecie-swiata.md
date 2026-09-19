@@ -48,8 +48,9 @@ naprawy i wchodzi tu tylko dlatego, że dotyka tego samego generatora i tej same
 > **Pakiet wykonuje M11c.** Decyzja właściciela produktu z 2026-09-19 przeniosła go do podfazy
 > prezentacyjnej razem z trzema innymi, bo M11c ma pokazać ulicę, a ulica jest pusta i nie ma
 > na niej szyldów. Zakres, kryterium i sufit czasu zostają **bez zmian** — zmienia się wyłącznie
-> adres wykonania. Powód w tabeli `J-n` dokumentu `M11c-wnetrza-i-kamera.md`; status wraca do
-> wykazu R2 po zamknięciu M11c.
+> adres wykonania. Powód w tabeli `J-n` dokumentu `M11c-wnetrza-i-kamera.md`.
+>
+> **Zamknięty w M11c** (2026-09-19) — z testem; szczegóły w tabeli `J-n` tamtego dokumentu.
 
 
 **Pozycja wykazu:** 5. Zapisana jako `AQ-8` w `M6-lancuch-dostaw.md` z adresem M7; M7 zamknięte bez niej.
@@ -97,8 +98,12 @@ wyczerpania — czyli mechanizm, który dziś nie chodzi, faktycznie chodzi.
 > **Pakiet wykonuje M11c.** Decyzja właściciela produktu z 2026-09-19 przeniosła go do podfazy
 > prezentacyjnej razem z trzema innymi, bo M11c ma pokazać ulicę, a ulica jest pusta i nie ma
 > na niej szyldów. Zakres, kryterium i sufit czasu zostają **bez zmian** — zmienia się wyłącznie
-> adres wykonania. Powód w tabeli `J-n` dokumentu `M11c-wnetrza-i-kamera.md`; status wraca do
-> wykazu R2 po zamknięciu M11c.
+> adres wykonania. Powód w tabeli `J-n` dokumentu `M11c-wnetrza-i-kamera.md`.
+>
+> **Skończony w M11c pomiarem, nie kodem** (2026-09-19): sufit `D-N6` zadziałał, a wynik
+> pomiaru stoi w `tools/headless/src/population.rs` (`gestosc_firm`). Zakład bierze **cały
+> budynek** — 4 186 lokali użytkowych obsługuje 202 zakłady, a `it_office` ma 183 etaty.
+> Naprawa jest przeprojektowaniem Etapu 7 i ma adres `D-N20`; pakiet przechodzi do **R3**.
 
 
 **Pozycja wykazu:** 6. Rozmiar `L`, sufit pracy w `D-N6`.

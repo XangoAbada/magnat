@@ -27,6 +27,11 @@ use magnat_voxel::{
 pub enum PickKind {
     Citizen = 1,
     Vehicle = 2,
+    /// Zakład — **przez swoje rzeczy, nie przez mury**. Szyld i wyposażenie wnętrza są
+    /// encjami instancjonowanymi, więc niosą identyfikator w instancji; ściana budynku
+    /// go nie niesie, bo wierzchołek chunka ma osiem bajtów i nie ma w nich miejsca
+    /// na `BuildingId` (M11c, korekta `J-19`).
+    Site = 3,
 }
 
 /// W co gracz trafił kursorem.
@@ -51,6 +56,7 @@ pub fn decode_pick(raw: u32) -> Option<PickHit> {
     let kind = match raw >> PICK_ENTITY_BITS {
         1 => PickKind::Citizen,
         2 => PickKind::Vehicle,
+        3 => PickKind::Site,
         _ => return None,
     };
     Some(PickHit {
@@ -541,7 +547,18 @@ fn build_geometry(models: &ModelLibrary) -> (Vec<ModelVertex>, Vec<u32>, ModelTa
     }
     let citizen = models.id_of("citizen").unwrap_or_default();
     let vehicle = models.id_of("car").unwrap_or_default();
-    (vertices, indices, ModelTable::new(slots, citizen, vehicle))
+    // Klucze propów są **kontraktem z `tools/mvoxc gen`**: brak pliku nie jest błędem,
+    // tylko wnętrzem bez tego mebla — `MODEL_BRAK` przechodzi przez generator wnętrz
+    // jako „nie ma czym tego narysować".
+    let id = |k: &str| models.id_of(k).unwrap_or(crate::interiors::MODEL_BRAK);
+    let props = crate::interiors::PropModels {
+        shelf: id("shelf"),
+        crate_: id("crate"),
+        desk: id("desk"),
+        machine: id("machine"),
+    };
+    let table = ModelTable::new(slots, citizen, vehicle).with_props(props, id("sign"));
+    (vertices, indices, table)
 }
 
 /// Tekstura warstwowa z kaflami sylwetek. `Rgba8Uint`, bo kanały niosą **liczby**

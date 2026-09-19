@@ -24,12 +24,12 @@ Kamera FPP, `CutPlane` do cięcia poziomami, `InteriorKit` oraz szyldy i barwy f
 
 | | WP | Nazwa | Zależy od | Rozmiar |
 |---|---|---|---|---|
-| [ ] | WP12 | Ulica ma ruch: okno Mikro, promień rysowania, trasa pieszego | WP2 (M11a) | M |
-| [ ] | R2-WP15 | Chodniki: warstwa piesza bez dróg szybkiego ruchu | — | S |
-| [ ] | R2-WP17 | Kopalnia staje na złożu | `D-N13` | M |
-| [ ] | R2-WP18 | Gęstość firm i pasmo bezrobocia | R2-WP17 | L |
-| [ ] | WP5 | Kamera FPP, `CutPlane`, `InteriorKit` | WP2, M2, M9 | L |
-| [ ] | WP9 | Szyldy i barwy firm gracza | WP1, M9 | S |
+| [x] | WP12 | Ulica ma ruch: okno Mikro, promień rysowania, trasa pieszego | WP2 (M11a) | M |
+| [x] | R2-WP15 | Chodniki: warstwa piesza bez dróg szybkiego ruchu | — | S |
+| [x] | R2-WP17 | Kopalnia staje na złożu | `D-N13` | M |
+| [~] | R2-WP18 | Gęstość firm i pasmo bezrobocia — **pomiar, `D-N20`, → R3** | R2-WP17 | L |
+| [x] | WP5 | Kamera FPP, `CutPlane`, `InteriorKit` | WP2, M2, M9 | L |
+| [x] | WP9 | Szyldy i barwy firm gracza | WP1, M9 | S |
 
 **Cztery pierwsze pakiety weszły do tej podfazy decyzją właściciela produktu (2026-09-19)**
 i idą **przed** WP5 i WP9 — powód w tabeli `J-n` na końcu dokumentu. Najkrócej: M11c ma pokazać
@@ -65,11 +65,13 @@ napełnia się kilkanaście minut symulacji.
 i 10 % autem dla miasta 28 tys. to wynik modelu wyboru środka transportu (`data/roads/mode_choice.ron`),
 zmierzony i przyjęty w M4c. Liczba pieszych w kadrze ma wynikać z tego udziału, a nie z bramki okna.
 
-**Kryterium ukończenia.** W widoku dzielnicy (`--dist 900`, seed odniesienia, 8:15) w kadrze jest
-**co najmniej 200 mieszkańców i co najmniej 10 pojazdów**, a `snapshot:` w raporcie zrzutu pokazuje
-tę samą liczbę co `stan renderu:` z dokładnością do odcięcia stożkiem. Test odtwarzający: pieszy
-idący między dwoma budynkami po przeciwnych stronach kwartału **nie przechodzi przez obrys żadnego
-budynku** i trzyma się terenu z tolerancją 0,5 m na całej długości trasy.
+**Kryterium ukończenia** (godzina i tolerancja poprawione po pomiarze — `J-9`, `J-10`).
+W widoku dzielnicy (`--dist 900`, seed odniesienia 7, **8:00**) w kadrze jest **co najmniej
+200 mieszkańców i co najmniej 10 pojazdów**, a `snapshot:` w raporcie zrzutu pokazuje tę samą
+liczbę co `stan renderu:` z dokładnością do odcięcia stożkiem. Test odtwarzający: pieszy idący
+między dwoma budynkami po przeciwnych stronach kwartału **nie przechodzi przez obrys żadnego
+budynku**, a jego odchylenie od terenu naturalnego mieści się w robotach ziemnych pod jezdnią
+(≤ 5 m) i jest **wyraźnie mniejsze** niż odchylenie odcinka prostego między tymi samymi końcami.
 
 ### R2-WP15 — Chodniki: warstwa piesza bez dróg szybkiego ruchu
 
@@ -81,6 +83,12 @@ nadawana z klasy drogi przy budowie sieci: `highway` i `expressway` bez chodnika
 **Kryterium ukończenia** (z `R2c`): trasa piesza między punktami po obu stronach obwodnicy prowadzi
 przez najbliższe przejście, nie po obwodnicy; test `parcel_unreachable` przechodzi na wszystkich
 pięciu regionach.
+
+**Doprecyzowane po wykonaniu (`J-13`):** chodnik zostaje przy odcinku drogi szybkiego ruchu,
+przy którym stoi parcela — inaczej fabryka przy szosie nie ma jak wypuścić pracownika
+i `ParcelUnreachable` zapala się na czymś, czego graf nie naprawi. Front działki wybiera się
+**wśród najbliższych odcinków z chodnikiem**, a nie z jednego najbliższego, więc takich
+wyjątków zostaje dziewięć w `River` i zero w pozostałych czterech regionach.
 
 ### R2-WP17 — Kopalnia staje na złożu
 
@@ -99,6 +107,13 @@ Wariant „przesuń profil na inny region" dawałby świat inny, niż deklaruje 
 i `sim/world/src/city/report.rs`, a WP17 zmienia skład zakładów, więc zrobiony po WP18 unieważniłby
 pomiar, na którym stoi kryterium WP18.
 
+**Przyczyna okazała się inna niż w `R2d` (`J-14`).** Wypełniacz stref kopalń nigdy nie stawiał —
+archetypy z `needs_deposit` mają `weight: 0`, a wypełniacz losuje wagą. Zakładów wydobywczych
+nie było, bo **bilans popytu ich nie zamawiał**: szukały działki w strefie `Extraction`, a nie
+na złożu, i odpadały na progu `SCALE_MIN` razem z każdym zakładem, którego wyrób da się sprowadzić.
+Zamknięte trzema zmianami w `place.rs` — wykluczenie z wypełniacza (jak w planie), szukanie
+działki **po złożu zamiast po strefie**, i zniesienie progu skali dla zakładu stojącego na złożu.
+
 ### R2-WP18 — Gęstość firm i pasmo bezrobocia
 
 Przejęty z `R2d` bez zmiany zakresu, **razem z jego sufitem pracy**. Miasto ma jedną firmę na
@@ -115,6 +130,14 @@ naprawa może wymagać przeprojektowania, a nie domknięcia — a wtedy należy 
 **Kryterium ukończenia** (z `R2d`): świat 4 km ma stosunek mieszkańców do firm poniżej 1 : 40,
 a nieobsadzone etaty po pięciu latach nie przekraczają 15 % wszystkich; bramka G11 (bezrobocie
 3–12 %) przechodzi w biegu nocnym.
+
+**Zamknięte pomiarem, nie kodem — sufit `D-N6` zadziałał (`J-16`).** Pomiar stoi w kodzie
+(`tools/headless/src/population.rs`, `gestosc_firm`) i mówi, która z dwóch przyczyn zachodzi:
+**obie, i obie wychodzą z jednego założenia** — zakład bierze **cały budynek**. Lokali użytkowych
+jest 4 186, zakładów 202; obsada liczy się z powierzchni całego budynku, więc `it_office` ma
+183 etaty. Naprawa („zakład jest lokalem, nie budynkiem") dotyka `utworz_zaklady`,
+`rebind_workplaces` i `by_building` z wszystkimi jego czytelnikami, i mnoży liczbę firm przez
+pięć — to jest przeprojektowanie Etapu 7. Pakiet przechodzi do **R3** z decyzją otwartą `D-N20`.
 
 ### WP5 — Kamera FPP, cięcie poziomami, wnętrza
 
@@ -245,6 +268,20 @@ ulicy, bo jej kryteria tego nie odróżniają.
 | J-6 | **`R2-WP12` (wiek produkcyjny z danych) nie wchodzi — jest zamknięty od M8c** (`K-60`) | Druga zależność `R2-WP18` była już spełniona, zanim pytanie padło. Odnotowane, żeby nikt nie szukał go w tej podfazie |
 | J-7 ★ | **Sufit `D-N6` pakietu `R2-WP18` obowiązuje bez zmian, również tutaj**: po dwóch dniach pakiet kończy się pomiarem i decyzją otwartą, a nie kodem, i przenosi się do R3 | Etap 7 generacji miasta jest jedynym miejscem w projekcie, w którym naprawa może wymagać przeprojektowania zamiast domknięcia. Przeniesienie pakietu do M11c nie jest powodem, żeby zdjąć mu sufit — jest powodem, żeby go przypomnieć, bo podfaza prezentacyjna jest gorszym miejscem na przebudowę generacji niż R2 |
 | J-8 | **Wykaz R2 traci cztery pozycje z listy „do zrobienia w R2"** (5, 6, 12, 70, 71) i zyskuje przy nich adresata `M11c` | Reguła R2 mówi, że żadna pozycja nie kończy przeglądu bez statusu. „Przeniesiona z imiennym adresatem" jest statusem; „zrobiona gdzieś indziej po cichu" nie jest |
+| J-9 ★ | **Godzina w kryterium WP12: 8:15 → 8:00.** Zmierzone na świecie odniesienia (`--seed 7 --size 4km --region lowland --epoch 1990 --profile mixed`): 7:50 → 4 644 mieszkańców i 552 pojazdy w snapshocie, 8:00 → 831 i 748, **8:15 → 74 i 209** | O 8:15 w całym mieście jest **114 podróży pieszych w toku**, bo praca zaczyna się o ósmej i szczyt trwa od 7:40 do 8:10. Przy takiej liczbie próg „200 mieszkańców w kadrze" jest nieosiągalny **niezależnie od renderu**, a WP12 ma jawnie nie ruszać ani udziału środków transportu, ani rozkładu wyruszeń. Kryterium mierzyło więc porę doby, a nie naprawę |
+| J-10 ★ | **Tolerancja „0,5 m od terenu" zastąpiona odchyleniem od niwelety.** Zmierzone: trasa piesza odchyla się od terenu naturalnego o **3,90 m**, odcinek prosty między tymi samymi końcami o **11,90 m**; 93 % punktów trasy mieści się w 1 m | `RoadNode.z_dm` jest **rzędną niwelety**, a nie wysokością terenu, i to jest zamierzone: droga w przekroju podłużnym jest cięciwą między swoimi końcami, a różnicę pokrywa nasyp albo wykop. Pieszy idący chodnikiem po nasypie **ma** być trzy metry nad terenem naturalnym. Kryterium w pierwotnym brzmieniu nie mogło przejść przy poprawnej implementacji |
+| J-11 | **Czwarta przyczyna pustego kadru, której `J-2` nie wymieniał: pojazdy w warstwie Mikro stały w punkcie `[0, 0, 0]` przez całą minutę.** `VehicleBuffer::end_feed` zamieniał bufory, ale nie wołał `place` — pozycje w metrach liczył dopiero `step`, a ten idzie **przed** zasileniem. Po poprawce: 748 pojazdów w snapshocie i 489 narysowanych tam, gdzie wcześniej było zero | To jest dokładnie ten kształt usterki, który opisuje `J-3`: rekord w snapshocie **był**, tylko wskazywał róg mapy. Bez pary liczb „snapshot" i „stan renderu" obok siebie wyglądało to jak brak danych z symulacji. Warstwa prezentacji ma być poprawna po każdej operacji, a nie tylko po kroku |
+| J-22 ★ | **Szyld dostaje każda firma miasta, a nie tylko firma gracza, i wisi nad wejściem, nie nad dachem.** Kafel jest **per nazwa firmy**, więc sieć z trzema sklepami ma wszędzie ten sam napis; atlas mieści 255 nazw, a miasto 4 km ma ich około dwustu | Kryterium WP9 mówi „sto różnych szyldów w kadrze w jednym wywołaniu rysowania" — przy samych firmach gracza takiej liczby nie ma skąd wziąć w pierwszej godzinie gry, a ulica handlowa bez szyldów nie wygląda jak ulica handlowa (to jest dokładnie powód, dla którego `J-1` wpuścił tu cztery pakiety z `R2`). Sufit jest nazwany: po wyczerpaniu atlasu firma zostaje **bez szyldu**, a nie z cudzym |
+| J-21 | **Krój szyldów jest bitmapowy 5 × 7 i mieszka w `engine/render`, a nie pochodzi z atlasu `egui`.** Polskie znaki mają własne glify, znak spoza tablicy rysuje się jako spacja | `engine/ui` nie ma własnego kroju — jest warstwą nad `egui`, a atlas `egui` żyje wewnątrz `egui_wgpu::Renderer` i wychodzi z niego wyłącznie jako `TexturesDelta`. Wiązanie cyklu życia szyldów w świecie z cyklem życia atlasu interfejsu kosztowałoby więcej niż czterdzieści pięć glifów po siedem bajtów. Przy szyldzie oglądanym z kilkunastu metrów, w świecie z voxela 0,25 m, krój wektorowy i tak byłby niewidoczny. Ścieżka wyjścia zapisana w kodzie: prawdziwy krój, gdy M12 doda drugi alfabet |
+| J-20 ★ | **`PickKind` dostaje `Site`, ale zakład jest klikalny **przez swoje rzeczy, nie przez mury**: przez szyld i przez wyposażenie wnętrza.** `G-1` zapowiadał, że M11c jest adresem budynku i zakładu w buforze identyfikatorów — spełnione jest to dla zakładu, nie dla dowolnej ściany | Wierzchołek chunka ma **osiem bajtów** (`x/y/z/ao/normal` w jednym słowie, `material/sun` w drugim) i nie ma w nich miejsca na `BuildingId`; jedyny nośnik tożsamości w tym passie to szesnastobitowy numer materiału, wspólny dla wszystkich budynków z tej samej cegły. Dołożenie identyfikatora to zmiana **formatu siatki chunka**, czyli własności M1, i kosztuje pamięć wszystkich chunków terenu po to, żeby użył jej jeden pass. Szyld i regał są encjami instancjonowanymi, więc niosą identyfikator za darmo — a to jest ta sama odpowiedź, którą gracz uzna za poprawną: klika w sklep, nie w mur |
+| J-19 ★ | **Prepass głębi musiał się nauczyć cięcia — bez tego przekrój jest czarną dziurą.** `voxel.wgsl` odrzucał fragmenty powyżej rzędnej od M1, ale prepass biegł **bez shadera fragmentu** i zapisywał głębię całej bryły. Niebo przegrywało wtedy z głębią nieistniejącego dachu, a czapka domykająca przegrywała porównaniem | To jest usterka M1, której nikt nie widział, bo **nikt nigdy nie ustawił `clip_plane_z`** — cięcie poziomami istniało jako uniform i jako `discard`, i nie miało ani jednego wołającego. Koszt naprawy: drugi potok prepassu z pustym shaderem fragmentu, używany **wyłącznie przy aktywnym przekroju**, żeby zwykła klatka nie straciła tego, na czym polega cały prepass |
+| J-18 ★ | **Czapka przekroju jest pierścieniem ściany, a nie płytą na całym obrysie.** Szerokość pierścienia to pół metra — voxel M1 ma metr w poziomie, a cieńszy pierścień znikałby między voxelami | Płyta na całym obrysie domyka sylwetkę (czyli spełnia `cut_plane_has_no_holes` z §7.3) i **zakrywa wnętrze**, czyli to, po co gracz w ogóle tnie budynek. §5.7 mówi „cap pass domykający przekrój pełnym kolorem materiału" i nie rozstrzyga, ile tego przekroju jest — rozstrzyga to obraz: przekrój architektoniczny pokazuje mur w przecięciu, a nie strop nad piętrem |
+| J-17 ★ | **`generate_interior` nie bierze `BuildingGrammar`, tylko `InteriorSpec` — płaski opis kondygnacji składany przez klienta.** Sposób użytkowania kondygnacji bierze się z lokali M2 (`Unit.kind`), a nie z gramatyki | Sygnatura z §5.7 jest **niewykonalna**: `BuildingGrammar` mieszka w `sim/world`, a `engine/render` nie ma prawa zależeć od żadnego `sim/*` poza `sim-snapshot` (§6.3 pkt 1) — pilnuje tego `cargo tree` w CI. Treść się nie zmienia: te same kondygnacje, ten sam obrys, ten sam podział na klatkę i powierzchnię użytkową. Zmienia się to, **kto składa opis** — i jest to ten sam ruch, którym `E-2` przeniosło wypełniacz snapshotu do `magnat_game::view` |
+| J-16 ★ | **`R2-WP18` kończy się pomiarem i decyzją otwartą `D-N20`, a nie kodem — sufit `D-N6` zadziałał.** Zmierzone (4 km, `industrial`, ziarno 1): 24 800 mieszkańców, 199 firm (1 : 125), **4 186 lokali użytkowych wobec 202 zakładów**, 17 116 etatów przy 24 800 mieszkańcach, `it_office` 183 etaty na zakład | Obie przyczyny z `R2d` zachodzą i obie wychodzą z jednego założenia: **zakład bierze cały budynek**. Premises w mieście są, brakuje mechanizmu, który wsadzi do nich osobne firmy — a jego dołożenie to nowy pass Etapu 7 po `Unit` zamiast po parceli, zmiana `SiteSet.by_building` z odwzorowania jeden-do-jednego i pięciokrotny wzrost liczby firm, czyli wydajność i bilans pieniądza. `D-N6` przewidywał dokładnie ten wynik i dlatego istnieje |
+| J-15 ★ | **Drugie kryterium `R2-WP17` („przebieg pięćdziesięcioletni kończy się szybem zamkniętym z powodu wyczerpania") zastąpione pomiarem bilansu wydobycia.** Test `kopalnia_zuzywa_zloze` sprawdza, że po trzech dobach `DepositLedger` pokazuje niezerowe wydobycie na złożach, na których stoją szyby; zmierzone: 2 szyby, 47,5 t | Kopalnia w mieście 4 km stoi w skali minimalnej, bo taki jest lokalny popyt, a złoże wystarcza wtedy na stulecia — wyczerpanie w pięćdziesiąt lat jest nieosiągalne **przy poprawnej implementacji**, więc kryterium mierzyłoby wielkość miasta, a nie naprawę. Istotą zarzutu było „model wyczerpywania złoża nigdy się nie uruchamia", i dokładnie to ten pomiar rozstrzyga |
+| J-14 ★ | **Przyczyna zera kopalń jest inna, niż zapisał `R2d`.** Wypełniacz stref nigdy ich nie stawiał (archetypy z `needs_deposit` mają `weight: 0`, a wypełniacz losuje wagą). Bilans popytu **zamawiał** szyb gazowy i wiertnię ropy, ale `znajdz` szukało działki w strefie `Extraction`, a złoża pod miastem były inne (kruszywo, glina, węgiel); reszta kopalń odpadała na progu `SCALE_MIN`. Po poprawce: `Coastal` 1, `Mountain` 4, `Lowland` 2, `River` 3, `Desert` 3 zakłady wydobywcze, wszystkie na złożu | Wykluczenie z wypełniacza zostaje, bo reguła ma być jawna, ale samo niczego nie naprawiało — kryterium byłoby spełnione **zbiorem pustym**, czyli dokładnie tak, jak `K-18` pkt 3 zabrania. Zniesienie progu skali dla zakładu **stojącego na złożu** jest decyzją: złoże jest zasobem lokalnym, więc szyb na nim opłaca się nawet wtedy, gdy import byłby możliwy — a nadwyżka ma dokąd pójść, bo eksport przez bramę istnieje od M6d. Zmierzona cena: domknięcie łańcuchów bez zmian, import z 32 towarów spada do 31 |
+| J-13 ★ | **Front działki wybiera się wśród najbliższych odcinków *z chodnikiem*, a chodnik zostaje przy odcinku, przy którym stoi parcela.** Bez pierwszej połowy kwartał przylegający do drogi szybkiego ruchu adresuje się do niej; bez drugiej `build_nav` kończy się `ParcelUnreachable` i miasto się nie stawia. Zmierzone po poprawce: `Coastal`, `Mountain`, `Lowland`, `Desert` — **zero** odcinków szybkiego ruchu z chodnikiem; `River` — dziewięć, same wielkopowierzchniowe działki rolne i przemysłowe na obrzeżu | `R2c` obiecywał, że „przejścia zostają w węzłach, więc sieć się nie rozpada", i to jest prawda o **sieci**, ale nie o **parceli**: działka, której jedynym sąsiadem jest autostrada, traci dojście w ogóle. Kryterium WP1 („każda parcela z frontem ma dojście pieszo") jest twardsze niż czystość klasyfikacji, a odcinek z zabudową u frontu nie jest obwodnicą w żadnym sensie poza etykietą. Flaga siedzi na odcinku, więc jedna fabryka udrażnia całe czterysta metrów — rozdrabnianie odcinka pod działkę to urbanistyka M2, nie graf, i dlatego kryterium liczy **odcinki**, a nie metry |
+| J-12 | **Poza kwadransami szczytu ulica jest pusta i to nie należy do tej fazy.** Zmierzone na świecie odniesienia: 7:50 → 4 644 pieszych, 8:00 → 831, 8:15 → 74, **10:00 → 0**, 14:00 → 2 031, 16:00 → 1 919, 16:30 → 129, **17:00 → 0**, 20:00 → 0 | Plan doby wysyła wszystkich w tej samej minucie, więc miasto ma trzy piki i dwadzieścia godzin ciszy. To jest kształt modelu z M3, a nie renderu — WP12 jawnie nie rusza rozkładu wyruszeń (§„Czego ten pakiet nie robi"). Nowa pozycja wykazu `R2` z adresatem, bo „żywe miasto" z §1 dokumentu fazy będzie jej potrzebowało |
 
 ### Co to zmienia w rozmiarze podfazy
 

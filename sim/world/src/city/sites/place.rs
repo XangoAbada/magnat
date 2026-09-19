@@ -315,6 +315,22 @@ fn pasuje_dzialka(k: &Kand, a: &Archetype) -> bool {
         && (k.built || a.grammar.is_some())
 }
 
+/// Czy archetyp wolno rozstawić **wypełniaczem** (`R2-WP17`).
+///
+/// Zakład wydobywczy — nie: wypełniacz nie umie sprawdzić, czy pod działką jest złoże
+/// wymaganego rodzaju, i do tej poprawki tego nie robił. Skutkiem była kopalnia stojąca
+/// w próżni: w mieście 4 km **zero** szybów miało `MiningSite`, więc cały model
+/// wyczerpywania złoża — napisany i przetestowany — nie uruchamiał się nigdy.
+///
+/// To jest odwrócenie problemu: zamiast uczyć wypełniacz tego, co umie ścieżka klastrowa,
+/// odbieramy mu prawo do decyzji, której nie umie podjąć. Archetyp z `needs_deposit`
+/// idzie wyłącznie przez `posadz_produkcje`, która dopasowanie do złoża sprawdza
+/// (`zloze_ok`). Gdy w regionie złoża nie ma, zakład **nie powstaje** (decyzja `D-N13`),
+/// a domknięcie łańcuchów uruchamia import przez bramę.
+fn wolno_wypelniaczem(a: &Archetype) -> bool {
+    a.spec.needs_deposit.is_none()
+}
+
 /// Wypełniacze: każda pozostała zabudowana działka we wskazanych strefach dostaje
 /// archetyp losowany wagą. Kryterium WP13 mówi „każda zabudowana parcela niemieszkalna
 /// ma `SiteSeed`" — to jest to miejsce, w którym ta obietnica się spełnia.
@@ -337,7 +353,10 @@ fn wypelnij(
             .iter()
             .enumerate()
             .filter(|(_, a)| {
-                a.spec.weight > 0 && a.pasuje_do_epoki(epoch_key) && pasuje_dzialka(k, a)
+                a.spec.weight > 0
+                    && wolno_wypelniaczem(a)
+                    && a.pasuje_do_epoki(epoch_key)
+                    && pasuje_dzialka(k, a)
             })
             .map(|(j, _)| j)
             .collect();
@@ -356,6 +375,7 @@ fn wypelnij(
                 .enumerate()
                 .filter(|(_, a)| {
                     a.spec.weight > 0
+                        && wolno_wypelniaczem(a)
                         && a.pasuje_do_epoki(epoch_key)
                         && a.zones.contains(&k.zone)
                         && (k.built || a.grammar.is_some())
@@ -550,6 +570,7 @@ fn posadz_produkcje(
         let n = s.ceil().clamp(1.0, 4096.0) as u32;
         let dokladna = s / f64::from(n) * f64::from(SCALE_BASE);
         if dokladna < f64::from(SCALE_MIN)
+            && sc.get(*a).spec.needs_deposit.is_none()
             && cat
                 .recipe(*r)
                 .outputs
@@ -645,7 +666,10 @@ fn posadz_produkcje(
         while zostalo[slot].1 > 0 {
             // Zakład, który **musi** powstać, siada wyłącznie na działce już zabudowanej:
             // pusta działka daje szansę, że bryła się nie zmieści, a wtedy nie ma wody.
-            let znaleziona = if musi {
+            let znaleziona = if a.spec.needs_deposit.is_some() {
+                // Kopalnia idzie **za złożem, nie za strefą** (`R2-WP17`).
+                znajdz_na_zlozu(kand, a, bi)
+            } else if musi {
                 kand.iter()
                     .position(|c| c.built && pasuje_dzialka(c, a) && zloze_ok(bi, c, a))
             } else {
@@ -707,6 +731,36 @@ fn znajdz(kand: &[Kand], a: &Archetype, extra: &dyn Fn(&Kand) -> bool) -> Option
     kand.iter()
         .position(|c| c.built && pasuje_dzialka(c, a) && extra(c))
         .or_else(|| kand.iter().position(|c| pasuje_dzialka(c, a) && extra(c)))
+}
+
+/// Działka pod zakład wydobywczy: **złoże wymaganego rodzaju decyduje, strefa nie**
+/// (`R2-WP17`).
+///
+/// Strefa `Extraction` powstaje tam, gdzie kwartał ma **wysoką średnią koncentrację
+/// czegokolwiek** (`zoning.rs`), a archetyp potrzebuje **konkretnego surowca**. Te dwa
+/// warunki spotykają się rzadko: w mieście 4 km bilans zamawiał szyb gazowy i wiertnię
+/// ropy, a `znajdz` nie znajdowało dla nich ani jednej działki — nie dlatego, że złóż
+/// nie ma, tylko dlatego, że nie leżą pod parcelami, którym strefowanie nadało
+/// `Extraction`. Skutek: **zero kopalń na złożu w każdym wygenerowanym mieście**,
+/// a napisany i przetestowany model wyczerpywania złoża nigdy się nie uruchamiał.
+///
+/// Zamiana warunku jest zgodna z rzeczywistością: kopalnia stoi tam, gdzie jest ruda,
+/// a nie tam, gdzie plan miejscowy wpisał przemysł wydobywczy. Zostaje wymóg
+/// niemieszkalności i metrażu — szyb nie powstanie na podwórku kamienicy.
+///
+/// Gdy złoża wymaganego rodzaju nie ma w ogóle, zakład **nie powstaje** (decyzja
+/// `D-N13`), a domknięcie łańcuchów uruchamia import przez bramę.
+fn znajdz_na_zlozu(kand: &[Kand], a: &Archetype, bi: &BuildInput) -> Option<usize> {
+    let pasuje = |c: &Kand| {
+        !c.zajeta
+            && niemieszkalna(c.zone)
+            && c.area >= a.spec.min_parcel_m2
+            && (c.built || a.grammar.is_some())
+            && zloze_pod(bi, c, a).is_some()
+    };
+    kand.iter()
+        .position(|c| c.built && pasuje(c))
+        .or_else(|| kand.iter().position(pasuje))
 }
 
 /// Czy pod działką leży złoże, którego archetyp wymaga (M1 `deposit_at`, K-13).
@@ -791,6 +845,12 @@ fn utworz_zaklady(
             parcel: crate::city::parcels::parcel_id(p.parcel),
         });
         rep.by_sector[a.sector() as usize] += 1;
+        if a.spec.needs_deposit.is_some() {
+            rep.extraction_sites += 1;
+            if p.deposit.is_some() {
+                rep.extraction_on_deposit += 1;
+            }
+        }
 
         let parcel = &mut parcels.parcels[p.parcel as usize];
         parcel.status = ParcelStatus::Built;

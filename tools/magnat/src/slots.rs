@@ -104,7 +104,7 @@ impl App {
         self.cel = Some((c.x as i32, c.y as i32));
         self.ustaw_kamere_startowa();
         self.wpnij_render();
-        ui.warm_up(&mut session, 0, self.camera.eye());
+        ui.warm_up(&mut session, 0, self.camera.target());
         ui.set_speed(self.predkosc);
         ui.arm_stop_conditions(false);
         ui.start_tutorial(&session);

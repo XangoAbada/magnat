@@ -171,6 +171,13 @@ pub struct SiteReport {
     pub unplaced: Vec<(String, u32)>,
     /// Zakłady postawione po **rozluźnieniu wymagania strefy** (KROK 4c po korekcie I-3).
     pub relaxed_zone: u32,
+    /// Zakłady wydobywcze i ile z nich stoi na złożu (`R2-WP17`).
+    ///
+    /// Druga liczba była do tej pory zerem w każdym wygenerowanym mieście i nikt tego
+    /// nie widział, bo raport jej nie pokazywał. Teraz obie stoją obok siebie: kopalnia
+    /// bez złoża jest zakładem, którego receptura `Extraction` nie ma z czego karmić.
+    pub extraction_sites: u32,
+    pub extraction_on_deposit: u32,
 }
 
 #[derive(Clone, Debug)]

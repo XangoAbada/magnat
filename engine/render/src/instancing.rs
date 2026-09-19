@@ -24,8 +24,50 @@ use magnat_voxel::{ModelId, LOD_COUNT};
 mod gpu;
 pub use gpu::{decode_pick, InstanceRenderer, PickHit, PickKind, PICK_ENTITY_BITS};
 
-/// Za tym promieniem encja jest mniejsza od piksela i przestaje być rysowana.
-pub const DRAW_RADIUS_M: f32 = 600.0;
+/// Najmniejsza wysokość ekranowa, przy której encję warto rysować, w pikselach.
+///
+/// Poniżej tego progu bryła zajmuje jeden migoczący punkt: przy każdym ruchu kamery
+/// wpada i wypada z siatki pikseli, więc kosztuje instancję i nie niesie obrazu.
+pub const MIN_SCREEN_PX: f32 = 1.5;
+
+/// Promień bryły, którym klient wymiarowuje wycinek snapshotu, zanim pozna modele.
+///
+/// To promień **pojazdu**, czyli największej rysowanej encji — dzięki temu wycinek
+/// jest nadzbiorem tego, co renderer zdecyduje się narysować. Renderer liczy próg
+/// osobno dla każdego rodzaju, z prawdziwego promienia modelu.
+pub const ENTITY_RADIUS_NOMINAL_M: f32 = 2.5;
+
+/// Za tym promieniem propu wnętrza nie widać — ani przez witrynę, ani przez przekrój.
+///
+/// Stała, a nie funkcja kadru: prop jest drobny, a jego koszt liniowy w liczbie sztuk,
+/// więc sufit ma być **przewidywalny**, a nie zależny od FOV. §5.5 podaje 0–50 m i to
+/// jest liczba dla widoku z ulicy; przekrój ogląda się z góry, z orbity kilkudziesięciu
+/// metrów nad dachem, więc pięćdziesiąt metrów od **oka** odcinałoby wszystko, na co
+/// gracz patrzy — ta sama arytmetyka, która zostawiła pusty kadr w `J-3`. Sto pięćdziesiąt
+/// to promień, w którym klient w ogóle generuje wnętrza, więc dalej i tak nic nie ma.
+const PROP_DRAW_M: f32 = 150.0;
+
+/// Widełki progu rysowania. Dolna granica chroni przed kadrem, w którym nie widać nic
+/// (FOV 60° na ulicy), górna — przed wycinkiem obejmującym pół miasta przy FOV 20°.
+const DRAW_MIN_M: f32 = 250.0;
+const DRAW_MAX_M: f32 = 4_000.0;
+
+/// Odległość, za którą bryła o promieniu `radius_m` jest mniejsza niż [`MIN_SCREEN_PX`].
+///
+/// **Próg rysowania wynika z rozmiaru ekranowego encji, a nie z jednej stałej** (`J-3`).
+/// Stała `DRAW_RADIUS_M = 600` była mniejsza od dystansu domyślnej orbity (900 m)
+/// i mierzona od oka, więc w widoku, od którego zaczyna się gra, nie było widać
+/// **żadnej** encji — a objaw wyglądał jak pusta symulacja, nie jak odcięcie renderu.
+///
+/// Wysokość ekranowa kuli o promieniu `r` w odległości `d` to `r · h / (d · tan(fov/2))`;
+/// próg jest tego odwróceniem. Encja w środku kadru nie ma prawa odpaść, bo w środku
+/// kadru zajmuje najwięcej pikseli, jakie ta odległość pozwala.
+#[must_use]
+pub fn draw_distance_m(radius_m: f32, fov_y_deg: f32, viewport_h_px: f32) -> f32 {
+    let half = (fov_y_deg.clamp(1.0, 179.0) * 0.5).to_radians();
+    let d = radius_m * viewport_h_px / (MIN_SCREEN_PX * half.tan());
+    d.clamp(DRAW_MIN_M, DRAW_MAX_M)
+}
 
 /// Ile instancji mieści bufor GPU w jednej klatce.
 ///
@@ -102,6 +144,11 @@ pub struct ModelTable {
     slots: Vec<MeshSlot>,
     citizen: ModelId,
     vehicle: ModelId,
+    /// Modele propów wnętrz i szyldu (M11c §5.7). Trzymane tu, a nie wyszukiwane
+    /// po kluczu przy każdym budynku: klucz jest łańcuchem, a propów w kadrze jest
+    /// do trzech tysięcy.
+    props: crate::interiors::PropModels,
+    sign: ModelId,
     /// Który model ma wypalone kafle impostora. Bez tego encja modelu bez kafli
     /// zniknęłaby za progiem L2 zamiast zostać przy siatce uproszczonej.
     impostor: Vec<bool>,
@@ -114,8 +161,28 @@ impl ModelTable {
             slots,
             citizen,
             vehicle,
+            props: crate::interiors::PropModels::default(),
+            sign: crate::interiors::MODEL_BRAK,
             impostor: Vec::new(),
         }
+    }
+
+    /// Dopina modele wyposażenia wnętrz i szyldu.
+    #[must_use]
+    pub fn with_props(mut self, props: crate::interiors::PropModels, sign: ModelId) -> ModelTable {
+        self.props = props;
+        self.sign = sign;
+        self
+    }
+
+    #[must_use]
+    pub fn props(&self) -> crate::interiors::PropModels {
+        self.props
+    }
+
+    #[must_use]
+    pub fn sign(&self) -> ModelId {
+        self.sign
     }
 
     /// Zaznacza modele, dla których atlas ma kafle (`ImpostorAtlas::bake`).
@@ -193,22 +260,55 @@ pub struct Bands {
 pub struct LodBands {
     pub citizen: Bands,
     pub vehicle: Bands,
+    /// Propy wnętrz i szyldy. Widać je wyłącznie z bliska — wnętrze niewidoczne nie jest
+    /// generowane (§5.5) — więc pasma L1/L2 nie mają czego uprościć i próg rysowania
+    /// jest krótki z założenia.
+    pub prop: Bands,
 }
 
 impl Default for LodBands {
     fn default() -> Self {
+        // Bez wiedzy o kadrze **nie odcinamy niczego**: domyślny próg jest górną
+        // granicą widełek, a nie liczbą pośrodku. Sufit mniejszy od dystansu kamery
+        // był dokładnie tym błędem, który zostawił widok dzielnicy pusty (`J-3`),
+        // a wartość domyślna powinna psuć budżet, nie obraz.
         LodBands {
             citizen: Bands {
                 l1_m: 40.0,
                 l2_m: 120.0,
-                draw_m: DRAW_RADIUS_M,
+                draw_m: DRAW_MAX_M,
             },
             vehicle: Bands {
                 l1_m: 60.0,
                 l2_m: 200.0,
-                draw_m: DRAW_RADIUS_M,
+                draw_m: DRAW_MAX_M,
+            },
+            prop: Bands {
+                l1_m: 50.0,
+                l2_m: 50.0,
+                draw_m: PROP_DRAW_M,
             },
         }
+    }
+}
+
+impl LodBands {
+    /// Progi dla bieżącego kadru: pasma L0/L1 zostają, a próg rysowania liczy się
+    /// z rozmiaru ekranowego bryły każdego rodzaju encji (`J-3`).
+    #[must_use]
+    pub fn for_view(models: &ModelTable, fov_y_deg: f32, viewport_h_px: f32) -> LodBands {
+        let mut b = LodBands::default();
+        b.citizen.draw_m = draw_distance_m(
+            radius_of(models, models.citizen()),
+            fov_y_deg,
+            viewport_h_px,
+        );
+        b.vehicle.draw_m = draw_distance_m(
+            radius_of(models, models.vehicle()),
+            fov_y_deg,
+            viewport_h_px,
+        );
+        b
     }
 }
 
@@ -241,12 +341,17 @@ pub struct InstanceScratch {
 /// sortowanie po `(model, lod)` jest stabilne i porządek wewnątrz wsadu zostaje odległościowy.
 /// To nie jest kosmetyka: degradacja „najdalszych ponad limit" z §5.2 pkt 2 potrzebuje
 /// tego porządku, a M11b dostaje go za darmo.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "siedem niezależnych wielkości opisuje klatkę; struktura pośrednia istniałaby wyłącznie po to, żeby zaraz się rozpakować"
+)]
 pub fn build_instances(
     snap: &RenderSnapshot,
     eye: DVec3,
     frustum: &[Vec4; 6],
     models: &ModelTable,
     bands: LodBands,
+    props: &[crate::interiors::PropPlacement],
     out: &mut InstanceScratch,
 ) {
     out.instances.clear();
@@ -262,6 +367,27 @@ pub fn build_instances(
     }
     for v in snap.vehicles.as_slice() {
         if let Some(i) = vehicle_instance(v, eye, frustum, models, bands.vehicle, palety) {
+            if !push(&mut out.instances, i) {
+                break;
+            }
+        }
+    }
+    // Szyldy: jeden na zakład, który ma nadany kafel atlasu. `sign_id == 0` znaczy
+    // „firma bez szyldu" — tak samo jak `0` w `SiteRenderRec::sign_id`.
+    for st in snap.sites.as_slice() {
+        if st.sign_id == 0 {
+            continue;
+        }
+        if let Some(i) = sign_instance(st, eye, frustum, models, bands.prop) {
+            if !push(&mut out.instances, i) {
+                break;
+            }
+        }
+    }
+    // Wyposażenie wnętrz. Wchodzi **po** encjach, bo jest najmniej ważne: przy pełnym
+    // buforze wolimy stracić regał niż mieszkańca.
+    for p in props {
+        if let Some(i) = prop_instance(p, eye, frustum, models, bands.prop) {
             if !push(&mut out.instances, i) {
                 break;
             }
@@ -387,6 +513,73 @@ fn vehicle_instance(
     })
 }
 
+/// Prop wnętrza: jedna bryła, bez animacji, z identyfikatorem **zakładu** w buforze ID.
+///
+/// Dzięki temu kliknięcie w regał otwiera kartę sklepu, w którym ten regał stoi —
+/// a to jest jedyna droga, jaką zakład może być klikalny, dopóki wierzchołek chunka
+/// nie niesie `BuildingId` (`J-19`).
+fn prop_instance(
+    p: &crate::interiors::PropPlacement,
+    eye: DVec3,
+    frustum: &[Vec4; 6],
+    models: &ModelTable,
+    bands: Bands,
+) -> Option<GpuInstance> {
+    let rel = relative_m(p.pos, eye);
+    let dist = visible(rel, radius_of(models, p.model), frustum, bands)?;
+    let lod = bands.lod_for(dist, false);
+    Some(GpuInstance {
+        pos: rel,
+        yaw_pitch: u32::from(p.yaw),
+        // Propy nie należą do dzielnicy — stoją w środku i paleta ulicy ich nie dotyczy.
+        palette_base: 0,
+        model_lod: model_lod(p.model, lod),
+        anim: u32::from(magnat_voxel::NO_CLIP.0),
+        tint: 0,
+        // Wariant miesza barwę w zestawie: dwa regały obok siebie mają się różnić
+        // odcieniem, a nie być dwoma kopiami tej samej tekstury.
+        variant: u32::from(p.fill) | (u32::from(p.yaw) << 8),
+        pick: pick_id(gpu::PickKind::Site, p.site),
+    })
+}
+
+/// Szyld zakładu. Kafel atlasu jedzie w `variant`, bo to on rozstrzyga, **czyj** to szyld.
+fn sign_instance(
+    st: &magnat_sim_snapshot::SiteRenderRec,
+    eye: DVec3,
+    frustum: &[Vec4; 6],
+    models: &ModelTable,
+    bands: Bands,
+) -> Option<GpuInstance> {
+    let model = models.sign();
+    if model == crate::interiors::MODEL_BRAK {
+        return None;
+    }
+    let rel = relative(st.pos, eye);
+    let dist = visible(rel, radius_of(models, model), frustum, bands)?;
+    Some(GpuInstance {
+        pos: rel,
+        yaw_pitch: 0,
+        palette_base: 0,
+        model_lod: model_lod(model, bands.lod_for(dist, false)),
+        anim: u32::from(magnat_voxel::NO_CLIP.0),
+        tint: 0,
+        variant: u32::from(st.sign_id),
+        pick: pick_id(gpu::PickKind::Site, st.entity_lo),
+    })
+}
+
+/// Pozycja względem kamery dla wejścia **w metrach**. Ta sama kolejność co w
+/// [`relative`]: odejmij w `f64`, potem rzutuj (`R11`).
+fn relative_m(pos_m: [f32; 3], eye: DVec3) -> [f32; 3] {
+    let w = DVec3::new(
+        f64::from(pos_m[0]),
+        f64::from(pos_m[1]),
+        f64::from(pos_m[2]),
+    );
+    (w - eye).as_vec3().into()
+}
+
 /// Paleta dzielnicy. Rekord niesie `DistrictId`, bo tego potrzebuje warstwa dźwiękowa;
 /// zestaw barw wybiera tablica ze snapshotu, bo odwzorowanie „dzielnica × epoka → paleta"
 /// jest wiedzą o mieście, której render nie ma.
@@ -494,6 +687,7 @@ mod tests {
             &stozek_wszystko(),
             &tablica(),
             LodBands::default(),
+            &[],
             &mut out,
         );
         assert_eq!(out.batches.len(), 1, "wsadów: {:?}", out.batches);
@@ -514,6 +708,7 @@ mod tests {
             &stozek_wszystko(),
             &tablica(),
             LodBands::default(),
+            &[],
             &mut out,
         );
         assert_eq!(out.instances.len(), 26_000);
@@ -540,6 +735,7 @@ mod tests {
             &stozek_wszystko(),
             &tablica(),
             LodBands::default(),
+            &[],
             &mut out,
         );
         let mut oczekiwany = 0u32;
@@ -611,6 +807,7 @@ mod tests {
             &stozek_wszystko(),
             &tablica(),
             LodBands::default(),
+            &[],
             &mut out,
         );
         assert!(out.instances.is_empty());
@@ -653,9 +850,12 @@ mod testy_kamery {
     /// widzenia jest jedynym miejscem między jednym a drugim.
     #[test]
     fn pieszy_w_celu_kamery_trafia_do_bufora() {
-        for dist in [12.0f32, 60.0, 300.0] {
+        // 900 m to dystans domyślnej orbity gry (`--dist`) i **to on** był przez całą
+        // M11a i M11b poza promieniem rysowania: stała 600 m mierzona od oka odcinała
+        // punkt, na który gracz patrzy (`J-3`).
+        for dist in [12.0f32, 60.0, 300.0, 900.0, 1400.0] {
             let cel = glam::DVec3::new(4009.0, 4599.0, 30.0);
-            let camera = CameraState {
+            let mut camera = CameraState {
                 mode: CameraMode::Orbit {
                     target: cel,
                     dist,
@@ -664,6 +864,7 @@ mod testy_kamery {
                 },
                 ..Default::default()
             };
+            camera.fov_deg = camera.fov_for_distance();
             let mut s = RenderSnapshot::new(SnapshotCaps::DEFAULT);
             s.citizens.push(CitizenRenderRec {
                 pos: [
@@ -689,7 +890,8 @@ mod testy_kamery {
                 camera.eye(),
                 &planes,
                 &modele,
-                LodBands::default(),
+                LodBands::for_view(&modele, camera.fov_deg, 1080.0),
+                &[],
                 &mut out,
             );
             assert_eq!(
@@ -698,6 +900,35 @@ mod testy_kamery {
                 "z {dist} m kamera nie widzi encji, na którą patrzy"
             );
         }
+    }
+
+    /// Próg rysowania wynika z rozmiaru ekranowego bryły, więc **rośnie** razem
+    /// z zawężaniem FOV przy oddalaniu kamery — inaczej im dalej gracz odjeżdża,
+    /// tym mniej widzi, choć encje na ekranie maleją wolniej niż rośnie dystans.
+    #[test]
+    fn prog_rysowania_rosnie_gdy_kadr_sie_zawez() {
+        let szeroki = draw_distance_m(1.0, 60.0, 1080.0);
+        let waski = draw_distance_m(1.0, 20.0, 1080.0);
+        assert!(
+            waski > szeroki,
+            "węższy kadr powinien sięgać dalej: {waski} vs {szeroki}"
+        );
+        // Domyślna orbita gry: 900 m i FOV ok. 31,5°. Encja w celu kamery ma być w progu.
+        let orbita = CameraState {
+            mode: CameraMode::Orbit {
+                target: glam::DVec3::ZERO,
+                dist: 900.0,
+                yaw: 0.0,
+                pitch: 0.7,
+            },
+            ..Default::default()
+        };
+        assert!(
+            draw_distance_m(1.0, orbita.fov_for_distance(), 1080.0) > 900.0,
+            "domyślny widok gry odcina własny cel"
+        );
+        // Bryła większa jest widoczna dalej — to jest cała treść tego progu.
+        assert!(draw_distance_m(2.5, 35.0, 1080.0) > draw_distance_m(1.0, 35.0, 1080.0));
     }
 }
 

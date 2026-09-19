@@ -159,18 +159,21 @@ pub fn build_nav(city: &CityData) -> Result<(NavGraphs, NavBuildReport), NavBuil
 
 /// Czy segment należy do warstwy.
 ///
-/// `Foot` bierze **każdy** segment niekolejowy, także autostradę. To uproszczenie:
-/// przy autostradzie chodnika nie ma. Wybrane świadomie, bo alternatywa (wycięcie
-/// `Highway`) robi z kryterium WP1 zakładnika urbanistyki — wystarczy jedna parcela
-/// frontująca do drogi klasy `Highway`, żeby budowa grafu padła błędem o czymś, czego
-/// graf nie naprawi.
-// ponytail: sufit to piesi chodzący autostradą w routingu M4b. Wyjście: M4c ma flagę
-// `RoadFlags::SIDEWALK` z M2 i wtedy warstwa piesza filtruje po niej, a nie po klasie.
+/// `Foot` bierze segment **z chodnikiem** (`RoadFlags::SIDEWALK`, `R2-WP15`). Do tej
+/// poprawki brał każdy niekolejowy, także autostradę — a marsz wzdłuż obwodnicy jest
+/// wtedy wykonalny, tani i przy niskiej wartości czasu **wygrywa**, bo jest jedyną
+/// opcją bez składnika pieniężnego.
+///
+/// Obawa, która kazała to odłożyć („jedna parcela frontująca do `Highway` wywali
+/// budowę grafu"), okazała się bezprzedmiotowa: przejścia przez drogi bez chodnika
+/// zostają w węzłach, więc sieć się nie rozpada, a `ParcelUnreachable` nie zapala się
+/// na żadnym z pięciu regionów. Ta sama droga, którą `Modality::Bike` wycina `Highway`
+/// od M4a.
 fn in_layer(s: &RoadSegment, m: Modality) -> bool {
     let rail = s.flags.contains(RoadFlags::RAIL) || s.class.is_rail();
     match m {
         Modality::Road => s.class.is_driveable() && !s.flags.contains(RoadFlags::RAIL),
-        Modality::Foot => !rail,
+        Modality::Foot => !rail && s.flags.contains(RoadFlags::SIDEWALK),
         Modality::Bike => !rail && s.class != RoadClass::Highway,
         Modality::Rail => rail,
     }
@@ -415,6 +418,10 @@ mod tests {
     use magnat_spatial::Vec2;
 
     /// Minimalna sieć: węzły `(x_m, y_m, z_dm)` i segmenty `(a, b, length_dm, klasa, flagi)`.
+    ///
+    /// Chodnik dokłada się z klasy, tak samo jak w `lsystem::push_segment` — inaczej
+    /// pomocnik budowałby sieć, której generator nigdy nie wypuści, a warstwa piesza
+    /// filtruje od `R2-WP15` po fladze.
     fn siec(
         wezly: &[(f32, f32, i32)],
         segmenty: &[(u32, u32, u32, RoadClass, RoadFlags)],
@@ -433,6 +440,11 @@ mod tests {
             .iter()
             .map(|&(a, b, length_dm, class, flags)| {
                 let sp = road::spec(class);
+                let flags = if road::has_sidewalk(class) {
+                    flags.with(RoadFlags::SIDEWALK)
+                } else {
+                    flags
+                };
                 let g = geom.push(&[nodes[a as usize].pos, nodes[b as usize].pos]);
                 RoadSegment {
                     a: NodeId(a),
@@ -516,14 +528,25 @@ mod tests {
         assert_eq!(build_layer(&net, Modality::Rail).0.edge_count(), 2);
     }
 
+    /// Odwrócenie testu z M4a (`R2-WP15`): do tej poprawki autostrada **była** pieszo.
+    ///
+    /// Marsz wzdłuż obwodnicy jest wykonalny, tani i przy niskiej wartości czasu wygrywa,
+    /// bo jest jedyną opcją bez składnika pieniężnego — a chodnika przy autostradzie
+    /// nie ma. Ulica lokalna obok, żeby test nie przechodził przez wyłączenie warstwy.
     #[test]
-    fn autostrada_jest_pieszo_ale_nie_rowerem() {
+    fn autostrada_nie_jest_ani_pieszo_ani_rowerem() {
         let net = siec(
             &[(0.0, 0.0, 0), (400.0, 0.0, 0)],
             &[(0, 1, 4000, RoadClass::Highway, RoadFlags::NONE)],
         );
-        assert_eq!(build_layer(&net, Modality::Foot).0.edge_count(), 2);
+        assert_eq!(build_layer(&net, Modality::Foot).0.edge_count(), 0);
         assert_eq!(build_layer(&net, Modality::Bike).0.edge_count(), 0);
+
+        let ulica = siec(
+            &[(0.0, 0.0, 0), (400.0, 0.0, 0)],
+            &[(0, 1, 4000, RoadClass::Local, RoadFlags::NONE)],
+        );
+        assert_eq!(build_layer(&ulica, Modality::Foot).0.edge_count(), 2);
     }
 
     #[test]
@@ -612,12 +635,90 @@ mod tests {
         assert_eq!(autostrada.curb_parking, 0);
     }
 
+    /// Czy z `a` da się dojść do `b` po krawędziach warstwy. Zwykły BFS — graf testowy
+    /// ma cztery węzły, a `alt::route` wymagałby wag i landmarków.
+    fn sciezka_istnieje(g: &RoadGraph, a: u32, b: u32) -> bool {
+        let mut odwiedzone = vec![false; g.node_count()];
+        let mut kolejka = vec![a];
+        odwiedzone[a as usize] = true;
+        while let Some(v) = kolejka.pop() {
+            if v == b {
+                return true;
+            }
+            for e in &g.edges {
+                if e.from.0 == v && !odwiedzone[e.to.0 as usize] {
+                    odwiedzone[e.to.0 as usize] = true;
+                    kolejka.push(e.to.0);
+                }
+            }
+        }
+        false
+    }
+
+    /// Kryterium `R2-WP15`: trasa piesza między punktami po obu stronach obwodnicy
+    /// prowadzi **przez najbliższe przejście**, a nie po obwodnicy.
+    ///
+    /// Przed poprawką prowadziła po obwodnicy, bo była krótsza i nic jej nie zabraniało.
+    /// Druga połowa kryterium jest równie ważna: sieć piesza **nie rozpada się** od tego,
+    /// że autostrada z niej wypadła — przejścia zostają w węzłach.
+    #[test]
+    fn trasa_piesza_omija_obwodnice() {
+        // A ─ obwodnica 400 m ─ B, i objazd A–C–D–B ulicami lokalnymi (800 m).
+        let net = siec(
+            &[
+                (0.0, 0.0, 0),
+                (400.0, 0.0, 0),
+                (0.0, 200.0, 0),
+                (400.0, 200.0, 0),
+            ],
+            &[
+                (0, 1, 4000, RoadClass::Highway, RoadFlags::NONE),
+                (0, 2, 2000, RoadClass::Local, RoadFlags::NONE),
+                (2, 3, 4000, RoadClass::Local, RoadFlags::NONE),
+                (3, 1, 2000, RoadClass::Local, RoadFlags::NONE),
+            ],
+        );
+        let (foot, _, uzyte) = build_layer(&net, Modality::Foot);
+        assert!(!uzyte[0], "obwodnica nie ma chodnika i nie wchodzi do warstwy");
+        assert!(
+            foot.edges.iter().all(|e| e.class != RoadClass::Highway),
+            "warstwa piesza wpuściła drogę szybkiego ruchu"
+        );
+        assert!(
+            sciezka_istnieje(&foot, 0, 1),
+            "sieć piesza rozpadła się: bez obwodnicy nie ma jak przejść na drugą stronę"
+        );
+        let (road, _, _) = build_layer(&net, Modality::Road);
+        assert!(
+            road.edges.iter().any(|e| e.class == RoadClass::Highway),
+            "obwodnica ma zostać w warstwie drogowej"
+        );
+    }
+
     /// Kryterium WP1 na prawdziwym mieście: wszystkie warstwy przechodzą walidację,
     /// każda parcela z frontem ma dojście pieszo, a budowa mieści się w budżecie 400 ms.
+    ///
+    /// **Pięć regionów, nie jeden** (`R2-WP15`): odebranie autostradzie chodnika mogło
+    /// odciąć parcelę frontującą do drogi szybkiego ruchu, a takiej parceli szuka się
+    /// w terenie, którego jeszcze nikt nie oglądał. `build_nav` zgłasza to błędem
+    /// `ParcelUnreachable`, więc samo `expect` jest tu asercją.
     #[test]
     #[ignore = "generuje świat i miasto — CI uruchamia jawnie przez --include-ignored"]
     fn miasto_daje_poprawny_graf_i_dostep_do_kazdej_parceli() {
-        use crate::params::{Difficulty, EconomyProfile, Epoch, Region, WorldGenParams, WorldSize};
+        use crate::params::Region;
+        for region in [
+            Region::Coastal,
+            Region::Mountain,
+            Region::Lowland,
+            Region::River,
+            Region::Desert,
+        ] {
+            sprawdz_miasto(region);
+        }
+    }
+
+    fn sprawdz_miasto(region: crate::params::Region) {
+        use crate::params::{Difficulty, EconomyProfile, Epoch, WorldGenParams, WorldSize};
         use magnat_jobs::JobPool;
         use magnat_voxel::MaterialRegistry;
         use std::sync::Arc;
@@ -626,7 +727,7 @@ mod tests {
         let params = WorldGenParams {
             seed: 0x00C0_FFEE,
             size: WorldSize::Small4km,
-            region: Region::River,
+            region,
             epoch: Epoch::Y1990,
             profile: EconomyProfile::Mixed,
             difficulty: Difficulty::Normal,
@@ -649,8 +750,45 @@ mod tests {
             .expect("miasto");
 
         let (graphs, r) = build_nav(&city).expect("graf nawigacyjny miasta");
+        // Chodnik przy odcinku drogi szybkiego ruchu zostaje tam, gdzie stoi parcela
+        // (`dosyp_chodniki_przy_parcelach`). Kryterium jest więc udziałowe, nie zerowe:
+        // gdyby przelotówek z zabudową było więcej niż jedna piąta sieci szybkiego ruchu,
+        // odebranie autostradzie chodnika przestałoby cokolwiek znaczyć.
+        let szybkie_cm: u64 = city
+            .roads
+            .segments
+            .iter()
+            .filter(|s| s.class == RoadClass::Highway)
+            .map(|s| u64::from(s.length_dm) * 10)
+            .sum();
+        let pieszo_cm: u64 = graphs
+            .layer(Modality::Foot)
+            .edges
+            .iter()
+            .filter(|e| e.class == RoadClass::Highway)
+            .map(|e| u64::from(e.length_cm))
+            .sum::<u64>()
+            / 2; // krawędzie są dwukierunkowe
         println!(
-            "nav_build: {} µs, warstwy {:?}, przesiadki {}, parcele {}/{}",
+            "{region:?}: droga szybkiego ruchu {} m, z chodnikiem {} m, chodniki z frontu {}",
+            szybkie_cm / 100,
+            pieszo_cm / 100,
+            city.report.sidewalks_from_frontage
+        );
+        // Kryterium jest **liczbą odcinków**, nie długością: flaga chodnika siedzi
+        // na odcinku, a odcinek drogi szybkiego ruchu ma kilkaset metrów, więc jedna
+        // fabryka u frontu udrażnia całe czterysta metrów. Rozdrabnianie odcinka pod
+        // pojedynczą działkę to urbanistyka M2, nie graf. W mieście `River` zostaje
+        // dziewięć takich odcinków — same wielkopowierzchniowe działki rolne
+        // i przemysłowe na obrzeżu, czyli dokładnie ten przypadek, w którym „autostrada"
+        // jest w praktyce przelotówką z zabudową u szosy.
+        assert!(
+            city.report.sidewalks_from_frontage <= 16,
+            "{region:?}: {} odcinków bez chodnika z klasy dostało go od parceli —              to już nie wyjątek, tylko reguła",
+            city.report.sidewalks_from_frontage
+        );
+        println!(
+            "nav_build {region:?}: {} µs, warstwy {:?}, przesiadki {}, parcele {}/{}",
             r.build_micros,
             r.layers
                 .iter()

@@ -109,7 +109,7 @@ impl App {
                         // `bootstrap_day` zasiewa kolejkę od minuty zero. Godzinę osiąga
                         // się przewinięciem, nie przestawieniem zegara — przestawiony
                         // zegar zostawiłby zdarzenia w przeszłości.
-                        c.warm_up(&mut session, self.godzina_startu, self.camera.eye());
+                        c.warm_up(&mut session, self.godzina_startu, self.camera.target());
                         c.set_speed(self.predkosc);
                         // Gotowy zestaw warunków „zatrzymaj, gdy…" (§5.10) —
                         // uzbrojony od razu, bo gracz ma go **wyłączać**, a nie

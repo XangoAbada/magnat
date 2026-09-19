@@ -254,16 +254,108 @@ impl TrafficOracle {
         }
     }
 
+    /// Zgłasza podróż pieszą do rejestru warstwy Mikro (WP12 M11c).
+    ///
+    /// **Nie wpuszcza nikogo do kadru od razu.** Wpuszczaniem zajmuje się
+    /// [`TrafficOracle::feed_walkers`], wołane co minutę przez `TrafficSystem` —
+    /// dzięki temu pieszy, nad którym kamera stanęła w połowie jego drogi, wchodzi
+    /// w kadr wtedy, a nie nigdy. Przy zamkniętym oknie (headless) rejestr nie rośnie
+    /// wcale, więc scenariusz bez kamery płaci jedno sprawdzenie atomika.
     pub(super) fn enter_micro_inner(&self, handle: &TripHandle, citizen: u32, depart: MinuteOfDay) {
-        if handle.mode != TransportMode::Walk {
+        if handle.mode != TransportMode::Walk || !self.micro.enabled() {
             return;
         }
-        let route = [self.coord_of(handle.from), self.coord_of(handle.to)];
-        self.micro.enter(
+        let w = Walker {
             citizen,
-            &route,
-            depart.get(),
-            (u32::from(depart.get()) + u32::from(handle.minutes)).min(1_439) as u16,
-        );
+            from: self.coord_of(handle.from),
+            to: self.coord_of(handle.to),
+            depart_min: depart.get(),
+            arrive_min: (u32::from(depart.get()) + u32::from(handle.minutes)).min(1_439) as u16,
+            in_micro: false,
+        };
+        let mut v = self.walkers.lock().expect("walkers");
+        // ponytail: liniowe usuwanie poprzedniego wpisu tego mieszkańca. Sufit nazwany —
+        // przy dziesięciu tysiącach pieszych w drodze i tysiącu wyruszeń na minutę to
+        // dziesięć milionów porównań `u32`. Ścieżka wyjścia: tablica indeksowana encją,
+        // gdy pomiar M11e pokaże ten koszt w profilu minuty.
+        v.retain(|x| x.citizen != citizen);
+        v.push(w);
+    }
+
+    /// Wpuszcza do kadru pieszych, którzy weszli w okno warstwy Mikro (WP12 M11c).
+    ///
+    /// Retire idzie po `arrive_min`, tak samo jak w samym buforze Mikro, więc rejestr
+    /// nie rośnie ponad liczbę podróży w toku.
+    pub fn feed_walkers(&self, now: MinuteOfDay) {
+        if !self.micro.enabled() {
+            return;
+        }
+        let mut v = self.walkers.lock().expect("walkers");
+        v.retain(|w| w.arrive_min > now.get());
+        let mut budzet = WALK_ROUTES_PER_MINUTE;
+        for w in v.iter_mut() {
+            if w.in_micro || budzet == 0 {
+                continue;
+            }
+            // Bramka okna jest i tutaj, i w `MicroLayer::enter`. Tutaj — żeby nie
+            // trasować kogoś, kogo kadr i tak odrzuci; tam — bo to warstwa jest
+            // właścicielem okna. Przypięty mieszkaniec (`LodPin`) wchodzi zawsze.
+            if !self.micro.is_pinned(w.citizen)
+                && !self.micro.contains(w.from)
+                && !self.micro.contains(w.to)
+            {
+                continue;
+            }
+            budzet -= 1;
+            let trasa = self.walk_polyline(w.from, w.to, MinuteOfDay::new(w.depart_min));
+            self.micro.enter(w.citizen, &trasa, w.depart_min, w.arrive_min);
+            w.in_micro = true;
+        }
+    }
+
+    /// Trasa piesza jako polilinia węzłów grafu, w centymetrach i z rzędnymi `z_cm`.
+    ///
+    /// Do M11c warstwa Mikro dostawała **dwa punkty**: środek budynku początkowego
+    /// i środek docelowego. Pieszy przenikał przez kwartały, a w połowie drogi bywał
+    /// pod ziemią albo nad nią — węzły grafu mają poprawne `z_cm` (łańcuch
+    /// `TerrainQuery::height_at` → `lsystem` → `nav_build`) i nikt ich w tej ścieżce
+    /// nie czytał. `G-13` z M11b wyprostowało końce trasy; to prostuje środek.
+    ///
+    /// Brak trasy (dom poza składową spójności warstwy pieszej) spada na odcinek prosty,
+    /// a nie na błąd — tak samo jak w [`TrafficOracle::network_walk_minutes`].
+    #[must_use]
+    pub fn walk_polyline(
+        &self,
+        a: WorldCoord,
+        b: WorldCoord,
+        depart: MinuteOfDay,
+    ) -> Vec<WorldCoord> {
+        let mut out = Vec::with_capacity(16);
+        out.push(a);
+        if let (Some(od), Some(do_)) = (self.nearest_node(a), self.nearest_node(b)) {
+            if od != do_ {
+                let q = RouteQuery::passenger(od, do_, TransportMode::Walk, depart.hour());
+                let mut cell = self.router.lock().expect("router");
+                if let Some(r) = cell.router.route(&q) {
+                    let graf = cell.router.graphs().layer(magnat_nav::Modality::Foot);
+                    for leg in &r.legs {
+                        for e in &leg.edges {
+                            let edge = graf.edge(*e);
+                            for n in [edge.from, edge.to] {
+                                let node = graf.nodes[n.0 as usize];
+                                let p = WorldCoord::new(node.pos_cm.x, node.pos_cm.y, node.z_cm);
+                                if out.last() != Some(&p) {
+                                    out.push(p);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if out.last() != Some(&b) {
+            out.push(b);
+        }
+        out
     }
 }

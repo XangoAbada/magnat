@@ -182,8 +182,9 @@ Test statyczny: w `sim/supply` nie ma pustego ramienia `match` dla żadnego wari
 > **Pakiet wykonuje M11c.** Decyzja właściciela produktu z 2026-09-19 przeniosła go do podfazy
 > prezentacyjnej razem z trzema innymi, bo M11c ma pokazać ulicę, a ulica jest pusta i nie ma
 > na niej szyldów. Zakres, kryterium i sufit czasu zostają **bez zmian** — zmienia się wyłącznie
-> adres wykonania. Powód w tabeli `J-n` dokumentu `M11c-wnetrza-i-kamera.md`; status wraca do
-> wykazu R2 po zamknięciu M11c.
+> adres wykonania. Powód w tabeli `J-n` dokumentu `M11c-wnetrza-i-kamera.md`.
+>
+> **Zamknięty w M11c** (2026-09-19) — z testem; szczegóły w tabeli `J-n` tamtego dokumentu.
 
 
 **Pozycja wykazu:** 12.

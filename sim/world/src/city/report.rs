@@ -51,6 +51,10 @@ pub struct GenerationReport {
     pub parcel_slivers: u32,
     pub local_streets: u32,
     pub segment_splits: u32,
+    /// Ile odcinków bez chodnika z klasy dostało go dlatego, że stoi przy nich parcela
+    /// (`R2-WP15`). Liczba jest w raporcie, bo gdyby urosła do połowy sieci szybkiego
+    /// ruchu, odebranie autostradzie chodnika przestałoby cokolwiek znaczyć.
+    pub sidewalks_from_frontage: u32,
     pub rail: rail::RailReport,
     // ── M2d ──────────────────────────────────────────────────────────────────────────
     /// Etap 6: budynki, lokale, stanowiska, gramatyka awaryjna.
@@ -207,12 +211,13 @@ impl GenerationReport {
             self.district_names.join(", ")
         ));
         v.push(format!(
-            "parcele: {} · bez frontu {} · odpad {} · ulice lokalne {} · podziały segmentów {}",
+            "parcele: {} · bez frontu {} · odpad {} · ulice lokalne {} · podziały segmentów {}              · chodniki z frontu {}",
             self.parcels,
             self.parcels_without_frontage,
             self.parcel_slivers,
             self.local_streets,
-            self.segment_splits
+            self.segment_splits,
+            self.sidewalks_from_frontage
         ));
         v.push(format!(
             "kolej: {:.1} km · bocznic {} · rozjazdów {} · w zasięgu istniejących {} · bez połączenia {} · max nachylenie {:.2}%",
@@ -330,6 +335,10 @@ impl GenerationReport {
             self.sites.buildings_added,
             self.sites.buildings_failed,
             self.sites.parcels_without_site
+        ));
+        v.push(format!(
+            "  wydobycie: {} zakładów, w tym {} na złożu",
+            self.sites.extraction_sites, self.sites.extraction_on_deposit
         ));
         if !self.sites.unplaced.is_empty() {
             v.push(format!(

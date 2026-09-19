@@ -41,11 +41,12 @@ use magnat_game::inspect::CardCtx;
 use magnat_game::Session;
 use magnat_ui::{CitizenPanel, InspectionNav, Locale, Theme, UiContext};
 
-/// Promień okna warstwy Mikro w metrach.
+/// Promień okna warstwy Mikro w metrach, liczony **od celu kamery**.
 ///
-/// Większy od promienia rysowania z `render::pick` (600 m), bo pieszy musi wejść w warstwę
-/// **zanim** wjedzie w kadr — inaczej pojawiałby się na środku ulicy w chwili, gdy kamera
-/// go dosięga. Zapas jest jedną minutą marszu z okładem.
+/// Zapas nad kadrem jest po to, żeby pieszy wszedł w warstwę **zanim** wjedzie w pole
+/// widzenia — inaczej pojawiałby się na środku ulicy w chwili, gdy kamera go dosięga.
+/// Środkiem jest cel, a nie oko: przy orbicie z 900 m oko stoi 767 m w poziomie od celu,
+/// więc okno wokół oka było przesunięte o tyle samo i połowa leżała za plecami (`J-2`).
 const MICRO_RADIUS_M: u32 = 900;
 
 /// Ile prób poprawkowych mediany dojazdu wykonuje Etap 8 w kliencie.
@@ -220,13 +221,13 @@ impl Citizens {
     /// i wygląda dokładnie jak zepsute. Przewinięcie do rana jest tanie i przy okazji
     /// rozgrzewa kolejkę zdarzeń.
     ///
-    /// Okno warstwy Mikro jest otwarte **już w trakcie przewijania**, na pozycji kamery
+    /// Okno warstwy Mikro jest otwarte **już w trakcie przewijania**, na celu kamery
     /// startowej. Bez tego szczyt poranny jest niewidzialny: pieszy wchodzi w warstwę
     /// w chwili, gdy **zaczyna** podróż, a kto wyszedł o 7:40, o 8:15 jest już w drodze.
-    pub fn warm_up(&mut self, session: &mut Session, minut: u32, kamera: glam::DVec3) {
+    pub fn warm_up(&mut self, session: &mut Session, minut: u32, cel_kamery: glam::DVec3) {
+        let (x, y) = (cel_kamery.x as i32, cel_kamery.y as i32);
         if let Some(z) = session.app.world.resource::<AgentSources>().get() {
-            z.travel
-                .set_micro_window(Some((kamera.x as i32, kamera.y as i32)), MICRO_RADIUS_M);
+            z.travel.set_micro_window(Some((x, y)), MICRO_RADIUS_M);
         }
         for _ in 0..minut {
             session.step(1, 0);
@@ -343,12 +344,12 @@ impl Citizens {
     /// `magnat_game::SnapshotFiller`, bo kanałem sim → render jest snapshot, a nie
     /// osobny slice (M11a §5.2). Zostaje to, co należy do widoku i tylko do niego —
     /// okno warstwy Mikro, czyli wycinek miasta, który w ogóle jest krokowany.
-    pub fn okno_mikro(&self, session: &Session, eye: glam::DVec3) {
+    pub fn okno_mikro(&self, session: &Session, cel: glam::DVec3) {
         let Some(z) = session.app.world.resource::<AgentSources>().get() else {
             return;
         };
         z.travel
-            .set_micro_window(Some((eye.x as i32, eye.y as i32)), MICRO_RADIUS_M);
+            .set_micro_window(Some((cel.x as i32, cel.y as i32)), MICRO_RADIUS_M);
     }
 
     /// Filtr encji (§14.2) albo `None`, gdy widać wszystkich.

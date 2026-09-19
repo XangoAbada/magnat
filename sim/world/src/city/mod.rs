@@ -240,6 +240,35 @@ fn load_profile(plan: &CityPlan) -> Result<GateProfile, CityGenError> {
 /// `mats` i `pool` doszły w M2d: gramatyka odwołuje się do materiałów po kluczu, a derywacja
 /// 50 tys. budynków jest jedynym zrównoleglonym krokiem fazy. Sygnatura z §6 dokumentu fazy
 /// nie przewidywała ani jednego, ani drugiego (korekta E2).
+/// Dosypuje chodnik odcinkom, przy których stoją parcele (`R2-WP15`).
+///
+/// Chodnik nadaje się z klasy drogi (`road::has_sidewalk`) i autostrada go nie dostaje —
+/// dlatego, że marsz wzdłuż obwodnicy nie ma być wykonalny. Ale **przy odcinku drogi
+/// szybkiego ruchu potrafi stanąć parcela**, a wtedy jej mieszkaniec musi mieć jak wyjść
+/// z domu: kryterium WP1 mówi „każda parcela z frontem ma dojście pieszo" i to jest
+/// twardsze niż czystość klasyfikacji. Odcinek z zabudową u frontu nie jest zresztą
+/// obwodnicą w żadnym sensie poza etykietą — jest przelotówką przez miasto.
+///
+/// Zwraca liczbę dosypanych odcinków; raport ją pokazuje, bo gdyby urosła do połowy
+/// sieci szybkiego ruchu, cała poprawka przestałaby cokolwiek znaczyć.
+fn dosyp_chodniki_przy_parcelach(roads: &mut RoadNetwork, parcels: &ParcelSet) -> u32 {
+    let mut n = 0;
+    for p in &parcels.parcels {
+        if p.frontage.is_none() {
+            continue;
+        }
+        let Some(s) = roads.segments.get_mut(p.frontage.seg.0 as usize) else {
+            continue;
+        };
+        if s.class.is_rail() || s.flags.contains(RoadFlags::SIDEWALK) {
+            continue;
+        }
+        s.flags = s.flags.with(RoadFlags::SIDEWALK);
+        n += 1;
+    }
+    n
+}
+
 pub fn generate_city(
     plan: &CityPlan,
     t: &dyn TerrainQuery,
@@ -344,6 +373,7 @@ pub fn generate_city(
     tik(&mut stage, "kolej towarowa");
 
     let mut parcel_set = parcels::subdivide(plan, t, &mut roads, &mut geom, &mut blocks, &zones);
+    let chodniki_z_frontu = dosyp_chodniki_przy_parcelach(&mut roads, &parcel_set);
     tik(&mut stage, "sieć lokalna i parcele");
 
     districts::assign_road_districts(&mut roads, &blocks);
@@ -566,6 +596,7 @@ pub fn generate_city(
         parcels_without_frontage: bez_frontu,
         parcel_slivers: parcel_set.slivers,
         local_streets: parcel_set.local_streets,
+        sidewalks_from_frontage: chodniki_z_frontu,
         segment_splits: parcel_set.splits,
         rail: rail_rep,
         build: buildings.report.clone(),

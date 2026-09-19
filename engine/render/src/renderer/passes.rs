@@ -441,7 +441,11 @@ impl Renderer {
                 }),
                 ..Default::default()
             });
-            pass.set_pipeline(&self.depth_pipeline);
+            pass.set_pipeline(if self.cut.mode == crate::interiors::CutMode::Off {
+                &self.depth_pipeline
+            } else {
+                &self.depth_clip_pipeline
+            });
             self.draw_list(&mut pass, &self.bind_group, &listy.widoczne, false, 0);
         }
 
@@ -486,15 +490,24 @@ impl Renderer {
         pass.set_pipeline(&self.pipeline);
         pass.set_bind_group(1, Some(&self.overlay_bind), &[]);
         let mut trojkaty = self.draw_list(&mut pass, &self.bind_group, &listy.widoczne, false, 0);
+        // Czapki przekroju zaraz po chunkach i **przed** encjami: zamykają dziurę, którą
+        // zostawił `discard` w `voxel.wgsl`, a encje mają się rysować na nich, nie pod nimi
+        // (mieszkaniec stojący na przeciętym piętrze).
+        trojkaty += self.cap.draw(&mut pass);
         // Encje dynamiczne na końcu passa: zapisują głębię, więc bufor ID może potem odtworzyć
         // dokładnie te fragmenty porównaniem `Equal`.
         trojkaty += self.instances.draw(&mut pass);
+        // Napisy na szyldach na samym końcu passa: leżą tuż przed licem tablicy, więc
+        // muszą wygrać z nią głębią, a tablica jest zwykłą instancją.
+        trojkaty += self.signs.draw(&mut pass);
         drop(pass);
 
         // Bufor ID **przed** wodą: tafla nie zapisuje głębi, więc kolejność jest tu
         // obojętna dla wyniku, ale trzymanie go tuż za passem, który głębię ustalił,
         // jest tym, co czyni porównanie `Equal` czytelnym.
-        let odczyt = self.pick_buffer.record_id_pass(encoder, depth, &self.instances);
+        let odczyt = self
+            .pick_buffer
+            .record_id_pass(encoder, depth, &self.instances);
 
         // Woda: osobny przebieg z mieszaniem, głębia **tylko do odczytu** — pass czyta ją
         // jako teksturę, żeby policzyć grubość słupa wody, a zapis do tej samej tekstury

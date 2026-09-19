@@ -10,7 +10,7 @@ jak R1.
 
 R1 mierzył jedną rzecz — długość plików — i naprawiał ją jednym ruchem. R2 mierzy co innego:
 **rozjazd między tym, co dokumenty faz uznały za zamknięte, a tym, co robi kod**. Wykaz w §11 ma
-**71 wierszy** i powstał w pięciu rzutach (dwa wiersze wyszły z wykonania pozycji 1, 2 i 21 przed R2): 42 z przeglądu repozytorium po M7f, jeden dopisany
+**73 wiersze** i powstał w sześciu rzutach (dwa wiersze wyszły z wykonania pozycji 1, 2 i 21 przed R2, dwa dopisała M11c): 42 z przeglądu repozytorium po M7f, jeden dopisany
 przy weryfikacji, trzy z przeglądów w trakcie M8, **dziesięć z recenzji przed commitem M9d**
 (pozycje 47–56), jeden z M9e (57), **osiem z przeglądu sesji po M9e** (pozycje 58–65), jeden z gry uruchomionej
 po M9e (68) i **dwa z M11b** (70–71) — obie wyszły dopiero wtedy, gdy pieszy przestał być plamką
@@ -215,10 +215,10 @@ Tabela pakietów z rozmiarami i statusem stoi w dokumencie każdej podfazy. Zbio
 | R2-WP12 ⇧ | Wiek produkcyjny w jednym miejscu | R2c | — | S | `[ ]` |
 | R2-WP13 | Wartość czasu idzie za dochodem | R2c | — | M | `[ ]` |
 | R2-WP14 | Szczebel substytucji dostaje wykonawcę | R2c | — | M | `[ ]` |
-| R2-WP15 | Chodniki: warstwa piesza bez dróg szybkiego ruchu | R2c → **M11c** | — | S | `[ ]` |
+| R2-WP15 | Chodniki: warstwa piesza bez dróg szybkiego ruchu | R2c → **M11c** | — | S | `[x]` |
 | R2-WP16 | Potrzeby bez martwych slotów | R2c | — | M | `[ ]` |
-| R2-WP17 | Kopalnia staje na złożu | R2d → **M11c** | `D-N13` (przyjęta) | M | `[ ]` |
-| R2-WP18 | Gęstość firm i pasmo bezrobocia | R2d → **M11c** | R2-WP17 | L | `[ ]` |
+| R2-WP17 | Kopalnia staje na złożu | R2d → **M11c** | `D-N13` (przyjęta) | M | `[x]` |
+| R2-WP18 | Gęstość firm i pasmo bezrobocia | R2d → M11c → **R3** | `D-N20` | L | `[~]` |
 | R2-WP19 | Przechwytywanie rzek w erozji | R2d | — | M | `[ ]` |
 | R2-WP20 | Podział `DecisionReason` | R2e | wszystkie pozostałe | L | `[ ]` |
 | R2-WP21 | Generator dróg: rozcięcie `lsystem.rs` | R2e | — | M | `[ ]` |
@@ -371,6 +371,22 @@ kończy się pomiarem i decyzją, nie kodem. Powód sufitu: Etap 7 jest jedynym 
 w którym naprawa może wymagać przeprojektowania, a nie domknięcia — a wtedy należy do własnej
 fazy, nie do dokumentu napraw. *Blokująca dla R2-WP18.*
 
+**`D-N20` — Czy zakład jest budynkiem, czy lokalem.** Otwarta przez pomiar `R2-WP18`
+wykonany w M11c; **sufit `D-N6` zadziałał**. Propozycja: **lokalem** — Etap 7 dostaje pass
+rozstawiający zakłady po `Unit`, a nie po parceli, i wtedy `SiteSet.by_building` przestaje być
+odwzorowaniem jeden-do-jednego. Pomiar (świat 4 km, `industrial`, ziarno 1): 24 800 mieszkańców,
+**199 firm**, 202 zakłady — jedna firma na 125 osób wobec obiecanych 1 : 15…25. Lokali użytkowych
+jest przy tym **4 186**, z czego 3 209 należy już do jakiegoś zakładu: premises **są**, brakuje
+mechanizmu, który wsadzi do nich osobne firmy. Drugi objaw z tej samej przyczyny: `it_office`
+ma 19 zakładów i **3 483 etaty**, czyli 183 osoby na biuro w mieście 25-tysięcznym — obsada
+liczy się z powierzchni **całego budynku**, bo zakład bierze cały budynek. Rozdrobnienie leczy
+oba naraz i nie rusza normatywu mocy produkcyjnej: ta sama powierzchnia, ten sam sumaryczny
+etat, więcej podmiotów. Cena jest jednak wyższa niż „pakiet naprawczy": zmiana dotyka
+`utworz_zaklady`, `rebind_workplaces`, `by_building` i wszystkich pięciu jego czytelników,
+a firm w mieście robi się pięć razy więcej — czyli dotyka wydajności i bilansu pieniądza.
+**To jest przeprojektowanie Etapu 7, więc należy do własnej fazy (R3), a nie do dokumentu
+napraw ani do podfazy prezentacyjnej.** *Blokująca dla R2-WP18; pakiet przechodzi do R3.*
+
 **`D-N19` — Czy identyfikatory prywatne przechodzą na angielski, czy reguła się zmienia.**
 `00` §6 i `CLAUDE.md` mówią: „kod i identyfikatory po angielsku, bez wyjątków — również w nowych
 fazach". Kod mówi co innego i mówi to konsekwentnie od M5: **publiczne API jest angielskie,
@@ -417,7 +433,7 @@ się numery w tabeli, a nie w głowie.
 
 ---
 
-## 11. Wykaz — 71 wierszy
+## 11. Wykaz — 73 wiersze
 
 Numeracja jest numeracją przeglądu i nie zmienia się. Kolumna „Plan" mówi, co wiedziały dokumenty
 przed R2: `—` = nieznane planowi, `zapis` = zapisane jako znana usterka bez wykonawcy,
@@ -436,14 +452,14 @@ czasu `D-N6` przy `R2-WP18` zostają bez zmian, a status wraca tutaj po zamknię
 | 2 ⇧ | Zakład produkcyjny nigdy nie ma utargu; tier taktyczny go nie zamknie | zapis `M7e` `BC-8` | R2-WP7 | `[x]` **wykonane przed R2** (`K-75`) |
 | 3 | Szczebel `Substituted` kaskady ma puste ramię `match` | zapis `M6` `AG-6` | R2-WP14 | `[ ]` |
 | 4 | Wartość czasu zamrożona na stanie z generacji świata | — | R2-WP13 | `[ ]` |
-| 5 | Zero zakładów wydobywczych ze złożem w mieście 4 km | zapis `M6` `AQ-8` | R2-WP17 → **M11c** | `[ ]` |
-| 6 | Gęstość firm ~10× za niska; bezrobocie 0,2 % przy 12 032 wakatach | zapis `00-postep` `BF-4`/`BF-10` | R2-WP18 → **M11c** | `[ ]` |
+| 5 | Zero zakładów wydobywczych ze złożem w mieście 4 km | zapis `M6` `AQ-8` | R2-WP17 → **M11c** | `[x]` **zamknięte w M11c** (`J-14`, `J-15`) |
+| 6 | Gęstość firm ~10× za niska; bezrobocie 0,2 % przy 12 032 wakatach | zapis `00-postep` `BF-4`/`BF-10`, pomiar `M11c` | R2-WP18 → M11c → **R3** | `[~]` **zmierzone, sufit `D-N6` zadziałał** (`D-N20`) |
 | 7 ⇧ | `WORKING_AGE` w kodzie (2 miejsca) vs `work_start`/`retirement` w danych | — | R2-WP12 | `[x]` **wykonane w M8c** (`K-60`) |
 | 8 | Rodzeństwo z zasiedlenia i napływu bez relacji `Sibling` | — | R2-WP2 | `[ ]` |
 | 9 | Babcia dostaje z wnukiem relację `Sibling`; brak `Grandparent` | — | R2-WP2 | `[ ]` |
 | 10 | Dziecko urodzone w pełnym gospodarstwie nie wchodzi do listy członków | — | R2-WP3 | `[ ]` |
 | 11 ⇧ | Uczeń wchodzi do indeksu miejsc pracy i dostaje relacje `Colleague` | zapis `M3d` `E-19` (przyczyna) | R2-WP1 | `[ ]` |
-| 12 | Warstwa piesza dopuszcza drogi szybkiego ruchu | — | R2-WP15 → **M11c** | `[ ]` |
+| 12 | Warstwa piesza dopuszcza drogi szybkiego ruchu | — | R2-WP15 → **M11c** | `[x]` **zamknięte w M11c** (`J-13`) |
 | 13 | Motoryzacja to płaska stawka 430 ‰ bez związku z dochodem | zapis `M4b` `L-12` | R2-WP13 | `[ ]` |
 | 14 | Potrzeba `Status`: tempo 0, brak miejsc, `StatusLoss` pusty | zapis `M3a` `D-15` | R2-WP16 | `[ ]` |
 | 15 | `ProductivityLoss` i `AmbitionGain` jawnie puste | zapis `M7b` ★ | R2-WP16 | `[ ]` |
@@ -536,9 +552,11 @@ Ujednolicenie nagłówków jest zadaniem R2-WP23.
 | 66 | Dziecko poniżej wieku szkolnego nie blokuje dorosłego w gospodarstwie | zakres `R2-WP5` | R2-WP35 | `[ ]` |
 | 67 | Zakład sprzedający na eksport nie ma utargu w rachunku wyniku | — | R2-WP36 | `[ ]` |
 | 68 | **Strzałki `↑↓←→` wypadły z interfejsu, bo domyślny atlas `egui` ich nie ma** — do czasu M11 gra nie wgrywa własnego kroju (`Theme::font`). Napisy, które ich używały (podpowiedź klawiszy powłoki, nagłówek karty podróży, znacznik wybranej opcji), mówią to samo znakami z atlasu. Po wgraniu kroju w M11 sprawdzić, czy strzałki wracają: test `atlas_fontow_zna_wszystkie_znaki_z_lokalizacji` odpowie na to w jednym przebiegu. Sufit testu jest nazwany: chodzi po **katalogu**, więc nie widzi znaków zaszytych w kodzie rysującym (`>`, `·`, `×` w `engine/ui/src/inspect/trip.rs`, `−` w `fmt.rs`) | zapis `M9b` `DE-16` | M11 (`M11d` albo gdziekolwiek wchodzą fonty) | `[ ]` |
-| 69 | **Ekran rozgrywki ma dwie z trzech rzeczy, które rysuje `ui-design.md` §5.** Inspekcja jest przeciągalnym oknem `egui` (`tools/magnat/src/citizens.rs`), a nie **dokiem prawym** — więc „lewy prowadzi, prawy pokazuje klikniętego" jest regułą dokumentu, nie ekranu. Pasek czasu nie niesie gotówki ani jej zmiany, choć §5 rysuje je po jego prawej stronie: gracz widzi stan konta tylko po otwarciu pulpitu. Oba są brakiem treści, a nie usterką — układ po naprawie `DI-39` jest już taki, że dok prawy ma gdzie stanąć | zapis `M9e` `DI-39` | — | `[ ]` |
-| 70 | **Trasa pieszego w warstwie Mikro jest odcinkiem prostym między środkami budynków.** `journey.rs::enter_micro_inner` podaje `MicroLayer::enter` dwa punkty (`coord_of(from)`, `coord_of(to)`) i nic więcej — żadnego routingu geometrycznego, żadnego próbkowania terenu. Pieszy idzie więc przez kwartały, a w połowie drogi bywa pod ziemią albo nad nią, bo interpolacja liniowa nie zna niwelety. Węzły grafu pieszego **mają** poprawne `z_cm` (łańcuch `TerrainQuery::height_at` → `lsystem` → `nav_build`) i nikt ich w tej ścieżce nie czyta. Objaw stał się widoczny w M11b, gdy pieszy przestał być plamką i dostał sylwetkę; poprawka `G-13` wyprostowała **końce** trasy (rzędna wejścia zamiast dna fundamentu), środek zostaje | zapis `M11b` `G-13` | — | `[ ]` |
-| 71 ⇧ | **Kadr gry jest pusty, bo okno warstwy Mikro i promień rysowania są zaczepione w oku kamery, a nie w tym, na co gracz patrzy.** Zdiagnozowane po M11b, trzy przyczyny naraz. **(1)** `citizens.rs::okno_mikro` podaje `set_micro_window(camera.eye())`, a przy orbicie z 900 m oko stoi 767 m w poziomie od celu — dysk o promieniu 900 m jest przesunięty o tyle samo, więc połowa okna leży za plecami kamery. **(2)** `DRAW_RADIUS_M = 600` mierzy się **od oka**, a `ViewQuery.aabb` to 720 m wokół oka: przy orbicie 900 m punkt, na który gracz patrzy, jest z definicji poza jednym i drugim, więc w domyślnym widoku dzielnicy nie widać **żadnej** encji. **(3)** `MicroLayer::enter` wpuszcza pieszego tylko w minucie wyruszenia i tylko wtedy, gdy początek albo koniec jego trasy trafia w okno — kto idzie przez kadr, ale mieszka i pracuje poza nim, nie pojawia się nigdy, a po przeskoku kamery nowe okno napełnia się przez kilkanaście minut symulacji. Liczba samych pieszych (24–46) jest przy tym **prawdopodobnie poprawna**: `data/roads/mode_choice.ron` daje dla miasta 28 tys. udział pieszy ~70 % i udział samochodowy ~10 %, a `min_car_distance_m: 800` odcina krótkie dojazdy autem. Rekordy pojazdów mają czytelnika (`view.rs::fill_vehicles`) — pusty jest bufor Mikro, nie kanał | zapis `M11b` `G-12` | **M11c** (przejęte z R2 decyzją właściciela produktu) | `[ ]` |
+| 69 | **Ekran rozgrywki ma dwie z trzech rzeczy, które rysuje `ui-design.md` §5.** Inspekcja jest przeciągalnym oknem `egui` (`tools/magnat/src/citizens.rs`), a nie **dokiem prawym** — więc „lewy prowadzi, prawy pokazuje klikniętego" jest regułą dokumentu, nie ekranu. Pasek czasu nie niesie gotówki ani jej zmiany, choć §5 rysuje je po jego prawej stronie: gracz widzi stan konta tylko po otwarciu pulpitu. Oba są brakiem treści, a nie usterką — układ po naprawie `DI-39` jest już taki, że dok prawy ma gdzie stanąć | zapis `M9e` `DI-39` | **M11c** | `[x]` **zamknięte** (`WP12`, test `pieszy_idzie_ulica_a_nie_przez_kwartal`) |
+| 70 | **Trasa pieszego w warstwie Mikro jest odcinkiem prostym między środkami budynków.** `journey.rs::enter_micro_inner` podaje `MicroLayer::enter` dwa punkty (`coord_of(from)`, `coord_of(to)`) i nic więcej — żadnego routingu geometrycznego, żadnego próbkowania terenu. Pieszy idzie więc przez kwartały, a w połowie drogi bywa pod ziemią albo nad nią, bo interpolacja liniowa nie zna niwelety. Węzły grafu pieszego **mają** poprawne `z_cm` (łańcuch `TerrainQuery::height_at` → `lsystem` → `nav_build`) i nikt ich w tej ścieżce nie czyta. Objaw stał się widoczny w M11b, gdy pieszy przestał być plamką i dostał sylwetkę; poprawka `G-13` wyprostowała **końce** trasy (rzędna wejścia zamiast dna fundamentu), środek zostaje | zapis `M11b` `G-13` | **M11c** | `[x]` **zamknięte** (`WP12`, test `pieszy_idzie_ulica_a_nie_przez_kwartal`) |
+| 71 ⇧ | **Kadr gry jest pusty, bo okno warstwy Mikro i promień rysowania są zaczepione w oku kamery, a nie w tym, na co gracz patrzy.** Zdiagnozowane po M11b, trzy przyczyny naraz. **(1)** `citizens.rs::okno_mikro` podaje `set_micro_window(camera.eye())`, a przy orbicie z 900 m oko stoi 767 m w poziomie od celu — dysk o promieniu 900 m jest przesunięty o tyle samo, więc połowa okna leży za plecami kamery. **(2)** `DRAW_RADIUS_M = 600` mierzy się **od oka**, a `ViewQuery.aabb` to 720 m wokół oka: przy orbicie 900 m punkt, na który gracz patrzy, jest z definicji poza jednym i drugim, więc w domyślnym widoku dzielnicy nie widać **żadnej** encji. **(3)** `MicroLayer::enter` wpuszcza pieszego tylko w minucie wyruszenia i tylko wtedy, gdy początek albo koniec jego trasy trafia w okno — kto idzie przez kadr, ale mieszka i pracuje poza nim, nie pojawia się nigdy, a po przeskoku kamery nowe okno napełnia się przez kilkanaście minut symulacji. Liczba samych pieszych (24–46) jest przy tym **prawdopodobnie poprawna**: `data/roads/mode_choice.ron` daje dla miasta 28 tys. udział pieszy ~70 % i udział samochodowy ~10 %, a `min_car_distance_m: 800` odcina krótkie dojazdy autem. Rekordy pojazdów mają czytelnika (`view.rs::fill_vehicles`) — pusty jest bufor Mikro, nie kanał | zapis `M11b` `G-12` | **M11c** (przejęte z R2 decyzją właściciela produktu) | `[x]` **zamknięte** (`WP12`; czwarta przyczyna — pojazdy w `[0,0,0]` — znaleziona przy okazji, `J-11`) |
+| 72 | **Poza kwadransami szczytu ulica jest pusta.** Plan doby wysyła wszystkich w tej samej minucie, więc miasto ma trzy piki i dwadzieścia godzin ciszy. Zmierzone w M11c na świecie odniesienia (`--seed 7 --size 4km`, mieszkańcy w snapshocie): 7:50 → 4 644, 8:00 → 831, 8:15 → 74, **10:00 → 0**, 14:00 → 2 031, 16:00 → 1 919, 16:30 → 129, **17:00 → 0**, 20:00 → 0. To nie jest usterka prezentacji: warstwa Mikro oddaje dokładnie tych, którzy są w drodze. Rozkład wyruszeń należy do planera doby (M3), a `WP12` fazy M11c jawnie go nie rusza | zapis `M11c` `J-12` | — | `[ ]` |
+| 73 | **`debug_assert` w kolejce zdarzeń wywraca każdy przebieg pętli doby w profilu testowym.** `des.rs` sprawdza, że klucz porządku zdarzeń jest **totalny**, i w mieście 4 km z czterema tysiącami mieszkańców trafia na duplikat w minucie 469: „dwa zdarzenia o identycznym kluczu — porządek przestał być totalny, a wynik zaczął zależeć od kolejności wstawiania". Skutkiem jest to, że **wszystkie testy `tools/headless/tests/full_city.rs` są czerwone pod `cargo test`** i zielone dopiero pod `cargo test --release`, gdzie asercja nie istnieje. Zarzut jest przy tym prawdziwy: jeśli klucz nie jest totalny, kolejność dwóch zdarzeń zależy od tego, które wstawiono pierwsze, a to jest wprost naruszenie 00 §3 | zapis `M11c` (znalezione przy `R2-WP17`) | — | `[ ]` |
 
 ## 12. Szacunek wielkości
 

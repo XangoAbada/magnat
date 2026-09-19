@@ -26,6 +26,8 @@ fn kazdy_shader_jest_poprawnym_modulem_wgsl() {
     // pojawić sam — inaczej test rósłby o pliki, których nikt nie kompiluje.
     for (nazwa, zrodlo) in [
         ("voxel.wgsl", include_str!("../src/shaders/voxel.wgsl")),
+        ("cap.wgsl", include_str!("../src/shaders/cap.wgsl")),
+        ("sign.wgsl", include_str!("../src/shaders/sign.wgsl")),
         ("water.wgsl", include_str!("../src/shaders/water.wgsl")),
         ("sky.wgsl", include_str!("../src/shaders/sky.wgsl")),
         ("post.wgsl", include_str!("../src/shaders/post.wgsl")),

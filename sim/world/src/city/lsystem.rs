@@ -258,7 +258,11 @@ impl<'a> Builder<'a> {
         let spec = super::road::spec(class);
         let (pa, pb) = (self.nodes[a.0 as usize].pos, self.nodes[b.0 as usize].pos);
         let geom = self.geom.push(&[pa, pb]);
-        let mut flags = extra.with(RoadFlags::SIDEWALK);
+        let mut flags = if super::road::has_sidewalk(class) {
+            extra.with(RoadFlags::SIDEWALK)
+        } else {
+            extra
+        };
         if spec.lanes_bwd == 0 {
             flags = flags.with(RoadFlags::ONEWAY);
         }

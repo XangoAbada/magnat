@@ -132,10 +132,78 @@ pub fn car() -> VoxModel {
     }
 }
 
+/// Slot 8 — powierzchnia szyldu; barwę bierze z marki firmy (`SlotRole::Sign`).
+const SIGN: u8 = 8;
+/// Slot 9 — korpus mebla albo maszyny.
+const BODY_SLOT: u8 = 9;
+
+
+/// Prop jednobryłowy: regał, skrzynia, biurko, maszyna (M11c §5.7, WP5).
+///
+/// Jedna część, jeden slot, trzy poziomy detalu — wnętrze widać wyłącznie przy aktywnym
+/// przekroju albo w trybie pierwszoosobowym, czyli z bliska i w małej liczbie sztuk,
+/// więc uproszczenie L1 nic by tu nie kupiło. `dims` są w voxelach 0,25 m.
+fn prop(key: &str, dims: [u8; 3], slot: u8, rola: SlotRole) -> VoxModel {
+    // Pivot w poziomie na środku bryły, w pionie na jej spodzie: prop stoi na podłodze
+    // i obraca się wokół własnej osi, tak samo jak postać i pojazd.
+    let pivot = [
+        -(i16::from(dims[0]) * 4) / 2,
+        -(i16::from(dims[1]) * 4) / 2,
+        0,
+    ];
+    VoxModel {
+        key: key.into(),
+        kind: ModelKind::Prop,
+        flags: ModelFlags::default(),
+        bbox: dims,
+        parts: vec![pudlo(PartName::BODY, Part::NO_PARENT, 0b111, pivot, dims, slot)],
+        slots: vec![PaletteSlot { slot, role: rola }],
+    }
+}
+
+/// Szyld firmy: tablica 2,5 × 0,25 × 0,75 m (M11c §5.7, WP9).
+///
+/// Lico ma **własny slot** (`SlotRole::Sign`), bo barwę bierze z marki firmy, a nie
+/// z palety dzielnicy — dwa sklepy na tej samej ulicy mają się różnić szyldem, a nie
+/// tylko nazwą. Napis nakłada atlas szyldów; model niesie samą powierzchnię.
+///
+/// Wspornika nie ma i to jest decyzja, nie przeoczenie: szyld wisi na ścianie, więc
+/// gracz go nie widzi, a każda część poniżej origin łamie regułę „model stoi na origin",
+/// na której stoi obrót o `yaw` i wypalanie sylwetek.
+#[must_use]
+pub fn sign() -> VoxModel {
+    VoxModel {
+        key: "sign".into(),
+        kind: ModelKind::Sign,
+        flags: ModelFlags::TWO_SIDED,
+        bbox: [1, 10, 3],
+        parts: vec![pudlo(
+            PartName::BODY,
+            Part::NO_PARENT,
+            0b111,
+            [-2, -20, 0],
+            [1, 10, 3],
+            SIGN,
+        )],
+        slots: vec![PaletteSlot { slot: SIGN, role: SlotRole::Sign }],
+    }
+}
+
 /// Modele zastępcze pod kluczami, którymi nazywają się pliki w `data/models/`.
 #[must_use]
 pub fn all() -> Vec<VoxModel> {
-    vec![citizen(), car()]
+    vec![
+        citizen(),
+        car(),
+        // Wyposażenie wnętrz — klucze są kontraktem z `PropModels` w `engine/render`.
+        // Regał 1,0 × 0,5 × 2,0 m, skrzynia 0,75 m sześcienna, biurko 1,5 × 0,75 × 0,75 m,
+        // maszyna 2,0 × 1,25 × 1,75 m.
+        prop("shelf", [4, 2, 8], BODY_SLOT, SlotRole::OutfitMain),
+        prop("crate", [3, 3, 3], BODY_SLOT, SlotRole::OutfitTrim),
+        prop("desk", [6, 3, 3], BODY_SLOT, SlotRole::Accent),
+        prop("machine", [8, 5, 7], BODY_SLOT, SlotRole::Metal),
+        sign(),
+    ]
 }
 
 #[cfg(test)]
@@ -151,12 +219,26 @@ mod tests {
     }
 
     /// L1 ma być **tańszy** od L0 i nadal widoczny — to jest cała treść poziomu detalu.
+    ///
+    /// Model jednobryłowy (regał, skrzynia, szyld) nie ma czego uprościć i jego L1 jest
+    /// równy L0. To nie jest wyjątek od reguły, tylko jej granica: upraszcza się
+    /// **hierarchię części**, a jedna część hierarchii nie tworzy. Wymaganie zostaje
+    /// tam, gdzie ma sens — i tam właśnie jest sprawdzane.
     #[test]
     fn l1_jest_tanszy_od_l0_i_niepusty() {
         for m in all() {
             let l0 = build_model_mesh(&m, 0);
             let l1 = build_model_mesh(&m, 1);
             assert!(!l1.is_empty(), "{}: L1 pusty", m.key);
+            if m.parts.len() == 1 {
+                assert_eq!(
+                    l1.indices.len(),
+                    l0.indices.len(),
+                    "{}: jedna część, a L1 różni się od L0",
+                    m.key
+                );
+                continue;
+            }
             assert!(
                 l1.indices.len() < l0.indices.len(),
                 "{}: L1 ma {} indeksów, L0 {}",

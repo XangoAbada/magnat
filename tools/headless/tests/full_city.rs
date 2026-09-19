@@ -140,3 +140,77 @@ fn kapital_sieci_zewnetrznej_jest_zarejestrowana_emisja() {
         );
     }
 }
+
+/// `R2-WP17`, druga połowa kryterium: **model wyczerpywania złoża faktycznie się
+/// uruchamia.**
+///
+/// Pierwotne brzmienie („przebieg pięćdziesięcioletni kończy się co najmniej jednym
+/// szybem zamkniętym z powodu wyczerpania") jest niemierzalne i nie jest to kwestia
+/// implementacji: kopalnia w mieście 4 km stoi w skali minimalnej, bo taki jest lokalny
+/// popyt, a złoże wystarcza wtedy na stulecia. Mierzalne — i będące istotą zarzutu —
+/// jest to, że **bilans wydobycia w ogóle drgnął**: do tej poprawki żaden wygenerowany
+/// świat nie miał szybu z przypisanym złożem, więc `DepositLedger` przez całą rozgrywkę
+/// pokazywał same zera.
+///
+/// **Ten plik wymaga profilu `--release`**, tak jak reszta jego testów: w profilu
+/// testowym `debug_assert` w kolejce zdarzeń (`des.rs`) wywraca każdy przebieg pętli
+/// doby w minucie 469 na duplikacie klucza. Usterka jest starsza od tej poprawki
+/// i ma osobny adres w wykazie `R2`.
+#[test]
+#[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
+fn kopalnia_zuzywa_zloze() {
+    let pool = JobPool::new(0);
+    let city = zbuduj_miasto(1, "4km", "lowland", "1990", "industrial", &pool).expect("miasto");
+    let szyby: Vec<magnat_core::DepositId> =
+        city.sites.sites.iter().filter_map(|s| s.deposit).collect();
+    assert!(
+        !szyby.is_empty(),
+        "świat bez ani jednego szybu na złożu — nie ma czego mierzyć (`R2-WP17`)"
+    );
+    let zloza = city.deposits.clone();
+
+    let mut world = swiat_agentow(1).expect("świat");
+    register_day(&mut world);
+    let zaludnione = zaludnij(&mut world, &city, 4_000, 200_000).expect("Etap 8");
+    full::setup(
+        &mut world,
+        &city,
+        zaludnione.places.clone(),
+        zaludnione.travel_oracle(),
+        &zaludnione.traffic,
+        1,
+        &pool,
+    )
+    .expect("gospodarka");
+
+    bootstrap_day(&mut world, 0);
+
+    let mut b = ScheduleBuilder::new();
+    b.add(magnat_supply::ChainSystem::new())
+        .add(magnat_firms::systems::FirmSystem::new())
+        .add(MarketSystem::new(&world))
+        .add(LaborSystem::new())
+        .add(InsolvencySystem::new())
+        .add(MacroSystem::new())
+        .add(DayLoopSystem::new(&world))
+        .add(ReplanCooldownSystem::new(&world))
+        .add(NeedDecaySystem::new(&world))
+        .add(DeprivationEffectsSystem::new(&world))
+        .add(SkillDriftSystem::new(&world))
+        .add(HouseholdStockSystem::new(&world))
+        .add(SocietySystem::new(Box::new(NoInheritance)))
+        .add(TrafficSystem::new(&world));
+    let schedule = b.build().expect("harmonogram");
+    let mut app = App::new(world, schedule, 0);
+    for _ in 0..3 * 1440u64 {
+        app.tick();
+    }
+
+    let wydobyte: i64 = szyby.iter().map(|d| zloza.mined(*d).0).sum();
+    println!("szybów {}, wydobyto {wydobyte} g", szyby.len());
+    assert!(
+        wydobyte > 0,
+        "trzy doby pracy {} szybów i zero w bilansie wydobycia",
+        szyby.len()
+    );
+}

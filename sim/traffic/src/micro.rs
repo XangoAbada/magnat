@@ -215,6 +215,13 @@ impl VehicleBuffer {
         }
         self.staged.clear();
         self.next.clear();
+        // Pozycje **od razu**, a nie dopiero przy następnym kroku. `feed` zna postęp
+        // wzdłuż trasy (`pos_cm`), ale nie przelicza go na metry, a zasilenie jest
+        // ostatnią rzeczą, jaka w minucie dotyka tej warstwy — więc bez tego wywołania
+        // każdy pojazd stoi w kadrze w punkcie `[0, 0, 0]` przez całą minutę. Objaw:
+        // „zero aut w widoku dzielnicy" (`J-2`), a rekord w snapshocie **jest**, tylko
+        // wskazuje róg mapy.
+        self.place(self.clock_cs);
     }
 
     /// Krok mikro do chwili `now_cs` (setne sekundy, ta sama oś co `exit_cs` podróży).

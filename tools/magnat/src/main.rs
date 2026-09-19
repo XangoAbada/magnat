@@ -18,9 +18,11 @@ mod bench;
 mod citizens;
 mod dock;
 mod inspect;
+mod interiors;
 mod overlay;
 mod preview;
 mod session;
+mod signs;
 mod slots;
 mod stream;
 
@@ -240,6 +242,12 @@ fn uruchom_ze_stanem(
         bench_czas_s: 0.0,
         anim_ms: 0,
         anim_reszta: 0.0,
+        ciecie: args.cut,
+        przekroj: magnat_render::CutPlane::off(),
+        szyldy: magnat_render::SignAtlas::new(),
+        szyldy_seed: None,
+        szyldy_kadr: Vec::new(),
+        wnetrza: interiors::Wnetrza::default(),
         tlum: args.crowd,
         krok_tlumu: args.crowd_step,
         bez_animacji: args.no_anim,

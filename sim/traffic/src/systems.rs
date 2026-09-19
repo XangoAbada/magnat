@@ -388,6 +388,10 @@ impl System for TrafficSystem {
             });
             oracle.micro().end_vehicle_feed();
         }
+        // Piesi: wejście do kadru jest ponawiane co minutę, a nie tylko w minucie
+        // wyruszenia (`J-2`). Inaczej po przeskoku kamery nowe okno napełniałoby się
+        // tyle minut, ile trwa najdłuższa podróż piesza.
+        oracle.feed_walkers(magnat_core::MinuteOfDay::new((now % 1440) as u16));
 
         // 7. Taryfy taksówkowe: oracle je zebrał przy wyruszeniu, tu trafiają do
         //    rejestru, żeby bilans pieniądza miał drugą stronę (`M-6`).

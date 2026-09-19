@@ -105,6 +105,22 @@ pub const fn forbids_heavy(class: RoadClass) -> bool {
     matches!(class, RoadClass::Pedestrian) || (t > 0 && t < 24)
 }
 
+/// Czy droga tej klasy ma chodnik (`R2-WP15`).
+///
+/// Autostrada go nie ma i to jest jedyny wyjątek — reszta klas kołowych prowadzi
+/// przez zabudowę i frontują do niej parcele, a ciąg pieszy jest ulicą w całości.
+/// Kolej chodnika nie ma z definicji; warstwa piesza i tak wycina ją flagą `RAIL`,
+/// ale flaga nadawana wbrew nazwie byłaby daną, która kłamie.
+///
+/// Klasy `Expressway` z `R2c` w słowniku nie ma: `RoadClass` ma osiem wariantów
+/// i drogą bez dostępu pieszego jest wśród nich wyłącznie `Highway`. Dokładanie
+/// wariantu tylko po to, żeby nazwa z dokumentu miała odpowiednik, przenumerowałoby
+/// tablicę `SPECS` i zapis gry.
+#[must_use]
+pub const fn has_sidewalk(class: RoadClass) -> bool {
+    !matches!(class, RoadClass::Highway) && !class.is_rail()
+}
+
 /// Parametry klasy drogi — tabela z M2 §5.2, w kodzie w jednym miejscu.
 ///
 /// Trzy pola nie mają odpowiednika w tabeli planu i są tu uzupełnione (odnotowane

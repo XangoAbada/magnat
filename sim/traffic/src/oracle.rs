@@ -165,6 +165,17 @@ pub struct TrafficOracle {
     /// binarne dla opcji „auto rodzinne".
     by_household: Vec<DriverEntry>,
     micro: MicroLayer,
+    /// Piesi w drodze — rejestr wejścia do warstwy Mikro (WP12 M11c).
+    ///
+    /// Wejście do kadru **nie jest jednorazowe w minucie wyruszenia**: po przeskoku
+    /// kamery nowe okno napełniałoby się tyle minut, ile trwa najdłuższa podróż piesza,
+    /// a przez ten czas ulica pod kamerą byłaby pusta. Rejestr trzyma same końce trasy
+    /// i minuty; polilinia z grafu pieszego powstaje dopiero dla tych, którzy w kadr
+    /// faktycznie wchodzą — trasowanie wszystkich podróży miasta kosztowałoby tysiące
+    /// zapytań na minutę po to, żeby wyrzucić prawie wszystkie.
+    ///
+    /// Poza hashem stanu: to jest bufor prezentacji, tak samo jak sama warstwa Mikro.
+    walkers: Mutex<Vec<Walker>>,
     /// Parkingi miasta razem z tym, gdzie stoi każdy pojazd (WP7).
     parking: Mutex<ParkingRegistry>,
     /// Linie, kursy i kolejki na przystankach (WP10).
@@ -198,6 +209,28 @@ pub struct TrafficOracle {
     /// Ile razy któraś opcja odpadła z podanego powodu — indeks jak w `Infeasible`.
     infeasible_counts: [AtomicU64; 8],
 }
+
+/// Podróż piesza w toku — tyle, ile trzeba, żeby wpuścić ją do kadru, gdy kamera
+/// się nad nią znajdzie.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+struct Walker {
+    citizen: u32,
+    from: WorldCoord,
+    to: WorldCoord,
+    depart_min: u16,
+    arrive_min: u16,
+    /// Czy siedzi już w buforze Mikro. Drugie wejście zdublowałoby postać na ulicy.
+    in_micro: bool,
+}
+
+/// Ile tras pieszych wolno wytrasować w jednej minucie świata.
+///
+/// `ponytail:` sufit nazwany — po przeskoku kamery kadr napełnia się przez kilka minut
+/// świata zamiast natychmiast. Trasowanie jest najdroższą rzeczą w tej ścieżce (zapytanie
+/// ALT po warstwie pieszej), a szczyt poranny zgłasza tysiące podróży w jednej minucie.
+/// Ścieżka wyjścia: trasowanie w puli wątków `engine/jobs`, gdy M11e zmierzy, że ten
+/// budżet jest wąskim gardłem klatki.
+const WALK_ROUTES_PER_MINUTE: usize = 512;
 
 /// Rozmiar komórki indeksu węzłów w metrach. Tyle samo, ile miał indeks sieci
 /// pieszej w M3 — zapytanie idzie o najbliższy węzeł, nie o promień.
@@ -251,6 +284,7 @@ impl TrafficOracle {
             busy: Mutex::new(vec![false; flota]),
             by_household,
             micro: MicroLayer::new(),
+            walkers: Mutex::new(Vec::new()),
             parking: Mutex::new(ParkingRegistry::default()),
             transit: Mutex::new(TransitNetwork::default()),
             params: ModeChoiceParams::load_default()

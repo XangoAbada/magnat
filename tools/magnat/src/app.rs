@@ -58,6 +58,18 @@ pub(crate) struct App {
     pub(crate) anim_ms: u64,
     /// Nierozliczona część milisekundy zegara animacji — patrz [`App::klatka`].
     pub(crate) anim_reszta: f64,
+    /// Poziom cięcia budynków: 0 = wyłączone (M11c §5.7). Przełącza `C`.
+    pub(crate) ciecie: u8,
+    /// Płaszczyzna przekroju policzona w tej klatce.
+    pub(crate) przekroj: magnat_render::CutPlane,
+    /// Atlas szyldów i odwzorowanie „zakład → kafel" (WP9). Powstaje raz na postawione
+    /// miasto: nazwa firmy nie zmienia się sama, a gdy zmieni ją gracz, kafel dochodzi.
+    pub(crate) szyldy: magnat_render::SignAtlas,
+    pub(crate) szyldy_seed: Option<u64>,
+    /// Prostokąty napisów tej klatki.
+    pub(crate) szyldy_kadr: Vec<magnat_render::SignQuad>,
+    /// Bufory przekroju i wnętrz — trzymane między klatkami, bo klatka nie alokuje.
+    pub(crate) wnetrza: crate::interiors::Wnetrza,
     /// `--crowd`: ilu syntetycznych pieszych dosypać do snapshotu (scena pomiarowa M11b).
     pub(crate) tlum: usize,
     /// Odstęp między nimi w metrach — decyduje, w którym paśmie detalu wypadnie tłum.
@@ -348,14 +360,33 @@ impl App {
             // Tryb „śledź" (§5.10): kamera idzie za zaznaczonym mieszkańcem,
             // a `LodPin` trzyma go w warstwie Mikro także przy 10×.
             Key::Character("g") | Key::Character("G") => self.przelacz_sledzenie(),
+            // Cięcie poziomami (§15.2): kolejne naciśnięcie zdejmuje kolejną kondygnację
+            // budynku, na który patrzy gracz, a czwarte wraca do widoku z dachami.
+            Key::Character("c") | Key::Character("C") => {
+                self.ciecie = (self.ciecie + 1) % 4;
+                eprintln!(
+                    "cięcie poziomami: {}",
+                    if self.ciecie == 0 {
+                        "wyłączone".to_string()
+                    } else {
+                        format!("poziom {}", self.ciecie)
+                    }
+                );
+            }
             Key::Character("1") => self.camera.to_orbit(600.0),
             Key::Character("2") => self.camera.to_free(),
+            // Widok pierwszoosobowy. Z postacią gracza kamera **przypina się do niej**
+            // (§5.7): pozycja oka przychodzi ze snapshotu, a nie z klawiszy, bo postać
+            // gracza jest zwykłym agentem i porusza się jak każdy inny (decyzja 9.7).
             Key::Character("3") => {
                 let oko = self.camera.eye();
                 let grunt = self.terrain.as_ref().map_or(0.0, |t| {
                     f64::from(t.height_at(oko.x as i32, oko.y as i32)) * 0.5
                 });
                 self.camera.to_first_person(grunt, WZROST_OCZU_M);
+                if let Some(c) = self.postac_gracza() {
+                    self.camera.set_anchor(Some(u64::from(c)));
+                }
             }
             Key::Character(c) if matches!(c, "w" | "s" | "a" | "d" | "q" | "e") => {
                 self.lec(c);
@@ -708,6 +739,8 @@ impl App {
         }
 
         self.publikuj_snapshot();
+        self.zloz_przekroj();
+        self.zloz_szyldy();
         let klatka_ui = self.buduj_ui();
         if let Some((_, Some(predkosc))) = &klatka_ui {
             let p = *predkosc;
@@ -748,6 +781,9 @@ impl App {
             renderer.set_lights(&swiatla, kamera.eye());
         }
         renderer.set_cursor(kursor);
+        renderer.set_cut(self.przekroj, &self.wnetrza.cuts, kamera.eye());
+        renderer.set_signs(&mut self.szyldy, &self.szyldy_kadr, kamera.eye());
+        renderer.set_interiors(&self.wnetrza.props);
         renderer.set_entities(self.snapshot.front(), &kamera);
         self.numer_klatki += 1;
 
@@ -832,28 +868,55 @@ impl App {
         let GameState::Playing(s) = &self.game else {
             return;
         };
+        // Kafle szyldów są własnością miasta, nie klatki — pożyczka kończy się przed
+        // resztą publikacji, bo `zwiaz_szyldy` bierze `&mut self`.
+        if self.szyldy_seed != Some(s.built.city.plan.seed) {
+            let city = s.built.city.clone();
+            self.zwiaz_szyldy(&city);
+        }
+        let GameState::Playing(s) = &self.game else {
+            return;
+        };
         let (Some(pal), Some(c)) = (self.palettes.as_ref(), self.citizens.as_ref()) else {
             return;
         };
         let oko = self.camera.eye();
-        c.okno_mikro(s, oko);
+        let cel = self.camera.target();
+        c.okno_mikro(s, cel);
 
-        let oko_mm = [
-            (oko.x * 1000.0) as i32,
-            (oko.y * 1000.0) as i32,
-            (oko.z * 1000.0) as i32,
-        ];
+        let mm = |p: glam::DVec3| {
+            [
+                (p.x * 1000.0) as i32,
+                (p.y * 1000.0) as i32,
+                (p.z * 1000.0) as i32,
+            ]
+        };
+        let oko_mm = mm(oko);
         // Kadr rozszerzony o promień rysowania: dokładny stożek widzenia liczy render,
         // bo to on zna macierze — snapshot ma tylko nie wozić drugiej połowy miasta.
-        let zasieg = (magnat_render::instancing::DRAW_RADIUS_M * 1_200.0) as i32;
+        //
+        // Wycinek idzie **za celem kamery**, a nie za okiem (`J-2`): przy orbicie z 900 m
+        // oko stoi 767 m w poziomie od celu, więc prostopadłościan wokół oka był
+        // przesunięty o tyle samo i połowa leżała za plecami kamery. Promień wynika
+        // z rozmiaru ekranowego encji, bo stała 600 m była mniejsza od dystansu orbity.
+        let promien = magnat_render::instancing::draw_distance_m(
+            magnat_render::instancing::ENTITY_RADIUS_NOMINAL_M,
+            self.camera.fov_deg,
+            self.renderer
+                .as_ref()
+                .map_or(900.0, magnat_render::Renderer::viewport_height_px),
+        );
+        let zasieg = (promien * 1_200.0) as i32;
         let zapytanie = magnat_sim_snapshot::ViewQuery {
-            aabb: magnat_sim_snapshot::Aabb::around(oko_mm, zasieg, zasieg),
+            aabb: magnat_sim_snapshot::Aabb::around(mm(cel), zasieg, zasieg),
             eye: oko_mm,
             caps: magnat_sim_snapshot::SnapshotCaps::DEFAULT,
             anim_ms: self.anim_ms,
         };
 
         self.filler.set_animations(!self.bez_animacji);
+        self.filler
+            .set_player(s.player().map(|p| p.citizen));
         self.filler.ensure_city(&s.built.city, pal);
         let filtr = c.filtr();
         self.filler.fill_filtered(
@@ -956,10 +1019,36 @@ impl App {
             czasy_passow(s),
         );
         let snap = self.snapshot.front();
+        // Warstwa Mikro obok snapshotu, bo to **dwie różne bramki** i przy pustym
+        // kadrze trzeba wiedzieć, która zamknęła: okno warstwy (promień wokół celu
+        // kamery) czy wycinek snapshotu (`ViewQuery.aabb` plus cap).
+        let mikro = match &self.game {
+            GameState::Playing(s) => s
+                .app
+                .world
+                .resource::<magnat_agents::AgentSources>()
+                .get()
+                .map_or(0, |z| z.travel.micro_len()),
+            _ => 0,
+        };
         eprintln!(
-            "snapshot: {} mieszkańców, {} pojazdów",
+            "snapshot: {} mieszkańców, {} pojazdów, {} zakładów (warstwa Mikro: {mikro} encji)",
             snap.citizens.len(),
             snap.vehicles.len(),
+            snap.sites.len(),
+        );
+        eprintln!(
+            "szyldy: {} kafli w atlasie, {} napisów w kadrze, {} zakładów z kaflem",
+            self.szyldy.tiles(),
+            self.szyldy_kadr.len(),
+            snap.sites.as_slice().iter().filter(|s| s.sign_id != 0).count(),
+        );
+        eprintln!(
+            "przekrój: {:?} na {:.1} m · czapek {} wierzchołków · propów wnętrz {}",
+            self.przekroj.mode,
+            self.przekroj.world_y,
+            self.wnetrza.cuts.len() * 6,
+            self.wnetrza.props.len(),
         );
         eprintln!(
             "kamera: oko {:?}, cel {:?}",
@@ -1016,7 +1105,11 @@ impl App {
             snap.citizens.len(),
             snap.vehicles.len(),
             najblizszy,
-            magnat_render::instancing::DRAW_RADIUS_M,
+            magnat_render::instancing::draw_distance_m(
+                magnat_render::instancing::ENTITY_RADIUS_NOMINAL_M,
+                self.camera.fov_deg,
+                renderer.viewport_height_px(),
+            ),
         );
         let kursor = self.kursor;
         match trafiony {

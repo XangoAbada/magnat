@@ -94,6 +94,14 @@ pub(crate) struct Args {
     #[arg(long)]
     pub(crate) lod0_radius: Option<i32>,
 
+    /// Cięcie poziomami na starcie: 0 = wyłączone, `n` = zdejmij `n` kondygnacji
+    /// budynku pod celem kamery. W oknie przełącza je `C`.
+    ///
+    /// Istnieje z tego samego powodu co `--lights` i `--crowd`: kryterium WP5 mówi
+    /// o przekroju centrum handlowego, a zrzut z CI nie ma jak nacisnąć klawisza.
+    #[arg(long, default_value_t = 0)]
+    pub(crate) cut: u8,
+
     /// Scena pomiarowa M11b: tylu syntetycznych pieszych rozstawionych wokół celu kamery,
     /// **obok** tych, których oddała symulacja. Ta sama konwencja co `--lights`.
     ///

@@ -251,6 +251,18 @@ fn z_nakladka(color: vec3<f32>, swiat_xy: vec2<f32>) -> vec3<f32> {
     return mix(color, barwa.rgb, frame.overlay.z * barwa.a);
 }
 
+// Prepass głębi **z cięciem** (M11c §5.7). Prepass bez shadera fragmentu zapisuje głębię
+// całej bryły, także tej, którą `fs_main` zaraz odrzuci — a wtedy przekrój zostaje czarną
+// dziurą: niebo przegrywa z zapisaną głębią dachu, a czapka domykająca przegrywa z nią
+// porównaniem. Ten punkt wejścia robi **tylko** odrzucenie i istnieje wyłącznie po to,
+// żeby prepass widział to samo co pass nieprzezroczysty.
+@fragment
+fn fs_depth(in: VertexOut) {
+    if (frame.clip.y > 0.5 && in.world_z > frame.clip.x) {
+        discard;
+    }
+}
+
 @fragment
 fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
     // Cięcie poziomem (§15.2): wszystko powyżej zadanej rzędnej znika. Cap domykający

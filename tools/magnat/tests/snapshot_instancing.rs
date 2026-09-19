@@ -243,9 +243,8 @@ fn miasto_o_osmej_rano_daje_instancje_z_palety_dzielnicy() {
         ),
         &stozek(),
         &tablica_modeli(&models),
-        LodBands::default(),
-        &mut scratch,
-    );
+        LodBands::default(), &[],
+        &mut scratch);
     assert!(
         !scratch.instances.is_empty(),
         "{} mieszkańców w snapshocie, zero instancji — ścieżka klatki gubi wszystko",

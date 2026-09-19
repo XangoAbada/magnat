@@ -172,6 +172,7 @@ pub fn run(a: &PopulationArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
         }
         histogram(&p.report);
         piramida(&p.report);
+        gestosc_firm(&city, &p.report);
 
         let zle = ocena(&p.report);
         if zle.is_empty() {
@@ -232,5 +233,74 @@ fn histogram(r: &PopulationReport) {
             "#".repeat((uzyskany / 8) as usize),
             "·".repeat((cel / 8) as usize),
         );
+    }
+}
+
+/// Pomiar gęstości firm i bilansu etatów (`R2-WP18`).
+///
+/// **Pakiet zaczyna się od pomiaru, a nie od naprawy**, bo rozbieżność „jedna firma na
+/// 130 mieszkańców wobec obiecanych 1 : 15–25" ma dwie możliwe przyczyny i obie brzmią
+/// wiarygodnie: albo normatyw liczy **moc produkcyjną** zamiast **liczby podmiotów**,
+/// albo w mieście po prostu nie ma tylu lokali użytkowych. Pierwsza jest do przestrojenia,
+/// druga wymaga przeprojektowania Etapu 7 — i dlatego trzeba wiedzieć, która zachodzi,
+/// zanim cokolwiek się ruszy.
+///
+/// Wypisywane liczby: mieszkańcy na firmę, lokale użytkowe wobec zakładów, etaty wobec
+/// ludzi oraz dziesięć archetypów o największej liczbie stanowisk.
+fn gestosc_firm(city: &magnat_world::CityData, r: &PopulationReport) {
+    use magnat_world::city::build::UnitKind;
+
+    let firmy = city.sites.firms.len().max(1);
+    let zaklady = city.sites.sites.len();
+    let uzytkowe = city
+        .buildings
+        .units
+        .iter()
+        .filter(|u| !matches!(u.kind, UnitKind::Dwelling { .. } | UnitKind::Common))
+        .count();
+    let zajete: usize = city.sites.sites.iter().map(|s| s.units.len()).sum();
+    let parcele_niemieszkalne = city
+        .parcels
+        .parcels
+        .iter()
+        .filter(|p| !p.zone.is_residential() && p.building.is_some())
+        .count();
+
+    println!("gęstość firm (R2-WP18)");
+    println!(
+        "  mieszkańcy {} · firmy {firmy} · zakłady {zaklady} → 1 : {:.0} (cel 1 : 15…25, próg 1 : 40)",
+        r.citizens,
+        f64::from(r.citizens) / firmy as f64
+    );
+    println!(
+        "  lokale użytkowe {uzytkowe} · zajęte przez zakład {zajete} · zabudowane parcele niemieszkalne {parcele_niemieszkalne}"
+    );
+    println!(
+        "  etaty {} · obsadzone {} · wolne {} ({:.0} %) · etatów na mieszkańca {:.2}",
+        r.jobs_total,
+        r.jobs_total - r.jobs_free,
+        r.jobs_free,
+        f64::from(r.jobs_free) * 100.0 / f64::from(r.jobs_total.max(1)),
+        f64::from(r.jobs_total) / f64::from(r.citizens.max(1))
+    );
+
+    // Dziesięć archetypów o największej liczbie stanowisk — to one rozstrzygają,
+    // czy nadmiar etatów bierze się z normatywu obsady, czy z liczby zakładów.
+    let mut per_archetyp: Vec<(String, u32, u32)> = Vec::new();
+    for s in &city.sites.sites {
+        let klucz = city.site_catalog.get(s.archetype).key().to_string();
+        let n = s.workplaces.len() as u32;
+        match per_archetyp.iter_mut().find(|(k, _, _)| *k == klucz) {
+            Some(w) => {
+                w.1 += 1;
+                w.2 += n;
+            }
+            None => per_archetyp.push((klucz, 1, n)),
+        }
+    }
+    per_archetyp.sort_by(|a, b| b.2.cmp(&a.2).then(a.0.cmp(&b.0)));
+    println!("  etaty per archetyp (10 największych):");
+    for (k, ile, etaty) in per_archetyp.iter().take(10) {
+        println!("    {k:<22} {ile:>4} zakł. · {etaty:>6} etatów");
     }
 }

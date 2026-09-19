@@ -83,6 +83,7 @@ fn bench(c: &mut Criterion) {
         &frustum,
         &models,
         LodBands::default(),
+        &[],
         &mut scratch,
     );
 
@@ -94,6 +95,7 @@ fn bench(c: &mut Criterion) {
                 black_box(&frustum),
                 black_box(&models),
                 LodBands::default(),
+                &[],
                 &mut scratch,
             );
             black_box(scratch.instances.len())

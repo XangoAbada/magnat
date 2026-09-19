@@ -526,6 +526,8 @@ fn depth_state(write: bool) -> wgpu::DepthStencilState {
 pub(super) struct ScenePipelines {
     pub shadow_pipeline: wgpu::RenderPipeline,
     pub depth_pipeline: wgpu::RenderPipeline,
+    /// Prepass głębi z cięciem poziomami — używany wyłącznie przy aktywnym przekroju.
+    pub depth_clip_pipeline: wgpu::RenderPipeline,
     pub pipeline: wgpu::RenderPipeline,
     pub sky_pipeline: wgpu::RenderPipeline,
     pub water_pipeline: wgpu::RenderPipeline,
@@ -612,6 +614,34 @@ pub(super) fn scene_pipelines(device: &wgpu::Device, p: &PipelineLayouts) -> Sce
             compilation_options: Default::default(),
         },
         fragment: None,
+        primitive: wgpu::PrimitiveState {
+            cull_mode: Some(wgpu::Face::Back),
+            ..Default::default()
+        },
+        depth_stencil: Some(depth_state(true)),
+        multisample: wgpu::MultisampleState::default(),
+        multiview_mask: None,
+        cache: None,
+    });
+
+    // Ten sam prepass **z cięciem poziomami** (M11c §5.7). Osobny potok, a nie jedna
+    // gałąź w shaderze: przy wyłączonym przekroju — czyli prawie zawsze — prepass ma
+    // zostać bez shadera fragmentu, bo na tym polega jego cała wartość.
+    let depth_clip_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("render.depth_prepass.clip"),
+        layout: Some(&p.pipeline_layout),
+        vertex: wgpu::VertexState {
+            module: &voxel_shader,
+            entry_point: Some("vs_main"),
+            buffers: &[Some(vertex_layout.clone())],
+            compilation_options: Default::default(),
+        },
+        fragment: Some(wgpu::FragmentState {
+            module: &voxel_shader,
+            entry_point: Some("fs_depth"),
+            targets: &[],
+            compilation_options: Default::default(),
+        }),
         primitive: wgpu::PrimitiveState {
             cull_mode: Some(wgpu::Face::Back),
             ..Default::default()
@@ -716,6 +746,7 @@ pub(super) fn scene_pipelines(device: &wgpu::Device, p: &PipelineLayouts) -> Sce
     ScenePipelines {
         shadow_pipeline,
         depth_pipeline,
+        depth_clip_pipeline,
         pipeline,
         sky_pipeline,
         water_pipeline,

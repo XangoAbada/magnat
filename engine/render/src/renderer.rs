@@ -12,6 +12,7 @@
 //! zmienia się jedna pętla.
 
 mod arena;
+mod scene;
 mod frame;
 mod passes;
 mod pipelines;
@@ -55,6 +56,10 @@ pub struct Renderer {
     pub gpu: GpuContext,
     pipeline: wgpu::RenderPipeline,
     depth_pipeline: wgpu::RenderPipeline,
+    /// Ten sam prepass z cięciem poziomami. Bez niego przekrój jest czarną dziurą:
+    /// prepass bez shadera fragmentu zapisuje głębię także tam, gdzie pass
+    /// nieprzezroczysty zaraz odrzuci fragment (M11c §5.7).
+    depth_clip_pipeline: wgpu::RenderPipeline,
     sky_pipeline: wgpu::RenderPipeline,
     bind_group: wgpu::BindGroup,
     frame_buffer: wgpu::Buffer,
@@ -126,6 +131,21 @@ pub struct Renderer {
     /// **encje symulacji**, a nie teren — i jedyny, który czyta z GPU z powrotem.
     pub pick_buffer: pick::PickBuffer,
     pub instances: crate::instancing::InstanceRenderer,
+    /// Domknięcie przekroju budynków (M11c §5.7). Osobny potok, bo czapka jest płaskim
+    /// wielokątem bez indeksów i bez normalnych — geometria chunka nie ma jak jej udawać.
+    cap: crate::interiors::CapRenderer,
+    /// Czapki tej klatki po stronie procesora — trzymane tu z tego samego powodu
+    /// co `scratch`: klatka nie alokuje.
+    cap_geom: crate::interiors::CapGeometry,
+    /// Płaszczyzna przekroju obowiązująca w tej klatce. Ustawia ją klient, bo to on
+    /// wie, na który budynek patrzy gracz i jakie ma stropy.
+    cut: crate::interiors::CutPlane,
+    /// Wyposażenie wnętrz widocznych w tej klatce. Składa je klient przez
+    /// [`Renderer::set_interiors`], bo generator potrzebuje kondygnacji z `CityData`.
+    props: Vec<crate::interiors::PropPlacement>,
+    /// Napisy na szyldach (M11c §5.7, WP9) — osobny potok, jedno wywołanie rysowania.
+    signs: crate::signs::SignRenderer,
+    sign_geom: crate::signs::SignGeometry,
     /// Bufory robocze ścieżki klatki — trzymane tu, żeby klatka nie alokowała.
     scratch: crate::instancing::InstanceScratch,
     /// Warstwa `egui` (decyzja 9.2). Powstaje zawsze; klatka bez panelu po prostu
@@ -177,12 +197,23 @@ impl Renderer {
             palettes,
         );
         let pick_buffer = pick::PickBuffer::new(device, gpu.config.width, gpu.config.height);
+        let cap = crate::interiors::CapRenderer::new(
+            device,
+            &buf.frame_buffer,
+            wgpu::TextureFormat::Depth32Float,
+        );
+        let signs = crate::signs::SignRenderer::new(
+            device,
+            &buf.frame_buffer,
+            wgpu::TextureFormat::Depth32Float,
+        );
         let ui = UiLayer::new(device, gpu.config.format);
 
         Renderer {
             gpu,
             pipeline: scene.pipeline,
             depth_pipeline: scene.depth_pipeline,
+            depth_clip_pipeline: scene.depth_clip_pipeline,
             sky_pipeline: scene.sky_pipeline,
             bind_group,
             frame_buffer: buf.frame_buffer,
@@ -235,6 +266,12 @@ impl Renderer {
             stats: FrameStats::default(),
             pick_buffer,
             instances,
+            cap,
+            cap_geom: crate::interiors::CapGeometry::default(),
+            cut: crate::interiors::CutPlane::off(),
+            props: Vec::new(),
+            signs,
+            sign_geom: crate::signs::SignGeometry::default(),
             scratch: crate::instancing::InstanceScratch::default(),
             ui,
         }
@@ -507,12 +544,21 @@ impl Renderer {
         // Stożek jest liczony w układzie **względem kamery** (`view_proj_relative`),
         // więc test przesłania też dostaje pozycję względną — `build_instances`
         // odejmuje origin w `f64` przed rzutowaniem na `f32` (`R11`).
+        // Próg rysowania liczy się z rozmiaru ekranowego encji, więc zależy od FOV
+        // i od wysokości kadru — a nie od stałej, która przy orbicie 900 m odcinała
+        // wszystko, na co gracz patrzy (`J-3`).
+        let bands = crate::instancing::LodBands::for_view(
+            self.instances.models(),
+            camera.fov_deg,
+            self.gpu.config.height.max(1) as f32,
+        );
         crate::instancing::build_instances(
             snapshot,
             camera.eye(),
             &planes,
             self.instances.models(),
-            crate::instancing::LodBands::default(),
+            bands,
+            &self.props,
             &mut self.scratch,
         );
         self.instances.upload(
