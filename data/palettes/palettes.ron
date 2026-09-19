@@ -1,0 +1,142 @@
+// Palety per rodzaj dzielnicy x epoka startowa (M11a, WP11). Wlasciciel: M11.
+//
+// Paleta **ogranicza, a nie definiuje**: podaje zestaw barw, z ktorego wariant encji
+// wybiera jedna (`palette::pick`). Dzieki temu tonacja dzielnicy jest dana, a nie kodem,
+// i zmiana wychodzi w diffie zamiast w rekompilacji.
+//
+// **`epochs` to epoki startowe gry** (`Epoch::key()` z `sim/world`: 1950...2020), a nie
+// pierscienie wieku zabudowy z `data/epochs/epochs.ron`. Slowo "epoka" znaczy w planie
+// dwie rozne rzeczy i to jest wybor miedzy nimi: ta paleta ubiera **ludzi i pojazdy**,
+// a ci wygladaja tak, jak sie wtedy chodzilo i jezdzilo, niezaleznie od tego, ile lat
+// ma kamienica obok. Pierscien wieku rzadzi materialem budynku i jest osobna sprawa.
+//
+// `districts` i `epochs` sa **osiami** i ich kolejnosc jest kontraktem (`K-76`): indeks
+// pary wchodzi do `DistrictPaletteId`, a ten jedzie w buforze instancji GPU. Dopisywac
+// wolno wylacznie na koncu. Klucze musza sie zgadzac z `DistrictKind::key()` i `Epoch::key()`.
+//
+// Rozstrzyganie: najpierw `defaults` (musza pokryc **wszystkie dwanascie** rol), potem
+// wpis `district: "*"` tej epoki, potem `epoch: "*"` tej dzielnicy, na koncu wpis imienny.
+// Kolejnosc wierszy w pliku nie ma znaczenia - regula jest szczegolowosc, nie pozycja.
+(
+    schema_version: 1,
+
+    districts: [
+        "old_town", "inner_city", "block_estate", "suburb", "industrial_belt",
+        "port_quarter", "village", "campus", "green_belt",
+    ],
+    epochs: ["1950", "1970", "1990", "2010", "2020"],
+
+    ramps: {
+        "skin_common": [(238,199,172),(222,178,148),(198,150,120),(172,124,95),(140,98,74),(106,74,56),(78,54,42),(246,215,192)],
+        "hair_common": [(30,26,24),(54,38,28),(88,62,38),(126,96,58),(168,140,92),(198,176,140),(120,120,122),(206,206,208)],
+        "outfit_postwar": [(96,98,96),(120,114,100),(74,84,102),(140,132,116),(88,76,68),(104,110,118),(132,124,106),(66,70,74),(150,142,128),(80,88,84),(112,104,92),(58,62,68)],
+        "outfit_seventies": [(142,86,40),(96,104,56),(176,140,72),(72,58,50),(120,64,52),(60,72,96),(188,164,112),(88,80,64),(150,110,60),(48,56,52)],
+        "outfit_nineties": [(42,66,118),(150,48,48),(206,196,178),(60,60,64),(88,110,72),(176,120,56),(36,82,96),(122,64,110),(196,178,120),(70,70,78),(150,150,156),(46,96,74),(210,120,100),(34,44,60)],
+        "outfit_contemporary": [(28,66,148),(206,44,44),(244,244,246),(24,24,28),(90,120,70),(226,146,40),(28,110,132),(142,64,132),(232,212,150),(96,96,104),(180,182,190),(36,130,96),(238,140,120),(48,58,80),(120,40,60),(160,200,220)],
+        "outfit_today": [(32,32,36),(72,74,80),(128,130,136),(196,198,204),(244,244,246),(46,58,74),(94,86,78),(150,144,132),(30,92,86),(206,86,64),(64,48,80),(178,170,152)],
+        "outfit_rural": [(92,72,50),(74,62,44),(110,90,66),(60,52,40),(126,106,78),(84,76,62)],
+        "outfit_work": [(36,66,112),(52,62,70),(96,100,104),(28,44,66),(70,74,78),(44,48,50)],
+        "outfit_hivis": [(232,196,32),(240,120,24),(36,66,112),(52,62,70),(96,100,104),(28,44,66)],
+        "outfit_academic": [(38,54,96),(120,36,52),(208,204,192),(46,46,50),(92,110,76),(160,140,96),(74,96,120),(30,34,40)],
+        "trim_muted": [(62,58,52),(88,82,72),(40,38,36),(110,102,90)],
+        "trim_bright": [(228,228,232),(196,168,84),(180,60,60),(40,40,44),(60,120,180),(232,196,32)],
+        "accent_earth": [(122,84,52),(96,70,44),(148,112,70),(70,52,34)],
+        "accent_navy": [(28,44,78),(40,62,104),(18,30,54),(60,86,128)],
+        "accent_bright": [(214,64,52),(240,160,40),(48,140,180),(92,176,96),(228,228,232),(40,40,46)],
+        "metal_iron": [(96,92,88),(74,70,66),(118,112,104),(58,54,52)],
+        "metal_steel": [(160,164,170),(132,136,142),(186,190,196),(108,112,118)],
+        "metal_chrome": [(206,212,220),(180,188,198),(228,234,240),(152,160,170)],
+        "glass_green": [(58,86,72),(76,104,88),(44,66,56)],
+        "glass_modern": [(72,104,128),(96,132,158),(48,72,92),(148,182,200)],
+        "paint_full": [
+            (209,94,94), (209,199,135), (96,209,58), (71,158,125), (102,130,158), (86,44,158),
+            (234,105,202), (234,162,152), (234,234,65), (108,209,94), (135,209,190), (58,115,209),
+            (114,71,158), (158,102,137), (158,72,44), (218,234,105), (152,234,152), (65,234,213),
+            (94,122,209), (181,135,209), (209,58,133), (158,103,71), (144,158,102), (44,158,58),
+            (105,234,234), (152,162,234), (192,65,234), (209,94,137), (209,172,135), (152,209,58),
+            (71,158,92), (102,151,158), (44,44,158), (218,105,234), (234,152,173), (234,171,65),
+            (151,209,94), (135,209,163), (58,171,209), (82,71,158), (158,102,158), (158,44,58),
+            (234,202,105), (183,234,152), (65,234,150), (94,165,209), (154,135,209), (209,58,190),
+            (20,20,20), (34,34,37), (48,48,54), (62,62,62), (76,76,79), (90,90,96),
+            (104,104,104), (118,118,121), (132,132,138), (146,146,146), (160,160,163), (174,174,180),
+            (188,188,188), (202,202,205), (216,216,222), (230,230,230),
+        ],
+        "paint_early": [(28,28,30),(38,34,30),(24,36,30),(48,40,32),(30,32,46),(56,50,44),(20,24,22),(64,58,50)],
+        "livery_muted": [(92,84,72),(64,60,56),(120,108,92),(48,46,44)],
+        "livery_bright": [(214,64,52),(28,66,148),(240,160,40),(36,130,96),(244,244,246),(24,24,28)],
+        "sign_painted": [(226,214,186),(56,44,34),(150,36,36),(38,62,44)],
+        "sign_lit": [(248,244,236),(236,84,60),(60,180,220),(250,206,80),(40,40,46)],
+        "rubber_black": [(30,30,32),(42,42,44),(22,22,24)],
+        "emissive_flame": [(255,186,96),(255,152,64),(238,120,48)],
+        "emissive_lamp": [(255,226,170),(255,240,214),(248,206,140)],
+        "emissive_neon": [(180,240,255),(255,140,200),(160,255,180),(255,240,214)],
+    },
+
+    // Domyslne musza pokryc wszystkie dwanascie rol - bez tego walidator odrzuca plik.
+    defaults: {
+        "skin": "skin_common",
+        "hair": "hair_common",
+        "outfit_main": "outfit_nineties",
+        "outfit_trim": "trim_muted",
+        "accent": "accent_earth",
+        "metal": "metal_steel",
+        "glass": "glass_modern",
+        "paint": "paint_full",
+        "livery": "livery_muted",
+        "sign": "sign_lit",
+        "rubber": "rubber_black",
+        "emissive": "emissive_lamp",
+    },
+
+    palettes: [
+        // -- Epoka: ubranie, lakier, szklo i swiatlo zmieniaja sie razem z nia --------
+        (district: "*", epoch: "1950", ramps: {
+            "outfit_main": "outfit_postwar", "paint": "paint_early", "glass": "glass_green",
+            "metal": "metal_steel", "emissive": "emissive_lamp", "sign": "sign_painted", "outfit_trim": "trim_muted",
+        }),
+        (district: "*", epoch: "1970", ramps: {
+            "outfit_main": "outfit_seventies", "paint": "paint_full", "glass": "glass_green",
+            "metal": "metal_steel", "emissive": "emissive_lamp", "sign": "sign_painted", "outfit_trim": "trim_muted",
+        }),
+        (district: "*", epoch: "1990", ramps: {
+            "outfit_main": "outfit_nineties", "paint": "paint_full", "glass": "glass_modern",
+            "metal": "metal_steel", "emissive": "emissive_lamp", "sign": "sign_lit", "outfit_trim": "trim_bright",
+        }),
+        (district: "*", epoch: "2010", ramps: {
+            "outfit_main": "outfit_contemporary", "paint": "paint_full", "glass": "glass_modern",
+            "metal": "metal_chrome", "emissive": "emissive_neon", "sign": "sign_lit", "outfit_trim": "trim_bright",
+        }),
+        (district: "*", epoch: "2020", ramps: {
+            "outfit_main": "outfit_today", "paint": "paint_full", "glass": "glass_modern",
+            "metal": "metal_chrome", "emissive": "emissive_neon", "sign": "sign_lit", "outfit_trim": "trim_bright",
+        }),
+
+        // -- Dzielnica: co w niej robia ludzie, tym sie ubieraja ----------------------
+        // Pas przemyslowy i port chodza w roboczym niezaleznie od epoki; odblask
+        // pojawia sie dopiero wtedy, gdy zaczyna istniec.
+        (district: "industrial_belt", epoch: "*", ramps: {
+            "outfit_main": "outfit_work", "accent": "accent_navy", "livery": "livery_muted",
+        }),
+        (district: "industrial_belt", epoch: "2010", ramps: {"outfit_main": "outfit_hivis"}),
+        (district: "industrial_belt", epoch: "2020", ramps: {"outfit_main": "outfit_hivis"}),
+        (district: "port_quarter", epoch: "*", ramps: {
+            "outfit_main": "outfit_work", "accent": "accent_navy",
+        }),
+        (district: "port_quarter", epoch: "2020", ramps: {"outfit_main": "outfit_hivis"}),
+        (district: "campus", epoch: "*", ramps: {
+            "outfit_main": "outfit_academic", "accent": "accent_bright",
+        }),
+        (district: "village", epoch: "*", ramps: {
+            "outfit_main": "outfit_rural", "accent": "accent_earth", "livery": "livery_muted",
+        }),
+        (district: "green_belt", epoch: "*", ramps: {"accent": "accent_earth"}),
+        (district: "old_town", epoch: "*", ramps: {"outfit_trim": "trim_muted", "sign": "sign_painted"}),
+        (district: "inner_city", epoch: "1990", ramps: {"livery": "livery_bright"}),
+        (district: "inner_city", epoch: "2010", ramps: {
+            "accent": "accent_bright", "livery": "livery_bright",
+        }),
+        (district: "inner_city", epoch: "2020", ramps: {
+            "accent": "accent_bright", "livery": "livery_bright",
+        }),
+    ],
+)

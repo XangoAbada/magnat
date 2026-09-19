@@ -21,8 +21,18 @@ pollster = { workspace = true }
 bytemuck = { workspace = true }
 log = "0.4"
 
+# Testy jednostkowe nie są benchmarkami — patrz komentarz w `engine/voxel/Cargo.toml`.
+[lib]
+bench = false
+
 [dev-dependencies]
 naga = { workspace = true }
+magnat-voxel = { workspace = true }
+criterion = { workspace = true }
+
+[[bench]]
+name = "instancing_bench"
+harness = false
 
 [lints]
 workspace = true

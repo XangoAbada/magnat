@@ -124,14 +124,24 @@ pub struct Renderer {
     stats: FrameStats,
     /// Piesi i bufor ID (M3 §5.11). Osobny moduł, bo to jedyny pass, który rysuje
     /// **encje symulacji**, a nie teren — i jedyny, który czyta z GPU z powrotem.
-    pub pedestrians: pick::Pedestrians,
+    pub pick_buffer: pick::PickBuffer,
+    pub instances: crate::instancing::InstanceRenderer,
+    /// Bufory robocze ścieżki klatki — trzymane tu, żeby klatka nie alokowała.
+    scratch: crate::instancing::InstanceScratch,
     /// Warstwa `egui` (decyzja 9.2). Powstaje zawsze; klatka bez panelu po prostu
     /// jej nie woła, a kosztem jest jeden potok i jeden bufor uniformów.
     ui: UiLayer,
 }
 
 impl Renderer {
-    pub fn new(gpu: GpuContext, materials: &MaterialRegistry) -> Renderer {
+    /// Tworzy renderer. Katalogi modeli i palet przychodzą **z zewnątrz**, tak samo jak
+    /// rejestr materiałów: `engine/render` rysuje dane, a nie czyta katalogu `data/`.
+    pub fn new(
+        gpu: GpuContext,
+        materials: &MaterialRegistry,
+        models: &magnat_voxel::ModelLibrary,
+        palettes: &magnat_voxel::PaletteLibrary,
+    ) -> Renderer {
         let timer = PassTimer::new(&gpu);
         let device = &gpu.device;
 
@@ -159,12 +169,14 @@ impl Renderer {
             &post.post_sampler,
             &post.post_cfg,
         );
-        let pedestrians = pick::Pedestrians::new(
+        let instances = crate::instancing::InstanceRenderer::new(
             device,
+            &gpu.queue,
             &buf.frame_buffer,
-            gpu.config.width,
-            gpu.config.height,
+            models,
+            palettes,
         );
+        let pick_buffer = pick::PickBuffer::new(device, gpu.config.width, gpu.config.height);
         let ui = UiLayer::new(device, gpu.config.format);
 
         Renderer {
@@ -221,7 +233,9 @@ impl Renderer {
             sky: sky_lut(),
             timer,
             stats: FrameStats::default(),
-            pedestrians,
+            pick_buffer,
+            instances,
+            scratch: crate::instancing::InstanceScratch::default(),
             ui,
         }
     }
@@ -254,7 +268,7 @@ impl Renderer {
             &self.post_sampler,
             &self.post_cfg,
         );
-        self.pedestrians.resize(
+        self.pick_buffer.resize(
             &self.gpu.device,
             self.gpu.config.width,
             self.gpu.config.height,
@@ -478,36 +492,48 @@ impl Renderer {
         }
     }
 
-    /// Wgrywa pieszych widocznych w tej klatce (M3 §5.11).
+    /// Składa bufor instancji encji dynamicznych z opublikowanego snapshotu (M11a WP2).
     ///
-    /// Bierze **wszystkich** i odcina sama, bo odcięcie wymaga stożka widzenia, a ten
-    /// zna renderer, nie symulacja. Wołający ma tylko przelać `WalkOracle::micro_snapshot`
-    /// do rekordów — i ma prawo wołać to rzadziej niż raz na klatkę, bo pozycje pieszych
-    /// zmieniają się co 100 ms, a klatka trwa 16 ms.
-    pub fn set_pedestrians(
+    /// Odcięcie stożkiem i dobór poziomu detalu dzieją się **tutaj**, a nie po stronie
+    /// symulacji: jedno i drugie zależy od kamery, a kamera nie wchodzi do hasha stanu
+    /// (00 §4). Snapshot mówi, kto jest w kadrze; renderer — jak go narysować.
+    pub fn set_entities(
         &mut self,
-        peds: &[magnat_sim_snapshot::PedestrianRecord],
+        snapshot: &magnat_sim_snapshot::RenderSnapshot,
         camera: &CameraState,
     ) {
         let vp = camera.view_proj_relative(self.gpu.aspect());
         let planes = frustum_planes(&vp);
         // Stożek jest liczony w układzie **względem kamery** (`view_proj_relative`),
-        // więc test przesłania też musi dostać pozycję względną — `upload` odejmuje oko.
-        let eye = camera.eye();
-        self.pedestrians.upload(&self.gpu.queue, peds, eye, &planes);
+        // więc test przesłania też dostaje pozycję względną — `build_instances`
+        // odejmuje origin w `f64` przed rzutowaniem na `f32` (`R11`).
+        crate::instancing::build_instances(
+            snapshot,
+            camera.eye(),
+            &planes,
+            self.instances.models(),
+            crate::instancing::LodBands::default(),
+            &mut self.scratch,
+        );
+        self.instances.upload(
+            &self.gpu.queue,
+            &self.scratch.instances,
+            &self.scratch.batches,
+        );
     }
 
     /// Kursor w pikselach okna albo `None`, gdy wyszedł poza nie. Ustawia, który piksel
     /// bufora ID klatka skopiuje — bez tego `hovered` zawsze zwraca `None`.
     pub fn set_cursor(&mut self, pos: Option<(u32, u32)>) {
-        self.pedestrians.set_cursor(pos);
+        self.pick_buffer.set_cursor(pos);
     }
 
-    /// Indeks encji pod kursorem albo `None` (decyzja 9.3). Wartość pochodzi z klatki
-    /// poprzedniej — patrz nagłówek `pick.rs`.
+    /// W co gracz celuje kursorem albo `None` (decyzja 9.3). Wartość pochodzi z klatki
+    /// poprzedniej — patrz nagłówek `pick.rs`. Rodzaj encji jest w wyniku, bo mieszkaniec
+    /// i pojazd mają osobne karty (`K-62`).
     #[must_use]
-    pub fn pick(&self) -> Option<u32> {
-        self.pedestrians.hovered()
+    pub fn pick(&self) -> Option<crate::instancing::PickHit> {
+        self.pick_buffer.hovered()
     }
 
     /// Histogram zajętości klastrów z ostatniego odczytu (przyrząd z §6.1 dla M2/M11).
@@ -533,6 +559,7 @@ mod tests {
             ("water", include_str!("shaders/water.wgsl")),
             ("sky", include_str!("shaders/sky.wgsl")),
             ("far_terrain", include_str!("shaders/far_terrain.wgsl")),
+            ("instance", include_str!("shaders/instance.wgsl")),
         ];
         let pola = |src: &str| -> Vec<String> {
             let start = src.find("struct Frame {").expect("brak struktury Frame");

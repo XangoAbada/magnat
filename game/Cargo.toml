@@ -32,6 +32,9 @@ magnat-macro = { workspace = true }
 magnat-city = { workspace = true }
 magnat-events = { workspace = true }
 magnat-spatial = { workspace = true }
+# Kanał sim → render: `game` jest jedynym miejscem, które widzi naraz ruch, mieszkańców
+# i miasto, więc to ono składa rekordy snapshotu (M11a WP2).
+magnat-sim-snapshot = { workspace = true }
 ron = { workspace = true }
 serde = { workspace = true }
 # Ekrany powłoki (WP14, `DE-7`). `egui` jest czystym procesorem bez GPU — rysowanie

@@ -13,6 +13,9 @@ pub mod edit;
 pub mod lod;
 pub mod material;
 pub mod mesh;
+pub mod model;
+pub mod model_mesh;
+pub mod palette;
 pub mod world;
 
 pub use chunk::{
@@ -29,6 +32,14 @@ pub use material::{
     MATERIALS_SCHEMA_VERSION,
 };
 pub use mesh::{build_mesh, ChunkMesh, PackedVertex, NORMALS};
+pub use model::{
+    ModelError, ModelFlags, ModelId, ModelKind, ModelLibrary, PaletteSlot, Part, PartName,
+    SlotRole, VoxModel, LOD_COUNT, MAX_SLOTS, MVOX_VERSION,
+};
+pub use model_mesh::{build_model_mesh, rest_offsets, ModelMesh, ModelVertex, FACE_NORMALS};
+pub use palette::{
+    pick, DistrictPaletteId, PaletteError, PaletteLibrary, RampRef, PALETTES_SCHEMA_VERSION,
+};
 pub use world::{
     EditOverlay, ViewPoint, VoxelBudget, VoxelStats, VoxelWorld, LOD_HYSTERESIS_PERMILLE,
     LOD_RADII_M,

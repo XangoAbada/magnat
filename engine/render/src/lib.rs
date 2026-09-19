@@ -5,6 +5,7 @@ pub mod camera;
 pub mod clusters;
 pub mod gpu;
 pub mod graph;
+pub mod instancing;
 pub mod pick;
 pub mod renderer;
 pub mod shadow;
@@ -14,6 +15,10 @@ pub mod ui;
 pub use camera::{CameraMode, CameraState};
 pub use clusters::{CLUSTER_COUNT, CLUSTER_X, CLUSTER_Y, CLUSTER_Z};
 pub use gpu::GpuContext;
+pub use instancing::{
+    build_instances, Batch, GpuInstance, InstanceRenderer, InstanceScratch, LodBands, MeshSlot,
+    ModelTable, PickHit, PickKind,
+};
 pub use graph::{
     GraphError, GraphSlot, PassDecl, PassId, RenderGraph, RenderPass, ResourceDesc, ResourceRef,
 };

@@ -112,3 +112,21 @@ Systemy renderu i audio **nie są systemami ECS** — nie ma ich w DAG-u schedul
 **Ani jeden z nich nie ma `&mut World`.** To jest egzekwowane sygnaturami.
 
 ---
+
+
+---
+
+## Zmiany wpisane po M11a
+
+Zgodnie z `K-18`. To są rzeczy, o których wiadomo **na pewno** po zamknięciu M11a;
+podfaza nie jest tu przeprojektowywana. Gwiazdka = zmiana zakresu albo kryterium.
+Pełna tabela `E-n` jest w `M11a-format-i-snapshot.md`.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| I-1 | **Ścieżka klatki po stronie procesora bierze 322 µs przy 26 tys. encji** — klucz `m11a-1` w `benches/baseline.json`, wobec budżetu 1,5 ms z §5.3 | To jest pierwsza zmierzona pozycja budżetu klatki i jedyna, która po M11a istnieje. Mierzy filtr stożka, klasyfikację poziomu detalu, sortowanie i zapis instancji **razem**, bo razem stoją w budżecie i razem się je przekracza |
+| I-2 | **Sortowanie instancji idzie porównaniami, nie radixem z §5.3** | Różnych kluczy `(model, poziom)` jest rzędu dziesiątek, więc sortowanie kubełkowe byłoby szybsze — ale dopiero wtedy, gdy 0,2 ms z budżetu zacznie być widoczne w pomiarze. Sufit jest nazwany w kodzie komentarzem `ponytail:` i wymiana dotyczy jednej linii |
+| I-3 ★ | **Cap snapshotu jest stałą konfiguracji i `RenderBudget` nie ma prawa go ruszać** — decyzja 9.11, wykonana kształtem typu | `SnapshotCaps` jest `Copy`, nie zawiera referencji i wchodzi do `ViewQuery`, czyli do jedynego kanału render → sim. Obniżanie capu byłoby sprzężeniem render → symulacja, czyli dokładnie tym, czemu `sim-snapshot` zapobiega |
+| I-4 | **Snapshot waży 1,31 MB rezydentnie na bufor, 2,62 MB przy podwójnym buforowaniu** — i nie zależy od wielkości miasta | Rozmiar jest sumą pojemności, nie zapełnienia: `RenderSnapshot::resident_bytes()` zwraca tę samą liczbę dla miasta pustego i pełnego, czego pilnuje test. To jest liczba, którą M12 wpisuje do budżetu pamięci |
+| I-5 | **`GpuInstance` ma 36 B**, więc upload to 720 KB na klatkę przy 20 tys. encji (43 MB/s po PCIe), a nie 640 KB (`E-8`) | §5.3 wyliczał 32 B, nie wymieniając w nich pickingu. Budżet pasma tego nie ogranicza, ale liczba w raporcie ma się zgadzać z liczbą w kodzie |
+| I-6 | **Pojazdy w trybie 50× nie istnieją i kliknięcie w nie też nie** — warstwa Mikro jest tam wyłączona z konstrukcji (`M12c`) | Zapis z 2026‑09‑17 żądał, żeby pass `pick_id` wypełniał bufor także przy wyłączonym LOD mikro **albo** żeby ta podfaza powiedziała wprost, że pojazdów wtedy nie ma. Mówi wprost: bez warstwy Mikro `vehicle_snapshot` zwraca pustą listę, więc do snapshotu nie trafia ani jeden pojazd i nie rysuje się ani jedna instancja bez identyfikatora. „Klikalne jest wszystko, co widoczne" trzyma się, bo niewidoczne jest jedno i drugie naraz — i to ma sprawdzić test tej podfazy, a nie założenie |

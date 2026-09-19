@@ -113,3 +113,20 @@ To jest jedyny sposób, żeby tryb FPP nie stał się drugą, rozbieżną ście�
 
 W FPP: near plane 0,05 m, FOV 70°, model własnej postaci ukryty, LOD wymuszony na L0 w promieniu
 15 m, `CutPlane::Box` wokół kamery, żeby ściana za plecami nie zasłaniała.
+
+
+---
+
+## Zmiany wpisane po M11a
+
+Zgodnie z `K-18`. To są rzeczy, o których wiadomo **na pewno** po zamknięciu M11a;
+podfaza nie jest tu przeprojektowywana. Gwiazdka = zmiana zakresu albo kryterium.
+Pełna tabela `E-n` jest w `M11a-format-i-snapshot.md`.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| G-1 ★ | **Budynek i zakład nadal nie są w buforze identyfikatorów i ta podfaza jest ich adresem.** Mieszkaniec i pojazd już są, a `Renderer::pick()` zwraca `PickHit { kind, entity }` z rodzajem w czterech starszych bitach | M11a wstawiła do bufora to, co rysuje instancingiem — a budynku i zakładu instancing nie rysuje: rysuje je pass chunków terenu. Wpisanie ich tam znaczy drugie wyjście koloru w shaderze chunka albo osobny przebieg po geometrii budynku, czyli pracę przy `CutPlane` i wnętrzach, czyli tę podfazę. Zapis „po M5e" dokumentu fazy wymienia `BuildingId` i `SiteId` imiennie i dopiero to go domknie; do tego czasu klient M5e szuka zakładu raycastem w teren w promieniu 25 m i dwa sklepy bliżej siebie są nierozróżnialne |
+| G-2 | **`PickKind` ma dwa warianty (`Citizen`, `Vehicle`) i 28 bitów na indeks encji.** Rozszerzenie o budynek i zakład jest dopisaniem wariantu | Cztery bity rodzaju zostawiają czternaście wolnych wartości, a 28 bitów indeksu to 268 mln encji — trzy rzędy ponad metropolię. `decode_pick` odrzuca nieznany rodzaj zamiast zgadywać |
+| G-3 ★ | **`PlayerViewRec` w snapshocie jest wyzerowany** i ta podfaza go wypełnia | To nie jest brak, tylko kolejność: pierwszym czytelnikiem `player.citizen` i `player.eye` jest tryb pierwszoosobowy, czyli WP5. Pole wypełnione, którego nikt nie czyta, wygląda w danych tak samo jak działające. Wypełniacz stoi w `magnat_game::view::SnapshotFiller` (`E-2`), a nie w `sim-snapshot` |
+| G-4 | **`SiteRenderRec.sign_id` i `VehicleRenderRec.livery` są zerami** — atlas szyldów (WP9) jest ich pierwszym czytelnikiem | `sign_id` i `livery` przechodzą przez instancję jako `variant` i `anim`; kanał już działa, brakuje wyłącznie strony, która nada numery |
+| G-5 | **`StreamId::Interior = 301` jest zarezerwowany imiennie** (`K-76` pkt 1) i to `generate_interior` go zajmie | Blok M11 (300–319) przydziela się fazie, a nie podfazie, więc numer został nadany razem z `Appearance = 300`. Wartość jest wieczna |

@@ -201,6 +201,9 @@ fn uruchom_ze_stanem(
     event_loop.set_control_flow(ControlFlow::Poll);
     let mut app = App {
         redaktor: None,
+        filler: magnat_game::SnapshotFiller::new(),
+        snapshot: magnat_sim_snapshot::SnapshotPair::default(),
+        palettes: None,
         terrain,
         materials,
         params,

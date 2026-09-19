@@ -106,7 +106,7 @@ impl App {
         self.wpnij_render();
         ui.warm_up(&mut session, 0, self.camera.eye());
         ui.set_speed(self.predkosc);
-        ui.arm_stop_conditions();
+        ui.arm_stop_conditions(false);
         ui.start_tutorial(&session);
         self.citizens = Some(ui);
         self.game = GameState::Playing(Box::new(session));

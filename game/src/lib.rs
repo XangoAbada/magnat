@@ -46,6 +46,7 @@ pub mod session;
 pub mod timectl;
 pub mod tutorial;
 pub mod shell;
+pub mod view;
 pub mod world;
 
 pub use career::{CareerTier, Holdings};
@@ -81,4 +82,5 @@ pub use shell::{
     GenProgress, GenWatch, NewGameParams, ScenarioId, Settings, ShellScreen, WorldGenJob,
     WorldPreview,
 };
+pub use view::SnapshotFiller;
 pub use world::{stand_up, BuiltCity, SessionOpts, Standing, StandingReport};

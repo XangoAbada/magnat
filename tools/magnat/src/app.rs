@@ -51,6 +51,12 @@ pub(crate) struct App {
     pub(crate) bench_etapy: Vec<bench::Pomiar>,
     pub(crate) lod0_radius: Option<i32>,
     pub(crate) swiatla: Vec<magnat_sim_snapshot::LightRecord>,
+    /// Kanał sim → render (M11a WP2). Wypełniacz składa rekordy z ECS, para buforów
+    /// oddziela to, co symulacja właśnie pisze, od tego, co render czyta.
+    pub(crate) filler: magnat_game::SnapshotFiller,
+    pub(crate) snapshot: magnat_sim_snapshot::SnapshotPair,
+    /// Palety dzielnic — czyta je klient, bo katalog `data/` jest jego, nie renderu.
+    pub(crate) palettes: Option<Arc<magnat_voxel::PaletteLibrary>>,
     pub(crate) bench_ms: Vec<f32>,
     pub(crate) bench_pass_ms: Vec<[f32; magnat_render::PASS_NAMES.len()]>,
     pub(crate) bench_chunks: usize,
@@ -132,7 +138,18 @@ impl ApplicationHandler for App {
         if self.bench.is_some() && !gpu.disable_vsync() {
             eprintln!("uwaga: sterownik nie daje trybu bez vsync — FPS będzie obcięty do odświeżania monitora");
         }
-        self.renderer = Some(Renderer::new(gpu, &self.materials));
+        // Modele encji i palety dzielnic są daną tak samo jak materiały; czyta je klient
+        // i podaje rendererowi, bo `engine/render` rysuje dane, a nie chodzi po katalogach.
+        // Brak któregokolwiek z tych katalogów jest błędem instalacji, nie stanem gry —
+        // stąd panika z nazwą pliku, tak samo jak przy otwieraniu okna wyżej.
+        let models = magnat_voxel::ModelLibrary::load_dir(&magnat_world::data_path("models"))
+            .unwrap_or_else(|e| panic!("data/models: {e}"));
+        let palettes = Arc::new(
+            magnat_voxel::PaletteLibrary::load(&magnat_world::data_path("palettes"))
+                .unwrap_or_else(|e| panic!("data/palettes: {e}")),
+        );
+        self.renderer = Some(Renderer::new(gpu, &self.materials, &models, &palettes));
+        self.palettes = Some(palettes);
 
         let egui_ctx = egui::Context::default();
         let egui_state = egui_winit::State::new(
@@ -198,7 +215,14 @@ impl ApplicationHandler for App {
                     // Klik w pieszego (decyzja 9.3). Pytamy bufor ID **przed** ustawieniem
                     // obrotu: trafienie w mieszkańca otwiera kartę i nie kręci kamerą.
                     if state == ElementState::Pressed {
-                        let trafiony = self.renderer.as_ref().and_then(Renderer::pick);
+                        // Kartę mieszkańca otwiera wyłącznie trafienie w mieszkańca;
+                        // pojazd ma własną kartę i wchodzi razem z nią (M11c).
+                        let trafiony = self
+                            .renderer
+                            .as_ref()
+                            .and_then(Renderer::pick)
+                            .filter(|h| h.kind == magnat_render::PickKind::Citizen)
+                            .map(|h| h.entity);
                         if let (Some(i), Some(c), Some(s)) =
                             (trafiony, self.citizens.as_mut(), self.game.session_mut())
                         {
@@ -653,13 +677,7 @@ impl App {
             self.ustaw_kamere_pomiarowa();
         }
 
-        let piesi: Vec<magnat_sim_snapshot::PedestrianRecord> = match self.citizens.as_mut() {
-            Some(c) => match &self.game {
-                GameState::Playing(s) => c.pedestrians(s, self.camera.eye()).to_vec(),
-                _ => Vec::new(),
-            },
-            None => Vec::new(),
-        };
+        self.publikuj_snapshot();
         let klatka_ui = self.buduj_ui();
         if let Some((_, Some(predkosc))) = &klatka_ui {
             let p = *predkosc;
@@ -700,9 +718,7 @@ impl App {
             renderer.set_lights(&swiatla, kamera.eye());
         }
         renderer.set_cursor(kursor);
-        if !piesi.is_empty() {
-            renderer.set_pedestrians(&piesi, &kamera);
-        }
+        renderer.set_entities(self.snapshot.front(), &kamera);
         self.numer_klatki += 1;
 
         if let Some(sciezka) = self.zrzut.clone() {
@@ -784,6 +800,47 @@ impl App {
         }
     }
 
+    /// Składa i publikuje snapshot tej klatki (M11a §5.2).
+    ///
+    /// Trzy kroki i każdy ma jednego właściciela: klient ustawia okno warstwy Mikro
+    /// (bo zna kamerę), wypełniacz składa rekordy z ECS (bo widzi ruch, mieszkańców
+    /// i miasto naraz), a `publish` przestawia parę buforów. Render czyta **przedni**
+    /// bufor i nie ma jak dosięgnąć tylnego.
+    pub(crate) fn publikuj_snapshot(&mut self) {
+        let GameState::Playing(s) = &self.game else {
+            return;
+        };
+        let (Some(pal), Some(c)) = (self.palettes.as_ref(), self.citizens.as_ref()) else {
+            return;
+        };
+        let oko = self.camera.eye();
+        c.okno_mikro(s, oko);
+
+        let oko_mm = [
+            (oko.x * 1000.0) as i32,
+            (oko.y * 1000.0) as i32,
+            (oko.z * 1000.0) as i32,
+        ];
+        // Kadr rozszerzony o promień rysowania: dokładny stożek widzenia liczy render,
+        // bo to on zna macierze — snapshot ma tylko nie wozić drugiej połowy miasta.
+        let zasieg = (magnat_render::instancing::DRAW_RADIUS_M * 1_200.0) as i32;
+        let zapytanie = magnat_sim_snapshot::ViewQuery {
+            aabb: magnat_sim_snapshot::Aabb::around(oko_mm, zasieg, zasieg),
+            eye: oko_mm,
+            caps: magnat_sim_snapshot::SnapshotCaps::DEFAULT,
+        };
+
+        self.filler.ensure_city(&s.built.city, pal);
+        let filtr = c.filtr();
+        self.filler.fill_filtered(
+            &s.app.world,
+            &zapytanie,
+            &|e| filtr.is_none_or(|f| f.accepts(s, e)),
+            self.snapshot.back_mut(),
+        );
+        self.snapshot.publish();
+    }
+
     /// `--pick`: kto jest pod zadanym pikselem. Diagnostyka bufora identyfikatorów
     /// bez myszy — kryterium WP11 fazy M3.
     pub(crate) fn pick_diagnostyczny(&mut self) {
@@ -791,16 +848,41 @@ impl App {
             return;
         };
         let trafiony = renderer.pick();
+        // Snapshot razem z buforem: „nic pod kursorem" ma dwie zupełnie różne
+        // przyczyny — pusty kadr i pusty snapshot — a bez tych liczb wyglądają tak samo.
+        let snap = self.snapshot.front();
+        let oko = self.camera.eye();
+        let najblizszy = snap
+            .citizens
+            .as_slice()
+            .iter()
+            .map(|c| {
+                let d = glam::DVec3::new(
+                    f64::from(c.pos[0]) / 1000.0,
+                    f64::from(c.pos[1]) / 1000.0,
+                    f64::from(c.pos[2]) / 1000.0,
+                ) - oko;
+                d.length()
+            })
+            .fold(f64::INFINITY, f64::min);
         eprintln!(
-            "bufor ID {}×{}, pieszych rysowanych {}",
+            "bufor ID {}×{}, kamera nad ({:.0}, {:.0}) z {:.0} m; instancji rysowanych {}; snapshot: {} mieszkańców, {} pojazdów, najbliższy {:.0} m (odcięcie {:.0} m)",
             renderer.gpu.config.width,
             renderer.gpu.config.height,
-            renderer.pedestrians.drawn()
+            oko.x,
+            oko.y,
+            oko.z,
+            renderer.instances.drawn(),
+            snap.citizens.len(),
+            snap.vehicles.len(),
+            najblizszy,
+            magnat_render::instancing::DRAW_RADIUS_M,
         );
         let kursor = self.kursor;
         match trafiony {
-            Some(i) => {
-                println!("bufor ID: piksel {kursor:?} → encja {i}");
+            Some(hit) => {
+                let i = hit.entity;
+                println!("bufor ID: piksel {kursor:?} → {:?} {i}", hit.kind);
                 let mut karta = None;
                 if let (Some(c), GameState::Playing(s)) = (self.citizens.as_mut(), &mut self.game) {
                     if c.select(s, i) {

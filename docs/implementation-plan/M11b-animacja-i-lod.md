@@ -196,3 +196,22 @@ ubrania, a auta mają swoje lakiery, zamiast zamienić się w jednolitą szaroś
   sensownie. Własnego licznika per blok **nie zastępuje i nie wolno go wyrzucić** (ostrzeżenie M1).
 - **Degradacja:** przy przekroczeniu budżetu blok bez kafla rysowany jest chunkiem LOD 8× z M1.
   Wolniej, ale poprawnie — nigdy nie rysujemy dziury.
+
+
+---
+
+## Zmiany wpisane po M11a
+
+Zgodnie z `K-18`. To są rzeczy, o których wiadomo **na pewno** po zamknięciu M11a;
+podfaza nie jest tu przeprojektowywana. Gwiazdka = zmiana zakresu albo kryterium.
+Pełna tabela `E-n` jest w `M11a-format-i-snapshot.md`.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| F-1 ★ | **`PaletteTable` nie jest tablicą wariantów, a wierzchołek modelu niesie `role` obok `slot`** (`E-7`). Barwę wybiera shader funkcją `pick(wariant, rola)` z zestawu palety dzielnicy | Tablica per wygląd nie mieści się w capie: 24 576 mieszkańców ma rzędu dwudziestu tysięcy różnych wyglądów wobec 4096 wpisów. Dla animacji znaczy to jedno: klip **nie ma prawa zmieniać barwy**, bo barwa nie jest stanem instancji, tylko funkcją wariantu — a wariant jest niezmienny |
+| F-2 ★ | **Pozycje wierzchołków są wypieczone w pozie spoczynkowej**, z wliczonym łańcuchem pivotów. `ModelMesh::part_rest_qv` niesie te same przesunięcia po stronie procesora, a `ModelVertex.part` numer części | M11a rysuje model jednym wywołaniem, bez tablicy transformacji na GPU — i to jest poprawny obraz **w spoczynku**. Pozy dokładając, trzeba przesunięcie części **odjąć** przed obrotem wokół pivota, a nie liczyć od nowa: `part_rest_qv` jest po to, żeby nie było drugiego miejsca, które je wyprowadza |
+| F-3 | **`GpuInstance` ma 36 B, a nie 32** (`E-8`): doszło `pick`, a `extra` zmieniło się w `variant`. Pole `anim` to `clip \| phase << 8 \| aux << 16 \| flags << 24` | `aux` jest tym, co §5.3 nazywało `extra`: `carry` u mieszkańca, `wheel_phase` u pojazdu. `ClipId` ma **jeden bajt**, nie dwa — 256 klipów, czyli sufit z ryzyka `R4`, i to jest jego jedyne miejsce |
+| F-4 ★ | **L2 nie jest wybierany i `LodBands` ma dwa progi zamiast trzech** (`E-12`). Powyżej 60 m encje rysują się L1 aż do 600 m | Siatka L2 jest z założenia pusta, bo poziom impostora rysuje `ImpostorAtlas` — czyli WP4 tej podfazy. Do tego czasu wybieranie L2 znaczyłoby, że encja **znika** zamiast zmaleć. `LodBands` jest strukturą, więc trzeci próg jest dopisaniem pola, a nie przebudową ścieżki |
+| F-5 | **Kierunek marszu mieszkańca nie istnieje: `CitizenRenderRec.yaw` jest zerem** | Rekord warstwy Mikro niesie pozycję, nie kurs. Wyprowadzenie kursu z różnicy pozycji między publikacjami dałoby obrót zależny od **częstotliwości publikacji**, czyli od klatki — a to jest dokładnie ta klasa sprzężenia, której zabrania 00 §4. Kurs ma policzyć warstwa ruchu albo klip lokomocji, i to jest wejście WP3 |
+| F-6 | **Wszystkie pojazdy jadą jedną bryłą `car`.** `VehicleRenderRec.model` niesie `VehicleClassId` z `data/vehicles/classes.ron` i czeka na tablicę | `ModelTable` sortuje już teraz po `ModelId`, więc dołożenie modeli nie rusza ścieżki klatki — dokłada wiersze. Sufit jest nazwany w kodzie (`instancing::ModelTable`) |
+| F-7 | **Ścieżka klatki bierze 322 µs przy 26 tys. encji** (`m11a-1` w `benches/baseline.json`) wobec budżetu 1,5 ms z §5.3 | Zapas jest czterokrotny, więc animacja i klasyfikacja trzech poziomów mają w czym rosnąć. Sortowanie jest porównaniami, nie radixem — wymiana na sortowanie kubełkowe jest w zapasie i należy do M11e, jeśli pomiar ją uzasadni |

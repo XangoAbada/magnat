@@ -221,11 +221,21 @@ impl crate::app::App {
 impl crate::citizens::Citizens {
     /// Uzbraja gotowy zestaw warunków zatrzymania (§5.10). Wołane raz, po wejściu
     /// do świata: lista jest **zestawem**, a nie wyrażeniem, więc nie ma czego budować.
-    pub(crate) fn arm_stop_conditions(&mut self) {
-        if self.stop.is_empty() {
-            for c in magnat_game::StopCondition::ready_set() {
-                self.stop.arm(c);
+    ///
+    /// W trybie przeglądu warunki **biznesowe się nie zbroją** i to nie jest wyjątek,
+    /// tylko wykonanie ich definicji: obserwator nie ma interesu, więc „gotówka poniżej
+    /// progu" jest u niego prawdą od pierwszej minuty i zatrzymuje świat na zawsze —
+    /// zamiast ostrzec, blokuje jedyną rzecz, po którą się do tego trybu wchodzi.
+    /// Zostają zdarzenia miejskie, bo te dotyczą miasta, a nie gracza.
+    pub(crate) fn arm_stop_conditions(&mut self, observe: bool) {
+        if !self.stop.is_empty() {
+            return;
+        }
+        for c in magnat_game::StopCondition::ready_set() {
+            if observe && !matches!(c, magnat_game::StopCondition::CityEvent) {
+                continue;
             }
+            self.stop.arm(c);
         }
     }
 

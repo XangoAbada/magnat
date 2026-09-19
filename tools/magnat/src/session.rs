@@ -115,7 +115,7 @@ impl App {
                         // uzbrojony od razu, bo gracz ma go **wyłączać**, a nie
                         // składać: warunek, który trzeba najpierw znaleźć, nie
                         // zatrzyma pierwszej katastrofy.
-                        c.arm_stop_conditions();
+                        c.arm_stop_conditions(self.shell.observe);
                         c.start_tutorial(&session);
                         self.citizens = Some(c);
                         self.shell.has_session = true;

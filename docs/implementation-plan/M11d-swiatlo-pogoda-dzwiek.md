@@ -203,3 +203,21 @@ inaczej przy płynności oscylującej wokół progu muzyka miga. Muzyka nigdy ni
 
 **Audio nie czyta ECS.** `AudioEngine::update(&RenderSnapshot, &CameraState)` — ta sama zasada
 co render, ten sam mechanizm egzekwowania (sekcja 6.3).
+
+
+---
+
+## Zmiany wpisane po M11a
+
+Zgodnie z `K-18`. To są rzeczy, o których wiadomo **na pewno** po zamknięciu M11a;
+podfaza nie jest tu przeprojektowywana. Gwiazdka = zmiana zakresu albo kryterium.
+Pełna tabela `E-n` jest w `M11a-format-i-snapshot.md`.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| H-1 ★ | **`weather`, `power` i `sites` w snapshocie są wyzerowane i ta podfaza je wypełnia.** Typy istnieją i mają ustalone rozmiary; brakuje wyłącznie wypełniacza | Pierwszym czytelnikiem każdego z nich jest coś, co rysuje albo gra: dym, okna, blackout, łoże dźwiękowe. Pole wypełnione, którego nikt nie czyta, wygląda w danych tak samo jak działające — stąd kolejność. Wypełniacz stoi w `magnat_game::view::SnapshotFiller` (`E-2`) i dokłada się do niego metodą na sekcję, a nie drugą funkcją |
+| H-2 | **`LightRecord` zostaje w kształcie M1** (`pos`, `range`, `color_rgbe`), bez pól `kind` i `flags` z §5.2 (`E-6`) | Ten sam rozmiar 20 B, a wersja M1 ma działającego konsumenta (`clusters::to_gpu`). Rozróżnienie okno / latarnia / reflektor dokłada ta podfaza razem z pierwszym miejscem, które je czyta — i wtedy dopiero zajmuje bajty |
+| H-3 | **`PowerRec` ma 1 B i nie niesie numeru dzielnicy** (`E-5`): tablica jest indeksowana dzielnicą, więc indeks jest tożsamością | Pole `district` mogło mieć wyłącznie wartość własnego indeksu, a `u16` obok `u8` dawał 4 B rekordu i 256 B tablicy zamiast obiecanych 192 |
+| H-4 | **`SiteRenderRec.flags` niesie `SITE_FAULT` na bicie 0 i rodzaj pióropusza na bitach 1–2**, z akcesorami `is_faulted()` i `plume_kind()` | Kodowanie jest już w typie, więc wypełniacz i shader nie wyprowadzają go osobno. Pięć bitów zostaje wolnych |
+| H-5 | **Barwy z palet są w sRGB i shader instancji przeliczy je na liniowe** (`pow 2,2`) przed oświetleniem | Bufor sceny jest HDR i liniowy, bo ekspozycja i tonemap dzieją się w post-processingu (M1). Emitery świateł mają wejść **tą samą drogą**, inaczej latarnia i okno tego samego budynku będą miały dwie różne barwy przy identycznym wpisie w danych |
+| H-6 | **Rola palety `Emissive` ma numer 11 i shader traktuje ją osobno** — element nią oznaczony nie gaśnie w cieniu | To jest cała różnica między lampą a blachą i jest już w kodzie. Blackout ma więc gdzie zadziałać: wygaszenie jest mnożnikiem tej jednej roli, a nie osobnym passem |

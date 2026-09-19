@@ -216,7 +216,7 @@ impl Renderer {
         self.gpu.queue.submit(Some(encoder.finish()));
         // Mapowanie **po** wysłaniu kopii — patrz `pick::Pedestrians::record_id_pass`.
         if odczyt {
-            self.pedestrians.read_back();
+            self.pick_buffer.read_back();
         }
         self.gpu.queue.present(frame);
         self.finish_stats(&listy.widoczne, triangles);
@@ -482,15 +482,15 @@ impl Renderer {
         pass.set_pipeline(&self.pipeline);
         pass.set_bind_group(1, Some(&self.overlay_bind), &[]);
         let mut trojkaty = self.draw_list(&mut pass, &self.bind_group, &listy.widoczne, false, 0);
-        // Piesi na końcu passa: zapisują głębię, więc bufor ID może potem odtworzyć
+        // Encje dynamiczne na końcu passa: zapisują głębię, więc bufor ID może potem odtworzyć
         // dokładnie te fragmenty porównaniem `Equal`.
-        trojkaty += self.pedestrians.draw(&mut pass);
+        trojkaty += self.instances.draw(&mut pass);
         drop(pass);
 
         // Bufor ID **przed** wodą: tafla nie zapisuje głębi, więc kolejność jest tu
         // obojętna dla wyniku, ale trzymanie go tuż za passem, który głębię ustalił,
         // jest tym, co czyni porównanie `Equal` czytelnym.
-        let odczyt = self.pedestrians.record_id_pass(encoder, depth);
+        let odczyt = self.pick_buffer.record_id_pass(encoder, depth, &self.instances);
 
         // Woda: osobny przebieg z mieszaniem, głębia **tylko do odczytu** — pass czyta ją
         // jako teksturę, żeby policzyć grubość słupa wody, a zapis do tej samej tekstury

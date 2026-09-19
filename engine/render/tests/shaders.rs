@@ -38,8 +38,8 @@ fn kazdy_shader_jest_poprawnym_modulem_wgsl() {
             include_str!("../src/shaders/clusters.wgsl"),
         ),
         (
-            "pedestrian.wgsl",
-            include_str!("../src/shaders/pedestrian.wgsl"),
+            "instance.wgsl",
+            include_str!("../src/shaders/instance.wgsl"),
         ),
     ] {
         waliduj(nazwa, zrodlo);
@@ -51,9 +51,9 @@ fn kazdy_shader_jest_poprawnym_modulem_wgsl() {
 /// Wymusza to jeden punkt wejścia wierzchołka dla obu fragmentów — i to jest sprawdzalne
 /// statycznie, bez karty graficznej.
 #[test]
-fn piesi_i_bufor_id_dziela_punkt_wejscia_wierzcholka() {
-    let zrodlo = include_str!("../src/shaders/pedestrian.wgsl");
-    let modul = naga::front::wgsl::parse_str(zrodlo).expect("pedestrian.wgsl");
+fn encje_i_bufor_id_dziela_punkt_wejscia_wierzcholka() {
+    let zrodlo = include_str!("../src/shaders/instance.wgsl");
+    let modul = naga::front::wgsl::parse_str(zrodlo).expect("instance.wgsl");
     let wierzcholki: Vec<&str> = modul
         .entry_points
         .iter()
@@ -72,4 +72,42 @@ fn piesi_i_bufor_id_dziela_punkt_wejscia_wierzcholka() {
         "bufor ID i scena muszą dzielić jeden punkt wejścia wierzchołka"
     );
     assert_eq!(fragmenty, vec!["fs_main", "fs_id"]);
+}
+
+/// Wybór barwy z zestawu palety liczy **shader**, a wynik sprawdzają testy **w Rust**
+/// (`magnat_voxel::palette::pick`). Dwie implementacje jednego wzoru rozjeżdżają się
+/// przy pierwszej zmianie i rozjazdu nie widać jako błędu — widać go jako inne barwy
+/// na ekranie niż w teście. Stąd porównanie stałych wprost z pliku shadera.
+#[test]
+fn stale_palety_zgadzaja_sie_z_kodem() {
+    let zrodlo = include_str!("../src/shaders/instance.wgsl");
+    let stala = |nazwa: &str| -> u32 {
+        let wiersz = zrodlo
+            .lines()
+            .find(|l| l.trim_start().starts_with(&format!("const {nazwa}:")))
+            .unwrap_or_else(|| panic!("brak stałej {nazwa} w instance.wgsl"));
+        let wartosc = wiersz
+            .split('=')
+            .nth(1)
+            .and_then(|s| s.split(';').next())
+            .expect("stała bez wartości")
+            .trim()
+            .trim_end_matches('u');
+        if let Some(hex) = wartosc.strip_prefix("0x") {
+            u32::from_str_radix(hex, 16).expect("stała szesnastkowa")
+        } else {
+            wartosc.parse().expect("stała dziesiętna")
+        }
+    };
+    assert_eq!(stala("PALETTE_MIX"), magnat_voxel::palette::MIX);
+    assert_eq!(stala("PALETTE_ROLE_SALT"), magnat_voxel::palette::ROLE_SALT);
+    assert_eq!(
+        stala("PALETTE_ROLE_COUNT") as usize,
+        magnat_voxel::SlotRole::ALL.len()
+    );
+    // Przesunięcie w `pick` też jest częścią wzoru — szukamy go w treści funkcji.
+    assert!(
+        zrodlo.contains("(v >> 13u) % ramp.y"),
+        "shader zmienił wzór wyboru barwy"
+    );
 }

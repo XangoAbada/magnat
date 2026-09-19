@@ -26,6 +26,7 @@ members = [
     "tools/balansator",
     "tools/goods-graph",
     "tools/headless",
+    "tools/mvoxc",
     "tools/magnat",
 ]
 

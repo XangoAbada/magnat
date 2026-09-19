@@ -252,6 +252,25 @@ pub enum StreamId {
     PolicyExecution = 260,
     // 261–279 zostaje wolne dla M9 (`K-4`). M9a–M9c nie losowały niczego:
     // komenda gracza jest funkcją stanu, a nie rzutem.
+
+    // ── M11: 300..=319 — prezentacja (`K-4`, przydział w M11 §„K-4") ─────────────
+    /// Wygląd mieszkańca i lakier pojazdu (M11a §5.2). Klucz: indeks encji, tick 0 —
+    /// losowanie jest **jednorazowe i stałe przez życie encji**, bo człowiek, który
+    /// co klatkę zmienia twarz, nie jest człowiekiem.
+    ///
+    /// **Wynik nie jest komponentem i nie wchodzi do hasha stanu** (`E-4` w M11a):
+    /// `appearance` jest funkcją czystą `(seed, entity_index)` dla bitów losowych
+    /// i funkcją stanu świata dla bitów zawodu i zamożności. Zapisanie go do ECS
+    /// dałoby drugie źródło prawdy o tym, gdzie mieszkaniec pracuje — i rozjechałoby
+    /// się przy pierwszej zmianie pracy.
+    Appearance = 300,
+    /// Rozstawienie propów we wnętrzu generowanym przez `InteriorKit` (M11c §5.7).
+    /// Klucz: indeks encji budynku i numer kondygnacji.
+    ///
+    /// Numer jest **zarezerwowany imiennie przez M11a** razem z `Appearance`, bo
+    /// `K-4` przydziela blok fazie, a nie podfazie — pierwszym losującym będzie M11c.
+    Interior = 301,
+    // 302–319 zarezerwowane dla M11.
 }
 
 /// Encja zastępcza dla losowania bez encji (zdarzenie globalne, generator świata).

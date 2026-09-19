@@ -39,7 +39,6 @@ use magnat_core::{SimSpeed, Tick};
 use magnat_economy::LostSaleTracking;
 use magnat_game::inspect::CardCtx;
 use magnat_game::Session;
-use magnat_sim_snapshot::PedestrianRecord;
 use magnat_ui::{CitizenPanel, InspectionNav, Locale, Theme, UiContext};
 
 /// Promień okna warstwy Mikro w metrach.
@@ -70,7 +69,6 @@ pub struct Citizens {
     pub(crate) ui: UiContext,
     panel: CitizenPanel,
     /// Rekordy dla renderera, wypełniane co klatkę wprost przez warstwę Mikro.
-    peds: Vec<PedestrianRecord>,
     /// Doba, dla której karta odtwarza plan.
     dzien: u64,
     /// Czy panel jest widoczny. Karta bez zaznaczenia pokazuje komunikat, więc panel
@@ -144,7 +142,6 @@ impl Citizens {
             legenda: None,
             filtr: None,
             nav: InspectionNav::new(),
-            peds: Vec::new(),
             dzien: 0,
             pokaz_karte: false,
             wersje: magnat_ui::Versions::new(),
@@ -340,23 +337,28 @@ impl Citizens {
         ruszyl
     }
 
-    /// Ustawia okno warstwy Mikro na kadr i przepisuje pieszych dla renderera.
+    /// Ustawia okno warstwy Mikro na kadr.
     ///
-    /// Filtr encji (§14.2) działa **tutaj**, a nie w warstwie Mikro: warstwa jest
-    /// wspólna dla renderu i dla śledzenia, a filtr jest preferencją widoku i nie ma
-    /// prawa zmienić tego, kogo symulacja liczy.
-    pub fn pedestrians(&mut self, session: &Session, eye: glam::DVec3) -> &[PedestrianRecord] {
+    /// Od M11a klient **nie przepisuje** pieszych dla renderera: rekordy składa
+    /// `magnat_game::SnapshotFiller`, bo kanałem sim → render jest snapshot, a nie
+    /// osobny slice (M11a §5.2). Zostaje to, co należy do widoku i tylko do niego —
+    /// okno warstwy Mikro, czyli wycinek miasta, który w ogóle jest krokowany.
+    pub fn okno_mikro(&self, session: &Session, eye: glam::DVec3) {
         let Some(z) = session.app.world.resource::<AgentSources>().get() else {
-            self.peds.clear();
-            return &self.peds;
+            return;
         };
         z.travel
             .set_micro_window(Some((eye.x as i32, eye.y as i32)), MICRO_RADIUS_M);
-        z.travel.micro_snapshot(&mut self.peds);
-        if let Some(f) = self.filtr {
-            self.peds.retain(|p| f.accepts(session, p.entity));
-        }
-        &self.peds
+    }
+
+    /// Filtr encji (§14.2) albo `None`, gdy widać wszystkich.
+    ///
+    /// Filtr działa **tutaj**, a nie w warstwie Mikro: warstwa jest wspólna dla renderu
+    /// i dla śledzenia, a filtr jest preferencją widoku i nie ma prawa zmienić tego,
+    /// kogo symulacja liczy.
+    #[must_use]
+    pub fn filtr(&self) -> Option<magnat_game::EntityFilter> {
+        self.filtr
     }
 
     /// Przełącza filtr encji: wszyscy → moi klienci → moi pracownicy → wszyscy.
