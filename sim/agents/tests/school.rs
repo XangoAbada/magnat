@@ -213,7 +213,10 @@ fn uczen_z_generacji_zostaje_uczniem() {
     przebieg_cyklu(&mut world, 0, ROK + 1);
 
     let u = emp(&world, uczen);
-    assert!(u.is_pupil(), "uczeń z generacji stracił flagę w pierwszym roku");
+    assert!(
+        u.is_pupil(),
+        "uczeń z generacji stracił flagę w pierwszym roku"
+    );
     assert!(u.has_job(), "uczeń z generacji stracił szkołę");
 }
 
@@ -328,7 +331,11 @@ fn tabela_wyksztalcenia_rosnie_i_domyka_pelny_cykl() {
     let t = DemographyTable::load_default().expect("data/demography");
     let ages = t.ages();
     let pelny = u16::from(ages.school_end - ages.school_start);
-    assert_eq!(t.education_level(0), 0, "zero lat szkoły daje wykształcenie");
+    assert_eq!(
+        t.education_level(0),
+        0,
+        "zero lat szkoły daje wykształcenie"
+    );
     let mut ostatni = 0;
     for lat in 0..=pelny {
         let p = t.education_level(lat);
@@ -369,7 +376,10 @@ fn po_trzydziestu_latach_szkola_ma_uczniow() {
             uczniow += 1;
         }
     }
-    assert!(w_wieku > 0, "po trzydziestu latach nie ma nikogo w wieku szkolnym");
+    assert!(
+        w_wieku > 0,
+        "po trzydziestu latach nie ma nikogo w wieku szkolnym"
+    );
     assert!(
         uczniow * 100 >= w_wieku * 90,
         "uczniów {uczniow} na {w_wieku} w wieku szkolnym — poniżej 90 %"

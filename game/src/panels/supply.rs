@@ -46,7 +46,9 @@ fn build(ctx: &PanelCtx<'_>) -> PanelModel {
             )
         })
         .collect();
-    let site = sites.get(ctx.sel.min(sites.len().saturating_sub(1))).copied();
+    let site = sites
+        .get(ctx.sel.min(sites.len().saturating_sub(1)))
+        .copied();
     let Some(m) = s.market.as_ref() else {
         return PanelModel::Supply(Model {
             nodes: Vec::new(),
@@ -163,8 +165,8 @@ fn render(
         ui.label(ctx.text("ui.panel.supply.no_contracts"));
     }
     for (good, do_, valid_to) in m.contracts.iter().take(10) {
-        let dni = valid_to.saturating_sub(ctx.session.tick().get())
-            / magnat_core::time::MINUTES_PER_DAY;
+        let dni =
+            valid_to.saturating_sub(ctx.session.tick().get()) / magnat_core::time::MINUTES_PER_DAY;
         row(
             ui,
             th,

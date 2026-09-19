@@ -217,7 +217,9 @@ pub(super) fn przypisz_szkoly(
 ) -> u32 {
     let mut bez = 0u32;
     for c in mieszkancy {
-        let uczen = world.get::<Employment>(*c).is_some_and(Employment::is_pupil);
+        let uczen = world
+            .get::<Employment>(*c)
+            .is_some_and(Employment::is_pupil);
         if !uczen {
             continue;
         }

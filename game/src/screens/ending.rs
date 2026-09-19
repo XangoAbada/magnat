@@ -83,10 +83,7 @@ pub fn scenario_end(
                     klucz,
                     &[
                         ("cel", &shell.text(&o.title)),
-                        (
-                            "procent",
-                            &crate::panels::percent_bp(i32::from(postep)),
-                        ),
+                        ("procent", &crate::panels::percent_bp(i32::from(postep))),
                         // Znak obok koloru: kolor nigdy nie jest jedynym nośnikiem
                         // (`ui-design.md` §3.1, reguła daltonizmu).
                         ("opcjonalny", if o.optional { "○" } else { "●" }),

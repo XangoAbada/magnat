@@ -247,7 +247,9 @@ impl Autonomy {
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub enum ViewCommand {
     SetTimeScale(magnat_core::SimSpeed),
-    SaveGame { slot: u8 },
+    SaveGame {
+        slot: u8,
+    },
     /// Gracz otworzył panel. **To jest nośnik metryki onboardingu** (§5.12): liczba
     /// otwartych paneli do pierwszej sensownej decyzji liczy się z tego strumienia,
     /// a nie z osobnej telemetrii.
@@ -270,7 +272,6 @@ pub struct ViewRecord {
     pub tick: Tick,
     pub cmd: ViewCommand,
 }
-
 
 /// To, co komenda widzi ze świata.
 ///

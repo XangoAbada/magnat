@@ -717,21 +717,48 @@ impl<'a> Cursor<'a> {
 pub enum ModelError {
     Io(std::io::Error),
     BadMagic(String),
-    Version { key: String, got: u16 },
-    LodCount { key: String, got: u8 },
+    Version {
+        key: String,
+        got: u16,
+    },
+    LodCount {
+        key: String,
+        got: u8,
+    },
     UnknownKind(u8),
     UnknownRole(u8),
     Truncated(String),
-    RleOverrun { key: String },
+    RleOverrun {
+        key: String,
+    },
     NoParts(String),
     TooManyParts(usize),
-    PartSize { part: String, got: usize, want: usize },
-    BadParent { part: String, parent: u8 },
-    ForwardParent { part: String, parent: u8 },
-    SlotOutOfRange { part: String, slot: u8 },
-    UndeclaredSlot { part: String, slot: u8 },
+    PartSize {
+        part: String,
+        got: usize,
+        want: usize,
+    },
+    BadParent {
+        part: String,
+        parent: u8,
+    },
+    ForwardParent {
+        part: String,
+        parent: u8,
+    },
+    SlotOutOfRange {
+        part: String,
+        slot: u8,
+    },
+    UndeclaredSlot {
+        part: String,
+        slot: u8,
+    },
     DuplicateSlot(u8),
-    EmptyLod { key: String, lod: u8 },
+    EmptyLod {
+        key: String,
+        lod: u8,
+    },
     DuplicateKey(String),
 }
 
@@ -769,7 +796,10 @@ impl fmt::Display for ModelError {
                 write!(f, "`{part}`: slot {slot} poza zakresem 0..{MAX_SLOTS}")
             }
             ModelError::UndeclaredSlot { part, slot } => {
-                write!(f, "część `{part}` używa slotu {slot}, którego model nie zadeklarował")
+                write!(
+                    f,
+                    "część `{part}` używa slotu {slot}, którego model nie zadeklarował"
+                )
             }
             ModelError::DuplicateSlot(s) => write!(f, "slot {s} zadeklarowany dwukrotnie"),
             ModelError::EmptyLod { key, lod } => {
@@ -887,7 +917,10 @@ mod tests {
         for p in &mut m.parts {
             p.lod_mask = 0b001;
         }
-        assert!(matches!(m.validate(), Err(ModelError::EmptyLod { lod: 1, .. })));
+        assert!(matches!(
+            m.validate(),
+            Err(ModelError::EmptyLod { lod: 1, .. })
+        ));
     }
 
     #[test]

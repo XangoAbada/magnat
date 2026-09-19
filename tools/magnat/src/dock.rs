@@ -164,7 +164,11 @@ impl crate::app::App {
     /// w kogoś kliknął, a druga lista „kogo śledzić" byłaby drugim zaznaczeniem.
     pub(crate) fn przelacz_sledzenie(&mut self) {
         let Some(s) = self.game.session() else { return };
-        let cel = match self.citizens.as_ref().and_then(crate::citizens::Citizens::selected) {
+        let cel = match self
+            .citizens
+            .as_ref()
+            .and_then(crate::citizens::Citizens::selected)
+        {
             Some(magnat_core::Subject::Citizen(c)) => Some(magnat_game::FollowTarget::Citizen(c)),
             Some(magnat_core::Subject::Vehicle(v)) => Some(magnat_game::FollowTarget::Vehicle(v)),
             _ => None,
@@ -179,7 +183,9 @@ impl crate::app::App {
     /// **nie wchodzi do symulacji** — zakaz zegara ściennego z 00 §3.5 dotyczy
     /// kodu, który liczy świat, a nie tego, który opisuje, co gracz widział.
     pub(crate) fn czas_sesji_ms(&self) -> u64 {
-        self.game.session().map_or(0, magnat_game::Session::played_ms)
+        self.game
+            .session()
+            .map_or(0, magnat_game::Session::played_ms)
     }
 
     /// Wykonuje komendę złożoną w panelu biznesowym.
@@ -240,11 +246,7 @@ impl crate::citizens::Citizens {
     }
 
     /// Ustawia cel trybu „śledź" i przypina go do warstwy Mikro.
-    pub(crate) fn follow(
-        &mut self,
-        session: &Session,
-        target: Option<magnat_game::FollowTarget>,
-    ) {
+    pub(crate) fn follow(&mut self, session: &Session, target: Option<magnat_game::FollowTarget>) {
         self.follow.set(session, target);
     }
 

@@ -150,10 +150,7 @@ const WYSOKOSC: f32 = 900.0;
 const KROK_PX: f32 = 8.0;
 
 fn ekran() -> egui::Rect {
-    egui::Rect::from_min_size(
-        egui::Pos2::ZERO,
-        egui::vec2(SZEROKOSC_DOKU, WYSOKOSC),
-    )
+    egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(SZEROKOSC_DOKU, WYSOKOSC))
 }
 
 fn wejscie_bez_myszy() -> egui::RawInput {
@@ -299,7 +296,10 @@ fn spadkobierca_jest_wlascicielem_swojego_zakladu() {
     let site = *h.sites.first().expect("spadkobierca ma zakład");
     assert!(!h.firms.is_empty(), "zakład bez firmy nie jest własnością");
     let wynik = magnat_game::precheck(&s.view(), &PlayerCommand::CloseSite { site });
-    assert!(wynik.is_ok(), "własny zakład odrzucony jako cudzy: {wynik:?}");
+    assert!(
+        wynik.is_ok(),
+        "własny zakład odrzucony jako cudzy: {wynik:?}"
+    );
 }
 
 /// Kryterium WP11: kronika zbiera wpisy i da się w niej szukać.
@@ -411,7 +411,11 @@ fn uklad_paneli_nie_zmienia_hasha_stanu() {
     for id in panele.reg.ids() {
         let _ = rysuj(&mut panele, &s, &c, &th, Locale::En, id);
     }
-    assert_eq!(przed, s.state_hash(), "rysowanie paneli ruszyło stan świata");
+    assert_eq!(
+        przed,
+        s.state_hash(),
+        "rysowanie paneli ruszyło stan świata"
+    );
 }
 
 /// Podmiot z panelu prowadzi do inspekcji, a nie do drugiej karty (`DF-6`).

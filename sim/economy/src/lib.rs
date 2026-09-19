@@ -54,13 +54,13 @@ pub mod cpi;
 pub mod credit;
 pub mod data;
 pub mod firmlife;
-pub mod owner_ops;
 pub mod kernel;
 pub mod labor;
 pub mod ledger;
 pub mod manager_exec;
 pub mod market;
 pub mod offer;
+pub mod owner_ops;
 pub mod panel;
 pub mod policy_run;
 pub mod pricing;
@@ -109,6 +109,9 @@ pub use ledger::{
     balance_sheet, cash_flow, close_period, income_statement, post, BalanceSheet, CashFlow,
     IncomeStatement, JournalEntry, Ledger, LedgerAccount, PeriodClose, LEDGER_ACCOUNT_COUNT,
 };
+pub use manager_exec::{
+    ManagerCurve, ManagerExecution, PolicyTuning, PolicyTuningError, POLICY_TUNING_SCHEMA_VERSION,
+};
 pub use market::{
     Bank, HouseholdMonth, HouseholdMonthReport, Market, MarketStats, PurchaseIntent, ShelfSnapshot,
     ShopSeed, SiteEnforcementRow,
@@ -119,10 +122,6 @@ pub use offer::{
 pub use panel::{
     BalanceSample, CompetitorRow, CustomerStats, FinanceSummary, LostSalesView, PriceDist,
     ShelfRow, ShopPanelSnapshot,
-};
-pub use manager_exec::{
-    ManagerCurve, ManagerExecution, PolicyTuning, PolicyTuningError,
-    POLICY_TUNING_SCHEMA_VERSION,
 };
 pub use policy_run::{
     preset_for, DryDay, DryRun, GoodFacts, PolicyAlert, PolicyDay, PolicyOutcome, PolicyTrace,

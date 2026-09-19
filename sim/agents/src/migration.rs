@@ -990,7 +990,11 @@ pub fn shock_retire_jobs(world: &mut World, n: usize) -> u32 {
         .citizens()
         .iter()
         .copied()
-        .filter(|e| world.get::<Employment>(*e).is_some_and(Employment::is_employed))
+        .filter(|e| {
+            world
+                .get::<Employment>(*e)
+                .is_some_and(Employment::is_employed)
+        })
         .collect();
     zatrudnieni.reverse();
     for e in zatrudnieni.into_iter().take(zostalo) {
@@ -1065,7 +1069,10 @@ fn usamodzielnienie(world: &mut World, day: u64, raport: &mut MigrationReport) {
             continue;
         }
         // Brak lokalu. Kto ma pracę, czeka; kto nie ma — wyjeżdża.
-        if world.get::<Employment>(e).is_some_and(Employment::is_employed) {
+        if world
+            .get::<Employment>(e)
+            .is_some_and(Employment::is_employed)
+        {
             continue;
         }
         demography::day::opusc_gospodarstwo(world, e, day, &mut cmd);

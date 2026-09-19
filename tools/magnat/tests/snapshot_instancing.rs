@@ -18,17 +18,15 @@ use magnat_agents::{
     bootstrap_day, register_day, AgentSources, DayLoopSystem, NeedDecaySystem, NeedTable,
     ReplanCooldownSystem,
 };
-use std::sync::Arc;
 use magnat_ecs::{App, ScheduleBuilder};
 use magnat_game::SnapshotFiller;
 use magnat_headless::population::{swiat_agentow, zaludnij, zbuduj_miasto};
 use magnat_jobs::JobPool;
-use magnat_render::instancing::{
-    build_instances, InstanceScratch, LodBands, MeshSlot, ModelTable,
-};
+use magnat_render::instancing::{build_instances, InstanceScratch, LodBands, MeshSlot, ModelTable};
 use magnat_sim_snapshot::{Aabb, RenderSnapshot, SnapshotCaps, ViewQuery};
 use magnat_traffic::TrafficSystem;
 use magnat_voxel::{ModelLibrary, PaletteLibrary, LOD_COUNT};
+use std::sync::Arc;
 
 /// Promień okna warstwy Mikro. Ta sama liczba, którą ustawia klient.
 const OKNO_MIKRO_M: u32 = 900;
@@ -243,8 +241,10 @@ fn miasto_o_osmej_rano_daje_instancje_z_palety_dzielnicy() {
         ),
         &stozek(),
         &tablica_modeli(&models),
-        LodBands::default(), &[],
-        &mut scratch);
+        LodBands::default(),
+        &[],
+        &mut scratch,
+    );
     assert!(
         !scratch.instances.is_empty(),
         "{} mieszkańców w snapshocie, zero instancji — ścieżka klatki gubi wszystko",

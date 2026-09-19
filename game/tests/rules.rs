@@ -161,11 +161,7 @@ fn ropa() -> RuleEditor {
     e.apply(Edit::AddRule).unwrap();
     e.apply(Edit::AddClause(
         0,
-        klauzula(
-            met(Metric::StockDays(ropa)),
-            CmpOp::Lt,
-            lit(Value::Days(5)),
-        ),
+        klauzula(met(Metric::StockDays(ropa)), CmpOp::Lt, lit(Value::Days(5))),
     ))
     .unwrap();
     // Obie strony netto: rafineria kupuje hurtem, więc porównanie idzie netto
@@ -187,11 +183,7 @@ fn ropa() -> RuleEditor {
     e.apply(Edit::AddRule).unwrap();
     e.apply(Edit::AddClause(
         1,
-        klauzula(
-            met(Metric::StockDays(ropa)),
-            CmpOp::Lt,
-            lit(Value::Days(5)),
-        ),
+        klauzula(met(Metric::StockDays(ropa)), CmpOp::Lt, lit(Value::Days(5))),
     ))
     .unwrap();
     e.apply(Edit::AddAction(
@@ -257,8 +249,11 @@ fn nabial_nie_wyrzucamy_konczy_sie_na_wycofaniu_z_polki() {
     ))
     .unwrap();
     // Alert wolno — nie zmienia świata, więc nie należy do żadnej dziedziny.
-    e.apply(Edit::AddAction(2, ActionDraft::alert(2, Severity::Critical)))
-        .unwrap();
+    e.apply(Edit::AddAction(
+        2,
+        ActionDraft::alert(2, Severity::Critical),
+    ))
+    .unwrap();
     // Wycofanie z półki — nie wolno.
     let wycofaj = ActionDraft {
         kind: magnat_core::ActionKind::RemoveFromShelf,
@@ -317,10 +312,7 @@ fn sezon_grzewczy_takze_rozpada_sie_na_dwie_dziedziny() {
     ))
     .unwrap();
     assert_eq!(
-        e.apply(Edit::AddAction(
-            1,
-            ActionDraft::markdown(wegiel, Bp(1_500))
-        )),
+        e.apply(Edit::AddAction(1, ActionDraft::markdown(wegiel, Bp(1_500)))),
         Err(EditError::ActionOutOfDomain {
             expected: PolicyDomain::Stock
         })
@@ -517,9 +509,9 @@ fn edytor_z_bledem_nie_daje_sie_przypiac() {
 
 #[test]
 fn kazda_uwaga_walidatora_ma_zdanie_w_obu_jezykach() {
-    use magnat_policy::Unit;
     use magnat_game::policy::view::note_text;
     use magnat_policy::NodePath;
+    use magnat_policy::Unit;
     let c = Catalog::load().expect("data/locale/");
     let wszystkie = [
         Note::BelowCost { rule: 0 },
@@ -558,7 +550,10 @@ fn kazda_uwaga_walidatora_ma_zdanie_w_obu_jezykach() {
     for l in Locale::ALL {
         for n in &wszystkie {
             let t = note_text(n, &c, l);
-            assert!(!t.is_empty() && !t.starts_with("ui.policy."), "{l:?} {n:?}: {t}");
+            assert!(
+                !t.is_empty() && !t.starts_with("ui.policy."),
+                "{l:?} {n:?}: {t}"
+            );
         }
     }
 }
@@ -613,8 +608,11 @@ fn caly_wjazd_edytora_ma_skutek() {
     ))
     .unwrap();
     assert_eq!(e.rules()[1].clauses[0].rhs, lit(Value::Days(45)));
-    e.apply(Edit::AddAction(1, ActionDraft::markdown(GoodRef::This, Bp(1_000))))
-        .unwrap();
+    e.apply(Edit::AddAction(
+        1,
+        ActionDraft::markdown(GoodRef::This, Bp(1_000)),
+    ))
+    .unwrap();
     e.apply(Edit::SetAction(
         1,
         0,

@@ -29,8 +29,8 @@ use magnat_ecs::App;
 use magnat_jobs::JobPool;
 
 use crate::command::{
-    precheck, CommandEnvelope, CommandError, CommandView, PlayerCommand, PlayerId,
-    ViewCommand, ViewRecord,
+    precheck, CommandEnvelope, CommandError, CommandView, PlayerCommand, PlayerId, ViewCommand,
+    ViewRecord,
 };
 use crate::replay::{Rejected, ReplayLog};
 use crate::shell::{NewGameParams, WorldGenJob, WorldPreview};
@@ -123,8 +123,7 @@ impl GameState {
                         .player()
                         .map(|p| p.citizen)
                         .and_then(|c| crate::legacy::heir_of(s, c));
-                    let GameState::Playing(session) =
-                        std::mem::replace(self, GameState::Shell)
+                    let GameState::Playing(session) = std::mem::replace(self, GameState::Shell)
                     else {
                         unreachable!("wariant sprawdzony wyżej");
                     };
@@ -154,9 +153,7 @@ impl GameState {
             return false;
         }
         let outcome = s.settled_outcome();
-        let GameState::Playing(session) =
-            std::mem::replace(self, GameState::Shell)
-        else {
+        let GameState::Playing(session) = std::mem::replace(self, GameState::Shell) else {
             unreachable!("wariant sprawdzony wyżej");
         };
         *self = GameState::ScenarioEnd { session, outcome };
@@ -389,10 +386,11 @@ impl Session {
     /// otwarty nie da się wygrać ani przegrać i to jest jego treść.
     #[must_use]
     pub fn scenario_outcome(&self) -> crate::scenario::ScenarioOutcome {
-        self.scenario.as_ref().map_or(
-            crate::scenario::ScenarioOutcome::Running,
-            |sc| self.scenario_state.outcome(self, sc),
-        )
+        self.scenario
+            .as_ref()
+            .map_or(crate::scenario::ScenarioOutcome::Running, |sc| {
+                self.scenario_state.outcome(self, sc)
+            })
     }
 
     /// Cele domknięte w ostatniej przeliczonej dobie.

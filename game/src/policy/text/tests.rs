@@ -263,8 +263,8 @@ fn round_trip_dziesieciu_tysiecy_polityk() {
         for n in 0..5_000u64 {
             let (p, s) = Losowa::new(n).polityka();
             let txt = write(&p, &s, &g, &c, l);
-            let (p2, s2) = parse(&txt, &g, &c)
-                .unwrap_or_else(|e| panic!("polityka {n} ({l:?}): {e}\n{txt}"));
+            let (p2, s2) =
+                parse(&txt, &g, &c).unwrap_or_else(|e| panic!("polityka {n} ({l:?}): {e}\n{txt}"));
             assert_eq!(p, p2, "polityka {n} ({l:?})\n{txt}");
             assert_eq!(s, s2, "zakres {n} ({l:?})\n{txt}");
         }

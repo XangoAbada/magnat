@@ -21,10 +21,7 @@ use super::*;
 /// tam i tak nikt nie chodzi.
 fn srodek(city: &CityData, building: u32) -> WorldCoord {
     let b = &city.buildings.buildings[building as usize];
-    let z_m = b
-        .entrances
-        .first()
-        .map_or(b.aabb.min.z, |e| e.pos.z);
+    let z_m = b.entrances.first().map_or(b.aabb.min.z, |e| e.pos.z);
     WorldCoord::new(
         ((b.aabb.min.x + b.aabb.max.x) * 50.0) as i32,
         ((b.aabb.min.y + b.aabb.max.y) * 50.0) as i32,

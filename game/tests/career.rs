@@ -6,10 +6,10 @@
 use magnat_game::career::{CareerTier, Holdings};
 use magnat_game::player::StartVariant;
 use magnat_game::scenario::ScenarioOutcome;
+use magnat_game::screens::ending::EndAction;
 use magnat_game::session::Session;
 use magnat_game::shell::{NewGameParams, ScenarioId};
 use magnat_game::world::{population, SessionOpts};
-use magnat_game::screens::ending::EndAction;
 use magnat_game::{GameState, GenWatch, PlayerCommand};
 use magnat_jobs::JobPool;
 use magnat_world::{Difficulty, EconomyProfile, Epoch, Region, WorldGenParams, WorldSize};
@@ -54,7 +54,10 @@ fn dzielnica(s: &Session) -> u16 {
         !d.is_empty(),
         "świat bez ani jednego lokalu handlowego: sklepów {}, zamkniętych {}",
         m.sites().len(),
-        m.sites().into_iter().filter(|x| m.is_shop_closed(*x)).count()
+        m.sites()
+            .into_iter()
+            .filter(|x| m.is_shop_closed(*x))
+            .count()
     );
     d[0].0
 }
@@ -111,7 +114,10 @@ fn siec_piecdziesieciu_sklepow_domyka_scenariusz() {
     // się na `scenario_outcome()` — i to on był jedynym czytelnikiem tej funkcji,
     // więc gracz nie dowiadywał się, że wygrał.
     let mut stan = GameState::Playing(Box::new(s));
-    assert!(stan.settle(), "domknięty scenariusz nie przełączył stanu gry");
+    assert!(
+        stan.settle(),
+        "domknięty scenariusz nie przełączył stanu gry"
+    );
     assert!(
         matches!(
             stan,
@@ -149,18 +155,17 @@ fn smierc_postaci_przelacza_gre_w_sukcesje() {
     let kto = s.player().expect("postać").citizen;
     let dziedzic = magnat_game::legacy::heir_of(&s, kto);
 
-    if let Some(id) = s
-        .app
-        .world
-        .get_mut::<magnat_agents::Identity>(kto.entity())
-    {
+    if let Some(id) = s.app.world.get_mut::<magnat_agents::Identity>(kto.entity()) {
         id.flags &= !magnat_agents::Identity::FLAG_ALIVE;
     }
     s.app
         .world
         .resource_mut::<magnat_agents::Population>()
         .remove_citizen(kto.entity());
-    assert!(s.app.world.despawn(kto.entity()), "encja postaci nie znikła");
+    assert!(
+        s.app.world.despawn(kto.entity()),
+        "encja postaci nie znikła"
+    );
     // Cykl życia gracza sprawdza się raz na dobę, tak samo jak cele scenariusza.
     s.step(1_441, 0);
 
@@ -169,7 +174,10 @@ fn smierc_postaci_przelacza_gre_w_sukcesje() {
     let GameState::Succession { heir, .. } = &stan else {
         panic!("po zgonie gra nie weszła w sukcesję");
     };
-    assert_eq!(*heir, dziedzic, "gra proponuje innego dziedzica niż `heir_of`");
+    assert_eq!(
+        *heir, dziedzic,
+        "gra proponuje innego dziedzica niż `heir_of`"
+    );
 
     match dziedzic {
         Some(h) => {

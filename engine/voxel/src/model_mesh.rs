@@ -154,17 +154,8 @@ pub fn build_model_mesh(model: &VoxModel, lod: u8) -> ModelMesh {
                         if p.at(nx, ny, nz) != 0 {
                             continue;
                         }
-                        let rola = model
-                            .role_of(slot)
-                            .map_or(0, |r| r.as_index() as u8);
-                        push_face(
-                            &mut m,
-                            off,
-                            [x, y, z],
-                            face as u8,
-                            (slot, rola),
-                            pi as u8,
-                        );
+                        let rola = model.role_of(slot).map_or(0, |r| r.as_index() as u8);
+                        push_face(&mut m, off, [x, y, z], face as u8, (slot, rola), pi as u8);
                     }
                 }
             }

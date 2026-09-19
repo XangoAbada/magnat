@@ -23,8 +23,8 @@ use magnat_policy::{
 use super::facts::{GoodFacts, ShopView};
 use crate::kernel::BP;
 use crate::manager_exec::ManagerExecution;
-use crate::shop::{ReorderPolicy, Shop};
 use crate::pricing::PricePolicy;
+use crate::shop::{ReorderPolicy, Shop};
 
 /// Co wyszło z wykonania jednej akcji — licznik doby, nie decyzja.
 pub(crate) enum Wynik {
@@ -134,7 +134,10 @@ pub(crate) fn decyduj(
             zatrzymany = Some(good);
         }
         rzutuj(fakty, skutek, tax);
-        out.push((skutek, dopisz_menedzera(powod, ctx.exec.info_lag_days, odchylenie)));
+        out.push((
+            skutek,
+            dopisz_menedzera(powod, ctx.exec.info_lag_days, odchylenie),
+        ));
     }
     out
 }
@@ -155,10 +158,7 @@ fn reka_menedzera(s: PolicyOutcome, ctx: &RunCtx) -> (PolicyOutcome, i16) {
             bp,
         ),
         PolicyOutcome::Order(g, q) => (
-            PolicyOutcome::Order(
-                g,
-                Qty(ctx.exec.distort(Money(q.get()), ctx.error_bp).get()),
-            ),
+            PolicyOutcome::Order(g, Qty(ctx.exec.distort(Money(q.get()), ctx.error_bp).get())),
             bp,
         ),
         // Alert i pytanie nie mają wartości, w którą można spudłować.

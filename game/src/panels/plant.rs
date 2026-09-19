@@ -49,7 +49,9 @@ fn build(ctx: &PanelCtx<'_>) -> PanelModel {
             )
         })
         .collect();
-    let site = sites.get(ctx.sel.min(sites.len().saturating_sub(1))).copied();
+    let site = sites
+        .get(ctx.sel.min(sites.len().saturating_sub(1)))
+        .copied();
     let (mut bars, mut stops, mut storage) = (Vec::new(), Vec::new(), Vec::new());
     if let (Some(site), Some(m)) = (site, s.market.as_ref()) {
         let chain = m.chain();
@@ -152,7 +154,13 @@ fn render(
         let okno = OKNO_DOB * magnat_core::time::MINUTES_PER_DAY;
         let mut g = GanttView::default();
         g.set(m.bars.clone());
-        g.show(ui, th, teraz.saturating_sub(okno / 2), teraz + okno / 2, th.gap(20));
+        g.show(
+            ui,
+            th,
+            teraz.saturating_sub(okno / 2),
+            teraz + okno / 2,
+            th.gap(20),
+        );
     }
 
     if !m.stops.is_empty() {

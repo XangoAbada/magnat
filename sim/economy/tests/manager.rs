@@ -194,14 +194,27 @@ fn zwloka_reakcji_wydluza_martwa_strefe() {
     let c = krzywa();
     let sprawdz = |skill: u8, po_godzinach: u64| {
         let b = dwa_sklepy(51);
-        let mut f = firmy(&b, &preset("perishables_markdown", PolicyDomain::Pricing), skill);
+        let mut f = firmy(
+            &b,
+            &preset("perishables_markdown", PolicyDomain::Pricing),
+            skill,
+        );
         doba(&b.market, &mut f, Some(&c), Tick(DOBA));
         b.market
-            .run_policies(&mut f, &BTreeMap::new(), Some(&c), Tick(DOBA + po_godzinach * 60))
+            .run_policies(
+                &mut f,
+                &BTreeMap::new(),
+                Some(&c),
+                Tick(DOBA + po_godzinach * 60),
+            )
             .on_cooldown
     };
     // Zakłady są dwa, więc licznik chodzi po dwa.
-    assert_eq!(sprawdz(100, 7), 0, "menedżer doskonały ma wrócić po sześciu");
+    assert_eq!(
+        sprawdz(100, 7),
+        0,
+        "menedżer doskonały ma wrócić po sześciu"
+    );
     assert_eq!(sprawdz(0, 7), 2, "słaby menedżer wrócił za wcześnie");
 }
 
@@ -213,7 +226,8 @@ fn zapytaj_gracza_laduje_w_skrzynce_i_zatrzymuje_polityke() {
     let b = dwa_sklepy(61);
     b.market
         .set_tracking(b.sites[0], magnat_economy::LostSaleTracking::Full);
-    let mut p = magnat_policy::Policy::empty(magnat_core::PolicyId(9), "pytam", PolicyDomain::Stock);
+    let mut p =
+        magnat_policy::Policy::empty(magnat_core::PolicyId(9), "pytam", PolicyDomain::Stock);
     p.cooldown_h = 12;
     p.rules.push(magnat_policy::Rule {
         when: magnat_policy::ConditionExpr::Always,
@@ -236,7 +250,9 @@ fn zapytaj_gracza_laduje_w_skrzynce_i_zatrzymuje_polityke() {
     doba(&b.market, &mut f, Some(&krzywa()), Tick(DOBA));
     let skrzynka = b.market.policy_inbox();
     assert!(
-        skrzynka.iter().any(|a| a.ask && a.msg == 3 && a.site == b.sites[0]),
+        skrzynka
+            .iter()
+            .any(|a| a.ask && a.msg == 3 && a.site == b.sites[0]),
         "{skrzynka:?}"
     );
     // Zakład nieśledzony nie zapycha skrzynki cudzymi pytaniami.
@@ -285,9 +301,10 @@ fn dry_run_zgadza_sie_z_wykonaniem_co_do_grosza() {
 #[test]
 fn dry_run_bez_sladu_nie_udaje_ze_cos_wie() {
     let b = dwa_sklepy(78);
-    let r = b
-        .market
-        .dry_run(b.sites[0], &preset("retail_discount", PolicyDomain::Pricing));
+    let r = b.market.dry_run(
+        b.sites[0],
+        &preset("retail_discount", PolicyDomain::Pricing),
+    );
     assert!(r.is_empty(), "zakład nieśledzony nie ma śladu");
 }
 
@@ -301,7 +318,11 @@ fn slad_trzyma_najwyzej_trzydziesci_dob() {
     }
     let s = b.market.policy_trace(b.sites[0]);
     assert_eq!(s.days().len(), magnat_economy::TRACE_DAYS);
-    assert_eq!(s.days()[0].day, Tick(11 * DOBA), "najstarsza doba nie wypadła");
+    assert_eq!(
+        s.days()[0].day,
+        Tick(11 * DOBA),
+        "najstarsza doba nie wypadła"
+    );
 }
 
 #[test]
@@ -372,7 +393,10 @@ fn powod_niesie_wiek_danych_i_odchylke_menedzera() {
             _ => None,
         })
         .collect();
-    assert!(!polityki.is_empty(), "polityka nie zapisała ani jednego powodu");
+    assert!(
+        !polityki.is_empty(),
+        "polityka nie zapisała ani jednego powodu"
+    );
     assert!(
         polityki.iter().any(|(l, d)| *l > 1 || *d != 0),
         "słaby menedżer nie zostawił po sobie ani wieku danych, ani odchyłki: {polityki:?}"

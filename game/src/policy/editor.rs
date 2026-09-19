@@ -62,11 +62,19 @@ pub enum EditError {
     /// Więcej reguł niż [`MAX_RULES`].
     TooManyRules,
     /// Obie strony porównania muszą mierzyć to samo.
-    UnitMismatch { expected: Unit, got: Unit },
+    UnitMismatch {
+        expected: Unit,
+        got: Unit,
+    },
     /// Brutto do brutto, netto do netto (`K-7`). Konwersja istnieje, ale jawna.
-    PriceBasisMismatch { lhs: PriceBasis, rhs: PriceBasis },
+    PriceBasisMismatch {
+        lhs: PriceBasis,
+        rhs: PriceBasis,
+    },
     /// Akcja, której w tej dziedzinie nikt nie wykona.
-    ActionOutOfDomain { expected: PolicyDomain },
+    ActionOutOfDomain {
+        expected: PolicyDomain,
+    },
 }
 
 impl std::fmt::Display for EditError {

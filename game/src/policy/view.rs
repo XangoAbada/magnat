@@ -325,7 +325,8 @@ fn naglowek(ui: &mut egui::Ui, theme: &Theme, tytul: &str) {
 /// (`K-12`), tylko po stronie edytora.
 #[must_use]
 pub fn note_text(n: &Note, c: &magnat_ui::Catalog, l: magnat_ui::Locale) -> String {
-    let k = |name: &str, args: &[(&str, &str)]| c.fmt_key(l, &format!("ui.policy.diag.{name}"), args);
+    let k =
+        |name: &str, args: &[(&str, &str)]| c.fmt_key(l, &format!("ui.policy.diag.{name}"), args);
     let nr = |i: usize| (i + 1).to_string();
     match n {
         Note::BelowCost { rule } => k("BelowCost", &[("numer", &nr(*rule))]),

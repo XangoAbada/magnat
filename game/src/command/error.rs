@@ -47,13 +47,19 @@ pub enum CommandError {
     NoFirms,
     /// Zakład należy do kogoś innego. Gracz przypina reguły **swoim** zakładom;
     /// cudzą politykę wolno obejrzeć, a nie podmienić.
-    NotYourSite { site: SiteId },
+    NotYourSite {
+        site: SiteId,
+    },
     /// Polityka nie przeszła walidatora. Liczba uwag, nie ich lista: pełną
     /// diagnostykę pokazuje edytor **przed** kliknięciem, a koperta komendy jedzie
     /// do dziennika wejść i ma być mała.
-    PolicyInvalid { notes: u16 },
+    PolicyInvalid {
+        notes: u16,
+    },
     /// Zakład nie ma przypiętej polityki, więc nie ma czego zdejmować.
-    NoPolicy { site: SiteId },
+    NoPolicy {
+        site: SiteId,
+    },
 
     // ── M9e ──────────────────────────────────────────────────────────────────
     /// Gracz nie prowadzi jeszcze żadnej firmy.
@@ -62,35 +68,57 @@ pub enum CommandError {
     AlreadyHasFirm,
     /// Kwota zero albo ujemna. Osobno od ceny, bo „za darmo" i „zero kapitału"
     /// to dwa różne błędy gracza.
-    AmountNotPositive { amount: Money },
+    AmountNotPositive {
+        amount: Money,
+    },
     /// W tej dzielnicy nie ma lokalu, do którego dałoby się wejść.
-    NoSeedInDistrict { district: u16 },
+    NoSeedInDistrict {
+        district: u16,
+    },
     /// Gospodarstwo nie ma tyle pieniędzy.
-    NotEnoughCash { need: Money, have: Money },
+    NotEnoughCash {
+        need: Money,
+        have: Money,
+    },
     /// Zakład nie ma takiego stanowiska albo wszystkie etaty są obsadzone.
-    NoVacancy { site: SiteId, role: u16 },
+    NoVacancy {
+        site: SiteId,
+        role: u16,
+    },
     /// Świat nie ma rynku pracy — scenariusz postawił sam rynek detaliczny.
     NoLabor,
     /// Takiej oferty pracy nie ma albo już wygasła. Numer to bity uchwytu areny —
     /// oferty są poza ECS (`K-16`), więc nie ma tu encji.
-    NoJobOffer { offer: u64 },
+    NoJobOffer {
+        offer: u64,
+    },
     /// Świat nie ma strony publicznej.
     NoCity,
     /// Nie trwa żadna kampania wyborcza.
     NoElection,
     /// Takiego kandydata nie ma na liście.
-    NoCandidate { candidate: u8 },
+    NoCandidate {
+        candidate: u8,
+    },
     /// Takiego rodzaju pozwolenia nie ma w słowniku.
-    UnknownPermit { kind: u8 },
+    UnknownPermit {
+        kind: u8,
+    },
     /// Bank odmówił kredytu.
-    CreditRefused { cause: magnat_core::RejectCredit },
+    CreditRefused {
+        cause: magnat_core::RejectCredit,
+    },
     /// Ten mieszkaniec już gdzieś pracuje i nie da się go postawić nad zakładem
     /// bez zwolnienia go tam, gdzie jest.
-    AlreadyEmployed { citizen: CitizenId },
+    AlreadyEmployed {
+        citizen: CitizenId,
+    },
     /// Postać żyje — sukcesja nie ma po kim nastąpić.
     PlayerAlive,
     /// Ten mieszkaniec nie jest w gospodarstwie zmarłego, więc nie jest dziedzicem.
-    NotAnHeir { citizen: CitizenId },
+    NotAnHeir {
+        citizen: CitizenId,
+    },
 }
 
 impl std::fmt::Display for CommandError {
@@ -134,7 +162,10 @@ impl std::fmt::Display for CommandError {
                 have.get()
             ),
             CommandError::NoVacancy { site, role } => {
-                write!(f, "zakład {site:?} nie ma wolnego etatu na stanowisku {role}")
+                write!(
+                    f,
+                    "zakład {site:?} nie ma wolnego etatu na stanowisku {role}"
+                )
             }
             CommandError::NoLabor => write!(f, "świat nie ma rynku pracy"),
             CommandError::NoJobOffer { offer } => write!(f, "nie ma oferty pracy {offer}"),
@@ -154,7 +185,10 @@ impl std::fmt::Display for CommandError {
             }
             CommandError::PlayerAlive => write!(f, "postać gracza żyje"),
             CommandError::NotAnHeir { citizen } => {
-                write!(f, "mieszkaniec {citizen:?} nie dziedziczy po postaci gracza")
+                write!(
+                    f,
+                    "mieszkaniec {citizen:?} nie dziedziczy po postaci gracza"
+                )
             }
         }
     }
@@ -230,7 +264,10 @@ impl CommandError {
                 l,
                 &klucz,
                 &[
-                    ("brakuje", &magnat_ui::fmt::money(c, l, Money(need.get() - have.get()))),
+                    (
+                        "brakuje",
+                        &magnat_ui::fmt::money(c, l, Money(need.get() - have.get())),
+                    ),
                     ("trzeba", &magnat_ui::fmt::money(c, l, *need)),
                 ],
             ),

@@ -103,8 +103,27 @@ impl std::error::Error for TextError {}
 /// Wszystkie klucze gramatyki. Jedna lista, bo zapis i odczyt muszą używać tej samej —
 /// dwie rozjechałyby się przy pierwszym nowym słowie.
 const KW: &[&str] = &[
-    "policy", "domain", "for", "every", "cooldown", "when", "then", "also", "otherwise", "and",
-    "or", "always", "this_good", "day", "hour", "gross", "net", "in", "to", "at", "note",
+    "policy",
+    "domain",
+    "for",
+    "every",
+    "cooldown",
+    "when",
+    "then",
+    "also",
+    "otherwise",
+    "and",
+    "or",
+    "always",
+    "this_good",
+    "day",
+    "hour",
+    "gross",
+    "net",
+    "in",
+    "to",
+    "at",
+    "note",
     "disabled",
 ];
 
@@ -233,8 +252,10 @@ impl Slownik {
                 s.act.insert(norm(&act_word(c, l, *k)), *k);
             }
             for (i, k) in SEASON.iter().enumerate() {
-                s.season
-                    .insert(norm(&c.fmt_key(l, &format!("ui.policy.season.{k}"), &[])), i as u8);
+                s.season.insert(
+                    norm(&c.fmt_key(l, &format!("ui.policy.season.{k}"), &[])),
+                    i as u8,
+                );
             }
             for (i, k) in DOW.iter().enumerate() {
                 s.dow
@@ -309,13 +330,7 @@ fn kolizje(c: &Catalog) -> Vec<String> {
 
 /// Polityka jako tekst w zadanym języku.
 #[must_use]
-pub fn write(
-    p: &Policy,
-    scope: &PolicyScope,
-    goods: &GoodKeys,
-    c: &Catalog,
-    l: Locale,
-) -> String {
+pub fn write(p: &Policy, scope: &PolicyScope, goods: &GoodKeys, c: &Catalog, l: Locale) -> String {
     let mut out = String::new();
     out.push_str(&format!(
         "{} \"{}\" {} {} {} {} {} {}",
@@ -354,7 +369,11 @@ pub fn write(
         if !d.enabled {
             out.push_str(&format!("  {}\n", kw(c, l, "disabled")));
         }
-        out.push_str(&format!("  {} {}\n", kw(c, l, "when"), warunek(&d, goods, c, l)));
+        out.push_str(&format!(
+            "  {} {}\n",
+            kw(c, l, "when"),
+            warunek(&d, goods, c, l)
+        ));
         for (i, a) in d.actions.iter().enumerate() {
             let slowo = if i == 0 {
                 kw(c, l, "then")
@@ -400,11 +419,7 @@ const fn domena(d: PolicyDomain) -> &'static str {
 /// przy pierwszej nowej metryce, a gracz porównuje jedno z drugim.
 #[must_use]
 pub fn rule_lines(d: &RuleDraft, goods: &GoodKeys, c: &Catalog, l: Locale) -> Vec<String> {
-    let mut out = vec![format!(
-        "{} {}",
-        kw(c, l, "when"),
-        warunek(d, goods, c, l)
-    )];
+    let mut out = vec![format!("{} {}", kw(c, l, "when"), warunek(d, goods, c, l))];
     for (i, a) in d.actions.iter().enumerate() {
         let slowo = if i == 0 {
             kw(c, l, "then")
@@ -626,12 +641,7 @@ fn akcja(a: &ActionDraft, goods: &GoodKeys, c: &Catalog, l: Locale) -> String {
         ActionKind::SetMargin | ActionKind::Markdown => {
             format!("{v} {t} = {}", procent(a.bp))
         }
-        ActionKind::ClampPrice => format!(
-            "{v} {t} {} {} .. {}",
-            kw(c, l, "to"),
-            s(&a.a),
-            s(&a.b)
-        ),
+        ActionKind::ClampPrice => format!("{v} {t} {} {} .. {}", kw(c, l, "to"), s(&a.a), s(&a.b)),
         ActionKind::OrderUpTo => format!("{v} {t} {}", s(&a.a)),
         ActionKind::OrderQty => format!(
             "{v} {t} {} {}",
@@ -669,7 +679,9 @@ fn akcja(a: &ActionDraft, goods: &GoodKeys, c: &Catalog, l: Locale) -> String {
                 l,
                 &format!(
                     "ui.policy.sev.{}",
-                    SEV.iter().find(|(_, s)| *s == a.severity).map_or("Info", |(k, _)| k)
+                    SEV.iter()
+                        .find(|(_, s)| *s == a.severity)
+                        .map_or("Info", |(k, _)| k)
                 ),
                 &[]
             )

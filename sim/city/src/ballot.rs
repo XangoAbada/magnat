@@ -292,7 +292,9 @@ fn wyborcy(world: &World) -> Vec<VoterView> {
             age_years: u32::try_from(id.age_years(doba)).unwrap_or(18),
             status: v.status,
             mood: v.mood,
-            employed: world.get::<Employment>(*e).is_some_and(Employment::is_employed),
+            employed: world
+                .get::<Employment>(*e)
+                .is_some_and(Employment::is_employed),
         });
     }
     out.sort_unstable_by_key(|v| v.citizen);

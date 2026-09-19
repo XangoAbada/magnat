@@ -117,10 +117,13 @@ impl Tutorial {
     /// `Scenario::tutorial`, której do `DI-35` nie miał nikt.
     #[must_use]
     pub fn start(session: &Session) -> Option<Tutorial> {
-        session.scenario().filter(|sc| sc.tutorial).map(|_| Tutorial {
-            krok: 0,
-            porzucony: false,
-        })
+        session
+            .scenario()
+            .filter(|sc| sc.tutorial)
+            .map(|_| Tutorial {
+                krok: 0,
+                porzucony: false,
+            })
     }
 
     /// Krok, na którym gracz stoi. `None` = samouczek skończony albo porzucony.
@@ -204,7 +207,10 @@ mod tests {
             assert!(t.step().is_some());
             t.skip_step();
         }
-        assert!(t.is_done(), "po pominięciu wszystkich kroków samouczek się kończy");
+        assert!(
+            t.is_done(),
+            "po pominięciu wszystkich kroków samouczek się kończy"
+        );
     }
 
     #[test]
@@ -226,10 +232,7 @@ mod tests {
                     let k = format!("ui.tutorial.{}.{czesc}", s.key());
                     let t = c.fmt_key(l, &k, &[]);
                     let slow = t.split_whitespace().count();
-                    assert!(
-                        slow <= 40,
-                        "{k} w {l:?} ma {slow} słów, a limit to 40"
-                    );
+                    assert!(slow <= 40, "{k} w {l:?} ma {slow} słów, a limit to 40");
                     assert!(!t.is_empty(), "{k} w {l:?} jest pusty");
                 }
             }

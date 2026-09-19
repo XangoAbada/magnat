@@ -45,7 +45,7 @@ pub use decide::PolicyOutcome;
 pub use dry::{DryDay, DryRun};
 pub use facts::{GoodFacts, PolicyTrace, TraceDay, MAX_COVER, TRACE_DAYS};
 
-use decide::{decyduj, zastosuj, z_powodu, RunCtx, Wynik};
+use decide::{decyduj, z_powodu, zastosuj, RunCtx, Wynik};
 
 /// Ile wpisów trzyma skrzynka eskalacji. Sześćdziesiąt cztery, bo to jest lista
 /// do przeczytania przez człowieka, a nie dziennik — starszy wpis ustępuje nowszemu.
@@ -196,8 +196,7 @@ impl Market {
             // pierwszej zmianie.
             m.shops[i].observed.delay_days = exec.info_lag_days;
             let lag = i32::try_from(
-                t.get()
-                    .saturating_sub(m.shops[i].observed.refreshed.get())
+                t.get().saturating_sub(m.shops[i].observed.refreshed.get())
                     / magnat_core::time::MINUTES_PER_DAY,
             )
             .unwrap_or(7);
@@ -293,12 +292,7 @@ impl MarketInner {
                 Wynik::Alert => d.alerts += 1,
                 Wynik::Slepa => d.blind += 1,
             }
-            if let PolicyOutcome::Alert {
-                msg,
-                severity,
-                ask,
-            } = *skutek
-            {
+            if let PolicyOutcome::Alert { msg, severity, ask } = *skutek {
                 let (policy, rule) = z_powodu(*powod);
                 self.push_policy_alert(
                     shop,

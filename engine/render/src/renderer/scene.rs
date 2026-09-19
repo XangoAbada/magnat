@@ -57,8 +57,7 @@ impl Renderer {
             atlas.clear_dirty();
         }
         self.sign_geom.build(signs, eye);
-        self.signs
-            .upload(&self.gpu.queue, &self.sign_geom.vertices);
+        self.signs.upload(&self.gpu.queue, &self.sign_geom.vertices);
     }
 
     /// Modele wyposażenia i szyldu — klient potrzebuje ich, żeby zawołać generator wnętrz.

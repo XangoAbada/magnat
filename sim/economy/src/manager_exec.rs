@@ -31,7 +31,7 @@
 //! obok pierwszego rozjechałby się przy pierwszej zmianie — to ta sama zasada, dla
 //! której wykonawca akcji liczy wyrażenia ewaluatorem, a nie własną arytmetyką.
 
-use magnat_core::{rng, Money, Q, StreamId, Tick};
+use magnat_core::{rng, Money, StreamId, Tick, Q};
 use serde::Deserialize;
 use std::path::Path;
 
@@ -73,7 +73,10 @@ pub struct PolicyTuning {
 pub enum PolicyTuningError {
     Io(String),
     Parse(String),
-    Schema { found: u32, want: u32 },
+    Schema {
+        found: u32,
+        want: u32,
+    },
     /// Kraniec „najlepszy" gorszy od krańca „najgorszego". Plik da się sparsować,
     /// a symulacja byłaby taka, w której lepszy menedżer myli się częściej — czyli
     /// dokładnie ten błąd, którego szuka test monotoniczności, tylko znaleziony
@@ -299,7 +302,10 @@ mod tests {
         for s in 1..=100u8 {
             let e = ManagerExecution::from_skill(Q::new(s), &c);
             assert!(e.info_lag_days <= poprzedni.info_lag_days, "skill {s}");
-            assert!(e.reaction_delay_h <= poprzedni.reaction_delay_h, "skill {s}");
+            assert!(
+                e.reaction_delay_h <= poprzedni.reaction_delay_h,
+                "skill {s}"
+            );
             assert!(e.exec_error_bp <= poprzedni.exec_error_bp, "skill {s}");
             assert!(e.skip_chance_bp <= poprzedni.skip_chance_bp, "skill {s}");
             poprzedni = e;

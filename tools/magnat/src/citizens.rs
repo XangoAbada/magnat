@@ -206,7 +206,6 @@ impl Citizens {
         self.nav.current()
     }
 
-
     pub fn toggle_pause(&mut self) {
         self.ui.time.toggle_pause();
     }
@@ -628,7 +627,6 @@ impl Citizens {
         }
         (wybor, akcja_panelu)
     }
-
 }
 
 /// Pas czasu u góry ekranu: data, zegar i prędkość (`ui-design.md` §5).

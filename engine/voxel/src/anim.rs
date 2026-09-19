@@ -662,7 +662,8 @@ mod tests {
     use crate::model::tests_support;
 
     fn biblioteka() -> (ModelLibrary, ClipLibrary) {
-        let modele = ModelLibrary::from_models(vec![tests_support::dwie_czesci()]).expect("katalog");
+        let modele =
+            ModelLibrary::from_models(vec![tests_support::dwie_czesci()]).expect("katalog");
         (modele, ClipLibrary::builtin())
     }
 
@@ -696,7 +697,11 @@ mod tests {
             let id = lib.id_of(k);
             assert_eq!(lib.get(id).expect("klip").kind, k, "brak klipu dla {k:?}");
         }
-        assert!(lib.len() <= MAX_CLIPS, "{} klipów, sufit {MAX_CLIPS}", lib.len());
+        assert!(
+            lib.len() <= MAX_CLIPS,
+            "{} klipów, sufit {MAX_CLIPS}",
+            lib.len()
+        );
     }
 
     /// Faza jest brana modulo 256, a klatkę wybiera shader maską `frames - 1`.
@@ -709,7 +714,11 @@ mod tests {
                 "klip {id:?} ma {} klatek",
                 c.frames
             );
-            assert!((8..=32).contains(&c.frames), "klip {id:?}: {} klatek", c.frames);
+            assert!(
+                (8..=32).contains(&c.frames),
+                "klip {id:?}: {} klatek",
+                c.frames
+            );
         }
     }
 
@@ -725,9 +734,7 @@ mod tests {
             vec![Channel::new(model.parts[0].name, Motion::Hold)],
         );
         let modele = ModelLibrary::from_models(vec![model]).expect("katalog");
-        let lib = ClipLibrary {
-            clips: vec![klip],
-        };
+        let lib = ClipLibrary { clips: vec![klip] };
         let atlas = PoseAtlas::bake(&modele, &lib);
         let p = atlas.pose(ModelId(0), ClipId(0), 0, 0).expect("poza");
         assert_eq!(p.rot, [0, 0, 0, 32767], "obrót nie jest jednostkowy");
@@ -750,9 +757,15 @@ mod tests {
         let rest = crate::model_mesh::rest_offsets(&model);
         let modele = ModelLibrary::from_models(vec![model]).expect("katalog");
         let atlas = PoseAtlas::bake(&modele, &ClipLibrary { clips: vec![klip] });
-        let p = atlas.pose(ModelId(0), ClipId(0), 0, 1).expect("poza dziecka");
+        let p = atlas
+            .pose(ModelId(0), ClipId(0), 0, 1)
+            .expect("poza dziecka");
         // Dziecko dziedziczy obrót rodzica, więc jego quaternion nie jest jednostkowy.
-        assert_ne!(p.rot, [0, 0, 0, 32767], "dziecko nie dostało obrotu rodzica");
+        assert_ne!(
+            p.rot,
+            [0, 0, 0, 32767],
+            "dziecko nie dostało obrotu rodzica"
+        );
         // I przesuwa się: jego pozycja spoczynkowa leży nad pivotem rodzica.
         assert_ne!(rest[1], rest[0], "test zakłada przesunięcie dziecka");
         assert_ne!(p.trans, [0, 0, 0], "dziecko zostało w miejscu");

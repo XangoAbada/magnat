@@ -52,7 +52,10 @@ impl fmt::Display for VoxError {
             VoxError::Truncated(co) => write!(f, "plik urwany przy: {co}"),
             VoxError::NoShapes => write!(f, "plik nie zawiera ani jednego modelu"),
             VoxError::TooBig { dim } => {
-                write!(f, "wymiar {dim} voxeli przekracza 255 — część musi się zmieścić w bajcie")
+                write!(
+                    f,
+                    "wymiar {dim} voxeli przekracza 255 — część musi się zmieścić w bajcie"
+                )
             }
             VoxError::SizeWithoutVoxels => write!(f, "kawałek SIZE bez odpowiadającego XYZI"),
         }
@@ -98,7 +101,9 @@ pub fn read(buf: &[u8]) -> Result<VoxFile, VoxError> {
                 oczekiwane = Some(d);
             }
             b"XYZI" => {
-                let dims = oczekiwane.take().ok_or(VoxError::Truncated("XYZI bez SIZE"))?;
+                let dims = oczekiwane
+                    .take()
+                    .ok_or(VoxError::Truncated("XYZI bez SIZE"))?;
                 let n = u32(buf, start)? as usize;
                 if start + 4 + n * 4 > koniec {
                     return Err(VoxError::Truncated("lista voxeli"));

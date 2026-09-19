@@ -71,10 +71,7 @@ pub fn precheck(view: &CommandView<'_>, cmd: &PlayerCommand) -> Result<(), Comma
         }
         PlayerCommand::DetachPolicy { site } => {
             let firms = moj_zaklad(view, *site)?;
-            if firms
-                .site(*site)
-                .is_some_and(|s| s.delegation.is_some())
-            {
+            if firms.site(*site).is_some_and(|s| s.delegation.is_some()) {
                 Ok(())
             } else {
                 Err(CommandError::NoPolicy { site: *site })
@@ -295,10 +292,14 @@ fn moj_zaklad<'a>(
         .world
         .and_then(magnat_ecs::World::get_resource::<magnat_firms::Firms>)
         .ok_or(CommandError::NoFirms)?;
-    let z = firms.site(site).ok_or(CommandError::SiteNotFound { site })?;
-    let moj = firms
-        .get(z.firm)
-        .is_some_and(|f| f.owners.iter().any(|o| o.owner == magnat_firms::Owner::Player));
+    let z = firms
+        .site(site)
+        .ok_or(CommandError::SiteNotFound { site })?;
+    let moj = firms.get(z.firm).is_some_and(|f| {
+        f.owners
+            .iter()
+            .any(|o| o.owner == magnat_firms::Owner::Player)
+    });
     if moj {
         Ok(firms)
     } else {

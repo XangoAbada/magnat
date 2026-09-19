@@ -284,9 +284,7 @@ impl StopWatch {
             StopCondition::CompetitorOpened { radius_m } => {
                 blisko_nowy(session, h, nowe, radius_m).map(|s| Some(Subject::Site(s)))
             }
-            StopCondition::MachineBreakdown => {
-                awaria(session, h).map(|s| Some(Subject::Site(s)))
-            }
+            StopCondition::MachineBreakdown => awaria(session, h).map(|s| Some(Subject::Site(s))),
             StopCondition::PriceWar => wojna_cenowa(session, h).map(|f| Some(Subject::Firm(f))),
             StopCondition::CityEvent => {
                 let ev = session.app.world.get_resource::<magnat_events::Events>()?;
@@ -378,9 +376,10 @@ fn wojna_cenowa(session: &Session, h: &Holdings) -> Option<magnat_core::FirmId> 
             let Some(f) = firms.site(k.cheapest_site).map(|z| z.firm) else {
                 continue;
             };
-            let wojna = firms.get(f).and_then(|x| x.campaign).is_some_and(|c| {
-                c.kind == magnat_core::ReactionKind::PriceWar
-            });
+            let wojna = firms
+                .get(f)
+                .and_then(|x| x.campaign)
+                .is_some_and(|c| c.kind == magnat_core::ReactionKind::PriceWar);
             if wojna {
                 return Some(magnat_firms::firm_id(f));
             }

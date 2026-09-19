@@ -84,8 +84,8 @@ fn import(vox_path: &Path, out: Option<&Path>, spec_path: Option<&Path>) -> Resu
 
     let bajty = std::fs::read(vox_path).map_err(|e| format!("{}: {e}", vox_path.display()))?;
     let plik = vox::read(&bajty).map_err(|e| format!("{}: {e}", vox_path.display()))?;
-    let tekst = std::fs::read_to_string(&spec_path)
-        .map_err(|e| format!("{}: {e}", spec_path.display()))?;
+    let tekst =
+        std::fs::read_to_string(&spec_path).map_err(|e| format!("{}: {e}", spec_path.display()))?;
     let s = spec::ImportSpec::parse(&tekst).map_err(|e| format!("{}: {e}", spec_path.display()))?;
 
     if s.parts.len() != plik.shapes.len() {

@@ -113,7 +113,12 @@ fn render(
     }
 
     section(ui, th, &ctx.text("ui.city.budget"));
-    row(ui, th, &ctx.text("ui.city.revenue"), &ctx.money(m.revenue_ytd));
+    row(
+        ui,
+        th,
+        &ctx.text("ui.city.revenue"),
+        &ctx.money(m.revenue_ytd),
+    );
     row(ui, th, &ctx.text("ui.city.spend"), &ctx.money(m.spend_ytd));
     row(ui, th, &ctx.text("ui.city.debt"), &ctx.money(m.debt));
     row(

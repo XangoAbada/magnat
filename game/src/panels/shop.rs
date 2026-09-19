@@ -71,14 +71,16 @@ fn build(ctx: &PanelCtx<'_>) -> PanelModel {
             )
         })
         .collect();
-    let snapshot = sites.get(ctx.sel.min(sites.len().saturating_sub(1))).and_then(|site| {
-        let do_ = s.tick();
-        let od = magnat_core::Tick(
-            do_.get()
-                .saturating_sub(TRACE_DAYS as u64 * magnat_core::time::MINUTES_PER_DAY),
-        );
-        m.shop_panel(*site, od, do_).map(Box::new)
-    });
+    let snapshot = sites
+        .get(ctx.sel.min(sites.len().saturating_sub(1)))
+        .and_then(|site| {
+            let do_ = s.tick();
+            let od = magnat_core::Tick(
+                do_.get()
+                    .saturating_sub(TRACE_DAYS as u64 * magnat_core::time::MINUTES_PER_DAY),
+            );
+            m.shop_panel(*site, od, do_).map(Box::new)
+        });
     PanelModel::Shop(Model {
         sites,
         names,
@@ -157,14 +159,20 @@ fn render(
         });
     }
 
-    let Some(w) = snap.shelves.get(view.tab.min(snap.shelves.len().saturating_sub(1))) else {
+    let Some(w) = snap
+        .shelves
+        .get(view.tab.min(snap.shelves.len().saturating_sub(1)))
+    else {
         return akcja;
     };
     let klucz = snap.good_key(w.good).to_string();
 
     section(ui, th, &ctx.text("ui.panel.shop.price"));
     ui.horizontal(|ui| {
-        for (etykieta, znak) in [("ui.panel.shop.price_down", -1i64), ("ui.panel.shop.price_up", 1)] {
+        for (etykieta, znak) in [
+            ("ui.panel.shop.price_down", -1i64),
+            ("ui.panel.shop.price_up", 1),
+        ] {
             let nowa = Money(w.price.get() + w.price.get() * KROK_CENY_BP * znak / 10_000);
             let cmd = PlayerCommand::SetPrice {
                 site,
@@ -281,15 +289,9 @@ fn render(
 }
 
 /// Przycisk komendy: wygaszony z powodem, jeśli `precheck` odmawia.
-fn przycisk(
-    ui: &mut egui::Ui,
-    ctx: &PanelCtx<'_>,
-    key: &str,
-    cmd: &PlayerCommand,
-) -> bool {
+fn przycisk(ui: &mut egui::Ui, ctx: &PanelCtx<'_>, key: &str, cmd: &PlayerCommand) -> bool {
     let blokada = crate::precheck(&ctx.session.view(), cmd)
         .err()
         .map(|e| e.text(ctx.c, ctx.l));
     action(ui, ctx, &ctx.text(key), blokada)
 }
-

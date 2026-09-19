@@ -29,14 +29,7 @@ const RUBBER: u8 = 6;
 /// Slot 7 — światła.
 const EMISSIVE: u8 = 7;
 
-fn pudlo(
-    name: PartName,
-    parent: u8,
-    lods: u8,
-    pivot: [i16; 3],
-    dims: [u8; 3],
-    slot: u8,
-) -> Part {
+fn pudlo(name: PartName, parent: u8, lods: u8, pivot: [i16; 3], dims: [u8; 3], slot: u8) -> Part {
     let n = dims[0] as usize * dims[1] as usize * dims[2] as usize;
     Part {
         name,
@@ -68,7 +61,14 @@ pub fn citizen() -> VoxModel {
     // Układ pionowy w voxelach: golenie 0–2, uda 2–4, tors 4–6, głowa 6–7.
     let parts = vec![
         // 0: tors — korzeń, metr nad gruntem.
-        pudlo(PartName::TORSO, Part::NO_PARENT, 0b011, [-2, -4, 16], [1, 2, 2], OUTFIT),
+        pudlo(
+            PartName::TORSO,
+            Part::NO_PARENT,
+            0b011,
+            [-2, -4, 16],
+            [1, 2, 2],
+            OUTFIT,
+        ),
         // 1: głowa.
         pudlo(PartName::HEAD, 0, 0b011, [0, 0, 8], [1, 2, 1], SKIN),
         // 2–3: lewe ramię i przedramię (L0).
@@ -94,9 +94,18 @@ pub fn citizen() -> VoxModel {
         bbox: [1, 4, 7],
         parts,
         slots: vec![
-            PaletteSlot { slot: SKIN, role: SlotRole::Skin },
-            PaletteSlot { slot: OUTFIT, role: SlotRole::OutfitMain },
-            PaletteSlot { slot: TRIM, role: SlotRole::OutfitTrim },
+            PaletteSlot {
+                slot: SKIN,
+                role: SlotRole::Skin,
+            },
+            PaletteSlot {
+                slot: OUTFIT,
+                role: SlotRole::OutfitMain,
+            },
+            PaletteSlot {
+                slot: TRIM,
+                role: SlotRole::OutfitTrim,
+            },
         ],
     }
 }
@@ -107,14 +116,28 @@ pub fn citizen() -> VoxModel {
 #[must_use]
 pub fn car() -> VoxModel {
     let parts = vec![
-        pudlo(PartName::BODY, Part::NO_PARENT, 0b011, [-32, -14, 4], [16, 7, 3], PAINT),
+        pudlo(
+            PartName::BODY,
+            Part::NO_PARENT,
+            0b011,
+            [-32, -14, 4],
+            [16, 7, 3],
+            PAINT,
+        ),
         pudlo(PartName::CAB, 0, 0b001, [16, 4, 12], [8, 5, 2], GLASS),
         // Koła **w obrysie** nadwozia, nie poza nim: auto ma mieć 1,75 m szerokości
         // razem z nimi, a nie 2,25 m.
         pudlo(PartName::WHEEL_FL, 0, 0b011, [8, 0, -4], [2, 1, 2], RUBBER),
         pudlo(PartName::WHEEL_FR, 0, 0b011, [8, 24, -4], [2, 1, 2], RUBBER),
         pudlo(PartName::WHEEL_RL, 0, 0b011, [44, 0, -4], [2, 1, 2], RUBBER),
-        pudlo(PartName::WHEEL_RR, 0, 0b011, [44, 24, -4], [2, 1, 2], RUBBER),
+        pudlo(
+            PartName::WHEEL_RR,
+            0,
+            0b011,
+            [44, 24, -4],
+            [2, 1, 2],
+            RUBBER,
+        ),
         pudlo(PartName::LAMPS, 0, 0b001, [60, 4, 4], [1, 5, 1], EMISSIVE),
     ];
     VoxModel {
@@ -124,10 +147,22 @@ pub fn car() -> VoxModel {
         bbox: [16, 7, 6],
         parts,
         slots: vec![
-            PaletteSlot { slot: PAINT, role: SlotRole::Paint },
-            PaletteSlot { slot: GLASS, role: SlotRole::Glass },
-            PaletteSlot { slot: RUBBER, role: SlotRole::Rubber },
-            PaletteSlot { slot: EMISSIVE, role: SlotRole::Emissive },
+            PaletteSlot {
+                slot: PAINT,
+                role: SlotRole::Paint,
+            },
+            PaletteSlot {
+                slot: GLASS,
+                role: SlotRole::Glass,
+            },
+            PaletteSlot {
+                slot: RUBBER,
+                role: SlotRole::Rubber,
+            },
+            PaletteSlot {
+                slot: EMISSIVE,
+                role: SlotRole::Emissive,
+            },
         ],
     }
 }
@@ -136,7 +171,6 @@ pub fn car() -> VoxModel {
 const SIGN: u8 = 8;
 /// Slot 9 — korpus mebla albo maszyny.
 const BODY_SLOT: u8 = 9;
-
 
 /// Prop jednobryłowy: regał, skrzynia, biurko, maszyna (M11c §5.7, WP5).
 ///
@@ -156,7 +190,14 @@ fn prop(key: &str, dims: [u8; 3], slot: u8, rola: SlotRole) -> VoxModel {
         kind: ModelKind::Prop,
         flags: ModelFlags::default(),
         bbox: dims,
-        parts: vec![pudlo(PartName::BODY, Part::NO_PARENT, 0b111, pivot, dims, slot)],
+        parts: vec![pudlo(
+            PartName::BODY,
+            Part::NO_PARENT,
+            0b111,
+            pivot,
+            dims,
+            slot,
+        )],
         slots: vec![PaletteSlot { slot, role: rola }],
     }
 }
@@ -185,7 +226,10 @@ pub fn sign() -> VoxModel {
             [1, 10, 3],
             SIGN,
         )],
-        slots: vec![PaletteSlot { slot: SIGN, role: SlotRole::Sign }],
+        slots: vec![PaletteSlot {
+            slot: SIGN,
+            role: SlotRole::Sign,
+        }],
     }
 }
 

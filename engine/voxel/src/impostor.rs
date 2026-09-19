@@ -129,9 +129,9 @@ impl ImpostorAtlas {
             // Klip 16-klatkowy na 4 kafle znaczy przesunięcie o 2 bity. Liczba klatek
             // klipu i liczba kafli są potęgami dwójki (pilnuje tego test biblioteki),
             // więc iloraz też nią jest i mieści się w przesunięciu.
-            let frame_shift = klip
-                .map_or(0, |(_, k)| (u32::from(k.frames) / u32::from(frames)).trailing_zeros())
-                as u8;
+            let frame_shift = klip.map_or(0, |(_, k)| {
+                (u32::from(k.frames) / u32::from(frames)).trailing_zeros()
+            }) as u8;
             let entry = ImpostorEntry {
                 base_layer: (atlas.pixels.len() / (TILE_W as usize * TILE_H as usize * CHANNELS))
                     as u32,
@@ -142,8 +142,7 @@ impl ImpostorAtlas {
             };
             for d in 0..dirs {
                 for f in 0..frames {
-                    let azymut =
-                        f32::from(d) / f32::from(dirs) * std::f32::consts::TAU;
+                    let azymut = f32::from(d) / f32::from(dirs) * std::f32::consts::TAU;
                     let poza = klip.map(|(cid, k): (crate::ClipId, &AnimationClip)| {
                         // Cztery fazy rozłożone równo po klipie — nie cztery pierwsze
                         // klatki, bo te różnią się od siebie o kilka stopni.
@@ -243,12 +242,7 @@ impl ImpostorAtlas {
             ];
             atrybuty[i % 3] = (v.role, normalna);
             if i % 3 == 2 {
-                rasteryzuj(
-                    &mut self.pixels[start..],
-                    &mut depth,
-                    &trojkat,
-                    atrybuty[0],
-                );
+                rasteryzuj(&mut self.pixels[start..], &mut depth, &trojkat, atrybuty[0]);
             }
         }
     }
@@ -270,10 +264,7 @@ fn bryla(mesh: &ModelMesh) -> ([f32; 2], f32) {
     // Zapas 25 % na wychylenie kończyn w pozie — bryła liczy się w spoczynku.
     let szerokosc = (dx * dx + dy * dy).sqrt().max(0.25) * 1.25;
     let wysokosc = (dz * 1.05).max(0.25);
-    (
-        [szerokosc, wysokosc],
-        f32::from(min[2]) * QV_M,
-    )
+    ([szerokosc, wysokosc], f32::from(min[2]) * QV_M)
 }
 
 fn zastosuj_poze(t: &PoseTexel, p: [f32; 3]) -> [f32; 3] {
@@ -334,13 +325,32 @@ fn obroc(q: [f32; 4], v: [f32; 3]) -> [f32; 3] {
 /// voxelowej kwadrat ściany ma jedno i drugie stałe. Stąd brak interpolacji czegokolwiek
 /// poza głębią i stąd cała funkcja mieści się w kilkunastu liniach.
 fn rasteryzuj(px: &mut [u8], depth: &mut [f32], v: &[[f32; 3]; 3], (role, face): (u8, u8)) {
-    let min_x = v.iter().map(|p| p[0]).fold(f32::INFINITY, f32::min).floor().max(0.0) as i32;
-    let max_x = (v.iter().map(|p| p[0]).fold(f32::NEG_INFINITY, f32::max).ceil())
-        .min(TILE_W as f32) as i32;
-    let min_y = v.iter().map(|p| p[1]).fold(f32::INFINITY, f32::min).floor().max(0.0) as i32;
-    let max_y = (v.iter().map(|p| p[1]).fold(f32::NEG_INFINITY, f32::max).ceil())
-        .min(TILE_H as f32) as i32;
-    let pole = (v[1][0] - v[0][0]) * (v[2][1] - v[0][1]) - (v[2][0] - v[0][0]) * (v[1][1] - v[0][1]);
+    let min_x = v
+        .iter()
+        .map(|p| p[0])
+        .fold(f32::INFINITY, f32::min)
+        .floor()
+        .max(0.0) as i32;
+    let max_x = (v
+        .iter()
+        .map(|p| p[0])
+        .fold(f32::NEG_INFINITY, f32::max)
+        .ceil())
+    .min(TILE_W as f32) as i32;
+    let min_y = v
+        .iter()
+        .map(|p| p[1])
+        .fold(f32::INFINITY, f32::min)
+        .floor()
+        .max(0.0) as i32;
+    let max_y = (v
+        .iter()
+        .map(|p| p[1])
+        .fold(f32::NEG_INFINITY, f32::max)
+        .ceil())
+    .min(TILE_H as f32) as i32;
+    let pole =
+        (v[1][0] - v[0][0]) * (v[2][1] - v[0][1]) - (v[2][0] - v[0][0]) * (v[1][1] - v[0][1]);
     if pole.abs() < 1.0e-6 {
         return;
     }
@@ -464,12 +474,19 @@ mod tests {
                 let t = atlas.texel(e.base_layer, x, y);
                 if t[3] != 0 {
                     role.insert(t[0]);
-                    assert!(t[1] >= 1 && t[1] <= 6, "numer ściany {} poza zakresem", t[1]);
+                    assert!(
+                        t[1] >= 1 && t[1] <= 6,
+                        "numer ściany {} poza zakresem",
+                        t[1]
+                    );
                 }
             }
         }
         assert!(role.len() >= 2, "sylwetka ma jedną rolę: {role:?}");
-        assert!(!role.contains(&0), "rola zero w miejscu, gdzie jest sylwetka");
+        assert!(
+            !role.contains(&0),
+            "rola zero w miejscu, gdzie jest sylwetka"
+        );
     }
 
     /// Cztery fazy chodu mają się **różnić** — inaczej tłum w oddali stoi w miejscu,

@@ -190,8 +190,12 @@ impl Chronicle {
         let Some(ev) = session.app.world.get_resource::<magnat_events::Events>() else {
             return;
         };
-        let wpisy: Vec<magnat_events::ChronicleEntry> =
-            ev.chronicle().iter().skip(self.seen_events).copied().collect();
+        let wpisy: Vec<magnat_events::ChronicleEntry> = ev
+            .chronicle()
+            .iter()
+            .skip(self.seen_events)
+            .copied()
+            .collect();
         self.seen_events += wpisy.len();
         for w in wpisy {
             let id = self.nowy_id();
@@ -288,9 +292,7 @@ impl Chronicle {
         let rok = 360 * magnat_core::time::MINUTES_PER_DAY;
         let granica = now.0.saturating_sub(LATA_DO_DECYMACJI * rok);
         self.entries.retain(|e| {
-            e.scope == ChronicleScope::Player
-                || e.importance >= PROG_DECYMACJI
-                || e.at.0 >= granica
+            e.scope == ChronicleScope::Player || e.importance >= PROG_DECYMACJI || e.at.0 >= granica
         });
     }
 
@@ -379,8 +381,6 @@ pub fn text(
                 |k| c.fmt_key(l, &k, &[]),
             ),
         ChroniclePayload::Reason(r) => magnat_ui::describe(c, l, r),
-        ChroniclePayload::Action { key } => {
-            c.fmt_key(l, &format!("ui.chronicle.act.{key}"), &[])
-        }
+        ChroniclePayload::Action { key } => c.fmt_key(l, &format!("ui.chronicle.act.{key}"), &[]),
     }
 }

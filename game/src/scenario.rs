@@ -48,7 +48,10 @@ pub enum Goal {
     /// Ile zakładów prowadzi gracz.
     SiteCount { min: u32 },
     /// Ilu ludzi zatrudnia; `rank` = miejsce wśród pracodawców miasta (1 = pierwszy).
-    Employment { min_headcount: u32, rank: Option<u8> },
+    Employment {
+        min_headcount: u32,
+        rank: Option<u8>,
+    },
     /// Zakład wypłacalny nieprzerwanie przez `for_days` dób.
     SiteSolvent { ordinal: u32, for_days: u32 },
     /// Majątek: gotówka gospodarstwa plus kapitał własny zakładów.
@@ -219,7 +222,9 @@ pub struct ScenarioCatalog {
 pub enum ScenarioError {
     Io(std::io::Error),
     Ron(String),
-    Schema { found: u32 },
+    Schema {
+        found: u32,
+    },
     /// Dwa scenariusze o tym samym kluczu — klucz jest kontraktem zapisu.
     DuplicateKey(String),
 }
@@ -417,7 +422,10 @@ pub fn apply_patches(session: &mut Session, patches: &[WorldPatch]) {
                 };
                 let (Some(konto), Some(books)) = (
                     m.shop_account(site),
-                    session.app.world.get_resource_mut::<magnat_economy::Books>(),
+                    session
+                        .app
+                        .world
+                        .get_resource_mut::<magnat_economy::Books>(),
                 ) else {
                     continue;
                 };
@@ -512,7 +520,11 @@ mod tests {
     #[test]
     fn katalog_wczytuje_sie_i_ma_szesc_pozycji() {
         let k = ScenarioCatalog::load().expect("katalog scenariuszy");
-        assert_eq!(k.scenarios.len(), 6, "pięć scenariuszy z §13.3 plus tryb otwarty");
+        assert_eq!(
+            k.scenarios.len(),
+            6,
+            "pięć scenariuszy z §13.3 plus tryb otwarty"
+        );
         assert!(k.get("sandbox").is_some(), "tryb otwarty musi być pierwszy");
         assert_eq!(
             k.by_id(crate::ScenarioId::SANDBOX).map(|s| s.key.as_str()),
@@ -536,8 +548,16 @@ mod tests {
     fn kazdy_cel_ma_klucz_tekstu_a_nie_napis() {
         let k = ScenarioCatalog::load().expect("katalog scenariuszy");
         for s in &k.scenarios {
-            assert!(s.title.starts_with("ui."), "tytuł {} nie jest kluczem", s.key);
-            assert!(s.brief.starts_with("ui."), "opis {} nie jest kluczem", s.key);
+            assert!(
+                s.title.starts_with("ui."),
+                "tytuł {} nie jest kluczem",
+                s.key
+            );
+            assert!(
+                s.brief.starts_with("ui."),
+                "opis {} nie jest kluczem",
+                s.key
+            );
             for o in &s.objectives {
                 assert!(
                     o.title.starts_with("ui."),

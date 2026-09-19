@@ -92,7 +92,11 @@ pub fn run(a: &M9SessionArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
     if let Some(s) = stan.session_mut() {
         komendy_gracza(s, a.price);
     }
-    hashe.extend(przebieg(&mut stan, ticki.saturating_sub(1440), a.hash_every));
+    hashe.extend(przebieg(
+        &mut stan,
+        ticki.saturating_sub(1440),
+        a.hash_every,
+    ));
 
     let Some(session) = stan.session() else {
         eprintln!("sesja przepadła w trakcie przebiegu");

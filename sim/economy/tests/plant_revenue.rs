@@ -66,9 +66,12 @@ struct Mlyn {
 
 /// Konto firmy z kapitałem — ta sama droga, którą `bench` zasila sklepy.
 fn konto(b: &mut Bench, firm: FirmId, kapital: i64) -> magnat_economy::AccountId {
-    let acc = b
-        .books
-        .open_account(AccountOwner::Firm(firm), AccountKind::Current, None, Money::ZERO);
+    let acc = b.books.open_account(
+        AccountOwner::Firm(firm),
+        AccountKind::Current,
+        None,
+        Money::ZERO,
+    );
     b.books
         .transfer(
             b.rest,
@@ -103,7 +106,13 @@ fn mlyn(b: &mut Bench) -> Mlyn {
 }
 
 /// Wysyłka hurtowa z młyna: to, co po dostawie oddaje `sim/supply`.
-fn wysylka(do_zakladu: SiteId, z_zakladu: SiteId, good: GoodId, netto: i64, koszt: i64) -> Settlement {
+fn wysylka(
+    do_zakladu: SiteId,
+    z_zakladu: SiteId,
+    good: GoodId,
+    netto: i64,
+    koszt: i64,
+) -> Settlement {
     Settlement {
         buyer: FirmId(do_zakladu.entity()),
         deliver_to: do_zakladu,
@@ -131,7 +140,8 @@ fn mlyn_ma_utarg_i_marze_po_domknieciu_miesiaca() {
     let m = mlyn(&mut b);
     let piekarnia = SiteId(ent(4_243));
     let acc = konto(&mut b, FirmId(piekarnia.entity()), 50_000_000);
-    b.market.register_plant(piekarnia, FirmId(piekarnia.entity()), acc);
+    b.market
+        .register_plant(piekarnia, FirmId(piekarnia.entity()), acc);
 
     let wysylki = [
         wysylka(piekarnia, m.site, g, 2_000_000, 1_200_000),
@@ -148,7 +158,11 @@ fn mlyn_ma_utarg_i_marze_po_domknieciu_miesiaca() {
         .find(|(s, _, _, _)| *s == m.site)
         .copied()
         .expect("młyn nie dostał wiersza w domknięciu miesiąca");
-    assert_eq!(wpis.2, Money(3_000_000), "utarg nie jest sumą wysyłek netto");
+    assert_eq!(
+        wpis.2,
+        Money(3_000_000),
+        "utarg nie jest sumą wysyłek netto"
+    );
     assert_eq!(
         wpis.3,
         Money(1_900_000),
@@ -189,7 +203,8 @@ fn trwale_stratny_zaklad_produkcyjny_zostaje_zamkniety() {
     let m = mlyn(&mut b);
     let piekarnia = SiteId(ent(4_243));
     let acc = konto(&mut b, FirmId(piekarnia.entity()), 500_000_000);
-    b.market.register_plant(piekarnia, FirmId(piekarnia.entity()), acc);
+    b.market
+        .register_plant(piekarnia, FirmId(piekarnia.entity()), acc);
     let mut firms = m.firms;
     let mut fin = magnat_economy::corpfin::CorpFinance::default();
 
@@ -199,9 +214,9 @@ fn trwale_stratny_zaklad_produkcyjny_zostaje_zamkniety() {
         let wysylki = [wysylka(piekarnia, m.site, g, 1_000_000, 1_500_000)];
         b.market
             .absorb_settlements(&wysylki, &mut b.books, Tick(i * MIESIAC));
-        let (_, wyniki) = b
-            .market
-            .close_month_with(&mut b.books, &mut fin, Tick((i + 1) * MIESIAC));
+        let (_, wyniki) =
+            b.market
+                .close_month_with(&mut b.books, &mut fin, Tick((i + 1) * MIESIAC));
         for (site, miesiac, utarg, koszt) in wyniki {
             firms.post_revenue(site, miesiac, utarg, koszt);
         }

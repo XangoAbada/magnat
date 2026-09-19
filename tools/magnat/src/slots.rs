@@ -81,7 +81,10 @@ impl App {
                 // Kolejność jest istotna: gdyby padł po `opusc_swiat`, poprzednia gra
                 // byłaby już bezpowrotnie porzucona, a wczytana nie miałaby czym
                 // grać — gracz zostałby w menu nad światem bez wejścia.
-                match citizens::Citizens::new(log.header.params.world.seed, self.shell.settings.locale) {
+                match citizens::Citizens::new(
+                    log.header.params.world.seed,
+                    self.shell.settings.locale,
+                ) {
                     Ok(ui) => (session, ui),
                     Err(e) => {
                         eprintln!("slot {id}: interfejs rozgrywki nieudany: {e}");

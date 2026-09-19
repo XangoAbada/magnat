@@ -246,13 +246,8 @@ fn render(
             &ctx.text("ui.kpi.margin"),
             &m.margin_bp
                 .map_or_else(|| ctx.text("ui.value.unknown"), super::widgets::percent_bp),
-            m.margin_bp.map_or(Sev::Normal, |bp| {
-                if bp < 0 {
-                    Sev::Bad
-                } else {
-                    Sev::Good
-                }
-            }),
+            m.margin_bp
+                .map_or(Sev::Normal, |bp| if bp < 0 { Sev::Bad } else { Sev::Good }),
         );
         kpi(
             ui,

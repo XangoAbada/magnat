@@ -157,9 +157,7 @@ fn hazardy(world: &mut World, day: u64, hooks: &mut dyn InheritanceHook, raport:
         //     zwalnia `site`, bo osiemnastolatek z kluczem szkoły w komponencie
         //     wygląda dla rynku pracy na zatrudnionego — i wyglądał tak do końca
         //     życia, skoro nikt tego pola nie kasował.
-        let w_szkole = world
-            .get::<Employment>(e)
-            .is_some_and(Employment::is_pupil);
+        let w_szkole = world.get::<Employment>(e).is_some_and(Employment::is_pupil);
         // Etat wygrywa z wiekiem. Przy dzisiejszych danych (`school_end == work_start`)
         // te dwa stany się nie stykają, ale `labour_force.min` jest niższe od obu,
         // więc pracujący nastolatek jest możliwy — a oznaczony jako uczeń zniknąłby

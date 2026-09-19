@@ -53,22 +53,22 @@ fn build(ctx: &PanelCtx<'_>) -> PanelModel {
             )
         })
         .collect();
-    let wybrany = sites.get(ctx.sel.min(sites.len().saturating_sub(1))).copied();
+    let wybrany = sites
+        .get(ctx.sel.min(sites.len().saturating_sub(1)))
+        .copied();
     let mut crew = Vec::new();
     let mut vacancies = Vec::new();
     let mut autonomy = None;
-    if let (Some(site), Some(firms)) = (
-        wybrany,
-        s.app.world.get_resource::<magnat_firms::Firms>(),
-    ) {
+    if let (Some(site), Some(firms)) = (wybrany, s.app.world.get_resource::<magnat_firms::Firms>())
+    {
         if let Some(z) = firms.site(site) {
             for p in &z.positions {
                 for e in &p.filled {
                     crew.push((e.citizen, p.role, e.wage_month));
                 }
-                let wolne = p.slots.saturating_sub(
-                    u16::try_from(p.filled.len()).unwrap_or(u16::MAX),
-                );
+                let wolne = p
+                    .slots
+                    .saturating_sub(u16::try_from(p.filled.len()).unwrap_or(u16::MAX));
                 if wolne > 0 {
                     vacancies.push((p.role, wolne));
                 }
@@ -219,10 +219,7 @@ fn render(
         }
         Some(teraz) => {
             for a in Autonomy::ALL {
-                let cmd = PlayerCommand::SetDelegationAutonomy {
-                    site,
-                    autonomy: a,
-                };
+                let cmd = PlayerCommand::SetDelegationAutonomy { site, autonomy: a };
                 let etykieta = ctx.text(&format!("ui.autonomy.{}", a.key()));
                 let blokada = if a == teraz {
                     Some(ctx.text("ui.people.autonomy_current"))

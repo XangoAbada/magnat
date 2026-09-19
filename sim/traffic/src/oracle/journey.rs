@@ -308,7 +308,8 @@ impl TrafficOracle {
             }
             budzet -= 1;
             let trasa = self.walk_polyline(w.from, w.to, MinuteOfDay::new(w.depart_min));
-            self.micro.enter(w.citizen, &trasa, w.depart_min, w.arrive_min);
+            self.micro
+                .enter(w.citizen, &trasa, w.depart_min, w.arrive_min);
             w.in_micro = true;
         }
     }

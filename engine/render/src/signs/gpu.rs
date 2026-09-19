@@ -84,8 +84,7 @@ impl SignGeometry {
             let pg = v(wzdluz + gora, [1.0, 0.0]);
             let ld = v(-wzdluz - gora, [0.0, 1.0]);
             let pd = v(wzdluz - gora, [1.0, 1.0]);
-            self.vertices
-                .extend_from_slice(&[lg, ld, pd, lg, pd, pg]);
+            self.vertices.extend_from_slice(&[lg, ld, pd, lg, pd, pg]);
         }
     }
 
@@ -239,12 +238,7 @@ impl SignRenderer {
     /// Wgrywa atlas, jeśli przybyło kafli. Tekstura rośnie **skokowo**, przez odtworzenie:
     /// szyldów przybywa kilka na sesję, więc realokacja jest tańsza niż rezerwacja
     /// czterech megabajtów na zapas.
-    pub fn upload_atlas(
-        &mut self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        atlas: &SignAtlas,
-    ) {
+    pub fn upload_atlas(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, atlas: &SignAtlas) {
         let n = atlas.tiles() as u32;
         if n > self.warstwy {
             let (tex, bind) = utworz(device, &self.layout, &self.sampler, &self.frame_buffer, n);

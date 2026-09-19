@@ -9,7 +9,9 @@
 //! po polsku. To nie jest wygoda: postać tekstowa istnieje **po to**, żeby politykami
 //! dawało się dzielić, a warunek „w moim języku" unieważniałby połowę tego pomysłu.
 
-use magnat_core::{ActionKind, Entity, GoodId, JobRoleId, Money, NeedCategoryId, PriceBasis, RecipeId};
+use magnat_core::{
+    ActionKind, Entity, GoodId, JobRoleId, Money, NeedCategoryId, PriceBasis, RecipeId,
+};
 use magnat_policy::{
     Bp, Cadence, CmpOp, GoodRef, Metric, Policy, PolicyScope, Severity, TagId, Value,
 };
@@ -26,11 +28,7 @@ use super::{norm, GoodKeys, Slownik, TextError};
 /// [`TextError`] — nieznane słowo, brakujący element gramatyki albo zmieszanie
 /// podstaw ceny (`K-7`). Import jest jedyną drogą, którą taka polityka może powstać:
 /// formularz jej nie złoży.
-pub fn parse(
-    txt: &str,
-    goods: &GoodKeys,
-    c: &Catalog,
-) -> Result<(Policy, PolicyScope), TextError> {
+pub fn parse(txt: &str, goods: &GoodKeys, c: &Catalog) -> Result<(Policy, PolicyScope), TextError> {
     let sl = Slownik::new(c);
     let tok = lex(txt);
     let mut p = P {
@@ -88,10 +86,7 @@ fn lex(txt: &str) -> Vec<Tok> {
         let mut s = String::new();
         while i < znaki.len() {
             let ch = znaki[i];
-            if ch.is_whitespace()
-                || ch == '"'
-                || PUNCT.iter().any(|p| pasuje(&znaki, i, p))
-            {
+            if ch.is_whitespace() || ch == '"' || PUNCT.iter().any(|p| pasuje(&znaki, i, p)) {
                 break;
             }
             s.push(ch);
@@ -103,7 +98,9 @@ fn lex(txt: &str) -> Vec<Tok> {
 }
 
 fn pasuje(znaki: &[char], i: usize, wzor: &str) -> bool {
-    wzor.chars().enumerate().all(|(k, c)| znaki.get(i + k) == Some(&c))
+    wzor.chars()
+        .enumerate()
+        .all(|(k, c)| znaki.get(i + k) == Some(&c))
 }
 
 // ── parser ───────────────────────────────────────────────────────────────────────
@@ -205,7 +202,6 @@ impl P<'_> {
             .and_then(|n| n.parse::<u32>().ok())
             .ok_or(TextError::BadNumber { at })
     }
-
 }
 
 // ── produkcje gramatyki ──────────────────────────────────────────────────────────
@@ -465,7 +461,11 @@ impl P<'_> {
             None => (1i64, body),
         };
         let v = match body.split_once('.') {
-            None => body.parse::<i64>().map_err(|_| TextError::BadNumber { at })? * 100,
+            None => {
+                body.parse::<i64>()
+                    .map_err(|_| TextError::BadNumber { at })?
+                    * 100
+            }
             Some((a, b)) => {
                 let a = a.parse::<i64>().map_err(|_| TextError::BadNumber { at })?;
                 let b = format!("{b:0<2}")[..2]
@@ -474,7 +474,9 @@ impl P<'_> {
                 a * 100 + b
             }
         };
-        Ok(Bp(i32::try_from(znak * v).map_err(|_| TextError::BadNumber { at })?))
+        Ok(Bp(
+            i32::try_from(znak * v).map_err(|_| TextError::BadNumber { at })?
+        ))
     }
 
     fn baza(&mut self) -> Result<Base, TextError> {

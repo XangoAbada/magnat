@@ -584,9 +584,7 @@ fn kontakty(
 ) {
     let emp = world.get::<Employment>(e).copied();
     let site = emp.filter(Employment::is_employed).map(|x| x.site);
-    let szkola = emp
-        .filter(|x| x.is_pupil() && x.has_job())
-        .map(|x| x.site);
+    let szkola = emp.filter(|x| x.is_pupil() && x.has_job()).map(|x| x.site);
     let building = world
         .get::<crate::components::Residence>(e)
         .filter(|r| r.has_home())

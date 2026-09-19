@@ -71,14 +71,13 @@ pub fn hire(world: &mut World, site: SiteId, citizen: CitizenId, role: JobRoleId
             .iter_mut()
             .find(|p| p.role == role && p.filled.len() < usize::from(p.slots))
             .is_some_and(|p| {
-                p.filled
-                    .push(Employment::new(
-                        citizen,
-                        role,
-                        stawka,
-                        magnat_core::SimMinute(t.get()),
-                        zmiana,
-                    ));
+                p.filled.push(Employment::new(
+                    citizen,
+                    role,
+                    stawka,
+                    magnat_core::SimMinute(t.get()),
+                    zmiana,
+                ));
                 true
             })
     });

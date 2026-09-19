@@ -35,25 +35,21 @@ pub(super) fn builtin_clips() -> Vec<AnimationClip> {
         vec![swing(PartName::TORSO, 2, 0)],
     ));
     v.push(AnimationClip::new(K::Walk, 16, chod(1.0)));
-    v.push(AnimationClip::new(
-        K::WalkCarry,
-        16,
-        {
-            let mut c = chod(0.9);
-            // Ręce zajęte: przedramiona przed sobą, ramiona prawie bez ruchu.
-            c.retain(|k| {
-                !matches!(
-                    k.part,
-                    PartName::ARM_L | PartName::ARM_R | PartName::FOREARM_L | PartName::FOREARM_R
-                )
-            });
-            c.push(Channel::new(PartName::ARM_L, Motion::Hold).tilt([0, -35, 0]));
-            c.push(Channel::new(PartName::ARM_R, Motion::Hold).tilt([0, -35, 0]));
-            c.push(Channel::new(PartName::FOREARM_L, Motion::Hold).tilt([0, -55, 0]));
-            c.push(Channel::new(PartName::FOREARM_R, Motion::Hold).tilt([0, -55, 0]));
-            c
-        },
-    ));
+    v.push(AnimationClip::new(K::WalkCarry, 16, {
+        let mut c = chod(0.9);
+        // Ręce zajęte: przedramiona przed sobą, ramiona prawie bez ruchu.
+        c.retain(|k| {
+            !matches!(
+                k.part,
+                PartName::ARM_L | PartName::ARM_R | PartName::FOREARM_L | PartName::FOREARM_R
+            )
+        });
+        c.push(Channel::new(PartName::ARM_L, Motion::Hold).tilt([0, -35, 0]));
+        c.push(Channel::new(PartName::ARM_R, Motion::Hold).tilt([0, -35, 0]));
+        c.push(Channel::new(PartName::FOREARM_L, Motion::Hold).tilt([0, -55, 0]));
+        c.push(Channel::new(PartName::FOREARM_R, Motion::Hold).tilt([0, -55, 0]));
+        c
+    }));
     v.push(AnimationClip::new(K::Run, 16, {
         let mut c = chod(1.6);
         c.push(Channel::new(PartName::TORSO, Motion::Hold).tilt([0, -12, 0]));
@@ -67,11 +63,7 @@ pub(super) fn builtin_clips() -> Vec<AnimationClip> {
     ));
     // Wsiadanie i wysiadanie: pochylenie i zgięcie nóg. Klip jest zapętlony, bo rekord
     // nie niesie chwili startu zdarzenia — ponytail: sufit nazwany w dokumentacji modułu.
-    v.push(AnimationClip::new(
-        K::EnterVehicle,
-        8,
-        wsiadanie(),
-    ));
+    v.push(AnimationClip::new(K::EnterVehicle, 8, wsiadanie()));
     v.push(AnimationClip::new(K::ExitVehicle, 8, wsiadanie()));
     v.push(AnimationClip::new(K::Board, 8, wsiadanie()));
     for styl in WorkStyle::ALL {
@@ -111,11 +103,14 @@ pub(super) fn builtin_clips() -> Vec<AnimationClip> {
     v.push(AnimationClip::new(
         K::Unload,
         16,
-        vec![Channel::new(PartName::CARGO, Motion::Swing {
-            axis: OS_Z,
-            amp_deg: 6,
-            phase: 0,
-        })],
+        vec![Channel::new(
+            PartName::CARGO,
+            Motion::Swing {
+                axis: OS_Z,
+                amp_deg: 6,
+                phase: 0,
+            },
+        )],
     ));
     // Maszyn (wózek, dźwig, rampa) nie ma jeszcze w katalogu modeli — klipy czekają
     // gotowe i wypieką się same, gdy model z częścią `mast` albo `cargo` się pojawi.
@@ -127,20 +122,26 @@ pub(super) fn builtin_clips() -> Vec<AnimationClip> {
     v.push(AnimationClip::new(
         K::Crane,
         32,
-        vec![Channel::new(PartName::MAST, Motion::Swing {
-            axis: OS_Z,
-            amp_deg: 40,
-            phase: 0,
-        })],
+        vec![Channel::new(
+            PartName::MAST,
+            Motion::Swing {
+                axis: OS_Z,
+                amp_deg: 40,
+                phase: 0,
+            },
+        )],
     ));
     v.push(AnimationClip::new(
         K::RampLoad,
         16,
-        vec![Channel::new(PartName::CARGO, Motion::Swing {
-            axis: OS_Y,
-            amp_deg: 10,
-            phase: 0,
-        })],
+        vec![Channel::new(
+            PartName::CARGO,
+            Motion::Swing {
+                axis: OS_Y,
+                amp_deg: 10,
+                phase: 0,
+            },
+        )],
     ));
     v
 }
@@ -178,11 +179,14 @@ fn siad() -> Vec<Channel> {
         Channel::new(PartName::SHIN_L, Motion::Hold).tilt([0, 85, 0]),
         Channel::new(PartName::SHIN_R, Motion::Hold).tilt([0, 85, 0]),
         Channel::new(PartName::LEGS, Motion::Hold).tilt([0, -85, 0]),
-        Channel::new(PartName::TORSO, Motion::Swing {
-            axis: OS_Y,
-            amp_deg: 2,
-            phase: 0,
-        })
+        Channel::new(
+            PartName::TORSO,
+            Motion::Swing {
+                axis: OS_Y,
+                amp_deg: 2,
+                phase: 0,
+            },
+        )
         .offset([0, 0, -2]),
         Channel::new(PartName::ARM_L, Motion::Hold).tilt([0, -20, 0]),
         Channel::new(PartName::ARM_R, Motion::Hold).tilt([0, -20, 0]),
@@ -191,11 +195,14 @@ fn siad() -> Vec<Channel> {
 
 fn wsiadanie() -> Vec<Channel> {
     vec![
-        Channel::new(PartName::TORSO, Motion::Swing {
-            axis: OS_Y,
-            amp_deg: 18,
-            phase: 0,
-        }),
+        Channel::new(
+            PartName::TORSO,
+            Motion::Swing {
+                axis: OS_Y,
+                amp_deg: 18,
+                phase: 0,
+            },
+        ),
         swing(PartName::THIGH_L, 40, 0),
         swing(PartName::THIGH_R, 20, 0),
         swing(PartName::LEGS, 25, 0),
@@ -252,4 +259,3 @@ fn praca(styl: WorkStyle) -> Vec<Channel> {
         }
     }
 }
-

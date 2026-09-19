@@ -679,7 +679,10 @@ mod tests {
             ],
         );
         let (foot, _, uzyte) = build_layer(&net, Modality::Foot);
-        assert!(!uzyte[0], "obwodnica nie ma chodnika i nie wchodzi do warstwy");
+        assert!(
+            !uzyte[0],
+            "obwodnica nie ma chodnika i nie wchodzi do warstwy"
+        );
         assert!(
             foot.edges.iter().all(|e| e.class != RoadClass::Highway),
             "warstwa piesza wpuściła drogę szybkiego ruchu"

@@ -485,7 +485,11 @@ mod tests {
         assert_eq!(g.vertices.len(), 24);
         assert!(g.vertices.iter().all(|v| (v.pos[2] - 20.0).abs() < 1e-3));
         // Wyłączone cięcie nie zostawia po sobie geometrii z poprzedniej klatki.
-        g.build(std::slice::from_ref(&niski), &CutPlane::off(), glam::DVec3::ZERO);
+        g.build(
+            std::slice::from_ref(&niski),
+            &CutPlane::off(),
+            glam::DVec3::ZERO,
+        );
         assert!(g.is_empty());
     }
 

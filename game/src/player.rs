@@ -376,10 +376,7 @@ pub fn take_role(
             .get_resource::<magnat_firms::Firms>()
             .and_then(|f| f.site(*site))
             .map(|z| z.firm);
-        if let (Some(key), Some(firms)) = (
-            firma,
-            world.get_resource_mut::<magnat_firms::Firms>(),
-        ) {
+        if let (Some(key), Some(firms)) = (firma, world.get_resource_mut::<magnat_firms::Firms>()) {
             if let Some(f) = firms.get_mut(key) {
                 f.owners.clear();
                 f.owners.push(magnat_firms::OwnerShare {

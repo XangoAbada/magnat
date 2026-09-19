@@ -151,12 +151,7 @@ pub fn percent_bp(bp: i32) -> String {
 /// Pasek wyboru: do pięciu wariantów segmentami, powyżej lista rozwijana.
 ///
 /// Zwraca `true`, gdy wybór się zmienił.
-pub(super) fn picker(
-    ui: &mut egui::Ui,
-    theme: &Theme,
-    items: &[String],
-    sel: &mut usize,
-) -> bool {
+pub(super) fn picker(ui: &mut egui::Ui, theme: &Theme, items: &[String], sel: &mut usize) -> bool {
     picker_id(ui, theme, items, sel, "picker")
 }
 

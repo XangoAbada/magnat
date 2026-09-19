@@ -47,14 +47,9 @@ pub(crate) fn run(s: &mut Session, t: Tick, cmd: &PlayerCommand) -> Result<(), C
         PlayerCommand::SetPrice { .. } => super::apply(&s.view(), cmd),
         PlayerCommand::SetCharacter { citizen } => {
             let wariant = s.variant();
-            let postac = crate::player::take_role(
-                &mut s.app.world,
-                s.market.as_ref(),
-                wariant,
-                *citizen,
-                t,
-            )
-            .ok_or(CommandError::CitizenNotFound { citizen: *citizen })?;
+            let postac =
+                crate::player::take_role(&mut s.app.world, s.market.as_ref(), wariant, *citizen, t)
+                    .ok_or(CommandError::CitizenNotFound { citizen: *citizen })?;
             *s.player_mut() = Some(postac);
             Ok(())
         }
@@ -218,11 +213,7 @@ fn likwiduj(s: &mut Session, t: Tick) {
 fn przejmij(s: &mut Session, citizen: magnat_core::CitizenId, t: Tick) -> Result<(), CommandError> {
     let stary = s.player().map(|p| p.citizen);
     if let Some(c) = stary {
-        if let Some(x) = s
-            .app
-            .world
-            .get_mut::<magnat_agents::Identity>(c.entity())
-        {
+        if let Some(x) = s.app.world.get_mut::<magnat_agents::Identity>(c.entity()) {
             x.flags &= !magnat_agents::Identity::FLAG_PLAYER;
         }
     }
@@ -275,12 +266,7 @@ fn attach_policy(
     Ok(())
 }
 
-fn found_firm(
-    s: &mut Session,
-    district: u16,
-    capital: Money,
-    t: Tick,
-) -> Result<(), CommandError> {
+fn found_firm(s: &mut Session, district: u16, capital: Money, t: Tick) -> Result<(), CommandError> {
     let m = s.market.clone().ok_or(CommandError::NoMarket)?;
     let citizen = s.player().ok_or(CommandError::NoCharacter)?.citizen;
     let kind = firmlife::districts_with_seed(&m)
@@ -297,9 +283,8 @@ fn found_firm(
         capital,
         score: 0,
     };
-    let f = firmlife::found(&mut s.app.world, &m, &zamiar, typ, t).ok_or(
-        CommandError::NoSeedInDistrict { district },
-    )?;
+    let f = firmlife::found(&mut s.app.world, &m, &zamiar, typ, t)
+        .ok_or(CommandError::NoSeedInDistrict { district })?;
     // Kapitał **faktycznie wniesiony** może być mniejszy od żądanego, bo gospodarstwo
     // mogło wydać część oszczędności. Firma wtedy powstaje, tylko chudsza — i to jest
     // poprawny wynik, a nie błąd komendy.

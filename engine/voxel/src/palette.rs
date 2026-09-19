@@ -184,10 +184,9 @@ impl PaletteLibrary {
                     palette: "defaults".into(),
                     role: rola.key().into(),
                 })?;
-            domyslne[rola.as_index()] =
-                *ramp_by_key
-                    .get(klucz.as_str())
-                    .ok_or_else(|| PaletteError::UnknownRamp(klucz.clone()))?;
+            domyslne[rola.as_index()] = *ramp_by_key
+                .get(klucz.as_str())
+                .ok_or_else(|| PaletteError::UnknownRamp(klucz.clone()))?;
         }
 
         let districts = f.districts.clone();
@@ -348,7 +347,10 @@ impl fmt::Display for PaletteError {
                 write!(f, "paleta `{palette}` nie pokrywa roli `{role}`")
             }
             PaletteError::RampOutOfRange { palette, role } => {
-                write!(f, "paleta `{palette}`, rola `{role}`: zestaw poza tablicą barw")
+                write!(
+                    f,
+                    "paleta `{palette}`, rola `{role}`: zestaw poza tablicą barw"
+                )
             }
             PaletteError::DuplicatePalette { district, epoch } => write!(
                 f,
@@ -490,7 +492,11 @@ mod tests {
     fn katalog_produkcyjny_laduje_sie_i_pokrywa_wszystko() {
         let dir = magnat_core::assets::data_path("palettes");
         let lib = PaletteLibrary::load(&dir).expect("data/palettes/palettes.ron");
-        assert_eq!(lib.palette_count(), 9 * 5, "9 rodzajów dzielnic × 5 epok startowych");
+        assert_eq!(
+            lib.palette_count(),
+            9 * 5,
+            "9 rodzajów dzielnic × 5 epok startowych"
+        );
         lib.validate().expect("pokrycie ról");
         // Lakier ma mieć zapas na 64 gospodarstwa (§5.2: 48 modeli × 64 lakiery).
         let id = lib.id_of("suburb", "2020").unwrap();

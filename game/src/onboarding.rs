@@ -200,7 +200,10 @@ mod tests {
         }
         log.commands.push(koperta(0, 10, cena()));
         let m = measure(&log);
-        assert_eq!(m.panels, 2, "liczy się ile rzeczy naraz, a nie ile kliknięć");
+        assert_eq!(
+            m.panels, 2,
+            "liczy się ile rzeczy naraz, a nie ile kliknięć"
+        );
         assert_eq!(m.wall_ms, Some(400));
         assert!(m.within_budget());
     }

@@ -273,12 +273,7 @@ impl Panels {
     }
 
     /// Rysuje sam panel, bez listy — kronika i inne panele pełnoekranowe.
-    pub fn draw_body(
-        &mut self,
-        ui: &mut egui::Ui,
-        ctx: &PanelCtx<'_>,
-        id: PanelId,
-    ) -> PanelAction {
+    pub fn draw_body(&mut self, ui: &mut egui::Ui, ctx: &PanelCtx<'_>, id: PanelId) -> PanelAction {
         let Some(d) = self.reg.get(id) else {
             return PanelAction::None;
         };

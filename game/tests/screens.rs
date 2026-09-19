@@ -299,9 +299,13 @@ fn esc_cofa_o_jeden_ekran_i_nie_zamyka_gry_po_drodze() {
     let esc = |s: &mut Shell| -> Option<ShellAction> {
         s.prepare(&ctx);
         let mut akcja = None;
-        let _ = testing::draw_in(&ctx, testing::key(testing::EKRAN, egui::Key::Escape), |ui| {
-            akcja = s.draw(ui);
-        });
+        let _ = testing::draw_in(
+            &ctx,
+            testing::key(testing::EKRAN, egui::Key::Escape),
+            |ui| {
+                akcja = s.draw(ui);
+            },
+        );
         akcja
     };
 
@@ -380,7 +384,10 @@ fn esc_cofa_o_jeden_ekran_i_nie_zamyka_gry_po_drodze() {
             akcja, akcja_oczek,
             "{ekran:?} (sesja: {sesja}): Esc dał inną akcję"
         );
-        assert_eq!(s.screen, po, "{ekran:?} (sesja: {sesja}): Esc zostawił zły ekran");
+        assert_eq!(
+            s.screen, po,
+            "{ekran:?} (sesja: {sesja}): Esc zostawił zły ekran"
+        );
     }
 }
 
@@ -406,10 +413,7 @@ fn kazdy_ekran_poza_menu_pokazuje_wstecz_i_sciezke() {
             "{ekran:?}: przycisk Wstecz jest tam, gdzie nie powinien, albo go brak"
         );
         if !menu {
-            assert!(
-                razem.contains(" / "),
-                "{ekran:?}: brak ścieżki w nagłówku"
-            );
+            assert!(razem.contains(" / "), "{ekran:?}: brak ścieżki w nagłówku");
         }
     }
 }
@@ -469,7 +473,10 @@ fn tryb_przegladu_wchodzi_z_menu_glownego_i_chowa_wariant_startu() {
     // Powrót do menu kasuje tryb: następna „Nowa gra" ma być zwykłą nową grą.
     klawisz(&mut s, egui::Key::Escape);
     assert!(matches!(s.screen, ShellScreen::MainMenu));
-    assert!(!s.observe, "powrót do menu zostawił włączony tryb przeglądu");
+    assert!(
+        !s.observe,
+        "powrót do menu zostawił włączony tryb przeglądu"
+    );
 }
 
 /// Klik myszą zatwierdza slot **kliknięty**, a nie ten pod kursorem klawiatury.

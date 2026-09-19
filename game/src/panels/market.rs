@@ -72,11 +72,7 @@ fn build(ctx: &PanelCtx<'_>) -> PanelModel {
         .get(ctx.sel.min(goods.len().saturating_sub(1)))
         .map(|(g, _)| *g);
     let (dist, share_bp, mine) = wybrany.map_or((None, None, Vec::new()), |g| {
-        let rozklad = m
-            .balance_sample()
-            .prices
-            .into_iter()
-            .find(|d| d.good == g);
+        let rozklad = m.balance_sample().prices.into_iter().find(|d| d.good == g);
         let moje = ctx
             .holdings
             .sites

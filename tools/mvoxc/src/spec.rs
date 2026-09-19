@@ -173,8 +173,12 @@ mod tests {
 
     #[test]
     fn rodzic_za_dzieckiem_jest_bledem_specyfikacji() {
-        let zly = SPEC.replace(r#"(name: "torso", pivot: (0,0,16), lods: [0,1]),"#, "")
-            .replace(r#"parts: ["#, r#"parts: [(name: "torso", parent: "head", pivot: (0,0,16), lods: [0,1]),"#);
+        let zly = SPEC
+            .replace(r#"(name: "torso", pivot: (0,0,16), lods: [0,1]),"#, "")
+            .replace(
+                r#"parts: ["#,
+                r#"parts: [(name: "torso", parent: "head", pivot: (0,0,16), lods: [0,1]),"#,
+            );
         let s = ImportSpec::parse(&zly).expect("parse");
         assert!(s.parent_index(0).is_err());
     }

@@ -221,7 +221,11 @@ mod tests {
             accessory: 31,
         };
         assert_eq!(Appearance::pack(f).unpack(), f);
-        assert_eq!(Appearance::pack(f).0, u32::MAX, "pola nie pokrywają 32 bitów");
+        assert_eq!(
+            Appearance::pack(f).0,
+            u32::MAX,
+            "pola nie pokrywają 32 bitów"
+        );
         assert_eq!(
             Appearance::pack(AppearanceFields::default()).0,
             0,
@@ -283,7 +287,10 @@ mod tests {
         let przed = Appearance::derive(7, 100, 3, 1, 2, 0).unpack();
         let po = Appearance::derive(7, 100, 19, 1, 2, 0).unpack();
         assert_eq!(po.outfit_class, 19);
-        assert_eq!((przed.body, przed.head, przed.hair), (po.body, po.head, po.hair));
+        assert_eq!(
+            (przed.body, przed.head, przed.hair),
+            (po.body, po.head, po.hair)
+        );
         assert_eq!(przed.palette_seed, po.palette_seed);
     }
 

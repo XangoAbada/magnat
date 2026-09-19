@@ -132,6 +132,9 @@ mod tests {
 
     #[test]
     fn granica_dorslosci_jest_jedna() {
-        assert_eq!(WIEK_DOROSLOSCI, 18, "wiek dziedziczenia zmienił się bez wpisu");
+        assert_eq!(
+            WIEK_DOROSLOSCI, 18,
+            "wiek dziedziczenia zmienił się bez wpisu"
+        );
     }
 }
