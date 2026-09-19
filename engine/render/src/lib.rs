@@ -1,6 +1,7 @@
 //! `magnat-render` — renderer voxelowy (M1, właściciel `engine/render`).
 #![forbid(unsafe_code)]
 
+pub mod budget;
 pub mod camera;
 pub mod clusters;
 pub mod gpu;
@@ -15,6 +16,9 @@ pub mod sky;
 pub mod ui;
 pub mod weather;
 
+pub use budget::{
+    RenderBudget, RenderStats, LOD_SCALE_MAX, LOD_SCALE_MIN, TARGET_30_MS, TARGET_60_MS,
+};
 pub use camera::{CameraMode, CameraState};
 pub use clusters::{CLUSTER_CAPACITY, CLUSTER_COUNT, CLUSTER_X, CLUSTER_Y, CLUSTER_Z};
 pub use gpu::GpuContext;

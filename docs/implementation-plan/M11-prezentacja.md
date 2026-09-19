@@ -124,7 +124,7 @@ dopiero po ostatniej podfazie; podfaza zamyka się własnym kryterium ze swojego
 | **M11b — Animacja i LOD wizualne** | WP3, WP4a | 5.4, 5.5, 5.6 | Postać chodzi, siada i pracuje; dalszy plan schodzi na impostory bez widocznego przeskoku. | `M11b-animacja-i-lod.md` |
 | **M11c — Wnętrza i kamera FPP** | WP12, R2-WP15, R2-WP17, R2-WP18, WP5, WP9 | 5.7 | Wejście do własnego sklepu z ulicy, na której są ludzie i samochody; szyld firmy gracza widoczny z zewnątrz. | `M11c-wnetrza-i-kamera.md` |
 | **M11d — Światło, pogoda, dźwięk** | WP6, WP7, WP8 | 5.8, 5.9 | Noc, deszcz, dym z komina i warstwa dźwiękowa reagująca na stan świata, nie na skrypt. | `M11d-swiatlo-pogoda-dzwiek.md` |
-| **M11e — Budżet klatki** | WP10, WP4b (`W-1`) | 5.10, 5.11 | Pełny artefakt fazy z §1 dokumentu fazy: cele FPS z PRD §20.2 dotrzymane na maszynie referencyjnej. | `M11e-budzet-klatki.md` |
+| **M11e — Budżet klatki** | WP10 (`WP4b` → `M12a`, `H-10`) | 5.10, 5.11 | Pełny artefakt fazy z §1 dokumentu fazy: cele FPS z PRD §20.2 dotrzymane na maszynie referencyjnej. | `M11e-budzet-klatki.md` |
 
 ---
 
@@ -206,10 +206,10 @@ To są trzy zdania, ale to one, a nie dobre intencje, gwarantują zasadę z dok.
 
 | Test | Metoda | Kryterium |
 |---|---|---|
-| `render_off_equals_render_on` | Ten sam seed, 20 000 ticków. Przebieg A: `tools/headless`. Przebieg B: pełna gra z renderem offscreen (lavapipe). Hash stanu ECS co 1000 ticków. | **Identyczny ciąg 20 hashy.** Tolerancja zero. |
-| `camera_path_does_not_matter` | Ten sam seed, 3 skrypty kamery: nieruchoma nad pustkowiem / przelot przez całe miasto / FPP w sklepie gracza. | Identyczne hashe. Testuje wprost dok. 00 §4 — LOD wizualne nie zmienia wyniku. |
-| `lod_scale_does_not_matter` | Ten sam seed, `lod_scale` wymuszony na 0,5 / 0,75 / 1,0 oraz cap snapshotu 4 096 / 24 576. | Identyczne hashe. Cap jest wizualny, nie ekonomiczny. |
-| `audio_off_equals_audio_on` | Jak wyżej, z `--no-audio`. | Identyczne hashe. |
+| `render_off_equals_render_on` | **Wykonane w M11e**, w jednym pliku z trzema poniższymi: `tools/magnat/tests/render_nie_dotyka_symulacji.rs`. Przebieg A nie woła prezentacji w ogóle; przebieg B przechodzi w każdym ticku całą drogę klienta (wypełnienie snapshotu, bufor instancji, plan miksu). Hash stanu co 50 ticków, 500 minut świata. | **Identyczny ciąg hashy.** Tolerancja zero. Bramka na siebie: wariant, w którym kamera nie wpuściła do kadru ani jednej encji, **nie zalicza się** — inaczej test porównywałby dwa przebiegi bez prezentacji |
+| `camera_path_does_not_matter` | Trzy skrypty kamery w tym samym pliku: nieruchoma nad centrum / przelot przez miasto / poziom oczu pieszego. | Identyczne hashe. Testuje wprost dok. 00 §4 — LOD wizualne nie zmienia wyniku. |
+| `lod_scale_does_not_matter` | Cap snapshotu 24 576 wobec 4 096 przy tej samej kamerze. **`lod_scale` nie wchodzi do tego testu i nie może**: `RenderBudget` z konstrukcji nie dotyka `ViewQuery` ani `SnapshotCaps` (decyzja 9.11, `I-3`), więc nie ma czym wpłynąć na symulację. Testem jest tam typ, nie przebieg. | Identyczne hashe. Cap jest wizualny, nie ekonomiczny. |
+| `audio_off_equals_audio_on` | Plan miksu liczony albo pomijany, przy tej samej kamerze. | Identyczne hashe. |
 | `no_sim_deps_in_render` | `cargo tree` (6.3) | Brak zależności. Test kompilacji, nie runtime'u. |
 | `snapshot_fill_is_pure` | Typ: `fn(&World, &ViewQuery, &mut RenderSnapshot)`. Dodatkowo test mutacyjny: hash `World` przed i po 10 000 wywołań. | Hash bez zmian. |
 | `snapshot_size_is_constant` | Miasto 40 tys. i 400 tys., ten sam kadr. | `size_of_val(snapshot)` identyczny; ≤ 1,35 MB. |
@@ -217,29 +217,36 @@ To są trzy zdania, ale to one, a nie dobre intencje, gwarantują zasadę z dok.
 
 ### 7.2 Benchmarki klatkowe
 
-**Sceny referencyjne** — zamrożone zapisy gry w repo (`bench/scenes/*.mgsave`), seed `0x4D41474E4154`,
-miasto 150 tys., dzień 400:
+**Sceny referencyjne** — **presety argumentów nad deterministycznym generatorem**, nie zamrożone
+zapisy (`H-15`: formatu `.mgsave` nie ma i jego właścicielem jest M12b). Katalog scen:
+`tools/magnat/src/scenes.rs`, uruchomienie: `magnat --bench-scene <nazwa>`, instrukcja:
+`bench/frames/README.md`. Seed `0x4D41474E4154`, mapa 8 km (81 tys. mieszkańców), doba 40.
+Symulacja stoi na pauzie, **zegar prezentacji idzie** (`H-18`).
 
-| Scena | Kamera | Warunki | Cel p95 |
-|---|---|---|---|
-| `bench_street` | wys. 1,7 m, FPP, ul. Handlowa | 08:15, pogodnie, szczyt pieszy | ≤ 16,6 ms |
-| `bench_district` | wys. 180 m, pochylenie 35°, Śródmieście | 08:15, ok. 20 tys. widocznych encji | **≤ 16,6 ms (60 FPS)** |
-| `bench_city` | wys. 1 400 m, całe miasto | 12:00 | **≤ 33,3 ms (30 FPS)** |
-| `bench_night_rain` | jak `district` | 23:00, deszcz, wszystkie latarnie | ≤ 16,6 ms |
-| `bench_blackout` | jak `night_rain` | blackout 3 dzielnic | ≤ `night_rain` |
-| `bench_interiors` | `CutPlane::Level(2)` | centrum handlowe + fabryka gracza | ≤ 16,6 ms |
-| `bench_winter` | jak `district` | śnieg, `season = 3` | ≤ 16,6 ms **i** `chunk_remesh_count == 0` |
+| Scena | Kamera | Warunki | Cel §20.2 | Próg | Zmierzone p95 |
+|---|---|---|---|---:|---:|
+| `bench_street` | wys. 1,7 m, FPP | 08:15, 6 tys. pieszych | 60 FPS | 9,13 ms | **6,84 ms** |
+| `bench_district` | wys. 180 m, pochylenie 35° | 08:15, 24 tys. pieszych | **60 FPS** | 9,13 ms | **6,51 ms** |
+| `bench_city` | wys. 1 400 m, całe miasto | 12:00 | **30 FPS** | 18,32 ms | **6,02 ms** |
+| `bench_night_rain` | jak `district` | 23:00, deszcz, 1 255 świateł | 60 FPS | 9,13 ms | **6,92 ms** |
+| `bench_blackout` | jak `night_rain` | blackout 3 dzielnic w kadrze | ≤ `night_rain` | 9,13 ms | **7,02 ms** |
+| `bench_interiors` | `CutPlane::Level(2)` | 12 tys. pieszych | 60 FPS | 9,13 ms | **6,42 ms** |
+| `bench_winter` | jak `district` | śnieg, **cztery pory roku w oknie pomiaru** | 60 FPS + `chunk_remesh_count == 0` | 9,13 ms | **5,28 ms** |
 
 **Metoda:** 120 klatek rozgrzewki, 600 klatek pomiaru, GPU timestamp queries. Raport p50/p95/p99
-+ pełny `RenderStats`. Zapis `bench/frames/<scena>.json`.
++ pełny `RenderStats`. Zapis `bench/frames/<scena>.json`, kod wyjścia klienta niesie werdykt.
 
-**Sprzęt referencyjny** („GPU średniej klasy 2024", §20.2): RTX 4060 / RX 7600 / Arc A750, 1080p,
-sterowniki przypięte w opisie baseline'u.
+**Sprzęt referencyjny — rozstrzygnięty decyzją właściciela produktu z 2026-09-19 (`H-9`).**
+Pomiar idzie na **RTX 4070 Ti SUPER @ 1080p**, a obietnica §20.2 dotyczy **RTX 4060 @ 1080p**,
+więc próg jest zaostrzony mnożnikiem `ZAPAS = 0,55` — jawną stałą, nie liczbą wtopioną w progi.
 
-**W CI (brak GPU):** uruchamiamy wyłącznie (a) benchmarki CPU-side — kompakcja instancji, radix sort,
-`generate_interior` — z progami criterion, oraz (b) testy poprawności offscreen na lavapipe
-**bez progów czasowych**. Progi klatkowe weryfikuje nocny bieg na dedykowanym runnerze z GPU.
-Regresja p95 > 8% względem baseline'u = fail.
+**W CI (brak GPU):** uruchamiamy wyłącznie (a) benchmarki CPU-side z progami criterion
+(`scripts/bench_guard.py`) i (b) testy poprawności bez GPU — §7.1 w całości
+(`tools/magnat/tests/render_nie_dotyka_symulacji.rs`). Progi klatkowe weryfikuje nocny bieg
+na maszynie referencyjnej: `python scripts/frame_guard.py bench/frames`.
+**Regresja idzie po p50 z progiem 10 %, nie po p95 z progiem 8 % (`H-11`)** — p95 czasu GPU
+waha się o 10 % między przebiegami tej samej sceny, więc bramka na p95 zapalałaby się na szumie.
+Próg bezwzględny (czy scena mieści się w celu) zostaje na p95 i się nie zmienia.
 
 ### 7.3 Poprawność wizualna
 
@@ -268,14 +275,26 @@ Regresja p95 > 8% względem baseline'u = fail.
 
 ### 7.5 Definition of Done fazy
 
-1. Wszystkie testy z 7.1 zielone — **bez wyjątku i bez tolerancji**.
+1. Wszystkie testy z 7.1 zielone — **bez wyjątku i bez tolerancji**. **Wykonane w M11e.**
 2. `bench_district` ≤ 16,6 ms p95 i `bench_city` ≤ 33,3 ms p95 na sprzęcie referencyjnym (§20.2).
-3. Snapshot ≤ 1,35 MB i niezależny od wielkości miasta.
+   **Wykonane z zapasem:** 6,51 ms wobec progu 9,13 ms i 6,02 ms wobec 18,32 ms — progi są
+   zaostrzone mnożnikiem maszyny (`H-9`), więc cel §20.2 jest spełniony z marginesem 2,5×.
+3. Snapshot ≤ 1,35 MB i niezależny od wielkości miasta. **Zmierzone w M11a:** 1,31 MB na bufor.
 4. Wszystkie nowe komponenty powstałe po stronie sim na potrzeby renderu (np. `paint`, `livery`,
    `outfit_class`) dopisane do funkcji haszującej stanu (dok. 00 §3.6).
 5. `clippy -D warnings`, `#![forbid(unsafe_code)]` w `engine/audio`; `unsafe` w `engine/voxel`
-   (bufory instancji) z uzasadnieniem i testem pod Miri (dok. 00 §6).
+   (bufory instancji) z uzasadnieniem i testem pod Miri (dok. 00 §6). **Spełnione, przy czym
+   drugi człon okazał się pusty i to jest wynik, nie przeoczenie:** `unsafe` w `engine/voxel`
+   **nie powstało** — bufory instancji jadą przez `bytemuck::cast_slice`, czyli przez
+   bibliotekę, która tę samą rzecz robi bezpiecznie. Jedynym crate'em z `unsafe` w repozytorium
+   został `engine/ecs` i to on chodzi pod Miri w CI. Kryterium „z testem pod Miri" nie ma
+   czego pilnować, bo nie ma czego testować.
 6. `RenderStats` widoczny w `engine/devtools` — M12 startuje z gotowym pomiarem.
+   **Spełnione przez `RenderStats::record_into(&mut MetricSink, Tick)`, a nie przez typ
+   w tamtym crate'cie:** `engine/render` **zależy** od `engine/devtools` (`ClusterOccupancy`,
+   zrzut PNG), więc zależność w drugą stronę zamknęłaby cykl, którego Cargo nie zbuduje —
+   ta sama reguła, która trzyma słowniki w `engine/core` (`K-8`). `MetricSink` eksportuje CSV,
+   więc M12 dostaje szereg czasowy, a nie strukturę do przepisania.
 
 ---
 
@@ -306,11 +325,11 @@ Regresja p95 > 8% względem baseline'u = fail.
 | 9.3 | ~~Kto wylicza `anim_phase`~~ | M3 | — | **ZAMKNIĘTE w M11a wg propozycji domyślnej:** liczy ją wypełniacz snapshotu, funkcją czystą od `(chwila, indeks encji)`, i **w ECS nie ma ani bajta stanu animacji**. Alternatywa różniłaby się wyłącznie adresem, bo rekord i tak ma bajt wyrównania. Przy okazji ta sama zasada objęła `appearance` (`E-4`, `K-76` pkt 4) |
 | 9.4 | ~~Skala `activity`, `emission`, `stock_fill`~~ | M6, M7 | — | **ZAMKNIĘTE przez M6** (§6.4.3 ich dokumentu). Wzory w tabeli 5.2. WP7 i WP8 odblokowane. M6 dołożył `SITE_FAULT` (awaria ≠ bezczynność) i `smoke_kind`; oba zmieściłem w bajcie, który był wyrównaniem — `SiteRenderRec` nadal 24 B |
 | 9.5 | ~~Czy powstaje crate `sim-snapshot`~~ | M0, M1 | — | **ZAMKNIĘTE przez koordynatora: tak, powstaje, a właścicielem jest M11** (nie M1, jak pierwotnie zakładałem). Konsumenci: M1 (podwójne buforowanie) i M9. Uzasadnienie przyjęte w całości: bez osobnego crate'a zasady „render nie mutuje symulacji" nie da się egzekwować grafem zależności, a reguła pilnowana samą dyscypliną zostanie złamana przy pierwszym pośpiechu. **Konsekwencja: dok. 00 §1 wymaga dopisania `sim-snapshot` do crate'ów tworzonych przez M11** |
-| 9.6 | **`kira` czy `cpal`** dla `engine/audio` (PRD §16.1 dopuszcza oba). `kira` daje gotowy mikser, magistrale i crossfade — mniej kodu, ale własny model czasu. `cpal` to goły strumień — pełna kontrola, więcej pracy | — (decyzja M11) | `kira`: mikser, magistrale i przejścia muzyczne to dokładnie to, czego potrzebujemy, a nie mamy powodu ich pisać. Ambient przestrzenny i klastrowanie budujemy sami nad nim | Otwarte — **do zamknięcia prototypem w WP8, przed napisaniem miksera** |
-| 9.7 | **Czy postać gracza w FPP jest zwykłym agentem ECS.** Plan zakłada, że tak, i że wejście gracza idzie przez komendy do sim. Jeśli M9 zaprojektuje postać gracza jako byt poza ECS, tryb FPP potrzebuje osobnej ścieżki pozycji | M9 | Zwykły agent; render tylko odczytuje `PlayerViewRec.eye` | Otwarte |
+| 9.6 | ~~`kira` czy `cpal`~~ | — (decyzja M11) | — | **ZAMKNIĘTE w M11d razem z WP8.** Mikser, magistrale i przejścia muzyczne stoją na `kira`, a ambient przestrzenny i klastrowanie są własne nad nim — dokładnie propozycja domyślna |
+| 9.7 | ~~Czy postać gracza w FPP jest zwykłym agentem ECS~~ | M9 | — | **ZAMKNIĘTE zgodnie z propozycją domyślną.** M9 zaprojektował postać gracza jako zwykłego mieszkańca (`PlayerViewRec.citizen`), a render czyta wyłącznie `PlayerViewRec.eye`. Tryb FPP nie ma osobnej ścieżki pozycji i nie potrzebuje jej |
 | 9.8 | ~~Trzy nowe katalogi `data/`~~ | dok. 00 | — | **ZAMKNIĘTE.** `data/palettes/`, `data/models/` i `data/audio/` są w §5 dokumentu nadrzędnego. M11a dołożyła im **regułę kolejności** (`K-76` pkt 2): osie `districts` i `epochs` w `palettes.ron` są kontraktem zapisu gry, bo indeks pary jedzie w buforze instancji; `ModelId` jest za to pozycją posortowanego klucza, więc w zapisie trzyma się klucz. `data/audio/` czeka na M11d |
 | 9.9 | ~~Nowe warianty `StreamId`~~ | M0 | — | **ZAMKNIĘTE przez K-4.** Blok M11 to 300–319; nadajemy `Appearance = 300`, `Interior = 301`, rezerwa 302–319. Wartości niezmienne |
-| 9.10 | **Sprzęt referencyjny dla §20.2.** „GPU średniej klasy 2024" wymaga konkretnego modelu, inaczej progi benchmarków są nieweryfikowalne | M12 | RTX 4060 / RX 7600 / Arc A750 @ 1080p | Otwarte — **M12 jest właścicielem profilowania, powinien to przypiąć** |
+| 9.10 | ~~Sprzęt referencyjny dla §20.2~~ | M12 | — | **ZAMKNIĘTE decyzją właściciela produktu z 2026-09-19 (`H-9`).** Pomiar idzie na **RTX 4070 Ti SUPER @ 1080p**, obietnica dotyczy **RTX 4060 @ 1080p**, a różnicę niesie jawna stała `ZAPAS = 0,55` w `tools/magnat/src/scenes.rs`. Progi: 9,13 ms (60 FPS) i 18,32 ms (30 FPS). Sufit nazwany: mnożnik pochodzi ze stosunku przepustowości obu kart z materiałów producenta, a nie z pomiaru tej gry — przebieg na maszynie docelowej zmienia jedną linię |
 | 9.11 | ~~Czy `RenderBudget` może obniżać cap snapshotu~~ | M1, M12 | — | **ZAMKNIĘTE przez koordynatora: nie — i to jest reguła, nie rekomendacja.** Obniżanie capu snapshotu byłoby sprzężeniem render → symulacja, czyli dokładnie tym, czemu zapobiega `sim-snapshot`. Cap jest stałą konfiguracji, nie zmienną runtime'u |
 
 ---

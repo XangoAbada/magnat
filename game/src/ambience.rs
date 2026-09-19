@@ -129,6 +129,13 @@ pub struct Ambience {
     force_precip: Option<u8>,
     force_snow: Option<u8>,
     force_blackout: u16,
+    /// Wymuszona pora roku sceny pomiarowej, 0..=3.
+    ///
+    /// Istnieje po to, żeby kryterium `seasons_do_not_remesh` mogło zapalić się
+    /// **na czerwono**: sezon liczy się z `world.tick`, a scena stoi na pauzie, więc
+    /// bez wymuszenia przejście przez cztery pory roku nigdy w oknie pomiaru nie
+    /// zachodzi i licznik remeshingu jest zerem z konstrukcji, a nie z własności kodu.
+    force_season: Option<u8>,
 }
 
 impl Default for Ambience {
@@ -149,6 +156,7 @@ impl Default for Ambience {
             force_precip: None,
             force_snow: None,
             force_blackout: 0,
+            force_season: None,
         }
     }
 }
@@ -242,6 +250,15 @@ impl Ambience {
         self.force_precip = precip;
         self.force_snow = snow;
         self.force_blackout = blackout;
+    }
+
+    /// Wymusza porę roku (0..=3) albo zdejmuje wymuszenie.
+    ///
+    /// Osobno od [`Ambience::force_scene`], bo scena `bench_winter` **przestawia ją
+    /// w trakcie pomiaru**: kryterium WP7 mówi o przejściu przez cztery pory roku,
+    /// a jedno ustawienie na starcie sprawdza jedną porę i nic więcej.
+    pub fn force_season(&mut self, season: Option<u8>) {
+        self.force_season = season;
     }
 
     /// Największa zajętość klastra z poprzedniej klatki — sprzężenie zwrotne
@@ -371,6 +388,9 @@ impl Ambience {
             out.weather.kind = 1;
             out.weather.season = magnat_core::Season::Winter.as_index() as u8;
         }
+        if let Some(s) = self.force_season {
+            out.weather.season = s.min(3);
+        }
         out.district_ambient = self.bed_by_district;
 
         let dzielnic = if self.districts == 0 {
@@ -379,10 +399,63 @@ impl Ambience {
             self.districts
         };
         power_of(world, dzielnic, &mut out.power);
-        for d in 0..usize::from(self.force_blackout).min(MAX_DISTRICTS) {
-            out.power[d].supply_ratio = 0;
+        for d in self.dzielnice_do_zgaszenia(view) {
+            out.power[usize::from(d)].supply_ratio = 0;
         }
         self.step_power(&out.power, view.anim_ms);
+    }
+
+    /// Które dzielnice gasi scena `bench_blackout` — te **widoczne**, a nie pierwsze
+    /// z brzegu.
+    ///
+    /// Do pierwszego pomiaru wymuszenie gasiło dzielnice 0..n po indeksie i scena nie
+    /// mierzyła niczego: kamera stoi nad centrum, a dzielnice o najniższych numerach
+    /// leżały gdzie indziej, więc lista świateł miała tyle samo pozycji z blackoutem
+    /// i bez niego (1 255 w obu przebiegach). Kryterium „`bench_blackout`
+    /// ≤ `bench_night_rain`" porównywało wtedy tę samą scenę ze sobą.
+    ///
+    /// Wybór idzie po **liczbie latarni w zasięgu oka**, bo to ona jest kosztem:
+    /// dzielnica bez ani jednej latarni w kadrze zgaszona nie zmienia ani jednej klatki.
+    fn dzielnice_do_zgaszenia(&self, view: &ViewQuery) -> Vec<u16> {
+        let ile = usize::from(self.force_blackout).min(MAX_DISTRICTS);
+        if ile == 0 {
+            return Vec::new();
+        }
+        let oko = mm_to_m(view.eye);
+        let zasieg2 = (LAMP_LIGHT_RANGE_M * LAMP_LIGHT_RANGE_M) as f32;
+        let mut ile_latarni = [0u32; MAX_DISTRICTS];
+        for l in &self.lamps {
+            if kwadrat_odleglosci(l.pos, oko) <= zasieg2 {
+                if let Some(n) = ile_latarni.get_mut(usize::from(l.district)) {
+                    *n += 1;
+                }
+            }
+        }
+        // Gdy w zasięgu oka nie ma **ani jednej** latarni (kamera wysoko, miasto bez
+        // oświetlenia), wszystkie liczniki są zerami i sortowanie zostawiłoby dzielnice
+        // w kolejności indeksów — czyli dokładnie to zachowanie, które ta funkcja miała
+        // zastąpić, tylko po cichu. Wtedy ranking idzie po **całkowitej** liczbie latarni
+        // w dzielnicy: gasimy te, w których jest co gasić, nawet jeśli akurat ich nie widać.
+        if ile_latarni.iter().all(|n| *n == 0) {
+            for l in &self.lamps {
+                if let Some(n) = ile_latarni.get_mut(usize::from(l.district)) {
+                    *n += 1;
+                }
+            }
+        }
+        let mut wg_liczby: Vec<(u32, u16)> = ile_latarni
+            .iter()
+            .enumerate()
+            .map(|(d, n)| (*n, d as u16))
+            .collect();
+        // Malejąco po liczbie latarni, remis po numerze dzielnicy — wynik ma być
+        // ten sam w każdym przebiegu tej samej sceny, inaczej bramka mierzy losowanie.
+        wg_liczby.sort_unstable_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
+        // Dzielnica bez ani jednej latarni nie ma czego zgasić — wpisanie jej do wyniku
+        // zajęłoby miejsce dzielnicy, która ma.
+        wg_liczby.retain(|(n, _)| *n > 0);
+        wg_liczby.truncate(ile);
+        wg_liczby.into_iter().map(|(_, d)| d).collect()
     }
 
     /// Posuwa rampę wygaszenia o tyle, ile minęło na zegarze prezentacji.

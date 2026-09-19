@@ -198,6 +198,29 @@ pub(crate) struct Args {
     #[arg(long, default_value_t = false)]
     pub(crate) no_audio: bool,
 
+    /// Scena odniesienia budżetu klatki (M11e/WP10, §7.2): `bench_street`,
+    /// `bench_district`, `bench_city`, `bench_night_rain`, `bench_blackout`,
+    /// `bench_interiors`, `bench_winter`.
+    ///
+    /// Scena **nadpisuje** ziarno, dobę, godzinę, kamerę, tłum i pogodę — inaczej dwa
+    /// uruchomienia mierzyłyby dwa różne kadry, a porównanie z linią bazową mówiłoby
+    /// o argumentach, a nie o kodzie. Raport ląduje w `--bench-out`, a kod wyjścia
+    /// mówi, czy scena zmieściła się w progu.
+    #[arg(long)]
+    pub(crate) bench_scene: Option<String>,
+
+    /// Katalog raportów scen odniesienia.
+    #[arg(long, default_value = "bench/frames")]
+    pub(crate) bench_out: std::path::PathBuf,
+
+    /// Klatki rozgrzewki przed pomiarem sceny odniesienia.
+    #[arg(long, default_value_t = crate::scenes::ROZGRZEWKA)]
+    pub(crate) bench_warmup: u32,
+
+    /// Klatki pomiaru sceny odniesienia.
+    #[arg(long, default_value_t = crate::scenes::POMIAR)]
+    pub(crate) bench_frames: u32,
+
     /// Język interfejsu: `pl` albo `en`. Bez tego argumentu bierze się go z profilu
     /// gracza, czyli z tego, co wybrano w ustawieniach ostatnim razem.
     #[arg(long)]
@@ -205,6 +228,48 @@ pub(crate) struct Args {
 }
 
 impl Args {
+    /// Nakłada preset sceny odniesienia na argumenty (§7.2).
+    ///
+    /// Świadomie **bez pytania, czy użytkownik podał coś sam**: scena jest kontraktem
+    /// pomiaru, a nie wartością domyślną. Argument, który zostaje po nakładce
+    /// (`--threads`, `--no-audio`, `--bench-frames`), zmienia przebieg, nie kadr.
+    ///
+    /// # Errors
+    /// Nieznana nazwa sceny.
+    pub(crate) fn nalozy_scene(&mut self) -> Result<(), String> {
+        let Some(nazwa) = self.bench_scene.clone() else {
+            return Ok(());
+        };
+        let s = crate::scenes::scena(&nazwa)
+            .ok_or_else(|| format!("nieznana scena „{nazwa}”; są: {}", crate::scenes::nazwy()))?;
+        self.seed = Some(format!("0x{:X}", crate::scenes::SEED));
+        self.size.get_or_insert_with(|| "8km".to_string());
+        self.day = crate::scenes::DZIEN;
+        self.hour = s.godzina.to_string();
+        self.crowd = s.tlum;
+        self.precip = s.opad;
+        self.snow = s.snieg;
+        self.blackout = s.blackout;
+        self.cut = s.ciecie;
+        // Pomiar rysowania, nie rozgrywki: świat ma stać, żeby dwie klatki różniły się
+        // wyłącznie tym, co robi renderer. Tryb przeglądu, bo ekran wyboru postaci
+        // byłby w środku skryptu jednym naciśnięciem klawisza.
+        //
+        // Kursor scena ustawia sobie sama, **w środku kadru** (`app.rs`), więc pass
+        // bufora identyfikatorów odbywa się w każdej klatce pomiaru i wchodzi do budżetu
+        // — inaczej wynik zależałby od tego, gdzie akurat leży mysz.
+        self.speed = 0;
+        self.observe = true;
+        Ok(())
+    }
+
+    /// Scena odniesienia tego przebiegu. Nazwę zwalidowała już [`Args::nalozy_scene`],
+    /// więc drugi odczyt nie może dać innego wyniku.
+    #[must_use]
+    pub(crate) fn scena(&self) -> Option<&'static crate::scenes::Scena> {
+        self.bench_scene.as_deref().and_then(crate::scenes::scena)
+    }
+
     /// Parametry świata z wiersza poleceń albo `None`, jeśli żadnego nie podano.
     ///
     /// `None` znaczy „idź do menu głównego". Wystarczy **jeden** parametr, żeby ominąć

@@ -22,6 +22,7 @@ mod interiors;
 mod overlay;
 mod preview;
 mod report;
+mod scenes;
 mod session;
 mod signs;
 mod slots;
@@ -43,7 +44,11 @@ use winit::event_loop::{ControlFlow, EventLoop};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();
-    let args = Args::parse();
+    let mut args = Args::parse();
+    // Preset sceny odniesienia **przed** czymkolwiek innym: ustawia ziarno i rozmiar
+    // świata, a te decydują o tym, co generator w ogóle zbuduje.
+    args.nalozy_scene()?;
+    let args = args;
     let pool = magnat_jobs::JobPool::new(args.threads);
     let materials = Arc::new(MaterialRegistry::load_dir(&magnat_world::data_path(
         "materials",
@@ -269,6 +274,14 @@ fn uruchom_ze_stanem(
         wymus_snieg: args.snow,
         wymus_blackout: args.blackout,
         bench_start: glam::DVec3::ZERO,
+        scena: args
+            .scena()
+            .map(|s| scenes::Przebieg::nowy(s, args.bench_out.clone())),
+        scena_rozgrzewka: args.bench_warmup,
+        scena_klatek: args.bench_frames,
+        scena_ok: true,
+        select_ms: 0.0,
+        budynki_ms: 0.0,
         zrzut: args.screenshot.clone(),
         zrzut_po: args.screenshot_after,
         numer_klatki: 0,
@@ -305,6 +318,11 @@ fn uruchom_ze_stanem(
         dzien_slonca: args.day.min(359),
     };
     event_loop.run_app(&mut app)?;
+    // Scena odniesienia jest bramką, nie raportem: przekroczony próg ma zatrzymać
+    // nocny bieg, a nie zostać w pliku, do którego nikt nie zajrzy (§7.2).
+    if app.scena.is_some() && !app.scena_ok {
+        std::process::exit(1);
+    }
     Ok(())
 }
 

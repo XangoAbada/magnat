@@ -1,0 +1,44 @@
+{
+  "bench_blackout": {
+    "gpu_p50_ms": 4.634,
+    "gpu_p95_ms": 7.023,
+    "threshold_ms": 9.13,
+    "machine": "RTX 4070 Ti SUPER @ 1080p"
+  },
+  "bench_city": {
+    "gpu_p50_ms": 2.766,
+    "gpu_p95_ms": 6.018,
+    "threshold_ms": 18.32,
+    "machine": "RTX 4070 Ti SUPER @ 1080p"
+  },
+  "bench_district": {
+    "gpu_p50_ms": 4.283,
+    "gpu_p95_ms": 6.512,
+    "threshold_ms": 9.13,
+    "machine": "RTX 4070 Ti SUPER @ 1080p"
+  },
+  "bench_interiors": {
+    "gpu_p50_ms": 4.075,
+    "gpu_p95_ms": 6.424,
+    "threshold_ms": 9.13,
+    "machine": "RTX 4070 Ti SUPER @ 1080p"
+  },
+  "bench_night_rain": {
+    "gpu_p50_ms": 4.503,
+    "gpu_p95_ms": 6.92,
+    "threshold_ms": 9.13,
+    "machine": "RTX 4070 Ti SUPER @ 1080p"
+  },
+  "bench_street": {
+    "gpu_p50_ms": 4.77,
+    "gpu_p95_ms": 6.839,
+    "threshold_ms": 9.13,
+    "machine": "RTX 4070 Ti SUPER @ 1080p"
+  },
+  "bench_winter": {
+    "gpu_p50_ms": 1.106,
+    "gpu_p95_ms": 5.28,
+    "threshold_ms": 9.13,
+    "machine": "RTX 4070 Ti SUPER @ 1080p"
+  }
+}

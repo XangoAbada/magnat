@@ -17,6 +17,7 @@ mod offscreen;
 mod passes;
 mod pipelines;
 mod scene;
+mod stats;
 
 use crate::camera::CameraState;
 use crate::clusters::{self, GpuLight};
@@ -26,14 +27,14 @@ use crate::sky::{sky_lut, SkySample, SKY_LUT_SIZE};
 use crate::ui::UiLayer;
 use arena::{Arena, GpuChunk};
 use magnat_voxel::{ChunkCoord, MaterialRegistry};
-use passes::PassTimer;
 use pipelines::{
     create_depth, create_hdr, create_overlay_bind, create_post_bind, create_water_bind,
 };
+use stats::PassTimer;
 use std::collections::BTreeMap;
 
 pub use frame::{frustum_planes, sphere_in_frustum};
-pub use passes::{FrameStats, PASS_NAMES};
+pub use stats::{FrameStats, PASS_NAMES};
 
 /// Nakładka terenowa: pole skalarne na siatce świata plus paleta (M1 §6.1, WP-R6).
 pub struct TerrainOverlay<'a> {
@@ -128,6 +129,9 @@ pub struct Renderer {
     sky: [SkySample; SKY_LUT_SIZE],
     timer: Option<PassTimer>,
     stats: FrameStats,
+    /// Budżet klatki: patrzy na czas GPU i skaluje progi detalu (§5.10, WP10).
+    /// Publiczny, bo cel zależy od trybu kamery, a ten zna klient.
+    pub budget: crate::budget::RenderBudget,
     /// Piesi i bufor ID (M3 §5.11). Osobny moduł, bo to jedyny pass, który rysuje
     /// **encje symulacji**, a nie teren — i jedyny, który czyta z GPU z powrotem.
     pub pick_buffer: pick::PickBuffer,
@@ -276,6 +280,7 @@ impl Renderer {
             sky: sky_lut(),
             timer,
             stats: FrameStats::default(),
+            budget: crate::budget::RenderBudget::default(),
             pick_buffer,
             instances,
             cap,
@@ -582,11 +587,14 @@ impl Renderer {
         // Próg rysowania liczy się z rozmiaru ekranowego encji, więc zależy od FOV
         // i od wysokości kadru — a nie od stałej, która przy orbicie 900 m odcinała
         // wszystko, na co gracz patrzy (`J-3`).
+        // Skala budżetu klatki wchodzi **tu i tylko tu** (§5.10): progi odległości
+        // po stronie GPU, nic po stronie symulacji.
         let bands = crate::instancing::LodBands::for_view(
             self.instances.models(),
             camera.fov_deg,
             self.gpu.config.height.max(1) as f32,
-        );
+        )
+        .scaled(self.budget.lod_scale());
         crate::instancing::build_instances(
             snapshot,
             camera.eye(),

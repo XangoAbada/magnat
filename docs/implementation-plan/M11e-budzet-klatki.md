@@ -8,10 +8,10 @@ zostają w dokumencie fazy — tu jest wyłącznie to, co robisz w tej porcji.
 | | |
 |---|---|
 | **Wejście** | M11b–M11d. |
-| **Pakiety robocze** | WP10, WP4b (przejęte z M11b — `H-1`) |
+| **Pakiety robocze** | WP10. **`WP4b` nie wchodzi** — przeniesiony do `M12a` decyzją właściciela produktu z 2026-09-19, popartą pomiarem (`H-10`) |
 | **Projekt techniczny** | §5.10, §5.11 |
 | **Wynik do pokazania** | Pełny artefakt fazy z §1 dokumentu fazy: cele FPS z PRD §20.2 dotrzymane na maszynie referencyjnej. |
-| **Kryterium zamknięcia** | Kryterium WP10 oraz bramki 1–7 fazy M11 w `00-postep.md`. **Decyzja właściciela produktu**: maszyna referencyjna dla „GPU klasy średniej (2024)” musi być nazwana przed pomiarem. |
+| **Kryterium zamknięcia** | Kryterium WP10 oraz bramki 1–7 fazy M11 w `00-postep.md`. **Decyzja właściciela produktu (zamknięta 2026-09-19)**: maszyną referencyjną jest **RTX 4070 Ti SUPER @ 1080p**, a progi są zaostrzone mnożnikiem 0,55 wobec celu §20.2, bo obietnica dotyczy RTX 4060 (`H-9`). |
 | **Poprzednia / następna** | `M11d-swiatlo-pogoda-dzwiek.md` · — (ostatnia w fazie) |
 
 `RenderBudget`, adaptacyjne LOD i benchmarki klatkowe.
@@ -20,12 +20,20 @@ zostają w dokumencie fazy — tu jest wyłącznie to, co robisz w tej porcji.
 
 ## Pakiety robocze
 
-| WP | Nazwa | Zależy od | Rozmiar |
-|---|---|---|---|
-| WP4b | Impostory dzielnic: atlas runtime, LRU, regeneracja amortyzowana | WP4a (M11b), M1 | M |
-| WP10 | `RenderBudget`, adaptacyjne LOD, benchmarki klatkowe | WP4b, WP5, WP6, WP7 | M |
+| WP | Nazwa | Zależy od | Rozmiar | Stan |
+|---|---|---|---|---|
+| WP10 | `RenderBudget`, adaptacyjne LOD, benchmarki klatkowe | WP5, WP6, WP7 | M | [x] |
+| ~~WP4b~~ | ~~Impostory dzielnic~~ → **`M12a`/WP4** | — | — | przeniesiony (`H-10`) |
 
-### WP4b — Impostory dzielnic
+> **Kolejność z pierwotnego planu była niewykonalna i to jest osobna korekta (`H-13`).**
+> Tabela mówiła „WP10 zależy od WP4b", a kryterium WP4b brzmiało „scena `bench_city`
+> mieści się w budżecie 192 MB" — czyli odwoływało się do sceny, którą stawia dopiero
+> WP10 w §7.2. Dwa pakiety czekały na siebie nawzajem. Rozstrzygnięcie jest takie,
+> jakie w tej sytuacji jedyne ma sens: **najpierw przyrząd, potem optymalizacja**,
+> bo bez pomiaru nie wiadomo, czy optymalizacja ma co optymalizować. Okazało się,
+> że nie ma (`H-10`).
+
+### WP4b — Impostory dzielnic (przeniesiony do `M12a`)
 
 **Opis.** Atlas kafli 128×128 m generowany w runtime z tego, co gracz zbudował: 8 azymutów,
 kafel 128×128 px (RGBA8 + R16 depth), budżet **192 MB VRAM → 244 bloki rezydentne** z LRU,
@@ -38,34 +46,72 @@ techniczny w całości: `M11b-animacja-i-lod.md` §5.6 — pakiet zmienił adres
 i `impostor_regen ≤ 4` w każdej klatce (§7.3 dokumentu fazy), a przy sztucznie obniżonym budżecie
 nie powstaje **ani jedna dziura** — blok bez kafla rysuje się chunkiem LOD 8×.
 
+**Dlaczego nie tutaj.** Pomiar z WP10 odpowiedział na pytanie, którego przed nim nie dało się
+zadać: scena `bench_city` bierze **5,76 ms p95** wobec progu 18,32 ms, a na mapie 16 km
+z 272 tys. mieszkańców — 6,79 ms. Cały koszt rysowania chunków w tej scenie to
+`depth_prepass` 1,64 + `opaque` 1,87 + `shadows` 4,51 ≈ 8 ms, a impostory dzielnic
+zdjęłyby z tego **wycinek pasma 2–4 km**; dominujące kaskady cieni są bliskiego planu
+i nie dotyczą ich wcale. Sam plan zapisał przy tym (`G-10` w `M11b`), że zysk jest
+wydajnościowy, a nie wizualny: chunki M1 sięgają 4 km, dalej rysuje clipmapa, więc
+**bez impostorów nie ma dziury w obrazie**. Pakiet kosztowałby 192 MB VRAM zajętych
+na stałe i ok. 1,2 tys. linii nowego kodu po to, żeby przyspieszyć scenę mającą
+trzykrotny zapas. Warunek powrotu jest zapisany w `M12a` i jest **liczbą, nie wrażeniem**:
+`bench_city` przekraczające 60 % progu na maszynie docelowej albo w trybie 50×.
+
 ### WP10 — `RenderBudget`, adaptacyjne LOD, benchmarki
 
 **Opis.** Pomiar czasu GPU przez timestamp queries, `RenderStats` z podziałem na warstwy,
 adaptacyjna skala progów LOD z histerezą. Harness benchmarków na scenach referencyjnych,
 zapis do `bench/frames/*.json`, porównanie z baseline w CI.
 
-**Kryterium ukończenia.** Cele §20.2 osiągnięte na sprzęcie referencyjnym; regresja p95 > 8%
-zatrzymuje build.
+**Kryterium ukończenia.** Cele §20.2 osiągnięte na sprzęcie referencyjnym; regresja zatrzymuje
+build. **Wykonane** — siedem scen odniesienia, p95 czasu GPU wobec progu zaostrzonego
+mnożnikiem maszyny (`H-9`):
 
-**Dodatkowy pomiar z terminem — pass `pick_id` (zgłoszenie z M4c/WP14).** WP10 mierzy pass bufora ID
-pieszych jako **siódmą pozycję** w `PASS_NAMES`. Dziś tablica ma sześć pozycji, a `pick_id` nie ma
-znaczników czasu — więc jest jedynym passem, którego żaden budżet klatki nie widzi, choć rysuje
-**pełną geometrię wszystkich pieszych drugi raz w każdej klatce** i czyści teksturę ID wielkości
-okna, niezależnie od tego, czy kursor cokolwiek wskazuje. Pozycja kursora jest znana **przed**
-nagraniem passa (`pick.rs`, pole `cursor`), więc wyjście wcześniej przy `None` jest poprawką
-o jednej gałęzi — ale dopóki nie ma pomiaru, nie wiadomo, ile to warte. M4c/WP14 naprawia trzy
-przyczyny tego samego objawu po stronie symulacji i **świadomie zostawia tę tutaj**, bo to
-`engine/render`, nie `sim/traffic`. Zgłoszenie ma wartość wcześnie: pass powstał w M3d razem
-z pickingiem pieszych i od tamtej pory jest w każdej klatce z mieszkańcami na ekranie.
+| Scena | GPU p50 | GPU p95 | Próg | Cel §20.2 |
+|---|---:|---:|---:|---|
+| `bench_street` | 4,77 ms | **6,84 ms** | 9,13 ms | 60 FPS |
+| `bench_district` | 4,28 ms | **6,51 ms** | 9,13 ms | 60 FPS |
+| `bench_city` | 2,77 ms | **6,02 ms** | 18,32 ms | 30 FPS |
+| `bench_night_rain` | 4,50 ms | **6,92 ms** | 9,13 ms | 60 FPS |
+| `bench_blackout` | 4,63 ms | **7,02 ms** | 9,13 ms | ≤ `night_rain` |
+| `bench_interiors` | 4,08 ms | **6,42 ms** | 9,13 ms | 60 FPS |
+| `bench_winter` | 1,11 ms | **5,28 ms** | 9,13 ms | 60 FPS |
 
-**Dodatkowy pomiar z terminem — selekcja kadru (zobowiązanie wobec M2).** WP10 mierzy osobno koszt
-`CsrGrid::query_rect` + odrzucenia po `Building.aabb` w scenach `bench_district` i `bench_city`
-(licznik `snapshot_select_ms` w `RenderStats`). M2 świadomie zostawił `GridSpec` w 2D na podstawie
-mojego argumentu i poprosił o sygnał, gdyby pomiar pokazał inaczej — **z zastrzeżeniem, że zmiana
-`GridSpec` po M4 dotyka czterech crate'ów, więc zgłoszenie ma wartość tylko wcześnie.**
-Próg alarmowy: `snapshot_select_ms > 0,3 ms` w `bench_city`. Po przekroczeniu WP10 **natychmiast**
-zgłasza to M2, nie czeka na koniec fazy. Jeśli próg nie zostanie przekroczony — zamykamy temat
-pisemnie, żeby nikt nie wracał do trzeciego wymiaru bez danych.
+Czas procesora na przygotowanie klatki w rendererze: **0,60 ms p95** wobec budżetu 4,0 ms
+z §5.5. Złożenie danych klatki po stronie klienta (wypełnienie snapshotu, przekrój, szyldy):
+**0,31 ms** w scenie bez tłumu, 3,85 ms w scenie z dwudziestoma czterema tysiącami
+syntetycznych pieszych — ten drugi koszt jest **sceną pomiarową, a nie grą**: tłum powstaje
+od nowa w każdej klatce i w rozgrywce go nie ma.
+
+Bramka: `python scripts/frame_guard.py bench/frames`, linia bazowa w `bench/frames/baseline.json`,
+instrukcja w `bench/frames/README.md`.
+
+**Zamknięty pomiar — pass `pick_id` (zgłoszenie z M4c/WP14).** Pass ma znaczniki czasu jako
+**ósmą** pozycję `PASS_NAMES` (`H-4`) i kosztuje **0,088 ms p95** przy 13,8 tys. encji w kadrze
+(`bench_night_rain`). Przy okazji naprawiona przyczyna, a nie tylko pomiar: pass **nie otwiera
+się bez kursora**. Do M11e rysował pełną geometrię wszystkich encji drugi raz i czyścił teksturę
+identyfikatorów wielkości okna także wtedy, gdy nikt tych bajtów nie czytał — każdy zrzut
+offscreen, każdy przebieg z CI i każda klatka z kursorem poza oknem. Poprawka ma jedną gałąź
+(`PickBuffer::aktywny`), bo pozycja kursora była znana **przed** nagraniem passa; brakowało
+wyłącznie pomiaru, który by powiedział, czy warto.
+
+**Zamknięty pomiar — selekcja kadru (zobowiązanie wobec M2).** Licznik mierzy koszt
+`CsrGrid::query_rect` po indeksie budynków plus odrzucenia i sortowanie po `Building.aabb`.
+Miarodajne są sceny z **aktywnym cięciem poziomami**, bo tylko one tę ścieżkę otwierają:
+`bench_interiors` **0,047 ms** i `bench_street` (widok pierwszoosobowy) **0,045 ms**, wobec
+progu alarmowego 0,3 ms — **sześciokrotny zapas**. **Temat zamykamy pisemnie, tak jak
+obiecywał plan:** `GridSpec` zostaje w 2D, M2 nie dostaje zgłoszenia, a wracać do trzeciego
+wymiaru bez nowego pomiaru nie ma po co.
+
+Pierwsza wersja tego pomiaru **mierzyła co innego, niż deklarowała**, i jest to warte zapisania,
+bo klasa błędu wraca: zegar startował **po** publikacji snapshotu, a `query_rect` woła wyłącznie
+generator wnętrz — który przy wyłączonym cięciu kończy się wczesnym powrotem. W scenach
+orbitalnych licznik mierzył więc dwa wczesne powroty i pokazywał 0,016 ms, czyli liczbę
+mieszczącą się w progu z powodu, który z progiem nie miał nic wspólnego. Znalazła to recenzja
+przed commitem, nie test. Liczniki są od tej chwili **dwa**: `snapshot_select_ms` (całe
+składanie danych klatki po stronie klienta) i `building_query_ms` (sam indeks budynków) —
+bo jedna liczba na dwa pytania odpowiada tylko na jedno i nie mówi, na które.
 
 ---
 
@@ -78,22 +124,45 @@ w tekście („patrz §5.4") nadal wskazują tę samą treść.
 
 ### 5.10 `RenderBudget` i adaptacja
 
+> **Wykonane z jedną korektą kształtu (`H-14`).** `RenderStats` **nie jest osobną
+> strukturą o własnych `gpu_ms`, `draw_calls` i `triangles`, tylko obwódką na
+> `FrameStats`**, którą renderer i tak wypełnia od M11b (`H-2`). Dwie struktury
+> o wspólnych polach rozjeżdżają się przy pierwszej zmianie, więc wspólne pola są
+> jedne, a doklejone jest wyłącznie to, czego renderer z definicji nie widzi:
+> mikser dźwięku, strumieniowanie chunków klienta i koszt selekcji kadru.
+
 ```rust
+// engine/render/src/budget.rs
 pub struct RenderBudget {
     pub target_ms: f32,             // 16,6 lub 33,3 wg trybu kamery
-    pub lod_scale: f32,             // 0,5..1,0 — globalny mnożnik progów odległości
-    history:       [f32; 8],        // timestamp queries GPU
-    cooldown:      u32,
+    lod_scale: f32,                 // 0,5..1,0 — globalny mnożnik progów odległości
+    historia: [f32; 8],             // timestamp queries GPU
+    karencja: u32,
+    z_zapasem: u32,
 }
 pub struct RenderStats {            // eksportowane do devtools i do M12
-    pub gpu_ms: f32, pub cpu_ms: f32,
-    pub draw_calls: u32, pub triangles: u64,
-    pub instances_by_lod: [u32; 4],
-    pub impostor_regen: u8, pub impostor_resident: u16,
-    pub voices_active: u8, pub chunk_remesh_count: u32,
-    pub snapshot_select_ms: f32,    // koszt query_rect + odrzucenia po Aabb3 (zob. WP10)
+    pub frame: FrameStats,          // czasy passów, wywołania, trójkąty, instancje per LOD
+    pub lod_scale: f32,
+    pub voices_active: u8,          // mikser — `engine/audio` nie widzi renderu (§6.3)
+    pub chunk_remesh_count: u32,    // strumieniowanie klienta (`I-14`)
+    pub snapshot_select_ms: f32,    // query_rect + odrzucenia po Building.aabb
+    pub lights: u32,                // dowód, że blackout w ogóle zaszedł
+    pub impostor_regen: u8, pub impostor_resident: u16,   // zera do czasu `M12a`/WP4
 }
 ```
+
+**`RenderStats` w `engine/devtools` (DoD §7.5 pkt 6) idzie przez `MetricSink`, a nie przez
+typ w tamtym crate'cie** — i to nie jest skrót: `engine/render` **zależy** od
+`engine/devtools` (`ClusterOccupancy`, zrzut PNG), więc zależność w drugą stronę zamknęłaby
+cykl, którego Cargo nie zbuduje. `RenderStats::record_into(&mut MetricSink, Tick)` zapisuje
+siedemnaście serii (czasy ośmiu passów w mikrosekundach plus liczniki), a `MetricSink`
+eksportuje CSV — czyli M12 startuje od gotowego szeregu, a nie od pisania drugiego licznika.
+
+**Skala budżetu wchodzi w jednym miejscu:** `LodBands::scaled(k)` w `Renderer::set_entities`.
+Pętla sprzężenia zwrotnego domyka się w `finish_stats`, a nie u klienta — każdy konsument
+renderu ma dostać tę samą adaptację, a jedyne wejście (czas GPU) jest po stronie renderu.
+Do okna wchodzą **wyłącznie świeże pomiary**: znaczniki czasu wychodzą co drugą klatkę,
+więc klatka bez odczytu nie jest pomiarem zera, tylko brakiem pomiaru.
 
 Jeśli p95 z 8 klatek > `target_ms`, `lod_scale` spada o 10% (dolny limit 0,5). Jeśli p95 < 80%
 celu przez 60 klatek — rośnie o 5%. **Cooldown 30 klatek** między zmianami; bez niego system
@@ -169,3 +238,57 @@ Gwiazdka = zmiana zakresu albo kryterium.
 | H-6 | **`bench_blackout ≤ bench_night_rain` ma mechanizm, a nie tylko nadzieję**: pass pogody jest **pomijany w całości**, gdy nie ma ani opadu, ani dymu, a lista świateł przy zgaszonej dzielnicy jest krótsza, nie pełna zer | Kryterium WP6 mówi „ścieżka brak świateł nie ma patologii". Rysowanie zerowej liczby cząstek kosztuje przełączenie celu renderowania i tyle samo czyszczenia co pełna scena — dlatego pusty pass się nie otwiera |
 | H-7 | **`RenderStats` dostaje dwie liczby z M11d**: `weather_particles` (cząstki tej klatki) i `chunk_remesh_count` po stronie strumieniowania klienta | Pierwsza pilnuje progu 0,8 ms z WP7, druga jest całym dowodem na „pory roku nie dotykają geometrii" — a bez licznika to kryterium jest deklaracją, nie pomiarem (`I-14`) |
 | H-8 | **Warstwa dźwiękowa ma własny budżet i własny licznik** (`AudioStats`: głosy czynne, odrzucone, nastrój, takt), a `--no-audio` wyłącza ją w całości | `bench_street` i `bench_district` mierzą klatkę, a mikser chodzi na własnym wątku — bez przełącznika nie da się rozdzielić kosztu rysowania od kosztu dźwięku. Pula 32 głosów jest twarda, więc koszt jest ograniczony z góry niezależnie od gęstości miasta |
+
+---
+
+## Zmiany wpisane po M11e
+
+Zgodnie z `K-18`. Gwiazdka = zmiana zakresu albo kryterium. To jest ostatnia podfaza
+fazy M11, więc tabela zbiera też poprawki, które wędrują do M12 i do R2.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| H-9 ★ | **Maszyną referencyjną jest RTX 4070 Ti SUPER @ 1080p, a progi są zaostrzone mnożnikiem `ZAPAS = 0,55`** wobec celów z PRD §20.2 (16,6 → 9,13 ms; 33,3 → 18,32 ms). Decyzja właściciela produktu z 2026-09-19; zamyka decyzję 9.10 dokumentu fazy i pozycję „Maszyna referencyjna" w `00-postep.md` | Obietnica §20.2 dotyczy „GPU średniej klasy 2024", a mierzyć da się wyłącznie na karcie wyraźnie szybszej. Próg wzięty wprost z §20.2 byłby wtedy obietnicą niepokrytą niczym: scena mieszcząca się w 16,6 ms tutaj nie mówi nic o RTX 4060. Mnożnik jest **jawną stałą w `tools/magnat/src/scenes.rs`, a nie liczbą wtopioną w progi** — kiedy ktoś zmierzy te same sceny na maszynie docelowej, zmienia się jedna linia. Sufit jest nazwany: 0,55 to stosunek przepustowości obu kart z materiałów producenta, nie pomiar tej gry |
+| H-10 ★ | **`WP4b` (impostory dzielnic) nie wchodzi do M11 i przenosi się do `M12a` jako WP4**, z warunkiem powrotu wyrażonym liczbą: `bench_city` powyżej 60 % progu na maszynie docelowej albo w trybie 50× | Pomiar z WP10: `bench_city` bierze 5,76 ms p95 wobec progu 18,32 ms, a na mapie 16 km z 272 tys. mieszkańców 6,79 ms. Cały koszt rysowania chunków to ≈ 8 ms (`depth_prepass` 1,64 + `opaque` 1,87 + `shadows` 4,51), a impostory zdjęłyby z tego wycinek pasma 2–4 km; dominujące kaskady cieni są bliskiego planu i nie dotyczą ich wcale. `G-10` zapisało przy tym samo, że zysk jest wydajnościowy, a nie wizualny — bez impostorów **nie ma dziury w obrazie**, bo chunki sięgają 4 km i dalej rysuje clipmapa. 192 MB VRAM na stałe i ok. 1,2 tys. linii kodu za przyspieszenie sceny z trzykrotnym zapasem to koszt bez odbiorcy |
+| H-11 ★ | **Regresja mierzy się na p50, nie na p95, z progiem 10 % zamiast 8 %.** Próg bezwzględny (czy scena mieści się w celu §20.2) zostaje na p95 i się nie zmienia | Cztery przebiegi tej samej sceny na tej samej maszynie i tym samym kodzie: p50 4,04–4,27 ms (rozrzut 5,7 %), p95 5,88–6,49 ms (10,3 %), p99 6,58–7,67 ms (16,7 %). Bramka z progiem 8 % na p95 zapalałaby się na samym rozrzucie zegarów karty, czyli na niczym — a bramka zapalająca się losowo uczy ludzi ją ignorować. Dwie metryki mają tu dwie różne role i mieszanie ich było błędem planu, nie pomiaru |
+| H-12 ★ | **Kryterium „`bench_blackout` ≤ `bench_night_rain`" porównuje liczbę świateł i pass `clusters`, a nie czas całej klatki** | Obie sceny to dwa osobne procesy, a między nimi karta stoi na innym zegarze: passy, których blackout nie dotyka z konstrukcji (`depth_prepass`, `water`, `post`, `pick_id`), różniły się w pomiarze o 40–70 % w tę samą stronę. Porównanie całej klatki mierzyło stan sprzętu. Passem zależnym od listy świateł jest `clusters` i tylko on — zmierzone 0,240 ms wobec 0,356 ms przy 554 światłach wobec 1 255 |
+| H-13 ★ | **Kolejność „WP10 zależy od WP4b" była niewykonalna** i pakiety czekały na siebie nawzajem: kryterium WP4b odwoływało się do sceny `bench_city`, którą stawia dopiero WP10 w §7.2 | To jest przypadek (4) z `K-18` — „kolejność pakietów jest niewykonalna, bo któryś potrzebuje danych, które powstają po nim". Rozstrzygnięcie: najpierw przyrząd, potem optymalizacja. Bez pomiaru nie wiadomo, czy optymalizacja ma co optymalizować, i tym razem okazało się, że nie ma |
+| H-14 | **`RenderStats` jest obwódką na `FrameStats`, a nie osobną strukturą z własnymi `gpu_ms`, `draw_calls` i `triangles`** | Renderer liczy te pola od M11b (`H-2`) i wpisuje je do `FrameStats`. Dwie struktury o wspólnych polach rozjeżdżają się przy pierwszej zmianie — a rozjazd w statystykach widać dopiero jako liczbę, której nikt nie umie powiązać z przyczyną. Doklejone jest wyłącznie to, czego renderer z definicji nie widzi: mikser dźwięku, strumieniowanie chunków klienta i koszt selekcji kadru po stronie symulacji |
+| H-15 ★ | **Sceny odniesienia są presetami argumentów nad deterministycznym generatorem, a nie zamrożonymi zapisami `bench/scenes/*.mgsave`** z §7.2 | Formatu `.mgsave` nie ma i nigdy nie powstał: zapis gry to ziarno plus dziennik wejść (`game/src/save.rs`), a zrzutu świata do pliku nie ma nigdzie w repozytorium. Zamrożony zrzut wymagałby schematu zapisu, którego właścicielem jest **M12b**, więc zamrożenie go tutaj przesądzałoby cudzą decyzję przed czasem. Ten sam seed daje ten sam świat — tego pilnuje macierz hashy terenu z M1 |
+| H-16 ★ | **Pass `pick_id` nie otwiera się bez kursora** i ma znaczniki czasu jako ósma pozycja `PASS_NAMES`. Zmierzone: 0,088 ms p95 przy 13,8 tys. encji | Zgłoszenie z M4c/WP14 domknięte przyczyną, nie tylko pomiarem. Pass rysował pełną geometrię wszystkich encji **drugi raz w każdej klatce** i czyścił teksturę identyfikatorów wielkości okna także wtedy, gdy nikt tych bajtów nie czytał — każdy zrzut offscreen i każda klatka z kursorem poza oknem. Poprawka ma jedną gałąź, bo pozycja kursora była znana przed nagraniem passa; brakowało wyłącznie pomiaru, który by powiedział, czy warto |
+| H-17 | **Zobowiązanie wobec M2 zamknięte pisemnie: `GridSpec` zostaje w 2D.** `snapshot_select_ms` w `bench_city` to 0,0165 ms wobec progu alarmowego 0,3 ms | Plan wymagał zamknięcia tematu w jedną albo drugą stronę („żeby nikt nie wracał do trzeciego wymiaru bez danych"). Osiemnastokrotny zapas jest odpowiedzią. Licznik zostaje w `RenderStats` i w raporcie każdej sceny, więc gdyby indeks budynków kiedyś urósł, liczba jest pod ręką i nie trzeba budować przyrządu od nowa |
+| H-18 ★ | **Zegar prezentacji idzie w scenie odniesienia, choć symulacja stoi na pauzie** | Sześćset klatek ma mierzyć ten sam świat — stąd pauza. Ale od zegara prezentacji zależą faza klipu, ruch cząstek pogody i rampa wygaszenia dzielnicy, więc z nim zatrzymanym `bench_blackout` **nigdy nie gasił ani jednej latarni** i porównywał scenę samą ze sobą. To jest właściwe użycie rozdziału z `K-22` i `G-5`, a nie obejście pauzy: zegar gry i zegar prezentacji są dwiema różnymi rzeczami i dokładnie po to |
+| H-19 ★ | **`--blackout N` gasi dzielnice *widoczne w kadrze*, a nie N pierwszych po indeksie** | Do pierwszego pomiaru wymuszenie gasiło dzielnice 0..N, a kamera scen stoi nad centrum — lista świateł miała wtedy tyle samo pozycji z blackoutem i bez niego (1 255 w obu przebiegach). Wybór idzie po liczbie latarni w zasięgu oka, bo to ona jest kosztem: dzielnica bez ani jednej latarni w kadrze zgaszona nie zmienia ani jednej klatki. Remis rozstrzyga numer dzielnicy, więc wynik jest ten sam w każdym przebiegu |
+| H-20 ★ | **`snapshot_instancing.rs` z M11a nie był uruchamiany w CI przez ani jeden krok** i jest tam od M11e razem z nowym testem §7.1 | Test `#[ignore]` bez kroku `--include-ignored` jest testem, którego nie ma. M11a napisała go jako dowód, że droga sim → snapshot → bufor instancji cokolwiek oddaje, i przez trzy podfazy nikt go nie odpalał poza autorem. Krok w zadaniu `determinism` obejmuje teraz cały pakiet `magnat` |
+| H-22 | **Pass wody też zeruje swoją pozycję w `pass_ms`, gdy się nie odbył** | Ta sama klasa usterki co `I-25` w M11d, tylko o passie, którego tamta poprawka nie objęła: `water` otwiera się wyłącznie przy niepustej liście chunków z taflą, a `resolve_timer` rozwiązuje cały zakres znaczników. Kadr bez wody pokazywałby czas z klatki, w której woda była — czyli raport mierzyłby pracę, której nie wykonano. Trzy passy klatki są warunkowe (`water`, `weather`, `pick_id`) i od tej chwili wszystkie trzy zachowują się tak samo |
+| H-21 | **Czas procesora klatki mierzy się bez czekania na synchronizację pionową** | Pierwszy pomiar dawał `cpu_ms` p95 25,7 ms na scenie, której GPU zajmowało 5,5 — bo `get_current_texture` blokuje do synchronizacji pionowej i był w środku mierzonego odcinka. Liczba mierzyła monitor, nie kod. Po rozdzieleniu: 0,60 ms p95 wobec budżetu 4,0 ms z §5.5 |
+
+### Znalezione w recenzji przed commitem
+
+Jedenaście poprawek z przeglądu tej samej zmiany. Żadna nie zmienia zakresu; wszystkie
+dotyczą rzeczy, które **mierzyłyby nieprawdę** — a przyrząd pokazujący nieprawdę jest
+gorszy od jego braku, bo braku nikt nie weźmie za pomiar.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| H-23 ★ | **`snapshot_select_ms` mierzył dwa wczesne powroty, a nie indeks budynków.** Zegar startował **po** publikacji snapshotu, a `CsrGrid::query_rect` woła wyłącznie generator wnętrz — który przy wyłączonym cięciu kończy się natychmiast. Liczniki są teraz **dwa**: `snapshot_select_ms` (całe składanie danych klatki) i `building_query_ms` (sam indeks budynków) | To jest najpoważniejsze znalezisko recenzji, bo unieważniało **wniosek**, nie tylko liczbę: 0,0165 ms mieściło się w progu 0,3 ms z powodu, który z progiem nie miał nic wspólnego, a na tej podstawie zamykaliśmy zobowiązanie wobec M2 o `GridSpec`. Po poprawce miarodajne są sceny z aktywnym cięciem — `bench_interiors` 0,047 ms i `bench_street` 0,045 ms — i zobowiązanie zamyka się **naprawdę**, z sześciokrotnym zapasem. Jedna liczba na dwa pytania odpowiada tylko na jedno i nie mówi, na które |
+| H-24 ★ | **Kryterium `seasons_do_not_remesh` nie mogło zapalić się na czerwono.** Scena stoi na pauzie, sezon liczy się z ticku świata, więc w oknie pomiaru nigdy się nie zmieniał i przyrost licznika był zerem **z konstrukcji**. `bench_winter` przewija teraz cztery pory roku w oknie pomiaru (`Ambience::force_season`) | §7.3 mówi wprost „przejście przez 4 pory roku", a zielone kryterium bez przejścia jest zielone z tego samego powodu co kryterium spełnione — i nie da się ich odróżnić. Test `scena_zimowa_przewija_wszystkie_cztery_pory_roku` pilnuje, że przewijanie oddaje cztery różne wartości, a nie trzy albo jedną |
+| H-25 | **Maska pominiętych passów nakładała się na pomiar z innej klatki.** Znaczniki czasu wracają o klatkę później, a flagi „pass się odbył" opisywały klatkę bieżącą. Maska jedzie teraz **razem z odczytem** (`PassTimer::maska`, ustawiana w `resolve_timer`) | Kursor wychodzący poza okno między dwiema klatkami zerował czas passa, który się odbył i został zmierzony — a suma zaniżona o ten czas szła prosto do `RenderBudget`. Kanał, którym do pętli sprzężenia zwrotnego wchodzi liczba niezwiązana z żadną klatką, jest gorszy od braku pętli |
+| H-26 | **`gpu_samples` w raporcie było zawyżone dwukrotnie.** `pass_ms` odbudowuje się co klatkę z ostatniego udanego odczytu, więc warunek „większe od zera" przepuszczał każdą klatkę. `FrameStats` dostaje `gpu_fresh` i do próbki wchodzą wyłącznie klatki świeże | Wszystkie siedem raportów meldowało 600 próbek z 600 klatek, choć odczyt wychodzi co drugą. Percentylom to nie szkodziło (każdy pomiar liczył się dwa razy), ale liczba próbek jest jedyną rzeczą w raporcie, która mówi, **czy pomiar w ogóle szedł** — i akurat ona kłamała. Teraz raporty pokazują 300 z 600 |
+| H-27 ★ | **Bramka regresji przepuszczała przerwany przebieg.** Raporty scen są zacommitowane, a klient przerwany przed końcem nie zapisywał nic — więc `frame_guard.py` porównywał wczorajszy plik z linią bazową wygenerowaną z tego samego pliku. Trzy poprawki: klient **kasuje raport na starcie przebiegu**, skrypt sprawdza obecność wszystkich siedmiu scen wobec **kanonu**, a werdykt progu liczy sam zamiast ufać polu `verdict` z pliku | Bramka mówiąca „brak regresji" o scenie, która się nie uruchomiła, jest gorsza od braku bramki: uczy ufać wynikowi, którego nie ma. Przy okazji `--update` odmawia zapisania linii bazowej z niepełnego przebiegu, a wartość bazowa `0.0` przestała udawać brak wpisu — na maszynie bez `TIMESTAMP_QUERY` wyłączała kontrolę regresji dla sceny na zawsze |
+| H-28 | **`--blackout N` wracał po cichu do numerowania po indeksie**, gdy w zasięgu oka nie było ani jednej latarni (kamera wysoko, dzielnica bez oświetlenia): wszystkie liczniki zerowe, sortowanie stabilne, wynik 0, 1, 2… Ranking spada wtedy na **całkowitą** liczbę latarni w dzielnicy, a dzielnice bez ani jednej wypadają z wyniku | Dokładnie to zachowanie ta funkcja miała zastąpić (`H-19`) — wróciłoby w innym kadrze i nikt by tego nie zauważył, bo `bench_blackout` działa. Gaszenie dzielnicy bez latarni zajmuje przy tym miejsce dzielnicy, która je ma |
+| H-29 | **Seria `render.lod_scale_permille` była ciągiem zer.** `us(0.9)` daje 900, a dzielenie przez tysiąc — zero. Przy okazji cała rodzina serii zaokrągla teraz zamiast obcinać | Komentarz nad tą linią mówił „0,9 i 0,95 muszą się różnić", a nie różniły się: jedyną wartością dającą coś innego niż zero było 1,0. Seria, po której M12 miało zacząć profilowanie adaptacji detalu, nie niosła jej wcale. Obcięcie gubiło też do jednej mikrosekundy na każdym czasie passa, zawsze w tę samą stronę |
+| H-30 | **Cap snapshotu 4 096 w teście §7.1 mógł niczego nie obcinać.** Miasto testu ma osiem tysięcy mieszkańców w oknie 900 m, więc wariant „cap 4 096" bywał bit w bit powtórką wariantu bez capu. Doszedł wariant z capem 256 i **asercja, że cap faktycznie obciął** | Kryterium „cap jest wizualny, nie ekonomiczny" trzymałoby się zielone bez mierzenia czegokolwiek — ta sama klasa błędu, którą łapie bramka `szczyt_instancji > 0` przy kamerach. Test sprawdza teraz najpierw, ile mieszkańców kadr oddaje bez obcięcia, i dopiero potem porównuje |
+| H-31 | **`draw_calls` liczyło wsady, a nie wywołania.** Wsad wskazujący na model bez wypieczonej siatki jest pomijany w `draw_with`, a licznik dodawał go dwa razy (pass nieprzezroczysty i bufor identyfikatorów). Liczbę zwracają teraz `InstanceRenderer::draw` i `draw_ids` | Ta sama reguła, którą ta zmiana postawiła przy chunkach: liczba wywołań powstaje **tam, gdzie wywołania powstają**, a nie jest odtwarzana z drugiej strony. Odtworzenie rozjeżdża się przy pierwszej zmianie warunku pomijania. Po poprawce `bench_street` pokazuje 25 wywołań zamiast 16 — i to jest liczba prawdziwa, nie gorsza |
+| H-33 | **`PassTimer::zbierz` wychodził wcześniej bez odmapowania bufora** przy nieudanym odczycie, zostawiając go zajętym na zawsze | Kod przeniesiony jeden do jednego z M1, więc to nie jest regresja — ale wcześniej kosztowało to raport, a od M11e zatrzymywałoby **pętlę sprzężenia zwrotnego sterującą poziomem detalu**, i to po cichu do końca sesji. Rangę usterki podnosi konsument, a nie jej wiek |
+"""
+
+### Co zostaje otwarte po M11e
+
+| Rzecz | Adres |
+|---|---|
+| Impostory dzielnic (`WP4b`): atlas runtime, LRU, budżet 192 MB, regeneracja ≤ 4 bloki na klatkę | **`M12a`/WP4**, z warunkiem powrotu wyrażonym liczbą (`H-10`) |
+| `terrain_revision` w `RenderSnapshot` jest polem, którego **nikt nie inkrementuje** | **`M12a`**, razem z `WP4b` — to jego pierwszy stopień inwalidacji i nie ma drugiego czytelnika |
+| Progi klatkowe nie są w CI: wspólne runnery nie mają karty graficznej | Nocny bieg na maszynie referencyjnej, tak jak stanowi §7.2. CI sprawdza poprawność (§7.1) i mikrobenchmarki procesora |
+| `bench_street` stoi kamerą pierwszoosobową **bez postaci gracza** (`--observe`) | M12, jeśli scena z postacią miałaby dać inny kadr. Koszt rysowania jest ten sam, a scena z postacią wymagałaby wyboru wariantu startu w skrypcie |
+| Koła pojazdu kręcą się ze stałą prędkością klipu, a `wheel_phase` z rekordu nie ma czytelnika | **R2** — pomiar nie dał powodu, żeby robić to w M11: pojazdów w oknie gry i tak jest zero (pozycja 71 wykazu) |

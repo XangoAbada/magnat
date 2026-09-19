@@ -9,7 +9,7 @@
 //! przebieg bezgłowy. Klient nie ma własnego enuma stanów i mieć nie powinien:
 //! dwie listy stanów rozjechałyby się przy pierwszym nowym ekranie.
 
-use crate::{bench, citizens, inspect, overlay, stream};
+use crate::{bench, citizens, inspect, overlay, scenes, stream};
 use crate::{BENCH_ROZGRZEWKA, KROK_LOTU_M, PROG_KLIKNIECIA_PX, PROMIEN_SKLEPU_M, WZROST_OCZU_M};
 use magnat_core::SimMinute;
 use magnat_game::screens::Shell;
@@ -104,6 +104,19 @@ pub(crate) struct App {
     pub(crate) wymus_snieg: Option<u8>,
     pub(crate) wymus_blackout: u16,
     pub(crate) bench_start: glam::DVec3,
+    /// Przebieg sceny odniesienia budżetu klatki (`--bench-scene`, M11e/WP10).
+    pub(crate) scena: Option<scenes::Przebieg>,
+    /// Klatki rozgrzewki i pomiaru sceny odniesienia.
+    pub(crate) scena_rozgrzewka: u32,
+    pub(crate) scena_klatek: u32,
+    /// Kod wyjścia procesu: `false` = scena przekroczyła próg albo nie było pomiaru.
+    pub(crate) scena_ok: bool,
+    /// Koszt selekcji kadru po stronie klienta — `query_rect` plus odrzucenia po
+    /// `Building.aabb` (zobowiązanie wobec M2, próg alarmowy 0,3 ms w `bench_city`).
+    pub(crate) select_ms: f32,
+    /// Z tego — sam koszt `CsrGrid::query_rect` po indeksie budynków i odrzuceń
+    /// po `Building.aabb` (zobowiązanie wobec M2, próg alarmowy 0,3 ms).
+    pub(crate) budynki_ms: f32,
     pub(crate) zrzut: Option<std::path::PathBuf>,
     pub(crate) zrzut_po: u32,
     pub(crate) numer_klatki: u32,
@@ -659,7 +672,14 @@ impl App {
             if let Some(c) = self.citizens.as_mut() {
                 // Zegar gry stoi → animacja też stoi: postacie deptałyby w miejscu
                 // na zamrożonym świecie.
-                if c.ui.time.speed() != magnat_core::SimSpeed::Paused {
+                //
+                // Scena odniesienia jest wyjątkiem i to nie jest obejście pauzy, tylko
+                // jej właściwe użycie: symulacja ma stać, żeby sześćset klatek mierzyło
+                // ten sam świat, ale **zegar prezentacji musi iść**, bo od niego zależy
+                // faza klipu, ruch cząstek pogody i rampa wygaszenia dzielnicy. Z nim
+                // zatrzymanym `bench_blackout` nigdy nie gasił ani jednej latarni
+                // i porównywał scenę samą ze sobą.
+                if c.ui.time.speed() != magnat_core::SimSpeed::Paused || self.scena.is_some() {
                     // Reszta zostaje w akumulatorze, bo przy 60 klatkach na sekundę
                     // `dt` to 16,67 ms i samo obcięcie gubiłoby 4 % czasu animacji —
                     // chód szedłby wolniej niż świat, a przy tysiącu klatek stanąłby.
@@ -701,9 +721,25 @@ impl App {
             self.ustaw_kamere_pomiarowa();
         }
 
+        // Selekcja kadru po stronie klienta, **cała**: wybór encji do snapshotu,
+        // `CsrGrid::query_rect` po budynkach i odrzucenia po `Building.aabb`.
+        // Mierzona osobno, bo to zobowiązanie wobec M2 — `GridSpec` został w 2D
+        // na podstawie argumentu M11, a próg 0,3 ms jest jedyną liczbą, która może
+        // ten argument obalić (WP10).
+        //
+        // Zegar obejmuje **wszystkie trzy kroki**, a nie dwa ostatnie: `query_rect`
+        // po siatce budynków wołają wyłącznie wnętrza, a te milczą bez aktywnego
+        // cięcia — więc pomiar zaczęty po publikacji snapshotu mierzył w scenach
+        // orbitalnych dwa wczesne powroty i nic poza tym.
+        let zegar_selekcji = Instant::now();
         self.publikuj_snapshot();
+        // Drugi zegar obejmuje **samo odpytanie indeksu budynków** — to jest liczba,
+        // której dotyczy zobowiązanie wobec M2, a nie koszt całego składania klatki.
+        let zegar_budynkow = Instant::now();
         self.zloz_przekroj();
         self.zloz_szyldy();
+        self.budynki_ms = zegar_budynkow.elapsed().as_secs_f32() * 1000.0;
+        self.select_ms = zegar_selekcji.elapsed().as_secs_f32() * 1000.0;
         let klatka_ui = self.buduj_ui();
         if let Some((_, Some(predkosc))) = &klatka_ui {
             let p = *predkosc;
@@ -716,7 +752,17 @@ impl App {
         let minuta = self.minute;
         let szerokosc = self.params.region.latitude_ddeg();
         let swiatla = std::mem::take(&mut self.swiatla);
-        let kursor = self.kursor;
+        // Scena odniesienia ma kursor **na stałe w środku kadru**, a nie tam, gdzie
+        // akurat leży mysz. Pass bufora identyfikatorów rysuje pełną geometrię encji
+        // drugi raz, więc od położenia myszy zależałoby, czy klatka kosztuje o 0,1 ms
+        // więcej — a bramka regresji porównywałaby wtedy myszy, nie kod.
+        let kursor = match self.scena.as_ref() {
+            Some(_) => self
+                .window
+                .as_ref()
+                .map(|w| (w.inner_size().width / 2, w.inner_size().height / 2)),
+            None => self.kursor,
+        };
         let ctx = self.egui_ctx.clone();
         let (jobs, delta, ppp) = match (klatka_ui, ctx) {
             (Some((mut out, _)), Some(ctx)) => {
@@ -808,10 +854,22 @@ impl App {
             }
         }
 
+        // Scena odniesienia ustawia cel budżetu wg tego, na co patrzy — 33,3 ms
+        // dla widoku miasta, 16,6 ms dla dzielnicy i ulicy (§5.10, PRD §20.2).
+        if let Some(p) = self.scena.as_ref() {
+            renderer.budget.target_ms = p.scena.target_ms;
+        }
         renderer.render_with_ui(&kamera, minuta, szerokosc, ui_frame);
         self.occupancy_klatki = renderer.cluster_occupancy().max();
         self.krok_dzwieku(&kamera, dt as f32);
         self.swiatla = swiatla;
+
+        if self.scena.is_some() {
+            self.krok_sceny(dt);
+            if self.koniec {
+                return;
+            }
+        }
 
         // Sprawdzenie bufora ID bez myszy (kryterium WP11). Odczyt pochodzi z klatki
         // poprzedniej, więc pytamy dopiero po kilku.
@@ -924,6 +982,15 @@ impl App {
             self.wymus_opad,
             self.wymus_snieg,
             self.wymus_blackout,
+        );
+        // Scena `bench_winter` przewija cztery pory roku **w oknie pomiaru** (§7.3).
+        // Bez tego sezon stoi razem ze światem i licznik remeshingu jest zerem
+        // z konstrukcji, a nie dlatego, że pora roku nie dotyka geometrii.
+        self.filler.ambience_mut().force_season(
+            self.scena
+                .as_ref()
+                .filter(|p| p.scena.cykl_por_roku)
+                .map(|p| scenes::pora_roku(p.zapisane, self.scena_klatek)),
         );
         let filtr = c.filtr();
         self.filler.fill_filtered(

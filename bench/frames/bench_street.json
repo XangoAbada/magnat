@@ -1,0 +1,40 @@
+{
+  "scene": "bench_street",
+  "machine": "RTX 4070 Ti SUPER @ 1080p",
+  "target_machine": "RTX 4060 @ 1080p",
+  "headroom_factor": 0.55,
+  "target_ms": 16.60,
+  "threshold_ms": 9.13,
+  "frames": 600,
+  "gpu_samples": 300,
+  "gpu_ms": { "p50": 4.770, "p95": 6.839, "p99": 8.323 },
+  "cpu_ms": { "p50": 0.416, "p95": 0.661, "p99": 0.699 },
+  "frame_ms": { "p50": 13.616, "p95": 27.365, "p99": 27.935 },
+  "pass_ms": {
+    "clusters": { "p50": 0.010, "p95": 0.011 },
+    "shadows": { "p50": 3.126, "p95": 5.135 },
+    "depth_prepass": { "p50": 0.377, "p95": 0.462 },
+    "opaque": { "p50": 1.032, "p95": 1.634 },
+    "water": { "p50": 0.015, "p95": 0.016 },
+    "post": { "p50": 0.075, "p95": 0.083 },
+    "weather": { "p50": 0.015, "p95": 0.017 },
+    "pick_id": { "p50": 0.103, "p95": 0.116 }
+  },
+  "stats": {
+    "draw_calls_max": 25,
+    "triangles_max": 1185574,
+    "instances_max": 2467,
+    "instances_by_lod": [432, 1220, 815, 0],
+    "instance_batches": 6,
+    "chunks_drawn": 595,
+    "weather_particles": 3264,
+    "chunk_remesh_count": 0,
+    "voices_active": 4,
+    "lights": 0,
+    "snapshot_select_ms_max": 1.3606,
+    "building_query_ms_max": 0.0451,
+    "lod_scale": 1.000
+  },
+  "world": { "seed": "0x4D41474E4154", "size_m": 8192, "day": 40, "minute_of_day": 495, "citizens": 6552, "crowd": 6000 },
+  "verdict": "ok"
+}

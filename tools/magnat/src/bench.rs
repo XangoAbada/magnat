@@ -102,22 +102,29 @@ impl Pomiar {
     }
 
     fn percentyl_fps(&self, q: f32) -> f32 {
-        if self.ms.is_empty() {
-            return 0.0;
-        }
-        let mut v = self.ms.clone();
-        v.sort_by(f32::total_cmp);
-        // Zaokrąglenie **w górę**: przy stu próbkach 1 % low ma pokazać tę jedną najgorszą
-        // klatkę, a nie przedostatnią. Obcięcie w dół wypadało na indeksie 98 i zgłaszało
-        // wynik o rząd wielkości lepszy niż rzeczywisty.
-        let i = ((((v.len() - 1) as f32) * q).ceil() as usize).min(v.len() - 1);
-        1000.0 / v[i].max(0.001)
+        1000.0 / percentyl_ms(&self.ms, q).max(0.001)
     }
 
     #[must_use]
     pub fn zaciecia(&self) -> usize {
         self.ms.iter().filter(|ms| **ms > 33.0).count()
     }
+}
+
+/// Percentyl czasu klatki w milisekundach. `0.0` dla pustej próbki.
+///
+/// Zaokrąglenie **w górę**: przy stu próbkach 1 % low ma pokazać tę jedną najgorszą
+/// klatkę, a nie przedostatnią. Obcięcie w dół wypadało na indeksie 98 i zgłaszało
+/// wynik o rząd wielkości lepszy niż rzeczywisty.
+#[must_use]
+pub fn percentyl_ms(ms: &[f32], q: f32) -> f32 {
+    if ms.is_empty() {
+        return 0.0;
+    }
+    let mut v = ms.to_vec();
+    v.sort_by(f32::total_cmp);
+    let i = ((((v.len() - 1) as f32) * q).ceil() as usize).min(v.len() - 1);
+    v[i]
 }
 
 /// Wiersz raportu dla jednego etapu wraz z werdyktem wobec progów §20.2.

@@ -41,7 +41,6 @@ pub(crate) struct Redaktor {
     pub(crate) goods: magnat_game::policy::GoodKeys,
 }
 
-
 impl App {
     /// Wpina postawione miasto do renderu i zaczyna grę (etap B: zaludnienie).
     ///
@@ -156,8 +155,13 @@ impl App {
             (s, s)
         });
         let h = f64::from(terrain.height_at(tx, ty)) * 0.5;
-        if let CameraMode::Orbit { target, .. } = &mut self.camera.mode {
-            *target = glam::DVec3::new(f64::from(tx), f64::from(ty), h);
+        let cel = glam::DVec3::new(f64::from(tx), f64::from(ty), h);
+        // Scena odniesienia ma **własny** kadr: wysokość, pochylenie i tryb kamery
+        // są jej definicją, a nie wartością domyślną klienta (§7.2).
+        if let Some(p) = self.scena.as_ref() {
+            self.camera = p.scena.kamera(cel);
+        } else if let CameraMode::Orbit { target, .. } = &mut self.camera.mode {
+            *target = cel;
         }
         if !self.swiatla.is_empty() {
             let cel = self.camera.target();
@@ -237,9 +241,8 @@ impl App {
                     // Ekrany domknięcia stoją poza powłoką, bo za nimi jest sesja:
                     // świat tyka dalej, a gracz decyduje, kto go poprowadzi.
                     (None, GameState::Succession { session, heir }) => {
-                        akcja_konca = magnat_game::screens::ending::succession(
-                            shell, ui, session, *heir,
-                        );
+                        akcja_konca =
+                            magnat_game::screens::ending::succession(shell, ui, session, *heir);
                         None
                     }
                     (None, GameState::ScenarioEnd { session, outcome }) => {
@@ -251,9 +254,13 @@ impl App {
                     _ => shell.draw(ui),
                 };
             } else if let Some(r) = redaktor.as_mut() {
-                akcja_edytora =
-                    r.view
-                        .draw(ui, &shell.theme, &shell.catalog, shell.settings.locale, &r.goods);
+                akcja_edytora = r.view.draw(
+                    ui,
+                    &shell.theme,
+                    &shell.catalog,
+                    shell.settings.locale,
+                    &r.goods,
+                );
             } else if let (Some(c), Some(s)) = (citizens.as_mut(), gra.session()) {
                 let (p, a) = c.draw(ui, &shell.theme, s);
                 predkosc = p;
@@ -439,9 +446,7 @@ impl App {
         if !matches!(&self.game, GameState::Generating(j) if j.is_finished()) {
             return;
         }
-        let GameState::Generating(job) =
-            std::mem::replace(&mut self.game, GameState::Shell)
-        else {
+        let GameState::Generating(job) = std::mem::replace(&mut self.game, GameState::Shell) else {
             return;
         };
         match job.join() {
@@ -500,7 +505,11 @@ impl App {
             self.redaktor = None;
             return;
         }
-        let Some(site) = self.citizens.as_ref().and_then(citizens::Citizens::wybrany_zaklad) else {
+        let Some(site) = self
+            .citizens
+            .as_ref()
+            .and_then(citizens::Citizens::wybrany_zaklad)
+        else {
             eprintln!("edytor reguł: najpierw kliknij w zakład");
             return;
         };
@@ -531,7 +540,9 @@ impl App {
             A::None => {}
             A::Close => self.redaktor = None,
             A::Attach => {
-                let Some(r) = self.redaktor.take() else { return };
+                let Some(r) = self.redaktor.take() else {
+                    return;
+                };
                 let polityka = r.view.editor.policy();
                 if let Some(s) = self.game.session_mut() {
                     if let Err(e) = s.submit(magnat_game::PlayerCommand::AttachPolicy {

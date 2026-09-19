@@ -40,5 +40,10 @@ glam = { workspace = true }
 env_logger = { workspace = true }
 log = "0.4"
 
+[dev-dependencies]
+# Hash stanu ECS — wyłącznie do testu §7.1 („prezentacja nie zmienia symulacji").
+# Zależność jest deweloperska, więc nie wchodzi do binarki i nie rusza bramki R-5.
+magnat-io = { workspace = true }
+
 [lints]
 workspace = true

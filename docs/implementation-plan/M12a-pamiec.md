@@ -8,7 +8,7 @@ zostają w dokumencie fazy — tu jest wyłącznie to, co robisz w tej porcji.
 | | |
 |---|---|
 | **Wejście** | Działający M10 (i M11 dla renderowej części budżetu). |
-| **Pakiety robocze** | WP1, WP2, WP3 |
+| **Pakiety robocze** | WP1, WP2, WP3, **WP4 (przejęty z `M11e`, warunkowy — `DM-1`)** |
 | **Projekt techniczny** | §5.1, §5.2, §5.3 |
 | **Wynik do pokazania** | Panel `F3 → Pamięć` pokazuje rozbicie per podsystem z porównaniem do budżetu; przekroczenie świeci na czerwono. |
 | **Kryterium zamknięcia** | Kryteria WP1–WP3; gorący wiersz mieszkańca ≤ 128 B, hash stanu niezmieniony po refaktorze. |
@@ -40,6 +40,34 @@ Zależności: WP2.
 `ExperienceStore` (ring 32 wpisów × 8 B per mieszkaniec, w arenie kolumnowej), `ChronicleStore` (append-only log zstd-framed + indeks odwrócony w RAM), rotacja kronik starszych niż 30 lat gry do rocznych podsumowań.
 
 **Kryterium ukończenia:** zapytanie „pełna historia firmy X przez 100 lat" zwraca wynik < 50 ms z dysku; indeks kronik ≤ 64 MB po 100 latach gry; karta inspekcji mieszkańca (M3) i Kronika (M9) działają bez zmian w API.
+
+### WP4 — Impostory dzielnic [M] — **warunkowy**
+Zależności: WP1 (budżet pamięci musi istnieć, zanim dołożymy do niego 192 MB VRAM).
+
+Przejęty z `M11e` (`H-10`). Atlas kafli 128×128 m generowany w runtime z tego, co gracz zbudował:
+8 azymutów, kafel 128×128 px (RGBA8 + R16 depth), budżet **192 MB VRAM → 244 bloki rezydentne**
+z LRU, regeneracja **≤ 4 bloki na klatkę** w osobnym passie z budżetem 1,5 ms i kolejką po
+odległości, inwalidacja dwustopniowa, degradacja do chunków LOD 8×. Projekt techniczny w całości:
+`M11b-animacja-i-lod.md` §5.6 — pakiet zmienił adres, nie treść.
+
+**Warunek wejścia — liczba, nie wrażenie.** Pakiet powstaje **wyłącznie wtedy**, gdy scena
+`bench_city` przekroczy **60 % swojego progu** na maszynie docelowej albo w trybie 50× (`M12c`).
+Stan po M11e: 5,76 ms p95 wobec progu 18,32 ms, czyli **31 %** — na mapie 16 km z 272 tys.
+mieszkańców 6,79 ms, czyli 37 %. Impostory zdjęłyby wycinek pasma 2–4 km z ośmiu milisekund
+rysowania chunków, a dominujące w tej scenie kaskady cieni są bliskiego planu i nie dotyczą ich
+wcale. Zysk jest przy tym **wydajnościowy, a nie wizualny** (`G-10` w `M11b`): chunki M1 sięgają
+4 km, dalej rysuje clipmapa, więc bez impostorów nie ma dziury w obrazie.
+
+**Przy okazji, i to jest warunek konieczny, a nie dodatek:** `RenderSnapshot.terrain_revision`
+jest dziś polem, którego **nikt nie inkrementuje**. To pierwszy stopień inwalidacji tego pakietu
+i jego jedyny czytelnik — jeśli WP4 nie wejdzie, pole zostaje martwe i należy je usunąć albo
+podpiąć razem z `M12b`.
+
+**Kryterium ukończenia:** scena `bench_city` mieści się w budżecie 192 MB, `impostor_resident ≤ 244`
+i `impostor_regen ≤ 4` w każdej klatce (§7.3 dokumentu M11), a przy sztucznie obniżonym budżecie
+nie powstaje **ani jedna dziura** — blok bez kafla rysuje się chunkiem LOD 8×. Wejście do rachunku
+pamięci z §5.2 jako osobna pozycja: 192 MB VRAM nie jest pamięcią systemową, ale budżet 6 GB
+z PRD §20.2 mówi o obu i rozdzielenie ich jest częścią tego pakietu.
 
 ---
 
@@ -164,3 +192,18 @@ struct Experience { kind: u8, valence: i8, sim_day: u16, subject: u32 }  // 8 B
 - **dla agentów w LOD Makro** (uśpionych; ring zamrożony, niedostępny dla decyzji) — tam zstd daje ~4× i nie kosztuje nic, bo nikt tego nie czyta.
 
 Kompresowanie magazynu dla agentów aktywnych byłoby błędem: pamięć doświadczeń jest czytana przy **każdej** decyzji zakupowej (M5) i przy ocenie marki (M10), więc dekompresja chunka trafiałaby w najgorętszą pętlę w grze. 102 MB to 1.7% budżetu — nie warto. Redukcja idzie przez rozmiar wpisu (8 B), nie przez entropię.
+
+
+---
+
+## Zmiany wpisane po M11e
+
+Zgodnie z `K-18`. Gwiazdka = zmiana zakresu albo kryterium.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| DM-1 ★ | **M12a przejmuje `WP4b` z `M11e` jako WP4 — warunkowo.** Projekt techniczny stoi w `M11b` §5.6 i się nie zmienia; zmienia się adres i dochodzi warunek wejścia wyrażony liczbą | Pomiar z M11e/WP10 pokazał, że scena, którą ten pakiet miał przyspieszyć, ma trzykrotny zapas: 5,76 ms p95 wobec progu 18,32 ms (na mapie 16 km z 272 tys. mieszkańców — 6,79 ms). 192 MB VRAM zajętych na stałe i ok. 1,2 tys. linii kodu za przyspieszenie czegoś, co mieści się w budżecie trzykrotnie, to koszt bez odbiorcy. M12a jest właściwym adresem, bo VRAM jest pamięcią, a budżet pamięci jest tej podfazy |
+| DM-2 | **`RenderStats` jest gotowe i eksportuje CSV** — `RenderStats::record_into(&mut MetricSink, Tick)` zapisuje siedemnaście serii (czasy ośmiu passów w mikrosekundach, wywołania, trójkąty, instancje, remeshing chunków, głosy, selekcja kadru, skala detalu) | DoD fazy M11 obiecywał M12 „gotowy pomiar" i to jest on. Profilowanie długiej sesji zaczyna się od szeregu czasowego, a nie od pisania drugiego licznika. Wejściem jest `MetricSink` z `engine/devtools`, czyli licznik, który M0 postawił dokładnie w tym celu |
+| DM-3 | **Budżet klatki (`RenderBudget`) istnieje i sam obniża progi detalu** przy przekroczeniu celu, z podłogą 0,5 i karencją 30 klatek | Tryb 50× z `M12c` ma gotowy mechanizm degradacji obrazu pod presją czasu. Wiążące pozostaje to, co rozstrzygnęła decyzja 9.11 fazy M11: budżet **nie dotyka** `ViewQuery` ani `SnapshotCaps`, bo obniżanie capu snapshotu byłoby sprzężeniem render → symulacja |
+| DM-4 | **`terrain_revision` w `RenderSnapshot` nie ma ani jednego pisarza i ani jednego czytelnika** | Pole powstało w M11a jako pierwszy stopień inwalidacji impostorów dzielnic, a ten pakiet właśnie tu przyszedł. Jeśli WP4 wejdzie — pole dostaje sens; jeśli nie wejdzie — należy je usunąć razem z rewizją schematu snapshotu w `M12b`, a nie zostawiać jako pole, które wygląda na działające |
+| DM-5 | **Progi klatkowe mają bramkę, ale nie mają jej w CI**: `python scripts/frame_guard.py bench/frames` wymaga karty graficznej | M12 jest właścicielem profilowania i to on rozstrzyga, czy nocny bieg na maszynie referencyjnej dostanie własne zadanie w CI, czy zostaje ręczny. Linia bazowa jest związana z maszyną i plik zapisuje jej nazwę — porównanie raportu z jednej karty do linii bazowej z drugiej mierzy sprzęt, nie kod |

@@ -238,6 +238,14 @@ jobs:
           cargo test --release -p magnat-game --test screens
       - name: M4 — dowód spójności mikro ↔ mezo (A1–A5, M4d/WP9)
         run: cargo test --release -p magnat-world --test lod -- --include-ignored
+      - name: M11 — render, dźwięk i poziom detalu nie zmieniają symulacji (§7.1)
+        # Dwa testy integracyjne klienta naraz. `render_nie_dotyka_symulacji` jest
+        # rdzeniem DoD fazy M11 (§7.5 pkt 1): ten sam seed, pięć wariantów prezentacji,
+        # identyczny ciąg hashy. `snapshot_instancing` sprawdza, że droga
+        # sim → snapshot → bufor instancji cokolwiek oddaje — powstał w M11a
+        # i **do M11e nie był uruchamiany w CI przez ani jeden krok**.
+        # GPU nie jest potrzebne: obie ścieżki kończą się na buforze po stronie procesora.
+        run: cargo test --release -p magnat -- --include-ignored
       - name: M4 — diagram IDM zgadza się z tabelą VDF (miernik dryfu R2)
         run: cargo run --release -q -p magnat-balansator -- calibrate-vdf
       - name: T-D8 — test negatywny (chaos musi zawieść)

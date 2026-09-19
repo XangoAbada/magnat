@@ -292,7 +292,37 @@ impl Default for LodBands {
     }
 }
 
+impl Bands {
+    /// Te same pasma przeskalowane mnożnikiem budżetu klatki (§5.10).
+    ///
+    /// Skalują się **wszystkie trzy progi razem**, bo obniżenie samego `draw_m` zdejmuje
+    /// encje z kadru (widać dziurę), a obniżenie samego `l1_m` niczego nie oszczędza —
+    /// koszt siedzi w geometrii bliskiego planu, a ta przechodzi wtedy na siatkę
+    /// uproszczoną i na sylwetki, czyli tam, gdzie liczba trójkątów spada rzędami.
+    #[must_use]
+    pub fn scaled(self, k: f32) -> Bands {
+        Bands {
+            l1_m: self.l1_m * k,
+            l2_m: self.l2_m * k,
+            draw_m: self.draw_m * k,
+        }
+    }
+}
+
 impl LodBands {
+    /// Progi przeskalowane mnożnikiem `RenderBudget` (§5.10, decyzja 9.11).
+    ///
+    /// **Budżet dotyka wyłącznie tego.** Nie `ViewQuery`, nie `SnapshotCaps` — cap
+    /// snapshotu jest stałą konfiguracji, a nie zmienną runtime'u (`I-3`).
+    #[must_use]
+    pub fn scaled(self, k: f32) -> LodBands {
+        LodBands {
+            citizen: self.citizen.scaled(k),
+            vehicle: self.vehicle.scaled(k),
+            prop: self.prop.scaled(k),
+        }
+    }
+
     /// Progi dla bieżącego kadru: pasma L0/L1 zostają, a próg rysowania liczy się
     /// z rozmiaru ekranowego bryły każdego rodzaju encji (`J-3`).
     #[must_use]

@@ -14,6 +14,64 @@ use crate::preview::czasy_passow;
 use magnat_game::GameState;
 
 impl App {
+    /// Krok przebiegu sceny odniesienia (M11e/WP10).
+    ///
+    /// Rozgrzewka **nie wchodzi do pomiaru** i to nie jest ostrożność: pierwsze klatki
+    /// niosą materializację chunków, wypalanie atlasów i rozkręcanie sterownika, czyli
+    /// koszty, które w rozgrywce zdarzają się raz.
+    pub(crate) fn krok_sceny(&mut self, dt: f64) {
+        let stats = self.zbierz_statystyki();
+        let Some(p) = self.scena.as_mut() else {
+            return;
+        };
+        if self.numer_klatki <= self.scena_rozgrzewka {
+            return;
+        }
+        p.dodaj(dt, stats);
+        if p.zapisane < self.scena_klatek {
+            return;
+        }
+        let swiat = self.opis_swiata();
+        self.scena_ok = self.scena.as_ref().is_some_and(|p| p.zapisz(&swiat));
+        self.koniec = true;
+    }
+
+    /// Statystyki klatki złożone z trzech źródeł: renderu, miksera i strumieniowania.
+    ///
+    /// Klient jest jedyną stroną, która widzi wszystkie trzy — `engine/audio` nie widzi
+    /// renderu (§6.3 pkt 1), a renderer nie widzi ani miksera, ani chunków klienta.
+    pub(crate) fn zbierz_statystyki(&self) -> magnat_render::RenderStats {
+        let Some(r) = self.renderer.as_ref() else {
+            return magnat_render::RenderStats::default();
+        };
+        let mut s = magnat_render::RenderStats::from_frame(r.stats(), r.budget.lod_scale());
+        s.voices_active = self
+            .audio
+            .as_ref()
+            .map_or(0, |a| a.stats().voices_active.min(255) as u8);
+        s.chunk_remesh_count = self
+            .streamer
+            .as_ref()
+            .map_or(0, |st| st.remesh_count().min(u64::from(u32::MAX)) as u32);
+        s.snapshot_select_ms = self.select_ms;
+        s.building_query_ms = self.budynki_ms;
+        s.lights = self.snapshot.front().lights.len() as u32;
+        s
+    }
+
+    /// Opis świata do raportu sceny — jedyna część, która nie jest liczbą z klatki.
+    fn opis_swiata(&self) -> String {
+        format!(
+            "{{ \"seed\": \"0x{:X}\", \"size_m\": {}, \"day\": {}, \"minute_of_day\": {}, \"citizens\": {}, \"crowd\": {} }}",
+            self.params.seed,
+            self.terrain.as_ref().map_or(0, |t| t.size_m()),
+            self.minute.0 / 1440,
+            self.minute.0 % 1440,
+            self.snapshot.front().citizens.len(),
+            self.tlum,
+        )
+    }
+
     /// Raport z przelotu: jeden wiersz na etap plus podsumowanie całości.
     ///
     /// Percentyle, nie sama średnia: 60 FPS średnio przy jednym zacięciu 200 ms to gorsze

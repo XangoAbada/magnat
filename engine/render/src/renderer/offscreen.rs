@@ -46,6 +46,7 @@ impl Renderer {
         height: u32,
         ui: Option<UiFrame<'_>>,
     ) -> (u32, u32, Vec<u8>) {
+        let zegar = std::time::Instant::now();
         let listy = self.prepare_frame(camera, minute, latitude_ddeg, (width, height));
         let device = &self.gpu.device;
 
@@ -79,14 +80,15 @@ impl Renderer {
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("render.offscreen"),
         });
-        // Zrzut offscreen nie ma kursora, więc kopia piksela ID i tak nie powstaje.
-        let (triangles, _, pogoda) = self.record_passes(&mut encoder, &color_view, &depth, &listy);
+        // Zrzut offscreen nie ma kursora, więc pass bufora ID w ogóle się nie otwiera
+        // (`H-4`) — a wraz z nim nie powstaje kopia piksela.
+        let wynik = self.record_passes(&mut encoder, &color_view, &depth, &listy);
         if let Some(f) = ui.as_ref() {
             self.ui
                 .prepare(device, &self.gpu.queue, &mut encoder, f, [width, height]);
             self.ui.paint(&mut encoder, &color_view, f, [width, height]);
         }
-        self.resolve_timer(&mut encoder);
+        self.resolve_timer(&mut encoder, wynik);
         encoder.copy_texture_to_buffer(
             wgpu::TexelCopyTextureInfo {
                 texture: &color,
@@ -109,6 +111,9 @@ impl Renderer {
             },
         );
         self.gpu.queue.submit(Some(encoder.finish()));
+        // Zegar procesora kończy się na wysłaniu poleceń: dalej jest synchroniczne
+        // czekanie na kartę, czyli czas GPU mierzony drugi raz i pod złą nazwą.
+        let cpu = zegar.elapsed();
 
         let slice = readback.slice(..);
         slice.map_async(wgpu::MapMode::Read, |_| {});
@@ -139,7 +144,7 @@ impl Renderer {
         drop(data);
         readback.unmap();
 
-        self.finish_stats(&listy.widoczne, triangles, pogoda);
+        self.finish_stats(&listy.widoczne, wynik, cpu);
         (width, height, rgb)
     }
 }

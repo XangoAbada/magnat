@@ -248,16 +248,21 @@ impl WeatherRenderer {
     }
 
     /// Dwa wywołania rysowania: całość opadu i całość dymu (§5.8 — „1 draw call").
-    pub fn draw(&self, pass: &mut wgpu::RenderPass<'_>) {
+    /// Zwraca, ile ich faktycznie poszło — scena bez dymu ma jedno, bez opadu też.
+    pub fn draw(&self, pass: &mut wgpu::RenderPass<'_>) -> u32 {
         pass.set_bind_group(0, Some(&self.bind), &[]);
+        let mut n = 0;
         if self.precip_count > 0 {
             pass.set_pipeline(&self.precip);
             pass.draw(0..6, 0..self.precip_count);
+            n += 1;
         }
         if self.plume_count > 0 {
             pass.set_pipeline(&self.smoke);
             pass.draw(0..6, 0..self.plume_count * PARTICLES_PER_PLUME);
+            n += 1;
         }
+        n
     }
 }
 

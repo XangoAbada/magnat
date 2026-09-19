@@ -352,6 +352,11 @@ impl Renderer {
     ///
     /// `pierwszy_arg` to pozycja listy w buforze pośrednim: kadr zaczyna się od zera,
     /// a kaskady leżą za nim, jedna za drugą.
+    ///
+    /// Zwraca `(trójkąty, wywołania rysowania)`. Liczba wywołań jest tu, a nie u wołającego,
+    /// bo tylko tutaj widać, którą z dwóch ścieżek poszła klatka: pośrednia rysuje całą
+    /// listę jednym wywołaniem, a zapasowa — jednym na chunk. Odtwarzanie tej gałęzi
+    /// po stronie statystyk rozjechałoby się z nią przy pierwszej zmianie.
     pub(super) fn draw_list(
         &self,
         pass: &mut wgpu::RenderPass<'_>,
@@ -359,7 +364,7 @@ impl Renderer {
         lista: &[VisibleChunk],
         woda: bool,
         pierwszy_arg: u32,
-    ) -> usize {
+    ) -> (usize, u32) {
         pass.set_bind_group(0, Some(bind), &[]);
         pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
         pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
@@ -372,13 +377,14 @@ impl Renderer {
             .sum();
 
         let miesci_sie = (pierwszy_arg as usize + lista.len()) <= MAX_INDIRECT_ARGS;
-        match self.indirect_buffer.as_ref() {
+        let wywolania = match self.indirect_buffer.as_ref() {
             Some(buf) if !lista.is_empty() && miesci_sie => {
                 pass.multi_draw_indexed_indirect(
                     buf,
                     u64::from(pierwszy_arg) * 20,
                     lista.len() as u32,
                 );
+                1
             }
             _ => {
                 for c in lista {
@@ -388,9 +394,10 @@ impl Renderer {
                         c.instance..c.instance + 1,
                     );
                 }
+                lista.len() as u32
             }
-        }
-        trojkaty
+        };
+        (trojkaty, wywolania)
     }
 
     // Osiem argumentów, bo tyle niezależnych wielkości opisuje klatkę. Opakowanie ich

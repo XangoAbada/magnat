@@ -108,7 +108,12 @@ impl InstanceRenderer {
 
         // Bufory palety są małe (kilka kilobajtów) i **nie zmieniają się w trakcie gry**:
         // paleta jest daną, a zmiana danych to restart. Stąd zapis raz, przy tworzeniu.
-        let colors = storage_buffer(device, queue, "render.instance.palette.colors", bajty_barw(palettes.colors()));
+        let colors = storage_buffer(
+            device,
+            queue,
+            "render.instance.palette.colors",
+            bajty_barw(palettes.colors()),
+        );
         let ramps = storage_buffer(
             device,
             queue,
@@ -216,9 +221,7 @@ impl InstanceRenderer {
                 usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
                 mapped_at_creation: false,
             }),
-            models: table.with_impostors(
-                sylwetki.index().iter().map(|e| !e.is_empty()).collect(),
-            ),
+            models: table.with_impostors(sylwetki.index().iter().map(|e| !e.is_empty()).collect()),
             batches: Vec::new(),
             drawn: 0,
             pose_atlas_bytes,
@@ -248,6 +251,20 @@ impl InstanceRenderer {
         self.batches.len()
     }
 
+    /// Ile encji poszło na każdym poziomie detalu (§5.5).
+    ///
+    /// Liczone z wsadów, a nie z instancji: klucz wsadu **jest** parą `(model, poziom)`,
+    /// więc wsadów są dziesiątki, a instancji dziesiątki tysięcy. Druga pętla po buforze
+    /// kosztowałaby tyle, co cała kompakcja.
+    #[must_use]
+    pub fn instances_by_lod(&self) -> [u32; 4] {
+        let mut out = [0u32; 4];
+        for b in &self.batches {
+            out[crate::instancing::lod_of(b.model_lod) as usize] += b.count;
+        }
+        out
+    }
+
     /// Ile waży atlas póz wgrany na GPU.
     #[must_use]
     pub fn pose_atlas_bytes(&self) -> usize {
@@ -264,8 +281,13 @@ impl InstanceRenderer {
         }
     }
 
-    /// Rysuje wszystkie wsady. Zwraca liczbę trójkątów.
-    pub fn draw(&self, pass: &mut wgpu::RenderPass<'_>) -> usize {
+    /// Rysuje wszystkie wsady. Zwraca `(trójkąty, wywołania rysowania)`.
+    ///
+    /// Liczba wywołań jest **liczona tam, gdzie powstają**, a nie odtwarzana z liczby
+    /// wsadów: wsad wskazujący na pusty slot modelu jest pomijany, więc `batches()`
+    /// zawyżałby budżet o każdy model bez wypieczonej siatki — a to jest liczba,
+    /// której pilnują progi scen odniesienia (§5.5).
+    pub fn draw(&self, pass: &mut wgpu::RenderPass<'_>) -> (usize, u32) {
         self.draw_with(pass, &self.pipeline, &self.impostor_pipeline)
     }
 
@@ -274,8 +296,9 @@ impl InstanceRenderer {
     /// Impostory też tu wchodzą, i to jest wymaganie produktowe, nie ozdoba: „każdy
     /// obiekt widoczny w świecie jest klikalny" (korekta po decyzji właściciela produktu
     /// w M11), a encja na dwustu metrach jest widoczna.
-    pub fn draw_ids(&self, pass: &mut wgpu::RenderPass<'_>) {
-        let _ = self.draw_with(pass, &self.id_pipeline, &self.impostor_id_pipeline);
+    pub fn draw_ids(&self, pass: &mut wgpu::RenderPass<'_>) -> u32 {
+        self.draw_with(pass, &self.id_pipeline, &self.impostor_id_pipeline)
+            .1
     }
 
     fn draw_with(
@@ -283,13 +306,14 @@ impl InstanceRenderer {
         pass: &mut wgpu::RenderPass<'_>,
         pipeline: &wgpu::RenderPipeline,
         impostor_pipeline: &wgpu::RenderPipeline,
-    ) -> usize {
+    ) -> (usize, u32) {
         if self.drawn == 0 {
-            return 0;
+            return (0, 0);
         }
         pass.set_bind_group(0, Some(&self.bind), &[]);
         pass.set_vertex_buffer(1, self.instances.slice(..));
         let mut trojkaty = 0usize;
+        let mut wywolania = 0u32;
 
         // Najpierw geometria, potem sylwetki: dwa potoki, ale nadal **jedno wywołanie
         // rysowania na wsad**. Rozdział idzie po poziomie detalu zapisanym w kluczu
@@ -311,6 +335,7 @@ impl InstanceRenderer {
                 b.first..b.first + b.count,
             );
             trojkaty += (s.index_count / 3) as usize * b.count as usize;
+            wywolania += 1;
         }
 
         let mut impostory = false;
@@ -326,8 +351,9 @@ impl InstanceRenderer {
             // trójkąty, które są takie same dla każdej encji, byłby pamięcią pod stałą.
             pass.draw(0..6, b.first..b.first + b.count);
             trojkaty += 2 * b.count as usize;
+            wywolania += 1;
         }
-        trojkaty
+        (trojkaty, wywolania)
     }
 }
 
@@ -339,40 +365,40 @@ const ATRYBUTY_INSTANCJI: [wgpu::VertexAttribute; 7] = [
         format: wgpu::VertexFormat::Float32x3,
         offset: 0,
         shader_location: 2,
-        },
+    },
     wgpu::VertexAttribute {
         format: wgpu::VertexFormat::Uint32,
         offset: 12,
         shader_location: 3,
-        },
-        // `palette_base` i `model_lod` leżą obok siebie jako dwa `u16`; shader
-        // czyta je jako jedno 32-bitowe słowo i rozdziela przesunięciem.
+    },
+    // `palette_base` i `model_lod` leżą obok siebie jako dwa `u16`; shader
+    // czyta je jako jedno 32-bitowe słowo i rozdziela przesunięciem.
     wgpu::VertexAttribute {
         format: wgpu::VertexFormat::Uint32,
         offset: 16,
         shader_location: 4,
-        },
+    },
     wgpu::VertexAttribute {
         format: wgpu::VertexFormat::Uint32,
         offset: 20,
         shader_location: 5,
-        },
+    },
     wgpu::VertexAttribute {
         format: wgpu::VertexFormat::Uint32,
         offset: 24,
         shader_location: 6,
-        },
+    },
     wgpu::VertexAttribute {
         format: wgpu::VertexFormat::Uint32,
         offset: 28,
         shader_location: 7,
-        },
+    },
     wgpu::VertexAttribute {
         format: wgpu::VertexFormat::Uint32,
         offset: 32,
         shader_location: 8,
-        },
-    ];
+    },
+];
 
 /// Układ grupy wiązań, wspólny dla obu potoków geometrii i obu potoków impostora.
 ///
@@ -430,26 +456,26 @@ fn create_pipelines(
 
     const ATRYBUTY_WIERZCHOLKA: [wgpu::VertexAttribute; 2] = [
         wgpu::VertexAttribute {
-        format: wgpu::VertexFormat::Sint16x4,
-        offset: 0,
-        shader_location: 0,
+            format: wgpu::VertexFormat::Sint16x4,
+            offset: 0,
+            shader_location: 0,
         },
         wgpu::VertexAttribute {
-        format: wgpu::VertexFormat::Uint8x4,
-        offset: 8,
-        shader_location: 1,
+            format: wgpu::VertexFormat::Uint8x4,
+            offset: 8,
+            shader_location: 1,
         },
     ];
     let bufory = [
         Some(wgpu::VertexBufferLayout {
-        array_stride: std::mem::size_of::<ModelVertex>() as u64,
-        step_mode: wgpu::VertexStepMode::Vertex,
-        attributes: &ATRYBUTY_WIERZCHOLKA,
+            array_stride: std::mem::size_of::<ModelVertex>() as u64,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &ATRYBUTY_WIERZCHOLKA,
         }),
         Some(wgpu::VertexBufferLayout {
-        array_stride: std::mem::size_of::<GpuInstance>() as u64,
-        step_mode: wgpu::VertexStepMode::Instance,
-        attributes: &ATRYBUTY_INSTANCJI,
+            array_stride: std::mem::size_of::<GpuInstance>() as u64,
+            step_mode: wgpu::VertexStepMode::Instance,
+            attributes: &ATRYBUTY_INSTANCJI,
         }),
     ];
     let primitive = wgpu::PrimitiveState {
@@ -460,24 +486,24 @@ fn create_pipelines(
         label: Some("render.instance.opaque"),
         layout: Some(&pipeline_layout),
         vertex: wgpu::VertexState {
-        module: shader,
-        entry_point: Some("vs_main"),
-        buffers: &bufory,
-        compilation_options: Default::default(),
+            module: shader,
+            entry_point: Some("vs_main"),
+            buffers: &bufory,
+            compilation_options: Default::default(),
         },
         fragment: Some(wgpu::FragmentState {
-        module: shader,
-        entry_point: Some("fs_main"),
-        targets: &[Some(crate::renderer::HDR_FORMAT.into())],
-        compilation_options: Default::default(),
+            module: shader,
+            entry_point: Some("fs_main"),
+            targets: &[Some(crate::renderer::HDR_FORMAT.into())],
+            compilation_options: Default::default(),
         }),
         primitive,
         depth_stencil: Some(wgpu::DepthStencilState {
-        format: wgpu::TextureFormat::Depth32Float,
-        depth_write_enabled: Some(true),
-        depth_compare: Some(wgpu::CompareFunction::Less),
-        stencil: Default::default(),
-        bias: Default::default(),
+            format: wgpu::TextureFormat::Depth32Float,
+            depth_write_enabled: Some(true),
+            depth_compare: Some(wgpu::CompareFunction::Less),
+            stencil: Default::default(),
+            bias: Default::default(),
         }),
         multisample: wgpu::MultisampleState::default(),
         multiview_mask: None,
@@ -487,26 +513,26 @@ fn create_pipelines(
         label: Some("render.instance.id"),
         layout: Some(&pipeline_layout),
         vertex: wgpu::VertexState {
-        module: shader,
-        entry_point: Some("vs_main"),
-        buffers: &bufory,
-        compilation_options: Default::default(),
+            module: shader,
+            entry_point: Some("vs_main"),
+            buffers: &bufory,
+            compilation_options: Default::default(),
         },
         fragment: Some(wgpu::FragmentState {
-        module: shader,
-        entry_point: Some("fs_id"),
-        targets: &[Some(crate::pick::ID_FORMAT.into())],
-        compilation_options: Default::default(),
+            module: shader,
+            entry_point: Some("fs_id"),
+            targets: &[Some(crate::pick::ID_FORMAT.into())],
+            compilation_options: Default::default(),
         }),
         primitive,
         // `Equal` bez zapisu: rysujemy dokładnie te fragmenty, które wygrały
         // w passie nieprzezroczystym. Stąd bierze się poprawne przesłanianie.
         depth_stencil: Some(wgpu::DepthStencilState {
-        format: wgpu::TextureFormat::Depth32Float,
-        depth_write_enabled: Some(false),
-        depth_compare: Some(wgpu::CompareFunction::Equal),
-        stencil: Default::default(),
-        bias: Default::default(),
+            format: wgpu::TextureFormat::Depth32Float,
+            depth_write_enabled: Some(false),
+            depth_compare: Some(wgpu::CompareFunction::Equal),
+            stencil: Default::default(),
+            bias: Default::default(),
         }),
         multisample: wgpu::MultisampleState::default(),
         multiview_mask: None,
@@ -585,8 +611,7 @@ fn impostor_texture(
         usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
         view_formats: &[],
     });
-    let oczekiwane =
-        (magnat_voxel::TILE_W * magnat_voxel::TILE_H * warstwy) as usize * 4;
+    let oczekiwane = (magnat_voxel::TILE_W * magnat_voxel::TILE_H * warstwy) as usize * 4;
     let mut dane = atlas.pixels().to_vec();
     dane.resize(oczekiwane, 0);
     queue.write_texture(
@@ -623,9 +648,7 @@ fn impostors_to_gpu(atlas: &ImpostorAtlas) -> Vec<[u32; 4]> {
         .map(|e| {
             [
                 e.base_layer,
-                u32::from(e.dirs)
-                    | (u32::from(e.frames) << 8)
-                    | (u32::from(e.frame_shift) << 16),
+                u32::from(e.dirs) | (u32::from(e.frames) << 8) | (u32::from(e.frame_shift) << 16),
                 e.size_m[0].to_bits(),
                 e.size_m[1].to_bits(),
             ]

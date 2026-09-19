@@ -86,6 +86,16 @@ impl PickBuffer {
         }
     }
 
+    /// Czy klatka ma w ogóle otwierać pass bufora identyfikatorów.
+    ///
+    /// Bez kursora nikt jego bajtów nie czyta — `set_cursor(None)` zeruje trafienie,
+    /// a kopii piksela i tak nie ma. Rysowanie pełnej geometrii wszystkich encji drugi
+    /// raz i czyszczenie tekstury wielkości okna byłoby wtedy pracą bez odbiorcy (`H-4`).
+    #[must_use]
+    pub fn aktywny(&self) -> bool {
+        self.cursor.is_some()
+    }
+
     /// W co gracz celuje, z **poprzedniej** klatki.
     #[must_use]
     pub fn hovered(&self) -> Option<PickHit> {
@@ -104,10 +114,13 @@ impl PickBuffer {
         encoder: &mut wgpu::CommandEncoder,
         depth: &wgpu::TextureView,
         instances: &InstanceRenderer,
+        timestamp_writes: Option<wgpu::RenderPassTimestampWrites<'_>>,
+        wywolania: &mut u32,
     ) -> bool {
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("pick_id"),
+                timestamp_writes,
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &self.id_view,
                     depth_slice: None,
@@ -127,7 +140,7 @@ impl PickBuffer {
                 }),
                 ..Default::default()
             });
-            instances.draw_ids(&mut pass);
+            *wywolania = instances.draw_ids(&mut pass);
         }
 
         let Some((x, y)) = self.cursor else {
