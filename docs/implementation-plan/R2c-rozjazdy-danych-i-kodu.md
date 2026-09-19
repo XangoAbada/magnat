@@ -42,7 +42,7 @@ pięciu.
 | R2-WP12 ⇧ | Wiek produkcyjny w jednym miejscu | — | S | `[x]` **wykonane w M8c** (2026-09-17) jako warunek wejścia podfazy, zgodnie z propozycją domyślną `D-N1` |
 | R2-WP13 | Wartość czasu idzie za dochodem | — | M | `[ ]` |
 | R2-WP14 | Szczebel substytucji dostaje wykonawcę | — | M | `[ ]` |
-| R2-WP15 | Chodniki: warstwa piesza bez dróg szybkiego ruchu | — | S | `[ ]` |
+| R2-WP15 → **M11c** | Chodniki: warstwa piesza bez dróg szybkiego ruchu | — | S | `[ ]` |
 | R2-WP16 | Potrzeby bez martwych slotów | — | M | `[ ]` |
 
 ---
@@ -178,6 +178,13 @@ Test statyczny: w `sim/supply` nie ma pustego ramienia `match` dla żadnego wari
 ---
 
 ### R2-WP15 — Chodniki: warstwa piesza bez dróg szybkiego ruchu
+
+> **Pakiet wykonuje M11c.** Decyzja właściciela produktu z 2026-09-19 przeniosła go do podfazy
+> prezentacyjnej razem z trzema innymi, bo M11c ma pokazać ulicę, a ulica jest pusta i nie ma
+> na niej szyldów. Zakres, kryterium i sufit czasu zostają **bez zmian** — zmienia się wyłącznie
+> adres wykonania. Powód w tabeli `J-n` dokumentu `M11c-wnetrza-i-kamera.md`; status wraca do
+> wykazu R2 po zamknięciu M11c.
+
 
 **Pozycja wykazu:** 12.
 

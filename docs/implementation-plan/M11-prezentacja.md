@@ -122,7 +122,7 @@ dopiero po ostatniej podfazie; podfaza zamyka się własnym kryterium ze swojego
 |---|---|---|---|---|
 | **M11a — Format i kontrakt snapshotu** | WP1, WP11, WP2 | 5.1, 5.2, 5.3 | Jeden model postaci w trzech wariantach palety rysowany jednym draw callem; tłum z M3 rysowany z bufora instancji. | `M11a-format-i-snapshot.md` |
 | **M11b — Animacja i LOD wizualne** | WP3, WP4a | 5.4, 5.5, 5.6 | Postać chodzi, siada i pracuje; dalszy plan schodzi na impostory bez widocznego przeskoku. | `M11b-animacja-i-lod.md` |
-| **M11c — Wnętrza i kamera FPP** | WP5, WP9 | 5.7 | Wejście do własnego sklepu z poziomu ulicy; szyld firmy gracza widoczny z zewnątrz. | `M11c-wnetrza-i-kamera.md` |
+| **M11c — Wnętrza i kamera FPP** | WP12, R2-WP15, R2-WP17, R2-WP18, WP5, WP9 | 5.7 | Wejście do własnego sklepu z ulicy, na której są ludzie i samochody; szyld firmy gracza widoczny z zewnątrz. | `M11c-wnetrza-i-kamera.md` |
 | **M11d — Światło, pogoda, dźwięk** | WP6, WP7, WP8 | 5.8, 5.9 | Noc, deszcz, dym z komina i warstwa dźwiękowa reagująca na stan świata, nie na skrypt. | `M11d-swiatlo-pogoda-dzwiek.md` |
 | **M11e — Budżet klatki** | WP10, WP4b (`W-1`) | 5.10, 5.11 | Pełny artefakt fazy z §1 dokumentu fazy: cele FPS z PRD §20.2 dotrzymane na maszynie referencyjnej. | `M11e-budzet-klatki.md` |
 
@@ -330,6 +330,7 @@ Regresja p95 > 8% względem baseline'u = fail.
 | WP8 | `engine/audio` | **L** | Cały nowy crate: mikser, emitery przestrzenne, okluzja, klastrowanie, `MusicDirector` |
 | WP9 | Szyldy i barwy firm gracza | **S** | Atlas tekstu + jeden slot palety. Zależy od font atlasu M9 |
 | WP10 | `RenderBudget`, adaptacja, benchmarki | **M** | Timestamp queries + histereza + harness i baseline |
+| WP12 | Ulica ma ruch: okno Mikro, promień rysowania, trasa pieszego | **M** | Trzy naprawy jednego objawu — pustego kadru (`X-1`). Dopisany po M11b |
 
 **Rozkład:** 5 × L, 4 × M, 2 × S. Ciężar leży w WP2 (kontrakt danych), WP3 (animacja),
 WP4 (LOD), WP5 (wnętrza) i WP8 (audio).
@@ -434,3 +435,16 @@ tutaj wyłącznie to, co dotyczy **całej fazy**. Gwiazdka = zmiana zakresu albo
 | W-5 | **`FrameStats` niesie `instances` i `instance_batches`** — pierwsze dwa pola `RenderStats` z §5.10 | Przy pustym kadrze „symulacja nic nie oddała", „render tego nie narysował" i „kamera patrzy gdzie indziej" dają ten sam obraz. M12 dostaje te liczby przy okazji (`G-14`) |
 | W-6 | **`§7.3` dostaje test `variant_survives_lod` w postaci wykonalnej bez GPU**: billboard ma wymiary bryły modelu, a barwę liczy ta sama funkcja `pick(wariant, rola)`, co pełna geometria | Porównanie pikseli centralnych z §7.3 wymaga karty graficznej i sceny referencyjnej; równość **wejść** obu ścieżek sprawdza się w CI i wyklucza tę samą klasę błędu (`G-8`, `G-11`) |
 | W-7 ★ | **Poprawka spoza fazy: mieszkańcy zaczynali i kończyli trasę pod terenem** (`PlaceEntry.at` brał `aabb.min.z`, czyli dno fundamentu). Po poprawce biorą rzędną wejścia | To jest ta klasa usterki, którą widać dopiero wtedy, gdy encja przestaje być plamką: do M11b pieszy miał kilka pikseli i nikt nie liczył, na jakiej jest wysokości (`G-13`). Środek trasy zostaje otwarty i ma adres w R2 |
+
+## Zmiany wpisane po decyzji właściciela produktu (2026-09-19, po M11b)
+
+Zgodnie z `K-18`. Pełna tabela `J-n` stoi w `M11c-wnetrza-i-kamera.md`; tutaj to,
+co dotyczy całej fazy. Gwiazdka = zmiana zakresu albo kryterium.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| X-1 ★ | **Faza dostaje `WP12` — „Ulica ma ruch"** — i cztery pakiety wchodzą do M11c przed WP5 i WP9: `WP12`, `R2-WP15`, `R2-WP17`, `R2-WP18` | M11b pokazała, że żywe miasto z §1 („mieszkańcy chodzą chodnikami, wsiadają do samochodów, niosą zakupy") nie ma dziś jak zaistnieć: w kadrze stoi kilkadziesiąt osób, nie jedzie ani jeden samochód, a firm jest dziesięciokrotnie za mało. Artefakt fazy z §1 jest wtedy nieweryfikowalny — nie dlatego, że renderer czegoś nie umie, tylko dlatego, że nie ma czego narysować |
+| X-2 ★ | **`DRAW_RADIUS_M` przestaje być stałą mniejszą od dystansu orbity.** Dziś to 600 m mierzone od oka, a domyślny widok gry stoi 900 m od celu — encje w środku kadru są poza promieniem | To jest stan gry od M11a i najpoważniejsza pojedyncza rzecz z całej czwórki: nie „za mało ludzi", tylko **zero ludzi w widoku, od którego gra się zaczyna**. §5.5 dokumentu M11b podaje progi poziomu detalu w metrach i one zostają; zmienia się wyłącznie odległość odcięcia, która ma wynikać z rozmiaru ekranowego encji |
+| X-3 ★ | **Okno warstwy Mikro i `ViewQuery.aabb` idą za celem kamery, nie za jej okiem** | Przy orbicie z 900 m oko stoi 767 m w poziomie od celu, więc oba wycinki są przesunięte o tyle samo, a połowa okna leży za plecami kamery. Kadr i wycinek symulacji mają opisywać to samo miejsce |
+| X-4 | **Decyzja `D-N13` z R2 przyjęta wg propozycji domyślnej** (profil bez złóż w regionie: zakład nie powstaje, łańcuch domyka import przez bramę) | Blokowała `R2-WP17`, który wchodzi do M11c razem z `R2-WP18`. Pozostałe warianty łamią kontrakt: „przesuń profil" daje świat inny, niż deklaruje wiersz poleceń, „dosiej złoże" łamie `K-13` |
+| X-5 | **Wykaz R2 traci pięć pozycji na rzecz M11c** (5, 6, 12, 70, 71) i wszystkie mają tam imiennego adresata | R2 wymaga statusu dla każdej pozycji; „przeniesiona z adresatem" jest statusem, „zrobiona po drodze" nie jest |

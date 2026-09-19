@@ -37,13 +37,20 @@ naprawy i wchodzi tu tylko dlatego, że dotyka tego samego generatora i tej same
 
 | WP | Nazwa | Zależy od | Rozmiar | Status |
 |---|---|---|---|---|
-| R2-WP17 | Kopalnia staje na złożu | — | M | `[ ]` |
-| R2-WP18 | Gęstość firm i pasmo bezrobocia | R2-WP17, R2-WP12 | L | `[ ]` |
+| R2-WP17 → **M11c** | Kopalnia staje na złożu | `D-N13` (przyjęta) | M | `[ ]` |
+| R2-WP18 → **M11c** | Gęstość firm i pasmo bezrobocia | R2-WP17 (WP12 zamknięty w M8c) | L | `[ ]` |
 | R2-WP19 | Przechwytywanie rzek w erozji | — | M | `[ ]` |
 
 ---
 
 ### R2-WP17 — Kopalnia staje na złożu
+
+> **Pakiet wykonuje M11c.** Decyzja właściciela produktu z 2026-09-19 przeniosła go do podfazy
+> prezentacyjnej razem z trzema innymi, bo M11c ma pokazać ulicę, a ulica jest pusta i nie ma
+> na niej szyldów. Zakres, kryterium i sufit czasu zostają **bez zmian** — zmienia się wyłącznie
+> adres wykonania. Powód w tabeli `J-n` dokumentu `M11c-wnetrza-i-kamera.md`; status wraca do
+> wykazu R2 po zamknięciu M11c.
+
 
 **Pozycja wykazu:** 5. Zapisana jako `AQ-8` w `M6-lancuch-dostaw.md` z adresem M7; M7 zamknięte bez niej.
 
@@ -86,6 +93,13 @@ wyczerpania — czyli mechanizm, który dziś nie chodzi, faktycznie chodzi.
 ---
 
 ### R2-WP18 — Gęstość firm i pasmo bezrobocia
+
+> **Pakiet wykonuje M11c.** Decyzja właściciela produktu z 2026-09-19 przeniosła go do podfazy
+> prezentacyjnej razem z trzema innymi, bo M11c ma pokazać ulicę, a ulica jest pusta i nie ma
+> na niej szyldów. Zakres, kryterium i sufit czasu zostają **bez zmian** — zmienia się wyłącznie
+> adres wykonania. Powód w tabeli `J-n` dokumentu `M11c-wnetrza-i-kamera.md`; status wraca do
+> wykazu R2 po zamknięciu M11c.
+
 
 **Pozycja wykazu:** 6. Rozmiar `L`, sufit pracy w `D-N6`.
 
@@ -189,6 +203,8 @@ bo zakończenie drugie też jest decyzją, a nie brakiem zmiany.
 ## 5.12 Decyzje otwarte tej podfazy
 
 **`D-N13` — Co zrobić, gdy profil gospodarczy wymaga wydobycia, a region nie ma złóż.**
+**ROZSTRZYGNIĘTA wg propozycji domyślnej** — właściciel produktu, 2026-09-19, przy przeniesieniu
+`R2-WP17` do M11c (`J-5`).
 Propozycja: zakład nie powstaje, a domknięcie łańcuchów uruchamia import przez bramę — mechanizm
 istnieje i ma przepustowość, elastyczność ceny i cło. Wariant „przesuń profil na inny region"
 oznaczałby, że `--region desert --profile industrial` daje inny świat niż deklaruje; wariant

@@ -215,10 +215,10 @@ Tabela pakietów z rozmiarami i statusem stoi w dokumencie każdej podfazy. Zbio
 | R2-WP12 ⇧ | Wiek produkcyjny w jednym miejscu | R2c | — | S | `[ ]` |
 | R2-WP13 | Wartość czasu idzie za dochodem | R2c | — | M | `[ ]` |
 | R2-WP14 | Szczebel substytucji dostaje wykonawcę | R2c | — | M | `[ ]` |
-| R2-WP15 | Chodniki: warstwa piesza bez dróg szybkiego ruchu | R2c | — | S | `[ ]` |
+| R2-WP15 | Chodniki: warstwa piesza bez dróg szybkiego ruchu | R2c → **M11c** | — | S | `[ ]` |
 | R2-WP16 | Potrzeby bez martwych slotów | R2c | — | M | `[ ]` |
-| R2-WP17 | Kopalnia staje na złożu | R2d | — | M | `[ ]` |
-| R2-WP18 | Gęstość firm i pasmo bezrobocia | R2d | R2-WP17, R2-WP12 | L | `[ ]` |
+| R2-WP17 | Kopalnia staje na złożu | R2d → **M11c** | `D-N13` (przyjęta) | M | `[ ]` |
+| R2-WP18 | Gęstość firm i pasmo bezrobocia | R2d → **M11c** | R2-WP17 | L | `[ ]` |
 | R2-WP19 | Przechwytywanie rzek w erozji | R2d | — | M | `[ ]` |
 | R2-WP20 | Podział `DecisionReason` | R2e | wszystkie pozostałe | L | `[ ]` |
 | R2-WP21 | Generator dróg: rozcięcie `lsystem.rs` | R2e | — | M | `[ ]` |
@@ -423,20 +423,27 @@ Numeracja jest numeracją przeglądu i nie zmienia się. Kolumna „Plan" mówi,
 przed R2: `—` = nieznane planowi, `zapis` = zapisane jako znana usterka bez wykonawcy,
 `WP` = miało pakiet. Kolumna „Status" wypełnia się w trakcie R2.
 
+**Pięć pozycji ma adresata poza R2.** Decyzją właściciela produktu z 2026-09-19 pozycje
+**5, 6, 12, 70 i 71** wykonuje **M11c**, razem z pakietami `R2-WP15`, `R2-WP17` i `R2-WP18`.
+Powód stoi w tabeli `J-n` dokumentu `M11c-wnetrza-i-kamera.md`: podfaza prezentacyjna ma pokazać
+ulicę, a ulica jest pusta — w kadrze kilkadziesiąt osób, zero samochodów i dziesięciokrotnie
+za mało firm. To jest **zmiana adresu, nie zakresu**: opisy pakietów, ich kryteria i sufit
+czasu `D-N6` przy `R2-WP18` zostają bez zmian, a status wraca tutaj po zamknięciu M11c.
+
 | # | Usterka | Plan | Pakiet | Status |
 |---|---|---|---|---|
 | 1 ⇧ | Dziecko urodzone w grze nie dostaje flagi ucznia ani szkoły | — | R2-WP1 | `[x]` **wykonane przed R2** (`K-74`) |
 | 2 ⇧ | Zakład produkcyjny nigdy nie ma utargu; tier taktyczny go nie zamknie | zapis `M7e` `BC-8` | R2-WP7 | `[x]` **wykonane przed R2** (`K-75`) |
 | 3 | Szczebel `Substituted` kaskady ma puste ramię `match` | zapis `M6` `AG-6` | R2-WP14 | `[ ]` |
 | 4 | Wartość czasu zamrożona na stanie z generacji świata | — | R2-WP13 | `[ ]` |
-| 5 | Zero zakładów wydobywczych ze złożem w mieście 4 km | zapis `M6` `AQ-8` | R2-WP17 | `[ ]` |
-| 6 | Gęstość firm ~10× za niska; bezrobocie 0,2 % przy 12 032 wakatach | zapis `00-postep` `BF-4`/`BF-10` | R2-WP18 | `[ ]` |
+| 5 | Zero zakładów wydobywczych ze złożem w mieście 4 km | zapis `M6` `AQ-8` | R2-WP17 → **M11c** | `[ ]` |
+| 6 | Gęstość firm ~10× za niska; bezrobocie 0,2 % przy 12 032 wakatach | zapis `00-postep` `BF-4`/`BF-10` | R2-WP18 → **M11c** | `[ ]` |
 | 7 ⇧ | `WORKING_AGE` w kodzie (2 miejsca) vs `work_start`/`retirement` w danych | — | R2-WP12 | `[x]` **wykonane w M8c** (`K-60`) |
 | 8 | Rodzeństwo z zasiedlenia i napływu bez relacji `Sibling` | — | R2-WP2 | `[ ]` |
 | 9 | Babcia dostaje z wnukiem relację `Sibling`; brak `Grandparent` | — | R2-WP2 | `[ ]` |
 | 10 | Dziecko urodzone w pełnym gospodarstwie nie wchodzi do listy członków | — | R2-WP3 | `[ ]` |
 | 11 ⇧ | Uczeń wchodzi do indeksu miejsc pracy i dostaje relacje `Colleague` | zapis `M3d` `E-19` (przyczyna) | R2-WP1 | `[ ]` |
-| 12 | Warstwa piesza dopuszcza drogi szybkiego ruchu | — | R2-WP15 | `[ ]` |
+| 12 | Warstwa piesza dopuszcza drogi szybkiego ruchu | — | R2-WP15 → **M11c** | `[ ]` |
 | 13 | Motoryzacja to płaska stawka 430 ‰ bez związku z dochodem | zapis `M4b` `L-12` | R2-WP13 | `[ ]` |
 | 14 | Potrzeba `Status`: tempo 0, brak miejsc, `StatusLoss` pusty | zapis `M3a` `D-15` | R2-WP16 | `[ ]` |
 | 15 | `ProductivityLoss` i `AmbitionGain` jawnie puste | zapis `M7b` ★ | R2-WP16 | `[ ]` |
@@ -531,7 +538,7 @@ Ujednolicenie nagłówków jest zadaniem R2-WP23.
 | 68 | **Strzałki `↑↓←→` wypadły z interfejsu, bo domyślny atlas `egui` ich nie ma** — do czasu M11 gra nie wgrywa własnego kroju (`Theme::font`). Napisy, które ich używały (podpowiedź klawiszy powłoki, nagłówek karty podróży, znacznik wybranej opcji), mówią to samo znakami z atlasu. Po wgraniu kroju w M11 sprawdzić, czy strzałki wracają: test `atlas_fontow_zna_wszystkie_znaki_z_lokalizacji` odpowie na to w jednym przebiegu. Sufit testu jest nazwany: chodzi po **katalogu**, więc nie widzi znaków zaszytych w kodzie rysującym (`>`, `·`, `×` w `engine/ui/src/inspect/trip.rs`, `−` w `fmt.rs`) | zapis `M9b` `DE-16` | M11 (`M11d` albo gdziekolwiek wchodzą fonty) | `[ ]` |
 | 69 | **Ekran rozgrywki ma dwie z trzech rzeczy, które rysuje `ui-design.md` §5.** Inspekcja jest przeciągalnym oknem `egui` (`tools/magnat/src/citizens.rs`), a nie **dokiem prawym** — więc „lewy prowadzi, prawy pokazuje klikniętego" jest regułą dokumentu, nie ekranu. Pasek czasu nie niesie gotówki ani jej zmiany, choć §5 rysuje je po jego prawej stronie: gracz widzi stan konta tylko po otwarciu pulpitu. Oba są brakiem treści, a nie usterką — układ po naprawie `DI-39` jest już taki, że dok prawy ma gdzie stanąć | zapis `M9e` `DI-39` | — | `[ ]` |
 | 70 | **Trasa pieszego w warstwie Mikro jest odcinkiem prostym między środkami budynków.** `journey.rs::enter_micro_inner` podaje `MicroLayer::enter` dwa punkty (`coord_of(from)`, `coord_of(to)`) i nic więcej — żadnego routingu geometrycznego, żadnego próbkowania terenu. Pieszy idzie więc przez kwartały, a w połowie drogi bywa pod ziemią albo nad nią, bo interpolacja liniowa nie zna niwelety. Węzły grafu pieszego **mają** poprawne `z_cm` (łańcuch `TerrainQuery::height_at` → `lsystem` → `nav_build`) i nikt ich w tej ścieżce nie czyta. Objaw stał się widoczny w M11b, gdy pieszy przestał być plamką i dostał sylwetkę; poprawka `G-13` wyprostowała **końce** trasy (rzędna wejścia zamiast dna fundamentu), środek zostaje | zapis `M11b` `G-13` | — | `[ ]` |
-| 71 | **Warstwa Mikro oddaje 24–46 pieszych i ZERO pojazdów w oknie 900 m w szczycie porannym** przy 26 tys. mieszkańców (seed `0x4D41474E4154`, 8 km, 8:15–8:30, `--observe`). Do sprawdzenia, czy to jest właściwa liczba — udział podróży pieszych w mieście tej wielkości może ją tłumaczyć — czy objaw: okno Mikro wygasa, `retire` usuwa za wcześnie albo Etap 8 nie planuje dojazdów w tej godzinie. Rozstrzyga to jedno pytanie: ilu mieszkańców ma w tej minucie `ActivityKind::Commute`, a ilu z nich trafia do `PedestrianBuffer`. Pojazdów jest zero przy każdej sprawdzonej godzinie (7:45, 8:15, 8:30) i każdej prędkości, więc `VehicleRenderRec` — gotowy od M11a i rozszerzony w M11b o klip i model — **nie ma ani jednego czytelnika w oknie gry**. Póki co „żywe miasto" z PRD §15 widać wyłącznie na scenie syntetycznej `--crowd` | zapis `M11b` `G-12` | — | `[ ]` |
+| 71 ⇧ | **Kadr gry jest pusty, bo okno warstwy Mikro i promień rysowania są zaczepione w oku kamery, a nie w tym, na co gracz patrzy.** Zdiagnozowane po M11b, trzy przyczyny naraz. **(1)** `citizens.rs::okno_mikro` podaje `set_micro_window(camera.eye())`, a przy orbicie z 900 m oko stoi 767 m w poziomie od celu — dysk o promieniu 900 m jest przesunięty o tyle samo, więc połowa okna leży za plecami kamery. **(2)** `DRAW_RADIUS_M = 600` mierzy się **od oka**, a `ViewQuery.aabb` to 720 m wokół oka: przy orbicie 900 m punkt, na który gracz patrzy, jest z definicji poza jednym i drugim, więc w domyślnym widoku dzielnicy nie widać **żadnej** encji. **(3)** `MicroLayer::enter` wpuszcza pieszego tylko w minucie wyruszenia i tylko wtedy, gdy początek albo koniec jego trasy trafia w okno — kto idzie przez kadr, ale mieszka i pracuje poza nim, nie pojawia się nigdy, a po przeskoku kamery nowe okno napełnia się przez kilkanaście minut symulacji. Liczba samych pieszych (24–46) jest przy tym **prawdopodobnie poprawna**: `data/roads/mode_choice.ron` daje dla miasta 28 tys. udział pieszy ~70 % i udział samochodowy ~10 %, a `min_car_distance_m: 800` odcina krótkie dojazdy autem. Rekordy pojazdów mają czytelnika (`view.rs::fill_vehicles`) — pusty jest bufor Mikro, nie kanał | zapis `M11b` `G-12` | **M11c** (przejęte z R2 decyzją właściciela produktu) | `[ ]` |
 
 ## 12. Szacunek wielkości
 
