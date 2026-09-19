@@ -52,35 +52,46 @@ fn pudlo(
 ///
 /// Poziomy: L0 ma dziesięć części (staw łokciowy i kolanowy osobno), L1 zbija ramiona
 /// i nogi w dwie bryły — to jest dokładnie podział z §5.1, tyle że pudełkami.
+///
+/// **Postać patrzy w `+X`, tak samo jak auto jedzie w `+X`.** Oś barków i rozstaw nóg
+/// idą wzdłuż `Y`, więc wymach kończyny w marszu jest obrotem wokół `Y` — i to jest
+/// jedyna orientacja, przy której `yaw` z warstwy ruchu ustawia postać twarzą do celu.
+/// Do M11b model stał bokiem i nikt tego nie widział, bo `yaw` mieszkańca był zerem
+/// (`F-5`); pierwszy obrócony pieszy pokazałby to natychmiast.
+///
+/// **Bryła jest wyśrodkowana na origin w poziomie**, a stoi na nim w pionie. To nie jest
+/// kosmetyka: shader obraca model o `yaw` **wokół origin**, więc model przesunięty
+/// względem niego zatacza łuk zamiast się obrócić, a impostor wypalony z tej samej bryły
+/// wychodzi poza kafel. Pivot korzenia niesie to przesunięcie i nic poza nim nie drgnęło.
 #[must_use]
 pub fn citizen() -> VoxModel {
     // Układ pionowy w voxelach: golenie 0–2, uda 2–4, tors 4–6, głowa 6–7.
     let parts = vec![
         // 0: tors — korzeń, metr nad gruntem.
-        pudlo(PartName::TORSO, Part::NO_PARENT, 0b011, [0, 0, 16], [2, 1, 2], OUTFIT),
+        pudlo(PartName::TORSO, Part::NO_PARENT, 0b011, [-2, -4, 16], [1, 2, 2], OUTFIT),
         // 1: głowa.
-        pudlo(PartName::HEAD, 0, 0b011, [0, 0, 8], [2, 1, 1], SKIN),
+        pudlo(PartName::HEAD, 0, 0b011, [0, 0, 8], [1, 2, 1], SKIN),
         // 2–3: lewe ramię i przedramię (L0).
-        pudlo(PartName::ARM_L, 0, 0b001, [-4, 0, 4], [1, 1, 1], OUTFIT),
+        pudlo(PartName::ARM_L, 0, 0b001, [0, -4, 4], [1, 1, 1], OUTFIT),
         pudlo(PartName::FOREARM_L, 2, 0b001, [0, 0, -4], [1, 1, 1], SKIN),
         // 4–5: prawe.
-        pudlo(PartName::ARM_R, 0, 0b001, [8, 0, 4], [1, 1, 1], OUTFIT),
+        pudlo(PartName::ARM_R, 0, 0b001, [0, 8, 4], [1, 1, 1], OUTFIT),
         pudlo(PartName::FOREARM_R, 4, 0b001, [0, 0, -4], [1, 1, 1], SKIN),
         // 6–7: lewa noga.
         pudlo(PartName::THIGH_L, 0, 0b001, [0, 0, -8], [1, 1, 2], OUTFIT),
         pudlo(PartName::SHIN_L, 6, 0b001, [0, 0, -8], [1, 1, 2], TRIM),
         // 8–9: prawa noga.
-        pudlo(PartName::THIGH_R, 0, 0b001, [4, 0, -8], [1, 1, 2], OUTFIT),
+        pudlo(PartName::THIGH_R, 0, 0b001, [0, 4, -8], [1, 1, 2], OUTFIT),
         pudlo(PartName::SHIN_R, 8, 0b001, [0, 0, -8], [1, 1, 2], TRIM),
         // 10–11: uproszczenia L1 — jedna bryła na ramiona, jedna na nogi.
-        pudlo(PartName::ARMS, 0, 0b010, [-4, 0, 0], [4, 1, 2], OUTFIT),
-        pudlo(PartName::LEGS, 0, 0b010, [0, 0, -16], [2, 1, 4], OUTFIT),
+        pudlo(PartName::ARMS, 0, 0b010, [0, -4, 0], [1, 4, 2], OUTFIT),
+        pudlo(PartName::LEGS, 0, 0b010, [0, 0, -16], [1, 2, 4], OUTFIT),
     ];
     VoxModel {
         key: "citizen".into(),
         kind: ModelKind::Character,
         flags: ModelFlags::default(),
-        bbox: [4, 1, 7],
+        bbox: [1, 4, 7],
         parts,
         slots: vec![
             PaletteSlot { slot: SKIN, role: SlotRole::Skin },
@@ -96,7 +107,7 @@ pub fn citizen() -> VoxModel {
 #[must_use]
 pub fn car() -> VoxModel {
     let parts = vec![
-        pudlo(PartName::BODY, Part::NO_PARENT, 0b011, [0, 0, 4], [16, 7, 3], PAINT),
+        pudlo(PartName::BODY, Part::NO_PARENT, 0b011, [-32, -14, 4], [16, 7, 3], PAINT),
         pudlo(PartName::CAB, 0, 0b001, [16, 4, 12], [8, 5, 2], GLASS),
         // Koła **w obrysie** nadwozia, nie poza nim: auto ma mieć 1,75 m szerokości
         // razem z nimi, a nie 2,25 m.
@@ -169,6 +180,47 @@ mod tests {
             "wzrost {wysokosc} m poza zakresem"
         );
         assert_eq!(min[2], 0, "postać nie stoi na gruncie");
+    }
+
+    /// Bryła ma być wyśrodkowana na origin w poziomie — inaczej `yaw` obraca model
+    /// wokół punktu poza nim (auto jedzie dwa metry obok jezdni i zatacza łuk przy
+    /// skręcie), a impostor wypalony z tej bryły wychodzi poza kafel.
+    #[test]
+    fn bryla_jest_wysrodkowana_w_poziomie() {
+        for m in all() {
+            let mesh = build_model_mesh(&m, 0);
+            let (min, max) = mesh.bounds_qv;
+            for os in 0..2 {
+                let srodek = i32::from(min[os]) + i32::from(max[os]);
+                assert!(
+                    srodek.abs() <= 2,
+                    "{}: oś {os} ma środek w {} ćwiartkach (min {}, max {})",
+                    m.key,
+                    srodek / 2,
+                    min[os],
+                    max[os]
+                );
+            }
+            assert_eq!(min[2], 0, "{}: model nie stoi na origin", m.key);
+        }
+    }
+
+    /// Postać i auto patrzą w tę samą stronę: są węższe wzdłuż `X` niż wzdłuż `Y`
+    /// dla postaci (bark szerszy od klatki) i dłuższe wzdłuż `X` dla auta. Gdyby postać
+    /// stała bokiem, pierwszy `yaw` z warstwy ruchu ustawiłby ją ramieniem do przodu.
+    #[test]
+    fn postac_patrzy_wzdluz_osi_x() {
+        let m = build_model_mesh(&citizen(), 0);
+        let (min, max) = m.bounds_qv;
+        let glebokosc = max[0] - min[0];
+        let szerokosc = max[1] - min[1];
+        assert!(
+            glebokosc < szerokosc,
+            "postać ma {glebokosc} ćwiartek głębokości i {szerokosc} szerokości"
+        );
+        let a = build_model_mesh(&car(), 0);
+        let (amin, amax) = a.bounds_qv;
+        assert!(amax[0] - amin[0] > amax[1] - amin[1], "auto stoi w poprzek");
     }
 
     /// Auto ma być 4 m długie i mieć koła pod nadwoziem, a nie w nim.

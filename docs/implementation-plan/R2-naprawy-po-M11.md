@@ -10,10 +10,11 @@ jak R1.
 
 R1 mierzył jedną rzecz — długość plików — i naprawiał ją jednym ruchem. R2 mierzy co innego:
 **rozjazd między tym, co dokumenty faz uznały za zamknięte, a tym, co robi kod**. Wykaz w §11 ma
-**68 wierszy** i powstał w czterech rzutach (dwa ostatnie wiersze wyszły z wykonania pozycji 1, 2 i 21 przed R2): 42 z przeglądu repozytorium po M7f, jeden dopisany
+**71 wierszy** i powstał w pięciu rzutach (dwa wiersze wyszły z wykonania pozycji 1, 2 i 21 przed R2): 42 z przeglądu repozytorium po M7f, jeden dopisany
 przy weryfikacji, trzy z przeglądów w trakcie M8, **dziesięć z recenzji przed commitem M9d**
-(pozycje 47–56), jeden z M9e (57), **osiem z przeglądu sesji po M9e** (pozycje 58–65) i jeden z gry uruchomionej
-po M9e (68).
+(pozycje 47–56), jeden z M9e (57), **osiem z przeglądu sesji po M9e** (pozycje 58–65), jeden z gry uruchomionej
+po M9e (68) i **dwa z M11b** (70–71) — obie wyszły dopiero wtedy, gdy pieszy przestał być plamką
+kilku pikseli i dostał sylwetkę.
 Z pierwszego rzutu jedna pozycja miała pakiet, jedna okazała się rozstrzygnięta i wypadła,
 jedenaście stało zapisanych w tabelach korekt albo w rejestrze długu — **każda bez wykonawcy** —
 a dwadzieścia dziewięć nie było znanych planowi w żadnej postaci.
@@ -416,7 +417,7 @@ się numery w tabeli, a nie w głowie.
 
 ---
 
-## 11. Wykaz — 69 wierszy
+## 11. Wykaz — 71 wierszy
 
 Numeracja jest numeracją przeglądu i nie zmienia się. Kolumna „Plan" mówi, co wiedziały dokumenty
 przed R2: `—` = nieznane planowi, `zapis` = zapisane jako znana usterka bez wykonawcy,
@@ -529,6 +530,8 @@ Ujednolicenie nagłówków jest zadaniem R2-WP23.
 | 67 | Zakład sprzedający na eksport nie ma utargu w rachunku wyniku | — | R2-WP36 | `[ ]` |
 | 68 | **Strzałki `↑↓←→` wypadły z interfejsu, bo domyślny atlas `egui` ich nie ma** — do czasu M11 gra nie wgrywa własnego kroju (`Theme::font`). Napisy, które ich używały (podpowiedź klawiszy powłoki, nagłówek karty podróży, znacznik wybranej opcji), mówią to samo znakami z atlasu. Po wgraniu kroju w M11 sprawdzić, czy strzałki wracają: test `atlas_fontow_zna_wszystkie_znaki_z_lokalizacji` odpowie na to w jednym przebiegu. Sufit testu jest nazwany: chodzi po **katalogu**, więc nie widzi znaków zaszytych w kodzie rysującym (`>`, `·`, `×` w `engine/ui/src/inspect/trip.rs`, `−` w `fmt.rs`) | zapis `M9b` `DE-16` | M11 (`M11d` albo gdziekolwiek wchodzą fonty) | `[ ]` |
 | 69 | **Ekran rozgrywki ma dwie z trzech rzeczy, które rysuje `ui-design.md` §5.** Inspekcja jest przeciągalnym oknem `egui` (`tools/magnat/src/citizens.rs`), a nie **dokiem prawym** — więc „lewy prowadzi, prawy pokazuje klikniętego" jest regułą dokumentu, nie ekranu. Pasek czasu nie niesie gotówki ani jej zmiany, choć §5 rysuje je po jego prawej stronie: gracz widzi stan konta tylko po otwarciu pulpitu. Oba są brakiem treści, a nie usterką — układ po naprawie `DI-39` jest już taki, że dok prawy ma gdzie stanąć | zapis `M9e` `DI-39` | — | `[ ]` |
+| 70 | **Trasa pieszego w warstwie Mikro jest odcinkiem prostym między środkami budynków.** `journey.rs::enter_micro_inner` podaje `MicroLayer::enter` dwa punkty (`coord_of(from)`, `coord_of(to)`) i nic więcej — żadnego routingu geometrycznego, żadnego próbkowania terenu. Pieszy idzie więc przez kwartały, a w połowie drogi bywa pod ziemią albo nad nią, bo interpolacja liniowa nie zna niwelety. Węzły grafu pieszego **mają** poprawne `z_cm` (łańcuch `TerrainQuery::height_at` → `lsystem` → `nav_build`) i nikt ich w tej ścieżce nie czyta. Objaw stał się widoczny w M11b, gdy pieszy przestał być plamką i dostał sylwetkę; poprawka `G-13` wyprostowała **końce** trasy (rzędna wejścia zamiast dna fundamentu), środek zostaje | zapis `M11b` `G-13` | — | `[ ]` |
+| 71 | **Warstwa Mikro oddaje 24–46 pieszych i ZERO pojazdów w oknie 900 m w szczycie porannym** przy 26 tys. mieszkańców (seed `0x4D41474E4154`, 8 km, 8:15–8:30, `--observe`). Do sprawdzenia, czy to jest właściwa liczba — udział podróży pieszych w mieście tej wielkości może ją tłumaczyć — czy objaw: okno Mikro wygasa, `retire` usuwa za wcześnie albo Etap 8 nie planuje dojazdów w tej godzinie. Rozstrzyga to jedno pytanie: ilu mieszkańców ma w tej minucie `ActivityKind::Commute`, a ilu z nich trafia do `PedestrianBuffer`. Pojazdów jest zero przy każdej sprawdzonej godzinie (7:45, 8:15, 8:30) i każdej prędkości, więc `VehicleRenderRec` — gotowy od M11a i rozszerzony w M11b o klip i model — **nie ma ani jednego czytelnika w oknie gry**. Póki co „żywe miasto" z PRD §15 widać wyłącznie na scenie syntetycznej `--crowd` | zapis `M11b` `G-12` | — | `[ ]` |
 
 ## 12. Szacunek wielkości
 

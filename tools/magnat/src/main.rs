@@ -238,6 +238,12 @@ fn uruchom_ze_stanem(
         egui_state: None,
         bench: args.bench,
         bench_czas_s: 0.0,
+        anim_ms: 0,
+        anim_reszta: 0.0,
+        tlum: args.crowd,
+        krok_tlumu: args.crowd_step,
+        bez_animacji: args.no_anim,
+        klipy: magnat_voxel::ClipLibrary::builtin(),
         bench_etapy: Vec::new(),
         lod0_radius: args.lod0_radius,
         // Wypełniane po ustawieniu kamery — pozycje zależą od celu, którego tu jeszcze nie ma.
@@ -303,3 +309,4 @@ pub(crate) const PROMIEN_SKLEPU_M: f32 = 25.0;
 
 /// Klatki rozgrzewkowe przed pomiarem.
 pub(crate) const BENCH_ROZGRZEWKA: u32 = 60;
+

@@ -90,7 +90,7 @@ impl PathArena {
 
 // ── piesi ───────────────────────────────────────────────────────────────────────
 
-/// Jeden pieszy w kadrze — 32 B. Bez unikania kolizji i bez steeringu: przy voxelu 1 m
+/// Jeden pieszy w kadrze — 36 B. Bez unikania kolizji i bez steeringu: przy voxelu 1 m
 /// tłum czyta się dobrze bez tego, a steering należy do M11 razem z animacjami.
 #[repr(C)]
 #[derive(Clone, Copy, PartialEq, Debug, Default)]
@@ -99,6 +99,10 @@ pub struct Pedestrian {
     pub pos: [f32; 3],
     /// Postęp 0..=1 wzdłuż trasy.
     pub progress: f32,
+    /// Kurs w radianach, 0 = oś +X. Ta sama liczba, którą pojazd trzyma od M4d —
+    /// bierze się z osi odcinka trasy i idzie do rekordu, bo renderer nie ma z czego
+    /// jej wyprowadzić bez sięgania po różnicę pozycji między klatkami (`F-5`).
+    pub heading: f32,
     /// Indeks trasy w arenie polilinii.
     pub path: u32,
     /// Indeks encji mieszkańca.
@@ -148,6 +152,9 @@ impl PedestrianBuffer {
     ) -> usize {
         let path = self.paths.push(route);
         let pierwszy = route[0];
+        // Kurs startowy z pierwszego odcinka: pieszy stojący na przystanku ma patrzeć
+        // w stronę, w którą zaraz pójdzie, a nie w oś +X.
+        let (_, kurs) = self.paths.at(path, 0.0);
         self.peds.push(Pedestrian {
             pos: [
                 pierwszy.x as f32 / 100.0,
@@ -155,6 +162,7 @@ impl PedestrianBuffer {
                 pierwszy.z as f32 / 100.0,
             ],
             progress: 0.0,
+            heading: kurs,
             path,
             citizen,
             depart_min,
@@ -184,7 +192,9 @@ impl PedestrianBuffer {
                 ((teraz - start) / (koniec - start)).clamp(0.0, 1.0)
             };
             p.progress = t;
-            p.pos = self.paths.at(p.path, t).0;
+            let (pos, kurs) = self.paths.at(p.path, t);
+            p.pos = pos;
+            p.heading = kurs;
         }
     }
 

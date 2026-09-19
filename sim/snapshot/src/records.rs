@@ -245,7 +245,7 @@ pub struct LightRecord {
 
 /// Pieszy w warstwie Mikro — rekord **ruchu**, nie wyglądu (M3d, `Z-1`).
 ///
-/// Zna pozycję i tożsamość, nie zna zawodu ani ubrania. Złączenie go z wyglądem
+/// Zna pozycję, kurs i tożsamość, nie zna zawodu ani ubrania. Złączenie go z wyglądem
 /// w [`CitizenRenderRec`] robi wypełniacz w `magnat_game::view`, bo tylko on widzi
 /// naraz ruch i komponenty mieszkańca.
 #[derive(Clone, Copy, PartialEq, Debug, Default)]
@@ -253,6 +253,14 @@ pub struct LightRecord {
 pub struct PedestrianRecord {
     /// Pozycja w metrach, względem początku świata. Z jest osią pionową.
     pub pos: [f32; 3],
+    /// Kurs w radianach, 0 = oś +X — ten sam układ co [`VehicleRecord::heading`].
+    ///
+    /// Dopisany w M11b (`F-5`). Kurs wynika z osi odcinka trasy, który zna wyłącznie
+    /// warstwa ruchu; liczony w rendererze z różnicy pozycji między publikacjami
+    /// zależałby od częstotliwości klatek, czyli od kamery — a to jest dokładnie ta
+    /// klasa sprzężenia, której zabrania 00 §4. Warstwa Mikro i tak go liczyła
+    /// (`PathArena::at`) i wyrzucała.
+    pub heading: f32,
     /// Indeks encji mieszkańca — to samo, co czyta bufor ID przy kliknięciu.
     pub entity: u32,
 }
@@ -296,6 +304,10 @@ mod tests {
         assert_eq!(size_of::<PowerRec>(), 1);
         assert_eq!(size_of::<PlayerViewRec>(), 24);
         assert_eq!(size_of::<LightRecord>(), 20);
+        // Rekordy warstwy Mikro nie wchodzą do budżetu snapshotu (idą własnym
+        // kanałem), ale ich rozmiar też jest kontraktem — kopiuje się je co klatkę.
+        assert_eq!(size_of::<PedestrianRecord>(), 20);
+        assert_eq!(size_of::<VehicleRecord>(), 24);
     }
 
     #[test]

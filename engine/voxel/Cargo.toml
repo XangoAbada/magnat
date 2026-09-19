@@ -15,6 +15,10 @@ bench = false
 [dependencies]
 magnat-core = { workspace = true }
 magnat-jobs = { workspace = true }
+# Quaterniony przy składaniu póz animacji (M11b §5.4). Ta sama wersja, co w renderze —
+# atlas póz jedzie do shadera bez konwersji, więc dwie biblioteki byłyby dwiema
+# konwencjami kolejności składowych.
+glam = { workspace = true }
 smallvec = { workspace = true }
 parking_lot = { workspace = true }
 bytemuck = { workspace = true }

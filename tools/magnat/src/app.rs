@@ -48,6 +48,25 @@ pub(crate) struct App {
     /// Klatki przelotu pomiarowego i zebrane z nich czasy.
     pub(crate) bench: Option<f32>,
     pub(crate) bench_czas_s: f32,
+    /// Zegar animacji w milisekundach (M11b §5.4). Rośnie czasem **realnym**, gdy gra
+    /// idzie, i stoi przy pauzie i w powłoce.
+    ///
+    /// Nie jest minutą świata i nie jest z nią związany mnożnikiem prędkości: chód
+    /// ma wyglądać jak chód przy każdej prędkości, a przy ×10 nogi przebierałyby
+    /// dziesięć razy szybciej, niż da się zobaczyć. Do symulacji ta liczba nie wchodzi
+    /// — jedzie do snapshotu wyłącznie jako faza klipu.
+    pub(crate) anim_ms: u64,
+    /// Nierozliczona część milisekundy zegara animacji — patrz [`App::klatka`].
+    pub(crate) anim_reszta: f64,
+    /// `--crowd`: ilu syntetycznych pieszych dosypać do snapshotu (scena pomiarowa M11b).
+    pub(crate) tlum: usize,
+    /// Odstęp między nimi w metrach — decyduje, w którym paśmie detalu wypadnie tłum.
+    pub(crate) krok_tlumu: f64,
+    /// `--no-anim`: wszystkie encje w pozie spoczynkowej — druga połowa pomiaru WP3.
+    pub(crate) bez_animacji: bool,
+    /// Katalog klipów. Ten sam, który renderer wypalił do atlasu póz, i ten sam,
+    /// którego używa wypełniacz snapshotu — jedna funkcja, trzech czytelników.
+    pub(crate) klipy: magnat_voxel::ClipLibrary,
     pub(crate) bench_etapy: Vec<bench::Pomiar>,
     pub(crate) lod0_radius: Option<i32>,
     pub(crate) swiatla: Vec<magnat_sim_snapshot::LightRecord>,
@@ -644,6 +663,17 @@ impl App {
         // minuta jest tym samym tickiem (§5.11). W powłoce symulacja stoi.
         if !self.w_powloce() {
             if let Some(c) = self.citizens.as_mut() {
+                // Zegar gry stoi → animacja też stoi: postacie deptałyby w miejscu
+                // na zamrożonym świecie.
+                if c.ui.time.speed() != magnat_core::SimSpeed::Paused {
+                    // Reszta zostaje w akumulatorze, bo przy 60 klatkach na sekundę
+                    // `dt` to 16,67 ms i samo obcięcie gubiłoby 4 % czasu animacji —
+                    // chód szedłby wolniej niż świat, a przy tysiącu klatek stanąłby.
+                    self.anim_reszta += dt * 1000.0;
+                    let cale = self.anim_reszta.floor();
+                    self.anim_reszta -= cale;
+                    self.anim_ms = self.anim_ms.wrapping_add(cale as u64);
+                }
                 if let GameState::Playing(s) = &mut self.game {
                     let t = c.advance(s, (dt * 1000.0) as u32);
                     self.minute = SimMinute(self.dzien_slonca * 1440 + t.0);
@@ -726,15 +756,7 @@ impl App {
                 let (w, h, px) = renderer
                     .render_to_image_with_ui(&kamera, minuta, szerokosc, 1600, 900, ui_frame);
                 let s = renderer.stats();
-                eprintln!(
-                    "stan renderu: {} chunków rezydentnych, {} rysowanych, {} trójkątów, \
-                     {:.1} MB geometrii; GPU {}",
-                    s.chunks_resident,
-                    s.chunks_drawn,
-                    s.triangles,
-                    (s.vertex_bytes + s.index_bytes) as f64 / (1024.0 * 1024.0),
-                    czasy_passow(&s),
-                );
+                self.raport_zrzutu(&s, &kamera);
                 match magnat_devtools::write_rgb(&sciezka, w, h, &px) {
                     Ok(b) => eprintln!("zrzut: {} ({w}×{h}, {b} B)", sciezka.display()),
                     Err(e) => eprintln!("zrzut nieudany: {e}"),
@@ -828,8 +850,10 @@ impl App {
             aabb: magnat_sim_snapshot::Aabb::around(oko_mm, zasieg, zasieg),
             eye: oko_mm,
             caps: magnat_sim_snapshot::SnapshotCaps::DEFAULT,
+            anim_ms: self.anim_ms,
         };
 
+        self.filler.set_animations(!self.bez_animacji);
         self.filler.ensure_city(&s.built.city, pal);
         let filtr = c.filtr();
         self.filler.fill_filtered(
@@ -838,7 +862,123 @@ impl App {
             &|e| filtr.is_none_or(|f| f.accepts(s, e)),
             self.snapshot.back_mut(),
         );
+        self.dosyp_tlum();
         self.snapshot.publish();
+    }
+
+    /// Scena pomiarowa `--crowd`: syntetyczni piesi wokół celu kamery.
+    ///
+    /// Wchodzą **po** wypełnieniu snapshotu i **nie istnieją w symulacji** — nie mają
+    /// encji, nie chodzą do pracy i nie kupują chleba. To jest scena do pomiaru klatki,
+    /// dokładnie tak samo jak `--lights`: kryteria WP3 i WP4 mówią o dwudziestu tysiącach
+    /// postaci, a warstwa Mikro w oknie 900 m oddaje ich kilkadziesiąt.
+    ///
+    /// Rozstawienie jest siatką o kroku `--crowd-step` na wysokości terenu, z klipami i wariantami
+    /// rozsuniętymi indeksem — tłum stojący w jednej pozie nie zmierzyłby ani kosztu
+    /// animacji, ani przejść poziomu detalu.
+    fn dosyp_tlum(&mut self) {
+        if self.tlum == 0 {
+            return;
+        }
+        let Some(terrain) = self.terrain.clone() else {
+            return;
+        };
+        let cel = self.camera.target();
+        let klipy = [
+            magnat_voxel::ClipKind::Walk,
+            magnat_voxel::ClipKind::Idle,
+            magnat_voxel::ClipKind::Shop,
+            magnat_voxel::ClipKind::Work(magnat_voxel::WorkStyle::Counter),
+            magnat_voxel::ClipKind::Sit,
+        ];
+        let bok = (self.tlum as f64).sqrt().ceil() as i32;
+        let anim_ms = self.anim_ms;
+        let bez = self.bez_animacji;
+        let klipy_id: Vec<u8> = klipy.iter().map(|k| self.klipy.id_of(*k).0).collect();
+        let snap = self.snapshot.back_mut();
+        for i in 0..self.tlum {
+            let (kx, ky) = (i as i32 % bok, i as i32 / bok);
+            let x = cel.x + f64::from(kx - bok / 2) * self.krok_tlumu;
+            let y = cel.y + f64::from(ky - bok / 2) * self.krok_tlumu;
+            let z = f64::from(terrain.height_at(x as i32, y as i32)) * 0.5;
+            let entity = 1_000_000 + i as u32;
+            let rec = magnat_sim_snapshot::CitizenRenderRec {
+                pos: [
+                    (x * 1000.0) as i32,
+                    (y * 1000.0) as i32,
+                    (z * 1000.0) as i32,
+                ],
+                entity_lo: entity,
+                appearance: magnat_sim_snapshot::Appearance::derive(
+                    0x4D41_474E_4154,
+                    entity,
+                    (i % 32) as u8,
+                    (i % 4) as u8,
+                    2,
+                    0,
+                )
+                .0,
+                yaw: (entity.wrapping_mul(2_654_435_761) >> 16) as u16,
+                district: (i % 8) as u16,
+                anim_state: if bez {
+                    magnat_voxel::NO_CLIP.0
+                } else {
+                    klipy_id[i % klipy_id.len()]
+                },
+                anim_phase: magnat_voxel::anim_phase(anim_ms, entity),
+                carry: 0,
+                flags: 0,
+                _pad: [0; 4],
+            };
+            if !snap.citizens.push(rec) {
+                break;
+            }
+        }
+    }
+
+    /// Cztery zdania stanu obok zrzutu: render, snapshot, kamera i pierwszy pieszy.
+    ///
+    /// Razem odpowiadają na pytanie, które przy pustym kadrze zadaje się najpierw:
+    /// czy symulacja **nic nie oddała**, czy render **tego nie narysował**, czy może
+    /// kamera patrzy gdzie indziej. Trzy różne przyczyny dają ten sam obraz, więc bez
+    /// tych liczb szuka się ich po kolei i po omacku — tak właśnie wyszło, że piesi
+    /// w M11b chodzili jedenaście metrów pod terenem.
+    fn raport_zrzutu(&self, s: &magnat_render::FrameStats, kamera: &magnat_render::CameraState) {
+        eprintln!(
+            "stan renderu: {} chunków rezydentnych, {} rysowanych, {} trójkątów, \
+             {} encji w {} wsadach, {:.1} MB geometrii; GPU {}",
+            s.chunks_resident,
+            s.chunks_drawn,
+            s.triangles,
+            s.instances,
+            s.instance_batches,
+            (s.vertex_bytes + s.index_bytes) as f64 / (1024.0 * 1024.0),
+            czasy_passow(s),
+        );
+        let snap = self.snapshot.front();
+        eprintln!(
+            "snapshot: {} mieszkańców, {} pojazdów",
+            snap.citizens.len(),
+            snap.vehicles.len(),
+        );
+        eprintln!(
+            "kamera: oko {:?}, cel {:?}",
+            kamera.eye().to_array(),
+            kamera.target().to_array()
+        );
+        if let Some(c) = snap.citizens.as_slice().first() {
+            eprintln!(
+                "pierwszy pieszy: {:?} m, klip {}, faza {}, yaw {}",
+                [
+                    c.pos[0] as f32 / 1000.0,
+                    c.pos[1] as f32 / 1000.0,
+                    c.pos[2] as f32 / 1000.0
+                ],
+                c.anim_state,
+                c.anim_phase,
+                c.yaw
+            );
+        }
     }
 
     /// `--pick`: kto jest pod zadanym pikselem. Diagnostyka bufora identyfikatorów

@@ -572,6 +572,7 @@ impl MicroLayer {
             let p = buf.get(i);
             out.push(PedestrianRecord {
                 pos: p.pos,
+                heading: p.heading,
                 entity: p.citizen,
             });
         }
@@ -691,6 +692,27 @@ mod tests {
         assert!((postep(&m) - 1.0).abs() < 1e-6);
     }
 
+    /// Kurs pieszego idzie do rekordu i wynika z osi trasy. Bez niego renderer musiałby
+    /// go wyprowadzić z różnicy pozycji między klatkami — czyli uzależnić obrót postaci
+    /// od częstotliwości publikacji (`F-5`).
+    #[test]
+    fn pieszy_niesie_kurs_odcinka_trasy() {
+        let m = warstwa();
+        m.set_window(Some((0, 0)), 1_000);
+        // Trasa na północ: kurs ma wyjść π/2, a nie zero.
+        let na_polnoc = vec![WorldCoord::new(0, 0, 0), WorldCoord::new(0, 20_000, 0)];
+        m.enter(7, &na_polnoc, 480, 490);
+        m.step(485 * 60_000);
+        let mut zrzut = Vec::new();
+        m.snapshot(&mut zrzut);
+        assert_eq!(zrzut.len(), 1);
+        assert!(
+            (zrzut[0].heading - std::f32::consts::FRAC_PI_2).abs() < 1e-3,
+            "kurs {} rad, oczekiwano π/2",
+            zrzut[0].heading
+        );
+    }
+
     #[test]
     fn retire_usuwa_tych_ktorzy_dotarli() {
         let m = warstwa();
@@ -711,7 +733,7 @@ mod tests {
 
     #[test]
     fn rozmiar_pieszego_zgadza_sie_z_budzetem() {
-        assert_eq!(size_of::<Pedestrian>(), 32);
+        assert_eq!(size_of::<Pedestrian>(), 36);
     }
 
     fn feed(vehicle: u32, entry_cs: u64, exit_cs: u64, lanes: u8) -> VehicleFeed {

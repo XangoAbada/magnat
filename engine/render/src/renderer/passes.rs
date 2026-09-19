@@ -28,6 +28,10 @@ pub struct FrameStats {
     pub chunks_resident: usize,
     pub chunks_drawn: usize,
     pub triangles: usize,
+    /// Ile encji dynamicznych poszło w buforze instancji tej klatki (M11b).
+    pub instances: usize,
+    /// Ile wywołań rysowania je obsłużyło — liczba, której pilnuje kryterium WP2.
+    pub instance_batches: usize,
     pub vertex_bytes: usize,
     pub index_bytes: usize,
     pub arena_capacity_bytes: usize,
@@ -617,6 +621,8 @@ impl Renderer {
             chunks_resident: self.chunks.len(),
             chunks_drawn: widoczne.len(),
             triangles,
+            instances: self.instances.drawn() as usize,
+            instance_batches: self.instances.batches(),
             vertex_bytes: self.vertex_arena.bytes_used(8),
             index_bytes: self.index_arena.bytes_used(4),
             arena_capacity_bytes: self.vertex_arena.capacity_bytes(8)

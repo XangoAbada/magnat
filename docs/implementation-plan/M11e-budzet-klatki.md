@@ -8,7 +8,7 @@ zostają w dokumencie fazy — tu jest wyłącznie to, co robisz w tej porcji.
 | | |
 |---|---|
 | **Wejście** | M11b–M11d. |
-| **Pakiety robocze** | WP10 |
+| **Pakiety robocze** | WP10, WP4b (przejęte z M11b — `H-1`) |
 | **Projekt techniczny** | §5.10, §5.11 |
 | **Wynik do pokazania** | Pełny artefakt fazy z §1 dokumentu fazy: cele FPS z PRD §20.2 dotrzymane na maszynie referencyjnej. |
 | **Kryterium zamknięcia** | Kryterium WP10 oraz bramki 1–7 fazy M11 w `00-postep.md`. **Decyzja właściciela produktu**: maszyna referencyjna dla „GPU klasy średniej (2024)” musi być nazwana przed pomiarem. |
@@ -22,7 +22,21 @@ zostają w dokumencie fazy — tu jest wyłącznie to, co robisz w tej porcji.
 
 | WP | Nazwa | Zależy od | Rozmiar |
 |---|---|---|---|
-| WP10 | `RenderBudget`, adaptacyjne LOD, benchmarki klatkowe | WP4, WP5, WP6, WP7 | M |
+| WP4b | Impostory dzielnic: atlas runtime, LRU, regeneracja amortyzowana | WP4a (M11b), M1 | M |
+| WP10 | `RenderBudget`, adaptacyjne LOD, benchmarki klatkowe | WP4b, WP5, WP6, WP7 | M |
+
+### WP4b — Impostory dzielnic
+
+**Opis.** Atlas kafli 128×128 m generowany w runtime z tego, co gracz zbudował: 8 azymutów,
+kafel 128×128 px (RGBA8 + R16 depth), budżet **192 MB VRAM → 244 bloki rezydentne** z LRU,
+regeneracja **≤ 4 bloki na klatkę** w osobnym passie z budżetem 1,5 ms i kolejką po odległości,
+inwalidacja dwustopniowa (`RenderSnapshot.terrain_revision` jako tani filtr wstępny, potem
+`generation` per blok), degradacja do chunków LOD 8× przy przekroczeniu budżetu. Projekt
+techniczny w całości: `M11b-animacja-i-lod.md` §5.6 — pakiet zmienił adres, nie treść (`H-1`).
+
+**Kryterium ukończenia.** Scena `bench_city` mieści się w budżecie 192 MB, `impostor_resident ≤ 244`
+i `impostor_regen ≤ 4` w każdej klatce (§7.3 dokumentu fazy), a przy sztucznie obniżonym budżecie
+nie powstaje **ani jedna dziura** — blok bez kafla rysuje się chunkiem LOD 8×.
 
 ### WP10 — `RenderBudget`, adaptacyjne LOD, benchmarki
 
@@ -130,3 +144,15 @@ Pełna tabela `E-n` jest w `M11a-format-i-snapshot.md`.
 | I-4 | **Snapshot waży 1,31 MB rezydentnie na bufor, 2,62 MB przy podwójnym buforowaniu** — i nie zależy od wielkości miasta | Rozmiar jest sumą pojemności, nie zapełnienia: `RenderSnapshot::resident_bytes()` zwraca tę samą liczbę dla miasta pustego i pełnego, czego pilnuje test. To jest liczba, którą M12 wpisuje do budżetu pamięci |
 | I-5 | **`GpuInstance` ma 36 B**, więc upload to 720 KB na klatkę przy 20 tys. encji (43 MB/s po PCIe), a nie 640 KB (`E-8`) | §5.3 wyliczał 32 B, nie wymieniając w nich pickingu. Budżet pasma tego nie ogranicza, ale liczba w raporcie ma się zgadzać z liczbą w kodzie |
 | I-6 | **Pojazdy w trybie 50× nie istnieją i kliknięcie w nie też nie** — warstwa Mikro jest tam wyłączona z konstrukcji (`M12c`) | Zapis z 2026‑09‑17 żądał, żeby pass `pick_id` wypełniał bufor także przy wyłączonym LOD mikro **albo** żeby ta podfaza powiedziała wprost, że pojazdów wtedy nie ma. Mówi wprost: bez warstwy Mikro `vehicle_snapshot` zwraca pustą listę, więc do snapshotu nie trafia ani jeden pojazd i nie rysuje się ani jedna instancja bez identyfikatora. „Klikalne jest wszystko, co widoczne" trzyma się, bo niewidoczne jest jedno i drugie naraz — i to ma sprawdzić test tej podfazy, a nie założenie |
+
+---
+
+## Zmiany wpisane po M11b
+
+Zgodnie z `K-18`. Gwiazdka = zmiana zakresu albo kryterium.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| H-1 ★ | **M11e przejmuje `WP4b` — impostory dzielnic** (atlas kafli 128×128 m generowany w runtime, 8 azymutów, LRU, budżet 192 MB, regeneracja ≤ 4 bloki na klatkę z budżetem 1,5 ms, inwalidacja dwustopniowa `terrain_revision` + `generation` per blok, degradacja do chunków LOD 8×). Projekt techniczny stoi w `M11b` §5.6 i **się nie zmienia** — zmienia się wyłącznie adres wykonania | Trzy powody, wszystkie z tej samej strony. **(1)** Ten pakiet jest budżetem klatki, a nie obrazem: kolejka regeneracji z limitem czasu i LRU na 192 MB to dokładnie mechanizm, który opisuje §5.10 (`RenderBudget`), więc rozbicie go na dwie podfazy znaczyłoby dwa liczniki tego samego. **(2)** Kryterium WP4 („scena `bench_city` mieści się w budżecie VRAM impostorów") odwołuje się do sceny referencyjnej, która powstaje **tutaj**, w §7.2 dokumentu fazy — w M11b nie ma go jak zapalić ani na zielono, ani na czerwono. **(3)** Bez impostorów dzielnic **nie ma dziury w obrazie**: chunki M1 sięgają 4 km (`LOD_RADII_M`), a dalej rysuje clipmapa terenu, więc brak kafli kosztuje czas klatki, a nie widok. Impostory **encji** są zamknięte w M11b i nie wchodzą tu ponownie |
+| H-2 | **`FrameStats` ma już `instances` i `instance_batches`** — dwa pierwsze pola `RenderStats` z §5.10 powstały w M11b (`G-14`) | Liczba encji i liczba wsadów odpowiadają na pierwsze pytanie przy pustym albo wolnym kadrze. WP10 dokłada do nich podział na warstwy i czasy passów, a nie zaczyna od zera |
+| H-3 | **Scena pomiarowa tłumu jest w kliencie**: `--crowd N`, `--crowd-step M` i `--no-anim` (`G-12`) | `bench_street` i `bench_district` wymagają 6 000 i 24 000 encji w kadrze, a warstwa Mikro w oknie 900 m oddaje ich kilkadziesiąt. Zamrożone zapisy z §7.2 tego nie zmienią, dopóki gęstość Mikro jest taka, jaka jest — a scena syntetyczna mierzy **rysowanie**, czyli to, czego dotyczy budżet klatki |

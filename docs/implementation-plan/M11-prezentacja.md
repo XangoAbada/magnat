@@ -121,10 +121,10 @@ dopiero po ostatniej podfazie; podfaza zamyka się własnym kryterium ze swojego
 | Podfaza | WP | §5 | Wynik do pokazania | Dokument |
 |---|---|---|---|---|
 | **M11a — Format i kontrakt snapshotu** | WP1, WP11, WP2 | 5.1, 5.2, 5.3 | Jeden model postaci w trzech wariantach palety rysowany jednym draw callem; tłum z M3 rysowany z bufora instancji. | `M11a-format-i-snapshot.md` |
-| **M11b — Animacja i LOD wizualne** | WP3, WP4 | 5.4, 5.5, 5.6 | Postać chodzi, siada i pracuje; dalszy plan schodzi na impostory bez widocznego przeskoku. | `M11b-animacja-i-lod.md` |
+| **M11b — Animacja i LOD wizualne** | WP3, WP4a | 5.4, 5.5, 5.6 | Postać chodzi, siada i pracuje; dalszy plan schodzi na impostory bez widocznego przeskoku. | `M11b-animacja-i-lod.md` |
 | **M11c — Wnętrza i kamera FPP** | WP5, WP9 | 5.7 | Wejście do własnego sklepu z poziomu ulicy; szyld firmy gracza widoczny z zewnątrz. | `M11c-wnetrza-i-kamera.md` |
 | **M11d — Światło, pogoda, dźwięk** | WP6, WP7, WP8 | 5.8, 5.9 | Noc, deszcz, dym z komina i warstwa dźwiękowa reagująca na stan świata, nie na skrypt. | `M11d-swiatlo-pogoda-dzwiek.md` |
-| **M11e — Budżet klatki** | WP10 | 5.10, 5.11 | Pełny artefakt fazy z §1 dokumentu fazy: cele FPS z PRD §20.2 dotrzymane na maszynie referencyjnej. | `M11e-budzet-klatki.md` |
+| **M11e — Budżet klatki** | WP10, WP4b (`W-1`) | 5.10, 5.11 | Pełny artefakt fazy z §1 dokumentu fazy: cele FPS z PRD §20.2 dotrzymane na maszynie referencyjnej. | `M11e-budzet-klatki.md` |
 
 ---
 
@@ -419,3 +419,18 @@ tutaj wyłącznie to, co dotyczy **całej fazy**. Gwiazdka = zmiana zakresu albo
 | U-3 | **`§7.5` pkt 4 Definition of Done jest spełniony zbiorem pustym.** M11a nie wnosi ani jednego komponentu po stronie sim — wygląd, lakier i oklejenie są funkcjami czystymi (`E-4`) | Punkt mówił „nowe komponenty powstałe po stronie sim na potrzeby renderu dopisane do funkcji haszującej". Najtańszy sposób spełnienia go to nie tworzyć takich komponentów, a nie pamiętać o ich dopisaniu. Reguła jest wiążąca dla podfaz następnych i siedzi w `K-76` pkt 4 |
 | U-4 | **Ryzyko `R11` (rozjazd konwencji współrzędnych) zamknięte, ale jego skala była zawyżona o dwa rzędy** (`E-11`): realny błąd złej kolejności to ok. 2 mm przy 16 km, a nie 0,5 m przy 8 km | Reguła „odejmij w `f64`, potem rzutuj" zostaje bez zmian — kosztuje jedno odejmowanie. Zmienia się wyłącznie liczba w opisie i test, który ją mierzy (`encja_przy_krawedzi_mapy_nie_drga`) |
 | U-5 | **Ryzyko `R1` (cap 24 576 wygląda źle) jest nadal otwarte i nie ma dowodu w żadną stronę** | Warstwa L3 (tłum agregatowy) należy do M11b, a `crowd` w snapshocie jest po M11a wyzerowane. Do czasu jej powstania granica L2/L3 nie istnieje, więc nie ma czego oglądać — i to jest jedyna uczciwa odpowiedź, jaką M11a może dać |
+
+## Zmiany wpisane po M11b
+
+Zgodnie z `K-18`. Pełna tabela `G-n` z uzasadnieniami jest w `M11b-animacja-i-lod.md`;
+tutaj wyłącznie to, co dotyczy **całej fazy**. Gwiazdka = zmiana zakresu albo kryterium.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| W-1 ★ | **WP4 dzieli się na `WP4a` (impostory encji, zamknięte w M11b) i `WP4b` (impostory dzielnic), a `WP4b` przechodzi do M11e** | Impostor encji i impostor dzielnicy dzielą nazwę i nic poza nią: pierwszy wypala się z modelu przy starcie i sprawdza testem bez GPU, drugi powstaje w locie z tego, co gracz zbudował, i potrzebuje passa renderującego blok miasta do tekstury, kolejki regeneracji z budżetem czasu i LRU na 192 MB — czyli budżetu klatki, który jest własnością M11e. Kryterium „`bench_city` mieści się w budżecie VRAM" nie ma jak zapalić się na czerwono, dopóki sceny `bench_city` nie ma, a ta powstaje w M11e §7.2 (`G-10`) |
+| W-2 ★ | **Pasma L3 z §5.5 nie ma.** Encja ma trzy poziomy (`L0`, `L1`, impostor) i odległość odcięcia; progi są osobne dla mieszkańca i pojazdu | Impostor rysowany z czterystu metrów zajmuje te 4×6 px sam z siebie, więc osobny poziom kosztowałby drugi potok po to, żeby narysować to samo (`G-9`) |
+| W-3 ★ | **Faza animacji liczy się z czasu animacji, nie z ticku symulacji.** `ViewQuery` dostaje `anim_ms` — zegar prezentacji, który stoi przy pauzie i nie zależy od prędkości gry | Decyzja 9.3 mówi „funkcja czysta od chwili i indeksu encji" i zostaje w mocy; chwilą nie może być minuta gry, bo przy ×1 trwa sekundę realną (`G-5`) |
+| W-4 ★ | **Klient dostaje scenę pomiarową `--crowd N`, `--crowd-step M` i `--no-anim`**, na wzór `--lights` z M1 | Kryteria M11b mówią o dwudziestu tysiącach postaci, a warstwa Mikro w oknie 900 m oddaje ich kilkadziesiąt. Bez sceny kryterium jest niemierzalne, a nie spełnione (`G-12`). Ta sama scena posłuży M11e do `bench_street` i `bench_district` |
+| W-5 | **`FrameStats` niesie `instances` i `instance_batches`** — pierwsze dwa pola `RenderStats` z §5.10 | Przy pustym kadrze „symulacja nic nie oddała", „render tego nie narysował" i „kamera patrzy gdzie indziej" dają ten sam obraz. M12 dostaje te liczby przy okazji (`G-14`) |
+| W-6 | **`§7.3` dostaje test `variant_survives_lod` w postaci wykonalnej bez GPU**: billboard ma wymiary bryły modelu, a barwę liczy ta sama funkcja `pick(wariant, rola)`, co pełna geometria | Porównanie pikseli centralnych z §7.3 wymaga karty graficznej i sceny referencyjnej; równość **wejść** obu ścieżek sprawdza się w CI i wyklucza tę samą klasę błędu (`G-8`, `G-11`) |
+| W-7 ★ | **Poprawka spoza fazy: mieszkańcy zaczynali i kończyli trasę pod terenem** (`PlaceEntry.at` brał `aabb.min.z`, czyli dno fundamentu). Po poprawce biorą rzędną wejścia | To jest ta klasa usterki, którą widać dopiero wtedy, gdy encja przestaje być plamką: do M11b pieszy miał kilka pikseli i nikt nie liczył, na jakiej jest wysokości (`G-13`). Środek trasy zostaje otwarty i ma adres w R2 |

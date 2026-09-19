@@ -128,6 +128,9 @@ fn miasto_o_osmej_rano_daje_instancje_z_palety_dzielnicy() {
         aabb: Aabb::around(oko_mm, 900_000, 900_000),
         eye: oko_mm,
         caps: SnapshotCaps::DEFAULT,
+        // Chwila animacji dobrana tak, żeby klip nie stał na klatce zerowej — inaczej
+        // test nie odróżniłby „faza działa" od „faza zawsze zero".
+        anim_ms: 3_500,
     };
 
     let mut filler = SnapshotFiller::new();
@@ -191,6 +194,43 @@ fn miasto_o_osmej_rano_daje_instancje_z_palety_dzielnicy() {
         "{} różnych barw ubrania na {} mieszkańców — paleta nie różnicuje",
         barwy.len(),
         snap.citizens.len()
+    );
+
+    // M11b: pieszy niesie kurs i klip. Kurs zerowy u **wszystkich** znaczy, że warstwa
+    // ruchu przestała go oddawać i cała ulica idzie bokiem w jedną stronę.
+    assert!(
+        snap.citizens.as_slice().iter().any(|c| c.yaw != 0),
+        "żaden pieszy nie ma kursu — rekord ruchu zgubił `heading`"
+    );
+    let klipy: std::collections::BTreeSet<u8> = snap
+        .citizens
+        .as_slice()
+        .iter()
+        .map(|c| c.anim_state)
+        .collect();
+    let klatki: std::collections::BTreeSet<u8> = snap
+        .citizens
+        .as_slice()
+        .iter()
+        .map(|c| c.anim_phase)
+        .collect();
+    assert!(
+        klipy.iter().any(|k| *k != 0),
+        "każdy mieszkaniec dostał klip zerowy — czynność nie dociera do wypełniacza"
+    );
+    assert!(
+        klatki.len() > 8,
+        "{} różnych faz klipu — tłum maszeruje w jednym takcie",
+        klatki.len()
+    );
+
+    // Atlas póz wypala się dla tych samych modeli, które rysuje klient. Budżet WP3
+    // jest sprawdzany tutaj, bo tu stoi prawdziwy katalog `data/models/`.
+    let atlas = magnat_voxel::PoseAtlas::bake(&models, &magnat_voxel::ClipLibrary::builtin());
+    assert!(
+        atlas.bytes() <= 512 * 1024 && atlas.bytes() > 0,
+        "atlas póz waży {} B, budżet 512 KB",
+        atlas.bytes()
     );
 
     let mut scratch = InstanceScratch::default();

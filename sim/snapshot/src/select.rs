@@ -87,6 +87,15 @@ pub struct ViewQuery {
     /// Oko kamery w milimetrach — punkt odniesienia dla wyboru top-K.
     pub eye: [i32; 3],
     pub caps: SnapshotCaps,
+    /// Czas animacji w milisekundach — monotoniczny, stoi przy pauzie (M11b §5.4).
+    ///
+    /// Nie jest minutą symulacji i nie ma nią być: minuta trwa sekundę realną przy
+    /// prędkości ×1, więc klip przesuwałby się o jedną klatkę na sekundę i postać
+    /// chodziłaby w zwolnionym tempie. Nie jest też czasem świata mnożonym przez
+    /// prędkość — przy ×10 nogi przebierałyby dziesięć razy szybciej, niż da się
+    /// zobaczyć. Jest zegarem **prezentacji**, który wchodzi do snapshotu wyłącznie
+    /// jako faza klipu i nie dotyka niczego w symulacji.
+    pub anim_ms: u64,
 }
 
 /// Kandydat do snapshotu. `src` jest indeksem w tablicy źródłowej wypełniacza —

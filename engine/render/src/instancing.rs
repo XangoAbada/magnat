@@ -102,6 +102,9 @@ pub struct ModelTable {
     slots: Vec<MeshSlot>,
     citizen: ModelId,
     vehicle: ModelId,
+    /// Który model ma wypalone kafle impostora. Bez tego encja modelu bez kafli
+    /// zniknęłaby za progiem L2 zamiast zostać przy siatce uproszczonej.
+    impostor: Vec<bool>,
 }
 
 impl ModelTable {
@@ -111,7 +114,23 @@ impl ModelTable {
             slots,
             citizen,
             vehicle,
+            impostor: Vec::new(),
         }
+    }
+
+    /// Zaznacza modele, dla których atlas ma kafle (`ImpostorAtlas::bake`).
+    #[must_use]
+    pub fn with_impostors(mut self, impostor: Vec<bool>) -> ModelTable {
+        self.impostor = impostor;
+        self
+    }
+
+    #[must_use]
+    pub fn has_impostor(&self, model: ModelId) -> bool {
+        self.impostor
+            .get(model.0 as usize)
+            .copied()
+            .unwrap_or(false)
     }
 
     #[must_use]
@@ -140,23 +159,71 @@ pub const fn model_lod(model: ModelId, lod: u8) -> u16 {
     (model.0 << 2) | (lod as u16 & 0b11)
 }
 
-/// Progi poziomu detalu w metrach.
+/// Poziom detalu z klucza wsadu.
+#[must_use]
+pub const fn lod_of(model_lod: u16) -> u8 {
+    (model_lod & 0b11) as u8
+}
+
+/// Poziom, na którym encję rysuje kafel atlasu sylwetek zamiast siatki.
+pub const LOD_IMPOSTOR: u8 = 2;
+
+/// Progi poziomu detalu jednego rodzaju encji, w metrach (§5.5).
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub struct Bands {
+    /// Za tym progiem model schodzi na siatkę uproszczoną (L1).
+    pub l1_m: f32,
+    /// Za tym progiem zostaje impostor (L2) — dwa trójkąty z atlasu sylwetek.
+    pub l2_m: f32,
+    /// Za tym progiem encja nie jest rysowana wcale.
+    pub draw_m: f32,
+}
+
+/// Progi poziomu detalu wizualnego (§5.5, WP4).
 ///
-/// ponytail: L2 (impostor) **nie jest tu wybierany**, bo w M11a jego siatka jest pusta —
-/// encja zniknęłaby zamiast zmaleć. Poziom impostora i właściwe progi z §5.5 wnosi M11b
-/// razem z `ImpostorAtlas`; do tego czasu wszystko powyżej `l1_m` rysuje się L1
-/// aż do [`DRAW_RADIUS_M`], czyli tak jak przed M11a, tylko taniej.
+/// Mieszkaniec i pojazd mają **osobne progi** i to nie jest kosmetyka: auto jest cztery
+/// razy dłuższe od postaci, więc na tej samej odległości zajmuje kilka razy więcej
+/// pikseli i uproszczenie widać na nim wcześniej.
+///
+/// Pasma L3 z §5.5 („plamka cienia + sylwetka 4×6 px") **nie ma i nie będzie**:
+/// impostor rysowany z czterystu metrów zajmuje dokładnie tyle pikseli sam z siebie,
+/// a osobny poziom kosztowałby drugi pipeline i drugi zestaw kafli po to, żeby narysować
+/// to samo. Zamiast trzeciego progu jest `draw_m` — odległość, za którą encji nie widać.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct LodBands {
-    pub l1_m: f32,
-    pub draw_m: f32,
+    pub citizen: Bands,
+    pub vehicle: Bands,
 }
 
 impl Default for LodBands {
     fn default() -> Self {
         LodBands {
-            l1_m: 60.0,
-            draw_m: DRAW_RADIUS_M,
+            citizen: Bands {
+                l1_m: 40.0,
+                l2_m: 120.0,
+                draw_m: DRAW_RADIUS_M,
+            },
+            vehicle: Bands {
+                l1_m: 60.0,
+                l2_m: 200.0,
+                draw_m: DRAW_RADIUS_M,
+            },
+        }
+    }
+}
+
+impl Bands {
+    /// Poziom detalu dla odległości. `has_impostor == false` znaczy „model nie ma kafli",
+    /// więc encja zostaje na siatce uproszczonej zamiast zniknąć — tak zachowywał się
+    /// cały render do M11b (`F-4`) i tak ma się zachować model, którego nikt nie wypalił.
+    #[must_use]
+    pub fn lod_for(&self, dist_m: f32, has_impostor: bool) -> u8 {
+        if dist_m <= self.l1_m {
+            0
+        } else if dist_m <= self.l2_m || !has_impostor {
+            1
+        } else {
+            2
         }
     }
 }
@@ -187,14 +254,14 @@ pub fn build_instances(
 
     let palety = &snap.district_palette;
     for c in snap.citizens.as_slice() {
-        if let Some(i) = citizen_instance(c, eye, frustum, models, bands, palety) {
+        if let Some(i) = citizen_instance(c, eye, frustum, models, bands.citizen, palety) {
             if !push(&mut out.instances, i) {
                 break;
             }
         }
     }
     for v in snap.vehicles.as_slice() {
-        if let Some(i) = vehicle_instance(v, eye, frustum, models, bands, palety) {
+        if let Some(i) = vehicle_instance(v, eye, frustum, models, bands.vehicle, palety) {
             if !push(&mut out.instances, i) {
                 break;
             }
@@ -251,7 +318,7 @@ fn radius_of(models: &ModelTable, model: ModelId) -> f32 {
     }
 }
 
-fn visible(rel: [f32; 3], radius_m: f32, frustum: &[Vec4; 6], bands: LodBands) -> Option<f32> {
+fn visible(rel: [f32; 3], radius_m: f32, frustum: &[Vec4; 6], bands: Bands) -> Option<f32> {
     let p = glam::Vec3::from(rel);
     let d2 = p.length_squared();
     if d2 > bands.draw_m * bands.draw_m {
@@ -269,7 +336,7 @@ fn citizen_instance(
     eye: DVec3,
     frustum: &[Vec4; 6],
     models: &ModelTable,
-    bands: LodBands,
+    bands: Bands,
     palety: &[u16],
 ) -> Option<GpuInstance> {
     // Mieszkaniec w pojeździe jedzie sylwetką w kabinie, a nie własną bryłą obok auta.
@@ -278,7 +345,7 @@ fn citizen_instance(
     }
     let rel = relative(c.pos, eye);
     let dist = visible(rel, radius_of(models, models.citizen()), frustum, bands)?;
-    let lod = u8::from(dist > bands.l1_m);
+    let lod = bands.lod_for(dist, models.has_impostor(models.citizen()));
     Some(GpuInstance {
         pos: rel,
         yaw_pitch: u32::from(c.yaw),
@@ -299,12 +366,12 @@ fn vehicle_instance(
     eye: DVec3,
     frustum: &[Vec4; 6],
     models: &ModelTable,
-    bands: LodBands,
+    bands: Bands,
     palety: &[u16],
 ) -> Option<GpuInstance> {
     let rel = relative(v.pos, eye);
     let dist = visible(rel, radius_of(models, models.vehicle()), frustum, bands)?;
-    let lod = u8::from(dist > bands.l1_m);
+    let lod = bands.lod_for(dist, models.has_impostor(models.vehicle()));
     Some(GpuInstance {
         pos: rel,
         yaw_pitch: u32::from(v.yaw) | ((v.pitch as u16 as u32) << 16),
@@ -571,5 +638,111 @@ mod tests {
         // Indeks spoza zakresu daje „nic", a nie cudzą encję.
         assert_eq!(pick_id(PickKind::Citizen, (1 << PICK_ENTITY_BITS) - 1), 0);
         assert_eq!(pick_id(PickKind::Citizen, u32::MAX), 0);
+    }
+}
+
+#[cfg(test)]
+mod testy_kamery {
+    use super::*;
+    use crate::camera::{CameraMode, CameraState};
+    use magnat_sim_snapshot::SnapshotCaps;
+
+    /// Encja stojąca w punkcie, na który patrzy kamera orbitalna, **musi** trafić
+    /// do bufora instancji. Test istnieje, bo pierwsza próba obejrzenia animacji
+    /// w oknie pokazała 44 mieszkańców w snapshocie i zero instancji — a stożek
+    /// widzenia jest jedynym miejscem między jednym a drugim.
+    #[test]
+    fn pieszy_w_celu_kamery_trafia_do_bufora() {
+        for dist in [12.0f32, 60.0, 300.0] {
+            let cel = glam::DVec3::new(4009.0, 4599.0, 30.0);
+            let camera = CameraState {
+                mode: CameraMode::Orbit {
+                    target: cel,
+                    dist,
+                    yaw: 0.7,
+                    pitch: 0.7,
+                },
+                ..Default::default()
+            };
+            let mut s = RenderSnapshot::new(SnapshotCaps::DEFAULT);
+            s.citizens.push(CitizenRenderRec {
+                pos: [
+                    (cel.x * 1000.0) as i32,
+                    (cel.y * 1000.0) as i32,
+                    (cel.z * 1000.0) as i32,
+                ],
+                entity_lo: 1,
+                ..Default::default()
+            });
+            let planes = crate::renderer::frustum_planes(&camera.view_proj_relative(16.0 / 9.0));
+            let mut out = InstanceScratch::default();
+            let slot = MeshSlot {
+                index_offset: 0,
+                index_count: 36,
+                base_vertex: 0,
+                radius_m: 1.0,
+            };
+            let modele =
+                ModelTable::new(vec![slot; 2 * LOD_COUNT as usize], ModelId(0), ModelId(1));
+            build_instances(
+                &s,
+                camera.eye(),
+                &planes,
+                &modele,
+                LodBands::default(),
+                &mut out,
+            );
+            assert_eq!(
+                out.instances.len(),
+                1,
+                "z {dist} m kamera nie widzi encji, na którą patrzy"
+            );
+        }
+    }
+}
+
+#[cfg(test)]
+mod testy_lod {
+    use super::*;
+
+    fn pasmo() -> Bands {
+        Bands {
+            l1_m: 40.0,
+            l2_m: 120.0,
+            draw_m: 600.0,
+        }
+    }
+
+    /// Trzy pasma i jedna zasada awaryjna: model bez kafli **nie znika** za progiem
+    /// impostora, tylko zostaje na siatce uproszczonej (`F-4`).
+    #[test]
+    fn progi_wybieraja_poziom_detalu() {
+        let b = pasmo();
+        assert_eq!(b.lod_for(0.0, true), 0);
+        assert_eq!(b.lod_for(40.0, true), 0);
+        assert_eq!(b.lod_for(40.1, true), 1);
+        assert_eq!(b.lod_for(120.0, true), 1);
+        assert_eq!(b.lod_for(120.1, true), LOD_IMPOSTOR);
+        assert_eq!(b.lod_for(599.0, true), LOD_IMPOSTOR);
+        assert_eq!(b.lod_for(599.0, false), 1, "model bez kafli zniknął");
+    }
+
+    /// Mieszkaniec schodzi na impostor wcześniej niż pojazd: auto jest cztery razy
+    /// dłuższe, więc na tej samej odległości zajmuje kilka razy więcej pikseli.
+    #[test]
+    fn pojazd_ma_dalsze_progi_niz_mieszkaniec() {
+        let d = LodBands::default();
+        assert!(d.vehicle.l1_m > d.citizen.l1_m);
+        assert!(d.vehicle.l2_m > d.citizen.l2_m);
+    }
+
+    /// Wsady rozdzielają się po poziomie detalu, więc rysowanie wie, który potok
+    /// wziąć bez ani jednego porównania na encję.
+    #[test]
+    fn klucz_wsadu_niesie_poziom_detalu() {
+        let k = model_lod(ModelId(7), LOD_IMPOSTOR);
+        assert_eq!(lod_of(k), LOD_IMPOSTOR);
+        assert_eq!(k >> 2, 7);
+        assert_eq!(lod_of(model_lod(ModelId(7), 0)), 0);
     }
 }

@@ -8,8 +8,10 @@
 
 #![forbid(unsafe_code)]
 
+pub mod anim;
 pub mod chunk;
 pub mod edit;
+pub mod impostor;
 pub mod lod;
 pub mod material;
 pub mod mesh;
@@ -18,6 +20,11 @@ pub mod model_mesh;
 pub mod palette;
 pub mod world;
 
+pub use anim::{
+    anim_phase, clip_for, AnimationClip, AnimationState, Channel, ClipEntry, ClipId, ClipKind,
+    ClipLibrary, Motion, PoseAtlas, PoseTexel, WorkStyle, ANIM_FPS, MAX_CLIPS, NO_CLIP,
+    POSE_TRANS_SCALE,
+};
 pub use chunk::{
     lin, pack, unlin, Chunk, ChunkBuilder, ChunkCoord, ChunkState, ChunkStorage, Palette, Run,
     CHUNK_DIM, CHUNK_HEIGHT_M, CHUNK_SPAN_M, CHUNK_VOXELS, VOXEL_HEIGHT_DM,
@@ -25,6 +32,9 @@ pub use chunk::{
 pub use edit::{
     rasterize, CarveShape, EditIndex, EditOp, EditQueue, EditReport, EditSeq, EditSource, Obb3,
     Overlap, Rot90, VoxelEditCmd,
+};
+pub use impostor::{
+    ImpostorAtlas, ImpostorEntry, CHARACTER_DIRS, CHARACTER_FRAMES, TILE_H, TILE_W, VEHICLE_DIRS,
 };
 pub use lod::{aggregate, MAX_LOD};
 pub use material::{

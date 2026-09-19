@@ -23,7 +23,7 @@
 //! (postać gracza, szyldy) i M11d (pogoda, światła, dym, łoża dźwiękowe). Typy są
 //! zdefiniowane i to jest treść kontraktu WP2; napełni je ta podfaza, która je narysuje.
 
-use magnat_agents::components::{Employment, Identity, Residence};
+use magnat_agents::components::{AgentState, Employment, Identity, Residence};
 use magnat_agents::household::Household;
 use magnat_agents::social::StatusDistribution;
 use magnat_agents::{demography, AgentSources};
@@ -35,7 +35,7 @@ use magnat_sim_snapshot::{
     CITIZEN_FLAG_PLAYER_OWNED, MAX_DISTRICTS,
 };
 use magnat_traffic::{TrafficServices, VehicleOwner};
-use magnat_voxel::PaletteLibrary;
+use magnat_voxel::{anim, ClipKind, ClipLibrary, PaletteLibrary, WorkStyle};
 use magnat_world::CityData;
 
 /// Bufory robocze wypełniacza.
@@ -51,6 +51,18 @@ pub struct SnapshotFiller {
     /// Ziarno miasta, dla którego tablica wyżej została policzona. Nowa gra ma inne
     /// ziarno, więc związanie odnawia się samo — bez flagi, którą ktoś musiałby zerować.
     bound_seed: Option<u64>,
+    /// Katalog klipów — ten sam, który renderer wypala do atlasu póz.
+    clips: ClipLibrary,
+    /// `WorkStyle` per `JobRoleId`, wyliczony raz z katalogu ról.
+    ///
+    /// `None` znaczy „jeszcze nie próbowano"; pusty wektor — „scenariusz nie ma rynku
+    /// pracy", bo `m5shop` i `m3day` stawiają wycinek świata bez katalogu ról. Wtedy
+    /// każdy pracujący dostaje [`WorkStyle::Office`] i to jest poprawna odpowiedź:
+    /// animacja ma wyglądać neutralnie, a nie zgadywać zawód z numeru.
+    style_by_role: Option<Vec<WorkStyle>>,
+    /// Czy encje dostają klip, czy pozę spoczynkową. Wyłącza to `--no-anim` i służy
+    /// wyłącznie do pomiaru z kryterium WP3 — w grze zawsze jest włączone.
+    animations: bool,
 }
 
 impl Default for SnapshotFiller {
@@ -61,6 +73,9 @@ impl Default for SnapshotFiller {
             cands: Vec::new(),
             palette_by_district: [0; MAX_DISTRICTS],
             bound_seed: None,
+            clips: ClipLibrary::builtin(),
+            style_by_role: None,
+            animations: true,
         }
     }
 }
@@ -102,6 +117,37 @@ impl SnapshotFiller {
         if self.bound_seed != Some(city.plan.seed) {
             self.bind_city(city, palettes);
         }
+    }
+
+    /// Włącza albo wyłącza klipy animacji (scena pomiarowa `--no-anim`).
+    pub fn set_animations(&mut self, on: bool) {
+        self.animations = on;
+    }
+
+    /// Odwzorowanie „rola zawodowa → styl animacji pracy", liczone raz na sesję.
+    ///
+    /// Klucz roli jest łańcuchem, a mieszkańców w kadrze jest do 24 576 — porównywanie
+    /// łańcuchów w pętli klatki byłoby dokładnie tym kosztem, którego cała ścieżka
+    /// instancingu unika.
+    fn ensure_styles(&mut self, world: &World) {
+        // Pustej tablicy **nie zapamiętujemy**: scenariusz bez rynku pracy wygląda
+        // wtedy tak samo jak świat, w którym katalog ról jeszcze się nie załadował,
+        // a pierwszy przypadek kosztuje jedno odpytanie zasobu na klatkę, drugi —
+        // wszystkich pracujących na zawsze w jednej animacji.
+        if self.style_by_role.as_ref().is_some_and(|t| !t.is_empty()) {
+            return;
+        }
+        let tabela = world
+            .get_resource::<magnat_economy::labor::LaborHandle>()
+            .and_then(magnat_economy::labor::LaborHandle::get)
+            .map(|m| {
+                let r = m.roles();
+                (0..r.len())
+                    .map(|i| WorkStyle::from_role_key(r.key(magnat_core::JobRoleId(i as u16))))
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        self.style_by_role = Some(tabela);
     }
 
     /// Wypełnia snapshot encjami widocznymi w kadrze.
@@ -172,9 +218,21 @@ impl SnapshotFiller {
         select_top_k(&mut self.cands, view.caps.citizens as usize);
 
         let status = world.get_resource::<StatusDistribution>();
+        self.ensure_styles(world);
+        let style = self.style_by_role.as_deref().unwrap_or(&[]);
         for c in &self.cands {
             let p = self.peds[c.src as usize];
-            out.citizens.push(citizen_rec(world, &p, doba, seed, status));
+            out.citizens.push(citizen_rec(
+                world,
+                &p,
+                doba,
+                seed,
+                status,
+                &self.clips,
+                style,
+                view.anim_ms,
+                self.animations,
+            ));
         }
     }
 
@@ -199,7 +257,8 @@ impl SnapshotFiller {
 
         for c in &self.cands {
             let v = self.vehs[c.src as usize];
-            out.vehicles.push(vehicle_rec(world, &v));
+            out.vehicles
+                .push(vehicle_rec(world, &v, &self.clips, view.anim_ms, self.animations));
         }
     }
 }
@@ -217,17 +276,23 @@ fn yaw_u16(rad: f32) -> u16 {
     (t * 65536.0) as u32 as u16
 }
 
+#[allow(clippy::too_many_arguments)]
 fn citizen_rec(
     world: &World,
     p: &PedestrianRecord,
     doba: i32,
     seed: u64,
     status: Option<&StatusDistribution>,
+    clips: &ClipLibrary,
+    style: &[WorkStyle],
+    anim_ms: u64,
+    animations: bool,
 ) -> CitizenRenderRec {
     let e = demography::citizen_by_index(world, p.entity);
     let id = e.and_then(|e| world.get::<Identity>(e)).copied();
     let emp = e.and_then(|e| world.get::<Employment>(e)).copied();
     let res = e.and_then(|e| world.get::<Residence>(e)).copied();
+    let stan = e.and_then(|e| world.get::<AgentState>(e)).copied();
 
     // Klasa ubrania z roli zawodowej. Katalog ról rośnie (46 po M7a), a pole ma pięć
     // bitów, więc reszta z dzielenia jest jedyną odpowiedzią, która nie wywraca renderu
@@ -245,27 +310,50 @@ fn citizen_rec(
         0
     };
 
+    // Czynność agenta → klip. Odwzorowanie jest w `engine/voxel`, bo to ono wie,
+    // *jak narysować* czynność; `core::ActivityKind` wie, *co to za czynność* (`K-8`).
+    // Mieszkaniec bez komponentu stanu (scenariusz bez pętli doby) dostaje `Idle`.
+    let styl = emp
+        .filter(|e| e.site != Employment::NO_SITE)
+        .and_then(|e| style.get(e.role as usize).copied())
+        .unwrap_or_default();
+    let klip = stan.map_or(ClipKind::Idle, |s| {
+        magnat_voxel::clip_for(s.activity_kind(), styl)
+    });
+
     CitizenRenderRec {
         pos: to_mm(p.pos),
         entity_lo: p.entity,
         appearance: Appearance::derive(seed, p.entity, outfit_class, tier as u8, age as u8, 0).0,
-        // Kierunek marszu wnosi M11b razem z klipami lokomocji: rekord ruchu go nie
-        // niesie, a zgadywanie z różnicy pozycji między publikacjami dałoby obrót
-        // zależny od częstotliwości publikacji, czyli od klatki.
-        yaw: 0,
+        // Kurs liczy warstwa ruchu z osi odcinka trasy (`F-5`); renderer dostaje go
+        // gotowego, bo różnica pozycji między publikacjami zależałaby od klatki.
+        yaw: yaw_u16(p.heading),
         district: res.map_or(0, |r| r.district),
-        anim_state: 0,
-        // Decyzja 9.3 przyjęta wg propozycji domyślnej: fazę liczy symulacja, funkcją
+        anim_state: if animations {
+            clips.id_of(klip).0
+        } else {
+            magnat_voxel::NO_CLIP.0
+        },
+        // Decyzja 9.3 przyjęta wg propozycji domyślnej: fazę liczy wypełniacz, funkcją
         // czystą od `(chwila, indeks encji)`, i **nie ma jej w ECS**. Rozsunięcie po
         // indeksie jest po to, żeby tłum nie maszerował w jednym takcie.
-        anim_phase: anim_phase(world.tick.get(), p.entity),
+        anim_phase: anim::anim_phase(anim_ms, p.entity),
+        // ponytail: niesiony przedmiot zostaje zerem, dopóki model postaci nie ma części
+        // `carried` — klip `WalkCarry` czeka gotowy w katalogu. Wchodzi razem z modelem
+        // artysty albo z propami wnętrz (M11c).
         carry: 0,
         flags,
         _pad: [0; 4],
     }
 }
 
-fn vehicle_rec(world: &World, v: &VehicleRecord) -> VehicleRenderRec {
+fn vehicle_rec(
+    world: &World,
+    v: &VehicleRecord,
+    clips: &ClipLibrary,
+    anim_ms: u64,
+    animations: bool,
+) -> VehicleRenderRec {
     let owner = vehicle_entity(world, v.entity).and_then(|e| world.get::<VehicleOwner>(e));
     let hh = owner
         .and_then(|o| demography::household_by_index(world, o.owner))
@@ -285,21 +373,21 @@ fn vehicle_rec(world: &World, v: &VehicleRecord) -> VehicleRenderRec {
         paint: owner.map_or(0, |o| (o.owner & 0xFFFF) as u16),
         livery: 0,
         district: hh.map_or(0, |h| h.district),
-        anim_state: 0,
-        anim_phase: anim_phase(world.tick.get(), v.entity),
-        wheel_phase: anim_phase(world.tick.get(), v.entity.wrapping_add(7)),
+        // Pojazd w warstwie Mikro jest w podróży — warstwa trzyma tych, którzy jadą.
+        // ponytail: postój, tankowanie i rozładunek mają swoje klipy w katalogu i czekają
+        // na stan pojazdu w rekordzie; dziś każdy widoczny pojazd jedzie.
+        anim_state: if animations {
+            clips.id_of(ClipKind::Drive).0
+        } else {
+            magnat_voxel::NO_CLIP.0
+        },
+        anim_phase: anim::anim_phase(anim_ms, v.entity),
+        wheel_phase: anim::anim_phase(anim_ms, v.entity.wrapping_add(7)),
         load: 0,
         flags: 0,
         occupants: 0,
         _pad: [0; 6],
     }
-}
-
-/// Faza animacji: funkcja czysta od chwili i indeksu encji (decyzja 9.3).
-fn anim_phase(tick: u64, entity: u32) -> u8 {
-    (tick as u32)
-        .wrapping_mul(11)
-        .wrapping_add(entity.wrapping_mul(97)) as u8
 }
 
 fn wealth_tier(
@@ -343,6 +431,7 @@ mod tests {
             aabb: Aabb::around([0, 0, 0], 2_000_000, 2_000_000),
             eye: [0, 0, 0],
             caps: SnapshotCaps::DEFAULT,
+            anim_ms: 0,
         }
     }
 
@@ -399,8 +488,21 @@ mod tests {
     #[test]
     fn faza_animacji_rozsuwa_tlum() {
         let fazy: std::collections::BTreeSet<u8> =
-            (0..64u32).map(|i| anim_phase(100, i)).collect();
+            (0..64u32).map(|i| anim::anim_phase(100, i)).collect();
         assert!(fazy.len() > 30, "tylko {} różnych faz", fazy.len());
-        assert_eq!(anim_phase(100, 5), anim_phase(100, 5), "faza nie jest czysta");
+        assert_eq!(
+            anim::anim_phase(100, 5),
+            anim::anim_phase(100, 5),
+            "faza nie jest czysta"
+        );
+    }
+
+    /// Klatka animacji zależy od **czasu animacji**, a nie od ticku symulacji: przy
+    /// prędkości ×1 tick zmienia się raz na sekundę realną i klip stałby.
+    #[test]
+    fn faza_plynie_miedzy_tickami() {
+        let a = anim::anim_phase(0, 3);
+        let b = anim::anim_phase(250, 3);
+        assert_ne!(a, b, "faza nie ruszyła się przez ćwierć sekundy");
     }
 }

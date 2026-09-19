@@ -94,6 +94,32 @@ pub(crate) struct Args {
     #[arg(long)]
     pub(crate) lod0_radius: Option<i32>,
 
+    /// Scena pomiarowa M11b: tylu syntetycznych pieszych rozstawionych wokół celu kamery,
+    /// **obok** tych, których oddała symulacja. Ta sama konwencja co `--lights`.
+    ///
+    /// Istnieje, bo kryteria WP3 i WP4 mówią o dwudziestu tysiącach animowanych postaci
+    /// i o przelocie bez przeskoku detalu, a warstwa Mikro w oknie 900 m oddaje ich
+    /// kilkadziesiąt. Tłum wchodzi **do snapshotu po jego wypełnieniu**, więc nie dotyka
+    /// symulacji ani hasha stanu — to jest scena, nie mieszkańcy.
+    #[arg(long, default_value_t = 0)]
+    pub(crate) crowd: usize,
+
+    /// Odstęp między pieszymi sceny `--crowd` w metrach.
+    ///
+    /// Istnieje, bo pomiar dotyczy **konkretnego pasma detalu**: żeby zmierzyć koszt
+    /// animacji dwudziestu tysięcy postaci, muszą się one zmieścić w paśmie, w którym
+    /// animacja w ogóle działa. Przy domyślnym kroku 1,8 m siatka ma ćwierć kilometra
+    /// boku i połowa tłumu jest już impostorami.
+    #[arg(long, default_value_t = 1.8)]
+    pub(crate) crowd_step: f64,
+
+    /// Wyłącza animację: każda encja dostaje klip spoza katalogu, czyli pozę spoczynkową.
+    ///
+    /// Bez tego kryterium WP3 („< 0,3 ms dodatkowego czasu GPU **względem pozy bazowej**")
+    /// jest niemierzalne — trzeba móc zmierzyć tę samą scenę dwa razy.
+    #[arg(long, default_value_t = false)]
+    pub(crate) no_anim: bool,
+
     /// Dzień roku (0–359) — wpływa na deklinację słońca, czyli na porę roku.
     /// 170 to przesilenie letnie w kalendarzu 360-dniowym (00 §K-1).
     #[arg(long, default_value_t = 170)]

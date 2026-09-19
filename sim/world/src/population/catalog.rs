@@ -6,13 +6,29 @@ use super::*;
 
 // ── krok 0: most między miastem a agentami ──────────────────────────────────────
 
-/// Środek bryły budynku w centymetrach.
+/// Środek bryły budynku w centymetrach, **na poziomie wejścia**.
+///
+/// Wysokość bierze się z drzwi, a nie z `aabb.min.z`, i to jest poprawka wpisana
+/// w M11b. `aabb.min.z` to **dno fundamentu**: `base_z_m − głębokość posadowienia −
+/// 2,8 m na kondygnację podziemną, czyli od 0,8 do 10,1 m poniżej gruntu (`data/grammar/`).
+/// Miejsce służy za punkt startu i końca trasy pieszej, więc mieszkaniec wychodził
+/// z piwnicy i szedł pod ziemią — niewidoczny, bo teren go zasłaniał. Objaw wyszedł
+/// dopiero wtedy, gdy pieszy dostał sylwetkę i klip (M11b WP3): przedtem był plamką
+/// kilku pikseli i nikt nie liczył, na jakiej jest wysokości.
+///
+/// `Building.entrances[].pos` niesie `base_z_m` z etapu obrysu, czyli rzędną, na której
+/// budynek stoi. Budynek bez wejścia (obiekt techniczny) zostaje przy `aabb.min.z` —
+/// tam i tak nikt nie chodzi.
 fn srodek(city: &CityData, building: u32) -> WorldCoord {
     let b = &city.buildings.buildings[building as usize];
+    let z_m = b
+        .entrances
+        .first()
+        .map_or(b.aabb.min.z, |e| e.pos.z);
     WorldCoord::new(
         ((b.aabb.min.x + b.aabb.max.x) * 50.0) as i32,
         ((b.aabb.min.y + b.aabb.max.y) * 50.0) as i32,
-        (b.aabb.min.z * 100.0) as i32,
+        (z_m * 100.0) as i32,
     )
 }
 
