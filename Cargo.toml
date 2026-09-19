@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
+    "engine/audio",
     "engine/core",
     "engine/ecs",
     "engine/jobs",
@@ -39,6 +40,7 @@ publish = false
 
 # Wersje przypięte w jednym miejscu (M0 §5.0). Granica bibliotek zewnętrznych: PRD §16.1.
 [workspace.dependencies]
+magnat-audio = { path = "engine/audio" }
 magnat-core = { path = "engine/core" }
 magnat-ecs = { path = "engine/ecs" }
 magnat-jobs = { path = "engine/jobs" }

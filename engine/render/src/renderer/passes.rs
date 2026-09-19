@@ -3,7 +3,6 @@
 //! Wydzielone z `renderer.rs` w R-WP3 bez zmiany zachowania.
 
 use super::frame::{FrameLists, VisibleChunk, FAR_QUADS};
-use super::pipelines::create_depth;
 use super::Renderer;
 use crate::camera::CameraState;
 use crate::clusters::{CLUSTER_COUNT, CLUSTER_Z};
@@ -13,14 +12,21 @@ use crate::ui::UiFrame;
 use magnat_core::SimMinute;
 
 /// Nazwy mierzonych passów — indeks odpowiada parze znaczników w `QuerySet`.
-pub const PASS_NAMES: [&str; 6] = [
+pub const PASS_NAMES: [&str; 7] = [
     "clusters",
     "shadows",
     "depth_prepass",
     "opaque",
     "water",
     "post",
+    // Dopisane **na końcu**, choć pass rysuje się przed `post`: indeksy znaczników
+    // czasu są pozycyjne, więc wstawienie w środku przesunęłoby każdy wcześniejszy
+    // pomiar i porównanie z baseline'em mierzyłoby przenumerowanie, nie zmianę kodu.
+    "weather",
 ];
+
+/// Pozycja passa pogody w [`PASS_NAMES`] — jedno miejsce zamiast trzech literałów.
+pub(super) const PASS_WEATHER: usize = 6;
 
 /// Statystyki klatki — wejście do licznika w tytule okna i do raportu z §7.4.
 #[derive(Clone, Copy, Default, Debug)]
@@ -209,7 +215,8 @@ impl Renderer {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("render.frame"),
             });
-        let (triangles, odczyt) = self.record_passes(&mut encoder, &view, &self.depth_view, &listy);
+        let (triangles, odczyt, pogoda) =
+            self.record_passes(&mut encoder, &view, &self.depth_view, &listy);
         if let Some(f) = ui.as_ref() {
             let rozmiar = [self.gpu.config.width, self.gpu.config.height];
             self.ui
@@ -223,142 +230,22 @@ impl Renderer {
             self.pick_buffer.read_back();
         }
         self.gpu.queue.present(frame);
-        self.finish_stats(&listy.widoczne, triangles);
+        self.finish_stats(&listy.widoczne, triangles, pogoda);
     }
 
-    /// Rysuje jedną klatkę do obrazu w pamięci i zwraca go jako RGB8.
+    /// Zwraca `(trójkąty, czy odczytać bufor ID, czy pass pogody się odbył)`.
     ///
-    /// Istnieje po to, żeby renderer dało się **zweryfikować bez patrzenia na ekran**:
-    /// w CI bez GPU test jest pominięty, ale na maszynie z kartą jeden zrzut mówi więcej
-    /// niż komplet asercji na liczbę trójkątów. Wymóg §7.4 (raport z przelotu kamery)
-    /// też zaczyna się od możliwości zapisania klatki.
-    pub fn render_to_image(
-        &mut self,
-        camera: &CameraState,
-        minute: SimMinute,
-        latitude_ddeg: i16,
-        width: u32,
-        height: u32,
-    ) -> (u32, u32, Vec<u8>) {
-        self.render_to_image_with_ui(camera, minute, latitude_ddeg, width, height, None)
-    }
-
-    /// Zrzut razem z warstwą UI. Istnieje po to, żeby panel dało się **zobaczyć**
-    /// w raporcie z CI — inaczej jedynym dowodem na to, że `egui` się wpięło, byłoby
-    /// słowo autora.
-    pub fn render_to_image_with_ui(
-        &mut self,
-        camera: &CameraState,
-        minute: SimMinute,
-        latitude_ddeg: i16,
-        width: u32,
-        height: u32,
-        ui: Option<UiFrame<'_>>,
-    ) -> (u32, u32, Vec<u8>) {
-        let listy = self.prepare_frame(camera, minute, latitude_ddeg, (width, height));
-        let device = &self.gpu.device;
-
-        let color = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("render.offscreen"),
-            size: wgpu::Extent3d {
-                width,
-                height,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: self.gpu.config.format,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
-            view_formats: &[],
-        });
-        let color_view = color.create_view(&wgpu::TextureViewDescriptor::default());
-        let depth = create_depth(device, width, height);
-
-        // Kopiowanie tekstury wymaga wierszy wyrównanych do 256 B — stąd `padded`.
-        let bpp = 4u32;
-        let padded = (width * bpp).div_ceil(256) * 256;
-        let readback = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("render.readback"),
-            size: u64::from(padded) * u64::from(height),
-            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-            mapped_at_creation: false,
-        });
-
-        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("render.offscreen"),
-        });
-        // Zrzut offscreen nie ma kursora, więc kopia piksela ID i tak nie powstaje.
-        let (triangles, _) = self.record_passes(&mut encoder, &color_view, &depth, &listy);
-        if let Some(f) = ui.as_ref() {
-            self.ui
-                .prepare(device, &self.gpu.queue, &mut encoder, f, [width, height]);
-            self.ui.paint(&mut encoder, &color_view, f, [width, height]);
-        }
-        self.resolve_timer(&mut encoder);
-        encoder.copy_texture_to_buffer(
-            wgpu::TexelCopyTextureInfo {
-                texture: &color,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            wgpu::TexelCopyBufferInfo {
-                buffer: &readback,
-                layout: wgpu::TexelCopyBufferLayout {
-                    offset: 0,
-                    bytes_per_row: Some(padded),
-                    rows_per_image: Some(height),
-                },
-            },
-            wgpu::Extent3d {
-                width,
-                height,
-                depth_or_array_layers: 1,
-            },
-        );
-        self.gpu.queue.submit(Some(encoder.finish()));
-
-        let slice = readback.slice(..);
-        slice.map_async(wgpu::MapMode::Read, |_| {});
-        self.gpu
-            .device
-            .poll(wgpu::PollType::wait_indefinitely())
-            .ok();
-
-        let data = slice.get_mapped_range().expect("odczyt bufora zrzutu");
-        let mut rgb = Vec::with_capacity((width * height * 3) as usize);
-        for y in 0..height {
-            let row = (y * padded) as usize;
-            for x in 0..width {
-                let i = row + (x * bpp) as usize;
-                // Powierzchnia jest w formacie BGRA albo RGBA zależnie od sterownika —
-                // rozpoznajemy po formacie, a nie po nadziei.
-                let (r, g, b) = if matches!(
-                    self.gpu.config.format,
-                    wgpu::TextureFormat::Bgra8Unorm | wgpu::TextureFormat::Bgra8UnormSrgb
-                ) {
-                    (data[i + 2], data[i + 1], data[i])
-                } else {
-                    (data[i], data[i + 1], data[i + 2])
-                };
-                rgb.extend_from_slice(&[r, g, b]);
-            }
-        }
-        drop(data);
-        readback.unmap();
-
-        self.finish_stats(&listy.widoczne, triangles);
-        (width, height, rgb)
-    }
-
-    fn record_passes(
+    /// Trzecia liczba nie jest statystyką: pass pominięty **nie stempluje swojej pary
+    /// znaczników czasu**, a `resolve_timer` rozwiązuje cały zakres, więc bez niej
+    /// pozycja „weather" w raporcie niosłaby wartość z wcześniejszej klatki. Scena
+    /// sucha i bezdymna pokazywałaby czas passa, który się nie odbył (`I-25`).
+    pub(super) fn record_passes(
         &self,
         encoder: &mut wgpu::CommandEncoder,
         color: &wgpu::TextureView,
         depth: &wgpu::TextureView,
         listy: &FrameLists,
-    ) -> (usize, bool) {
+    ) -> (usize, bool, bool) {
         // Scena idzie do bufora HDR; `color` jest celem dopiero dla post-processingu.
         let scena = &self.hdr_view;
         {
@@ -542,11 +429,56 @@ impl Renderer {
                 listy.offset(1),
             );
             drop(pass);
+            let pogoda = self.record_weather(encoder, scena, depth);
             self.record_post(encoder, color);
-            return (trojkaty + t, odczyt);
+            return (trojkaty + t, odczyt, pogoda);
         }
+        let pogoda = self.record_weather(encoder, scena, depth);
         self.record_post(encoder, color);
-        (trojkaty, odczyt)
+        (trojkaty, odczyt, pogoda)
+    }
+
+    /// Cząstki pogody i dymu — **po** wodzie i **przed** post-processingiem.
+    ///
+    /// Po wodzie, bo deszcz pada też na taflę; przed post-processingiem, bo kropla ma
+    /// przejść przez ekspozycję i tonemap razem z resztą sceny — inaczej nocny deszcz
+    /// byłby jaśniejszy od latarni, które go oświetlają.
+    ///
+    /// Sucha bezdymna scena **nie otwiera passa w ogóle**: pusty przebieg kosztuje
+    /// przełączenie celu renderowania, a `bench_blackout` ma nie być wolniejszy
+    /// od `bench_night_rain`.
+    fn record_weather(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        scena: &wgpu::TextureView,
+        depth: &wgpu::TextureView,
+    ) -> bool {
+        if self.weather_fx.is_empty() {
+            return false;
+        }
+        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some(PASS_NAMES[PASS_WEATHER]),
+            timestamp_writes: self.timer.as_ref().map(|t| t.writes(PASS_WEATHER)),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: scena,
+                depth_slice: None,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Load,
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            // Głębia **tylko do odczytu**: cząstka zasłonięta budynkiem ma zniknąć,
+            // ale dwieście tysięcy kropel zapisujących głębię zamieniłoby obraz w koc.
+            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                view: depth,
+                depth_ops: None,
+                stencil_ops: None,
+            }),
+            ..Default::default()
+        });
+        self.weather_fx.draw(&mut pass);
+        true
     }
 
     /// Przebieg końcowy: ekspozycja, tonemap i FXAA z bufora HDR na ekran.
@@ -573,7 +505,7 @@ impl Renderer {
 
     /// Przepisuje znaczniki czasu do bufora odczytu. Musi iść do **tego samego** enkodera,
     /// zanim klatka trafi do kolejki — inaczej mierzyłaby się następna.
-    fn resolve_timer(&self, encoder: &mut wgpu::CommandEncoder) {
+    pub(super) fn resolve_timer(&self, encoder: &mut wgpu::CommandEncoder) {
         let Some(t) = self.timer.as_ref() else {
             return;
         };
@@ -624,7 +556,12 @@ impl Renderer {
         }
     }
 
-    fn finish_stats(&mut self, widoczne: &[VisibleChunk], triangles: usize) {
+    pub(super) fn finish_stats(
+        &mut self,
+        widoczne: &[VisibleChunk],
+        triangles: usize,
+        pogoda: bool,
+    ) {
         if let Some(mut t) = self.timer.take() {
             t.zbierz(&self.gpu);
             self.timer = Some(t);
@@ -640,10 +577,19 @@ impl Renderer {
             index_bytes: self.index_arena.bytes_used(4),
             arena_capacity_bytes: self.vertex_arena.capacity_bytes(8)
                 + self.index_arena.capacity_bytes(4),
-            pass_ms: self
-                .timer
-                .as_ref()
-                .map_or([0.0; PASS_NAMES.len()], |t| t.ms),
+            pass_ms: {
+                let mut ms = self
+                    .timer
+                    .as_ref()
+                    .map_or([0.0; PASS_NAMES.len()], |t| t.ms);
+                // Pass pominięty nie stemplował swojej pary znaczników, więc w buforze
+                // leży wartość z klatki, w której się odbył. Zero znaczy „nie było
+                // passa"; liczba z przeszłości znaczyłaby „był i kosztował".
+                if !pogoda {
+                    ms[PASS_WEATHER] = 0.0;
+                }
+                ms
+            },
             gpu_timing: self.timer.is_some(),
         };
     }

@@ -27,60 +27,59 @@
 
 #![forbid(unsafe_code)]
 
+pub mod ambience;
 pub mod career;
 pub mod chronicle;
 pub mod command;
 pub mod inspect;
 pub mod legacy;
 pub mod metrics;
-pub mod panels;
 pub mod onboarding;
 pub mod overlays;
+pub mod panels;
 pub mod player;
 pub mod policy;
 pub mod replay;
-pub mod scenario;
 pub mod save;
+pub mod scenario;
 pub mod screens;
 pub mod session;
+pub mod shell;
 pub mod timectl;
 pub mod tutorial;
-pub mod shell;
 pub mod view;
 pub mod world;
 
+pub use ambience::Ambience;
 pub use career::{CareerTier, Holdings};
 pub use chronicle::{Chronicle, ChronicleEntry, ChronicleId, ChronicleKind, ChronicleScope};
 pub use command::{
-    Autonomy,
-    apply, precheck, CommandEnvelope, CommandError, CommandView, PlayerCommand, PlayerId,
+    apply, precheck, Autonomy, CommandEnvelope, CommandError, CommandView, PlayerCommand, PlayerId,
     ViewCommand, ViewRecord,
 };
+pub use legacy::LifeEvent;
 pub use metrics::{MetricId, MetricsRecorder};
-pub use panels::{Layout, PanelAction, PanelCtx, PanelDesc, PanelId, PanelRegistry, Panels};
 pub use onboarding::{measure as measure_onboarding, Onboarding};
 pub use overlays::{EntityFilter, OverlayField, OverlayField2d};
-pub use policy::{dry_run, DrySummary, Edit, EditError, GoodKeys, Note, RuleEditor};
+pub use panels::{Layout, PanelAction, PanelCtx, PanelDesc, PanelId, PanelRegistry, Panels};
 pub use player::{
     AutonomyField, Candidate, Control, PlayerAutonomy, PlayerCharacter, StartVariant,
     CANDIDATES_SHOWN,
 };
-pub use legacy::LifeEvent;
+pub use policy::{dry_run, DrySummary, Edit, EditError, GoodKeys, Note, RuleEditor};
+pub use replay::{ReplayError, ReplayHeader, ReplayLog, REPLAY_SCHEMA_VERSION};
+pub use save::{SaveError, SaveSlot, SAVE_SCHEMA_VERSION};
 pub use scenario::{
     Goal, Objective, ObjectiveId, Scenario, ScenarioCatalog, ScenarioOutcome, ScenarioState,
     WorldPatch,
 };
-pub use replay::{ReplayError, ReplayHeader, ReplayLog, REPLAY_SCHEMA_VERSION};
-pub use save::{SaveError, SaveSlot, SAVE_SCHEMA_VERSION};
 pub use screens::{Shell, ShellAction};
-pub use tutorial::{Progress as TutorialProgress, Step as TutorialStep, Tutorial};
-pub use timectl::{
-    FollowTarget, StopCondition, StopConditionId, StopHit, StopWatch, TimeScale,
-};
 pub use session::{replay as replay_session, GameState, ReplayMismatch, Session};
 pub use shell::{
     GenProgress, GenWatch, NewGameParams, ScenarioId, Settings, ShellScreen, WorldGenJob,
     WorldPreview,
 };
+pub use timectl::{FollowTarget, StopCondition, StopConditionId, StopHit, StopWatch, TimeScale};
+pub use tutorial::{Progress as TutorialProgress, Step as TutorialStep, Tutorial};
 pub use view::SnapshotFiller;
 pub use world::{stand_up, BuiltCity, SessionOpts, Standing, StandingReport};

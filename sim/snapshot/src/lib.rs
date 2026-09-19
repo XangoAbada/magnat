@@ -38,13 +38,14 @@ pub mod appearance;
 pub mod records;
 pub mod select;
 
-pub use appearance::{Appearance, AppearanceFields, AgeBand, Carry, OutfitTier};
+pub use appearance::{AgeBand, Appearance, AppearanceFields, Carry, OutfitTier};
 pub use records::{
-    CitizenRenderRec, CrowdDensityRec, LightRecord, PedestrianRecord, PlayerViewRec, PowerRec,
-    SiteRenderRec, VehicleRecord, VehicleRenderRec, WeatherState, CITIZEN_FLAG_HIGHLIGHTED,
-    CITIZEN_FLAG_IN_BUILDING, CITIZEN_FLAG_IN_VEHICLE, CITIZEN_FLAG_PLAYER_OWNED, MAX_DISTRICTS,
-    SITE_FAULT, VEHICLE_FLAG_BLINKER, VEHICLE_FLAG_ENGINE_ON, VEHICLE_FLAG_HIGHLIGHTED,
-    VEHICLE_FLAG_LIGHTS, VEHICLE_FLAG_PLAYER_OWNED,
+    AmbientBed, CitizenRenderRec, CrowdDensityRec, LightRecord, PedestrianRecord, PlayerViewRec,
+    PowerRec, SiteRenderRec, VehicleRecord, VehicleRenderRec, WeatherState, AMBIENT_BED_COUNT,
+    CITIZEN_FLAG_HIGHLIGHTED, CITIZEN_FLAG_IN_BUILDING, CITIZEN_FLAG_IN_VEHICLE,
+    CITIZEN_FLAG_PLAYER_OWNED, MAX_DISTRICTS, SITE_FAULT, VEHICLE_FLAG_BLINKER,
+    VEHICLE_FLAG_ENGINE_ON, VEHICLE_FLAG_HIGHLIGHTED, VEHICLE_FLAG_LIGHTS,
+    VEHICLE_FLAG_PLAYER_OWNED,
 };
 pub use select::{dist2_mm, select_top_k, Aabb, Candidate, SnapshotCaps, ViewQuery};
 
@@ -156,6 +157,14 @@ pub struct RenderSnapshot {
     /// na dzielnicę zamiast drugiego pola w rekordzie liczonym na dwadzieścia cztery
     /// tysiące sztuk.
     pub district_palette: [u16; MAX_DISTRICTS],
+    /// [`AmbientBed::as_index`] per dzielnica — czym brzmi tło w tym miejscu.
+    ///
+    /// Tablica, a nie pole w rekordzie encji, z tego samego powodu co
+    /// [`RenderSnapshot::district_palette`]: „dzielnica przemysłowa brzmi maszynami"
+    /// jest wiedzą o mieście (rodzaj dzielnicy), a `engine/audio` widzi wyłącznie
+    /// snapshot. 64 bajty na cały świat zamiast bajtu na każdą z dwudziestu czterech
+    /// tysięcy encji.
+    pub district_ambient: [u8; MAX_DISTRICTS],
     pub player: PlayerViewRec,
 }
 
@@ -176,6 +185,7 @@ impl RenderSnapshot {
             weather: WeatherState::default(),
             power: [PowerRec::default(); MAX_DISTRICTS],
             district_palette: [0; MAX_DISTRICTS],
+            district_ambient: [0; MAX_DISTRICTS],
             player: PlayerViewRec::default(),
         }
     }
@@ -195,6 +205,7 @@ impl RenderSnapshot {
         self.weather = WeatherState::default();
         self.power = [PowerRec::default(); MAX_DISTRICTS];
         self.district_palette = [0; MAX_DISTRICTS];
+        self.district_ambient = [0; MAX_DISTRICTS];
         self.player = PlayerViewRec::default();
     }
 
@@ -210,6 +221,7 @@ impl RenderSnapshot {
             + core::mem::size_of::<WeatherState>()
             + core::mem::size_of::<[PowerRec; MAX_DISTRICTS]>()
             + core::mem::size_of::<[u16; MAX_DISTRICTS]>()
+            + core::mem::size_of::<[u8; MAX_DISTRICTS]>()
             + core::mem::size_of::<PlayerViewRec>()
     }
 }
@@ -311,7 +323,11 @@ mod tests {
                 ..Default::default()
             }));
         }
-        assert_eq!(s.resident_bytes(), pusty, "rozmiar zmienił się z zawartością");
+        assert_eq!(
+            s.resident_bytes(),
+            pusty,
+            "rozmiar zmienił się z zawartością"
+        );
         // Budżet z §5.2: ≈1,30 MB na bufor, twardy sufit 1,35 MB z §7.1 pkt 7.
         assert!(
             pusty <= 1_350_000,
@@ -324,7 +340,11 @@ mod tests {
     fn publikacja_zamienia_bufory_bez_kopiowania() {
         let mut p = SnapshotPair::default();
         p.back_mut().tick = Tick(7);
-        assert_eq!(p.front().tick, Tick(0), "render widzi bufor przed publikacją");
+        assert_eq!(
+            p.front().tick,
+            Tick(0),
+            "render widzi bufor przed publikacją"
+        );
         p.publish();
         assert_eq!(p.front().tick, Tick(7));
         // Tylny jest teraz tym, który render czytał w poprzedniej klatce.

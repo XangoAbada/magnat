@@ -21,9 +21,11 @@ mod inspect;
 mod interiors;
 mod overlay;
 mod preview;
+mod report;
 mod session;
 mod signs;
 mod slots;
+mod sound;
 mod stream;
 
 use crate::app::App;
@@ -261,6 +263,11 @@ fn uruchom_ze_stanem(
         bench_chunks: 0,
         occupancy_opis: String::new(),
         occupancy_max: 0,
+        occupancy_klatki: 0,
+        audio: sound::uruchom(args.no_audio),
+        wymus_opad: args.precip,
+        wymus_snieg: args.snow,
+        wymus_blackout: args.blackout,
         bench_start: glam::DVec3::ZERO,
         zrzut: args.screenshot.clone(),
         zrzut_po: args.screenshot_after,
@@ -317,4 +324,3 @@ pub(crate) const PROMIEN_SKLEPU_M: f32 = 25.0;
 
 /// Klatki rozgrzewkowe przed pomiarem.
 pub(crate) const BENCH_ROZGRZEWKA: u32 = 60;
-

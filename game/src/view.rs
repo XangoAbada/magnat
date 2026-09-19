@@ -15,14 +15,18 @@
 //! **wejściem jest `&World`, nie `&mut World`**, więc kompilator gwarantuje, że publikacja
 //! snapshotu nie zmienia stanu symulacji (§7.1, `snapshot_fill_is_pure`).
 //!
-//! ### Czego M11a jeszcze nie wypełnia i dlaczego
+//! ### Co tu jest, a czego nie ma
 //!
-//! `sites`, `crowd`, `weather`, `power` i `player` zostają wyzerowane. To nie jest brak,
-//! tylko kolejność: pole wypełnione, którego nikt nie czyta, wygląda w danych dokładnie
-//! tak samo jak działające, a pierwszy czytelnik każdego z nich powstaje w M11c
-//! (postać gracza, szyldy) i M11d (pogoda, światła, dym, łoża dźwiękowe). Typy są
-//! zdefiniowane i to jest treść kontraktu WP2; napełni je ta podfaza, która je narysuje.
+//! Tutaj są **encje**: mieszkańcy, pojazdy, zakłady i postać gracza. Pogoda, zasilanie
+//! dzielnic i lista świateł mieszkają obok, w [`crate::ambience`] — to jest inny temat
+//! i inny zestaw źródeł (stan `sim/events`, sieci `sim/traffic`, geometria latarni
+//! z `CityData`), a nie złączenie warstwy Mikro z komponentami.
+//!
+//! `crowd` zostaje wyzerowane i to jest jedyna sekcja bez wypełniacza. Warstwy L3
+//! (tłum agregatowy) nie ma — `W-2` zdjęło ją z fazy, bo impostor z czterystu metrów
+//! zajmuje te 4×6 px sam z siebie.
 
+use crate::ambience::Ambience;
 use magnat_agents::components::{AgentState, Employment, Identity, Residence};
 use magnat_agents::household::Household;
 use magnat_agents::social::StatusDistribution;
@@ -72,13 +76,24 @@ pub struct SnapshotFiller {
     ///
     /// Pozycja jest w `CityData`, a nie w ECS, więc `fill` po samym `&World` by jej nie
     /// dosięgnął. Tablica jest sortowana po `SiteId`, bo tak samo indeksuje ją `Plant`.
-    sites: Vec<(SiteId, [i32; 3])>,
+    /// Dzielnica dołączyła w M11d — do tej pory docstring ją obiecywał, a krotka miała
+    /// dwa pola (`I-4`); bez niej okno nie wie, czy jego dzielnica ma prąd.
+    ///
+    /// **Klucz jest przesunięty** (`SITE_KEY_BASE + indeks`, `K-46`), bo przechodzi
+    /// granicę crate'u: pod nim stoi zakład w `magnat_supply::Plant`, pod nim jedzie
+    /// `entity_lo` do bufora identyfikatorów i pod nim `Subject::Site` otwiera kartę.
+    /// Do M11d stała tu numeracja generatora i `plant.get` **nigdy nie trafiał** —
+    /// każdy zakład dostawał aktywność 128 i zapas 255, czyli wartości domyślne
+    /// nie do odróżnienia od prawdziwych (`I-5`).
+    sites: Vec<(SiteId, [i32; 3], u16)>,
     /// Postać gracza, jeśli już jest. `PlayerCharacter` mieszka w sesji, a nie w świecie,
     /// więc wypełniacz dostaje ją setterem — tak samo jak `animations`.
     player: Option<CitizenId>,
     /// Kafel atlasu szyldów per `SiteId`, nadany przez klienta (WP9). Pusty wektor
     /// znaczy „nikt jeszcze nie rozdał numerów", a nie „żadna firma nie ma szyldu".
     signs: Vec<(SiteId, u16)>,
+    /// Pogoda, zasilanie i światła — patrz [`crate::ambience`].
+    ambience: Ambience,
 }
 
 impl Default for SnapshotFiller {
@@ -95,6 +110,7 @@ impl Default for SnapshotFiller {
             sites: Vec::new(),
             player: None,
             signs: Vec::new(),
+            ambience: Ambience::default(),
         }
     }
 }
@@ -123,9 +139,7 @@ impl SnapshotFiller {
             if i >= MAX_DISTRICTS {
                 break;
             }
-            self.palette_by_district[i] = palettes
-                .id_of(d.kind.key(), epoka)
-                .map_or(0, |p| p.0);
+            self.palette_by_district[i] = palettes.id_of(d.kind.key(), epoka).map_or(0, |p| p.0);
         }
         // Pozycja zakładu to **wejście budynku**, a nie środek bryły: szyld wisi nad
         // drzwiami, a nie nad dachem, i tam samo gracz podchodzi. Wysokość to nadproże
@@ -144,12 +158,16 @@ impl SnapshotFiller {
                 ],
                 |e| [e.pos.x, e.pos.y, z],
             );
-            self.sites.push((
-                magnat_world::city::sites::site_id(i as u32),
-                to_mm(p),
-            ));
+            let dzielnica = city
+                .parcels
+                .parcels
+                .get(s.parcel.0.index() as usize)
+                .map_or(0, |p| p.district.0);
+            self.sites
+                .push((crate::world::plants::site_id(i), to_mm(p), dzielnica));
         }
-        self.sites.sort_unstable_by_key(|(s, _)| *s);
+        self.sites.sort_unstable_by_key(|(s, _, _)| *s);
+        self.ambience.bind(city);
     }
 
     /// Wiąże z miastem, jeśli to inne miasto niż poprzednio. Wołane z pętli klatki:
@@ -239,25 +257,40 @@ impl SnapshotFiller {
         let doba = (world.tick.get() / 1440) as i32;
         let seed = world.seed;
 
+        // Atmosfera **przed** encjami: jasność okna zakładu zależy od tego, czy
+        // dzielnica ma prąd, a lista świateł — od tego, które zakłady i pojazdy
+        // w ogóle weszły do kadru. Stąd stan na początku, światła na końcu.
+        self.ambience.fill_state(world, view, out);
         self.fill_citizens(world, view, doba, seed, keep, out);
         self.fill_vehicles(world, view, out);
         self.fill_sites(world, view, out);
         self.fill_player(world, out);
+        self.ambience.fill_lights(view, out);
+    }
+
+    /// Atmosfera kadru — pogoda, zasilanie, światła. Klient ustawia przez nią
+    /// światło dzienne i sprzężenie zwrotne zajętości klastrów.
+    pub fn ambience_mut(&mut self) -> &mut Ambience {
+        &mut self.ambience
     }
 
     /// Zakłady widoczne w kadrze (M11c §5.7, WP5 i WP9).
     ///
-    /// `activity`, `stock_fill` i awaria pochodzą z `magnat_supply`, więc **zakład
-    /// handlowy ich nie ma** — sklep nie jest linią produkcyjną. Dostaje wtedy zapas
-    /// pełny i aktywność neutralną: regały w sklepie mają stać pełne, dopóki M11d nie
-    /// podłączy stanu półki.
+    /// `activity`, `stock_fill`, emisja i awaria pochodzą z `magnat_supply`, więc
+    /// **zakład handlowy ich nie ma** — sklep nie jest linią produkcyjną. Dostaje wtedy
+    /// zapas pełny i aktywność neutralną: regały w sklepie mają stać pełne, dopóki
+    /// stan półki nie dojdzie własną drogą (pozycja w `R3`).
+    ///
+    /// M11d dokłada trzy pola, których M11c nie ruszało: `emission` i rodzaj pióropusza
+    /// (dym z komina, §5.8), `lights` (okna po zmroku, gaszone blackoutem) oraz
+    /// `ambient_kind` (łoże dźwiękowe emitera, §5.9).
     fn fill_sites(&mut self, world: &World, view: &ViewQuery, out: &mut RenderSnapshot) {
         if self.sites.is_empty() {
             return;
         }
         let chain = world.get_resource::<magnat_supply::ChainHandle>();
         self.cands.clear();
-        for (i, (_, pos)) in self.sites.iter().enumerate() {
+        for (i, (_, pos, _)) in self.sites.iter().enumerate() {
             if !view.aabb.contains(*pos) {
                 continue;
             }
@@ -269,7 +302,7 @@ impl SnapshotFiller {
         }
         select_top_k(&mut self.cands, view.caps.sites as usize);
         for c in &self.cands {
-            let (id, pos) = self.sites[c.src as usize];
+            let (id, pos, dzielnica) = self.sites[c.src as usize];
             let mut rec = SiteRenderRec {
                 entity_lo: id.0.index(),
                 pos,
@@ -279,6 +312,7 @@ impl SnapshotFiller {
                     .map_or(0, |i| self.signs[i].1),
                 activity: 128,
                 stock_fill: 255,
+                ambient_kind: self.ambience.bed_of_site(id),
                 ..Default::default()
             };
             if let Some(ch) = chain {
@@ -289,8 +323,19 @@ impl SnapshotFiller {
                     if zaklad.is_fault() {
                         rec.flags |= magnat_sim_snapshot::SITE_FAULT;
                     }
+                    rec.emission = self.ambience.plant_emission(zaklad);
+                    // Pióropusz bierze się z **pracującej** receptury, a nie z archetypu:
+                    // linia przezbrojona na inny wyrób dymi inaczej, a stojąca nie dymi
+                    // wcale — i to jest ta sama informacja, którą niesie `activity`.
+                    if let Some(r) = zaklad.lines.iter().find_map(|l| match l.state {
+                        magnat_supply::plant::LineState::Running { recipe, .. } => Some(recipe),
+                        _ => None,
+                    }) {
+                        rec.flags |= (self.ambience.plume_of_recipe(r) & 0b11) << 1;
+                    }
                 }
             }
+            rec.lights = self.ambience.window_brightness(dzielnica, rec.activity);
             out.sites.push(rec);
         }
     }
@@ -380,17 +425,28 @@ impl SnapshotFiller {
         }
         select_top_k(&mut self.cands, view.caps.vehicles as usize);
 
+        let swiatla = self.ambience.headlights_on();
         for c in &self.cands {
             let v = self.vehs[c.src as usize];
-            out.vehicles
-                .push(vehicle_rec(world, &v, &self.clips, view.anim_ms, self.animations));
+            out.vehicles.push(vehicle_rec(
+                world,
+                &v,
+                &self.clips,
+                view.anim_ms,
+                self.animations,
+                swiatla,
+            ));
         }
     }
 }
 
 /// Metry `f32` → milimetry `i32`, z nasyceniem zamiast zawijania.
 fn to_mm(p: [f32; 3]) -> [i32; 3] {
-    let m = |v: f32| (f64::from(v) * 1000.0).round().clamp(f64::from(i32::MIN), f64::from(i32::MAX)) as i32;
+    let m = |v: f32| {
+        (f64::from(v) * 1000.0)
+            .round()
+            .clamp(f64::from(i32::MIN), f64::from(i32::MAX)) as i32
+    };
     [m(p[0]), m(p[1]), m(p[2])]
 }
 
@@ -478,6 +534,7 @@ fn vehicle_rec(
     clips: &ClipLibrary,
     anim_ms: u64,
     animations: bool,
+    headlights: bool,
 ) -> VehicleRenderRec {
     let owner = vehicle_entity(world, v.entity).and_then(|e| world.get::<VehicleOwner>(e));
     let hh = owner
@@ -509,7 +566,17 @@ fn vehicle_rec(
         anim_phase: anim::anim_phase(anim_ms, v.entity),
         wheel_phase: anim::anim_phase(anim_ms, v.entity.wrapping_add(7)),
         load: 0,
-        flags: 0,
+        // **Silnik pracuje w każdym widocznym pojeździe** i to nie jest uproszczenie:
+        // warstwa Mikro trzyma wyłącznie tych, którzy jadą (komentarz przy `anim_state`
+        // wyżej). Do M11d flagi były twardym zerem, więc reflektory z WP6 i dźwięk
+        // silnika z WP8 nie miały na czym stanąć — pole bez pisarza wygląda w danych
+        // tak samo jak pole wyzerowane z rozmysłu (`I-18`).
+        flags: magnat_sim_snapshot::VEHICLE_FLAG_ENGINE_ON
+            | if headlights {
+                magnat_sim_snapshot::VEHICLE_FLAG_LIGHTS
+            } else {
+                0
+            },
         occupants: 0,
         _pad: [0; 6],
     }
@@ -589,7 +656,10 @@ mod tests {
         f.fill(&world, &zapytanie(), &mut snap);
         assert!(snap.citizens.is_empty());
         assert!(snap.vehicles.is_empty());
-        assert_eq!(snap.resident_bytes(), RenderSnapshot::default().resident_bytes());
+        assert_eq!(
+            snap.resident_bytes(),
+            RenderSnapshot::default().resident_bytes()
+        );
     }
 
     #[test]

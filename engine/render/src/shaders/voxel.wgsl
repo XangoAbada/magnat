@@ -20,6 +20,7 @@ struct Frame {
     screen: vec4<f32>,        // xy = rozmiar okna w pikselach, zw = odwrócenie bufora głębi
     eye: vec4<f32>,           // xyz = pozycja kamery w świecie
     overlay: vec4<f32>,       // x = bok komórki, y = wymiar, z = siła, w = czy aktywna
+    weather: vec4<f32>,   // x = pokrywa śnieżna, y = wilgoć, z = pora roku, w = zachmurzenie
 }
 
 struct ChunkData {
@@ -192,6 +193,44 @@ fn vs_main(
     return out;
 }
 
+/// Pogoda na materiale: śnieg, wilgoć i pora roku — **bez dotykania geometrii**.
+///
+/// Remeshing całego miasta cztery razy w roku gry za zmianę koloru liści byłby kosztem
+/// bez pokrycia (§5.8), więc sezon jest przesunięciem palety i tyle. Ta sama zasada
+/// obejmuje śnieg: nie sypiemy voxeli, tylko bielimy powierzchnie zwrócone w górę.
+///
+/// ponytail: roślinność rozpoznajemy po **przewadze zieleni w albedo**, bo tabela
+/// materiałów nie niesie klasy pogodowej. Sufit: zielona ściana zmieniałaby barwę
+/// z porą roku. Ścieżka wyjścia, gdy to zacznie przeszkadzać: jeden bajt klasy
+/// w czwartej składowej wpisu tabeli materiałów obok chropowatości.
+fn pogoda_na_materiale(color: vec3<f32>, n: vec3<f32>) -> vec3<f32> {
+    var albedo = color;
+
+    // Pora roku dotyka wyłącznie zieleni. Zima jest już załatwiona śniegiem, więc
+    // sezony przestawiają tylko odcień: wiosna soczysta, lato neutralne, jesień żółto-ruda.
+    let zielen = f32(albedo.g > albedo.r * 1.15 && albedo.g > albedo.b * 1.15);
+    if (zielen > 0.0) {
+        let sezon = i32(frame.weather.z + 0.5);
+        var szorstka = vec3<f32>(1.0);
+        if (sezon == 0) { szorstka = vec3<f32>(0.85, 0.82, 0.78); }   // zima: wyblakła
+        if (sezon == 1) { szorstka = vec3<f32>(0.92, 1.12, 0.80); }   // wiosna: soczysta
+        if (sezon == 3) { szorstka = vec3<f32>(1.45, 1.00, 0.45); }   // jesień: ruda
+        albedo = albedo * szorstka;
+    }
+
+    // Wilgoć: mokra powierzchnia jest ciemniejsza i mniej nasycona. Kałuż jako kształtów
+    // nie ma i nie będzie — różnica między mokrym a suchym asfaltem jest w połysku.
+    let poziomo = clamp(n.z, 0.0, 1.0);
+    let wilgoc = frame.weather.y * poziomo;
+    let szarosc = dot(albedo, vec3<f32>(0.299, 0.587, 0.114));
+    albedo = mix(albedo, mix(albedo, vec3<f32>(szarosc), 0.25) * 0.62, wilgoc);
+
+    // Śnieg leży na tym, co zwrócone w górę, i tym mocniej, im bardziej płasko.
+    // Pion zostaje odsłonięty — inaczej miasto zimą wygląda jak polany lukrem.
+    let przyczepnosc = smoothstep(0.35, 0.85, n.z);
+    return mix(albedo, vec3<f32>(0.90, 0.93, 0.98), frame.weather.x * przyczepnosc);
+}
+
 /// Numer klastra dla piksela: kafel z pozycji na ekranie, warstwa z odległości.
 ///
 /// Podział po Z jest logarytmiczny i **musi** być tą samą funkcją co w `clusters.wgsl` —
@@ -294,7 +333,7 @@ fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
         punktowe = swiatla_punktowe(numer_klastra(in.clip_pos.xy, glebokosc), in.world_pos, n);
     }
     let light = frame.sun_color.xyz * ndotl * cien + ambient + punktowe;
-    var color = in.color * light * in.ao;
+    var color = pogoda_na_materiale(in.color, n) * light * in.ao;
     color = z_nakladka(color, in.world_pos.xy + frame.eye.xy);
 
     // Mgła atmosferyczna — wykładnicza po odległości, barwa z nieba przy horyzoncie.

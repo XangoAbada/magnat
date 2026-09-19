@@ -176,6 +176,28 @@ pub(crate) struct Args {
     #[arg(long, default_value_t = 1)]
     pub(crate) speed: u32,
 
+    /// Scena pomiarowa `bench_night_rain`: wymuszone natężenie opadu 0–255.
+    ///
+    /// Model pogody M8c losuje opad i nie da się go poprosić o ulewę, a scena odniesienia
+    /// §7.2 wymaga deszczu o zadanej sile. Wymuszenie dotyczy **wyłącznie snapshotu** —
+    /// symulacja dalej liczy własną pogodę, więc scena nie zmienia stanu świata.
+    #[arg(long)]
+    pub(crate) precip: Option<u8>,
+
+    /// Scena pomiarowa `bench_winter`: wymuszona pokrywa śnieżna 0–255.
+    /// Razem z `--day 340` daje zimę bez czekania na nią dziewięćdziesiąt dób.
+    #[arg(long)]
+    pub(crate) snow: Option<u8>,
+
+    /// Scena pomiarowa `bench_blackout`: tyle pierwszych dzielnic bez prądu.
+    #[arg(long, default_value_t = 0)]
+    pub(crate) blackout: u16,
+
+    /// Wyłącza dźwięk. Istnieje dla testu `audio_off_equals_audio_on` (§7.1) i dla
+    /// zrzutów z CI, gdzie urządzenia dźwiękowego nie ma w ogóle.
+    #[arg(long, default_value_t = false)]
+    pub(crate) no_audio: bool,
+
     /// Język interfejsu: `pl` albo `en`. Bez tego argumentu bierze się go z profilu
     /// gracza, czyli z tego, co wybrano w ustawieniach ostatnim razem.
     #[arg(long)]

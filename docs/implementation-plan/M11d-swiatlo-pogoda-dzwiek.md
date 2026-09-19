@@ -20,11 +20,11 @@ Oświetlenie nocne z blackoutem, pogoda wizualna i dym oraz crate `engine/audio`
 
 ## Pakiety robocze
 
-| WP | Nazwa | Zależy od | Rozmiar |
-|---|---|---|---|
-| WP6 | Oświetlenie nocne i blackout | WP2, M1, M8 | M |
-| WP7 | Pogoda wizualna i dym | WP2, M8 | M |
-| WP8 | `engine/audio` | WP2 (tylko `SiteRenderRec`) | L |
+| | WP | Nazwa | Zależy od | Rozmiar |
+|---|---|---|---|---|
+| [x] | WP6 | Oświetlenie nocne i blackout | WP2, M1, M8 | M |
+| [x] | WP7 | Pogoda wizualna i dym | WP2, M8 | M |
+| [x] | WP8 | `engine/audio` | WP2 (tylko `SiteRenderRec`) | L |
 
 ### WP6 — Oświetlenie nocne i blackout
 
@@ -221,3 +221,58 @@ Pełna tabela `E-n` jest w `M11a-format-i-snapshot.md`.
 | H-4 | **`SiteRenderRec.flags` niesie `SITE_FAULT` na bicie 0 i rodzaj pióropusza na bitach 1–2**, z akcesorami `is_faulted()` i `plume_kind()` | Kodowanie jest już w typie, więc wypełniacz i shader nie wyprowadzają go osobno. Pięć bitów zostaje wolnych |
 | H-5 | **Barwy z palet są w sRGB i shader instancji przeliczy je na liniowe** (`pow 2,2`) przed oświetleniem | Bufor sceny jest HDR i liniowy, bo ekspozycja i tonemap dzieją się w post-processingu (M1). Emitery świateł mają wejść **tą samą drogą**, inaczej latarnia i okno tego samego budynku będą miały dwie różne barwy przy identycznym wpisie w danych |
 | H-6 | **Rola palety `Emissive` ma numer 11 i shader traktuje ją osobno** — element nią oznaczony nie gaśnie w cieniu | To jest cała różnica między lampą a blachą i jest już w kodzie. Blackout ma więc gdzie zadziałać: wygaszenie jest mnożnikiem tej jednej roli, a nie osobnym passem |
+
+---
+
+## Zmiany wpisane po M11d
+
+Zgodnie z `K-18`. To są rzeczy, o których wiadomo **na pewno** po zamknięciu M11d.
+Gwiazdka = zmiana zakresu albo kryterium.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| I-1 ★ | **Pojemność klastra świateł to 64, nie 256** (`MAX_LIGHTS_PER_CLUSTER` w `engine/devtools`), więc próg przerzedzania 192 z §5.8 leżał **powyżej** sufitu i nie mógł się nigdy zapalić. Próg jest teraz 48 (trzy czwarte pojemności), z powrotem przy 32 | Korekta budżetu z §5.8 mówiła „256 na klaster" na podstawie decyzji 9.1, a kod M1 stanął na 64 i nikt tych dwóch liczb nie porównał. Globalne 4 096 zgadza się bez zmian, więc próg 400 m zostaje |
+| I-2 ★ | **Przerzedzanie latarni jest globalne, sterowane szczytem zajętości klastrów z poprzedniej klatki**, a nie liczone per klaster | §5.8 opisuje przerzedzanie „w tym klastrze", co wymagałoby **czwartej** kopii arytmetyki froxeli po stronie producenta listy — a nagłówek `clusters.rs` ostrzega wprost, że trzy kopie już są i rozjeżdżają się przy pierwszej zmianie wymiarów siatki. Przyrządem jest `ClusterOccupancy`, czyli licznik, który M1 wystawił dokładnie w tym celu (§5.8 zdanie ostatnie). Efekt wizualny jest ten sam — równomiernie rzadszy rząd latarni — tylko obejmuje cały kadr, a nie jeden froxel |
+| I-3 | **`LightRecord` nadal nie ma pól `kind` i `flags`**, które `H-2` zapowiadało „razem z pierwszym czytelnikiem" | Czytelnik się nie pojawił i to jest wynik, nie zaniechanie: blackout gasi dzielnicę po stronie **producenta** listy, bo tylko on zna dzielnicę, a przerzedzanie idzie krokiem po liście, nie po rodzaju światła. Rekord zostaje 20-bajtowy, a snapshot w budżecie |
+| I-4 | **`SnapshotFiller.sites` niesie dzielnicę** — docstring obiecywał ją od M11a, a krotka miała dwa pola | Bez dzielnicy okno zakładu nie wie, czy ma prąd, więc blackout nie miałby czego wygasić |
+| I-5 ★ | **Usterka sprzed tej podfazy: wypełniacz szukał zakładu pod numeracją generatora, a `Plant` jest kluczowany kluczem przesuniętym** (`K-46`). `plant.get` nie trafiał **nigdy**, więc każdy zakład od M11c miał `activity = 128` i `stock_fill = 255` | To są wartości domyślne `fill_sites` i wyglądają dokładnie jak prawdziwe — dlatego nikt tego nie zobaczył. Objawiło się dopiero tutaj, bo dym z komina i „linia stoi = cisza" stoją na tych liczbach. Poprawione w `game::view`, `game::ambience` oraz po stronie klienta w `signs.rs` i `interiors.rs`; po naprawie 183 z 254 zakładów pracuje, a nie 254 |
+| I-6 ★ | **`SiteRenderRec.emission` liczy się z receptury pracującej linii, a nie z `EmissionTotals::pm_g_last_minute`** | Tamto pole zeruje się co minutę i napełnia dopiero w minucie **zakończenia szarży**, więc snapshot próbkujący je co klatkę trafia w zero prawie zawsze: komin dymiłby przez jedną klatkę raz na pół godziny gry. Kontrakt §5.2 mówi „gęstość", czyli tempo — i tempo liczymy z `emissions.pm_g / duration_minutes` receptury. Sufit nazwany w kodzie: tempo jest nominalne, obniżona szarża dymi tak samo jak pełna |
+| I-7 ★ | **Widoczność pióropusza zależy od `plume_kind` i `activity`, nie od samego `emission`** | Chłodnia kominowa i mleczarnia mają `PlumeKind::Steam` i **zerowy pył**, bo para nie jest zanieczyszczeniem. Reguła: rodzaj mówi, co leci, `activity` — czy cokolwiek leci, `emission` — jak gęsto. Bez tego połowa kominów w mieście byłaby niewidoczna mimo pracy |
+| I-8 ★ | **Waga łoża dzielnicy bierze się z encji wokół słuchacza, a nie z odległości do centroidu dzielnicy**, jak zapisywało §5.9 | Centroidu dzielnicy w snapshocie nie ma i nie będzie — kanał sim → render niesie encje i tablice per dzielnica, a nie geometrię miasta. Wychodzi na to samo i jest uczciwsze: dzielnica przemysłowa brzmi maszynami dlatego, że stoją w niej maszyny |
+| I-9 ★ | **`AudioEngine::update` bierze `&Listener`, a nie `&CameraState`**, jak zapisywało §5.9 | `CameraState` mieszka w `engine/render`, a §6.3 pkt 1 zabrania `engine/audio` zależeć od czegokolwiek poza `engine-core` i `sim-snapshot`. Ten sam ruch, którym `Y-4` przestawiło `generate_interior` na `InteriorSpec`. Słuchacza składa klient, bo to on ma kamerę |
+| I-10 | **Okluzja jest terenowa, nie voxelowa** — sufit nazwany w kodzie komentarzem `ponytail:` | Prawdziwy raycast po voxelach wymaga zmaterializowanych chunków, których klient trzyma tylko wokół kamery; emiter poza tym podzbiorem dostałby zero i tak. Ścieżka wyjścia: przecięcie odcinka z `Building.aabb` przez `CsrGrid::query_rect`, czyli indeks, który miasto już ma |
+| I-11 ★ | **`data/audio/` nie ma nagrań: `audio.ron` opisuje syntezę** (decyzja właściciela produktu z 2026-09-19) | Ten sam wzorzec co `mvoxc gen` w M11a i `Y-6` w M11c. Kryterium „odsłuch trzech dzielnic daje rozpoznawalnie różne łoża" jest wtedy **mierzalne bez ucha**: test porównuje energię w pasmach, bo to w nich siedzi różnica między rumorem hali a szelestem liści. Szczegóły kontraktu — `K-77` |
+| I-12 | **`PASS_NAMES` rośnie do siedmiu, a `weather` dopisany jest na końcu**, choć pass rysuje się przed `post` | Indeksy znaczników czasu są pozycyjne, więc wstawienie w środku przesunęłoby każdy wcześniejszy pomiar — a wtedy porównanie z baseline'em mierzyłoby przenumerowanie, nie zmianę kodu. Wiążące dla M11e, które z tych liczb robi raport |
+| I-13 | **`FrameUniform` dostaje `weather: vec4`** (śnieg, wilgoć, sezon, zachmurzenie) i **wszystkie osiem kopii `struct Frame` w WGSL** dostaje to pole razem z testem, który tego pilnuje | Kopia, która zgubi pole, czyta cudze bajty i jest przy tym poprawnym shaderem — walidator `naga` tego nie widzi. Test `kazda_kopia_uniformu_ramki_ma_te_same_pola` porównuje listę pól we wszystkich ośmiu |
+| I-14 | **`chunk_remesh_count` jest licznikiem w strumieniowaniu klienta i mierzy się go w oknie, nie w CI** | Kryterium WP7 mówi o przejściu przez cztery pory roku, a to wymaga uruchomionej gry z GPU — §7.2 dopuszcza to wprost („progi klatkowe weryfikuje nocny bieg"). W CI stoi za to test, że pogoda w ogóle nie ma drogi do geometrii: wchodzi wyłącznie do uniformu ramki |
+| I-15 | **Klient dostaje cztery przełączniki scen pomiarowych: `--precip`, `--snow`, `--blackout`, `--no-audio`** | Sceny odniesienia §7.2 nazywają się `bench_night_rain`, `bench_winter` i `bench_blackout`, a model pogody losuje opad i nie da się go poprosić o ulewę. Ta sama konwencja co `--lights` i `--crowd`: wymuszenie dotyczy **wyłącznie snapshotu**, więc scena nie zmienia ani grosza w świecie |
+| I-16 | **Sezon w snapshocie liczy się z `world.tick`, a `--day` przestawia samo słońce** — `--snow` wymusza przy okazji zimę, żeby scena była spójna | Rozjazd jest sprzed tej podfazy i udokumentowany w kliencie („Dzień roku dla słońca. Symulacja liczy własną dobę od zera"), ale do M11d nie było go widać: dopiero paleta sezonowa stawia zieleń obok zimowego słońca. Przewinięcie świata o 170 dób kosztuje 245 tys. minut symulacji, więc scena wymusza sezon zamiast go przeżywać |
+| I-17 ★ | **Słuchacz stoi w celu kamery, a nie w jej oku** | Ta sama poprawka, którą `X-3` zrobiło dla okna warstwy Mikro, i z tego samego powodu: przy orbicie z 900 m oko wisi nad miastem, więc emiter w promieniu 220 m od oka nie istnieje i widok dzielnicy byłby niemy mimo tysiąca ludzi w kadrze |
+| I-18 ★ | **Pojazd ma zapalony silnik, a po zmroku światła** — do tej pory `VehicleRenderRec.flags` było twardym zerem | Reflektory z WP6 i dźwięk silnika z WP8 nie miały na czym stanąć: obie reguły czytają flagi, których nikt nie pisał. Warstwa Mikro trzyma wyłącznie pojazdy w podróży, więc „silnik pracuje” jest prawdą o każdym z nich; próg zapalenia świateł jest ten sam co dla latarni |
+
+### Znalezione w recenzji przed commitem
+
+Dziesięć poprawek z przeglądu tej samej zmiany. Żadna nie zmienia zakresu; wszystkie
+dotyczą rzeczy, które **działałyby po cichu źle**.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| I-19 ★ | **Mieszkaniec nie wchodzi do mieszanki łóż**; robią to zakłady (przez `ambient_kind`) i pojazdy (zawsze jako `Traffic`) | `CitizenRenderRec.district` niesie dzielnicę **zameldowania**, a nie tę, w której człowiek stoi — ważenie nią odległości znaczyło, że pas przemysłowy pełen dojeżdżających brzmi osiedlem. To jest dokładnie odwrotność kryterium WP8, a złapać dało się to tylko czytając, skąd bierze się `district` |
+| I-20 ★ | **Bramka `dep_isolation` przepuszczała siedem z jedenastu crate'ów symulacji** i jest teraz listą **dozwolonych**, nie zakazanych | Wzorzec `magnat-(world\|city\|econ\|events\|sim)` nie łapał `magnat-economy` (po „econ" jest „omy"), `sim` nie łapał niczego, a `supply`, `agents`, `traffic`, `firms`, `macro` i `policy` nie były wymienione. Przy liście dozwolonych **nowy crate symulacji zapala bramkę sam** |
+| I-21 | **`AudioEngine::new` nie panikuje już po utworzeniu miksera** — każdy `expect` zamieniony na propagację błędu | Konstruktor zwraca `Result` po to, żeby brak urządzenia dawał cichą grę. Panika za `AudioManager::new` łamała własny kontrakt crate'u dokładnie w sytuacji, do której ten `Result` był |
+| I-22 ★ | **Tempo emisji liczy się w miligramach na minutę, nie w gramach** | `pm_g / duration_minutes` obcina w dół, więc **każda receptura emitująca mniej niż gram na minutę dawała zero** i jej komin był czysty. Ta sama pułapka co przy rampie blackoutu i przy paliwie (`K-25`): zaokrąglenie w jedną stronę nie znosi się |
+| I-23 ★ | **Mgła sięga pełnej skali**: próg połowy zachmurzenia zamiast dzielenia przez trzy | Poprzedni wzór nie przekraczał 85 z 255, więc górne dwie trzecie skali były martwe, a kontrakt renderu obiecywał przy 255 widoczność 200 m — stan nieosiągalny. Mgła jest tak samo rzadka, ale kiedy jest, znaczy to, co obiecuje |
+| I-24 | **`WeatherUniform.params.w` przestaje udawać daną**: było tam `snow_cover`, którego shader cząstek nie czytał | Śnieg na ziemi idzie **uniformem ramki** do shaderów terenu; cząstki opadu nic o nim nie wiedzą. Pole ustawiane i nieczytane wygląda w kodzie tak samo jak działające, więc lepiej, żeby jawnie było wyrównaniem |
+| I-25 | **Pominięty pass pogody zeruje swoją pozycję w `pass_ms`** | Pass, który się nie odbył, nie stempluje pary znaczników, a `resolve_timer` rozwiązuje cały zakres — więc raport pokazywałby czas z klatki, w której pass był. `bench_blackout` mierzyłby wtedy pracę, której nie wykonano |
+| I-26 | **Test kopii `struct Frame` porównuje kolejność pól, nie ich obecność** (i jest ich dziewięć, nie osiem) | O tym, które bajty trafiają do którego pola, decyduje wyłącznie pozycja. Kopia z przestawionymi polami przechodziła poprzednią wersję testu i czytała cudze bajty — czyli awaria, przed którą `I-13` miał chronić |
+| I-27 | **Reguła śniegu i sezonu w `voxel.wgsl` i `far_terrain.wgsl` ma test porównujący obie kopie** | WGSL nie ma dołączania plików, więc duplikat jest nieunikniony — ale rozjazd byłby widoczny dokładnie na granicy pierścienia LOD, czyli tam, gdzie patrzy się najczęściej |
+| I-28 | **Walidator katalogu dźwięku sprawdza klucze źródeł i warstwy stemów** | Przestawienie dwóch wierszy w `sources` zamieniłoby cicho dźwig na deszcz, a stem bez warstw wczytywał się i grał ciszę. Oba stany są nie do odróżnienia od brakującego pliku — czyli dokładnie to, przed czym walidator ma bronić |
+
+Przy okazji poprawione bez osobnego wiersza: pętla szwu w syntezatorze omijała **każdy**
+głos z warstwą szumu, czyli wszystkie siedem łóż, i nie dochodziła do ani jednej asercji
+(sprawdza teraz stemy muzyki, które są czystymi tonami); zerowe ziarno xorshiftu jest
+punktem stałym i uciszało prawy kanał; `wybierz_kominy` alokowało co klatkę mimo pola
+`scratch` opisanego jako „klatka nie alokuje"; indeksowanie katalogu archetypów wywracało
+wiązanie z miastem zamiast dać domyślne łoże; próg przerzedzania latarni dostał test
+wiążący go z `CLUSTER_CAPACITY` po stronie klienta — jedynego crate'u, który widzi obie
+liczby naraz.

@@ -1,0 +1,186 @@
+// Katalog dźwięku (M11d §5.9, WP8). Właściciel: M11.
+//
+// Nie ma tu ani jednego pliku WAV i to jest decyzja, nie brak: dźwięki **generują się
+// proceduralnie** z tego opisu przy starcie gry, tą samą drogą, którą modele w M11a
+// i M11c powstają z `mvoxc gen`. Zapis jest wtedy jedną tabelą zamiast katalogu nagrań,
+// a łoże dzielnicy da się przestroić, patrząc na liczby, a nie otwierając edytor audio.
+//
+// Warstwa to jedno źródło: pasmowy szum, ton albo impuls. Głos składa się z kilku warstw
+// i zapętla się bezszwowo, bo długość pętli jest wielokrotnością okresu każdej modulacji.
+//
+// Kolejność `beds` jest kontraktem: indeksuje ją `AmbientBed::as_index()` ze snapshotu.
+(
+    schema_version: 1,
+    sample_rate: 44100,
+
+    // ── Łoża dzielnic ───────────────────────────────────────────────────────────
+    // Kolejność = `AmbientBed`: Quiet, Industry, Traffic, Park, Residential, Retail, Port.
+    beds: [
+        (
+            key: "quiet",
+            loop_s: 4.0,
+            layers: [
+                (kind: Noise, lo_hz: 120.0, hi_hz: 2000.0, gain: 0.030, am_hz: 0.07, am_depth: 0.4),
+            ],
+        ),
+        (
+            key: "industry",
+            loop_s: 4.0,
+            layers: [
+                // Rumor hali: wąskie pasmo nisko, prawie stałe.
+                (kind: Noise, lo_hz: 40.0, hi_hz: 260.0, gain: 0.30, am_hz: 0.25, am_depth: 0.25),
+                // Ton siłowni — to on robi różnicę między halą a ulicą.
+                (kind: Tone, lo_hz: 98.0, hi_hz: 98.0, gain: 0.10, am_hz: 1.5, am_depth: 0.6),
+                // Uderzenie prasy co pół sekundy.
+                (kind: Pulse, lo_hz: 2.0, hi_hz: 220.0, gain: 0.16, am_hz: 0.0, am_depth: 0.0),
+            ],
+        ),
+        (
+            key: "traffic",
+            loop_s: 4.0,
+            layers: [
+                // Szerokie pasmo opon na asfalcie, falujące jak przejeżdżające auta.
+                (kind: Noise, lo_hz: 180.0, hi_hz: 3200.0, gain: 0.22, am_hz: 0.33, am_depth: 0.7),
+                (kind: Noise, lo_hz: 60.0, hi_hz: 400.0, gain: 0.12, am_hz: 0.9, am_depth: 0.5),
+            ],
+        ),
+        (
+            key: "park",
+            loop_s: 4.0,
+            layers: [
+                // Liście: wysoko i cicho.
+                (kind: Noise, lo_hz: 2200.0, hi_hz: 9000.0, gain: 0.22, am_hz: 0.21, am_depth: 0.8),
+                // Ptak: krótki ton co dwie sekundy, wysoko.
+                (kind: Pulse, lo_hz: 0.5, hi_hz: 3200.0, gain: 0.05, am_hz: 0.0, am_depth: 0.0),
+            ],
+        ),
+        (
+            key: "residential",
+            loop_s: 4.0,
+            layers: [
+                (kind: Noise, lo_hz: 90.0, hi_hz: 1100.0, gain: 0.07, am_hz: 0.13, am_depth: 0.5),
+                (kind: Tone, lo_hz: 220.0, hi_hz: 220.0, gain: 0.015, am_hz: 0.4, am_depth: 0.9),
+            ],
+        ),
+        (
+            key: "retail",
+            loop_s: 4.0,
+            layers: [
+                // Gwar: średnie pasmo z szybką modulacją — mowa bez słów.
+                (kind: Noise, lo_hz: 300.0, hi_hz: 2600.0, gain: 0.16, am_hz: 3.7, am_depth: 0.55),
+                (kind: Pulse, lo_hz: 1.3, hi_hz: 1800.0, gain: 0.05, am_hz: 0.0, am_depth: 0.0),
+            ],
+        ),
+        (
+            key: "port",
+            loop_s: 4.0,
+            layers: [
+                (kind: Noise, lo_hz: 30.0, hi_hz: 220.0, gain: 0.20, am_hz: 0.11, am_depth: 0.6),
+                // Syrena: bardzo niski ton, rzadko.
+                (kind: Tone, lo_hz: 62.0, hi_hz: 62.0, gain: 0.09, am_hz: 0.19, am_depth: 1.0),
+                (kind: Pulse, lo_hz: 0.75, hi_hz: 520.0, gain: 0.10, am_hz: 0.0, am_depth: 0.0),
+            ],
+        ),
+    ],
+
+    // ── Źródła punktowe ─────────────────────────────────────────────────────────
+    // Kolejność jest kontraktem: indeksuje ją `SoundSourceId`.
+    sources: [
+        (
+            key: "machine",
+            loop_s: 2.0,
+            layers: [
+                (kind: Tone, lo_hz: 74.0, hi_hz: 74.0, gain: 0.30, am_hz: 4.0, am_depth: 0.35),
+                (kind: Noise, lo_hz: 200.0, hi_hz: 1400.0, gain: 0.12, am_hz: 8.0, am_depth: 0.5),
+            ],
+        ),
+        (
+            key: "shop",
+            loop_s: 2.0,
+            layers: [
+                (kind: Noise, lo_hz: 400.0, hi_hz: 2400.0, gain: 0.16, am_hz: 4.3, am_depth: 0.6),
+            ],
+        ),
+        (
+            key: "car",
+            loop_s: 2.0,
+            layers: [
+                (kind: Tone, lo_hz: 118.0, hi_hz: 118.0, gain: 0.20, am_hz: 11.0, am_depth: 0.3),
+                (kind: Noise, lo_hz: 250.0, hi_hz: 2600.0, gain: 0.10, am_hz: 0.0, am_depth: 0.0),
+            ],
+        ),
+        (
+            key: "truck",
+            loop_s: 2.0,
+            layers: [
+                (kind: Tone, lo_hz: 58.0, hi_hz: 58.0, gain: 0.32, am_hz: 7.0, am_depth: 0.4),
+                (kind: Noise, lo_hz: 120.0, hi_hz: 1600.0, gain: 0.14, am_hz: 0.0, am_depth: 0.0),
+            ],
+        ),
+        (
+            key: "crane",
+            loop_s: 3.0,
+            layers: [
+                (kind: Tone, lo_hz: 165.0, hi_hz: 165.0, gain: 0.16, am_hz: 0.6, am_depth: 0.9),
+                (kind: Pulse, lo_hz: 0.66, hi_hz: 700.0, gain: 0.12, am_hz: 0.0, am_depth: 0.0),
+            ],
+        ),
+        (
+            key: "rain",
+            loop_s: 2.0,
+            layers: [
+                (kind: Noise, lo_hz: 700.0, hi_hz: 11000.0, gain: 0.28, am_hz: 0.0, am_depth: 0.0),
+                (kind: Noise, lo_hz: 90.0, hi_hz: 500.0, gain: 0.10, am_hz: 0.3, am_depth: 0.5),
+            ],
+        ),
+    ],
+
+    // ── Muzyka ──────────────────────────────────────────────────────────────────
+    // Cztery stemy, po jednym na nastrój (`MusicMood`). Przejścia wyłącznie na granicy
+    // taktu, więc długość pętli musi być całkowitą liczbą taktów — pilnuje tego walidator.
+    music: (
+        bpm: 84.0,
+        beats_per_bar: 4,
+        bars_per_loop: 4,
+        stems: [
+            // Rozwój: durowy, jasny.
+            (
+                key: "rozwoj",
+                loop_s: 0.0,
+                layers: [
+                    (kind: Tone, lo_hz: 196.0, hi_hz: 196.0, gain: 0.10, am_hz: 0.35, am_depth: 0.5),
+                    (kind: Tone, lo_hz: 293.7, hi_hz: 293.7, gain: 0.07, am_hz: 0.35, am_depth: 0.5),
+                    (kind: Tone, lo_hz: 392.0, hi_hz: 392.0, gain: 0.05, am_hz: 0.7, am_depth: 0.6),
+                ],
+            ),
+            // Stabilność: ten sam akord bez tercji, spokojniejszy.
+            (
+                key: "stabilnosc",
+                loop_s: 0.0,
+                layers: [
+                    (kind: Tone, lo_hz: 196.0, hi_hz: 196.0, gain: 0.09, am_hz: 0.18, am_depth: 0.4),
+                    (kind: Tone, lo_hz: 293.7, hi_hz: 293.7, gain: 0.06, am_hz: 0.18, am_depth: 0.4),
+                ],
+            ),
+            // Napięcie: sekunda mała pod prymą.
+            (
+                key: "napiecie",
+                loop_s: 0.0,
+                layers: [
+                    (kind: Tone, lo_hz: 196.0, hi_hz: 196.0, gain: 0.09, am_hz: 0.9, am_depth: 0.5),
+                    (kind: Tone, lo_hz: 207.7, hi_hz: 207.7, gain: 0.05, am_hz: 0.9, am_depth: 0.7),
+                ],
+            ),
+            // Kryzys: nisko i ciemno, z pulsem.
+            (
+                key: "kryzys",
+                loop_s: 0.0,
+                layers: [
+                    (kind: Tone, lo_hz: 98.0, hi_hz: 98.0, gain: 0.12, am_hz: 1.4, am_depth: 0.8),
+                    (kind: Tone, lo_hz: 138.6, hi_hz: 138.6, gain: 0.06, am_hz: 1.4, am_depth: 0.8),
+                    (kind: Pulse, lo_hz: 1.4, hi_hz: 160.0, gain: 0.10, am_hz: 0.0, am_depth: 0.0),
+                ],
+            ),
+        ],
+    ),
+)

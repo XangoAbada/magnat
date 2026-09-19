@@ -62,6 +62,13 @@ pub struct Streamer {
     /// Wymuszony promień LOD0 w metrach — tylko do pomiaru z §7.4 („3000 chunków LOD0").
     /// W normalnym biegu `None`, bo pierścienie mają wynikać z odległości, nie z flagi.
     wymuszony_lod0_m: Option<i32>,
+    /// Ile razy chunk został zmeshowany od startu klienta (M11d, kryterium WP7).
+    ///
+    /// Licznik istnieje po to, żeby kryterium „przejście przez cztery pory roku bez ani
+    /// jednego remeshingu" dało się **zmierzyć**, a nie tylko zadeklarować. Pory roku
+    /// przestawiają paletę materiału w shaderze (§5.8), więc ta liczba nie ma prawa
+    /// drgnąć od samego upływu czasu — drgnie wyłącznie od ruchu kamery i od edycji.
+    remesh: u64,
 }
 
 impl Streamer {
@@ -74,6 +81,7 @@ impl Streamer {
             pool: JobPool::new(0),
             na_gpu: BTreeSet::new(),
             wymuszony_lod0_m: None,
+            remesh: 0,
             terrain,
             materials,
             edits,
@@ -98,6 +106,12 @@ impl Streamer {
             .map(|(lod, n)| format!("L{lod}:{n}"))
             .collect::<Vec<_>>()
             .join(" ")
+    }
+
+    /// Ile chunków zmeshowano od startu (`chunk_remesh_count`, kryterium WP7).
+    #[must_use]
+    pub fn remesh_count(&self) -> u64 {
+        self.remesh
     }
 
     pub fn update(&mut self, camera: &CameraState, renderer: &mut Renderer) {
@@ -146,6 +160,7 @@ impl Streamer {
             Vec::new(),
         );
 
+        self.remesh += gotowe.len() as u64;
         for (slot, mesh) in gotowe {
             renderer.upload_chunk(slot.coord, slot.lod, 0, &mesh);
             self.na_gpu.insert(slot);

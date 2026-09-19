@@ -29,6 +29,7 @@ struct Frame {
     screen: vec4<f32>,
     eye: vec4<f32>,
     overlay: vec4<f32>,
+    weather: vec4<f32>,   // x = pokrywa śnieżna, y = wilgoć, z = pora roku, w = zachmurzenie
 }
 
 struct ChunkData {

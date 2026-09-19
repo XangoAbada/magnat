@@ -50,15 +50,25 @@ jobs:
           if cargo tree -p magnat-headless | grep -q wgpu; then
             echo "wgpu przeniknął do headless" && exit 1
           fi
-      - name: dep_isolation — render i voxel nie widzą symulacji (M1 §7.3)
+      - name: dep_isolation — render, voxel i audio nie widzą symulacji (M1 §7.3, M11 §6.3)
         shell: bash
         run: |
           # Uzgodnione z M11: renderer dostaje dane przez `sim-snapshot` i **tylko** przez
           # niego. Gdyby mógł sięgnąć do `sim/world` albo `sim/city`, kontrakt snapshotu
           # przestałby cokolwiek znaczyć — i nikt by tego nie zauważył do M11.
-          for crate in magnat-render magnat-voxel; do
-            if cargo tree -p $crate --prefix none               | grep -E '^magnat-(world|city|econ|events|sim)($| )'               | grep -v 'magnat-sim-snapshot'; then
-              echo "$crate zależy od symulacji poza sim-snapshot" && exit 1
+          # `magnat-audio` dołączył w M11d: §6.3 pkt 1 wymienia go obok renderu.
+          #
+          # Lista **dozwolonych**, nie zakazanych (poprawka M11d, `I-20`). Poprzednia
+          # wersja wypisywała zakazane crate'y wzorcem `magnat-(world|city|econ|events|sim)`
+          # i przepuszczała siedem z jedenastu: `econ` nie pasuje do `magnat-economy`,
+          # `sim` do niczego, a `supply`, `agents`, `traffic`, `firms`, `macro` i `policy`
+          # nie były w nim wymienione. Przy liście dozwolonych **nowy crate symulacji
+          # zapala bramkę sam**, bez pamiętania o dopisaniu go tutaj.
+          DOZWOLONE='^magnat-(core|ecs|jobs|io|nav|devtools|spatial|voxel|render|audio|ui|sim-snapshot)$'
+          for crate in magnat-render magnat-voxel magnat-audio; do
+            obce=$(cargo tree -p $crate --prefix none               | grep -oE '^magnat-[a-z-]+' | sort -u | grep -vE "$DOZWOLONE" || true)
+            if [ -n "$obce" ]; then
+              echo "$crate widzi crate'y spoza kontraktu §6.3:" && echo "$obce" && exit 1
             fi
           done
 

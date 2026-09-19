@@ -66,7 +66,7 @@ impl ClusterConfig {
 /// barwa rozpakowana z RGBE.
 #[must_use]
 pub fn to_gpu(light: &magnat_sim_snapshot::LightRecord, eye: glam::DVec3) -> GpuLight {
-    let (r, g, b) = unpack_rgbe(light.color_rgbe);
+    let [r, g, b] = light.color();
     GpuLight {
         pos_range: [
             light.pos[0] - eye.x as f32,
@@ -76,22 +76,6 @@ pub fn to_gpu(light: &magnat_sim_snapshot::LightRecord, eye: glam::DVec3) -> Gpu
         ],
         color: [r, g, b, 0.0],
     }
-}
-
-/// RGBE: trzy mantysy po 8 bitów i wspólny wykładnik. Format pochodzi ze snapshotu M11
-/// i jest tam po to, żeby jasne światło nie zajmowało trzech `f32` — rozpakowanie musi
-/// więc zostać po tej stronie, a nie „gdzieś w shaderze".
-fn unpack_rgbe(v: u32) -> (f32, f32, f32) {
-    let e = (v >> 24) as i32;
-    if e == 0 {
-        return (0.0, 0.0, 0.0);
-    }
-    let skala = 2.0f32.powi(e - 128 - 8);
-    (
-        ((v >> 16) & 0xFF) as f32 * skala,
-        ((v >> 8) & 0xFF) as f32 * skala,
-        (v & 0xFF) as f32 * skala,
-    )
 }
 
 #[cfg(test)]
@@ -104,24 +88,6 @@ mod tests {
         // które dostanie budżet świateł policzony na tej siatce.
         assert_eq!((CLUSTER_X, CLUSTER_Y, CLUSTER_Z), (16, 9, 24));
         assert_eq!(CLUSTER_COUNT, 3456);
-    }
-
-    #[test]
-    fn rgbe_odtwarza_barwe_z_dokladnoscia_kwantu() {
-        // Konwencja RGBE: wartość = mantysa / 256 · 2^(e − 128). Wykładnik 128 daje więc
-        // zakres 0…1, a każdy kolejny mnoży jasność przez dwa.
-        let (r, g, b) = unpack_rgbe((128 << 24) | (255 << 16) | (128 << 8) | 64);
-        assert!((r - 255.0 / 256.0).abs() < 1e-6, "r = {r}");
-        assert!((g - 0.5).abs() < 1e-6, "g = {g}");
-        assert!((b - 0.25).abs() < 1e-6, "b = {b}");
-        // Wykładnik o osiem większy to osiem podwojeń — 256 razy jaśniej.
-        let (r2, _, _) = unpack_rgbe(((128 + 8) << 24) | (255 << 16) | (128 << 8) | 64);
-        assert!((r2 - 255.0).abs() < 1e-3, "r2 = {r2}");
-        assert_eq!(
-            unpack_rgbe(0),
-            (0.0, 0.0, 0.0),
-            "wykładnik 0 to brak światła"
-        );
     }
 
     #[test]

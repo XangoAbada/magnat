@@ -25,6 +25,7 @@ struct Frame {
     screen: vec4<f32>,
     eye: vec4<f32>,
     overlay: vec4<f32>,
+    weather: vec4<f32>,   // x = pokrywa śnieżna, y = wilgoć, z = pora roku, w = zachmurzenie
 }
 
 /// Opis siatki dalekiego terenu.
@@ -138,7 +139,26 @@ fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
     let ndotl = max(dot(n, frame.sun_dir.xyz), 0.0);
     let up = n.z * 0.5 + 0.5;
     let ambient = mix(frame.ground_color.xyz, frame.sky_color.xyz, up);
-    var color = in.color * (frame.sun_color.xyz * ndotl + ambient);
+    // Śnieg i pora roku muszą sięgać także tutaj: zimowe miasto z zieloną panoramą
+    // za czterema kilometrami wygląda na błąd streamingu, a nie na pogodę. Skrót wobec
+    // `voxel.wgsl` jest świadomy — na tej odległości nie ma pionowych ścian ani kałuż,
+    // więc zostaje sam sezon i sama pokrywa.
+    var albedo = in.color;
+    let zielen = f32(albedo.g > albedo.r * 1.15 && albedo.g > albedo.b * 1.15);
+    if (zielen > 0.0) {
+        let sezon = i32(frame.weather.z + 0.5);
+        var szorstka = vec3<f32>(1.0);
+        if (sezon == 0) { szorstka = vec3<f32>(0.85, 0.82, 0.78); }
+        if (sezon == 1) { szorstka = vec3<f32>(0.92, 1.12, 0.80); }
+        if (sezon == 3) { szorstka = vec3<f32>(1.45, 1.00, 0.45); }
+        albedo = albedo * szorstka;
+    }
+    albedo = mix(
+        albedo,
+        vec3<f32>(0.90, 0.93, 0.98),
+        frame.weather.x * smoothstep(0.35, 0.85, n.z),
+    );
+    var color = albedo * (frame.sun_color.xyz * ndotl + ambient);
     // Ta sama nakładka co na terenie bliskim — inaczej podgląd urywałby się na granicy
     // pierścieni LOD, czyli dokładnie tam, gdzie najczęściej się patrzy.
     if (frame.overlay.w >= 0.5) {

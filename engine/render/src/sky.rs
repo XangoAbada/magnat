@@ -78,6 +78,26 @@ pub fn sun_state(minute: SimMinute, latitude_ddeg: i16) -> SunState {
     }
 }
 
+/// Ułamek światła dziennego 0..=255 — czy w mieście jest jasno (M11d §5.8).
+///
+/// Wyprowadzone z **tej samej** wysokości słońca, którą dostaje niebo i cienie, i to
+/// jest cały powód, dla którego ta funkcja mieszka tutaj, a nie po stronie wypełniacza
+/// snapshotu: druga kopia deklinacji i kąta godzinnego rozjechałaby się z pierwszą,
+/// a objawem byłyby okna zapalające się w biały dzień.
+///
+/// Granice są zmierzchem **cywilnym**, nie geometrycznym: przy −6° da się jeszcze czytać
+/// gazetę, więc latarnie mają się zapalać po tym progu, a nie w chwili, gdy tarcza
+/// dotknie horyzontu. Powyżej +3° jest pełny dzień — między tymi dwiema wartościami
+/// ramp jest liniowy, bo cała krzywa barwy i tak siedzi w tabeli nieba.
+#[must_use]
+pub fn daylight(minute: SimMinute, latitude_ddeg: i16) -> u8 {
+    const NOC_DEG: f32 = -6.0;
+    const DZIEN_DEG: f32 = 3.0;
+    let e = sun_state(minute, latitude_ddeg).elevation_deg;
+    let t = ((e - NOC_DEG) / (DZIEN_DEG - NOC_DEG)).clamp(0.0, 1.0);
+    (t * 255.0) as u8
+}
+
 /// Wpis tabeli nieba.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct SkySample {

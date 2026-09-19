@@ -33,6 +33,7 @@ struct Frame {
     screen: vec4<f32>,
     eye: vec4<f32>,
     overlay: vec4<f32>,
+    weather: vec4<f32>,   // x = pokrywa śnieżna, y = wilgoć, z = pora roku, w = zachmurzenie
 }
 
 // Wpis atlasu: gdzie leżą kafle modelu i jak duży jest jego billboard w metrach.

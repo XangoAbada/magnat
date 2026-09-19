@@ -14,6 +14,9 @@ magnat-voxel = { workspace = true }
 magnat-spatial = { workspace = true }
 magnat-world = { workspace = true }
 magnat-render = { workspace = true }
+# Warstwa dźwiękowa (M11d/WP8). Zależność idzie **do** niej, nie od niej:
+# `engine/audio` widzi wyłącznie snapshot (§6.3 pkt 1).
+magnat-audio = { workspace = true }
 magnat-ecs = { workspace = true }
 magnat-agents = { workspace = true }
 magnat-ui = { workspace = true }

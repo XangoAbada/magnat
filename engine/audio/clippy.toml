@@ -1,0 +1,13 @@
+# W dźwięku float wolno bez ograniczeń (00 §K-6: „dozwolone bez ograniczeń w renderze,
+# UI i audio"). Obwiednia impulsu, atenuacja i krzywe filtru liczone przez `det_math`
+# kosztowałyby czas bez żadnego zysku: bufor audio nie wchodzi do hasha stanu i nie ma
+# jak zmienić wyniku ekonomicznego. Ten plik **nadpisuje** zakaz z korzenia repozytorium,
+# tak samo jak `engine/render/clippy.toml`.
+#
+# Zakaz iterowania po HashMap zostaje: kolejność głosów w puli decyduje o tym, który
+# z nich zostanie wywłaszczony, więc ma być powtarzalna — inaczej dwa uruchomienia tej
+# samej sceny cichłyby w różnych miejscach.
+disallowed-types = [
+    { path = "std::collections::HashMap", reason = "niedeterministyczna kolejność iteracji; BTreeMap (00 §3.2)" },
+    { path = "std::collections::HashSet", reason = "niedeterministyczna kolejność iteracji; BTreeSet (00 §3.2)" },
+]

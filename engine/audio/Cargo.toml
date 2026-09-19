@@ -1,0 +1,31 @@
+[package]
+name = "magnat-audio"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "magnat_audio"
+path = "src/lib.rs"
+bench = false
+
+[dependencies]
+magnat-core = { workspace = true }
+# Jedyny kanał z symulacji (M11 §6.3 pkt 1). Ani jednego `sim/*` poza tym — pilnuje
+# tego test `no_sim_deps_in_render` po stronie CI.
+magnat-sim-snapshot = { workspace = true }
+# Mikser, magistrale, limiter, tweeny i zegar taktu (decyzja 9.6 fazy M11, przyjęta
+# 2026-09-19 wg propozycji domyślnej). Piszemy nad nim emitery przestrzenne, okluzję,
+# klastrowanie głosów i `MusicDirector`; nie piszemy miksera ani limitera.
+#
+# Bez dekoderów: katalog `data/audio/` nie ma ani jednego pliku dźwiękowego, bo dźwięki
+# powstają proceduralnie z opisu (`synth`). `mp3`/`ogg`/`flac`/`wav` ciągnęłyby
+# `symphonia` po to, żeby nic nie odczytać.
+kira = { version = "0.12.4", default-features = false, features = ["cpal", "cpal-realtime"] }
+ron = { workspace = true }
+serde = { workspace = true }
+
+[lints]
+workspace = true

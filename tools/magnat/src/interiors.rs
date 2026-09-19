@@ -128,7 +128,7 @@ impl Wnetrza {
                 .site_of_building(*b)
                 .and_then(|_| {
                     let id = city.sites.by_building[b.0.index() as usize]?;
-                    let sid = magnat_world::city::sites::site_id(id);
+                    let sid = magnat_game::world::plants::site_id(id as usize);
                     sites.iter().find(|s| s.entity_lo == sid.0.index())
                 })
                 .copied()
@@ -138,7 +138,12 @@ impl Wnetrza {
                     ..Default::default()
                 });
             let spec = spec_budynku(city, bud, cut.world_y);
-            let kit = magnat_render::generate_interior(&spec, &zaklad, &modele, seed ^ u64::from(b.0.index()));
+            let kit = magnat_render::generate_interior(
+                &spec,
+                &zaklad,
+                &modele,
+                seed ^ u64::from(b.0.index()),
+            );
             self.props.extend(kit.props);
         }
     }
@@ -186,7 +191,12 @@ fn spec_budynku(
         z += f32::from(*h) * 0.1;
     }
     InteriorSpec {
-        bounds: [bud.aabb.min.x, bud.aabb.min.y, bud.aabb.max.x, bud.aabb.max.y],
+        bounds: [
+            bud.aabb.min.x,
+            bud.aabb.min.y,
+            bud.aabb.max.x,
+            bud.aabb.max.y,
+        ],
         base_z_m: bud.aabb.min.z,
         floor_heights_dm: wysokosci,
         floor_use: uzycie,

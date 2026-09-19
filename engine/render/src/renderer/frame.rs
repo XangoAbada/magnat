@@ -107,6 +107,14 @@ pub(super) struct FrameUniform {
     eye: [f32; 4],
     /// x = bok komórki nakładki w metrach, y = jej wymiar, z = siła mieszania, w = czy aktywna.
     overlay: [f32; 4],
+    /// Pogoda dla shaderów terenu: x = pokrywa śnieżna, y = wilgoć, z = pora roku,
+    /// w = zachmurzenie. Wszystko 0..1 poza sezonem, który jest numerem 0..3.
+    ///
+    /// Tu, a nie w osobnym buforze, bo czyta to **każdy** shader rysujący materiał,
+    /// a uniform ramki jest już związany w każdym z nich. Pora roku zmienia paletę
+    /// liści, śnieg przykrywa powierzchnie skierowane w górę, wilgoć przyciemnia
+    /// i wygładza — i żadne z tego nie dotyka geometrii (§5.8).
+    weather: [f32; 4],
 }
 
 /// Per-chunk dane w SSBO: przesunięcie względem kamery i skala voxela.
@@ -416,16 +424,15 @@ impl Renderer {
             sun_color: Vec4::from((sky.sun_color, sun.elevation_deg)).to_array(),
             sky_color: Vec4::from((sky.zenith, 0.0)).to_array(),
             ground_color: Vec4::from((sky.ground, 0.0)).to_array(),
-            // Gęstość mgły: horyzont na granicy pierścienia LOD3 (4 km) ma być wyraźnie
-            // zamglony, ale teren w promieniu kilometra — czysty. Przy 0,000 18 mgła zjadała
-            // kontrast już na 500 m i cały widok wychodził jednolicie brązowy.
-            fog: Vec4::from((sky.horizon, 0.000_06)).to_array(),
+            // Gęstość mgły: baza M1 plus wkład pogody — patrz `weather::fog_density`.
+            fog: Vec4::from((sky.horizon, crate::weather::fog_density(&self.weather))).to_array(),
             clip: [clip_level, clip_active, eye_z, 0.0],
             // zw: współczynniki odwrócenia bufora głębi, `d = z / (ndc + w)`. Bez nich
             // odczytana głębia jest liczbą z przedziału [0, 1] o nieliniowym rozkładzie,
             // z której nie da się policzyć grubości słupa wody w metrach.
             eye: [eye_xy.0, eye_xy.1, eye_z, 0.0],
             overlay: self.overlay_cfg,
+            weather: crate::weather::terrain_params(&self.weather),
             screen: [
                 rozmiar.0 as f32,
                 rozmiar.1 as f32,

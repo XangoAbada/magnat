@@ -12,10 +12,11 @@
 //! zmienia się jedna pętla.
 
 mod arena;
-mod scene;
 mod frame;
+mod offscreen;
 mod passes;
 mod pipelines;
+mod scene;
 
 use crate::camera::CameraState;
 use crate::clusters::{self, GpuLight};
@@ -143,6 +144,12 @@ pub struct Renderer {
     /// Wyposażenie wnętrz widocznych w tej klatce. Składa je klient przez
     /// [`Renderer::set_interiors`], bo generator potrzebuje kondygnacji z `CityData`.
     props: Vec<crate::interiors::PropPlacement>,
+    /// Cząstki opadu i dymu (M11d §5.8, WP7) — dwa potoki, dwa wywołania rysowania.
+    weather_fx: crate::weather::WeatherRenderer,
+    /// Pogoda tej klatki. Wchodzi do uniformu ramki (śnieg, wilgoć, sezon, mgła)
+    /// i do cząstek. Domyślnie pogodnie — scena bez snapshotu ma być czysta, a nie
+    /// zasypana śniegiem z niezainicjalizowanej pamięci.
+    weather: magnat_sim_snapshot::WeatherState,
     /// Napisy na szyldach (M11c §5.7, WP9) — osobny potok, jedno wywołanie rysowania.
     signs: crate::signs::SignRenderer,
     sign_geom: crate::signs::SignGeometry,
@@ -203,6 +210,11 @@ impl Renderer {
             wgpu::TextureFormat::Depth32Float,
         );
         let signs = crate::signs::SignRenderer::new(
+            device,
+            &buf.frame_buffer,
+            wgpu::TextureFormat::Depth32Float,
+        );
+        let weather_fx = crate::weather::WeatherRenderer::new(
             device,
             &buf.frame_buffer,
             wgpu::TextureFormat::Depth32Float,
@@ -270,6 +282,8 @@ impl Renderer {
             cap_geom: crate::interiors::CapGeometry::default(),
             cut: crate::interiors::CutPlane::off(),
             props: Vec::new(),
+            weather_fx,
+            weather: magnat_sim_snapshot::WeatherState::default(),
             signs,
             sign_geom: crate::signs::SignGeometry::default(),
             scratch: crate::instancing::InstanceScratch::default(),
@@ -527,6 +541,27 @@ impl Renderer {
                 .queue
                 .write_buffer(&self.light_buffer, 0, bytemuck::cast_slice(&dane));
         }
+    }
+
+    /// Podaje pogodę tej klatki: cząstki opadu, kominy i parametry palety terenu.
+    ///
+    /// Osobno od [`Renderer::set_entities`], choć wejściem jest ten sam snapshot, bo to
+    /// są dwa różne budżety: instancje mają swój cap i swój pass, cząstki swój. Wołający,
+    /// który zapomni o jednym z nich, ma dostać scenę bez pogody, a nie scenę bez encji.
+    pub fn set_weather(
+        &mut self,
+        snapshot: &magnat_sim_snapshot::RenderSnapshot,
+        eye: glam::DVec3,
+    ) {
+        self.weather = snapshot.weather;
+        let czas = self.czas_s;
+        self.weather_fx.set(snapshot, eye, czas, &self.gpu.queue);
+    }
+
+    /// Ile cząstek pogody poszło w ostatniej klatce — do raportu i do progu z WP7.
+    #[must_use]
+    pub fn weather_particles(&self) -> u32 {
+        self.weather_fx.particles()
     }
 
     /// Składa bufor instancji encji dynamicznych z opublikowanego snapshotu (M11a WP2).

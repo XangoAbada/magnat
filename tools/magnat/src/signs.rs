@@ -35,10 +35,9 @@ impl crate::app::App {
                     .get(s.firm.0.index() as usize)
                     .copied()
                     .unwrap_or_default();
-                (
-                    magnat_world::city::sites::site_id(i as u32),
-                    kafel.0,
-                )
+                // Klucz przesunięty (`K-46`) — ten sam, którym wypełniacz indeksuje
+                // zakłady; numeracja generatora nie przechodzi granicy crate'u.
+                (magnat_game::world::plants::site_id(i), kafel.0)
             })
             .collect();
         mapa.sort_unstable_by_key(|(s, _)| *s);

@@ -16,6 +16,84 @@
 /// Ile dzielnic mieści tablica zasilania. 64 — tyle, ile `PowerRec` w §5.2.
 pub const MAX_DISTRICTS: usize = 64;
 
+/// Łoże dźwiękowe — z czego składa się tło dzielnicy albo emitera (M11d §5.9).
+///
+/// Mieszka tutaj, a nie w `engine/core`, bo nie jest słownikiem domenowym w rozumieniu
+/// `K-8`: nikt w symulacji nie podejmuje decyzji „bo to dzielnica przemysłowa brzmi
+/// tak". Pisze go wypełniacz snapshotu, czyta `engine/audio`, a `sim-snapshot` jest
+/// jedynym crate'em, który widzą obaj.
+///
+/// Kolejność wariantów jest kontraktem, bo `as_index()` indeksuje tablicę łóż
+/// w `data/audio/`.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Default)]
+#[repr(u8)]
+pub enum AmbientBed {
+    /// Cisza z drobnym szumem — pustkowie, pole, nieokreślone.
+    #[default]
+    Quiet = 0,
+    /// Maszyny, sprężone powietrze, stukot.
+    Industry = 1,
+    /// Ruch uliczny: opony, silniki, klakson w oddali.
+    Traffic = 2,
+    /// Park: liście, ptaki, dzieci.
+    Park = 3,
+    /// Osiedle: rozmowy zza okien, pies, trzepany dywan.
+    Residential = 4,
+    /// Handel: gwar, drzwi, wózki.
+    Retail = 5,
+    /// Port i bocznica: dźwigi, syreny, woda.
+    Port = 6,
+}
+
+/// Ile jest łóż. Kolejność i liczba są kontraktem katalogu `data/audio/`.
+pub const AMBIENT_BED_COUNT: usize = 7;
+
+impl AmbientBed {
+    pub const ALL: [AmbientBed; AMBIENT_BED_COUNT] = [
+        AmbientBed::Quiet,
+        AmbientBed::Industry,
+        AmbientBed::Traffic,
+        AmbientBed::Park,
+        AmbientBed::Residential,
+        AmbientBed::Retail,
+        AmbientBed::Port,
+    ];
+
+    #[must_use]
+    pub const fn as_index(self) -> usize {
+        self as usize
+    }
+
+    /// Wariant z bajtu snapshotu. Wartość spoza listy daje ciszę, a nie panikę —
+    /// snapshot jest danymi, a nie kodem, i mod może w nim napisać cokolwiek.
+    #[must_use]
+    pub const fn from_index(i: u8) -> AmbientBed {
+        match i {
+            1 => AmbientBed::Industry,
+            2 => AmbientBed::Traffic,
+            3 => AmbientBed::Park,
+            4 => AmbientBed::Residential,
+            5 => AmbientBed::Retail,
+            6 => AmbientBed::Port,
+            _ => AmbientBed::Quiet,
+        }
+    }
+
+    /// Klucz w `data/audio/audio.ron`.
+    #[must_use]
+    pub const fn key(self) -> &'static str {
+        match self {
+            AmbientBed::Quiet => "quiet",
+            AmbientBed::Industry => "industry",
+            AmbientBed::Traffic => "traffic",
+            AmbientBed::Park => "park",
+            AmbientBed::Residential => "residential",
+            AmbientBed::Retail => "retail",
+            AmbientBed::Port => "port",
+        }
+    }
+}
+
 // ── Mieszkaniec ─────────────────────────────────────────────────────────────────
 
 /// Mieszkaniec siedzi w pojeździe — bryła pieszego się nie rysuje, sylwetka jedzie
@@ -129,7 +207,7 @@ pub struct SiteRenderRec {
     pub emission: u8,
     /// 0..255 — jasność okien; 0 przy blackoucie.
     pub lights: u8,
-    /// Rodzaj łoża dźwiękowego emitera (M11d §5.9).
+    /// Rodzaj łoża dźwiękowego emitera — [`AmbientBed::as_index`] (M11d §5.9).
     pub ambient_kind: u8,
     /// 0..255 — wypełnienie regałów dla `InteriorKit` (M11c §5.7).
     pub stock_fill: u8,
@@ -229,9 +307,11 @@ pub struct PlayerViewRec {
 /// Światło punktowe w klatce. 20 B na rekord, 80 KB na pełny cap.
 ///
 /// Kształt jest **M1 i taki zostaje**: ma działającego konsumenta (`clusters::to_gpu`)
-/// i mieści się w tych samych 20 B, co wersja z §5.2. `kind` i `flags` z tamtej wersji
-/// dołoży M11d razem z pierwszym czytelnikiem — pole bez czytelnika wygląda w danych
-/// tak samo jak działające.
+/// i mieści się w tych samych 20 B, co wersja z §5.2. `kind` i `flags` z §5.2 **nadal
+/// nie mają czytelnika i dlatego nadal ich nie ma** (`H-2`, `I-2`): blackout gasi
+/// dzielnicę po stronie producenta listy, który zna dzielnicę, a przerzedzanie latarni
+/// idzie krokiem po liście, nie po rodzaju. Pole bez czytelnika wygląda w danych
+/// dokładnie tak samo jak działające.
 #[derive(Clone, Copy, PartialEq, Debug, Default)]
 #[repr(C)]
 pub struct LightRecord {
@@ -239,8 +319,49 @@ pub struct LightRecord {
     pub pos: [f32; 3],
     /// Zasięg w metrach.
     pub range: f32,
-    /// Barwa i natężenie spakowane w RGBE.
+    /// Barwa i natężenie spakowane w RGBE — patrz [`LightRecord::color`].
     pub color_rgbe: u32,
+}
+
+impl LightRecord {
+    /// Światło o barwie podanej w sRGB 0..=255 i jasności `exp2` jako wykładniku RGBE.
+    ///
+    /// Obie połówki formatu — pakowanie i rozpakowanie — mieszkają tutaj, bo to jest
+    /// jedyne miejsce, które widzi obaj konsumenci: producenta listy (`magnat_game`)
+    /// i pass klastrów (`engine/render`). Do M11d pakowanie było wpisane z palca
+    /// w scenie pomiarowej klienta, a rozpakowanie w rendererze — dwie połowy jednej
+    /// konwencji w dwóch crate'ach rozjeżdżają się przy pierwszej zmianie.
+    ///
+    /// Konwencja: `wartość = mantysa / 256 · 2^(exp − 128)`. `exp == 128` daje zakres
+    /// 0..1, każdy kolejny stopień podwaja jasność.
+    #[must_use]
+    pub const fn new(pos: [f32; 3], range: f32, rgb: [u8; 3], exp: u8) -> LightRecord {
+        LightRecord {
+            pos,
+            range,
+            color_rgbe: ((exp as u32) << 24)
+                | ((rgb[0] as u32) << 16)
+                | ((rgb[1] as u32) << 8)
+                | rgb[2] as u32,
+        }
+    }
+
+    /// Barwa liniowa HDR. Wykładnik zero znaczy „zgaszone" i daje czarny — to jest
+    /// sposób, w jaki blackout wygasza okno, nie usuwając go z listy.
+    #[must_use]
+    pub fn color(&self) -> [f32; 3] {
+        let e = (self.color_rgbe >> 24) as i32;
+        if e == 0 {
+            return [0.0, 0.0, 0.0];
+        }
+        // 2^(e − 128 − 8): −8 bierze się z dzielenia mantysy przez 256.
+        let skala = 2.0f32.powi(e - 128 - 8);
+        [
+            ((self.color_rgbe >> 16) & 0xFF) as f32 * skala,
+            ((self.color_rgbe >> 8) & 0xFF) as f32 * skala,
+            (self.color_rgbe & 0xFF) as f32 * skala,
+        ]
+    }
 }
 
 /// Pieszy w warstwie Mikro — rekord **ruchu**, nie wyglądu (M3d, `Z-1`).
@@ -308,6 +429,38 @@ mod tests {
         // kanałem), ale ich rozmiar też jest kontraktem — kopiuje się je co klatkę.
         assert_eq!(size_of::<PedestrianRecord>(), 20);
         assert_eq!(size_of::<VehicleRecord>(), 24);
+    }
+
+    /// Konwencja RGBE: wartość = mantysa / 256 · 2^(e − 128). Test przeprowadził się
+    /// tu z `engine/render::clusters` razem z rozpakowaniem — pakowanie i rozpakowanie
+    /// mają jeden adres, więc i jeden test.
+    #[test]
+    fn rgbe_odtwarza_barwe_z_dokladnoscia_kwantu() {
+        let [r, g, b] = LightRecord::new([0.0; 3], 1.0, [255, 128, 64], 128).color();
+        assert!((r - 255.0 / 256.0).abs() < 1e-6, "r = {r}");
+        assert!((g - 0.5).abs() < 1e-6, "g = {g}");
+        assert!((b - 0.25).abs() < 1e-6, "b = {b}");
+        // Wykładnik o osiem większy to osiem podwojeń — 256 razy jaśniej.
+        let [r2, _, _] = LightRecord::new([0.0; 3], 1.0, [255, 128, 64], 136).color();
+        assert!((r2 - 255.0).abs() < 1e-3, "r2 = {r2}");
+        // Wykładnik zero to zgaszone światło — tą drogą blackout gasi okno, nie
+        // wyrzucając go z listy.
+        assert_eq!(
+            LightRecord::new([0.0; 3], 1.0, [255, 255, 255], 0).color(),
+            [0.0, 0.0, 0.0]
+        );
+    }
+
+    /// Kolejność łóż indeksuje katalog `data/audio/`, więc jest kontraktem.
+    #[test]
+    fn lozka_maja_stale_numery() {
+        for (i, b) in AmbientBed::ALL.iter().enumerate() {
+            assert_eq!(b.as_index(), i, "{b:?} zmieniło numer");
+            assert_eq!(AmbientBed::from_index(i as u8), *b);
+        }
+        assert_eq!(AmbientBed::ALL.len(), AMBIENT_BED_COUNT);
+        // Bajt spoza listy to cisza, a nie panika: snapshot jest danymi.
+        assert_eq!(AmbientBed::from_index(200), AmbientBed::Quiet);
     }
 
     #[test]

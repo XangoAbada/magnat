@@ -47,6 +47,7 @@ fn kazdy_shader_jest_poprawnym_modulem_wgsl() {
             "impostor.wgsl",
             include_str!("../src/shaders/impostor.wgsl"),
         ),
+        ("weather.wgsl", include_str!("../src/shaders/weather.wgsl")),
     ] {
         waliduj(nazwa, zrodlo);
     }
@@ -175,4 +176,132 @@ fn stale_palety_zgadzaja_sie_z_kodem() {
         zrodlo.contains("(v >> 13u) % ramp.y"),
         "shader zmienił wzór wyboru barwy"
     );
+}
+
+/// Pudło cząstek i liczba cząstek na komin są rozpisane po obu stronach granicy GPU:
+/// Rust decyduje, ile instancji narysować, shader — gdzie je postawić. Rozjazd nie daje
+/// błędu walidacji, tylko deszcz padający obok kamery albo dym poszatkowany na kawałki
+/// z dwóch kominów. Ta sama droga, którą `stale_animacji_zgadzaja_sie_z_kodem` pilnuje
+/// atlasu póz.
+#[test]
+fn stale_pogody_zgadzaja_sie_z_kodem() {
+    let zrodlo = include_str!("../src/shaders/weather.wgsl");
+    let wartosc = |nazwa: &str| -> String {
+        zrodlo
+            .lines()
+            .find(|l| l.trim_start().starts_with(&format!("const {nazwa}:")))
+            .unwrap_or_else(|| panic!("brak stałej {nazwa} w weather.wgsl"))
+            .split('=')
+            .nth(1)
+            .and_then(|s| s.split(';').next())
+            .expect("stała bez wartości")
+            .trim()
+            .trim_end_matches('u')
+            .to_string()
+    };
+    assert_eq!(
+        wartosc("BOX_Z_M").parse::<f32>().expect("liczba"),
+        magnat_render::weather::PRECIP_BOX_Z_M
+    );
+    assert_eq!(
+        wartosc("PARTICLES_PER_PLUME")
+            .parse::<u32>()
+            .expect("liczba"),
+        magnat_render::weather::PARTICLES_PER_PLUME
+    );
+}
+
+/// Uniform ramki ma jeden układ i **dziewięć** kopii jego deklaracji w WGSL. Kopia,
+/// która zgubi pole albo przestawi dwa, czyta cudze bajty — i jest przy tym poprawnym
+/// shaderem, więc walidator `naga` tego nie widzi.
+///
+/// Porównujemy **kolejność**, a nie samą obecność: o tym, które bajty trafiają do
+/// którego pola, decyduje wyłącznie pozycja w strukturze. Pierwsza wersja tego testu
+/// sprawdzała przynależność i przepuściłaby przestawienie (`I-26`).
+#[test]
+fn kazda_kopia_uniformu_ramki_ma_te_same_pola() {
+    const UKLAD: [&str; 14] = [
+        "view_proj",
+        "light_view_proj",
+        "cascade_far",
+        "cascade_texel",
+        "sun_dir",
+        "sun_color",
+        "sky_color",
+        "ground_color",
+        "fog",
+        "clip",
+        "screen",
+        "eye",
+        "overlay",
+        "weather",
+    ];
+    let mut kopii = 0;
+    for (nazwa, zrodlo) in [
+        ("voxel.wgsl", include_str!("../src/shaders/voxel.wgsl")),
+        ("cap.wgsl", include_str!("../src/shaders/cap.wgsl")),
+        ("sign.wgsl", include_str!("../src/shaders/sign.wgsl")),
+        ("water.wgsl", include_str!("../src/shaders/water.wgsl")),
+        ("sky.wgsl", include_str!("../src/shaders/sky.wgsl")),
+        (
+            "far_terrain.wgsl",
+            include_str!("../src/shaders/far_terrain.wgsl"),
+        ),
+        (
+            "instance.wgsl",
+            include_str!("../src/shaders/instance.wgsl"),
+        ),
+        (
+            "impostor.wgsl",
+            include_str!("../src/shaders/impostor.wgsl"),
+        ),
+        ("weather.wgsl", include_str!("../src/shaders/weather.wgsl")),
+    ] {
+        let start = zrodlo
+            .find("struct Frame {")
+            .unwrap_or_else(|| panic!("{nazwa}: brak `struct Frame`"));
+        let koniec = start
+            + zrodlo[start..]
+                .find(
+                    "
+}",
+                )
+                .unwrap_or_else(|| panic!("{nazwa}: niedomknięty `struct Frame`"));
+        let pola: Vec<&str> = zrodlo[start..koniec]
+            .lines()
+            .skip(1)
+            .filter_map(|l| l.trim().split(':').next())
+            .filter(|n| !n.is_empty() && !n.starts_with("//"))
+            .collect();
+        assert_eq!(pola, UKLAD, "{nazwa}: inny układ `struct Frame`");
+        kopii += 1;
+    }
+    assert_eq!(kopii, 9, "test ominął kopię");
+}
+
+/// Śnieg i pora roku są rozpisane **dwa razy**: w `voxel.wgsl` dla terenu bliskiego
+/// i w `far_terrain.wgsl` dla clipmapy za czterema kilometrami. WGSL nie ma dołączania
+/// plików, więc duplikat jest nieunikniony — ale rozjazd byłby widoczny dokładnie
+/// na granicy pierścienia LOD, czyli tam, gdzie patrzy się najczęściej (`I-27`).
+#[test]
+fn obie_kopie_pogody_na_terenie_maja_te_same_liczby() {
+    let bliski = include_str!("../src/shaders/voxel.wgsl");
+    let daleki = include_str!("../src/shaders/far_terrain.wgsl");
+    for wzorzec in [
+        // Próg rozpoznania zieleni.
+        "albedo.g > albedo.r * 1.15",
+        // Trzy przesunięcia sezonowe.
+        "vec3<f32>(0.85, 0.82, 0.78)",
+        "vec3<f32>(0.92, 1.12, 0.80)",
+        "vec3<f32>(1.45, 1.00, 0.45)",
+        // Barwa i przyczepność śniegu.
+        "vec3<f32>(0.90, 0.93, 0.98)",
+        "smoothstep(0.35, 0.85, n.z)",
+    ] {
+        assert!(bliski.contains(wzorzec), "voxel.wgsl nie ma `{wzorzec}`");
+        assert!(
+            daleki.contains(wzorzec),
+            "far_terrain.wgsl nie ma `{wzorzec}`"
+        );
+    }
 }
