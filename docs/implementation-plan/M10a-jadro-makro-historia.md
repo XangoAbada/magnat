@@ -20,7 +20,7 @@ zostają w dokumencie fazy — tu jest wyłącznie to, co robisz w tej porcji.
 
 ## Pakiety robocze
 
-### WP10.2 — Wydzielenie wspólnego jądra ekonomicznego (`econ_kernel`)
+### [x] WP10.2 — Wydzielenie wspólnego jądra ekonomicznego (`econ_kernel`)
 
 **Zależności:** M5 (rdzeń), M6 i M7 (wypełnienie slotów).
 **Charakter:** **domknięcie, nie refaktor** — i to jest zmiana na lepsze względem pierwszej wersji
@@ -79,7 +79,7 @@ literałów mnożników cenowych i stawek (skrypt grepowy — prymitywny, ale sk
 
 ---
 
-### WP10.1 — `sim/macro`: stan, krok, `lift`/`lower`
+### [x] WP10.1 — `sim/macro`: stan, krok, `lift`/`lower`
 
 **Zależności:** WP10.2.
 
@@ -103,7 +103,7 @@ Cztery rzeczy:
 
 ---
 
-### WP10.3 — Historia „na sucho" (`DryRunConfig`, etapy D0–D5)
+### [~] WP10.3 — Historia „na sucho" (`DryRunConfig`, etapy D0–D5)
 
 **Zależności:** WP10.1, generator M1–M2 (Etapy 1–8).
 
@@ -118,7 +118,7 @@ Pełny opis etapów w §5.7. Kryterium ukończenia:
 
 ---
 
-### WP10.4 — Test spójności LOD i rozszerzenie balansatora
+### [~] WP10.4 — Test spójności LOD i rozszerzenie balansatora
 
 **Zależności:** WP10.1–10.3.
 Opis w §7.3. **Rozmiar: M.**
@@ -290,12 +290,20 @@ pub struct DryRunConfig {
 }
 ```
 
-| Etap | Nazwa | Co jest symulowane | Co jest agregowane | Wynik |
-|---|---|---|---|---|
-| **D0** | Zasiew | — | — | Z Etapów 4–8 generatora budujemy `MacroState` w `start_year`: miasto **mniejsze** (populacja skalowana krzywą wzrostu epoki, typowo 30–50% docelowej), mniej firm, mniej dzielnic zabudowanych. Parcele i drogi z Etapów 3–5 istnieją już w pełni — teren nie jest symulowany. |
-| **D3** | Kronika | — | — | Każde zdarzenie o skali > progu → `ChronicleEvent { provenance: DryRun }`: upadek huty, gentryfikacja Starego Portu, fortuna rodziny Nowaków, trzy recesje. To jest tło narracyjne, które gracz czyta w M9. |
-| **D4** | Rozwinięcie (`lower`) | — | — | `MacroState` → pełny świat ECS. Mechanizm w §5.8. |
-| **D5** | Weryfikacja i naprawa | — | — | Etap 10 PRD. Kryteria i procedura naprawy niżej. |
+Tabela jest **poprawiona po M10a**: pierwsza wersja opisywała cztery etapy z sześciu,
+bo D1 i D2 nie miały wiersza — a nazwa „etapy D0–D5" sugerowała, że mają. Kolumny
+„co jest symulowane / agregowane" były we wszystkich wierszach puste i zostały usunięte:
+w makrze **wszystko jest agregatem** poza firmami (`D21`), więc kolumna z jedną możliwą
+odpowiedzią nie była pytaniem.
+
+| Etap | Nazwa | Wynik |
+|---|---|---|
+| **D0** | Zasiew | `lift()` stojącego świata po Etapie 8 generatora. Miasto **nie jest zmniejszane** (`E-2`): populacja startowa jest populacją docelową, a historia zmienia strukturę wieku, rozmieszczenie, majątek, ceny, zapasy, zadłużenie i sieć dostawców. Parcele, drogi i teren nie są symulowane. |
+| **D1** | Bieg | `years` lat kroku makro. Krok jest zmienny: `step_days_early` (domyślnie 6) w latach wczesnych, `step_days_late` (1) w ostatnich pięciu — bo to one ustawiają stan początkowy partii. Każda faza mnoży swój przepływ przez długość kroku (`E-7`). |
+| **D2** | Epoki | **Nie powstaje w M10a** (`E-3`). Postęp technologiczny epoki to PRD §11.3, czyli WP10.9 i podfaza M10c; drugi mechanizm epok obok tamtego byłby dokładnie tym, przed czym broni `K-8`. |
+| **D3** | Kronika | Zdarzenie o skali większej niż próg → `ChronicleEvent` z `provenance: DryRun`: wstrząs w skali miasta, dzielnica tracąca albo zyskująca > 40 ‰ ludności w ciągu roku, runda naprawcza. Próg jest **wyższy niż dla zdarzenia w partii** (`R9`): celem jest 50–200 wpisów na 80 lat, nie 50 000. |
+| **D4** | Rozwinięcie (`lower`) | `MacroState` naniesiony na świat ECS: pieniądz gospodarstw w komponentach, salda firm w księgach, różnica sektora GD domknięta na rachunku reszty świata. Mechanizm w §5.8. Wykonuje się **po** naprawie, bo świat ma dostać stan, który przeszedł bramki. |
+| **D5** | Weryfikacja i naprawa | Etap 10 PRD: osiem bramek i do trzech rund `rebalance`. Kryteria i procedura niżej. |
 
 **D5 — weryfikacja (§4.2 Etap 10: „żaden rynek nie jest w stanie nierównowagi > 30%").**
 
@@ -397,3 +405,28 @@ jest ich ~150 tys. przy 400 tys. mieszkańców, a ich majątek i mieszkanie to r
 nie wystarcza (mieszkanie jest konkretną parcelą). `HouseholdId`, skład, adres i majątek GD są trzymane
 jawnie także w makro: 150 tys. × 48 B = 7,2 MB. **To jest jedyne odstępstwo od agregacji mieszkańców
 i jest świadome** — bez niego „majątki rodzin" z §4.2 Etap 9 nie mają nośnika.
+
+---
+
+## Zmiany wpisane po M10a
+
+Zgodnie z `K-18`. Gwiazdka = zmiana zakresu albo kryterium.
+Rozstrzygnięcia dotykające kontraktu z dokumentu 00 mają wpis `K-78` w §4a.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| E-1 ★ | **`SeedWorld` nie powstaje, a `dry_run` bierze `&mut World`.** Sygnatura z §6 dokumentu fazy brzmiała `dry_run(cfg, seed_world: &SeedWorld)`; jest `dry_run(cfg: &DryRunConfig, world: &mut World, params: &MacroParams) -> DryRunResult` | `CitizenSeed.birth_index` to indeks encji ECS — tak wypełnia go `lift` od M7f. Świat **jest** zasiewem, więc osobny typ opisywałby drugi raz to, co `World` już niesie (`K-78` pkt 2) |
+| E-2 ★ | **Etap D0 nie zmniejsza miasta, a populacja jest w kroku makro zamknięta.** §5.7 zapowiadał start od 30–50 % docelowej ludności; historia startuje z pełnej populacji stojącego świata i tę populację ma na końcu. Zmienia się struktura wieku, rozmieszczenie między dzielnicami, majątek, ceny, zapasy, zadłużenie i sieć dostawców | Nowy mieszkaniec w makrze musiałby dostać indeks encji, której jeszcze nie ma, a zmarły — zostawić encję do usunięcia. Jedno i drugie czyni z `lower()` **drugi generator populacji** obok Etapu 8 (`K-8`). Wzrost ludności wymaga churnu encji i należy do M12c, gdzie i tak musi powstać |
+| E-3 ★ | **Etapu D2 nie ma.** Tabela w §5.7 opisywała cztery wiersze z sześciu — D1 i D2 nie miały opisu. D1 jest zaimplementowany jako bieg historii; D2 (epoki i postęp technologiczny) **nie powstaje w M10a** | Postęp epoki to PRD §11.3, czyli WP10.9 i podfaza M10c. Wpisanie go tutaj znaczyłoby drugi mechanizm epok obok tamtego |
+| E-4 | **`lower_cell` nie używa odwrotnej dystrybuanty log-normalnej.** §5.8 pkt 3 zapowiadał dopasowanie rozkładu dwuparametrowego; jest **profil kwantylowy w liczbach całkowitych** — interpolacja między `wealth_q` po pozycji w rankingu, a podział przez `core::split_proportional` | Kwantyle są tym, co komórka **zna**, a dopasowanie rozkładu do czterech kwantyli i tak sprowadza się do interpolacji między nimi. Float w drodze do kwoty pieniężnej jest zabroniony (00 §2) nawet przejściowo, a tutaj nie jest do niczego potrzebny |
+| E-5 ★ | **`lift(lower(s)) == s` obowiązuje na sumach, nie na kwantylach.** Kryterium WP10.1 mówi „wszystkie agregaty pieniężne"; `wealth_q` jest **kształtem**, a nie agregatem, i rozwinięcie odtwarza go z dokładnością profilu, nie co do grosza | Suma jest niezmiennikiem księgowym i da się ją zagwarantować konstrukcyjnie. Kwantyl jest statystyką próby i jego równość wymagałaby, żeby profil był dokładną dystrybuantą świata — czyli żeby makro trzymało rozkład, a nie cztery liczby |
+| E-6 | **Równość per komórka ma jeden warunek: gospodarstwo nie może mieć członków w dwóch komórkach.** `lift` dzieli pieniądz gospodarstwa **równo między komórki jego członków**, więc gospodarstwo o członkach w dwóch klasach społecznych wraca inaczej, niż wyszło. Suma jest ta sama; `LowerReport.straddling_households` **liczy** takie gospodarstwa zamiast o nich milczeć | Rozwiązaniem byłaby komórka po gospodarstwie, a nie po osobie — czyli inne ziarno agregacji i inny próg `MIN_CELL_POP`. Liczba w raporcie jest tańsza i mówi, ile dokładnie kosztuje przybliżenie |
+| E-7 ★ | **Krok makro może reprezentować wiele dób** (`MacroParams::days_per_step`) i **każda faza mnoży przez tę liczbę swój przepływ**: listę płac, odsetki, minuty pracy linii, budżet zakupowy, tempo rekrutacji i hazard wstrząsu. Kadencje (przecena, przegląd dostawców, rocznica) pytają `step::przekroczono`, a nie resztę z dzielenia | Bez mnożnika osiemdziesiąt lat liczone krokiem sześciodobowym wypłaciłoby jedną szóstą należnych płac. Bez `przekroczono` krok sześciodobowy **mija granicę okresu bez trafienia w nią** i przegląd dostawców nie odbyłby się ani razu — a faza wyglądałaby na działającą, bo test z krokiem jednodobowym przechodzi |
+| E-8 ★ | **Przecena wypada raz na `reprice_every_days` (domyślnie 4), a nie codziennie.** `data/economy/shop.ron` daje każdej firmie czujność 1–7 dób; makro nie ma osobowości firm, więc bierze jedną kadencję dla wszystkich — środek tamtego przedziału | Przecena codzienna, którą M7f tu zostawił, była modelem **agresywniejszym od mezo**: ceny zbiegały w „co jeśli" szybciej niż w przebiegu, który ten „co jeśli" przewidywał. Przy okazji krok zmieścił się w budżecie §7.5 |
+| E-9 ★ | **Komórka ocenia najwyżej `candidates_per_good` (8) najtańszych ofert na towar**, a nie wszystkie oferty dzielnicy | Mieszkaniec w M5 pyta o `k_min..k_max` ofert (`data/economy/choice.ron`) i wybiera spośród nich. Komórka oceniająca każdą półkę w dzielnicy **wiedziałaby o rynku więcej niż mieszkaniec, którego zastępuje** — to jest rozjazd modeli, nie oszczędność. Rachunek „240 komórek × ~60 towarów" z §5.7 daje 10⁵ operacji na krok **tylko** przy takim zawężeniu |
+| E-10 | **Faza 6 dostaje kanał kredytu obrotowego.** Firma, która nie ma z czego zapłacić ludziom, pożycza od **reszty świata** (przelew `RestOfWorld → Firms`, `debt` rośnie o tę samą kwotę), do sufitu `max_leverage_permille` | Bez tego `MacroFirm.debt` nigdy nie rośnie: `lift` odczytuje dług jako ujemne saldo rachunku, a świeżo postawione miasto ma wszystkie salda dodatnie. Historia obiecuje „zadłużenie firm" (PRD §4.2 Etap 9), a oddawałaby same zera — bramka 5 Etapu 10 mierzyłaby **brak mechanizmu**, nie stan świata. Sufit jest konieczny, bo makro nie ma postępowania upadłościowego (`K-10` przyznaje je M7): bez niego firma trwale nierentowna pożycza co dobę przez osiemdziesiąt lat i saldo reszty świata wychodzi poza zakres `i64` |
+| E-11 ★ | **Naprawa „brakujący dostawca" nie powstaje.** §5.7 wymieniał cztery naprawy; są trzy (zapasy, ceny, restrukturyzacja zadłużenia) | Zatowarowanie w fazie 3 idzie z importu, więc **każda firma ma dostawcę z konstrukcji**. Naprawa opisywałaby stan, który nie zachodzi — a naprawa, której nikt nigdy nie uruchomi, przechodzi każdy test i wygląda tak samo jak działająca |
+| E-12 ★ | **Kryterium WP10.3 „100 % ziaren przechodzi Etap 10" nie jest spełnione po M10a** i to jest stan zapisany, nie przemilczany. Mechanizm działa w całości: osiem bramek jest **zmierzonych**, trzy rundy naprawcze się wykonują, kronika powstaje, pieniądz domyka się co do grosza. Na świeżo wygenerowanym mieście 4 km cztery bramki świecą na czerwono: nierównowaga (1), firmy bez obsady (3), mediana dźwigni (5) i współczynnik Giniego (7) | Przyczyna bramek 1 i 3 jest jedna i nazwana w `step::labor`: **płaska `CommuteMatrix`** zamyka rekrutację w granicach dzielnicy, więc firmy w dzielnicach przemysłowych bez mieszkań nie dostają obsady, nie produkują, a rynek zjada zapas z Etapu 7. Otwarcie puli na całe miasto zostało spróbowane i **cofnięte** — bezrobocie schodzi wtedy do zera, a odsetek firm bez obsady rośnie z 291 ‰ do 342 ‰, bo bez kosztu dojazdu rekrutacja jest albo zakazana, albo darmowa. Rozstrzyga to wypełnienie macierzy przez M4 (kontrakt M10 §6), a nie zmiana progu w bramce. Bramka 7 mówi o **generatorze**: rozkład majątku gospodarstw po Etapie 8 ma Gini rzędu 0,50–0,84, a plan oczekuje 0,25–0,45 — to jest liczba do rozstrzygnięcia przez właściciela produktu (§9.2 dokumentu fazy) |
+| E-13 ★ | **Rozszerzenia balansatora nie ma.** WP10.4 dostarcza test spójności LOD (`tools/headless/tests/macro_lod.rs`, pięć przypadków w CI) i przebieg `headless dry-run`; bramki G12+ w `tools/balansator` nie powstały | Bramka balansatora musiałaby porównywać przebieg mezo i makro tego samego scenariusza przez rok gry — a przebieg mezo roku gry kosztuje ~10 min na ziarno (`U-24`). To jest bieg nocny z własnym budżetem i własnym raportem, czyli praca wielkości pakietu, a nie dopisek. Adresat: M10f razem z domknięciem fazy |
+| E-14 | **Zależność `sim/macro` → `magnat-supply` zostaje i ma czytelnika**: `step::produce` woła `magnat_supply::PlantSite::FULL_LABOR` przy ograniczaniu pokrycia etatowego | Zapis dla porządku: przegląd crate'u po M7f wskazywał tę zależność jako nieużywaną |
+| E-15 | **Bramka 8 (koszyk do dochodu) potrzebuje koszyka od wołającego.** `DryRunConfig.basket: Vec<(GoodId, i64)>` — pusty koszyk znaczy „nie zmierzono" i raport mówi to wprost | `sim/macro` nie ma katalogu towarów i mieć nie powinien (`K-50`: rdzeń nie zna encji ani katalogu). Koszyk `data/economy/cpi.ron` składa scenariusz gry; przebieg `headless dry-run` bierze na razie dwanaście towarów o najszerszej dostępności i mówi o tym w kodzie |

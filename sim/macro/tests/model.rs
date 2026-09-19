@@ -93,12 +93,19 @@ fn smallvec_new() -> smallvec::SmallVec<[(GoodId, magnat_core::FirmId); 8]> {
 
 /// Suma kont musi być sumą gotówki komórek i kapitału firm — w każdej dobie.
 fn sprawdz_zgodnosc(st: &MacroState) {
-    let gd: i64 = st.cells.iter().map(|c| c.cash.get()).sum();
+    // Gotówka **i depozyt**: konto gospodarstw obejmuje cały ich majątek płynny
+    // (poprawka M10a w `lift::zbuduj_ksiege` — na prawdziwym świecie gospodarstwo
+    // trzyma pieniądz na rachunku, a `cash` bywa zerem).
+    let gd: i64 = st
+        .cells
+        .iter()
+        .map(|c| c.cash.get() + c.deposits.get())
+        .sum();
     let firmy: i64 = st.firms.iter().map(|f| f.capital.get()).sum();
     assert_eq!(
         st.ledger.get(MacroAccount::Households).get(),
         gd,
-        "konto gospodarstw rozjechało się z gotówką komórek"
+        "konto gospodarstw rozjechało się z majątkiem płynnym komórek"
     );
     assert_eq!(
         st.ledger.get(MacroAccount::Firms).get(),
@@ -266,4 +273,122 @@ fn co_jesli_nie_rusza_stanu_wyjsciowego() {
         90,
     );
     assert_eq!(state_hash(&st), przed);
+}
+
+// ── M10a/WP10.1: fazy 1, 7 i 8 ──────────────────────────────────────────────────
+
+/// Parametry z wstrząsami i migracją włączonymi na tyle mocno, żeby przez dziesięć
+/// lat gry wypadły wielokrotnie. Domyślne są dla gry, te są dla testu.
+fn parametry_z_historia() -> MacroParams {
+    MacroParams {
+        seed: 0xB00C_1234_5678_9ABC,
+        shock_hazard_permille: 20,
+        shock_min_days: 30,
+        shock_span_days: 90,
+        migration_permille: 80,
+        ..MacroParams::default()
+    }
+}
+
+#[test]
+fn dziesiec_lat_daje_ten_sam_lancuch_hashy() {
+    // Kryterium WP10.1: dwa przebiegi tego samego ziarna → identyczny hash
+    // `MacroState` co 100 kroków. Od M10a w kroku jest losowanie (faza 8), więc
+    // test przestał być tożsamościowy: gdyby wstrząs zależał od czegokolwiek poza
+    // `(ziarno, doba)`, łańcuchy rozjechałyby się na pierwszym z nich.
+    let p = parametry_z_historia();
+    let mut a = miasto();
+    let mut b = miasto();
+    let mut lancuch_a = Vec::new();
+    let mut lancuch_b = Vec::new();
+    for i in 0..3_600 {
+        step(&mut a, &p);
+        step(&mut b, &p);
+        if i % 100 == 99 {
+            lancuch_a.push(state_hash(&a));
+            lancuch_b.push(state_hash(&b));
+        }
+    }
+    assert_eq!(lancuch_a.len(), 36);
+    assert_eq!(lancuch_a, lancuch_b);
+}
+
+#[test]
+fn dziesiec_lat_nie_tworzy_ani_nie_niszczy_grosza() {
+    // Ten sam niezmiennik co przy 90 krokach, ale przez dziesięć lat gry i z trzema
+    // fazami, których M7f nie miał. Migracja przenosi pieniądz między komórkami,
+    // a wstrząs zmienia popyt — żadne z tych dwóch nie ma prawa ruszyć sumy.
+    let p = parametry_z_historia();
+    let mut st = miasto();
+    let przed = st.money();
+    for _ in 0..3_600 {
+        step(&mut st, &p);
+        assert_eq!(st.money(), przed, "suma pieniądza drgnęła w kroku makro");
+    }
+    sprawdz_zgodnosc(&st);
+}
+
+#[test]
+fn dziesiec_lat_nie_gubi_ani_jednego_mieszkanca() {
+    // Populacja jest zamknięta (`step::demography`), a migracja tylko ją przesuwa:
+    // zbiór tożsamości po dziesięciu latach ma być **ten sam co do elementu**.
+    let p = parametry_z_historia();
+    let mut st = miasto();
+    let przed: Vec<u32> = posortowane_tozsamosci(&st);
+    let ludzi_przed: u32 = st
+        .cells
+        .iter()
+        .map(|c| c.age_hist.iter().sum::<u32>())
+        .sum();
+    for _ in 0..3_600 {
+        step(&mut st, &p);
+    }
+    assert_eq!(
+        posortowane_tozsamosci(&st),
+        przed,
+        "zbiór mieszkańców drgnął"
+    );
+    let ludzi_po: u32 = st
+        .cells
+        .iter()
+        .map(|c| c.age_hist.iter().sum::<u32>())
+        .sum();
+    assert_eq!(ludzi_po, ludzi_przed, "piramida wieku zgubiła ludzi");
+}
+
+#[test]
+fn migracja_wyprowadza_ludzi_z_najgorszej_komorki() {
+    // Komórka bez pracy i bez zaspokojonych potrzeb ma się wyludniać na rzecz
+    // najlepszej komórki swojej klasy — to jest cała „gentryfikacja Starego Portu"
+    // z §5.7, sprowadzona do liczby mieszkańców.
+    let p = parametry_z_historia();
+    let mut st = miasto();
+    // Dzielnica 0, klasa 0 dostaje bezrobocie i puste potrzeby.
+    let zla = st
+        .cells
+        .iter()
+        .position(|c| c.key.0 .0 == 0 && c.key.1 .0 == 0)
+        .expect("komórka istnieje");
+    st.cells[zla].need_sat = [magnat_core::Q::MIN; magnat_macro::N_NEEDS];
+    st.cells[zla].unemployed = st.cells[zla].labour_force();
+    st.cells[zla].employed = 0;
+    let przed = st.cells[zla].population();
+    for _ in 0..3_600 {
+        step(&mut st, &p);
+    }
+    let po = st.cells[zla].population();
+    assert!(
+        po < przed,
+        "komórka bez pracy nie straciła nikogo: {przed} → {po}"
+    );
+}
+
+fn posortowane_tozsamosci(st: &MacroState) -> Vec<u32> {
+    let mut v: Vec<u32> = st
+        .cells
+        .iter()
+        .flat_map(|c| c.citizens.iter().map(|s| s.birth_index))
+        .collect();
+    v.sort_unstable();
+    v
 }

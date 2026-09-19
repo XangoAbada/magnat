@@ -29,14 +29,23 @@
 //! [`whatif::RankedVariants`] z `decisive_winner()` i `direction()`. Kwota do grosza
 //! pochodzi z ksiąg firmy, nigdy z prognozy (§5.10, `R14`, `R15`).
 
+pub mod dryrun;
 pub mod lift;
+pub mod lod;
+pub mod lower;
 pub mod state;
 pub mod step;
 pub mod system;
 pub mod types;
 pub mod whatif;
 
+pub use dryrun::{
+    dry_run, ChronicleEvent, ChronicleKind, DryRunConfig, DryRunResult, GateCheck,
+    VerificationReport,
+};
 pub use lift::{lift, state_hash};
+pub use lod::{BlockReason, CityLod, LoadStats, MacroLodPolicy};
+pub use lower::{lower, lower_cell, CellExpansion, LowerError, LowerReport, PersonState};
 pub use state::{MacroCell, MacroFirm, MacroState, N_NEEDS};
 pub use step::{step, MacroParams};
 pub use system::{register_macro, MacroHandle, MacroSystem};

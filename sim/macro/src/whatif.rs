@@ -90,6 +90,7 @@ pub struct MacroOutcome {
 /// są końcami przedziału 3–12 % z rozstrzygnięcia M10 i nie są kalibracją:
 /// przestawienie ich byłoby zmianą **obietnicy**, a test uczciwości marginesu
 /// natychmiast by to pokazał.
+/// macro-guard: deklarowany błąd modelu, nie stawka ekonomiczna
 const MARGIN_MIN_BP: u32 = 300;
 const MARGIN_MAX_BP: u32 = 1_200;
 

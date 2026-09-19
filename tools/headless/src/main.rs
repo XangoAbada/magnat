@@ -10,6 +10,7 @@
 mod agents;
 mod century;
 mod day;
+mod dryrun;
 mod m3day;
 mod m5shop;
 mod m7_miasto;
@@ -127,6 +128,9 @@ enum Command {
     M8miasto(m8_miasto::M8MiastoArgs),
     /// **Wynik podfazy M9a**: sesja gry z pliku parametrów, dziennik wejść i replay.
     NewGame(m9session::M9SessionArgs),
+    /// **Artefakt A fazy M10**: historia „na sucho" — 30–100 lat makro przed startem
+    /// partii, bramki Etapu 10 i kronika (M10a/WP10.3).
+    DryRun(dryrun::DryRunArgs),
 }
 
 fn uruchom() -> Result<std::process::ExitCode, Box<dyn std::error::Error>> {
@@ -147,6 +151,7 @@ fn uruchom() -> Result<std::process::ExitCode, Box<dyn std::error::Error>> {
         Some(Command::M7miasto(a)) => return m7_miasto::run(a),
         Some(Command::M8miasto(a)) => return m8_miasto::run(a),
         Some(Command::NewGame(a)) => return m9session::run(a),
+        Some(Command::DryRun(a)) => return dryrun::run(a),
         None => {}
     }
 

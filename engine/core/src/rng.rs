@@ -253,6 +253,36 @@ pub enum StreamId {
     // 261–279 zostaje wolne dla M9 (`K-4`). M9a–M9c nie losowały niczego:
     // komenda gracza jest funkcją stanu, a nie rzutem.
 
+    // ── M10: 280..=299 — głębia (`K-4`, przydział w M10 §7.1) ───────────────────
+    /// Losowość wewnątrz kroku makro: demografia komórki — urodzenia, zgony
+    /// i migracja w fazie 1 (M10a §5.7). Klucz: indeks komórki, tick kroku.
+    ///
+    /// **Jeden strumień na całą fazę 1**, bo klucz `(komórka, tick)` rozdziela
+    /// losowania, a wartości `StreamId` są wieczne. Fazy 2–6 **nie losują** i losować
+    /// nie będą: rynek pracy, produkcja, popyt, ceny i finanse liczą się z agregatu
+    /// i z jądra — to jest cała różnica między makro a mezo (M10a §5.1).
+    MacroStep = 292,
+    /// Porządek rangowy przy rozwijaniu komórki do jednostek (`lower_cell`,
+    /// M10a §5.8). Klucz: `birth_index` mieszkańca, tick rozwinięcia.
+    ///
+    /// Porządek jest **funkcją czystą** tożsamości, a nie kolejności w wektorze —
+    /// dzięki temu `lower()` wykonany dwukrotnie z tego samego stanu daje identyczny
+    /// świat niezależnie od tego, jak komórka była zapełniana (00 §4 pkt 4).
+    MacroLower = 293,
+    /// Zasiew pamięci doświadczeń mieszkańca po `lower()` (decyzja `D7` fazy M10).
+    ///
+    /// **Zarezerwowany imiennie, niezajęty po M10a**: pamięć doświadczeń jest
+    /// strukturą M3, a sklepy, którymi się ją zasiewa, wskazuje udział rynkowy
+    /// z makra — jedno i drugie należy do M10b razem z marką. Numer stoi tu już
+    /// teraz, bo blok przydziela się fazie, a nie podfazie.
+    MacroSeedMemory = 294,
+    /// Zdarzenia w historii „na sucho" (M10a §5.7, faza 8). Klucz: indeks komórki
+    /// albo firmy dotkniętej zdarzeniem, tick losowania.
+    DryRunEvent = 295,
+    // 280–291 i 296–299 zostaje wolne jako reszta bloku M10 (`K-4`): marka, media,
+    // R&D, giełda, ubezpieczenia, kartele i związki biorą numery w M10b–M10e,
+    // wg tabeli z M10 §7.1.
+
     // ── M11: 300..=319 — prezentacja (`K-4`, przydział w M11 §„K-4") ─────────────
     /// Wygląd mieszkańca i lakier pojazdu (M11a §5.2). Klucz: indeks encji, tick 0 —
     /// losowanie jest **jednorazowe i stałe przez życie encji**, bo człowiek, który

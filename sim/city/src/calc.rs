@@ -12,29 +12,27 @@
 //! dwanaście niezależnych działań.
 
 use magnat_core::{Mass, Money};
+use magnat_economy::kernel::tax;
 
 use crate::code::{PitBracket, TaxCode};
 
 /// VAT wyłuskany z ceny brutto (`K-7`: cena detaliczna jest tym, co płaci kupujący).
 ///
-/// `vat = round(gross * bp / (10 000 + bp))`. Mianownik jest większy od licznika,
-/// więc wynik nigdy nie przekroczy kwoty — `Books::transfer` odrzuciłby `tax > amount`.
+/// Arytmetyka mieszka od M10a w `economy::kernel::tax` (`K-50`): ten sam wzór
+/// nalicza podatek w mezo i w kroku makro, a `sim/macro` nie widzi `sim/city`.
+/// Tutaj zostaje **nazwa dziedzinowa** — miasto mówi „VAT", jądro mówi „danina
+/// wyłuskana z brutto".
 #[must_use]
 pub fn vat_from_gross(gross: Money, bp: u32) -> Money {
-    if bp == 0 || gross.get() == 0 {
-        return Money::ZERO;
-    }
-    gross.mul_ratio(i64::from(bp), 10_000 + i64::from(bp))
+    tax::from_gross(gross, bp)
 }
 
 /// Cena brutto z netto. Odwrotność [`vat_from_gross`] z dokładnością do grosza
 /// zaokrąglenia — i to jest kierunek, w którym liczy sklep (`K-7`).
+/// Arytmetyka w `economy::kernel::tax::add_to_net`.
 #[must_use]
 pub fn vat_add_to_net(net: Money, bp: u32) -> Money {
-    if bp == 0 {
-        return net;
-    }
-    Money(net.get() + net.mul_ratio(i64::from(bp), 10_000).get())
+    tax::add_to_net(net, bp)
 }
 
 /// CIT od dochodu rocznego, ze stratą z lat ubiegłych rozliczaną w przód.
@@ -51,10 +49,7 @@ pub fn cit_due(taxable_profit: Money, loss_carry: Money, bp: u32) -> (Money, Mon
     }
     let odliczone = strata.min(zysk);
     let podstawa = Money(zysk - odliczone);
-    (
-        podstawa.mul_ratio(i64::from(bp), 10_000),
-        Money(strata - odliczone),
-    )
+    (tax::apply(podstawa, bp), Money(strata - odliczone))
 }
 
 /// Podatek roczny ze skali progresywnej, po odjęciu kwoty wolnej.

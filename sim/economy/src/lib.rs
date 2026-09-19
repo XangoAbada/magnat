@@ -97,8 +97,9 @@ pub use data::{
     HOUSEHOLD_KIND_COUNT,
 };
 pub use kernel::{
-    annuity_payment, clamp_to_margin, ledger_post, monthly_interest, next_price, next_price_full,
-    take_cogs, throughput, wage_bid, LedgerError, PriceBreakdown, PriceInput, StockValue, BP,
+    annuity_payment, apply_bp, clamp_to_margin, cost_from_price, interest_accrual, ledger_post,
+    monthly_interest, next_price, next_price_full, take_cogs, throughput, wage_bid, LedgerError,
+    PriceBreakdown, PriceInput, StockValue, BP,
 };
 pub use labor::{
     register_labor, Application, JobIndex, JobOffer, JobOfferId, LaborDay, LaborHandle,

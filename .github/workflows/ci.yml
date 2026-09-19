@@ -236,6 +236,21 @@ jobs:
         run: |
           cargo test --release -p magnat-ui --test dirty --test i18n
           cargo test --release -p magnat-game --test screens
+      - name: M10a — most makro ↔ mezo i historia „na sucho" (WP10.1, WP10.3)
+        # Pięć kryteriów naraz: rozwinięcie domyka się z zdjęciem co do grosza,
+        # dwa rozwinięcia dają identyczny świat, historia zmienia świat nie ruszając
+        # sumy pieniądza, ta sama historia dwa razy daje ten sam świat, a krok
+        # zmienny oszczędza kroki bez zmiany sumy.
+        run: cargo test --release -p magnat-headless --test macro_lod -- --include-ignored
+      - name: M10a — artefakt A fazy M10: raport historii „na sucho"
+        # Przebieg **wypisuje** bramki Etapu 10 i kronikę, a kod wyjścia pilnuje
+        # jedynej rzeczy, która jest tu niepodlegająca negocjacji: sumy pieniądza.
+        # Czerwone bramki są stanem świata i mają być widoczne w logu, a nie ukryte
+        # za zielonym krokiem — dlatego raport idzie do artefaktu.
+        shell: bash
+        run: |
+          cargo run --release -q -p magnat-headless -- dry-run --seed 7 --size 4km             --years 30 --out dryrun.hash | tee raport-dryrun.txt
+          cargo run --release -q -p magnat-headless -- dry-run --seed 7 --size 4km             --years 30 --expect dryrun.hash > /dev/null
       - name: M4 — dowód spójności mikro ↔ mezo (A1–A5, M4d/WP9)
         run: cargo test --release -p magnat-world --test lod -- --include-ignored
       - name: M11 — render, dźwięk i poziom detalu nie zmieniają symulacji (§7.1)
@@ -269,7 +284,7 @@ jobs:
         # cel z `bench = true` jako benchmark, więc `--workspace` próbuje uruchomić także
         # biblioteki i binarki, które nie znają flag criteriona.
         run: |
-          cargo bench -p magnat-core -p magnat-ecs -p magnat-io                       -p magnat-voxel -p magnat-world -p magnat-nav -p magnat-spatial                       -p magnat-traffic -p magnat-economy -p magnat-firms -p magnat-ui --benches                       -- --warm-up-time 1 --measurement-time 3
+          cargo bench -p magnat-core -p magnat-ecs -p magnat-io                       -p magnat-voxel -p magnat-world -p magnat-nav -p magnat-spatial                       -p magnat-traffic -p magnat-economy -p magnat-firms -p magnat-ui                       -p magnat-macro --benches                       -- --warm-up-time 1 --measurement-time 3
       - name: porównanie z linią bazową (10 % ostrzeżenie, 25 % błąd — D-8)
         run: python3 scripts/bench_guard.py benches/baseline.json
 
@@ -290,6 +305,20 @@ jobs:
         run: python3 scripts/struct_guard.py --self-test
       - name: cztery metryki na całym repozytorium
         run: python3 scripts/struct_guard.py --all
+
+  macro-kernel:
+    name: sim/macro woła jądro, nie liczy sam (M10a/WP10.2)
+    runs-on: ubuntu-latest
+    # Reguła „`sim/macro` nie zawiera logiki ekonomicznej" (M10a §5.1, `K-50`) jest
+    # jedyną obroną przed ryzykiem R1 fazy M10: dwoma modelami gospodarki, które
+    # rozjeżdżają się po trzech sprintach i których rozjazdu nie widać w żadnym
+    # teście, bo oba są zielone osobno. Reguła w dokumencie nie broni się sama.
+    steps:
+      - uses: actions/checkout@v4
+      - name: test wykrywacza
+        run: python3 scripts/macro_kernel_guard.py --self-test
+      - name: bramka
+        run: python3 scripts/macro_kernel_guard.py
 
   balansator:
     name: bramki balansatora (G1–G9, M5e/WP13)

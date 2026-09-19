@@ -28,6 +28,14 @@ use super::MacroParams;
 const MINUTES_PER_DAY: u32 = 1_440;
 
 pub fn phase(st: &mut MacroState, p: &MacroParams) {
+    // Szok podażowy dławi wsad wszystkim zakładom naraz — to jest cała treść
+    // wstrząsu w skali miasta (faza 8). Punkt bazowy schodzi tu na procent, bo
+    // `throughput` liczy dławienie w procentach: to jest zmiana jednostki, a nie
+    // stosowanie stawki do kwoty.
+    let dlawienie = u8::try_from((100 + st.supply_shift_bp() / 100).clamp(0, 100)).unwrap_or(100);
+    // Czas trwania szarży rośnie z długością kroku — `throughput` liczy przerób
+    // z minut, więc krok sześciodobowy to sześć razy więcej minut pracy.
+    let minut = MINUTES_PER_DAY.saturating_mul(u32::from(p.days_per_step.max(1)));
     for f in &mut st.firms {
         let etaty = (f.capacity_daily.get() / FULL_TIME).max(0);
         if etaty == 0 || f.price.is_empty() {
@@ -48,8 +56,8 @@ pub fn phase(st: &mut MacroState, p: &MacroParams) {
 
         let zdolnosc = kernel::throughput(
             Mass(p.nominal_per_slot_hour.saturating_mul(etaty)),
-            MINUTES_PER_DAY,
-            100,
+            minut,
+            dlawienie,
             labor_pct,
         )
         .0;

@@ -5,12 +5,13 @@
 //! zrobić na klonie, bez dotykania świata i bez ryzyka, że prognoza coś w nim
 //! zmieni.
 //!
-//! # Czego tu nie ma
+//! # Druga strona mostu
 //!
-//! `lower()` — rozwinięcia makra z powrotem do świata. M7 nigdy nie rozwija
-//! prognozy: czyta agregaty i tyle (M10 §6, tabela podzbioru). Gdyby kiedyś
-//! zaczął, zdjęcie musiałoby nieść rozkłady, a nie same sumy — i stąd biorą się
-//! `wealth_q` i `citizens` w komórce, które M7 wypełnia, a nie czyta.
+//! [`crate::lower`] nanosi stan makro z powrotem na świat — powstało w M10a i to
+//! ono jest pierwszym czytelnikiem `wealth_q` oraz `citizens`, które M7f wypełniał
+//! bez czytelnika. „Co jeśli" nadal niczego nie rozwija: czyta agregaty i tyle
+//! (M10 §6, tabela podzbioru); rozwinięcia potrzebuje historia „na sucho"
+//! i tryb 50×.
 
 use std::collections::BTreeMap;
 
@@ -36,7 +37,8 @@ const FLAT_COMMUTE_MIN: u16 = 22;
 
 /// Marża odniesienia, z której zdjęcie odtwarza koszt własny półki, w bp.
 /// Środek widełek z `data/economy/shop.ron` — patrz `MacroFirm::cost`.
-const REF_MARGIN_BP: i64 = 1_800;
+/// macro-guard: kalibracja — marża odniesienia, stroi ją balansator
+const REF_MARGIN_BP: i32 = 1_800;
 
 /// Zdjęcie świata. Woła się **raz na kwartał** i wynik jest współdzielony przez
 /// wszystkie firmy klas S2/S3 (§5.10, budżet) — bez tego byłoby 10 tys. zdjęć.
@@ -246,6 +248,10 @@ fn rozlej_gospodarstwa(st: &mut MacroState, world: &World, ludzie: &[Osoba]) {
             czlonkowie.entry(o.household).or_default().push(i);
         }
     }
+    // Majątek na głowę, komórka po komórce — materiał na kwantyle. Zbierany przy
+    // okazji rozlewania, bo drugi przebieg po gospodarstwach kosztowałby tyle samo,
+    // a dawałby drugie miejsce, w którym wolno pomylić przynależność do komórki.
+    let mut majatki: Vec<Vec<i64>> = vec![Vec::new(); st.cells.len()];
     for e in pop.households() {
         let Some(h) = world.get::<Household>(*e) else {
             continue;
@@ -255,6 +261,10 @@ fn rozlej_gospodarstwa(st: &mut MacroState, world: &World, ludzie: &[Osoba]) {
             continue;
         }
         cele.sort_unstable();
+        let na_glowe = (h.cash.get() + h.bank.get() + h.savings.get()) / cele.len() as i64;
+        for i in &cele {
+            majatki[*i].push(na_glowe);
+        }
         podziel(&mut st.cells, &cele, h.cash.get(), |c, v| {
             c.cash = Money(c.cash.get().saturating_add(v));
         });
@@ -269,14 +279,34 @@ fn rozlej_gospodarstwa(st: &mut MacroState, world: &World, ludzie: &[Osoba]) {
         });
     }
 
-    // Kwartyle majątku komórki — wypełnia je `lower()` (M10), a M7 zapisuje tyle,
-    // ile zna z sumy: min i max są dziś równe średniej. To jest jawna zaślepka,
-    // a nie pomyłka: bez rozwijania z powrotem do świata rozkład nie jest do niczego
-    // potrzebny, a udawanie go liczbami byłoby fałszywą precyzją.
-    for c in &mut st.cells {
-        let na_glowe = c.cash.get() / i64::from(c.population().max(1));
-        c.wealth_q = [Money(na_glowe); 4];
+    // Kwartyle majątku komórki. Do M7f stała tu jawna zaślepka — cztery razy ta
+    // sama średnia — bo nikt rozkładu nie czytał. Od M10a czyta go `lower()`
+    // i zaślepka przestała być nieszkodliwa: profil płaski rozdałby całej komórce
+    // po równo, więc świat po rozwinięciu byłby egalitarny co do grosza, a bramka
+    // Etapu 10 na współczynnik Giniego mierzyłaby wtedy własną zaślepkę.
+    for (i, c) in st.cells.iter_mut().enumerate() {
+        c.wealth_q = kwantyle(&mut majatki[i]);
     }
+}
+
+/// Cztery punkty rozkładu majątku na głowę: min, q1, q3, max.
+///
+/// Sortowanie w miejscu, bez interpolacji między sąsiadami — kwantyl jest tu
+/// **elementem próby**, a nie jej modelem. Komórka pusta daje cztery zera i to
+/// jest poprawna odpowiedź: rozkład zbioru pustego nie ma kształtu.
+fn kwantyle(majatki: &mut [i64]) -> [Money; 4] {
+    if majatki.is_empty() {
+        return [Money::ZERO; 4];
+    }
+    majatki.sort_unstable();
+    let n = majatki.len();
+    let idx = |licznik: usize, mianownik: usize| majatki[(n - 1) * licznik / mianownik];
+    [
+        Money(majatki[0]),
+        Money(idx(1, 4)),
+        Money(idx(3, 4)),
+        Money(majatki[n - 1]),
+    ]
 }
 
 /// Dzieli kwotę równo między komórki, resztę oddając pierwszej w kolejności.
@@ -324,7 +354,7 @@ fn zbuduj_firmy(st: &mut MacroState, world: &World) {
             // koszt pochodzi z faktycznie zapłaconej ceny.
             cost.set(
                 s.good,
-                Money(s.price_net.get() * 10_000 / (10_000 + REF_MARGIN_BP)),
+                magnat_economy::kernel::cost_from_price(s.price_net, REF_MARGIN_BP),
             );
         }
         let mut employees = 0u32;
@@ -391,10 +421,17 @@ fn zbuduj_firmy(st: &mut MacroState, world: &World) {
 /// z punktu widzenia kroku makro jest poza modelem.
 fn zbuduj_ksiege(st: &mut MacroState, world: &World) {
     let mut l = MacroLedger::default();
+    // **Gotówka i depozyt razem.** Do M7f konto brało samą gotówkę, bo stan
+    // budowany ręcznie w teście trzymał wszystko w gotówce i różnicy nie było
+    // widać. Na prawdziwym świecie gospodarstwo trzyma pieniądz na rachunku
+    // (`Household.bank`), a `cash` bywa zerem — konto liczone z samej gotówki
+    // startowało wtedy od zera, komórka nie miała za co kupować i cały rynek dóbr
+    // stał. Zapasy nie schodziły z półek, więc bramki 1 i 2 Etapu 10 nie miały
+    // czego zmierzyć: model **wyglądał** na działający, bo nic w nim nie pękało.
     let gospodarstwa: i64 = st
         .cells
         .iter()
-        .map(|c| c.cash.get())
+        .map(|c| c.cash.get().saturating_add(c.deposits.get()))
         .fold(0i64, i64::saturating_add);
     let firmy: i64 = st
         .firms

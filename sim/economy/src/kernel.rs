@@ -371,6 +371,121 @@ pub fn monthly_interest(outstanding: Money, rate_bp_month: i32) -> Money {
     outstanding.mul_ratio(i64::from(rate_bp_month), BP)
 }
 
+/// Zastosowanie stawki w punktach bazowych do kwoty: `v · bp / 10 000`,
+/// połówki od zera (00 §2).
+///
+/// **Istnieje po to, żeby skala punktu bazowego miała jedno miejsce.** Dzielenie
+/// przez 10 000 rozsiane po crate'ach to tyle samo miejsc, w których wolno pomylić
+/// zaokrąglenie — a różnica jednego grosza na stawce widać dopiero jako rozjazd
+/// wpływów budżetu po miesiącu. Bramka `scripts/macro_kernel_guard.py` egzekwuje
+/// to w `sim/macro` wprost: literał `10_000` w działaniu jest tam błędem.
+///
+/// Stawka może być **ujemna** (przecena, korekta w dół) — stąd `i32`, a nie `u32`.
+#[must_use]
+pub fn apply_bp(v: Money, bp: i32) -> Money {
+    if bp == 0 || v.get() == 0 {
+        return Money::ZERO;
+    }
+    Money(div_round_half_away(
+        i128::from(v.get()) * i128::from(bp),
+        i128::from(BP),
+    ))
+}
+
+/// Koszt własny odtworzony z ceny netto i marży: odwrotność bazy z [`next_price_full`]
+/// (`base = cost · (1 + marża)`).
+///
+/// Potrzebna tam, gdzie znana jest cena, a nie koszt — model makro odtwarza tak
+/// koszt półki przy `lift()`, bo zdjęcie widzi cenę na półce, a księga zakładu
+/// zostaje w mezo. Reguła (którą stronę równania się odwraca) jest tutaj; liczba
+/// (jaka marża) jest kalibracją wołającego.
+///
+/// Marża ≤ −10 000 bp znaczyłaby cenę ujemną albo zerową — zwracamy wtedy cenę,
+/// czyli „koszt równy cenie, marża zero", zamiast dzielić przez zero.
+#[must_use]
+pub fn cost_from_price(price_net: Money, margin_bp: i32) -> Money {
+    let m = i128::from(BP) + i128::from(margin_bp);
+    if m <= 0 {
+        return price_net;
+    }
+    Money(div_round_half_away(
+        i128::from(price_net.get()) * i128::from(BP),
+        m,
+    ))
+}
+
+/// Odsetki naliczone za `days` dób od salda, przy stopie **miesięcznej** w bp.
+///
+/// Miesiąc odsetkowy ma zawsze 30 dób (`K-1`), więc dobowa część to `1/30` — i to
+/// jest cała treść tej funkcji. Istnieje osobno od [`monthly_interest`], bo model
+/// makro nalicza **co dobę**, a `monthly_interest(saldo) / 30` obcina grosze
+/// w jedną stronę: przy 30 naliczeniach w miesiącu odsetki wychodzą systematycznie
+/// niższe od miesięcznych, a błąd nie znosi się, tylko kumuluje (ten sam rachunek,
+/// który wypchnął paliwo do mikrolitrów w `K-25`). Tutaj dzielenie jest **jedno**,
+/// na końcu, i zaokrągla połówki od zera jak reszta pieniądza (00 §2).
+#[must_use]
+pub fn interest_accrual(outstanding: Money, rate_bp_month: i32, days: u16) -> Money {
+    if outstanding.get() <= 0 || rate_bp_month <= 0 || days == 0 {
+        return Money::ZERO;
+    }
+    let licznik = i128::from(outstanding.get()) * i128::from(rate_bp_month) * i128::from(days);
+    Money(div_round_half_away(
+        licznik,
+        i128::from(BP) * i128::from(DAYS_PER_MONTH),
+    ))
+}
+
+/// Doba w miesiącu odsetkowym (`K-1`: 12 × 30, bez wyjątków lutowych).
+pub const DAYS_PER_MONTH: i64 = 30;
+
+// ── daniny (§5.1 M8a, kontrakt `K-57`) ───────────────────────────────────────────
+
+/// Arytmetyka daniny — **jedna dla miasta i dla modelu makro**.
+///
+/// Powód, dla którego te trzy linie mieszkają w jądrze, a nie w `sim/city`: krok
+/// makro nalicza podatek dochodowy firmy tym samym wzorem, którym nalicza go miasto,
+/// a `sim/city` stoi **nad** `sim/macro` w grafie i makro go nie widzi. Dwie kopie
+/// mnożenia przez stawkę rozjechałyby się przy pierwszej zmianie zaokrąglenia —
+/// i rozjazd byłby widoczny dopiero jako różnica wpływów budżetu między przebiegiem
+/// mezo a makro, czyli w miejscu odległym od przyczyny (`K-50`).
+///
+/// Czego tu nie ma i nie będzie: **stawek**. Stawka jest polityką miasta
+/// (`data/city/tax.ron`, `K-56`), a jądro nie zna danych — dostaje liczby
+/// i oddaje liczbę.
+pub mod tax {
+    use super::{Money, BP};
+
+    /// Danina liczona **od podstawy netto**: CIT, PIT, podatek od nieruchomości.
+    #[must_use]
+    pub fn apply(base: Money, rate_bp: u32) -> Money {
+        if base.get() <= 0 {
+            return Money::ZERO;
+        }
+        super::apply_bp(base, i32::try_from(rate_bp).unwrap_or(i32::MAX))
+    }
+
+    /// Danina **wyłuskana z kwoty brutto**: VAT (`K-7` — cena detaliczna jest tym,
+    /// co płaci kupujący). Mianownik jest większy od licznika, więc wynik nigdy nie
+    /// przekroczy kwoty — `Books::transfer` odrzuciłby `tax > amount`.
+    #[must_use]
+    pub fn from_gross(gross: Money, rate_bp: u32) -> Money {
+        if rate_bp == 0 || gross.get() == 0 {
+            return Money::ZERO;
+        }
+        gross.mul_ratio(i64::from(rate_bp), BP + i64::from(rate_bp))
+    }
+
+    /// Kwota brutto z netto — odwrotność [`from_gross`] z dokładnością do grosza
+    /// zaokrąglenia, i to jest kierunek, w którym liczy sklep (`K-7`).
+    #[must_use]
+    pub fn add_to_net(net: Money, rate_bp: u32) -> Money {
+        if rate_bp == 0 {
+            return net;
+        }
+        Money(net.get() + apply(net, rate_bp).get())
+    }
+}
+
 /// Dzielenie `i128` z zaokrągleniem połówek od zera — ta sama konwencja co
 /// `Money::div_round_half_up`, tylko w szerszym typie.
 fn div_round_half_away(a: i128, b: i128) -> i64 {
@@ -489,6 +604,60 @@ mod tests {
         assert_eq!(acc[LedgerAccount::Revenue.as_index()], Money(-100));
         assert_eq!(acc.iter().map(|m| m.get()).sum::<i64>(), 0);
     }
+
+    // ── M10a/WP10.2: domknięcie jądra ────────────────────────────────────────
+
+    #[test]
+    fn odsetki_dobowe_sumuja_sie_do_miesiecznych() {
+        // Trzydzieści naliczeń po jednej dobie ma dać tyle samo, co jedno
+        // naliczenie miesięczne — z dokładnością do grosza zaokrąglenia.
+        // To jest cały powód, dla którego `interest_accrual` istnieje obok
+        // `monthly_interest`: `monthly_interest(saldo) / 30` gubi tu 9 groszy
+        // na każdym miesiącu, zawsze w tę samą stronę.
+        let saldo = Money(1_234_567);
+        let miesiac = monthly_interest(saldo, 83);
+        let doby: i64 = (0..30).map(|_| interest_accrual(saldo, 83, 1).get()).sum();
+        assert!(
+            (doby - miesiac.get()).abs() <= 30,
+            "doby={doby} miesiac={}",
+            miesiac.get()
+        );
+        // Jedno naliczenie za 30 dób jest równe miesięcznemu co do grosza.
+        assert_eq!(interest_accrual(saldo, 83, 30), miesiac);
+    }
+
+    #[test]
+    fn odsetki_od_zera_i_stopy_zerowej_sa_zerem() {
+        assert_eq!(interest_accrual(Money(0), 100, 30), Money::ZERO);
+        assert_eq!(interest_accrual(Money(-500), 100, 30), Money::ZERO);
+        assert_eq!(interest_accrual(Money(1_000), 0, 30), Money::ZERO);
+        assert_eq!(interest_accrual(Money(1_000), 100, 0), Money::ZERO);
+    }
+
+    #[test]
+    fn danina_z_brutto_i_z_netto_opisuja_te_sama_transakcje() {
+        // `add_to_net` i `from_gross` są dwiema stronami jednej kwoty: cena netto
+        // podniesiona o stawkę, a potem wyłuskana z brutto, daje tę samą daninę
+        // (z dokładnością do grosza zaokrąglenia).
+        for netto in [100i64, 999, 12_345, 1_000_000] {
+            let brutto = tax::add_to_net(Money(netto), 2_300);
+            let danina = tax::from_gross(brutto, 2_300);
+            assert!(
+                (brutto.get() - netto - danina.get()).abs() <= 1,
+                "netto={netto} brutto={} danina={}",
+                brutto.get(),
+                danina.get()
+            );
+            assert!(danina.get() < brutto.get(), "danina nie może zjeść kwoty");
+        }
+    }
+
+    #[test]
+    fn stawka_zerowa_nie_rusza_kwoty() {
+        assert_eq!(tax::apply(Money(10_000), 0), Money::ZERO);
+        assert_eq!(tax::from_gross(Money(10_000), 0), Money::ZERO);
+        assert_eq!(tax::add_to_net(Money(10_000), 0), Money(10_000));
+    }
 }
 
 // ── użyteczność zakupu (§6.4, `D20`) ─────────────────────────────────────────────
@@ -538,9 +707,18 @@ pub fn purchase_score(i: &ScoreInput, w: &UtilityWeights, noise: f64) -> f64 {
 }
 
 /// `f(x) = -ln(1 + x)` dla `x >= 0` (§5.4) — wspólny człon ceny i odległości.
+///
+/// Zero ma ścieżkę na skróty, bo `ln(1) = 0` i to nie jest przybliżenie, tylko
+/// tożsamość. Opłaca się: człon odległości jest zerem przy **każdym** wywołaniu
+/// z modelu makro (dojazd w obrębie dzielnicy nie różnicuje sklepów), a to jest
+/// kilkaset tysięcy wywołań na krok. Wynik się nie zmienia, więc złoty odcisk
+/// `det_math` i hashe stanu zostają bez zmian.
 #[must_use]
 pub fn cost_term(x: f64) -> f64 {
-    -magnat_core::det_math::ln1p(x.max(0.0))
+    if x <= 0.0 {
+        return 0.0;
+    }
+    -magnat_core::det_math::ln1p(x)
 }
 
 /// Ćwiartka skali 0..100 — tier statusu i jakości (0..4).

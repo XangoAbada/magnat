@@ -29,9 +29,16 @@ smallvec = { workspace = true }
 
 [dev-dependencies]
 magnat-io = { workspace = true }
+# Testy własnościowe rozwinięcia (WP10.1): tysiąc losowych komórek, tolerancja zero.
+proptest = { workspace = true }
+criterion = { workspace = true }
 # Test modelu buduje `MacroState` ręcznie, więc potrzebuje `SmallVec` tak samo
 # jak sam model — pole `suppliers` jest jego częścią, nie ozdobą.
 smallvec = { workspace = true }
+
+[[bench]]
+name = "macro_bench"
+harness = false
 
 [lints]
 workspace = true

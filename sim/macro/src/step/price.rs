@@ -13,6 +13,22 @@ use crate::state::MacroState;
 use super::MacroParams;
 
 pub fn phase(st: &mut MacroState, p: &MacroParams) {
+    // Przecena nie wypada codziennie, i to jest zbliżenie do mezo, a nie skrót:
+    // `data/economy/shop.ron` daje każdej firmie czujność 1–7 dób, a sklep patrzy
+    // na ceny konkurencji z takim właśnie opóźnieniem (M5c). Model makro nie ma
+    // osobowości firm, więc bierze **jedną kadencję dla wszystkich** — środek
+    // tamtego przedziału. Przecena codzienna, którą M7f tu zostawił, była w istocie
+    // modelem agresywniejszym od mezo i różnicę widać było jako szybszą zbieżność
+    // cen w „co jeśli" niż w przebiegu, który ten „co jeśli" przewidywał.
+    if st.day > 0
+        && !super::przekroczono(
+            st.day,
+            u32::from(p.days_per_step.max(1)),
+            u32::from(p.reprice_every_days.max(1)),
+        )
+    {
+        return;
+    }
     // Mediana ceny w dzielnicy per towar — obraz konkurencji. Liczona przed
     // przeceną, bo wszyscy patrzą na **wczorajsze** ceny (w mezo robi to tablica
     // publiczna z opóźnieniem 1–7 dób).

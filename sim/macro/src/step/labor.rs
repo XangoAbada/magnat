@@ -6,6 +6,21 @@
 //! do dzielnicy jest jedyną rzeczą, która w ogóle odróżnia dzielnicę od dzielnicy.
 //! Kiedy M4 wypełni macierz, pula rozszerzy się o dzielnice w zasięgu dojazdu —
 //! i to jest cała zmiana, jakiej to będzie wymagało.
+//!
+//! # Co ten zakaz kosztuje, zmierzone w M10a
+//!
+//! Miasto ma dzielnice przemysłowe bez mieszkań i mieszkaniowe bez zakładów, więc
+//! przy rekrutacji zamkniętej w granicach dzielnicy **jedna trzecia firm nie dostaje
+//! ani jednego pracownika przez trzydzieści lat** historii „na sucho". Te firmy nic
+//! nie produkują, rynek zjada zapas z Etapu 7 i bramka 1 Etapu 10 (nierównowaga)
+//! wychodzi 1000 ‰.
+//!
+//! Otwarcie puli na całe miasto **zostało spróbowane i cofnięte**: bezrobocie schodzi
+//! wtedy do zera, firmy o niższym `FirmId` zabierają całą pulę, a odsetek firm bez
+//! obsady rośnie z 291 ‰ do 342 ‰. Problemem nie jest granica dzielnicy, tylko
+//! **brak kosztu dojazdu**: bez niego rekrutacja jest albo zakazana, albo darmowa,
+//! a żadne z tych dwojga nie jest rynkiem pracy. Rozstrzyga to wypełnienie macierzy
+//! przez M4 — wtedy „najpierw swoi" stanie się preferencją kosztową, a nie zakazem.
 
 use magnat_core::Money;
 use magnat_economy::kernel;
@@ -64,10 +79,12 @@ pub fn phase(st: &mut MacroState, p: &MacroParams) {
                 &p.wage,
             );
             let cel = bid.wage.get();
-            let cap = stawka.get() * WAGE_STEP_CAP_BP / 10_000;
+            let cap = kernel::apply_bp(stawka, WAGE_STEP_CAP_BP).get();
             let nowa = cel.min(stawka.get().saturating_add(cap.max(1)));
 
-            let mozliwe = u32::from(p.hire_speed_permille) * etaty / 1_000;
+            let mozliwe =
+                u32::from(p.hire_speed_permille) * u32::from(p.days_per_step.max(1)) * etaty
+                    / 1_000;
             let chetni = wakaty.min(mozliwe.max(1)).min(pula[d]);
             if chetni > 0 {
                 pula[d] -= chetni;

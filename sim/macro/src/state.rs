@@ -221,6 +221,56 @@ pub struct MacroState {
     pub grain: ClassGrain,
     /// Liczba ról w `labor`/`skill_sum` każdej komórki.
     pub roles: usize,
+    /// Wstrząs w skali miasta, o ile akurat trwa (faza 8, M10a).
+    ///
+    /// **Jeden, nie lista** — uzasadnienie w `step::events`: dwa wstrząsy naraz
+    /// wymagałyby składania mnożników popytu, czyli modelu cyklu koniunkturalnego,
+    /// a nie zdarzenia.
+    pub shock: Option<MacroShock>,
+}
+
+/// Rodzaj wstrząsu w skali miasta. Trzy warianty, bo trzy mają sens w agregacie
+/// dzielnica × klasa; kolejność jest kontraktem, bo indeksuje klucz tekstu
+/// we wpisie kronikarskim.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ShockKind {
+    /// Popyt gospodarstw spada.
+    Recession,
+    /// Popyt gospodarstw rośnie.
+    Boom,
+    /// Przerób zakładów spada — wsad drożeje albo go nie ma.
+    SupplyShock,
+}
+
+impl ShockKind {
+    #[must_use]
+    pub const fn as_index(self) -> usize {
+        match self {
+            ShockKind::Recession => 0,
+            ShockKind::Boom => 1,
+            ShockKind::SupplyShock => 2,
+        }
+    }
+
+    /// Klucz tekstowy do kroniki i do raportu dry-runu.
+    #[must_use]
+    pub const fn key(self) -> &'static str {
+        match self {
+            ShockKind::Recession => "recession",
+            ShockKind::Boom => "boom",
+            ShockKind::SupplyShock => "supply_shock",
+        }
+    }
+}
+
+/// Trwający wstrząs: co, jak mocno i do której doby.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct MacroShock {
+    pub kind: ShockKind,
+    /// Korekta w punktach bazowych — ujemna dla recesji i szoku podażowego.
+    pub magnitude_bp: i32,
+    pub started_day: u32,
+    pub ends_day: u32,
 }
 
 impl MacroState {
@@ -236,6 +286,26 @@ impl MacroState {
             ledger: MacroLedger::default(),
             grain,
             roles,
+            shock: None,
+        }
+    }
+
+    /// Korekta popytu z trwającego wstrząsu, w punktach bazowych. Zero, gdy nic
+    /// się nie dzieje — a wtedy faza 4 liczy dokładnie to, co liczyła przed M10a.
+    #[must_use]
+    pub fn demand_shift_bp(&self) -> i32 {
+        match self.shock {
+            Some(s) if s.kind != ShockKind::SupplyShock => s.magnitude_bp,
+            _ => 0,
+        }
+    }
+
+    /// Korekta przerobu z trwającego wstrząsu, w punktach bazowych.
+    #[must_use]
+    pub fn supply_shift_bp(&self) -> i32 {
+        match self.shock {
+            Some(s) if s.kind == ShockKind::SupplyShock => s.magnitude_bp,
+            _ => 0,
         }
     }
 
@@ -323,5 +393,17 @@ impl HashState for MacroState {
         self.ledger.hash_state(h);
         h.write_u8(self.grain.classes());
         h.write_u32(self.roles as u32);
+        // Wstrząs wchodzi do hasha, bo zmienia popyt i przerób — dwa przebiegi
+        // tego samego ziarna, w których wypadł w różnych dobach, **mają** się
+        // różnić hashem, a nie tylko wynikiem.
+        match self.shock {
+            None => h.write_u8(0),
+            Some(s) => {
+                h.write_u8(1 + s.kind.as_index() as u8);
+                h.write_u32(s.magnitude_bp as u32);
+                h.write_u32(s.started_day);
+                h.write_u32(s.ends_day);
+            }
+        }
     }
 }
