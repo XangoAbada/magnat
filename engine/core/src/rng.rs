@@ -290,8 +290,27 @@ pub enum StreamId {
     /// z rozmysłu (§5.4): postęp bez wyniku jest dla gracza nieodróżnialny od błędu
     /// programu, a jedyne, czego się z niego dowiaduje, to że nie warto patrzeć.
     RnDBreakthrough = 285,
-    // 286–291 zostaje wolne dla M10d–M10e (giełda, ubezpieczenia, kartele,
-    // związki) wg tabeli M10 §7.1.
+    /// Szum wyceny inwestora: o ile jego przekonanie o wartości firmy odchyla się
+    /// od wartości fundamentalnej (M10d §5.5). Klucz: indeks encji **inwestora**,
+    /// tick doby fixingu.
+    ///
+    /// Bez tego szumu arkusz zleceń nie ma z czego powstać: gdyby wszyscy liczyli
+    /// tę samą liczbę, nikt nie miałby powodu sprzedać temu, kto kupuje. Rozrzut
+    /// zależy od wyrafinowania inwestora — fundusz myli się mniej niż mieszkaniec.
+    InvestorNoise = 286,
+    /// Szum publikowanego wyniku firmy (M10d §5.5). Klucz: indeks encji **zakładu**,
+    /// tick doby publikacji.
+    ///
+    /// Inwestor nie zna prawdziwego zysku — zna opublikowany. To jest cała treść
+    /// zdania „ktoś wiedział wcześniej": plotka rusza przekonanie, zanim liczba
+    /// wyjdzie, a liczba, która wyjdzie, i tak nie jest dokładna.
+    EarningsNoise = 287,
+    // 288–291 zostaje wolne dla M10d–M10e wg tabeli M10 §7.1. **`PerilDraw = 288`
+    // z tamtej tabeli zostaje zarezerwowany i niezajęty**, tak samo jak
+    // `StreamId::EventHazard` w `K-63`: szkoda nie jest losowaniem, tylko funkcją
+    // siły zdarzenia i zapasu zakładu, a zdarzenie wylosował już `EventRoll`.
+    // Strumień na „realizację szkody" opisywałby mechanizm, którego ta podfaza
+    // świadomie nie ma.
     /// Losowość wewnątrz kroku makro: demografia komórki — urodzenia, zgony
     /// i migracja w fazie 1 (M10a §5.7). Klucz: indeks komórki, tick kroku.
     ///
@@ -317,8 +336,8 @@ pub enum StreamId {
     /// Zdarzenia w historii „na sucho" (M10a §5.7, faza 8). Klucz: indeks komórki
     /// albo firmy dotkniętej zdarzeniem, tick losowania.
     DryRunEvent = 295,
-    // 285–291 i 296–299 zostaje wolne jako reszta bloku M10 (`K-4`): R&D, giełda,
-    // ubezpieczenia, kartele i związki biorą numery w M10c–M10e, wg tabeli M10 §7.1.
+    // Stan bloku M10 (`K-4`) po M10d: zajęte 280–287 i 292–295. **Wolne: 288–291
+    // i 296–299** — biorą je kartele i związki w M10e, wg tabeli M10 §7.1.
     // `MacroSeedMemory = 294` przestał być zarezerwowany i niezajęty: zasiew pamięci
     // marek po `lower()` (decyzja `D7` fazy M10) wykonuje M10b.
 

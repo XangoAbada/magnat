@@ -3,7 +3,7 @@ Sklep spożywczy nr 12 (firma 3)
   śledzenie: pełne, ze zdarzeniami
   Rachunek wyników od: Rok 0, 1 lutego, środa
   przychód 12845.00 zł · koszt własny 9312.00 zł · marża brutto 3533.00 zł
-  odpisy 187.00 zł · wynik 465.00 zł
+  odpisy 187.00 zł · reklama 240.00 zł · ubezpieczenie 31.00 zł · wynik 194.00 zł
   suma bilansowa 21628.00 zł · domknięcie 0.00 zł
   przepływy: operacyjny 923.00 zł · inwestycyjny -400.00 zł · finansowy -128.00 zł · netto 395.00 zł
   wartość zapasu: 4128.00 zł

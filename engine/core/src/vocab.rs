@@ -585,14 +585,43 @@ vocab_enum! {
     /// Reguła, dla której ten enum w ogóle istnieje: **masa znikająca bez kategorii jest
     /// błędem testu, nie zaokrągleniem** (M6 §7.3 pkt 1). Kolejność wariantów jest
     /// kontraktem, bo `as_index()` indeksuje histogram strat w panelu zakładu.
+    /// **Dopisane w M10d:** `Disaster` — masa zniszczona przez zdarzenie losowe
+    /// (pożar magazynu, wichura). Na końcu, bo kolejność indeksuje histogram.
     LossKind {
         Drying, Evaporation, Spoilage, Expired, Spillage, ProcessWaste, Setup,
-        TransportDamage, Theft, Storage,
+        TransportDamage, Theft, Storage, Disaster,
     }
 }
 
 /// Liczba kategorii strat — rozmiar histogramu strat.
 pub const LOSS_KIND_COUNT: usize = LossKind::ALL.len();
+
+vocab_enum! {
+    /// Rodzaj ryzyka objętego polisą (M10d §5.5, PRD §6.5).
+    ///
+    /// Mieszka w `core`, bo jest **ładunkiem centralnego enuma**
+    /// (`DecisionReason::{PerilStruck, Underwritten, ClaimPaid}`), a ładunek nie może
+    /// pochodzić z crate'u, który od `core` zależy — ta sama reguła, która wypchnęła
+    /// tu `PriceDriver` (`K-30`). Drugi konsument znany z nazwy i numeru fazy: M8
+    /// nazywa ryzyko w definicji zdarzenia (`EventDef.peril`), M5 prowadzi polisy
+    /// i szkodowość.
+    ///
+    /// **Warianty są dwa, bo dwa mają wyzwalacz** (`K-67`): `Fire` niesie
+    /// `firm/warehouse_fire`, `Flood` — `natural/flood` dopisane w M10d. Wariant
+    /// bez własnego zdarzenia byłby ryzykiem, które nigdy nie zachodzi: przeszedłby
+    /// każdy test i wyglądał w katalogu tak samo jak działający. Mechanizm wyceny
+    /// jest bezagnostyczny wobec rodzaju, więc trzecie ryzyko dopisane razem ze
+    /// swoim zdarzeniem nie potrzebuje ani jednej linii kodu poza wariantem tutaj.
+    ///
+    /// Kolejność jest kontraktem, bo `as_index()` indeksuje tablicę szkodowości
+    /// w rejestrze ubezpieczycieli.
+    PerilKind {
+        Fire, Flood,
+    }
+}
+
+/// Liczba rodzajów ryzyka — szerokość tablicy szkodowości.
+pub const PERIL_KIND_COUNT: usize = PerilKind::ALL.len();
 
 vocab_enum! {
     /// Dlaczego linia produkcyjna nie produkuje. Właścicielem jest M6, ale słownik mieszka

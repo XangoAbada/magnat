@@ -161,40 +161,144 @@ impl Market {
             if bp == 0 {
                 continue;
             }
-            let (backroom, shelf_slot) = (m.shops[i].backroom, m.shops[i].shelf_slot);
-            let linie: Vec<GoodId> = m.shops[i].shelf.lines.iter().map(|l| l.good).collect();
-            let przed = ch.store.write_offs_total();
-            for good in linie {
-                for slot in [shelf_slot, backroom] {
-                    let jest = ch.store.shelf_state(slot, good).mass;
-                    let ile = Mass(jest.0 * i64::from(bp) / 10_000);
-                    if ile.0 <= 0 {
-                        continue;
-                    }
-                    ch.store.write_off(slot, good, ile, LossKind::Theft);
-                }
-            }
-            let odpis = Money(ch.store.write_offs_total().get() - przed.get());
+            let odpis = odpisz_zapas(
+                &mut m,
+                &mut ch,
+                i,
+                bp,
+                LossKind::Theft,
+                DecisionReason::Unspecified,
+                t,
+            );
             if odpis.get() <= 0 {
                 continue;
             }
-            let _ = ledger::post(
-                &mut m.shops[i].ledger,
-                JournalEntry::new(
-                    t,
-                    DecisionReason::Unspecified,
-                    &[
-                        (LedgerAccount::WriteOffExpense, odpis),
-                        (LedgerAccount::InventoryGoods, Money(-odpis.get())),
-                    ],
-                ),
-            );
-            m.stats.write_offs += 1;
-            m.stats.write_off_value = Money(m.stats.write_off_value.get() + odpis.get());
             zakladow += 1;
             razem = Money(razem.get() + odpis.get());
         }
         (zakladow, razem)
+    }
+
+    /// Sklepy dzielnicy, rosnąco po `SiteId`.
+    ///
+    /// Potrzebne ubezpieczeniom (M10d): zdarzenie dzielnicowe uderza w zakłady tej
+    /// dzielnicy, a rynek jest jedynym miejscem, które wie, gdzie stoi który sklep.
+    #[must_use]
+    pub fn shops_in_district(&self, district: DistrictId) -> Vec<SiteId> {
+        let m = self.lock();
+        let mut out: Vec<SiteId> = m
+            .shops
+            .iter()
+            .filter(|s| !s.closed && s.district == district.0)
+            .map(|s| s.site)
+            .collect();
+        out.sort_unstable_by_key(|s| s.0.index());
+        out
+    }
+
+    /// Dzielnica sklepu.
+    #[must_use]
+    pub fn district_of(&self, site: SiteId) -> Option<DistrictId> {
+        let m = self.lock();
+        m.by_site
+            .get(&site)
+            .map(|i| DistrictId(m.shops[*i as usize].district))
+    }
+
+    /// Szkoda majątkowa: `bp` zapasu zakładu przepada (M10d WP10.12).
+    ///
+    /// Odpis idzie tą samą drogą co kradzież ([`Market::shrinkage`]) — przez
+    /// [`magnat_supply::Store::write_off`] — więc bilans masy (00 §6) domyka się sam:
+    /// towar schodzi z `consumed` do `losses[Disaster]`, a nie znika. To jest
+    /// **pierwsze miejsce w grze, w którym zdarzenie cokolwiek niszczy**: do M10d
+    /// zdarzenie zmieniało wyłącznie parametry, a nakładka przywracała je przy
+    /// wygaśnięciu (`GD-4`).
+    ///
+    /// `ponytail:` szkoda dotyka **zapasu sklepów**, nie wyposażenia i nie magazynów
+    /// zakładów produkcyjnych. Sufit nazwany: wyposażenie siedzi w księdze zakładu
+    /// jako `FixedAssets`, a slotów magazynowych fabryki `Market` nie zna. Droga
+    /// wyjścia prowadzi przez rejestr zakładów M6, a nie przez drugą tablicę tutaj.
+    ///
+    /// Zwraca `(zakład, wartość odpisu)` dla zakładów, w których cokolwiek przepadło.
+    pub fn peril_damage(
+        &self,
+        sites: &[SiteId],
+        bp: u32,
+        reason: DecisionReason,
+        t: Tick,
+    ) -> Vec<(SiteId, Money)> {
+        if bp == 0 {
+            return Vec::new();
+        }
+        let mut m = self.lock();
+        let chain = m.chain.clone();
+        let mut ch = chain.lock();
+        let mut out = Vec::new();
+        for site in sites {
+            let Some(i) = m.by_site.get(site).copied() else {
+                continue;
+            };
+            let i = i as usize;
+            if m.shops[i].closed {
+                continue;
+            }
+            let odpis = odpisz_zapas(&mut m, &mut ch, i, bp, LossKind::Disaster, reason, t);
+            if odpis.get() > 0 {
+                out.push((*site, odpis));
+            }
+        }
+        out
+    }
+
+    /// Księguje wpływ odszkodowania w księdze zakładu.
+    ///
+    /// **Bez własnego konta przychodu i to jest decyzja**: odszkodowanie zmniejsza
+    /// [`LedgerAccount::WriteOffExpense`], bo taka jest ekonomiczna prawda o tej
+    /// operacji — strata została pokryta, a nie zarobiona. Konto przychodu
+    /// z odszkodowań kazałoby rachunkowi wyników pokazywać pożar jako dobry miesiąc.
+    pub fn post_insurance_claim(&self, site: SiteId, amount: Money, t: Tick) -> bool {
+        if amount.get() <= 0 {
+            return false;
+        }
+        let mut m = self.lock();
+        let Some(i) = m.by_site.get(&site).copied() else {
+            return false;
+        };
+        ledger::post(
+            &mut m.shops[i as usize].ledger,
+            JournalEntry::new(
+                t,
+                DecisionReason::Unspecified,
+                &[
+                    (LedgerAccount::BankCurrent, amount),
+                    (LedgerAccount::WriteOffExpense, Money(-amount.get())),
+                ],
+            ),
+        )
+        .is_ok()
+    }
+
+    /// Księguje składkę ubezpieczeniową w księdze zakładu (M10d WP10.12).
+    pub fn post_insurance_premium(&self, site: SiteId, amount: Money, t: Tick) -> bool {
+        if amount.get() <= 0 {
+            return false;
+        }
+        let mut m = self.lock();
+        let Some(i) = m.by_site.get(&site).copied() else {
+            return false;
+        };
+        ledger::post(
+            &mut m.shops[i as usize].ledger,
+            JournalEntry::new(
+                t,
+                DecisionReason::Unspecified,
+                &[
+                    (LedgerAccount::InsuranceExpense, amount),
+                    (LedgerAccount::BankCurrent, Money(-amount.get())),
+                ],
+            ),
+        )
+        .is_ok()
     }
 }
 
@@ -274,4 +378,55 @@ impl Market {
         let od = okresy.len().saturating_sub(months);
         Money(okresy[od..].iter().map(|p| p.statement.revenue.get()).sum())
     }
+}
+
+/// Odpis części zapasu sklepu — **jeden rdzeń dla kradzieży i dla szkody losowej**.
+///
+/// Dwie kopie tego ciała stały obok siebie przez jedną recenzję i różniły się
+/// wyłącznie kategorią straty; rozjechałyby się przy pierwszej poprawce, a rozjazd
+/// widać dopiero jako inną liczbę w cudzym rachunku wyników. `DRY` dotyczy wiedzy:
+/// „ile towaru schodzi z półki i jak się to księguje" jest jedną regułą, a to, **co
+/// ją wywołało**, niesie [`LossKind`] i powód.
+///
+/// Zwraca wartość odpisu; zero znaczy „nie było czego odpisać".
+fn odpisz_zapas(
+    m: &mut MarketInner,
+    ch: &mut magnat_supply::Chain,
+    i: usize,
+    bp: u32,
+    kind: LossKind,
+    reason: DecisionReason,
+    t: Tick,
+) -> Money {
+    let (backroom, shelf_slot) = (m.shops[i].backroom, m.shops[i].shelf_slot);
+    let linie: Vec<GoodId> = m.shops[i].shelf.lines.iter().map(|l| l.good).collect();
+    let przed = ch.store.write_offs_total();
+    for good in linie {
+        for slot in [shelf_slot, backroom] {
+            let jest = ch.store.shelf_state(slot, good).mass;
+            let ile = Mass(jest.0 * i64::from(bp) / 10_000);
+            if ile.0 <= 0 {
+                continue;
+            }
+            ch.store.write_off(slot, good, ile, kind);
+        }
+    }
+    let odpis = Money(ch.store.write_offs_total().get() - przed.get());
+    if odpis.get() <= 0 {
+        return Money::ZERO;
+    }
+    let _ = ledger::post(
+        &mut m.shops[i].ledger,
+        JournalEntry::new(
+            t,
+            reason,
+            &[
+                (LedgerAccount::WriteOffExpense, odpis),
+                (LedgerAccount::InventoryGoods, Money(-odpis.get())),
+            ],
+        ),
+    );
+    m.stats.write_offs += 1;
+    m.stats.write_off_value = Money(m.stats.write_off_value.get() + odpis.get());
+    odpis
 }

@@ -30,6 +30,10 @@
         (key: "design_office",   sector: Office, zones: ["office", "commercial"], min_parcel_m2: 400, m2_per_workplace: 26, wage_mult: 1.10, weight: 60, epochs: ["postwar", "transition"], consumes: [("mat_paper", 9_000)]),
         (key: "it_office",       sector: Office, zones: ["office"], min_parcel_m2: 400, m2_per_workplace: 19, wage_mult: 1.45, weight: 60, epochs: ["transition", "contemporary"], consumes: [("mat_paper", 3_000)]),
         (key: "bank_branch",     sector: Office, zones: ["office", "commercial"], min_parcel_m2: 250, m2_per_workplace: 29, wage_mult: 1.30, weight: 30, consumes: [("mat_paper", 5_000)]),
+        // Zakład ubezpieczeń (M10d). Waga niższa od banku, bo oddziałów ubezpieczyciela
+        // jest w mieście mniej niż placówek bankowych, a normatywu ludnościowego nie ma
+        // z tego samego powodu co gazeta: polisy sprzedaje się firmom, nie mieszkańcom.
+        (key: "insurance_office", sector: Office, zones: ["office", "commercial"], min_parcel_m2: 220, m2_per_workplace: 27, wage_mult: 1.22, weight: 14, consumes: [("mat_paper", 6_000)]),
         (key: "office_suite",    sector: Office, zones: ["office"], min_parcel_m2: 300, m2_per_workplace: 24, wage_mult: 1.12, weight: 90, consumes: [("mat_paper", 7_000)]),
 
         // ── media (M10b) ───────────────────────────────────────────────────────────

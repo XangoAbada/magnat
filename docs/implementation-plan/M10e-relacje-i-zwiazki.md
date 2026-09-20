@@ -157,3 +157,20 @@ w `M10c-rd-i-nowe-produkty.md`.
 |---|---|---|
 | FE-5 | **Blok `DecisionReason` M10: zajęte 800–807.** Wolne: **808–899**. `StreamId` M10: wolne **286–291** i **296–299** | M10c wziął `RnDBreakthrough = 285` i powody 804–807 |
 | FE-6 | **`StockCat` ma od M10c dziewięć wariantów**, a `Household.stock` dziewięć bajtów (`K-83`). Kolejność jest kontraktem zapisu gry i dopisywać wolno wyłącznie na końcu | Żądanie płacowe związku liczy się z budżetu gospodarstwa, a ten dzieli się na koperty indeksowane `StockCat`. Wpis, który zakłada osiem kopert, policzy o jedną za mało |
+
+---
+
+## Zmiany wpisane po M10d
+
+Zgodnie z `K-18`. Wpisane jest **tylko to, co wiadomo na pewno** po zamknięciu
+M10d. Gwiazdka = zmiana zakresu albo kryterium. Szczegóły — tabela `GD-n`
+w `M10d-gielda-przejecia-ubezpieczenia.md`.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| FE-7 ★ | **Udziału w firmie nie liczy się w akcjach, tylko w punktach bazowych `Firm.owners`** (`GD-1`, `K-85`). Kartel, franczyza i spółka celowa (`JV`) dzielą tę samą tablicę: „firma A ma 40 % w B" to `OwnerShare { owner: Owner::Firm(A), bp: 4_000 }` | Drugiej tablicy własności nie ma i nie będzie. Wpis, który zakłada `Holding` albo `total_shares`, opisuje strukturę, której nie ma — a `Firm::owners_sum_ok` pilnuje sumy 10 000 od M7a |
+| FE-8 | **`Equity::take_disclosures()` jest gotową skrzynką zdarzeń korporacyjnych.** Niesie `(firma, posiadacz jako `Subject`, bp, czy to kontrola, doba) i opróżnia się przy odbiorze | Kartel wykryty przez regulatora M8 i przejęcie to dla kroniki ta sama klasa zdarzenia. Drugi strumień o tym samym kształcie rozjechałby się z pierwszym |
+| FE-9 ★ | **Strajk ma teraz drugi nośnik obok marki: kurs.** Notowana firma, w której stanęła produkcja, publikuje gorszy wynik w dobie `(m + 1) × 30 + 45`, a przekonanie inwestorów rusza się dopiero wtedy — chyba że wcześniej pójdzie plotka | To jest mierzalna konsekwencja strajku, której M10 §1 nie obiecywało wprost, a która wychodzi za darmo z `GD-3`. Uwaga przy pisaniu testu: między strajkiem a reakcją kursu mija **półtora miesiąca gry**, więc przebieg krótszy niż 75 dób nie zobaczy niczego |
+| FE-10 | **Blok `StreamId` M10: zajęte 280–287 i 292–295. Wolne: 288–291 i 296–299.** `CartelDetection = 289`, `UnionFormation = 290`, `StrikeResolve = 291` są nadal wolne i zarezerwowane imiennie; **`PerilDraw = 288` zostaje zarezerwowany i niezajęty** (`K-85`) | M10d wziął `InvestorNoise = 286` i `EarningsNoise = 287` |
+| FE-11 | **Blok `DecisionReason` M10: zajęte 800–816. Wolne: 817–899** | M10d dołożył dziewięć powodów giełdy i ubezpieczeń |
+| FE-12 | **`Owner` ma pięć wariantów i to jest komplet dla własności.** Kartel nie jest własnością, więc nie dokłada wariantu; JV **jest** i nie potrzebuje niczego nowego — spółka celowa to firma, której właścicielami są dwie inne firmy | Ta sama reguła, którą `GD-8` zastosował do funduszy inwestycyjnych: nowy rodzaj właściciela wchodzi razem ze swoim kontem w `Books`, a nie jako wyjątek w jednym module |

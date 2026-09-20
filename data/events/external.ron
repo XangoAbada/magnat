@@ -11,7 +11,7 @@
 // naprawdę przychodzi z zewnątrz. Zostaje związek, który istnieje — inflacja
 // i koniunktura zwiększają szansę, że świat zewnętrzny zrobi coś gwałtownego.
 (
-    schema_version: 1,
+    schema_version: 2,
 
     events: [
         // Szok naftowy. Ropa jest wejściem rafinerii, więc podrożeje wszystko,

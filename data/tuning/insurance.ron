@@ -1,0 +1,62 @@
+// Kalibracja ubezpieczeń i giełdy (M10d, `K-35`).
+//
+// Jeden plik na całą podfazę, bo obie mechaniki stroi się razem: zamożność
+// gospodarstw decyduje i o tym, kto inwestuje, i o tym, kogo stać na polisę.
+//
+// **W tym pliku nie ma ani jednej liczby mówiącej, jak groźna jest dzielnica** —
+// i to jest treść kryterium WP10.12, a nie przeoczenie. Składka wychodzi z historii
+// szkód zebranej przez `Insurers`, a `prior_rate_bp` jest jedną liczbą dla całego
+// miasta, która znika, gdy tylko pojawi się jakakolwiek własna statystyka.
+//
+// Granica wobec `data/economy/`: tam siedzą liczby zmieniające kształt modelu
+// (`min_margin_bp` jest ogranicznikiem ceny), tutaj — kalibracja, którą wolno
+// przestawić bez zmiany znaczenia (`K-35`, `K-56`).
+(
+    schema_version: 1,
+
+    insurance: (
+        // Ile polisomiesięcy własnej historii waży tyle co prior miejski.
+        // 100 to plan §5.5 („K = 100 polis"); przy mniejszej wartości jedna szkoda
+        // w dzielnicy z kilkoma polisami wywracałaby składkę.
+        credibility_k: 100,
+        // Stawka wyjściowa świata bez historii: 3 % sumy ubezpieczenia rocznie.
+        prior_rate_bp: 300,
+        // Narzut na koszty i zysk zakładu: 25 %.
+        loading_bp: 2500,
+        // Opłata stała doliczana do składki miesięcznej: 20 zł.
+        policy_fee_gr: 2000,
+        // Okno obserwacji szkodowości — pięć lat gry (plan §5.5). Jest **wykładnicze**:
+        // każdy miesiąc mnoży statystykę przez 1 − 1/60, więc średni wiek obserwacji
+        // wynosi sześćdziesiąt miesięcy, a powódź sprzed dekady nie trzyma składki.
+        window_months: 60,
+        // Udział własny: 10 % sumy ubezpieczenia.
+        deductible_bp: 1000,
+        // Zdarzenie o pełnej sile niszczy 30 % zapasu zakładu. Skala wspólna dla
+        // wszystkich ryzyk: różnicę robi częstość i siła zdarzenia, nie mnożnik.
+        damage_at_full_bp: 3000,
+        // Poniżej 2 000 zł zapasu zakład się nie ubezpiecza — składka z opłatą stałą
+        // kosztowałaby więcej niż szkoda.
+        min_sum_insured_gr: 200000,
+        // Polisa roczna.
+        term_months: 12,
+    ),
+
+    equity: (
+        // Gospodarstwo inwestuje od 50 000 zł majątku…
+        investor_wealth_min_gr: 5000000,
+        // …i wykłada 20 % nadwyżki ponad ten próg.
+        investor_stake_bp: 2000,
+        // Rozrzut przekonania: mieszkaniec ±20 %, firma ±5 % (plan §5.5).
+        noise_household_bp: 2000,
+        noise_firm_bp: 500,
+        // Szum publikowanego wyniku: ±4 %.
+        earnings_noise_bp: 400,
+        // Widełki wskaźnika cena/zysk po przeliczeniu ze stopy bazowej.
+        pe_min: 5,
+        pe_max: 25,
+        // Premia w wezwaniu: 25 % (plan §5.5: zwykle 15–35 %).
+        tender_premium_bp: 2500,
+        // Dywidenda: 30 % zysku miesiąca.
+        payout_bp: 3000,
+    ),
+)

@@ -112,8 +112,14 @@ pub fn run(a: &M7MiastoArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
     )?;
     let market = f.retail.market.clone();
     eprintln!(
-        "gospodarka: {} sklepów, {} zakładów produkcyjnych; firmy: {} z {} zakładami, {} etatów, {} sieci w katalogu",
-        f.retail.shops, f.retail.plants.sites, f.firms.firms, f.firms.sites, f.slots, f.chains
+        "gospodarka: {} sklepów, {} zakładów produkcyjnych; firmy: {} z {} zakładami, {} etatów,          {} sieci w katalogu, {} zakładów ubezpieczeń",
+        f.retail.shops,
+        f.retail.plants.sites,
+        f.firms.firms,
+        f.firms.sites,
+        f.slots,
+        f.chains,
+        f.insurers
     );
     if f.firms.firms == 0 || f.retail.shops == 0 {
         eprintln!("BRAK FIRM ALBO SKLEPÓW — scenariusz nie ma czego pokazać");
@@ -130,6 +136,8 @@ pub fn run(a: &M7MiastoArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
         .add(InsolvencySystem::new())
         .add(MacroSystem::new())
         .add(magnat_media::MediaSystem::new())
+        .add(magnat_economy::insurance::system::InsuranceSystem::new())
+        .add(magnat_economy::equity::system::EquitySystem::new())
         .add(DayLoopSystem::new(&world))
         .add(ReplanCooldownSystem::new(&world))
         .add(NeedDecaySystem::new(&world))
@@ -521,6 +529,53 @@ fn raport(
             );
         }
         _ => println!("brak drzewa technologii — badania nie stoją w tym świecie"),
+    }
+
+    println!("── giełda i ubezpieczenia (M10d) ─────────────────────");
+    match (
+        world.get_resource::<magnat_economy::equity::Equity>(),
+        world.get_resource::<magnat_economy::insurance::Insurers>(),
+    ) {
+        (Some(eq), Some(ins)) => {
+            println!(
+                "notowanych firm {}, polis czynnych {}",
+                eq.listed_count(),
+                ins.cover_count()
+            );
+            for l in eq.listings().take(5) {
+                println!(
+                    "firma {} od doby {}: kurs {} gr za 0,01 % (wycena {} zł), wolumen ostatniej sesji {} bp",
+                    l.firm.0,
+                    l.since.0 / 1_440,
+                    l.last_fixing.get(),
+                    l.last_fixing.get().saturating_mul(10_000) / 100,
+                    l.last_volume_bp
+                );
+            }
+            for d in eq.disclosures().iter().rev().take(5) {
+                println!(
+                    "ujawnienie w dobie {}: firma {} — pakiet {} bp{}",
+                    d.day,
+                    d.firm.0,
+                    d.bp,
+                    if d.control { " (kontrola)" } else { "" }
+                );
+            }
+            // Szkodowość per ryzyko: to z niej bierze się składka i to ona jest
+            // jedynym śladem po tym, że zdarzenie cokolwiek zniszczyło (`GD-4`).
+            for p in magnat_core::PerilKind::ALL {
+                let m = ins.city_stats(*p);
+                println!(
+                    "ryzyko {}: polisomiesięcy {}, szkód {}, strata {} zł, suma ubezpieczenia {} zł",
+                    p.name(),
+                    m.exposures,
+                    m.claims,
+                    m.loss_total.get() / 100,
+                    m.sum_total.get() / 100
+                );
+            }
+        }
+        _ => println!("brak giełdy albo ubezpieczeń — rynek kapitałowy nie stoi w tym świecie"),
     }
 
     println!("── rynek detaliczny ──────────────────────────────────");

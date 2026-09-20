@@ -23,5 +23,28 @@
             capex: ( build: 180000000, equip_per_100m2: 11000000 ),
             fixed_cost: ( rent_per_m2: 6400, admin: 720000 ),
         ),
+        // **Dopisane w M10d.** Zakład ubezpieczeń wystawia polisy zakładom miasta
+        // i wypłaca odszkodowania; bez wpisu tutaj rejestr ubezpieczycieli byłby
+        // w każdym wygenerowanym mieście pusty, a wycena ryzyka — mechanizmem,
+        // którego nikt nigdy nie uruchomi. Ta sama luka, którą M10b zamknął
+        // trzema tytułami medialnymi.
+        //
+        // Obsada z ról, które **już są** w `data/jobs/roles.ron`: `loan_officer`
+        // ocenia ryzyko tak samo jak zdolność kredytową, a `roles.ron` ma kolejność
+        // wpisów jako kontrakt zapisu gry (`K-43`) i nie dopisuje się do niego roli,
+        // dla której istnieje odpowiednik.
+        (
+            key: "insurance_office",
+            category: Finance,
+            staffing: [
+                ( role: "loan_officer", per_10000m2: 140, min: 2 ),
+                ( role: "office_clerk", per_10000m2: 80, min: 1 ),
+                ( role: "sales_assistant", per_10000m2: 60, min: 1 ),
+                ( role: "accountant", per_10000m2: 20, min: 1 ),
+                ( role: "office_manager", per_site: 1, managerial: true ),
+            ],
+            capex: ( build: 140000000, equip_per_100m2: 7000000 ),
+            fixed_cost: ( rent_per_m2: 5200, admin: 560000 ),
+        ),
     ],
 )

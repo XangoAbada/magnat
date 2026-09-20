@@ -1383,6 +1383,117 @@ pub fn describe(c: &Catalog, l: Locale, r: DecisionReason) -> String {
                 ("sklepow", &format!("{shops}")),
             ],
         ),
+        // ── M10d: giełda, przejęcia, ubezpieczenia ───────────────────────────────
+        // Kurs jest ceną **jednego punktu bazowego** udziału, więc razy 10 000 daje
+        // wycenę całej firmy. Karta pokazuje obie liczby, bo pierwsza jest ceną,
+        // którą się płaci, a druga — jedyną, która cokolwiek znaczy dla gracza.
+        DecisionReason::StockListed { firm: _, price } => c.fmt_key(
+            l,
+            "ui.reason.StockListed",
+            &[
+                ("cena", &crate::zlotowki(price)),
+                ("wycena", &crate::zlotowki(wycena_firmy(price))),
+            ],
+        ),
+        DecisionReason::StockFixing { firm: _, price } => c.fmt_key(
+            l,
+            "ui.reason.StockFixing",
+            &[
+                ("cena", &crate::zlotowki(price)),
+                ("wycena", &crate::zlotowki(wycena_firmy(price))),
+            ],
+        ),
+        // Posiadacz jest osobą albo firmą i to rozstrzyga **klucz**, a nie wstawka —
+        // ta sama droga, którą `TechDiscovered` rozdziela patent od wiedzy w obiegu.
+        DecisionReason::StakeDisclosed { holder } => c.fmt_key(
+            l,
+            if holder.kind() == magnat_core::SubjectKind::Firm {
+                "ui.reason.StakeDisclosedFirm"
+            } else {
+                "ui.reason.StakeDisclosedPerson"
+            },
+            &[("posiadacz", &podmiot(holder))],
+        ),
+        DecisionReason::ControlAcquired { holder } => c.fmt_key(
+            l,
+            if holder.kind() == magnat_core::SubjectKind::Firm {
+                "ui.reason.ControlAcquiredFirm"
+            } else {
+                "ui.reason.ControlAcquiredPerson"
+            },
+            &[("posiadacz", &podmiot(holder))],
+        ),
+        DecisionReason::DividendPaid { firm: _, total } => c.fmt_key(
+            l,
+            "ui.reason.DividendPaid",
+            &[("kwota", &crate::zlotowki(total))],
+        ),
+        DecisionReason::SharesIssued { bp, price } => c.fmt_key(
+            l,
+            "ui.reason.SharesIssued",
+            &[
+                ("udzial", &procent_bp(i32::from(bp))),
+                ("cena", &crate::zlotowki(price)),
+            ],
+        ),
+        DecisionReason::PerilStruck {
+            peril,
+            district,
+            loss,
+        } => c.fmt_key(
+            l,
+            "ui.reason.PerilStruck",
+            &[
+                ("ryzyko", &peril_kind(c, l, peril)),
+                ("dzielnica", &district.0.to_string()),
+                ("strata", &crate::zlotowki(loss)),
+            ],
+        ),
+        DecisionReason::Underwritten {
+            peril,
+            rate_bp,
+            premium,
+        } => c.fmt_key(
+            l,
+            "ui.reason.Underwritten",
+            &[
+                ("ryzyko", &peril_kind(c, l, peril)),
+                ("stawka", &procent_bp(i32::from(rate_bp))),
+                ("skladka", &crate::zlotowki(premium)),
+            ],
+        ),
+        DecisionReason::ClaimPaid { insurer: _, paid } => c.fmt_key(
+            l,
+            "ui.reason.ClaimPaid",
+            &[("kwota", &crate::zlotowki(paid))],
+        ),
+    }
+}
+
+/// Wycena całej firmy z kursu jednego punktu bazowego.
+///
+/// Mnożenie nasycające, a nie `checked`: karta inspekcji ma pokazać liczbę, a nie
+/// zniknąć przy kursie, który i tak nie mógłby powstać z fixingu.
+fn wycena_firmy(price: Money) -> Money {
+    Money(price.get().saturating_mul(10_000))
+}
+
+/// Nazwa rodzaju ryzyka ubezpieczeniowego (M10d §5.5).
+#[must_use]
+pub fn peril_kind(c: &Catalog, l: Locale, p: magnat_core::PerilKind) -> String {
+    c.fmt_key(l, &format!("ui.peril.{}", p.name()), &[])
+}
+
+/// Posiadacz pakietu jako etykieta w karcie inspekcji.
+///
+/// `ponytail:` numer encji zamiast nazwy — ten sam sufit i ta sama droga wyjścia
+/// co przy [`marka`] i [`technologia`]: `describe` dostaje katalog tekstów
+/// i `Locale`, a nazwiska mieszkają w `sim/agents`, nazwy firm w `sim/firms`.
+/// Kartę z odnośnikiem zbuduje `game::inspect` (`K-62`), który widzi jedno i drugie.
+fn podmiot(s: magnat_core::Subject) -> String {
+    match s.entity() {
+        Some(e) => format!("#{}", e.index()),
+        None => String::new(),
     }
 }
 
@@ -2063,6 +2174,64 @@ mod tests {
                 tech: magnat_core::TechId(4),
                 shops: 23,
             },
+            // ── M10d ────────────────────────────────────────────────────────────
+            DecisionReason::StockListed {
+                firm: magnat_core::FirmId(magnat_core::Entity::new(12, std::num::NonZeroU32::MIN)),
+                price: magnat_core::Money(4_200),
+            },
+            DecisionReason::StockFixing {
+                firm: magnat_core::FirmId(magnat_core::Entity::new(12, std::num::NonZeroU32::MIN)),
+                price: magnat_core::Money(4_350),
+            },
+            // Dwa wpisy, bo posiadacz-osoba i posiadacz-firma wybierają inny klucz
+            // lokalizacji — ta sama zasada, co przy `TechDiscovered` wyżej.
+            DecisionReason::StakeDisclosed {
+                holder: magnat_core::Subject::Citizen(magnat_core::CitizenId(
+                    magnat_core::Entity::new(7, std::num::NonZeroU32::MIN),
+                )),
+            },
+            DecisionReason::StakeDisclosed {
+                holder: magnat_core::Subject::Firm(magnat_core::FirmId(magnat_core::Entity::new(
+                    9,
+                    std::num::NonZeroU32::MIN,
+                ))),
+            },
+            DecisionReason::ControlAcquired {
+                holder: magnat_core::Subject::Citizen(magnat_core::CitizenId(
+                    magnat_core::Entity::new(7, std::num::NonZeroU32::MIN),
+                )),
+            },
+            DecisionReason::ControlAcquired {
+                holder: magnat_core::Subject::Firm(magnat_core::FirmId(magnat_core::Entity::new(
+                    9,
+                    std::num::NonZeroU32::MIN,
+                ))),
+            },
+            DecisionReason::DividendPaid {
+                firm: magnat_core::FirmId(magnat_core::Entity::new(12, std::num::NonZeroU32::MIN)),
+                total: magnat_core::Money(1_250_000),
+            },
+            DecisionReason::SharesIssued {
+                bp: 1_500,
+                price: magnat_core::Money(3_900),
+            },
+            DecisionReason::PerilStruck {
+                peril: magnat_core::PerilKind::Flood,
+                district: magnat_core::DistrictId(3),
+                loss: magnat_core::Money(840_000),
+            },
+            DecisionReason::Underwritten {
+                peril: magnat_core::PerilKind::Fire,
+                rate_bp: 320,
+                premium: magnat_core::Money(26_000),
+            },
+            DecisionReason::ClaimPaid {
+                insurer: magnat_core::FirmId(magnat_core::Entity::new(
+                    5,
+                    std::num::NonZeroU32::MIN,
+                )),
+                paid: magnat_core::Money(620_000),
+            },
         ]
     }
 
@@ -2130,7 +2299,11 @@ mod tests {
         // Po M10c cztery powody R&D (804..=807) plus **jeden wpis dwukrotny**:
         // `TechDiscovered` z patentem i bez patentu to dwa różne zdania o tym samym
         // odkryciu, bo różnicę robi rok „światowy", a nie znak liczby. Razem 106.
-        assert_eq!(wszystkie().len(), 106);
+        // Po M10d dziewięć powodów giełdy i ubezpieczeń (808..=816) plus **dwa wpisy
+        // dwukrotne**: `StakeDisclosed` i `ControlAcquired` wybierają inny klucz dla
+        // posiadacza-osoby i posiadacza-firmy, bo po polsku różnią się rodzajem
+        // czasownika, a po angielsku rzeczownikiem. Razem 117.
+        assert_eq!(wszystkie().len(), 117);
     }
 
     #[test]
@@ -2190,6 +2363,9 @@ mod tests {
             }
             for k in magnat_core::TaxKind::ALL {
                 assert!(!tax_kind(&c, l, *k).is_empty());
+            }
+            for p in magnat_core::PerilKind::ALL {
+                assert!(!peril_kind(&c, l, *p).is_empty());
             }
             for s in magnat_core::SpendCategory::ALL {
                 assert!(!spend_category(&c, l, *s).is_empty());

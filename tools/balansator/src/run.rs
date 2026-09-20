@@ -454,7 +454,14 @@ fn jest_decyzja(kind: &magnat_economy::TxKind) -> bool {
         | K::AdSpend { .. }
         // Budżet laboratorium tak samo: badania są wydatkiem, którego nikt firmie
         // nie narzuca, a przestawia go kurs firmy (M10c, `K-49`).
-        | K::RndSpend { .. } => true,
+        | K::RndSpend { .. }
+        // Obrót udziałami i emisja są wyborem z tego samego powodu: nikt nie każe
+        // inwestorowi kupić pakietu ani firmie wypuścić nowych akcji, a decyduje
+        // o tym rachunek „czy ta firma jest warta więcej, niż kosztuje" (M10d).
+        | K::ShareTrade { .. }
+        | K::ShareIssue { .. }
+        // Dywidenda też: uchwala się ją co miesiąc i wolno jej nie uchwalić.
+        | K::Dividend { .. } => true,
         // Zobowiązanie: umowa, harmonogram albo warunek początkowy świata.
         K::Wage { .. }
         // Licencja jest **zobowiązaniem**, nie wyborem, i to jest różnica wobec
@@ -466,6 +473,11 @@ fn jest_decyzja(kind: &magnat_economy::TxKind) -> bool {
         | K::LoanPayment { .. }
         | K::Deposit { .. }
         | K::Withdrawal
+        // Polisa jest **umową**: składka idzie co miesiąc niezależnie od tego, czy
+        // firma nadal chce, a odszkodowanie wypłaca się z niej, a nie z decyzji
+        // ubezpieczyciela (M10d). Ta sama klasa co `LicenseFee`.
+        | K::InsurancePremium { .. }
+        | K::InsuranceClaim { .. }
         | K::Endowment => false,
     }
 }

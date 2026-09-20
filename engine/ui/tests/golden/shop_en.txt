@@ -3,7 +3,7 @@ Grocery shop no. 12 (firm 3)
   tracking: full, with events
   Income statement since: Year 0, February 1, Wednesday
   revenue 12845.00 PLN · cost of goods 9312.00 PLN · gross margin 3533.00 PLN
-  write-offs 187.00 PLN · result 465.00 PLN
+  write-offs 187.00 PLN · marketing 240.00 PLN · insurance 31.00 PLN · result 194.00 PLN
   balance total 21628.00 PLN · imbalance 0.00 PLN
   cash flow: operating 923.00 PLN · investing -400.00 PLN · financing -128.00 PLN · net 395.00 PLN
   inventory value: 4128.00 PLN

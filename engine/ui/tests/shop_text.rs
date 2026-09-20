@@ -176,6 +176,8 @@ fn migawka(tracking: LostSaleTracking, cash_complete: bool) -> ShopPanelSnapshot
                 interest: Money(4_300),
                 write_off: Money(18_700),
                 tax: Money(10_400),
+                marketing: Money(24_000),
+                insurance: Money(3_100),
             },
             balance: BalanceSheet {
                 cash: Money(240_000),

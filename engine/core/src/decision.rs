@@ -25,15 +25,16 @@
 //! 6. Wariant, którego nie da się pokazać graczowi jednym zdaniem, jest źle zaprojektowany.
 
 use crate::ids::{FirmId, SiteId};
+use crate::subject::Subject;
 use crate::time::MinuteOfDay;
 use crate::types::{BrandId, DistrictId, EventId, GoodId, JobRoleId, Money, PolicyId, TechId, Q};
 use crate::vocab::{
     AbateReason, ActionKind, AdChannelKind, AgencyKind, BankruptcyTrigger, ClaimPriority,
     CommitmentKind, DeprivationEffect, EditorialBias, EventCategory, FirmStrategy, FixedCost,
-    LeaveCause, LifeEventKind, LineStopCause, LoanKind, MigrationKind, NeedKind, PermitKind,
-    PlaceRef, PolicyKind, PriceDriver, ReactionKind, RejectCause, RejectCredit, RemedyKind,
-    ServiceKind, ShortageStageKind, SpendCategory, StockCat, TaxKind, TenderKind, TouchSource,
-    TraitId, TransportMode, Trend, UtilityKind, UtilityService, VoteDriver, WageCause,
+    LeaveCause, LifeEventKind, LineStopCause, LoanKind, MigrationKind, NeedKind, PerilKind,
+    PermitKind, PlaceRef, PolicyKind, PriceDriver, ReactionKind, RejectCause, RejectCredit,
+    RemedyKind, ServiceKind, ShortageStageKind, SpendCategory, StockCat, TaxKind, TenderKind,
+    TouchSource, TraitId, TransportMode, Trend, UtilityKind, UtilityService, VoteDriver, WageCause,
 };
 use serde::{Deserialize, Serialize};
 
@@ -813,7 +814,66 @@ pub enum DecisionReason {
         tech: TechId,
         shops: u16,
     } = 807,
-    // 808–899 zarezerwowane dla M10d–M10f (giełda, relacje, związki).
+    /// Firma weszła na giełdę (M10d WP10.10, PRD §6.5).
+    ///
+    /// `price` jest ceną odniesienia pierwszego fixingu, a nie kursem: kurs powstaje
+    /// dopiero z transakcji (PRD §6.5 — „wycena z transakcji, nigdy z formuły").
+    StockListed { firm: FirmId, price: Money } = 808,
+    /// Dobowy fixing wyznaczył kurs (M10d WP10.10).
+    ///
+    /// Cena jest **za jeden punkt bazowy udziału**, więc pomnożona przez 10 000
+    /// daje wycenę całej firmy. Wolumenu w ładunku nie ma (sufit 16 B, patrz
+    /// `StakeDisclosed`) — notowanie trzyma go u siebie.
+    StockFixing { firm: FirmId, price: Money } = 809,
+    /// Ktoś przekroczył próg 5 % w akcjonariacie i musiał to ujawnić (M10d WP10.11).
+    ///
+    /// **Firmy w ładunku nie ma i to jest decyzja, nie przeoczenie.** Powód zapisuje
+    /// się w dzienniku decyzji firmy, której akcjonariat się zmienił, więc firma
+    /// jest kontekstem — ta sama droga, którą `LicenseSigned` z M10c nazywa
+    /// licencjodawcę, a licencjobiorcę zostawia kontekstowi. Alternatywa (oba pola)
+    /// to 20 B ładunku przy suficie 16 B z zasady 5 w nagłówku modułu, a `Subject`
+    /// zjada z niego 12, bo pakiet trzyma i mieszkaniec, i firma.
+    ///
+    /// Wielkości pakietu też nie ma: próg jest treścią wariantu, a stan bieżący
+    /// odtwarza się z `Firm.owners` przy otwarciu karty — tak samo jak `K-70`
+    /// odtwarza wejścia reguły.
+    StakeDisclosed { holder: Subject } = 810,
+    /// Ktoś przekroczył 50 % i przejął kontrolę (M10d WP10.11, PRD §7.9).
+    ///
+    /// To jest druga — obok upadłości — droga wyjścia firmy z rynku (PRD §12.4):
+    /// firma nie znika, tylko zaczyna działać cechami przejmującego.
+    ControlAcquired { holder: Subject } = 811,
+    /// Wypłacono dywidendę (M10d WP10.11, PRD §7.8).
+    DividendPaid { firm: FirmId, total: Money } = 812,
+    /// Emisja nowych udziałów (M10d WP10.11, PRD §7.8).
+    ///
+    /// `bp` jest wielkością emisji **po rozwodnieniu**: tyle udziału mają nowe
+    /// akcje w firmie, która właśnie urosła. Firma jest kontekstem, jak przy
+    /// [`DecisionReason::StakeDisclosed`].
+    SharesIssued { bp: u16, price: Money } = 813,
+    /// Zdarzenie wyrządziło szkodę majątkową (M10d WP10.12, PRD §11.2).
+    ///
+    /// Pierwszy powód w tej grze, który mówi „coś przepadło": do M10d zdarzenie
+    /// zmieniało wyłącznie parametry, a nakładka przywracała je po wygaśnięciu.
+    /// Szkoda jest nieodwracalna i dlatego **nie jest efektem** (`GD-4`).
+    PerilStruck {
+        peril: PerilKind,
+        district: DistrictId,
+        loss: Money,
+    } = 814,
+    /// Ubezpieczyciel wystawił polisę (M10d WP10.12, PRD §6.5).
+    ///
+    /// `rate_bp` jest stawką roczną od sumy ubezpieczenia i to ona niesie całą
+    /// wiedzę zakładu o ryzyku — **nie ma jej w żadnym pliku danych**: wychodzi
+    /// z historii szkód w dzielnicy zmieszanej z priorem miejskim.
+    Underwritten {
+        peril: PerilKind,
+        rate_bp: u16,
+        premium: Money,
+    } = 815,
+    /// Ubezpieczyciel wypłacił odszkodowanie (M10d WP10.12).
+    ClaimPaid { insurer: FirmId, paid: Money } = 816,
+    // 817–899 zarezerwowane dla M10e–M10f (relacje, kartele, związki, kroniki).
     // ... kolejne fazy dopisują własne bloki na końcu pliku
 }
 
@@ -921,6 +981,15 @@ impl DecisionReason {
             DecisionReason::TechDiscovered { .. } => 805,
             DecisionReason::LicenseSigned { .. } => 806,
             DecisionReason::ProductLaunched { .. } => 807,
+            DecisionReason::StockListed { .. } => 808,
+            DecisionReason::StockFixing { .. } => 809,
+            DecisionReason::StakeDisclosed { .. } => 810,
+            DecisionReason::ControlAcquired { .. } => 811,
+            DecisionReason::DividendPaid { .. } => 812,
+            DecisionReason::SharesIssued { .. } => 813,
+            DecisionReason::PerilStruck { .. } => 814,
+            DecisionReason::Underwritten { .. } => 815,
+            DecisionReason::ClaimPaid { .. } => 816,
         }
     }
 }

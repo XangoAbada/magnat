@@ -13,7 +13,7 @@
 // Kierunek związku jest w obie strony i tak ma być: bezrobocie pcha miasto
 // ku protekcjonizmowi, drożyzna — ku otwarciu granicy na żywność.
 (
-    schema_version: 1,
+    schema_version: 2,
 
     events: [
         // Kontrola skarbowa (M8d WP8, PRD §10.4).

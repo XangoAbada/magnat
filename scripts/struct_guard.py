@@ -168,8 +168,8 @@ REJESTR = {
     # wyprzedzenie świata, a nie znak liczby. Plus jedna funkcja pomocnicza
     # nazywająca technologię. Przyrost trafia w regułę tej pozycji: jedno
     # rozgałęzienie plus dziewięć podstawień.
-    ("engine/ui/src/inspect/reason.rs", "fn", 1106): 37,
-    ("engine/ui/src/inspect/reason.rs", "plik", 1527): 37,
+    ("engine/ui/src/inspect/reason.rs", "fn", 1190): 37,
+    ("engine/ui/src/inspect/reason.rs", "plik", 1638): 37,
     # 269 po M7d: jedna linia za `finance: bf.finance` w budowie `BankParams`.
     ("sim/economy/src/data.rs", "fn", 269): 38,
 }

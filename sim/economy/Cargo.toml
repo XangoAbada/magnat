@@ -30,6 +30,9 @@ magnat-firms = { workspace = true }
 # Silnik reguł (`K-11`) — wykonawca polityk zdelegowanych zakładów stoi tutaj,
 # bo to sklep ma półkę; `sim/policy` mówi co zrobić, nie komu.
 magnat-policy = { workspace = true }
+# Akcjonariat siedzi w `Firm.owners: SmallVec<[OwnerShare; 4]>` (M7a) i giełda M10d
+# go przepisuje — bez tego crate'u nie da się dopisać właściciela spoza inline'u.
+smallvec = { workspace = true }
 serde = { workspace = true }
 ron = { workspace = true }
 

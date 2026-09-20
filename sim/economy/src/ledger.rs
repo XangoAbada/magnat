@@ -88,6 +88,14 @@ pub enum LedgerAccount {
     /// Reklama i PR (M10b WP10.6). **Dopisane na końcu**, bo kolejność wariantów
     /// indeksuje tablicę sald wchodzącą do hasha i do zapisu gry.
     MarketingExpense,
+    /// Składka ubezpieczeniowa zakładu (M10d WP10.12). **Dopisane na końcu**, z tego
+    /// samego powodu co `MarketingExpense`.
+    ///
+    /// Odszkodowanie **nie ma własnego konta**: wpływa jako zmniejszenie
+    /// [`LedgerAccount::WriteOffExpense`], bo to jest ekonomiczna prawda o tej
+    /// operacji — strata została pokryta, a nie zarobiona. Osobne konto przychodu
+    /// z odszkodowań kazałoby rachunkowi wyników pokazywać pożar jako dobry miesiąc.
+    InsuranceExpense,
 }
 
 impl LedgerAccount {
@@ -114,6 +122,7 @@ impl LedgerAccount {
         LedgerAccount::WriteOffExpense,
         LedgerAccount::TaxExpense,
         LedgerAccount::MarketingExpense,
+        LedgerAccount::InsuranceExpense,
     ];
 
     #[must_use]
@@ -146,6 +155,7 @@ impl LedgerAccount {
             LedgerAccount::WriteOffExpense => "WriteOffExpense",
             LedgerAccount::TaxExpense => "TaxExpense",
             LedgerAccount::MarketingExpense => "MarketingExpense",
+            LedgerAccount::InsuranceExpense => "InsuranceExpense",
         }
     }
 
@@ -163,6 +173,8 @@ impl LedgerAccount {
                 | LedgerAccount::InterestExpense
                 | LedgerAccount::WriteOffExpense
                 | LedgerAccount::TaxExpense
+                | LedgerAccount::MarketingExpense
+                | LedgerAccount::InsuranceExpense
         )
     }
 
@@ -252,6 +264,14 @@ pub struct IncomeStatement {
     pub interest: Money,
     pub write_off: Money,
     pub tax: Money,
+    /// Reklama i PR (M10b). **Dopisane w M10d razem z ubezpieczeniem**: do tej pory
+    /// `MarketingExpense` nie było kontem wynikowym, więc nie domykało się na koniec
+    /// miesiąca i `net_result()` nie równało się zmianie `RetainedEarnings` w żadnym
+    /// zakładzie, który się reklamował — czyli kryterium WP7 fazy M5 było fałszywe
+    /// od M10b i nikt tego nie zauważył, bo `Σ sald == 0` trzymało się dalej.
+    pub marketing: Money,
+    /// Składka ubezpieczeniowa (M10d).
+    pub insurance: Money,
 }
 
 impl IncomeStatement {
@@ -273,7 +293,9 @@ impl IncomeStatement {
                 - self.depreciation.get()
                 - self.interest.get()
                 - self.write_off.get()
-                - self.tax.get(),
+                - self.tax.get()
+                - self.marketing.get()
+                - self.insurance.get(),
         )
     }
 
@@ -287,6 +309,8 @@ impl IncomeStatement {
         self.interest = Money(self.interest.get() + o.interest.get());
         self.write_off = Money(self.write_off.get() + o.write_off.get());
         self.tax = Money(self.tax.get() + o.tax.get());
+        self.marketing = Money(self.marketing.get() + o.marketing.get());
+        self.insurance = Money(self.insurance.get() + o.insurance.get());
     }
 }
 
@@ -606,6 +630,8 @@ fn statement_from(b: &[Money; LEDGER_ACCOUNT_COUNT]) -> IncomeStatement {
         interest: Money(g(LedgerAccount::InterestExpense)),
         write_off: Money(g(LedgerAccount::WriteOffExpense)),
         tax: Money(g(LedgerAccount::TaxExpense)),
+        marketing: Money(g(LedgerAccount::MarketingExpense)),
+        insurance: Money(g(LedgerAccount::InsuranceExpense)),
     }
 }
 

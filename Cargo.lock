@@ -1666,6 +1666,7 @@ dependencies = [
  "proptest",
  "ron",
  "serde",
+ "smallvec",
 ]
 
 [[package]]

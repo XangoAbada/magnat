@@ -14,7 +14,7 @@
 // 40 000 — „cztery razy częściej". Punkty muszą rosnąć po pierwszej współrzędnej;
 // krzywa malejąca zapisuje się malejącą **drugą** współrzędną, nie odwróconą listą.
 (
-    schema_version: 1,
+    schema_version: 2,
 
     events: [
         // Susza. Wzorzec z §5.5 A: deficyt opadów podnosi hazard, a jego wielkość
@@ -137,6 +137,43 @@
             cooldown_days: 360,
             max_concurrent: 1,
             chronicle: "event.natural.epidemic",
+        ),
+
+        // Powódź. **Dopisana w M10d** i jedyne zdarzenie dzielnicowe, które niszczy
+        // majątek, a nie tylko zdolność produkcyjną. Sonda jest ta sama co przy suszy,
+        // czytana z drugiej strony: `PrecipDeficit30dChm` **ujemny** znaczy nadmiar
+        // opadu, więc krzywa rośnie w lewo. Osobnej sondy „opad" nie ma i nie jest
+        // potrzebna — deficyt ze znakiem niesie jedno i drugie.
+        //
+        // Nie ma tu ani jednej liczby mówiącej, które dzielnice są nadrzeczne:
+        // składka ubezpieczeniowa ma wyjść z **historii szkód**, a nie z tabeli
+        // ryzyka (kryterium WP10.12). Dzielnice różnicuje przebieg zdarzeń.
+        (
+            key: "natural/flood",
+            category: Natural,
+            scope: District,
+            trigger: (
+                // Rachunek, a nie liczba z rozsądku: osiem dzielnic razy 270 dób
+                // sezonu razy `base_ppm`/1e6 daje oczekiwaną liczbę powodzi na rok
+                // gry. Przy 60 wychodzi 0,13 — czyli powódź raz na osiem lat i
+                // mechanizm, którego gracz nigdy nie zobaczy (zmierzone: zero szkód
+                // w 220 dobach). Przy 300 wychodzi 0,65 przy neutralnym opadzie
+                // i ponad dwie przy mokrym roku, bo krzywa mnoży do dziewięciu razy.
+                base_ppm: 300,
+                gate: [Season([Spring, Summer, Autumn])],
+                factors: [
+                    (probe: PrecipDeficit30dChm, curve: ([(-9000, 120000), (-3000, 30000), (0, 10000)])),
+                ],
+            ),
+            severity: (min_bps: 3000, max_bps: 10000, from: None),
+            duration: RangeDays(2, 8),
+            effects: [
+                SiteOutput(mul_bps: 5000, filter: Any),
+            ],
+            peril: Some(Flood),
+            cooldown_days: 90,
+            max_concurrent: 2,
+            chronicle: "event.natural.flood",
         ),
 
         // Plaga szkodników. Lato, ciepło, długo — i tylko na polach.

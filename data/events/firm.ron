@@ -9,7 +9,7 @@
 // Zakres `Site` ocenia się **wyłącznie dla zakładów przechodzących filtr efektu**
 // (ryzyko `R6`), więc pożar magazynu nie pyta o sondy sklepu spożywczego.
 (
-    schema_version: 1,
+    schema_version: 2,
 
     events: [
         // Awaria maszyny. Kondycja i zaległy przegląd — te same dwie liczby,
@@ -70,7 +70,11 @@
             scope: Site,
             trigger: (
                 base_ppm: 10,
-                gate: [MinSiteLines(1)],
+                // **Bramka zdjęta w M10d.** `MinSiteLines(1)` wykluczał z pożaru
+                // magazynu każdy sklep, a sklep ma zaplecze — i to właśnie ono
+                // płonie. Wykluczenie było luką, nie decyzją: do M10d zdarzenie
+                // nie niszczyło niczego, więc różnicy nie było widać.
+                gate: [],
                 factors: [
                     (probe: AirTempDc, curve: ([(200, 10000), (320, 30000)])),
                     (probe: SiteConditionQ, curve: ([(20, 25000), (100, 10000)])),
@@ -81,6 +85,10 @@
             effects: [
                 SiteOutput(mul_bps: 3000, filter: Industry),
             ],
+            // Pożar **niszczy majątek** i jest ryzykiem ubezpieczeniowym (M10d).
+            // Pole mówi, czym to zdarzenie jest, a nie jak groźna jest dzielnica —
+            // tego drugiego nie ma nigdzie w danych i ma nie być (WP10.12).
+            peril: Some(Fire),
             cooldown_days: 180,
             max_concurrent: 2,
             chronicle: "event.firm.warehouse_fire",

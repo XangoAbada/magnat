@@ -10,7 +10,7 @@
 // powiedzieć bramką, którego medium dotyczy. Bez tego „przeciek w sieci
 // ciepłowniczej" oceniałby się także dla elektrowni.
 (
-    schema_version: 1,
+    schema_version: 2,
 
     events: [
         // Awaria elektrowni — wzorzec z §5.5 B. Cztery sondy i każda z nich jest

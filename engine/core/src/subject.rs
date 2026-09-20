@@ -37,7 +37,12 @@ use crate::types::{CaseId, DistrictId, EventId, PermitId, TenderId};
 /// Rozszerza się go tak samo jak [`crate::DecisionReason`] (`K-12`): faza dokładająca byt,
 /// o który gracz może zapytać „dlaczego", dokłada wariant **i** układ zakładek jego karty.
 /// Brak ramienia w karcie ma łamać kompilację, a nie pokazywać pustą stronę.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+/// `Serialize`/`Deserialize` **dopisane w M10d**: `Subject` jest od tej chwili ładunkiem
+/// `DecisionReason::{StakeDisclosed, ControlAcquired}`, a powód wchodzi do zapisu gry.
+/// Derywacja, nie nowy mechanizm — ta sama droga, którą `K-71` nadał `ArenaRef`.
+#[derive(
+    Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, serde::Serialize, serde::Deserialize,
+)]
 pub enum Subject {
     Citizen(CitizenId),
     Household(HouseholdId),

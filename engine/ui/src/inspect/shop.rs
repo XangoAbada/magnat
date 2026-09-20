@@ -189,6 +189,11 @@ fn naglowek(c: &Catalog, l: Locale, v: &ShopView<'_>) -> Vec<String> {
             "ui.shop.fin.bottom",
             &[
                 ("odpisy", &crate::zlotowki(f.statement.write_off)),
+                // Reklama i składka są w wyniku od M10d, więc muszą być też
+                // w wierszu: liczba, która nie zgadza się z pozycjami nad nią,
+                // wygląda dla gracza jak błąd programu.
+                ("reklama", &crate::zlotowki(f.statement.marketing)),
+                ("ubezpieczenie", &crate::zlotowki(f.statement.insurance)),
                 ("wynik", &crate::zlotowki(f.statement.net_result())),
             ],
         ),

@@ -213,6 +213,21 @@ scalar_newtype! {
     TechId(u16)
 }
 
+scalar_newtype! {
+    /// Polisa ubezpieczeniowa w rejestrze `magnat_economy::Insurers` (M10d §5.5).
+    ///
+    /// **Nazwa jest inna niż w planie fazy i to jest korekta, nie kaprys:** plan pisał
+    /// `PolicyId`, a ten typ jest zajęty od `K-47` przez politykę silnika reguł
+    /// i znaczy coś zupełnie innego. Dwa typy o jednej nazwie w jednym crate'cie nie
+    /// mogą istnieć, a przemianowanie tamtego przepisałoby edytor reguł M9.
+    ///
+    /// Mieszka w `core`, bo jest **ładunkiem centralnego enuma**: `TxKind::
+    /// {InsurancePremium, InsuranceClaim}` niosą go do dziennika transakcji, a dziennik
+    /// wchodzi do zapisu gry. Numer jest monotoniczny w obrębie gry i nigdy nie wraca —
+    /// wygasła polisa zostaje w historii szkodowości pod swoim numerem.
+    CoverId(u32)
+}
+
 /// Skala 0..=100: jakość, zaspokojenie potrzeby, poziom umiejętności.
 /// Konstruktor przycina do zakresu — wartość spoza skali nigdy nie powstaje.
 #[derive(

@@ -15,6 +15,7 @@ use crate::apply;
 use crate::eval;
 use crate::indicators::CityIndicators;
 use crate::registry::{EventCause, Events, WorldEvent};
+use crate::ScopeInstance;
 use magnat_core::{Cadence, Mood, Tick};
 use magnat_ecs::{System, SystemCtx, SystemDesc, SystemId, World};
 use magnat_traffic::utility::UtilityGrids;
@@ -269,7 +270,66 @@ fn oceny(ev: &mut Events, world: &mut World, t: Tick, seed: u64, hourly: bool) {
             },
             t,
         );
+        zglos_szkode(world, &d, f.scope, f.severity_bps, day);
     }
+}
+
+/// Zgłasza wystąpienie ryzyka ubezpieczeniowego (M10d WP10.12, `GD-4`).
+///
+/// **Osobna droga od efektów i to jest jej istota.** `Effect` jest odwracalny:
+/// `ParamOverlay` pamięta wartość zastaną i przywraca ją przy wygaśnięciu zdarzenia.
+/// Szkoda majątkowa jest jednorazowa i nieodwracalna, więc siódmym wariantem `Effect`
+/// być nie może — złamałaby kontrakt nakładki. Zdarzenie zgłasza więc sam **fakt**,
+/// a co z nim zrobić, wie `sim/economy`: ile przepadło, komu i kto to pokryje.
+///
+/// Kierunek jest wymuszony grafem i jest ten sam, którym `sim/events` nakłada
+/// parametry: piszący stoi nad czytelnikiem i sięga do jego pola (`K-64`, `CE-4`).
+/// Świat bez ubezpieczeń (scenariusze M3–M8) nie płaci za to ani cyklu — zasobu
+/// nie ma, więc zgłoszenie nie ma gdzie trafić.
+fn zglos_szkode(
+    world: &mut World,
+    d: &crate::catalog::EventDef,
+    scope: ScopeInstance,
+    severity_bps: u16,
+    day: u64,
+) {
+    let Some(o) = peril_of(d, scope, severity_bps, day) else {
+        return;
+    };
+    if let Some(ins) = world.get_resource_mut::<magnat_economy::insurance::Insurers>() {
+        ins.report_peril(o);
+    }
+}
+
+/// Czym jest to zdarzenie dla ubezpieczyciela — funkcja czysta, bez świata.
+///
+/// Osobno od [`zglos_szkode`], bo **to jest cała logika**, a tamto jest jedną linią
+/// dostarczenia. Ta sama granica, którą `fixing` postawił w giełdzie: tam, gdzie
+/// zapada rozstrzygnięcie, stoi funkcja czysta z własnym testem.
+#[must_use]
+pub fn peril_of(
+    d: &crate::catalog::EventDef,
+    scope: ScopeInstance,
+    severity_bps: u16,
+    day: u64,
+) -> Option<magnat_economy::insurance::PerilOccurrence> {
+    let peril = d.peril?;
+    let (district, site) = match scope {
+        ScopeInstance::District(i) => (Some(magnat_core::DistrictId(i)), None),
+        ScopeInstance::Site(s) => (None, Some(s)),
+        // Zakres firmowy i sieciowy nie mają dziś definicji z ryzykiem. Gdyby
+        // powstała, **milczymy**: „całe miasto" byłoby najszerszą możliwą szkodą,
+        // czyli najgorszą z możliwych domyślnych odpowiedzi (recenzja M10d).
+        // Definicja, która tego potrzebuje, dokłada tu swoje ramię razem z sobą.
+        _ => return None,
+    };
+    Some(magnat_economy::insurance::PerilOccurrence {
+        peril,
+        district,
+        site,
+        severity_bps,
+        day: u32::try_from(day).unwrap_or(u32::MAX),
+    })
 }
 
 /// Wstawia rejestr do świata i wpina go w hash stanu.

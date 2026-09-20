@@ -17,7 +17,7 @@ use magnat_core::{EventCategory, Season};
 use serde::Deserialize;
 use std::path::Path;
 
-pub const EVENTS_SCHEMA_VERSION: u32 = 1;
+pub const EVENTS_SCHEMA_VERSION: u32 = 2;
 
 /// Zakres zdarzenia: co jest jego „instancją".
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Deserialize)]
@@ -168,6 +168,23 @@ pub struct EventDef {
     pub severity: SeveritySpec,
     pub duration: DurationSpec,
     pub effects: Vec<Effect>,
+    /// Rodzaj ryzyka ubezpieczeniowego, jeśli to zdarzenie **niszczy majątek**
+    /// (M10d WP10.12, `GD-4`).
+    ///
+    /// Osobne pole, a nie siódmy wariant [`Effect`], i to jest rozstrzygnięcie:
+    /// efekty są **odwracalne** — `ParamOverlay` pamięta, co zastał, i przywraca
+    /// to przy wygaśnięciu. Szkoda majątkowa jest jednorazowa i nieodwracalna,
+    /// więc w tamtym mechanizmie nie mieści się z definicji.
+    ///
+    /// `None` znaczy „to zdarzenie niczego nie niszczy" i tak jest dla większości
+    /// katalogu: susza zabiera plon przez `SiteOutput`, a nie przez zniszczenie
+    /// zapasu, który już leży w magazynie.
+    ///
+    /// Nazwanie ryzyka **nie jest parametrem ryzyka** w rozumieniu kryterium
+    /// WP10.12: mówi, czym jest to zdarzenie, a nie jak groźna jest dzielnica.
+    /// Tego drugiego nie ma nigdzie w danych i ma nie być.
+    #[serde(default)]
+    pub peril: Option<magnat_core::PerilKind>,
     pub cooldown_days: u32,
     pub max_concurrent: u8,
     /// Klucz lokalizacji wpisu do kroniki (`data/locale/`). Sam tekst nigdy

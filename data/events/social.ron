@@ -10,7 +10,7 @@
 // z kosztem podwyżki, a hazard wygasa sam, bez ani jednej linii kodu o strajku
 // po stronie M7.
 (
-    schema_version: 1,
+    schema_version: 2,
 
     events: [
         (

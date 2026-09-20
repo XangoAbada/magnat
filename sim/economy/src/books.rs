@@ -275,6 +275,41 @@ pub enum TxKind {
     LicenseFee {
         tech: magnat_core::TechId,
     },
+    /// Obrót udziałami na fixingu (M10d WP10.10, PRD §6.5).
+    ///
+    /// Obie strony sesji przechodzą przez **konto reszty świata**, bo aukcja ma jedną
+    /// cenę i nie paruje zleceń: suma wpłat równa się sumie wypłat co do grosza, więc
+    /// konto przelotowe domyka się w tej samej dobie. Bez niego para „gospodarstwo →
+    /// gospodarstwo" nie zostawiłaby w dzienniku ani jednego zapisu, bo gospodarstwo
+    /// nie ma konta w księgach (M5b) — a wtedy bramka G9 balansatora liczyłaby obrót
+    /// akcjami jako niebyły.
+    ///
+    /// `bp` jest wielkością pakietu w punktach bazowych udziału; `Firm.owners`
+    /// liczy własność w tych samych jednostkach i drugiej tablicy nie ma (`GD-1`).
+    ShareTrade {
+        firm: magnat_core::FirmId,
+        bp: u16,
+    },
+    /// Emisja nowych udziałów — pieniądz idzie **do firmy** (M10d WP10.11, PRD §7.8).
+    ///
+    /// Osobny wariant od [`TxKind::ShareTrade`] i to jest cała jego treść: przy
+    /// obrocie płaci się dotychczasowemu właścicielowi, przy emisji spółce.
+    ShareIssue {
+        firm: magnat_core::FirmId,
+        bp: u16,
+    },
+    /// Dywidenda (M10d WP10.11, PRD §7.8).
+    Dividend {
+        firm: magnat_core::FirmId,
+    },
+    /// Składka ubezpieczeniowa (M10d WP10.12, PRD §6.5).
+    InsurancePremium {
+        cover: magnat_core::CoverId,
+    },
+    /// Odszkodowanie (M10d WP10.12).
+    InsuranceClaim {
+        cover: magnat_core::CoverId,
+    },
 }
 
 /// Opis zapisu podawany przez wołającego. `tax` jest **wyłącznie VAT-em**

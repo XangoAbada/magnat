@@ -41,6 +41,8 @@ pub struct FullCity {
     pub slots: u32,
     /// Ile sieci zewnętrznych czeka w katalogu.
     pub chains: usize,
+    /// Ile zakładów ubezpieczeń dostało rachunek (M10d).
+    pub insurers: u32,
 }
 
 /// Stawia gospodarkę i warstwę firm w tym samym świecie.
@@ -130,11 +132,32 @@ pub fn setup(
     magnat_media::register_media(world);
     magnat_media::ai::stand_up_outlets(world);
 
+    // Giełda i ubezpieczenia (M10d). Oba rejestry są puste do pierwszego debiutu
+    // i do pierwszej polisy, więc świat bez rynku kapitałowego nie płaci za nie
+    // ani bajtem hasha poza zerowymi długościami. Kalibracja **z danych**
+    // (`data/tuning/insurance.ron`, `K-35`), a nie z `Default` — ten sam wniosek,
+    // co przy `brand.ron` w M10b: ładowarka, której nikt nie woła, ukrywa
+    // niepoprawny plik do czasu, aż ktoś go otworzy.
+    let strojenie = magnat_economy::insurance::data::M10dTuning::load_default()?;
+    magnat_economy::equity::system::register_equity(
+        world,
+        magnat_economy::equity::Equity::new(strojenie.equity),
+    );
+    magnat_economy::insurance::system::register_insurers(
+        world,
+        magnat_economy::insurance::Insurers::new(strojenie.insurance),
+    );
+    // Rachunki zakładom ubezpieczeń. Konta otwierają dziś tylko sklepy i zakłady
+    // z linią produkcyjną, a biuro nie jest ani jednym, ani drugim — bez tego kroku
+    // polisy powstają, ale ani składka, ani odszkodowanie nie ruszają grosza.
+    let ubezpieczycieli = magnat_economy::insurance::system::stand_up_insurers(world);
+
     Ok(FullCity {
         retail: r,
         firms: report,
         slots,
         chains: ile,
+        insurers: ubezpieczycieli,
     })
 }
 
