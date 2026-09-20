@@ -32,6 +32,7 @@ fn swiat(scenario: ScenarioId, variant: StartVariant) -> Session {
             commute_swaps: 5_000,
             economy: true,
             micro: false,
+            ..SessionOpts::default()
         },
     };
     let built = population::zbuduj_z_params(p.world, &pool, &GenWatch::none())

@@ -620,6 +620,9 @@ fn redakcja(world: &mut World, spis: &DistrictRoster, t: Tick, raport: &mut Medi
                 }
             }
 
+            if bohater.is_some() && uderzenie.is_some() {
+                world.resource_mut::<Outlets>().note_scandal();
+            }
             world.resource_mut::<Outlets>().publish(
                 story,
                 t,

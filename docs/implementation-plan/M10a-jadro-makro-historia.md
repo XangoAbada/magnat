@@ -303,7 +303,7 @@ odpowiedzią nie była pytaniem.
 | **D2** | Epoki | **Nie powstaje w M10a** (`E-3`). Postęp technologiczny epoki to PRD §11.3, czyli WP10.9 i podfaza M10c; drugi mechanizm epok obok tamtego byłby dokładnie tym, przed czym broni `K-8`. |
 | **D3** | Kronika | Zdarzenie o skali większej niż próg → `ChronicleEvent` z `provenance: DryRun`: wstrząs w skali miasta, dzielnica tracąca albo zyskująca > 40 ‰ ludności w ciągu roku, runda naprawcza. Próg jest **wyższy niż dla zdarzenia w partii** (`R9`): celem jest 50–200 wpisów na 80 lat, nie 50 000. |
 | **D4** | Rozwinięcie (`lower`) | `MacroState` naniesiony na świat ECS: pieniądz gospodarstw w komponentach, salda firm w księgach, różnica sektora GD domknięta na rachunku reszty świata. Mechanizm w §5.8. Wykonuje się **po** naprawie, bo świat ma dostać stan, który przeszedł bramki. |
-| **D5** | Weryfikacja i naprawa | Etap 10 PRD: osiem bramek i do trzech rund `rebalance`. Kryteria i procedura niżej. |
+| **D5** | Weryfikacja i naprawa | Etap 10 PRD: dziewięć bramek mierzonych w makro (siódma i dziesiąta rozdzielone w M10f, `D9`) i do trzech rund `rebalance`. Kryteria i procedura niżej. |
 
 **D5 — weryfikacja (§4.2 Etap 10: „żaden rynek nie jest w stanie nierównowagi > 30%").**
 
@@ -324,9 +324,10 @@ Bramki Etapu 10 (wszystkie muszą przejść):
 | 4 | Bezrobocie | 3%–15% |
 | 5 | Mediana `dług/aktywa` firm | 0,10–0,60 |
 | 6 | Odsetek firm niewypłacalnych w dowolnej dzielnicy | < 40% |
-| 7 | Gini majątku GD | 0,25–0,45 |
+| 7 | Gini **majątku** GD | 0,55–0,85 (`D9`, zmienione z 0,25–0,45 w M10f) |
 | 8 | Koszyk podstawowy / mediana dochodu GD | 0,25–0,55 |
 | 9 | Każdy mieszkaniec ma dom; grafy dróg spójne | 100% (z Etapów 4–6, nie z makro) |
+| 10 | Gini **dochodu** pracujących | 0,25–0,45 (`D9`, dopisana w M10f) |
 
 **Naprawa, nie odrzucenie seeda.** Odrzucenie 40% seedów byłoby porażką generatora i wściekłością
 gracza, który wybrał seed. Do 3 rund `rebalance()`:

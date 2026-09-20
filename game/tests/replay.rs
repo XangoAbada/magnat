@@ -30,6 +30,7 @@ fn params() -> NewGameParams {
             commute_swaps: 5_000,
             economy: true,
             micro: false,
+            ..SessionOpts::default()
         },
     }
 }

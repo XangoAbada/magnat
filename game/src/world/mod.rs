@@ -62,6 +62,15 @@ pub struct SessionOpts {
     /// Warstwa Mikro ruchu. Potrzebna wyłącznie tam, gdzie ktoś patrzy —
     /// w oknie. Nie ma prawa zapisu do stanu (00 §4), więc nie zmienia wyniku.
     pub micro: bool,
+    /// Ile lat historii „na sucho" przepuścić przez świat przed pierwszą dobą
+    /// rozgrywki. `0` = żadnych, czyli świat startuje sterylny tak jak do M10f.
+    ///
+    /// Decyzja `D5` fazy M10 oddaje przepływ startu partii fazie M9, a pomiar
+    /// z M10a mówi, ile to kosztuje: trzydzieści lat metropolii to 3300 kroków
+    /// i ~0,2 s po wygenerowaniu miasta. Nastawa jedzie w **nagłówku dziennika**
+    /// razem z resztą `SessionOpts`, bo zmienia świat, na którym replay stoi.
+    #[serde(default)]
+    pub dry_run_years: u16,
 }
 
 impl Default for SessionOpts {
@@ -71,6 +80,7 @@ impl Default for SessionOpts {
             commute_swaps: 200_000,
             economy: true,
             micro: false,
+            dry_run_years: 0,
         }
     }
 }
@@ -82,6 +92,12 @@ pub struct Standing {
     /// współdzielony, więc sesja trzyma go **obok** świata i czyta bez `&World`.
     pub market: Option<magnat_economy::Market>,
     pub report: StandingReport,
+    /// Kronika historii „na sucho", jeśli `SessionOpts::dry_run_years > 0`.
+    ///
+    /// Most przekazuje ją **dalej**, a nie zapisuje do świata: to jest widok
+    /// pochodny, więc nie wchodzi do hasha stanu i nie ma go w ECS. Odbiera ją
+    /// `Session::begin` i wkłada do kroniki gracza (`DK-2`).
+    pub history: Vec<magnat_macro::ChronicleEvent>,
 }
 
 /// Liczby, które most ma powiedzieć po postawieniu świata. Raport tekstowy
@@ -170,6 +186,24 @@ pub fn stand_up(
     };
 
     bootstrap_day(&mut world, 0);
+
+    // Historia „na sucho" (M10 §4.2 Etap 9). Stoi **tu**, a nie w generatorze:
+    // potrzebuje gospodarki, firm i ludzi, czyli wszystkiego, co powyżej,
+    // a jednocześnie musi się wykonać, zanim ruszy pierwszy tick — inaczej
+    // przepisywałaby świat, który już żyje.
+    let history = if opts.dry_run_years > 0 && market.is_some() {
+        let cfg = magnat_macro::DryRunConfig {
+            seed,
+            years: opts.dry_run_years.clamp(1, 100),
+            start_year: i32::from(city.plan.epoch.year()) - i32::from(opts.dry_run_years),
+            basket: dry_run_basket(&world),
+            ..magnat_macro::DryRunConfig::default()
+        };
+        magnat_macro::dry_run(&cfg, &mut world, &magnat_macro::MacroParams::default()).chronicle
+    } else {
+        Vec::new()
+    };
+
     let schedule = zbuduj_harmonogram(&world, opts, market.is_some())?;
     rap.systems = schedule.system_count();
     rap.stages = schedule.stage_count();
@@ -180,7 +214,42 @@ pub fn stand_up(
         app,
         market,
         report: rap,
+        history,
     })
+}
+
+/// Koszyk podstawowy do bramki 8 Etapu 10 — pary (towar, sztuk na miesiąc).
+///
+/// Buduje go **wołający**, bo `sim/macro` nie ma katalogu towarów i mieć nie
+/// powinien. Bierzemy towary o najszerszej dostępności w mieście: koszyk, którego
+/// połowy nie da się kupić, mierzyłby nie tyle drożyznę, ile braki w asortymencie.
+/// Docelowy koszyk `data/economy/cpi.ron` składa scenariusz gry, nie ta funkcja.
+///
+/// Adres jest tutaj, a nie w `tools/headless`, z powodu kierunku zależności
+/// (`K-68`): przebieg bezgłowy woła `game`, nigdy odwrotnie — a obie drogi mają
+/// mierzyć **ten sam** koszyk, inaczej bramka 8 znaczy co innego w każdej z nich.
+#[must_use]
+pub fn dry_run_basket(world: &World) -> Vec<(magnat_core::GoodId, i64)> {
+    /// Ile pozycji ma koszyk.
+    const POZYCJI: usize = 12;
+    /// Ile sztuk każdej pozycji miesięcznie.
+    const SZTUK_MIESIECZNIE: i64 = 30;
+
+    let st = magnat_macro::lift(world);
+    let mut licznik: std::collections::BTreeMap<u16, u32> = std::collections::BTreeMap::new();
+    for f in &st.firms {
+        for (g, cena) in f.price.iter() {
+            if cena.get() > 0 {
+                *licznik.entry(g.0).or_default() += 1;
+            }
+        }
+    }
+    let mut v: Vec<(u32, u16)> = licznik.into_iter().map(|(g, n)| (n, g)).collect();
+    v.sort_unstable_by(|a, b| b.cmp(a));
+    v.into_iter()
+        .take(POZYCJI)
+        .map(|(_, g)| (magnat_core::GoodId(g), SZTUK_MIESIECZNIE))
+        .collect()
 }
 
 /// Harmonogram świata gry. **Jeden dla okna i dla headlessa** — inaczej odcisk

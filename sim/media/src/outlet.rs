@@ -146,6 +146,15 @@ pub struct Outlets {
     map: std::collections::BTreeMap<SiteId, MediaOutlet>,
     stories: Vec<Story>,
     log: Vec<(Tick, DecisionReason)>,
+    /// Ile tekstów uderzyło w czyjąś markę, od początku gry.
+    ///
+    /// Licznik, a nie historia: pytanie brzmi „ile marek rocznie obrywa od prasy"
+    /// (`FF-25`) i odpowiada na nie jedna liczba podzielona przez lata przebiegu.
+    /// Liczony **per tekst**, nie per czytelnik — inaczej mierzyłby zasięg tytułu,
+    /// a nie liczbę skandali. Wchodzi do hasha, bo jest faktem o świecie, który
+    /// powstał deterministycznie: dwa przebiegi tego samego ziarna mają mieć tyle
+    /// samo skandali, a rozjazd w tej liczbie jest rozjazdem w redakcji.
+    scandal_stories: u32,
 }
 
 impl Outlets {
@@ -156,6 +165,17 @@ impl Outlets {
 
     pub fn insert(&mut self, o: MediaOutlet) {
         self.map.insert(o.site, o);
+    }
+
+    /// Ile tekstów uderzyło w czyjąś markę od początku gry (`FF-25`).
+    #[must_use]
+    pub fn scandal_stories(&self) -> u32 {
+        self.scandal_stories
+    }
+
+    /// Notuje, że publikowany właśnie tekst zabrał komuś sympatię do marki.
+    pub fn note_scandal(&mut self) {
+        self.scandal_stories = self.scandal_stories.saturating_add(1);
     }
 
     #[must_use]
@@ -233,5 +253,6 @@ impl HashState for Outlets {
             h.write_u64(t.0);
             h.write_u16(r.discriminant());
         }
+        h.write_u32(self.scandal_stories);
     }
 }

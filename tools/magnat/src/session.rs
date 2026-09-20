@@ -81,6 +81,7 @@ impl App {
                 economy: !self.bez_gospodarki,
                 // W oknie warstwa Mikro jest zawsze: bez niej nie ma czego rysować.
                 micro: true,
+                ..SessionOpts::default()
             },
         };
         let pula = magnat_jobs::JobPool::new(self.watki);

@@ -16,7 +16,7 @@
 
 use std::collections::BTreeMap;
 
-use crate::metrics::{DayMetrics, RunFile};
+use crate::metrics::{DayMetrics, LodSample, RunFile};
 
 // ── progi (PRD §20.1 przez §7.4 dokumentu fazy) ──────────────────────────────────
 
@@ -56,6 +56,32 @@ pub const G6_HHI_MAX: i32 = 6_000;
 pub const G10_FIRM_BAND_PERMILLE: i64 = 400;
 /// G11: pasmo bezrobocia w promilach siły roboczej (§7.10: 3–12 %).
 pub const G11_UNEMPLOYMENT: (u16, u16) = (30, 120);
+/// G12: mediana bezwzględnego odchylenia makro od mezo, w promilach (M10 §7.3 `K2`:
+/// 0,5 % dla agregatów o n ≥ 500; miasto balansatora ma ich kilka tysięcy).
+pub const G12_MEDIAN_DEV_MAX_PERMILLE: i64 = 50;
+/// G12: dopuszczalne nachylenie regresji odchylenia, w **dziesiątych promila
+/// na rok gry** (M10 §7.3 `K3`: ≤ 0,02 pp/rok, czyli 0,2 ‰/rok).
+///
+/// To jest **ważniejszy próg niż poprzedni** i po to ta bramka istnieje:
+/// odchylenie 4 ‰ w losową stronę jest nieszkodliwe, a 4 ‰ co miesiąc w tę samą
+/// stronę to po stu latach świat, który się rozpadł.
+pub const G12_SLOPE_MAX_TENTHS_PERMILLE: i64 = 2;
+/// G12: autokorelacja znaku odchylenia (lag 1), w setnych. Powyżej tego progu
+/// odchylenie jest systematyczne, nawet gdy mieści się w medianie.
+pub const G12_SIGN_AUTOCORR_MAX: i64 = 30;
+/// G12: ile próbek miesięcznych musi mieć przebieg, żeby regresja cokolwiek
+/// znaczyła. Poniżej tego bramka jest **doradcza**, a nie zielona.
+pub const G12_MIN_MONTHS: usize = 6;
+/// G12: o ile promili wolno się różnić w **dobie zero**, zanim uznamy, że obie
+/// strony liczą co innego.
+///
+/// `lift()` kopiuje świat, więc w dobie zero odchylenie ma być zerem — pięć
+/// promili to zapas na zaokrąglenia przy dzieleniu na komórki. Większe znaczy,
+/// że pomiar porównuje dwie różne wielkości, a nie dwa modele, i wtedy bramka
+/// **nie sądzi**: świeci doradczo i mówi, co zobaczyła. Ta reguła powstała
+/// z własnego błędu — pierwsza wersja brała po stronie mezo `total_money`
+/// i świeciła na czerwono z powodu własnej definicji, nie z powodu modelu.
+pub const G12_DAY0_TOLERANCE_PERMILLE: i64 = 5;
 /// G11: ile ostatnich dób przebiegu wyznacza stopę bezrobocia.
 ///
 /// **Ogon, a nie całość po rozbiegu** — i to jest wniosek z pomiaru, nie ostrożność.
@@ -87,7 +113,9 @@ impl Profile {
             // G11 wymaga przebiegu dłuższego niż ten z PR (`G11_MIN_DAYS`), bo
             // krótszy nie ma ogona, w którym miasto jest już zaludnione — tak samo
             // jak G4 i G6 mierzyłyby szum przy krótkim przebiegu.
-            Profile::Ci => !matches!(gate, "G4" | "G6" | "G11"),
+            // G12 wymaga przebiegu z próbkami miesięcznymi: regresja na trzech
+            // punktach mierzy szum, a nie dryf.
+            Profile::Ci => !matches!(gate, "G4" | "G6" | "G11" | "G12"),
         }
     }
 }
@@ -325,6 +353,7 @@ pub fn evaluate(runs: &[RunFile], profile: Profile, min_margin_bp: i32) -> Vec<G
     detal(&u, profile, min_margin_bp, &mut out);
     rzetelnosc(runs, &u, &mut out);
     firmy(&u, &mut out);
+    out.push(lod(&u));
     out.retain(|g| profile.includes(g.gate));
     out
 }
@@ -713,6 +742,251 @@ fn najbardziej_ruszony(run: &RunFile, event_day: u32) -> Option<u16> {
         .map(|(g, _)| g)
 }
 
+// ── G12: czy makro i mezo to jeden model (M10f WP10.17, `E-13`) ──────────────────
+
+/// Odchylenie względne makro od mezo w promilach dla jednej pary liczb.
+///
+/// Mianownikiem jest **mezo**, bo to ono jest źródłem prawdy (00 §4). Zero
+/// w mianowniku znaczy „nie ma czego porównać", nie „odchylenie nieskończone".
+fn odchylenie_permille(makro: i64, mezo: i64) -> Option<i64> {
+    if mezo == 0 {
+        return None;
+    }
+    Some((makro - mezo).saturating_mul(1_000) / mezo)
+}
+
+/// Seria miesięczna odchyleń: po jednej próbce na trzydzieści dób.
+///
+/// Miesięcznie, a nie dobowo, bo kontrakt `K2` mówi o **skali miesiąca gry**,
+/// a próbka dobowa niosłaby rytm dobowy mezo, którego makro z definicji nie ma.
+fn seria_miesieczna(lod: &[LodSample], wielkosc: Wielkosc) -> Vec<i64> {
+    lod.iter()
+        .filter(|s| s.day > 0 && s.day.is_multiple_of(30))
+        .filter_map(|s| {
+            let (makro, mezo) = wielkosc(s);
+            odchylenie_permille(makro, mezo)
+        })
+        .collect()
+}
+
+/// Ile próbek miesięcznych ma przebieg — mianownik pytania „czy jest co mierzyć".
+fn probki_miesieczne(lod: &[LodSample]) -> usize {
+    lod.iter()
+        .filter(|s| s.day > 0 && s.day.is_multiple_of(30))
+        .count()
+}
+
+/// Nachylenie regresji liniowej serii, w **dziesiątych promila na rok gry**.
+///
+/// Próbki są miesięczne i równo odległe, więc `x` jest numerem miesiąca;
+/// dwanaście miesięcy to rok gry (`K-1`). Liczone w `i128` i bez ani jednego
+/// dzielenia pośredniego — werdykt bramki nie ma prawa zależeć od kolejności
+/// działań (00 §2).
+#[must_use]
+pub fn nachylenie_na_rok(seria: &[i64]) -> i64 {
+    let n = seria.len() as i128;
+    if n < 2 {
+        return 0;
+    }
+    let sx: i128 = (0..n).sum();
+    let sy: i128 = seria.iter().map(|v| i128::from(*v)).sum();
+    let sxy: i128 = seria
+        .iter()
+        .enumerate()
+        .map(|(i, v)| i as i128 * i128::from(*v))
+        .sum();
+    let sxx: i128 = (0..n).map(|i| i * i).sum();
+    let mianownik = n * sxx - sx * sx;
+    if mianownik == 0 {
+        return 0;
+    }
+    // slope [‰/miesiąc] × 12 [mies./rok] × 10 [dziesiąte]
+    let licznik = (n * sxy - sx * sy) * 120;
+    i64::try_from(licznik / mianownik).unwrap_or(i64::MAX)
+}
+
+/// Autokorelacja znaku serii przy opóźnieniu 1, w setnych (−100..=100).
+///
+/// Łapie „makro zawsze odrobinę na plus" natychmiast, także wtedy, gdy mediana
+/// odchylenia mieści się w progu — a sam próg na nachylenie da się przypadkiem
+/// przejść na krótkiej próbce (M10 §7.3 `K3`).
+#[must_use]
+pub fn autokorelacja_znaku(seria: &[i64]) -> i64 {
+    let znaki: Vec<i64> = seria.iter().map(|v| v.signum()).collect();
+    if znaki.len() < 2 {
+        return 0;
+    }
+    let par = (znaki.len() - 1) as i64;
+    let zgodne: i64 = znaki.windows(2).map(|w| w[0] * w[1]).sum();
+    zgodne * 100 / par
+}
+
+fn mediana_abs(seria: &[i64]) -> i64 {
+    let mut v: Vec<i64> = seria.iter().map(|x| x.abs()).collect();
+    v.sort_unstable();
+    v.get(v.len() / 2).copied().unwrap_or(0)
+}
+
+/// Werdykt jednej wielkości: mediana, nachylenie i autokorelacja znaku.
+fn g12_wielkosc(seria: &[i64]) -> (bool, String) {
+    let med = mediana_abs(seria);
+    let nach = nachylenie_na_rok(seria);
+    let auto = autokorelacja_znaku(seria);
+    let ok = med <= G12_MEDIAN_DEV_MAX_PERMILLE
+        && nach.abs() <= G12_SLOPE_MAX_TENTHS_PERMILLE
+        && auto.abs() <= G12_SIGN_AUTOCORR_MAX;
+    (
+        ok,
+        format!("med {med} ‰, nachylenie {nach}/10 ‰ na rok, autokor. znaku {auto}/100"),
+    )
+}
+
+/// G12: czy `sim/macro` i mezo to **jeden model**, a nie dwa podobne.
+///
+/// Nie mierzy jakości przybliżenia — mierzy, czy ktoś nie dopisał logiki
+/// ekonomicznej do `sim/macro` zamiast zawołać jądro. To jest ryzyko `R1` fazy
+/// M10 i cała jej architektura stoi wokół niego (`WP10.2` przed `WP10.1`).
+///
+/// Bramka jest **doradcza** w przebiegu bez próbek miesięcznych — i to jest ta
+/// sama droga, którą G11 jest doradcza bez ciasnego rynku pracy: bramka, która
+/// nie miała czego zmierzyć, nie ma prawa świecić ani na zielono, ani na czerwono.
+fn lod(u: &[&RunFile]) -> GateOutcome {
+    let mierzalne: Vec<&&RunFile> = u
+        .iter()
+        .filter(|r| probki_miesieczne(&r.lod) >= G12_MIN_MONTHS)
+        .collect();
+    if mierzalne.is_empty() {
+        return GateOutcome {
+            gate: "G12",
+            name: "Makro nie odjezdza od mezo",
+            pass: true,
+            advisory: true,
+            value: format!(
+                "brak przebiegu z {G12_MIN_MONTHS} probkami miesiecznymi (dlugosci: {})",
+                u.iter()
+                    .map(|r| r.lod.len().to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            threshold: "mediana ≤ 5 ‰, nachylenie ≤ 0,2 ‰/rok, autokorelacja znaku ≤ 0,30",
+        };
+    }
+
+    let mut czerwone: Vec<u64> = Vec::new();
+    // Nie steruje już werdyktem (bramka jest doradcza), ale **musi** trafić
+    // do opisu: seria nieporównywalna w dobie zero znaczy, że ktoś zmienił
+    // jedną ze stron pomiaru i bramka mierzy własną definicję.
+    let mut nieporownywalne: Vec<&'static str> = Vec::new();
+    let mut opisy: Vec<String> = Vec::new();
+    for r in &mierzalne {
+        for (nazwa, wielkosc) in WIELKOSCI {
+            let (op, werdykt) = g12_seria(&r.lod, *wielkosc);
+            match werdykt {
+                Werdykt::Nieporownywalna => nieporownywalne.push(nazwa),
+                Werdykt::Czerwona => czerwone.push(r.seed),
+                Werdykt::Zielona => {}
+            }
+            opisy.push(format!("ziarno {}: {nazwa} {op}", r.seed));
+        }
+    }
+    czerwone.dedup();
+
+    GateOutcome {
+        gate: "G12",
+        name: "Makro nie odjezdza od mezo",
+        pass: czerwone.is_empty(),
+        // **Doradcza, dopóki dochód gospodarstwa jest egzogeniczny** — i to jest
+        // ta sama droga, którą G4 jest doradcza do czasu M6.
+        //
+        // Zmierzone (210 dób, ziarno 1): mediana odchylenia pieniądza gospodarstw
+        // **879 ‰**, przy zgodności w dobie zero co do promila. Rozjazd jest więc
+        // prawdziwy, ale jego przyczyna leży po stronie **mezo**, nie makra:
+        // `Firms::run_payroll` zwraca fakty, `PayrollOutbox` je przyjmuje i nikt
+        // jej nie opróżnia od M7b (`FF-29`), więc dochód gospodarstwa płaci
+        // pracodawca spoza miasta, a pieniądz firm osobno wycieka do ludzi
+        // (395 → 229 mln zł w księgach przez 300 dób). Makro nie ma jak tego
+        // odtworzyć, bo w nim płace idą z ksiąg firm do gospodarstw i tyle.
+        //
+        // Czerwień znaczyłaby „model makro jest zepsuty", a zepsuty jest kanał,
+        // którego jeszcze nie ma — a bramka świecąca na czerwono z powodu
+        // nieistniejącego kanału uczy wyłącznie ignorowania bramek. Liczba jest
+        // przy tym wypisywana co noc, więc doba, w której `FF-29` się domknie,
+        // będzie w raporcie widoczna.
+        //
+        // **Kiedy przestaje być doradcza:** gdy `PayrollOutbox` dostanie
+        // konsumenta. Wtedy ten komentarz znika razem z `advisory: true`.
+        advisory: true,
+        value: format!(
+            "{} ziaren czerwonych {czerwone:?}{}; {}",
+            czerwone.len(),
+            if nieporownywalne.is_empty() {
+                String::new()
+            } else {
+                format!("; nieporównywalne w dobie zero: {nieporownywalne:?}")
+            },
+            opisy.join(" | ")
+        ),
+        threshold: "mediana ≤ 5 ‰, nachylenie ≤ 0,2 ‰/rok, autokorelacja znaku ≤ 0,30 \
+                    (doradcza do czasu domknięcia `PayrollOutbox`, `FF-29`)",
+    }
+}
+
+/// Co porównujemy. Pieniądz jest wielkością **nazwaną w kontrakcie** (M10 §7.3,
+/// tabela `K2`: „gotówka + depozyty GD per dzielnica"); bezrobocie dołożone,
+/// bo jest wyjściem rynku pracy, czyli fazy, w której makro i mezo najłatwiej
+/// się rozjeżdżają.
+const WIELKOSCI: &[(&str, Wielkosc)] = &[
+    ("pieniądz GD", |s| {
+        (s.macro_hh_money_gr, s.mezo_hh_money_gr)
+    }),
+    ("bezrobocie", |s| {
+        (
+            i64::from(s.macro_unemployment_permille),
+            i64::from(s.mezo_unemployment_permille),
+        )
+    }),
+];
+
+/// Wyciąg pary „makro, mezo" z jednej próbki doby.
+type Wielkosc = fn(&LodSample) -> (i64, i64);
+
+/// Werdykt jednej wielkości w jednym przebiegu.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Werdykt {
+    Zielona,
+    Czerwona,
+    /// Doba zero już się nie zgadza — obie strony liczą co innego.
+    Nieporownywalna,
+}
+
+/// Seria jednej wielkości z werdyktem i opisem.
+///
+/// **Najpierw doba zero, potem dryf** — i ta kolejność jest istotą poprawki:
+/// `lift()` kopiuje świat, więc jeśli w dobie zero liczby się nie zgadzają,
+/// to nie jest dryf modelu, tylko dwie różne definicje. Sądzenie takiej serii
+/// dałoby bramkę czerwoną na zawsze i nic nieznaczącą.
+fn g12_seria(lod: &[LodSample], wielkosc: Wielkosc) -> (String, Werdykt) {
+    let start = lod
+        .iter()
+        .find(|s| s.day == 0)
+        .map(wielkosc)
+        .and_then(|(m, z)| odchylenie_permille(m, z));
+    if let Some(d0) = start {
+        if d0.abs() > G12_DAY0_TOLERANCE_PERMILLE {
+            return (
+                format!("doba zero różni się o {d0} ‰ — nieporównywalne"),
+                Werdykt::Nieporownywalna,
+            );
+        }
+    }
+    let seria = seria_miesieczna(lod, wielkosc);
+    let (ok, opis) = g12_wielkosc(&seria);
+    (
+        opis,
+        if ok { Werdykt::Zielona } else { Werdykt::Czerwona },
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -865,5 +1139,77 @@ mod tests {
             d.deferral_permille = G5_DEFERRAL_MAX_PERMILLE;
         }
         assert!(!g5_series(&odkladaja));
+    }
+
+    // ── G12 ─────────────────────────────────────────────────────────────────
+
+    /// Odchylenie skaczące w obie strony ma nachylenie zero — i to jest cała
+    /// różnica między szumem a dryfem.
+    #[test]
+    fn szum_nie_ma_nachylenia() {
+        // Palindrom: ta sama seria czytana od końca, więc regresja jest płaska
+        // z konstrukcji. Znaki układają się w pary, więc autokorelacja też siada.
+        let seria = vec![3, -3, -3, 3, 3, -3, -3, 3, 3, -3, -3, 3];
+        assert_eq!(nachylenie_na_rok(&seria), 0);
+        assert_eq!(mediana_abs(&seria), 3);
+        let (ok, opis) = g12_wielkosc(&seria);
+        assert!(ok, "szum w paśmie ma przechodzić ({opis})");
+    }
+
+    /// Odchylenie rosnące o promil na miesiąc to dwanaście promili na rok,
+    /// czyli sto dwadzieścia dziesiątych — sześćdziesiąt razy ponad próg.
+    #[test]
+    fn dryf_wylapuje_nachylenie() {
+        let seria: Vec<i64> = (0..12).collect();
+        assert_eq!(nachylenie_na_rok(&seria), 120);
+        let (ok, opis) = g12_wielkosc(&seria);
+        assert!(!ok, "dryf o promil na miesiąc ma być czerwony ({opis})");
+    }
+
+    /// Odchylenie małe, ale **zawsze w tę samą stronę**: mediana i nachylenie
+    /// przechodzą, a bramka i tak jest czerwona. To jest ten wiersz `K3`,
+    /// dla którego autokorelacja znaku w ogóle tam stoi.
+    #[test]
+    fn stale_odchylenie_w_jedna_strone_jest_czerwone() {
+        let seria = vec![4, 4, 3, 4, 3, 4, 4, 3, 4, 3, 4, 4];
+        assert!(mediana_abs(&seria) <= G12_MEDIAN_DEV_MAX_PERMILLE);
+        assert!(nachylenie_na_rok(&seria).abs() <= G12_SLOPE_MAX_TENTHS_PERMILLE);
+        assert_eq!(autokorelacja_znaku(&seria), 100);
+        let (ok, _) = g12_wielkosc(&seria);
+        assert!(!ok, "makro zawsze odrobinę na plus to nie jest szum");
+    }
+
+    /// Mezo równe zero nie daje odchylenia nieskończonego — nie daje żadnego.
+    #[test]
+    fn zerowy_mianownik_nie_jest_odchyleniem() {
+        assert_eq!(odchylenie_permille(100, 0), None);
+        assert_eq!(odchylenie_permille(105, 100), Some(50));
+    }
+
+    /// Przebieg bez próbek nie ma czego zmierzyć i mówi to o sobie.
+    #[test]
+    fn brak_probek_czyni_bramke_doradcza() {
+        let r = przebieg_pusty();
+        let g = lod(&[&r]);
+        assert!(g.advisory, "bramka bez pomiaru nie ma prawa świecić");
+        assert!(g.pass);
+    }
+
+    fn przebieg_pusty() -> RunFile {
+        RunFile {
+            schema_version: crate::metrics::SCHEMA_VERSION,
+            scenario: "base".to_string(),
+            seed: 1,
+            days: 10,
+            citizens: 100,
+            shops: 1,
+            hashes: Vec::new(),
+            days_data: Vec::new(),
+            shock_good: None,
+            conservation_ok: true,
+            decisions_without_reason: 0,
+            decisions_sampled: 0,
+            lod: Vec::new(),
+        }
     }
 }

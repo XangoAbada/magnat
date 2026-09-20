@@ -296,6 +296,7 @@ impl Session {
             outcome: crate::scenario::ScenarioOutcome::Running,
             ending_seen: false,
         };
+        s.chronicle.ingest_dry_run(&standing.history);
         s.load_scenario(params.scenario);
         // Świat już stoi, więc ta koperta niczego nie wykonuje — niesie za to
         // wszystko, czego trzeba, żeby go odtworzyć (§5.13).

@@ -18,12 +18,11 @@ use std::process::ExitCode;
 
 use clap::Args;
 use magnat_agents::{bootstrap_day, register_day};
-use magnat_core::GoodId;
 use magnat_headless::full;
 use magnat_headless::population::{swiat_agentow, zaludnij, zbuduj_miasto};
 use magnat_io::world_state_hash;
 use magnat_jobs::JobPool;
-use magnat_macro::{dry_run, lift, DryRunConfig, MacroParams};
+use magnat_macro::{dry_run, DryRunConfig, MacroParams};
 
 #[derive(Args, Debug)]
 pub struct DryRunArgs {
@@ -71,14 +70,6 @@ pub struct DryRunArgs {
     pub expect: Option<String>,
 }
 
-/// Ile pozycji ma koszyk podstawowy do bramki 8 i ile sztuk każdej na miesiąc.
-///
-/// Koszyk buduje **wołający**, bo to on ma katalog towarów (`sim/macro` go nie ma
-/// i mieć nie powinien). Tu bierzemy towary o najszerszej dostępności w mieście;
-/// docelowy koszyk `data/economy/cpi.ron` składa scenariusz gry, nie ten runner.
-const KOSZYK_POZYCJI: usize = 12;
-const KOSZYK_SZTUK_MIESIECZNIE: i64 = 30;
-
 pub fn run(a: &DryRunArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
     let pool = JobPool::new(a.threads);
     let t0 = std::time::Instant::now();
@@ -99,7 +90,7 @@ pub fn run(a: &DryRunArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
     let budowa = t0.elapsed();
 
     let pieniadz_przed = pieniadz(&world);
-    let koszyk = koszyk_miasta(&world);
+    let koszyk = magnat_game::world::dry_run_basket(&world);
 
     let cfg = DryRunConfig {
         seed: a.seed,
@@ -250,23 +241,4 @@ fn pieniadz(world: &magnat_ecs::World) -> i64 {
         + world
             .get_resource::<magnat_economy::Books>()
             .map_or(0, |b| b.total_balance().get())
-}
-
-/// Towary o najszerszej dostępności w mieście, po `KOSZYK_SZTUK_MIESIECZNIE` sztuk.
-fn koszyk_miasta(world: &magnat_ecs::World) -> Vec<(GoodId, i64)> {
-    let st = lift(world);
-    let mut licznik: std::collections::BTreeMap<u16, u32> = std::collections::BTreeMap::new();
-    for f in &st.firms {
-        for (g, cena) in f.price.iter() {
-            if cena.get() > 0 {
-                *licznik.entry(g.0).or_default() += 1;
-            }
-        }
-    }
-    let mut v: Vec<(u32, u16)> = licznik.into_iter().map(|(g, n)| (n, g)).collect();
-    v.sort_unstable_by(|a, b| b.cmp(a));
-    v.into_iter()
-        .take(KOSZYK_POZYCJI)
-        .map(|(_, g)| (GoodId(g), KOSZYK_SZTUK_MIESIECZNIE))
-        .collect()
 }

@@ -1,6 +1,6 @@
 # M10f — Kroniki i domknięcie
 
-Podfaza 6 z 6 fazy **M10 — Głębia** (`M10-glebia.md`).
+Podfaza 6 z 7 fazy **M10 — Głębia** (`M10-glebia.md`).
 Dokument nadrzędny: `00-konwencje-i-kontrakty.md`.
 Zakres fazy (§2), kontrakty międzyfazowe (§6), ryzyka (§8) i decyzje otwarte (§9)
 zostają w dokumencie fazy — tu jest wyłącznie to, co robisz w tej porcji.
@@ -8,32 +8,157 @@ zostają w dokumencie fazy — tu jest wyłącznie to, co robisz w tej porcji.
 | | |
 |---|---|
 | **Wejście** | M10a–M10e. |
-| **Pakiety robocze** | WP10.15, WP10.16 |
+| **Pakiety robocze** | WP10.15, WP10.16, WP10.17, WP10.18 |
 | **Projekt techniczny** | §5.10 |
-| **Wynik do pokazania** | Pełny artefakt fazy z §1 dokumentu fazy: marka z pamięci agentów, R&D, giełda, historia „na sucho”. |
-| **Kryterium zamknięcia** | Kryteria WP10.15 i WP10.16 oraz bramki 1–7 fazy M10 w `00-postep.md`. |
-| **Poprzednia / następna** | `M10e-relacje-i-zwiazki.md` · — (ostatnia w fazie) |
+| **Wynik do pokazania** | Świat, którego historię widać: kronika niesie osiemdziesiąt lat sprzed partii i uchwały rady, bramki Etapu 10 są zielone, a bramka balansatora porównuje przebieg mezo z makro. |
+| **Kryterium zamknięcia** | Kryteria WP10.15–WP10.18. Bramki 1–7 fazy M10 zamyka dopiero `M10g`. |
+| **Poprzednia / następna** | `M10e-relacje-i-zwiazki.md` · `M10g-panele-i-komendy.md` |
 
-Kroniki i wyjaśnialność dla wszystkich nowych mechanik oraz dopisanie stanu M10 do funkcji haszującej.
+Kroniki, determinizm i domknięcie pomiarów fazy.
+
+## Dlaczego podfaz jest siedem, a nie sześć
+
+Plan przewidywał dla M10f dwa pakiety rozmiaru S — kroniki i hash. Tabele
+„Zmiany wpisane po M10b/c/d/e" poniżej dołożyły do tego adresu jeszcze
+**trzy panele z komendami gracza, cztery karty inspekcji i przebieg pomiarowy
+całej fazy**: `FF-1`, `FF-8`, `FF-9`, `FF-11`, `FF-14`, `FF-15`, `FF-17`,
+`FF-18`, `FF-21`, `FF-22`, `FF-23`, `FF-24`. Do tego doszły dwie pozycje
+z M10a, które nie miały gdzie indziej trafić: bramki Etapu 10 (`E-12`)
+i bramka balansatora makro↔mezo (`E-13`).
+
+To jest praca czterech pakietów, dwóch rozmiaru L — a nie dwóch pakietów
+rozmiaru S. `K-17` dopuszcza poprawienie podziału w dokumencie fazy, więc
+podział jest poprawiony: **M10f zamyka symulację** (kronika, determinizm,
+bramki, pomiary), **M10g zamyka wejście gracza** (panele, komendy, karty).
+Granica jest ostra i wynika z kierunku zależności: M10f nie dotyka `game/`
+poza kroniką, M10g nie dotyka `sim/*` poza jednym punktem podstawienia
+w negocjacjach.
 
 ---
 
 ## Pakiety robocze
 
+Kolejność jest kolejnością zależności: kronika i hash są niezależne, bramki
+potrzebują obu, a przebieg pomiarowy potrzebuje bramek, żeby wiedzieć,
+czy mierzy świat zdrowy.
+
 ### WP10.15 — Kroniki i wyjaśnialność
 
 **Zależności:** M9 (podsystem kroniki), wszystkie WP tej fazy.
-Przekrojowy. Każda nowa decyzja ma `DecisionReason` (dok. 00 §7). Nowe warianty `ChronicleEvent` z §5.9.
-**Kryterium ukończenia:** 100% nowych decyzji ma czytelny powód w karcie inspekcji; audyt ręczny
-20 losowych wpisów kronikarskich pod kątem zrozumiałości dla gracza.
+Przekrojowy. Każda nowa decyzja ma `DecisionReason` (dok. 00 §7).
+
+**Co jest już zrobione po M10e i czego nie trzeba powtarzać:** `reason::describe`
+ma ramię dla wszystkich dwudziestu pięciu powodów 800–824, a `data/locale/pl.ron`
+i `en.ron` mają komplet kluczy po obu stronach. Dziennik redakcji jest zbierany
+(`FF-2`), a decyzje giełdy, ubezpieczeń, zmów i związków idą przez `Firm.log`
+i tą drogą trafiają do kroniki **firm gracza** (`FF-20`).
+
+**Co zostaje do zrobienia — dwie rzeczy:**
+
+1. **Historia „na sucho" wchodzi do kroniki** (M10 §2 pkt 14, §6 pkt 7, ryzyko `R9`).
+   `DryRunResult.chronicle` jest dziś czytany wyłącznie przez `tools/headless`
+   i ginie razem z procesem. Kronika gracza dostaje **pochodzenie** wpisu
+   (`Provenance::{Live, DryRun}`) i most jednokierunkowy z `DK-2`: wpis sprzed
+   partii niesie własny rok, bo `SimMinute` nie umie liczyć wstecz od zera świata.
+2. **Uchwały rady i wybory wchodzą do kroniki.** `City.reasons` jest pierścieniem
+   na 256 wpisów, który dziś nikt nie czyta; są w nim decyzje widoczne dla
+   **każdego** gracza niezależnie od tego, co posiada — podwyżka VAT-u, wynik
+   wyborów, uchwalona polityka. Decyzji dwóch tysięcy firm AI nadal nie zbieramy
+   i to zostaje bez zmian (sufit nazwany w nagłówku `game::chronicle`).
+
+**Kryterium ukończenia:** kronika po przebiegu `dry-run` niesie wpisy sprzed
+startu partii i da się je odfiltrować po pochodzeniu; uchwała rady zmieniająca
+stawkę podatku pojawia się w kronice w dobie, w której zapadła; audyt ręczny
+20 wpisów pod kątem zrozumiałości dla gracza.
 **Rozmiar: S.**
 
 ---
 
 ### WP10.16 — Determinizm i hash stanu
 
-Przekrojowy, Definition of Done fazy. Nowe warianty `StreamId`, dopisanie nowych komponentów do
-funkcji haszującej, testy dwóch przebiegów. **Rozmiar: S.**
+Przekrojowy, Definition of Done fazy.
+
+**Co jest już zrobione po M10e:** wszystkie zasoby M10 mają `impl HashState`
+i są wpięte — `MacroHandle`, `BrandSlab`, `Campaigns`, `Outlets`, `EdgeWatch`
+(przez `TrafficNetwork`), `RndState` (przez `Firms`), `Equity`, `Insurers`,
+`Unions`, `Cartels`, relacje B2B (przez `ChainHandle`). Bloki `StreamId`
+280–295 i `DecisionReason` 800–824 są rozpisane i wieczne.
+
+**Co zostaje:** **testu dwóch przebiegów obejmującego M10 nie ma.**
+`sim/agents/tests/determinism.rs` pilnuje mieszkańców, `sim/economy` i `sim/firms`
+mają własne testy hasha, `macro_lod.rs` porównuje dwa dry-runy — ale żaden
+nie stawia świata z mediami, giełdą, ubezpieczeniami i związkami naraz
+i nie porównuje **ciągu** hashy dwóch przebiegów. Bez niego zdanie „stan M10
+jest w hashu" opiera się na przeglądzie kodu, a nie na pomiarze.
+
+**Kryterium ukończenia:** test stawiający pełny świat (`game::world::stand_up`
+z gospodarką) i przepuszczający go przez co najmniej trzy doby daje identyczny
+ciąg hashy w dwóch przebiegach tego samego ziarna, przy jednym i przy wielu
+wątkach; test jest w CI.
+**Rozmiar: S.**
+
+---
+
+### WP10.17 — Bramki Etapu 10 i bramka balansatora makro↔mezo
+
+**Zależności:** WP10.16. Przejmuje `E-12` i `E-13` z `M10a-jadro-makro-historia.md`,
+bo to jedyne dwie pozycje WP10.3 i WP10.4, które tamta podfaza zostawiła otwarte.
+
+Trzy rzeczy:
+
+1. **Bramka 7 rozdziela się na dwie** — wykonanie decyzji `D9` fazy zgodnie
+   z propozycją domyślną, rozstrzygniętej przez właściciela produktu 2026-09-20.
+   Bramka 7 mierzy **Gini majątku** w paśmie 550–850 ‰ (bo to jest pasmo realnego
+   współczynnika Giniego majątku i mierzy Etap 8 generatora), a nowa **bramka 9**
+   mierzy **Gini dochodu** w paśmie 250–450 ‰ (bo to mierzy rynek pracy). Mylenie
+   ich ukrywało obie: bramka świeciła na czerwono od pierwszego pomiaru i nikt nie
+   wiedział, czy to wada generatora, czy wada progu.
+2. **Bramki 1, 3 i 5 mierzy się ponownie**, bo `M10e` zmieniło wejście, na którym
+   stały: `CommuteMatrix` wypełnia się od `GE-12` geometrią miasta, a rekrutacja
+   w makro jest ważona gotowością do dojazdu. `E-12` przypisywało czerwień bramek
+   1 i 3 **płaskiej macierzy** — pomiar rozstrzyga, czy to była cała przyczyna.
+3. **Bramka `G12` balansatora porównuje przebieg mezo z makro.** `E-13` odkładało
+   ją jako „bieg nocny z własnym budżetem", bo rok gry mezo kosztuje ~10 min na
+   ziarno. Droga tańsza i wystarczająca: balansator **i tak** prowadzi przebieg
+   mezo, więc `lift()` w dobie zero i krok makro obok kosztują 8 ms na dobę —
+   dwie trajektorie z jednego przebiegu. Bramka porównuje agregaty miesięczne
+   i stosuje kryterium `K3` z §7.3 (nachylenie regresji, nie odchylenie
+   pojedynczego miesiąca), bo to ono jest prawdziwym testem jednego modelu.
+
+**Kryterium ukończenia:** `headless dry-run` na trzech rozmiarach miasta wypisuje
+dziewięć bramek i wszystkie są zmierzone; `balansator gate --profile nightly`
+zna `G12` i wydaje werdykt z nachyleniem regresji.
+**Rozmiar: M.**
+
+---
+
+### WP10.18 — Przebieg pomiarowy fazy
+
+**Zależności:** WP10.17. Zbiera osiem pomiarów, które podfazy M10b–M10e
+zostawiły z adresem „M10f" — każdy jest liczbą, której nikt nie zmierzył,
+a od której zależy, czy mechanika w mieście z generatora w ogóle zachodzi.
+
+| Skąd | Co zmierzyć | Próg z planu |
+|---|---|---|
+| `FF-8` | udział systemów reklamowych w budżecie ticku przy 2000 kampanii | ≤ 1,5 % (§7.5) |
+| `FF-11` | badacze na etatach, projekty w toku, odkrycia, patenty | 4 badaczy → węzeł 1200 RP w 9 ± 1 mies. (§7.4) |
+| `FF-17` | ile oddziałów ubezpieczeniowych stawia generator | ≥ 1; zero znaczy miasto bez polis |
+| `FF-18` | firmy spełniające warunek debiutu, gospodarstwa nad progiem inwestora, przecięcia w arkuszu | pierwszy debiut nie przed dobą 255 |
+| `FF-21` | szkody na rok gry uśrednione po ziarnach (powódź, pożar magazynu) | `base_ppm` zgadnięte, do weryfikacji |
+| `FF-24` | zakłady nad progiem żalu, zmowy na rok, odsetek firm rocznie w strajku | strajk < 5 % firm rocznie (`R6`), 20–50 % zmów wykrytych w 5 lat (`R8`) |
+| `FF-25` | ile marek rocznie obrywa od prasy | decyduje, czy `SCANDAL_MAX_DROP` idzie do `data/tuning/brand.ron` |
+| `D4` | mediana liczby marek, z którymi mieszkaniec ma realny kontakt | > 13 znaczy podnieść `BRAND_SLOTS` z 16 na 24 |
+
+Pomiar jest **wynikiem**, nie kodem: pakiet jest zamknięty, gdy liczby są
+zmierzone i zapisane w tabeli na końcu tego dokumentu, a każda z nich ma
+werdykt „mieści się w progu" albo „nie mieści się i oto adres naprawy".
+Pułapka nazwana w `FF-8` obowiązuje wszystkie wiersze: doba `m7miasto`
+kosztuje 1,15 s w piątej dobie i ~15 s w czterdziestej **bez udziału nowego
+kodu**, więc porównanie dwóch różnych dób mierzy wzrost gospodarki.
+
+**Kryterium ukończenia:** tabela pomiarów jest wypełniona, a każda liczba
+poza progiem ma wpisany adres — pakiet naprawczy albo decyzję otwartą.
+**Rozmiar: M.**
 
 ---
 
@@ -72,6 +197,138 @@ w tekście („patrz §5.4") nadal wskazują tę samą treść.
 | `union_negotiate` | `EveryWeek` | — | W: `Union`, płace |
 | `strike_tick` | `EveryDay` | — | W: produkcja zakładu, `Ledger` |
 | `macro_step` | `EveryDay` (tylko w trybie makro) | makro | R/W: `MacroState` |
+
+---
+
+## Wyniki przebiegu pomiarowego (WP10.18)
+
+Osiem liczb, których podfazy M10b–M10e nie zmierzyły. **Przyrząd dobrany do
+pytania, nie do przyzwyczajenia** — i to jest główny wniosek tego pakietu.
+
+### Dlaczego nie jeden długi przebieg miasta
+
+Pierwsza wersja tego pakietu uruchamiała trzy przebiegi po 400 dób i **dwa
+z ośmiu pomiarów mierzyłaby źle**:
+
+- **`FF-21`** („szkód na rok gry uśrednione po ziarnach") jest własnością
+  katalogu zdarzeń, a nie miasta. Przebieg 400 dób to **jedna** próbka przy
+  oczekiwanych 0,65 powodzi na rok — zero niczego nie dowodzi i jedna też nie.
+  Arytmetyka katalogu daje rozkład i liczy się w milisekundach.
+- **`FF-8`** („≤ 1,5 % budżetu ticku przy **2000** kampanii") nie zmierzyłby się
+  nigdy: firmy AI otwierają ich kilkadziesiąt. Kampanie trzeba **postawić**,
+  a nie doczekać.
+
+Do tego `FF-11` było już zmierzone przez M10c, a M10f nie dotknął R&D, i `FF-17`
+widać w nagłówku przebiegu. Zostały cztery pomiary, którym wystarczył **jeden**
+przebieg 300 dób przy mniejszej populacji startowej — 801 s zamiast godzin.
+
+### Tabela
+
+Przebieg: `m7miasto --seed 1 --size 4km --citizens 6000 --days 300`
+(populacja rośnie migracją do 22 731), 215 → 236 firm.
+
+| # | Pomiar | Zmierzone | Próg | Werdykt |
+|---|---|---|---|---|
+| `D4` | mediana marek na znającego markę | **6** (maks. 16, 457 ‰ mieszkańców zna jakąkolwiek) | podnieść `BRAND_SLOTS` przy > 13 | **zielone — zostaje 16**, decyzja `D4` zamknięta |
+| `FF-17` | biura ubezpieczeniowe z generatora | **5**, polis czynnych 118, 987 opłaconych polisomiesięcy | ≥ 1 | **zielone** |
+| `FF-11` | badacze / projekty / patenty | 9 / 25 / 0, opłacony budżet badań **760 ‰** | węzeł 1200 RP w 9 ± 1 mies. | **czerwone** — ta sama przyczyna co `FF-18`, adres niżej |
+| `FF-18` | notowania / gospodarstwa nad progiem inwestora | **0** / **202** | pierwszy debiut ≥ doba 255 | **czerwone** — warunek debiutu wymaga dodatniego **opublikowanego** wyniku |
+| `FF-24` | zakłady nad progiem żalu / zmowy / strajki | **0 z 123** mierzonych / **17 czynnych** / **0** | strajk < 5 % firm rocznie (`R6`), 20–50 % zmów wykrytych w 5 lat (`R8`) | `R6` **zielone** (0 %), `R8` **niezmierzone** — 0,83 roku to za mało na wykrycie |
+| `FF-21` | szkody na rok gry | 4 km: powódź **0,65**, pożar **0,79**; metropolia: **1,94** i **2,00** | mechanizm widoczny dla gracza | **zielone**, z jednym znaleziskiem — niżej |
+| `FF-8` | koszt 2000 kampanii na dobę gry | **12 514 ms** | ≤ 225 ms (1,5 % doby) | **czerwone 55×**, przyczyna zlokalizowana co do funkcji |
+| `FF-25` | marki obrywające od prasy | **0 na rok** — redakcja nie opublikowała ani jednego tekstu | liczba, która rozstrzyga, czy `SCANDAL_MAX_DROP` idzie do danych | **niezmierzone**, adres niżej |
+
+### Znaleziska, których żaden z tych pomiarów nie szukał
+
+**1. Karencja zdarzenia wiąże powyżej 556 zakładów, i to zmienia model.**
+`cooldown_days` jest przerwą **definicji**, nie podmiotu (`CH-11`), więc jeden
+pożar magazynu ucisza wszystkie zakłady w mieście na 180 dób. Hazard rośnie
+z liczbą zakładów, realizowana częstość ma sufit `360 / cooldown_days`. Przy
+4 km (220 zakładów) hazard 0,79/rok mieści się pod sufitem 2,00; przy metropolii
+(2200 zakładów) hazard 7,92/rok jest **przycięty do 2,00**. Konsekwencja, której
+nikt nie zapisał: **duże miasto ma pożarów na zakład czterokrotnie mniej niż
+małe**, a dołożenie magazynów ich nie dokłada. Mierzy to
+`sim/events/tests/peril.rs::karencja_wiaze_powyzej_progu_liczby_zakladow`.
+
+**2. Cały nadmiar `FF-8` siedzi w dwóch kanałach z ośmiu.** Rozbicie (250 kampanii
+na kanał, 20 tys. mieszkańców, doba gry): Billboard 2 ms, Press 1 ms, Radio 1 ms,
+Tv 2 ms, Leaflet 1 ms, Sponsorship 10 ms — i **InStorePromo 6079 ms** oraz
+**Pr 6479 ms**. Przyczyna jest jedna i ta sama: `promocja` (`sim/media/src/system.rs`)
+zbiera mieszkańców **wszystkich dzielnic** i pyta każdego `knows_place`, a `pr`
+robi to samo z `affinity_of` i dodatkowo klonuje tabelę pamięci marki na kampanię.
+To jest przebieg po całej populacji **na kampanię, na dobę**. W świecie pomiaru
+oba kanały nie docierają do **nikogo** (relacje puste, sklepów nikt nie zna), więc
+te 12,5 s to koszt samego szukania — w prawdziwym mieście będzie wyższy, nie niższy.
+Adres naprawy: indeks „marka → mieszkańcy, którzy ją znają" albo jeden przebieg
+po populacji na dobę zamiast na kampanię. **Należy do `M10g` albo `R2`** — jest to
+przebudowa wydajnościowa, a nie domknięcie pomiaru.
+
+**3. Bramka `G12` w pierwszym przebiegu znalazła dwie różne rzeczy, i to jest
+argument za tym, żeby w ogóle istniała.** Obie serie są czerwone, ale z **innych
+powodów**, a rozróżnienie wyszło dopiero po zmierzeniu bramek Etapu 10 (niżej).
+
+*Pieniądz gospodarstw — mediana odchylenia **879 ‰**.* Przyczyna jest po stronie
+mezo: pieniądz wycieka z ksiąg firm do gospodarstw (**395 → 229 mln zł**
+w księgach wobec **6 → 169 mln zł** u ludzi przez 300 dób), a makro tego nie
+odtwarza, bo w nim płace idą z ksiąg firm do gospodarstw i tyle. Otwarty kanał
+`FF-29`: `PayrollOutbox` nie ma konsumenta od M7b, więc dochód gospodarstwa jest
+egzogeniczny i **pieniądz firm ubywa drugą drogą**.
+
+*Bezrobocie — mediana odchylenia **863 ‰**.* Tu przyczyna jest po stronie
+**makra i należy do M10**: bramka 4 Etapu 10 pokazuje bezrobocie makro równe
+**zeru** na obu zmierzonych rozmiarach miasta. Rekrutacja ważona gotowością
+do dojazdu (`GE-12`, decyzja `D10` wykonana w M10e) zatrudnia praktycznie
+wszystkich — czyli zaszło dokładnie to, przed czym `E-12` ostrzegało przy
+wcześniejszej próbie otwarcia puli na całe miasto („bezrobocie schodzi wtedy
+do zera"). Odsetek firm bez obsady spadł przy tym z 291 ‰ do **167 ‰**, więc
+poprawka pomogła w połowie i w połowie zaszkodziła.
+
+**`G12` jest doradcza**, bo jedna z jej dwóch serii jest zablokowana kanałem,
+którego jeszcze nie ma — tą samą drogą co `G4` do czasu M6. Seria bezrobocia
+**nie ma tego usprawiedliwienia** i powinna zzielenieć po naprawie rekrutacji
+makro, niezależnie od `FF-29`. Gdyby nie ta bramka, o zerowym bezrobociu
+w makrze nie dowiedziałby się nikt: mezo go nie widzi, a `what_if()` zwraca
+uporządkowanie wariantów, nie poziom.
+
+**5. Bramki Etapu 10 po decyzji `D9` i po `GE-12`.** Przebieg
+`headless dry-run --years 30`, dwa rozmiary miasta:
+
+| Bramka | 4 km | 8 km | Pasmo | Uwaga |
+|---|---|---|---|---|
+| 7 Gini **majątku** | **704** ‰ ✅ | 872 ‰ | 550–850 | **decyzja `D9` działa** — bramka, która świeciła na czerwono od pierwszego pomiaru, jest zielona na 4 km; 8 km wychodzi 22 ‰ nad krawędź |
+| 10 Gini **dochodu** (nowa) | 613 ‰ | 507 ‰ | 250–450 | czerwona; mierzy dyspersję płac **między pracodawcami**, a ta jest w tym modelu bardzo szeroka |
+| 4 bezrobocie | **0** ‰ | **0** ‰ | 30–150 | **regresja po `GE-12`** — patrz znalezisko 3 |
+| 3 firmy bez obsady | 167 ‰ | 139 ‰ | 0 | poprawa z 291 ‰ (`E-12`), ale nie do zera |
+| 1 nierównowaga | 1000 ‰ | 1000 ‰ | ≤ 300 | bez zmian wobec `E-12` |
+| 5 mediana dźwigni | 0 ‰ | 0 ‰ | 100–600 | bez zmian |
+| 8 koszyk/dochód | 0 ‰ | 0 ‰ | 250–550 | niemierzalny przy zerowym bezrobociu i zerowej dźwigni |
+| 2, 6 | ✅ | ✅ | — | zielone |
+
+Kryterium WP10.3 „100 % ziaren przechodzi Etap 10" **nadal nie jest spełnione**
+i to jest stan zapisany, nie przemilczany — ale po raz pierwszy wiadomo, że
+jedna z czerwonych bramek jest skutkiem poprawki z poprzedniej podfazy,
+a nie stanu zastanego. Adres: `M10g` razem z resztą rekrutacji makro.
+
+**4. Trzy czerwone pomiary mają jedną przyczynę.** `FF-11` (badania pełzną),
+`FF-18` (zero debiutów) i niski udział kampanii (6 zamiast 35 z M10b) to
+skutki tego samego wycieku co w znalezisku 3: firma bez gotówki nie opłaca
+badań, nie publikuje dodatniego wyniku i schodzi z reklamą na najtańszy kanał.
+M10c nazwał to przy `FF-11`; ten przebieg pokazuje, że dotyczy trzech mechanik
+naraz, a nie jednej. **Adres jest wspólny i jest nim `FF-29`.**
+
+**4a. A najtańszy kanał nie dociera do nikogo — i to jest osobna usterka.**
+Histogram kanałów żywych kampanii, dopisany do raportu właśnie po to, żeby
+nie zgadywać: **`Leaflet` 6 kampanii, 0 ekspozycji** — i żadnego innego kanału.
+Zubożałe firmy schodzą na ulotki (`ai::monthly` wybiera kanał z zasobności),
+a ulotki milczą. `ulotki` (`sim/media/src/system.rs`) ma **dokładnie jedno**
+wyjście, które kończy się zerem bez ani jednej próby doręczenia: brak
+współrzędnej zakładu w `PlaceCatalog` (`coord_of(PlaceRef::Site(origin))`
+zwraca `None`). Kandydatem na kampanię jest **każdy zakład z firmą**, a katalog
+miejsc zna te, które mieszkaniec odwiedza — więc zakład produkcyjny wypada
+z niego z definicji. To tłumaczy, dlaczego M10b mierzyło 482 tys. ekspozycji
+przy 40 dobach (bogate firmy kupowały prasę i telewizję), a ten przebieg zero
+przy 300 (biedne kupują ulotki). Mechanizm wyglądał na działający przez dwie
+podfazy, bo nikt nie patrzył na kanał, tylko na sumę. Adres: `GF-2` w `M10g`.
 
 ---
 

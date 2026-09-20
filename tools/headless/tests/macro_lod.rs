@@ -203,7 +203,7 @@ fn historia_na_sucho_zuzywa_swiat_i_domyka_etap_10() {
     // Raport ma mieć zdanie o **każdej** bramce, także o tej, której nie zmierzył.
     assert_eq!(
         wynik.verification.checks.len(),
-        8,
+        9,
         "brakuje bramki w raporcie"
     );
     for c in &wynik.verification.checks {

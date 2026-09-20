@@ -168,6 +168,8 @@ pub fn succession(
         min_importance: WAZNOSC,
         from_day: None,
         to_day: None,
+        // Ekran spuścizny mówi o tej postaci, a nie o świecie sprzed niej.
+        provenance: Some(crate::chronicle::Provenance::Live),
     };
     let wpisy = session.chronicle().query(&zapytanie);
     if wpisy.is_empty() {

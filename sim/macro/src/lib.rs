@@ -39,6 +39,7 @@ pub mod state;
 pub mod step;
 pub mod system;
 pub mod types;
+pub mod verify;
 pub mod whatif;
 
 pub use brandseed::{fill_brand_stock, seed_memory, SEED_MAX, SEED_MIN};

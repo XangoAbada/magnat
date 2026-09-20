@@ -43,6 +43,33 @@ pub struct RunFile {
     /// Ile decyzji bez `DecisionReason` znalazł przebieg (bramka G9).
     pub decisions_without_reason: u64,
     pub decisions_sampled: u64,
+    /// Trajektoria makro tego samego świata, próbkowana co dobę — wejście
+    /// bramki G12 (M10f WP10.17, `E-13`).
+    ///
+    /// Pusta w plikach sprzed M10f i to jest cała wsteczna zgodność: bramka
+    /// bez próbek **nie udaje, że zmierzyła**, tak samo jak G11 bez ciasnego
+    /// rynku pracy.
+    #[serde(default)]
+    pub lod: Vec<LodSample>,
+}
+
+/// Jedna doba w obu trybach naraz — mezo z tykającego świata, makro z modelu
+/// zdjętego w dobie zero i krokowanego obok (bramka G12).
+///
+/// Dwie liczby, a nie dwanaście, i to jest decyzja: kontrakt `K3` z §7.3
+/// dokumentu M10 pyta o **dryf**, a nie o kompletność. Pieniądz gospodarstw
+/// i bezrobocie wystarczą, bo pierwszy jest sumą wszystkich przepływów modelu,
+/// a drugie wyjściem rynku pracy — jeśli któryś z nich dryfuje, dryfuje model,
+/// a nie pojedyncza faza kroku.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
+pub struct LodSample {
+    pub day: u32,
+    /// Gotówka plus depozyty gospodarstw, mezo.
+    pub mezo_hh_money_gr: i64,
+    /// To samo w makro: suma po komórkach.
+    pub macro_hh_money_gr: i64,
+    pub mezo_unemployment_permille: u16,
+    pub macro_unemployment_permille: u16,
 }
 
 /// Próbka z granicy doby. Doba 0 to stan **przed** pierwszym tickiem — bramka G5

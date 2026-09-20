@@ -28,7 +28,7 @@ use magnat_io::world_state_hash;
 use magnat_jobs::JobPool;
 use magnat_traffic::TrafficSystem;
 
-use crate::metrics::{DayMetrics, PriceRow, RunFile, SCHEMA_VERSION};
+use crate::metrics::{DayMetrics, LodSample, PriceRow, RunFile, SCHEMA_VERSION};
 
 /// Region, epoka i profil miasta są **ustalone**, a nie wystawione w CLI: bramki
 /// porównują liczby między przebiegami, więc parametr, którego nikt nie stroi,
@@ -165,11 +165,23 @@ pub fn single(cfg: &RunCfg, seed: u64) -> Result<RunFile, String> {
     let mut days_data = vec![probka.dobowa(&app, &market, 0)];
     let mut hashes = vec![(0u64, world_state_hash(&app.world).to_string())];
 
+    // Druga trajektoria tego samego świata, w makro (bramka G12, `E-13`).
+    //
+    // `E-13` odkładało tę bramkę jako „bieg nocny z własnym budżetem", bo rok gry
+    // mezo kosztuje ~10 min na ziarno. Tyle że ten przebieg **i tak** trwa rok —
+    // więc zamiast drugiego biegu wystarczy jedno `lift()` w dobie zero i krok
+    // makro obok, po 8 ms na dobę. Dwie trajektorie z jednego przebiegu.
+    let makro_params = magnat_macro::MacroParams::default();
+    let mut makro = magnat_macro::lift(&app.world);
+    let mut lod = vec![probka_lod(&app, &makro, 0)];
+
     for d in 1..=u32::from(cfg.days) {
         for _ in 0..1_440 {
             app.tick();
         }
+        magnat_macro::step(&mut makro, &makro_params);
         days_data.push(probka.dobowa(&app, &market, d));
+        lod.push(probka_lod(&app, &makro, d));
         hashes.push((
             u64::from(d) * 1_440,
             world_state_hash(&app.world).to_string(),
@@ -192,7 +204,54 @@ pub fn single(cfg: &RunCfg, seed: u64) -> Result<RunFile, String> {
         conservation_ok,
         decisions_without_reason: probka.bez_powodu,
         decisions_sampled: probka.probkowanych,
+        lod,
     })
+}
+
+/// Para liczb „mezo obok makro" z tej samej doby.
+///
+/// # Obie strony muszą liczyć **to samo**, inaczej bramka mierzy siebie
+///
+/// Pierwsza wersja brała po stronie mezo `magnat_agents::total_money` i to był
+/// błąd pomiaru, nie modelu: tamta funkcja dokłada majątek osobisty mieszkańców,
+/// spadki bezdziedziczne i pieniądz wywieziony z miasta, a komórka makro ich nie
+/// zna. Mediana odchylenia wychodziła **878 ‰** od pierwszego miesiąca — czyli
+/// bramka świeciła na czerwono z powodu własnej definicji.
+///
+/// Liczymy więc dokładnie te trzy pola, które czyta `lift` przy napełnianiu
+/// komórki (`sim/macro::lift`): `cash` idzie do `cell.cash`, a `bank + savings`
+/// do `cell.deposits`. Dzięki temu w dobie zero obie liczby są równe **z
+/// konstrukcji** — i bramka ma czym sprawdzić, czy naprawdę są (patrz
+/// `gates::lod`).
+fn probka_lod(app: &App, makro: &magnat_macro::MacroState, day: u32) -> LodSample {
+    let hh: i64 = app
+        .world
+        .resource::<magnat_agents::Population>()
+        .households()
+        .iter()
+        .filter_map(|h| app.world.get::<magnat_agents::Household>(*h))
+        .map(|h| {
+            h.cash
+                .get()
+                .saturating_add(h.bank.get())
+                .saturating_add(h.savings.get())
+        })
+        .fold(0i64, i64::saturating_add);
+    LodSample {
+        day,
+        mezo_hh_money_gr: hh,
+        macro_hh_money_gr: makro
+            .cells
+            .iter()
+            .map(|c| c.cash.get().saturating_add(c.deposits.get()))
+            .fold(0i64, i64::saturating_add),
+        mezo_unemployment_permille: app
+            .world
+            .get_resource::<magnat_economy::labor::LaborHandle>()
+            .and_then(magnat_economy::labor::LaborHandle::get)
+            .map_or(0, |m| m.last_day().unemployment_permille()),
+        macro_unemployment_permille: makro.unemployment_permille(),
+    }
 }
 
 fn opis(e: impl std::fmt::Display) -> String {

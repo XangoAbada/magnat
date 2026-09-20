@@ -414,6 +414,32 @@ fn raport(
                 o.len(),
                 o.stories().len()
             );
+            // Kanały żywych kampanii. Bez tego „0 ekspozycji przy 6 kampaniach"
+            // jest zagadką: kanały docierają różnymi drogami i każda może zawieść
+            // osobno (ulotka potrzebuje współrzędnej zakładu z `PlaceCatalog`,
+            // prasa tytułu, billboard przejazdów w `EdgeWatch`). Histogram mówi,
+            // **który** kanał milczy, zamiast zostawiać wniosek do zgadnięcia.
+            {
+                let mut per_kanal: std::collections::BTreeMap<&'static str, (u32, u64)> =
+                    std::collections::BTreeMap::new();
+                for (_, c) in k.iter() {
+                    let e = per_kanal.entry(c.channel.kind().name()).or_default();
+                    e.0 += 1;
+                    e.1 += c.metrics.exposures_total;
+                }
+                let opis: Vec<String> = per_kanal
+                    .iter()
+                    .map(|(n, (ile, eksp))| format!("{n} {ile} ({eksp} eksp.)"))
+                    .collect();
+                println!(
+                    "kanały żywych kampanii: {}",
+                    if opis.is_empty() {
+                        "brak".to_string()
+                    } else {
+                        opis.join(", ")
+                    }
+                );
+            }
             // Ilu mieszkańców ma w pamięci **jakąkolwiek** markę — to jest liczba,
             // która odróżnia świat z marką od świata, w którym marka jest strukturą.
             let spis = world.resource::<magnat_agents::Population>().citizens();
@@ -432,6 +458,32 @@ fn raport(
                 } else {
                     znajacy * 1000 / spis.len()
                 }
+            );
+            // Mediana liczby marek u tych, którzy znają **jakąkolwiek** — to jest
+            // pomiar rozstrzygający decyzję `D4` fazy: powyżej 13 slotów
+            // `BRAND_SLOTS = 16` zaczyna wypierać lojalność i idzie na 24.
+            // Liczona wśród znających, nie wśród wszystkich: mediana po całym
+            // mieście mówiłaby o zasięgu reklamy, a nie o ciasnocie pamięci.
+            let mut ile_marek: Vec<usize> = spis
+                .iter()
+                .map(|e| magnat_agents::slots_of(world, *e, doba).len())
+                .filter(|n| *n > 0)
+                .collect();
+            ile_marek.sort_unstable();
+            println!(
+                "marek na znającego: mediana {}, maksimum {} (sufit {}; `D4` podnosi przy > 13)",
+                ile_marek.get(ile_marek.len() / 2).copied().unwrap_or(0),
+                ile_marek.last().copied().unwrap_or(0),
+                magnat_agents::BRAND_SLOTS
+            );
+            // `FF-25`: ile marek obrywa od prasy. Liczba rozstrzyga, czy
+            // `SCANDAL_MAX_DROP` ma zejść z kodu do `data/tuning/brand.ron`.
+            let lat = f64::from(a.days).max(1.0) / 360.0;
+            println!(
+                "teksty uderzające w markę: {} przez {:.2} roku gry ({:.1} na rok)",
+                o.scandal_stories(),
+                lat,
+                f64::from(o.scandal_stories()) / lat
             );
             // Najszerzej znana marka w mieście — agregat liczony z pamięci
             // mieszkańców, a nie z pola przy firmie (`brand_strength`).
@@ -538,10 +590,41 @@ fn raport(
         world.get_resource::<magnat_economy::insurance::Insurers>(),
     ) {
         (Some(eq), Some(ins)) => {
+            // `FF-17`: ile oddziałów ubezpieczeniowych stawia generator. Rejestr
+            // bez ani jednego znaczy miasto, w którym nikt nie wystawia polis —
+            // a mechanizm wygląda wtedy tak samo jak działający.
+            let biur = world
+                .get_resource::<magnat_firms::SiteTypeCatalog>()
+                .map(|kat| {
+                    firms
+                        .sites()
+                        .filter(|(_, s)| {
+                            kat.get(s.site_type).key
+                                == magnat_economy::insurance::system::INSURER_SITE_TYPE
+                        })
+                        .count()
+                })
+                .unwrap_or(0);
             println!(
-                "notowanych firm {}, polis czynnych {}",
+                "notowanych firm {}, polis czynnych {}, biur ubezpieczeniowych {biur}",
                 eq.listed_count(),
                 ins.cover_count()
+            );
+            // `FF-18`: ile gospodarstw przekracza próg majątku inwestora. Zero
+            // znaczy giełdę bez kupujących, niezależnie od tego, ile firm debiutuje.
+            // Majątek liczy się **tak samo** jak w `equity::system`: oszczędności
+            // plus rachunek, bo inaczej pomiar mierzyłby inny próg niż mechanizm.
+            let prog = eq.params().investor_wealth_min;
+            let inwestorow = world
+                .resource::<magnat_agents::Population>()
+                .households()
+                .iter()
+                .filter_map(|h| world.get::<magnat_agents::Household>(*h))
+                .filter(|gd| gd.savings.get().max(0) + gd.bank.get().max(0) >= prog.get())
+                .count();
+            println!(
+                "gospodarstw nad progiem inwestora ({} zł): {inwestorow}",
+                prog.get() / 100
             );
             for l in eq.listings().take(5) {
                 println!(
@@ -591,6 +674,47 @@ fn raport(
                 u.len(),
                 strajkuje,
                 c.len()
+            );
+            // `FF-24`: ile załóg **jest rozżalonych**, a nie ile już się zrzeszyło.
+            // Związek powstaje dopiero po dwóch pomiarach nad progiem i przy dość
+            // gęstej składowej grafu relacji, więc miasto ze stoma rozżalonymi
+            // załogami i zerem związków wygląda w raporcie tak samo jak zadowolone.
+            let prog = magnat_economy::relations::RelationsTuning::load_default()
+                .map(|d| d.union.grievance_threshold)
+                .unwrap_or(55);
+            let (zmierzonych, nad_progiem) =
+                u.watched()
+                    .fold((0usize, 0usize), |(n, k), (_, g)| {
+                        (n + 1, k + usize::from(g.level >= prog))
+                    });
+            println!(
+                "zakładów z pomiarem żalu {zmierzonych}, nad progiem {prog}: {nad_progiem}"
+            );
+            // **Zero związków nie znaczy zero żalu** i to jest cała treść tego
+            // akapitu. Związek powstaje dopiero wtedy, gdy trzy warunki zejdą się
+            // naraz (§5.9), więc miasto z setką rozżalonych załóg i miasto
+            // zadowolone wyglądają w liczbie związków identycznie. Raport pokazuje
+            // **którego warunku brakuje** — inaczej kalibracja byłaby zgadywaniem.
+            let p = magnat_economy::RelationsTuning::default().union;
+            let (mut zal, mut siec, mut gestosc, mut ile) = (0u32, 0u32, 0u32, 0u32);
+            let mut najwyzszy = 0u8;
+            for (site, g) in u.watched() {
+                ile += 1;
+                najwyzszy = najwyzszy.max(g.level);
+                if g.level >= p.grievance_threshold {
+                    zal += 1;
+                }
+                if u32::from(g.component) >= u32::from(p.min_component) {
+                    siec += 1;
+                }
+                if g.density_bp >= p.density_bp {
+                    gestosc += 1;
+                }
+                let _ = site;
+            }
+            println!(
+                "zakładów pod obserwacją {ile}: żal ≥ {} w {zal}, sieć relacji ≥ {} w {siec},                  gęstość ≥ {} bp w {gestosc}; najwyższy zmierzony żal {najwyzszy}",
+                p.grievance_threshold, p.min_component, p.density_bp
             );
             for z in u.iter().take(5) {
                 println!(

@@ -268,3 +268,147 @@ fn tekst_rozchodzi_sie_zgodnie_z_czytelnictwem() {
         "plotka uciekła poza pasmo między czytelnictwem a sufitem: {a:.1} %"
     );
 }
+
+// ── FF-8: koszt systemów reklamowych przy 2000 kampanii ─────────────────────────
+
+/// Ile kampanii ma stać naraz — liczba wprost z kryterium §7.5 dokumentu M10.
+const KAMPANII: u32 = 2_000;
+
+/// Budżet z §7.5: „systemy reklamowe ≤ 1,5 % budżetu ticku". Doba `m7miasto`
+/// przy 28,5 tys. mieszkańców kosztuje ~15 s (zmierzone w M10b, `F-27`), więc
+/// półtora procenta to **225 ms na dobę gry**.
+const BUDZET_MS: u128 = 225;
+
+/// Kampania na kanale wskazanym numerem — po jednej z każdych ośmiu.
+fn kampania(w: &mut World, i: u32) -> CampaignId {
+    let site = SiteId(Entity::new(1 + i % 16, std::num::NonZeroU32::MIN));
+    let channel = match i % 8 {
+        0 => AdChannel::Billboard {
+            edge: EdgeId(i % 64),
+            notice_rate_bps: 1_200,
+        },
+        1 => AdChannel::Press { outlet: site },
+        2 => AdChannel::Radio { outlet: site },
+        3 => AdChannel::Tv { outlet: site },
+        4 => AdChannel::Leaflet {
+            origin: site,
+            radius_m: 400,
+        },
+        5 => AdChannel::InStorePromo { site },
+        6 => AdChannel::Sponsorship {
+            event: magnat_core::EventId(i),
+        },
+        _ => AdChannel::Pr,
+    };
+    w.resource_mut::<Campaigns>().open(|id| AdCampaign {
+        id,
+        site,
+        brand: BrandId(1 + (i % 64) as u16),
+        channel,
+        claim: Q::new(80),
+        budget: Money(10_000_000),
+        spent: Money::ZERO,
+        window: (SimMinute(0), SimMinute(100 * 1_440)),
+        metrics: CampaignMetrics::default(),
+    })
+}
+
+/// Jedna doba gry systemów mediów, w milisekundach.
+fn doba_mediow_ms(w: &mut World, od_minuty: u64) -> u128 {
+    let t0 = std::time::Instant::now();
+    for m in 1..=1_440u64 {
+        let _ = magnat_media::step(w, Tick(od_minuty + m));
+    }
+    t0.elapsed().as_millis()
+}
+
+/// `FF-8`: dwa tysiące kampanii mieszczą się w budżecie ticku.
+///
+/// # Dlaczego test, a nie przebieg miasta
+///
+/// Bo w przebiegu **nigdy nie powstanie dwa tysiące kampanii**: firmy AI otwierają
+/// je raz na miesiąc i w mieście 4 km było ich trzydzieści pięć (M10b). Czekanie
+/// na tę liczbę w naturalnym przebiegu to czekanie na coś, co nie zajdzie —
+/// kampanie trzeba **postawić**, i to jest cała treść tego pomiaru.
+///
+/// Mierzymy **różnicę**, a nie czas bezwzględny: ten sam świat bez ani jednej
+/// kampanii jest odniesieniem, więc wynik nie zawiera kosztu mieszkańców, pamięci
+/// marek ani redakcji. To jest ta sama ablacja, którą M10b zrobiło na `m7miasto`,
+/// tylko przy liczbie kampanii z kryterium, a nie z przypadku.
+///
+/// `#[ignore]`, bo mierzy zegarem: na obciążonej maszynie liczba skacze, a bramka,
+/// która świeci na czerwono od cudzego kompilatora w tle, uczy ignorowania bramek.
+#[test]
+#[ignore = "pomiar czasu"]
+fn dwa_tysiace_kampanii_miesci_sie_w_budzecie_ticku() {
+    // Dwadzieścia tysięcy mieszkańców w ośmiu dzielnicach: tyle, żeby kanały
+    // skalujące się z ludnością (ulotka, prasa) miały do kogo docierać.
+    let mut bez = miasto(20_000, 8);
+    bez.insert_resource(magnat_traffic::TrafficNetwork::default());
+    let odniesienie = doba_mediow_ms(&mut bez, 0);
+
+    let mut z = miasto(20_000, 8);
+    z.insert_resource(magnat_traffic::TrafficNetwork::default());
+    for i in 0..KAMPANII {
+        kampania(&mut z, i);
+    }
+    // Pierwsza doba ustawia podsłuch krawędzi i zasiewa liczniki; mierzymy drugą,
+    // bo to ona jest dobą typową.
+    let _ = doba_mediow_ms(&mut z, 0);
+    let z_kampaniami = doba_mediow_ms(&mut z, 1_440);
+
+    let koszt = z_kampaniami.saturating_sub(odniesienie);
+    println!(
+        "media: doba bez kampanii {odniesienie} ms, z {KAMPANII} kampaniami \
+         {z_kampaniami} ms → koszt kampanii {koszt} ms (budżet {BUDZET_MS} ms)"
+    );
+    assert!(
+        koszt <= BUDZET_MS,
+        "{KAMPANII} kampanii kosztuje {koszt} ms na dobę gry wobec budżetu \
+         {BUDZET_MS} ms (1,5 % doby `m7miasto`, §7.5)"
+    );
+}
+
+/// Rozbicie kosztu na kanały — odpowiedź na pytanie „który z ośmiu".
+///
+/// Sam czerwony pomiar mówi „za drogo" i nie mówi, gdzie szukać. Osiem osobnych
+/// przebiegów po dwieście pięćdziesiąt kampanii **jednego** kanału mówi to,
+/// czego potrzebuje adres naprawy: czy koszt rozkłada się równo, czy siedzi
+/// w jednym miejscu. M10b nazwało kandydata (`F-27`: ulotka skalowała się
+/// z liczbą mieszkańców razy liczba kampanii) — ten pomiar to sprawdza.
+#[test]
+#[ignore = "pomiar czasu"]
+fn koszt_kampanii_w_rozbiciu_na_kanaly() {
+    const NA_KANAL: u32 = 250;
+    let nazwy = [
+        "Billboard",
+        "Press",
+        "Radio",
+        "Tv",
+        "Leaflet",
+        "InStorePromo",
+        "Sponsorship",
+        "Pr",
+    ];
+    let mut bez = miasto(20_000, 8);
+    bez.insert_resource(magnat_traffic::TrafficNetwork::default());
+    let odniesienie = doba_mediow_ms(&mut bez, 0);
+    println!("odniesienie (0 kampanii): {odniesienie} ms/dobę");
+
+    for (k, nazwa) in nazwy.iter().enumerate() {
+        let mut w = miasto(20_000, 8);
+        w.insert_resource(magnat_traffic::TrafficNetwork::default());
+        for i in 0..NA_KANAL {
+            // `i * 8 + k` trafia zawsze w ten sam kanał, a zmienia zakład i markę.
+            kampania(&mut w, i * 8 + k as u32);
+        }
+        let _ = doba_mediow_ms(&mut w, 0);
+        let z = doba_mediow_ms(&mut w, 1_440);
+        let koszt = z.saturating_sub(odniesienie);
+        println!(
+            "{nazwa:<14} {NA_KANAL} kampanii → {koszt} ms/dobę \
+             ({} µs na kampanię)",
+            koszt * 1_000 / u128::from(NA_KANAL)
+        );
+    }
+}

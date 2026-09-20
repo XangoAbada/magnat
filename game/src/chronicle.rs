@@ -47,14 +47,20 @@ pub enum ChronicleKind {
     FirmDecision,
     /// Komenda gracza.
     PlayerAction,
+    /// Decyzja władzy miasta: uchwała, wybory, zmiana stawki.
+    CityDecision,
+    /// Wpis z historii „na sucho" — z lat sprzed startu partii.
+    History,
 }
 
 impl ChronicleKind {
-    pub const ALL: [ChronicleKind; 4] = [
+    pub const ALL: [ChronicleKind; 6] = [
         ChronicleKind::EventStarted,
         ChronicleKind::EventEnded,
         ChronicleKind::FirmDecision,
         ChronicleKind::PlayerAction,
+        ChronicleKind::CityDecision,
+        ChronicleKind::History,
     ];
 
     /// Klucz tekstu: `ui.chronicle.kind.<key>`.
@@ -65,8 +71,26 @@ impl ChronicleKind {
             ChronicleKind::EventEnded => "event_ended",
             ChronicleKind::FirmDecision => "firm_decision",
             ChronicleKind::PlayerAction => "player_action",
+            ChronicleKind::CityDecision => "city_decision",
+            ChronicleKind::History => "history",
         }
     }
+}
+
+/// Skąd wpis pochodzi.
+///
+/// Wykonanie wymagania M10 §6 pkt 7 („filtr `provenance: DryRun` i oś czasu
+/// sprzed startu partii") i mitygacja ryzyka `R9`: osiemdziesiąt lat historii
+/// wchodzi do tej samej kroniki co rozgrywka, więc gracz musi umieć jedno
+/// od drugiego oddzielić. Most jest jednokierunkowy (`DK-2`) — kronika dokłada
+/// pochodzenie wpisowi z `sim/macro`, a `sim/macro` o kronice gracza nie wie.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum Provenance {
+    /// Zaszło w tej rozgrywce.
+    #[default]
+    Live,
+    /// Policzone w historii „na sucho" przed startem partii.
+    DryRun,
 }
 
 /// Czyja to sprawa. Wpisy `Player` **nigdy nie są usuwane** przy decymacji.
@@ -88,6 +112,18 @@ pub enum ChroniclePayload {
     Reason(DecisionReason),
     /// Komenda gracza — klucz tekstu opisującego, co zrobił.
     Action { key: &'static str },
+    /// Wpis z historii „na sucho": klucz zdania z `magnat_macro::ChronicleKind`,
+    /// **rok świata** i skala w promilach.
+    ///
+    /// Rok siedzi w ładunku, a nie w `at`, bo `SimMinute` jest bez znaku i nie
+    /// umie liczyć wstecz od zera świata — a historia dzieje się właśnie przed
+    /// nim. Skala jest liczbą porządkową (ile ludności straciła dzielnica),
+    /// nigdy pieniężną.
+    History {
+        key: &'static str,
+        year: i32,
+        magnitude: i32,
+    },
 }
 
 /// Jeden wpis kroniki.
@@ -103,6 +139,8 @@ pub struct ChronicleEntry {
     /// 0..=100. Poniżej [`PROG_DECYMACJI`] wpis starszy niż pięć lat gry znika.
     pub importance: u8,
     pub scope: ChronicleScope,
+    /// Rozgrywka czy historia sprzed niej. Decymacja rusza wyłącznie `Live`.
+    pub provenance: Provenance,
 }
 
 /// Poniżej tej ważności wpis nie przeżywa pięciu lat gry (§5.11).
@@ -122,6 +160,8 @@ pub struct Query {
     /// Zakres dób gry, `None` = bez ograniczenia.
     pub from_day: Option<u64>,
     pub to_day: Option<u64>,
+    /// Tylko wpisy o tym pochodzeniu. `None` = jedno i drugie.
+    pub provenance: Option<Provenance>,
 }
 
 /// Magazyn kroniki.
@@ -137,6 +177,8 @@ pub struct Chronicle {
     seen_firm_tick: u64,
     /// Ostatnia minuta publikacji, którą kronika już zebrała z dziennika redakcji.
     seen_story_tick: u64,
+    /// Ostatnia minuta decyzji władzy, którą kronika już zebrała.
+    seen_city_tick: u64,
     /// Ostatnia doba, w której zbierano.
     last_day: Option<u64>,
 }
@@ -173,6 +215,7 @@ impl Chronicle {
         self.zbierz_zdarzenia(session);
         self.zbierz_decyzje_firm(session);
         self.zbierz_publikacje(session);
+        self.zbierz_wladze(session);
         self.zbierz_komendy(session);
         self.decimate(SimMinute(session.tick().get()));
     }
@@ -217,6 +260,7 @@ impl Chronicle {
                 },
                 importance: u8::try_from(w.severity_bps / 100).unwrap_or(100).min(100),
                 scope: ChronicleScope::World,
+                provenance: Provenance::Live,
             });
         }
     }
@@ -258,6 +302,7 @@ impl Chronicle {
                 payload: ChroniclePayload::Reason(powod),
                 importance: 40,
                 scope: ChronicleScope::Firm(firma),
+                provenance: Provenance::Live,
             });
         }
     }
@@ -302,6 +347,83 @@ impl Chronicle {
                 // tekst o strajku jest tłem, dopóki nie dotyczy jego zakładu.
                 importance: 25,
                 scope: ChronicleScope::World,
+                provenance: Provenance::Live,
+            });
+        }
+    }
+
+    /// Decyzje władzy miasta (M8e): uchwały rady, wybory, zmiany stawek.
+    ///
+    /// To są wpisy, które widzi **każdy** gracz niezależnie od tego, co posiada —
+    /// podwyżka VAT-u zmienia cenę na półce w całym mieście, a wynik wyborów
+    /// zmienia to, czego można się spodziewać po radzie. Dlatego czytamy je,
+    /// choć decyzji dwóch tysięcy firm AI nie czytamy: tamtych jest sześćdziesiąt
+    /// cztery tysiące na dobę i dotyczą cudzych sklepów, tych jest kilka na
+    /// miesiąc i dotyczą wszystkich.
+    ///
+    /// Źródłem jest pierścień `City.reasons` (256 wpisów) — zapisuje go
+    /// `sim/city`, tak samo jak redakcja zapisuje swój (`DK-1`).
+    fn zbierz_wladze(&mut self, session: &Session) {
+        let Some(c) = session.app.world.get_resource::<magnat_city::City>() else {
+            return;
+        };
+        let nowe: Vec<(u64, DecisionReason)> = c
+            .reasons
+            .iter()
+            .filter(|(t, _)| t.get() > self.seen_city_tick)
+            .map(|(t, r)| (t.get(), *r))
+            .collect();
+        for (t, _) in &nowe {
+            self.seen_city_tick = self.seen_city_tick.max(*t);
+        }
+        for (t, powod) in nowe {
+            let id = self.nowy_id();
+            self.push(ChronicleEntry {
+                id,
+                at: SimMinute(t),
+                kind: ChronicleKind::CityDecision,
+                actor: Some(Subject::Government),
+                payload: ChroniclePayload::Reason(powod),
+                // Wyżej niż publikacja i niżej niż własna decyzja: uchwała rady
+                // dotyczy gracza zawsze, ale nie jest jego wyborem.
+                importance: 55,
+                scope: ChronicleScope::World,
+                provenance: Provenance::Live,
+            });
+        }
+    }
+
+    /// Wciąga historię „na sucho" — lata policzone w makro przed startem partii.
+    ///
+    /// Wołane **raz**, przy zakładaniu sesji, i to jest cała droga: `sim/macro`
+    /// nie zna kroniki gracza i nie ma jak jej zgłosić wpisu (`DK-1`), więc to
+    /// sesja przychodzi po gotowy `DryRunResult.chronicle`.
+    ///
+    /// Wpisy dostają `at = 0`, bo minuta świata zaczyna się od zera i nie umie
+    /// liczyć wstecz; rok niosą **w ładunku**. Filtr po pochodzeniu jest tym,
+    /// co oddziela osiemdziesiąt lat historii od pierwszej doby rozgrywki.
+    /// Ile ich jest, rozstrzyga próg skali po stronie `sim/macro` — kronika
+    /// nie filtruje drugi raz (ryzyko `R9`: cel to 50–200 wpisów na 80 lat).
+    pub fn ingest_dry_run(&mut self, events: &[magnat_macro::ChronicleEvent]) {
+        for e in events {
+            let id = self.nowy_id();
+            self.push(ChronicleEntry {
+                id,
+                at: SimMinute(0),
+                kind: ChronicleKind::History,
+                actor: e.district.map(Subject::District),
+                payload: ChroniclePayload::History {
+                    key: e.kind.key(),
+                    year: e.year,
+                    magnitude: e.magnitude,
+                },
+                // Skala jest w promilach, ważność w setnych — dzielenie przez
+                // dziesięć jest całą regułą, tak samo jak przy sile zdarzenia.
+                importance: u8::try_from(e.magnitude.unsigned_abs() / 10)
+                    .unwrap_or(100)
+                    .min(100),
+                scope: e.district.map_or(ChronicleScope::World, ChronicleScope::District),
+                provenance: Provenance::DryRun,
             });
         }
     }
@@ -326,6 +448,7 @@ impl Chronicle {
                 payload: ChroniclePayload::Action { key },
                 importance: 80,
                 scope: ChronicleScope::Player,
+                provenance: Provenance::Live,
             });
         }
     }
@@ -335,11 +458,20 @@ impl Chronicle {
     /// Wpisy gracza zostają **zawsze**, niezależnie od ważności i wieku: kronika
     /// dynastii jest treścią ekranu spuścizny, a skasowana historia własnej gry
     /// jest gorsza od pustej.
+    ///
+    /// Wpisy z historii „na sucho" zostają z tego samego powodu i z jednego
+    /// dodatkowego: mają `at = 0`, więc kryterium wieku skasowałoby je co do
+    /// jednego w piątym roku gry — a „dlaczego ta dzielnica jest taka, jaka
+    /// jest" jest pytaniem, które gracz zadaje **później**, nie wcześniej.
+    /// Ich liczbę ogranicza próg skali po stronie `sim/macro`, nie decymacja.
     pub fn decimate(&mut self, now: SimMinute) {
         let rok = 360 * magnat_core::time::MINUTES_PER_DAY;
         let granica = now.0.saturating_sub(LATA_DO_DECYMACJI * rok);
         self.entries.retain(|e| {
-            e.scope == ChronicleScope::Player || e.importance >= PROG_DECYMACJI || e.at.0 >= granica
+            e.scope == ChronicleScope::Player
+                || e.provenance == Provenance::DryRun
+                || e.importance >= PROG_DECYMACJI
+                || e.at.0 >= granica
         });
     }
 
@@ -353,6 +485,10 @@ impl Chronicle {
             .filter(|e| q.kind.is_none_or(|k| k == e.kind))
             .filter(|e| q.actor.is_none_or(|a| Some(a) == e.actor))
             .filter(|e| e.importance >= q.min_importance)
+            .filter(|e| q.provenance.is_none_or(|p| p == e.provenance))
+            // Zakres dób dotyczy rozgrywki. Wpis z historii ma `at = 0` i swój
+            // rok w ładunku, więc pytanie „co się działo w dobach 100–200"
+            // nie ma dla niego sensu — odsiewa go zakres, a nie brak filtra.
             .filter(|e| q.from_day.is_none_or(|d| doba(e.at) >= d))
             .filter(|e| q.to_day.is_none_or(|d| doba(e.at) <= d))
             .collect();
@@ -429,5 +565,31 @@ pub fn text(
             ),
         ChroniclePayload::Reason(r) => magnat_ui::describe(c, l, r),
         ChroniclePayload::Action { key } => c.fmt_key(l, &format!("ui.chronicle.act.{key}"), &[]),
+        // Dwa klucze, bo połowa wpisów historii nie ma skali: wstrząs miejski
+        // i runda naprawcza dotyczą całego miasta i nie mierzą się w promilach
+        // niczego. „(0 ‰)" przy każdym z nich było szumem, który audyt WP10.15
+        // wyłapał od razu — i to jest dokładnie to, po co ten audyt jest.
+        ChroniclePayload::History {
+            key,
+            year,
+            magnitude: 0,
+        } => c.fmt_key(
+            l,
+            "ui.chronicle.history_row_plain",
+            &[("rok", &year.to_string()), ("co", &c.fmt_key(l, key, &[]))],
+        ),
+        ChroniclePayload::History {
+            key,
+            year,
+            magnitude,
+        } => c.fmt_key(
+            l,
+            "ui.chronicle.history_row",
+            &[
+                ("rok", &year.to_string()),
+                ("co", &c.fmt_key(l, key, &[])),
+                ("skala", &magnitude.abs().to_string()),
+            ],
+        ),
     }
 }

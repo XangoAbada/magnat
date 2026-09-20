@@ -117,7 +117,9 @@ uruchamiają kaskadę u odbiorców, gazeta pisze o strajku, marka gracza traci a
 Ścieżka krytyczna: **WP10.2 → WP10.1 → WP10.3 → WP10.4**. Ona blokuje M12 (tryb 50×) i zamyka
 Etap 9–10 generatora. Reszta jest równoległa i może iść w dowolnej kolejności po spełnieniu zależności.
 
-Faza jest rozbita na **6 podfaz**. Podfaza to porcja, którą da się zacząć i zamknąć
+Faza jest rozbita na **7 podfaz** (`M10g` dopisane po M10e — `K-17` dopuszcza poprawienie
+podziału, a uzasadnienie jest w nagłówku `M10f-kroniki-i-domkniecie.md`). Podfaza to porcja,
+którą da się zacząć i zamknąć
 bez trzymania w głowie całej fazy: własny zestaw WP, własny sprawdzalny wynik i własny
 wycinek projektu technicznego. Opis pakietów i sekcje §5 mieszkają teraz w dokumentach
 podfaz — poniższa tabela mówi, gdzie co jest. Bramki 1–7 z `00-postep.md` zamykają się
@@ -130,7 +132,8 @@ dopiero po ostatniej podfazie; podfaza zamyka się własnym kryterium ze swojego
 | **M10c — R&D i nowe produkty** | WP10.8, WP10.9 | 5.4 | Technologia odblokowuje kategorię towaru, patent daje wyłączność, licencja ją sprzedaje. | `M10c-rd-i-nowe-produkty.md` |
 | **M10d — Giełda, przejęcia, ubezpieczenia** | WP10.10, WP10.11, WP10.12 | 5.5 | Notowanie powstaje z arkusza zleceń, a wrogie przejęcie da się przeprowadzić i obronić. | `M10d-gielda-przejecia-ubezpieczenia.md` |
 | **M10e — Relacje i związki** | WP10.13, WP10.14 | 5.9 | Strajk powstaje z żądania płacowego wyliczonego z danych M7 i skutkuje po stronie miasta przez wyzwalacz M8. | `M10e-relacje-i-zwiazki.md` |
-| **M10f — Kroniki i domknięcie** | WP10.15, WP10.16 | 5.10 | Pełny artefakt fazy z §1 dokumentu fazy: marka z pamięci agentów, R&D, giełda, historia „na sucho”. | `M10f-kroniki-i-domkniecie.md` |
+| **M10f — Kroniki i domknięcie** | WP10.15, WP10.16, WP10.17, WP10.18 | 5.10 | Kronika niesie historię sprzed partii i uchwały rady, bramki Etapu 10 są zmierzone, bramka balansatora porównuje mezo z makro, a osiem pomiarów fazy ma liczby. | `M10f-kroniki-i-domkniecie.md` |
+| **M10g — Panele, komendy i karty** | WP10.19, WP10.20, WP10.21, WP10.22 | 5.11, 5.12 | Pełny artefakt fazy z §1: gracz kupuje billboard, prowadzi badania, gra na giełdzie i negocjuje z załogą. | `M10g-panele-i-komendy.md` |
 
 ---
 
@@ -151,6 +154,8 @@ odesłania w tekście („patrz §5.4") nadal wskazują tę samą sekcję — zm
 | 5.8 | Tożsamość w stanie uśpionym i rozwinięcie makro→mezo | `M10a-jadro-makro-historia.md` |
 | 5.9 | Relacje międzyfirmowe, związki — struktury | `M10e-relacje-i-zwiazki.md` |
 | 5.10 | Systemy ECS i ich częstotliwość | `M10f-kroniki-i-domkniecie.md` |
+| 5.11 | Wzorzec panelu M10 | `M10g-panele-i-komendy.md` |
+| 5.12 | Sufit siedmiu zakładek karty | `M10g-panele-i-komendy.md` |
 
 ---
 
@@ -637,7 +642,8 @@ tych testów — nie mierzą jakości przybliżenia, tylko pilnują, że model j
 ### 9.2 Stan decyzji po M10a–M10e
 
 Podfaza M10a zamknęła cztery decyzje i otworzyła jedną, M10b wykonała `D7`,
-M10c zamknęła `D1`, M10e wykonała `D6` i `D10`. Szczegóły i uzasadnienia —
+M10c zamknęła `D1`, M10e wykonała `D6` i `D10`, a `D9` rozstrzygnął właściciel
+produktu przy starcie M10f. Szczegóły i uzasadnienia —
 tabele `E-n`, `F-n`, `FD-n`, `GD-n` i `GE-n` w dokumentach podfaz.
 
 | # | Stan po M10a |
@@ -646,7 +652,8 @@ tabele `E-n`, `F-n`, `FD-n`, `GD-n` i `GE-n` w dokumentach podfaz.
 | **D5** | **Bez zmian, mierzone.** Dry-run trzydziestu lat metropolii to 3300 kroków i ~0,2 s po wygenerowaniu miasta; osiemdziesiąt lat mieści się w budżecie 60 s z dużym zapasem (7500 kroków ≈ 47 s dla metropolii, `criterion`). Przepływ startu partii pozostaje do zaprojektowania przez M9 — ale narzut, o który tam chodziło, okazał się rzędu sekund, nie kwadransa. |
 | **D7** | **Wykonana w M10b.** `lower()` zasiewa 2–4 sloty marek per mieszkaniec, wybierając firmy **z jego dzielnicy** proporcjonalnie do udziału rynkowego (przepustowość × wykorzystanie), po dwa doświadczenia na markę. `StreamId::MacroSeedMemory = 294` jest zajęty. Przy okazji domknięta druga strona: `lift()` wypełnia `MacroFirm.brand_stock` z pamięci mieszkańców, więc pole, które od M7f było zerem w każdym przebiegu, niesie teraz renomę marki ważoną znajomością. **Jedno doprecyzowanie wobec treści decyzji:** „3–5 wpisów doświadczeń" i „2–4 sloty marek" to w tej implementacji **jedno i to samo** — zasiew idzie przez `Touch::Experience`, więc wpis doświadczenia **jest** slotem marki; dwa osobne magazyny pamięci opisywałyby to samo dwa razy. Losowanie jest **bez powtórzeń**, więc dzielnica z dwoma sklepami daje dwa sloty, a nie cztery: nie da się zapamiętać czterech sklepów, jeśli są dwa. |
 | **D8** | **Przyjęta w całości.** Partie nie są odtwarzane, a `MacroFirm.suppliers` niesie jeden skok wstecz i jest wypełniany co miesiąc przez fazę 7. Przebieg `headless dry-run` wypisuje, ile firm ma stałego dostawcę i ile jest par (firma, towar). |
-| **D9 (nowa)** | **Rozkład majątku gospodarstw po Etapie 8 nie mieści się w bramce 7 Etapu 10.** Zmierzone: Gini 0,50–0,84 zależnie od ziarna i wielkości miasta; plan (§5.7, bramka 7) oczekuje 0,25–0,45. Obie liczby są obronne — realny współczynnik Giniego **majątku** bywa rzędu 0,7–0,8, a 0,25–0,45 to pasmo typowe dla **dochodu**. Rozstrzygnąć trzeba, którą wielkość mierzy ta bramka, bo od tego zależy, czy naprawiać próg, czy generator. **Kto rozstrzyga: właściciel produktu.** Propozycja M10: rozdzielić bramkę na dwie — Gini majątku 0,55–0,85 i Gini dochodu 0,25–0,45 — bo pierwsza mierzy Etap 8, a druga rynek pracy, i mylenie ich ukrywa obie. |
+| **D9** | **Rozstrzygnięta przez właściciela produktu 2026-09-20, zgodnie z propozycją domyślną: bramka rozdziela się na dwie.** Bramka 7 mierzy **Gini majątku** w paśmie 550–850 ‰, nowa bramka 9 — **Gini dochodu** w paśmie 250–450 ‰. Powód jest ten sam, który propozycja podawała: pierwsza liczba mierzy Etap 8 generatora, druga rynek pracy, a jedna bramka na obie ukrywała każdą z nich. Wykonanie: `WP10.17` w `M10f`. Treść pierwotna niżej, dla historii. |
+| **D9 (treść pierwotna)** | **Rozkład majątku gospodarstw po Etapie 8 nie mieści się w bramce 7 Etapu 10.** Zmierzone: Gini 0,50–0,84 zależnie od ziarna i wielkości miasta; plan (§5.7, bramka 7) oczekuje 0,25–0,45. Obie liczby są obronne — realny współczynnik Giniego **majątku** bywa rzędu 0,7–0,8, a 0,25–0,45 to pasmo typowe dla **dochodu**. Rozstrzygnąć trzeba, którą wielkość mierzy ta bramka, bo od tego zależy, czy naprawiać próg, czy generator. **Kto rozstrzyga: właściciel produktu.** Propozycja M10: rozdzielić bramkę na dwie — Gini majątku 0,55–0,85 i Gini dochodu 0,25–0,45 — bo pierwsza mierzy Etap 8, a druga rynek pracy, i mylenie ich ukrywa obie. |
 | **D1** | **Zamknięta w M10c, zgodnie z propozycją domyślną.** `data/tech/` jest katalogiem danych z własnym wpisem w dok. 00 §5 i własnym rozstrzygnięciem `K-82`; kalibracja tempa badań stoi obok, w `data/tuning/rnd.ron`, bo to są liczby do przestawienia, a nie kształt modelu (`K-35`). Walidator grafu chodzi w CI zwykłym `cargo test` (`sim/firms/tests/tech_graph.rs`) i sprawdza cztery reguły, nie trzy: prereq istnieje, brak cykli, `NewGood` ma wpis w `data/goods/`, a **klasa maszyn z `MachineUpgrade` jest używana przez jakąś recepturę**. Jedno doprecyzowanie wobec treści decyzji: **rok „światowy” przelicza się na dobę świata przy ładowaniu**, z roku startowego partii — dzięki temu symulacja nie pyta o kalendarz i nie powstaje drugie źródło roku obok `EpochClock` z M8c |
 | **D3** | **Rozstrzygnięta przez M10b w części technicznej, bez zmiany propozycji.** Media są zwykłymi zakładami z rejestru M7 (`data/site_types/media.ron`: gazeta, stacja radiowa, stacja telewizyjna), więc gracz **może** je posiadać tą samą drogą, którą posiada każdy inny zakład — nie trzeba do tego ani jednej linii kodu. Konsekwencje, o których mówiła propozycja (przewaga PR, ograniczenia koncentracji po stronie M8, spadek wiarygodności u czytelników, którzy zauważą stronniczość), zostają **niewykonane**: trzecia z nich nie ma wyzwalacza (`FF-5` w `M10f`), a dwie pierwsze wymagają panelu i regulatora. |
 | **D4** | **Bez zmian: start z 16, pomiar w balansatorze przed podniesieniem.** Zmierzony budżet pamięci przy komplecie szesnastu slotów u każdego z 400 tys. mieszkańców to **50 MB** wobec sufitu 55 MB z §7.4, więc podniesienie do 24 nadal mieści się w rachunku z `D4` (76,8 MB). Mediany realnych kontaktów z marką **nie zmierzono** — to wymaga przebiegu balansatora na mieście z generatora i należy do M10f. |
