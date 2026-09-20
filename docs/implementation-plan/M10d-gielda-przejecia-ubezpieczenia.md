@@ -144,3 +144,18 @@ Po katastrofie ubezpieczyciel może być niewypłacalny; cesja X% ryzyka do „r
 jest jedyną reasekuracją, jaką modelujemy.
 > *ponytail: brak modelu reasekuracji jako rynku. Dodać, gdy gracz będzie mógł założyć reasekuratora —
 > nie wcześniej.*
+
+
+---
+
+## Zmiany wpisane po M10b
+
+Zgodnie z `K-18`. Wpisane jest **tylko to, co wiadomo na pewno** po zamknięciu M10b.
+Szczegóły — tabela `F-n` w `M10b-marka-i-media.md`.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| FD-1 | **Nowy przepływ pieniądza = nowy wariant `TxKind`, dopisany na końcu** (`K-80`). M10b dołożył `AdSpend`; obrót akcjami, dywidenda, składka i wypłata ubezpieczeniowa idą tą samą drogą | `Books::transfer` wymaga rodzaju zapisu, a wciśnięcie obrotu akcjami w `WholesalePurchase` zafałszowałoby bramkę G9 balansatora, która dzieli zapisy na wybory i zobowiązania. Przy okazji: **`jest_decyzja` w `tools/balansator` jest wyczerpujący i nie ma gałęzi `_`**, więc nowy wariant nie skompiluje się bez rozstrzygnięcia, po której stronie stoi |
+| FD-2 | **Plan kont `LedgerAccount` też rośnie na końcu.** M10b dołożył `MarketingExpense` | Kolejność wariantów indeksuje tablicę sald, która wchodzi do hasha stanu i do zapisu gry. Rozdział ról zostaje bez zmian: **księga zakładu mówi, na co poszło, dziennik transakcji — do kogo** (`K-57`, `K-80`) |
+| FD-3 ★ | **Wycena firmy ma już jedno wejście, którego wcześniej nie miała: `MacroFirm.brand_stock`** przestał być zerem (`F-14`) i niesie renomę marki ważoną znajomością, w skali −100..100 | §6.5 PRD chce wyceny „z opóźnionych i zaszumionych wyników plus plotek". Marka jest tym składnikiem wyceny, który **nie** jest wynikiem finansowym, i od M10b jest realną liczbą, a nie polem w strukturze |
+| FD-4 | **Blok `StreamId` M10: zajęte 280–284 i 292–295; wolne 285–291 i 296–299.** `InvestorNoise = 286`, `EarningsNoise = 287`, `PerilDraw = 288` z tabeli M10 §7.1 są nadal wolne i zarezerwowane imiennie | — |

@@ -173,6 +173,30 @@ scalar_newtype! {
     PermitId(u32)
 }
 
+scalar_newtype! {
+    /// Marka — to, pod czym gracz i firma AI są znani mieszkańcom (PRD §7.6).
+    ///
+    /// Przeprowadzka z `sim/supply::batch` przy starcie M10b, wykonanie `K-8`.
+    /// Do M10b typ mieszkał u partii, bo tylko ona go przenosiła; od M10b marka jest
+    /// **wpisem w pamięci mieszkańca** (`magnat_agents::brand`), a `sim/agents` nie
+    /// zależy i nie będzie zależał od `sim/supply` — zależność idzie w drugą stronę.
+    /// Czterech konsumentów znanych z nazwy i numeru fazy: M6 (partia), M5 (półka
+    /// i decyzja zakupowa), M3/M10 (sloty marek u mieszkańca), M10 (kampanie i media).
+    ///
+    /// **Marka jest firmą**: wartość to `FirmKey` rzutowany na `u16`
+    /// (`magnat_firms::brand_of`). Osobny rejestr marek nie powstaje, dopóki nie ma
+    /// drugiego konsumenta — linie produktowe należą do M10c.
+    BrandId(u16)
+}
+
+scalar_newtype! {
+    /// Kampania reklamowa w rejestrze `magnat_media` (M10b §5.2).
+    ///
+    /// Numer jest **monotoniczny w obrębie gry i nigdy nie wraca** — ta sama reguła
+    /// co przy `EventId`: zakończona kampania zostaje w metrykach pod swoim numerem.
+    CampaignId(u32)
+}
+
 /// Skala 0..=100: jakość, zaspokojenie potrzeby, poziom umiejętności.
 /// Konstruktor przycina do zakresu — wartość spoza skali nigdy nie powstaje.
 #[derive(

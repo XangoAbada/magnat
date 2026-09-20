@@ -166,6 +166,7 @@ impl Anna {
                 personality: &self.personality,
                 residence: &self.residence,
                 today: self.day as i32,
+                brands: Default::default(),
             },
             household: HouseholdView {
                 id: magnat_core::HouseholdId(encja(100)),

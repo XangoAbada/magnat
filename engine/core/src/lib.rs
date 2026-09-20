@@ -53,20 +53,21 @@ pub use service::ServiceCoverage;
 pub use subject::{Subject, SubjectKind};
 pub use time::{Cadence, DayOfWeek, MinuteOfDay, OpenHours, SimCalendar, SimClock, SimSpeed};
 pub use types::{
-    CaseId, DepositId, DistrictId, Energy, EventId, GoodId, JobRoleId, Mass, Money, Mood,
-    NeedCategoryId, PermitId, PolicyId, Qty, RecipeId, SimInstant, SimMinute, TariffClassId,
-    TenderId, Tick, Volume, Q,
+    BrandId, CampaignId, CaseId, DepositId, DistrictId, Energy, EventId, GoodId, JobRoleId, Mass,
+    Money, Mood, NeedCategoryId, PermitId, PolicyId, Qty, RecipeId, SimInstant, SimMinute,
+    TariffClassId, TenderId, Tick, Volume, Q,
 };
 pub use vocab::{
-    AbateReason, ActionKind, ActivityKind, AgencyKind, BankruptcyTrigger, Biome, BodyType,
-    ClaimPriority, CommitmentKind, DeprivationEffect, EventCategory, FirmStrategy, FixedCost,
-    GateKind, LeaveCause, LifeEventKind, LineStopCause, LoanKind, LossKind, MigrationKind,
-    NeedKind, PermitKind, PlaceKind, PlaceRef, PolicyKind, PriceBasis, PriceDriver, ReactionKind,
-    RejectCause, RejectCredit, RemedyKind, ResourceKind, RoadClass, Season, ServiceKind,
-    ShortageStageKind, SpendCategory, StockCat, TaxKind, TenderKind, TraitId, TransportMode, Trend,
-    UtilityKind, UtilityService, VoteDriver, WageCause, WorldCoord, AGENCY_KIND_COUNT,
-    CLAIM_PRIORITY_COUNT, FIXED_COST_COUNT, LOSS_KIND_COUNT, NEED_COUNT, POLICY_KIND_COUNT,
-    REJECT_CAUSE_COUNT, SERVICE_KIND_COUNT, SPEND_CATEGORY_COUNT, STOCK_CAT_COUNT, TAX_KIND_COUNT,
-    UTILITY_KIND_COUNT,
+    AbateReason, ActionKind, ActivityKind, AdChannelKind, AgencyKind, BankruptcyTrigger, Biome,
+    BodyType, ClaimPriority, CommitmentKind, DeprivationEffect, EditorialBias, EventCategory,
+    FirmStrategy, FixedCost, GateKind, LeaveCause, LifeEventKind, LineStopCause, LoanKind,
+    LossKind, MediaKind, MigrationKind, NeedKind, PermitKind, PlaceKind, PlaceRef, PolicyKind,
+    PriceBasis, PriceDriver, ReactionKind, RejectCause, RejectCredit, RemedyKind, ResourceKind,
+    RoadClass, Season, ServiceKind, ShortageStageKind, SpendCategory, StockCat, TaxKind,
+    TenderKind, TouchSource, TraitId, TransportMode, Trend, UtilityKind, UtilityService,
+    VoteDriver, WageCause, WorldCoord, AD_CHANNEL_KIND_COUNT, AGENCY_KIND_COUNT,
+    CLAIM_PRIORITY_COUNT, FIXED_COST_COUNT, LOSS_KIND_COUNT, MEDIA_KIND_COUNT, NEED_COUNT,
+    POLICY_KIND_COUNT, REJECT_CAUSE_COUNT, SERVICE_KIND_COUNT, SPEND_CATEGORY_COUNT,
+    STOCK_CAT_COUNT, TAX_KIND_COUNT, TOUCH_SOURCE_COUNT, UTILITY_KIND_COUNT,
 };
 pub use weather::{weather_at, Weather};

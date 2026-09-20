@@ -88,6 +88,7 @@ fn zadanie_po_drodze(
         personality: &personality,
         residence: &residence,
         today: 0,
+        brands: Default::default(),
     };
     choose_place(places, need, skad, 60, znane, &kto, &mut kandydaci)
 }
@@ -180,6 +181,7 @@ fn sciezka_odmowy_dziala_zanim_m5_bedzie_mial_czym_odmawiac() {
         at: SimMinute(480),
         budget_hint: Money::ZERO,
         household_size: 1,
+        brands: Default::default(),
     };
 
     let wyniki: Vec<bool> = (0..6)
@@ -333,6 +335,7 @@ fn planer_stoi_na_traitach_a_nie_na_implementacjach() {
                 personality: &personality,
                 residence: &residence,
                 today: 1,
+                brands: Default::default(),
             },
             household: HouseholdView {
                 id: HouseholdId(encja(11)),

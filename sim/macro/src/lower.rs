@@ -262,6 +262,9 @@ pub struct LowerReport {
     /// Kwota, której nie dało się przesunąć — rachunek reszty świata odmówił
     /// przelewu albo firma nie ma konta. Zero znaczy „naniesione w całości".
     pub unsettled: Money,
+    /// Ile slotów marek zasiał zasiew pamięci (`D7`, M10b). Zero znaczy „w mieście
+    /// nie ma firm z marką" i jest poprawnym stanem, nie błędem.
+    pub brands_seeded: u32,
 }
 
 /// Dlaczego rozwinięcie w ogóle nie ruszyło.
@@ -400,6 +403,13 @@ pub fn lower(state: &MacroState, world: &mut World, seed: u64) -> Result<LowerRe
     if delta_gd != 0 && !rozlicz_sektor_gd(world, rest, delta_gd, tick) {
         report.unsettled = Money(report.unsettled.get().saturating_add(delta_gd.abs()));
     }
+
+    // ── 5. zasiew pamięci marek (`D7`) ───────────────────────────────────────
+    // Świat „zużyty" w liczbach i sterylny w zachowaniu byłby światem, w którym
+    // pierwszy tydzień partii to chaos wyborów: mieszkaniec nie zna żadnego sklepu,
+    // więc człon marki w decyzji zakupowej jest zerem dla wszystkich ofert naraz.
+    // Zasiew nie rusza pieniądza, więc stoi **po** domknięciu sektora gospodarstw.
+    report.brands_seeded = crate::brandseed::seed_memory(state, world, seed, tick);
 
     Ok(report)
 }

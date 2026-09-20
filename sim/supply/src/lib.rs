@@ -43,8 +43,8 @@ pub use b2b::{
     WhoTransports, TARIFFS_SCHEMA_VERSION,
 };
 pub use batch::{
-    Batch, BatchEvent, BatchFlags, BatchId, BatchLedger, BatchLocation, BatchOrigin, BrandId,
-    CoalesceKey, LineId, SlotId, TraceKind, TransportOrderId,
+    brand_of, firm_of, Batch, BatchEvent, BatchFlags, BatchId, BatchLedger, BatchLocation,
+    BatchOrigin, BrandId, CoalesceKey, LineId, SlotId, TraceKind, TransportOrderId,
 };
 pub use catalog::{
     load_default, Catalog, CatalogError, CostAllocation, Emissions, Good, GoodForm, GoodSpec,

@@ -132,6 +132,9 @@ impl Market {
                 price_basis: PriceBasis::GrossRetail,
                 available: Qty::ZERO,
                 quality: spec.quality,
+                // Marka wchodzi dopiero z pierwszą partią na półce (`restock`):
+                // pusta półka nie ma producenta, więc nie ma czyjej marki nosić.
+                brand: None,
                 category: CategoryId::Stock(spec.cat),
                 since: t,
                 price_rev: 0,
@@ -481,6 +484,9 @@ impl Market {
                 price_basis: PriceBasis::GrossRetail,
                 available: Qty::ZERO,
                 quality: spec.quality,
+                // Marka wchodzi dopiero z pierwszą partią na półce (`restock`):
+                // pusta półka nie ma producenta, więc nie ma czyjej marki nosić.
+                brand: None,
                 category: CategoryId::Stock(spec.cat),
                 since: t,
                 price_rev: 0,

@@ -238,6 +238,18 @@ pub enum TxKind {
         candidate: u8,
         illegal: bool,
     },
+    /// Wydatek na kampanię reklamową (M10b WP10.6, `K-80`).
+    ///
+    /// Osobny wariant, bo żaden istniejący nie opisuje tego przepływu: to nie jest
+    /// zakup towaru, nie usługa komunalna i nie danina — ta sama reguła, którą `K-66`
+    /// zastosował do wpłaty na kampanię wyborczą. Odbiorcą jest **tytuł medialny**,
+    /// jeśli kanał go ma, i reszta świata, jeśli nie (billboard, ulotki, sponsoring):
+    /// właściciela tablicy reklamowej nie modelujemy i udawanie, że pieniądz trafia
+    /// do konkretnej firmy, byłoby zmyśleniem drugiej strony przelewu.
+    AdSpend {
+        campaign: magnat_core::CampaignId,
+        channel: magnat_core::AdChannelKind,
+    },
 }
 
 /// Opis zapisu podawany przez wołającego. `tax` jest **wyłącznie VAT-em**

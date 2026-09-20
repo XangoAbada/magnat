@@ -239,6 +239,47 @@ pub struct CitizenView<'a> {
     pub residence: &'a Residence,
     /// Doba świata — wiek liczy się z niej, a nie z zegara systemowego (00 §3.5).
     pub today: i32,
+    /// Marki, które mieszkaniec zna (M10b §5.1). Pusty widok = decyzja bez członu marki.
+    pub brands: BrandView<'a>,
+}
+
+/// Marki, które mieszkaniec zna, z naniesionym zanikiem (M10b §5.1).
+///
+/// Ten sam wzorzec co [`KnowledgeView`] i z tego samego powodu: `PlaceProvider`
+/// dostaje `&self`, a nie `&World`, więc pamięć mieszkańca musi przyjechać razem
+/// z nim. Widok jest pusty w każdym świecie bez marek i wtedy człon marki w decyzji
+/// zakupowej jest zerem — czyli dokładnie tym, czym był do M10b.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub struct BrandView<'a> {
+    slots: &'a [crate::brand::BrandAffinity],
+}
+
+impl<'a> BrandView<'a> {
+    #[must_use]
+    pub fn new(slots: &'a [crate::brand::BrandAffinity]) -> BrandView<'a> {
+        BrandView { slots }
+    }
+
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.slots.len()
+    }
+
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.slots.is_empty()
+    }
+
+    /// Co mieszkaniec myśli o tej marce. `None` = nie zna jej.
+    #[must_use]
+    pub fn get(&self, brand: magnat_core::BrandId) -> Option<&crate::brand::BrandAffinity> {
+        self.slots.iter().find(|s| s.brand == brand)
+    }
+
+    #[must_use]
+    pub fn as_slice(&self) -> &[crate::brand::BrandAffinity] {
+        self.slots
+    }
 }
 
 /// Wiedza mieszkańca o miejscach (§5.7). Kandydatem może być **wyłącznie** miejsce,
@@ -392,7 +433,7 @@ impl Default for PlaceCandidate {
 
 /// Żądanie realizacji wizyty.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct FulfilRequest {
+pub struct FulfilRequest<'a> {
     pub citizen: CitizenId,
     pub household: HouseholdId,
     pub need: NeedKind,
@@ -405,6 +446,10 @@ pub struct FulfilRequest {
     /// **na mieszkańca na dobę**, więc bez liczebności nie da się go przeliczyć
     /// na sztuki.
     pub household_size: u8,
+    /// Marki, które kupujący zna (M10b §5.1) — ten sam widok, którym liczył się
+    /// wybór sklepu. Gdyby próg akceptacji liczył się bez niego, mieszkaniec
+    /// wybierałby sklep z powodu marki i odrzucał go z braku marki.
+    pub brands: BrandView<'a>,
 }
 
 /// Wynik wizyty.
@@ -485,7 +530,7 @@ pub trait PlaceProvider: Send + Sync {
     fn opening_hours(&self, place: PlaceRef) -> OpenHours;
 
     /// Realizacja wizyty w chwili zdarzenia `StartActivity`.
-    fn fulfil(&mut self, req: &FulfilRequest) -> FulfilOutcome;
+    fn fulfil(&mut self, req: &FulfilRequest<'_>) -> FulfilOutcome;
 }
 
 /// Estymator w linii prostej — **dubler testowy** i nic więcej.
@@ -772,7 +817,7 @@ impl PlaceProvider for InfinitePlaces {
             .map_or(OpenHours::ALWAYS, |e| default_hours(e.kind))
     }
 
-    fn fulfil(&mut self, req: &FulfilRequest) -> FulfilOutcome {
+    fn fulfil(&mut self, req: &FulfilRequest<'_>) -> FulfilOutcome {
         let spec = self.needs.spec(req.need);
         FulfilOutcome::Done {
             satisfaction: Q::new(spec.satisfaction),
@@ -820,7 +865,7 @@ impl PlaceProvider for FlakyPlaces {
         self.inner.opening_hours(place)
     }
 
-    fn fulfil(&mut self, req: &FulfilRequest) -> FulfilOutcome {
+    fn fulfil(&mut self, req: &FulfilRequest<'_>) -> FulfilOutcome {
         self.licznik += 1;
         if self.licznik.is_multiple_of(3) {
             return FulfilOutcome::Refused(DecisionReason::PlaceUnknown {
@@ -854,7 +899,7 @@ impl PlaceProvider for PanickingPlaces {
         panic!("PanickingPlaces::opening_hours");
     }
 
-    fn fulfil(&mut self, _req: &FulfilRequest) -> FulfilOutcome {
+    fn fulfil(&mut self, _req: &FulfilRequest<'_>) -> FulfilOutcome {
         panic!("PanickingPlaces::fulfil");
     }
 }
@@ -879,7 +924,7 @@ impl PlaceProvider for EmptyPlaces {
         OpenHours::ALWAYS
     }
 
-    fn fulfil(&mut self, req: &FulfilRequest) -> FulfilOutcome {
+    fn fulfil(&mut self, req: &FulfilRequest<'_>) -> FulfilOutcome {
         FulfilOutcome::Refused(DecisionReason::PlaceUnknown {
             need: req.need,
             known_count: 0,

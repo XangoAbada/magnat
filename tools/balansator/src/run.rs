@@ -147,6 +147,7 @@ pub fn single(cfg: &RunCfg, seed: u64) -> Result<RunFile, String> {
         .add(magnat_economy::labor::LaborSystem::new())
         .add(magnat_economy::corpfin::system::InsolvencySystem::new())
         .add(magnat_macro::MacroSystem::new())
+        .add(magnat_media::MediaSystem::new())
         .add(DayLoopSystem::new(&world))
         .add(ReplanCooldownSystem::new(&world))
         .add(NeedDecaySystem::new(&world))
@@ -447,7 +448,10 @@ fn jest_decyzja(kind: &magnat_economy::TxKind) -> bool {
         // Wpłata na kampanię jest wyborem w najczystszej postaci: firma nie musi
         // jej robić, nikt jej do tego nie zobowiązał, a decyduje o niej rachunek
         // „czy ten kandydat mi się opłaci" (M8e).
-        | K::CampaignDonation { .. } => true,
+        | K::CampaignDonation { .. }
+        // Reklama też: nikt nie zobowiązał firmy do kupienia billboardu, a decyduje
+        // o tym rachunek „czy ta kampania mi się zwróci" (M10b).
+        | K::AdSpend { .. } => true,
         // Zobowiązanie: umowa, harmonogram albo warunek początkowy świata.
         K::Wage { .. }
         | K::Rent { .. }

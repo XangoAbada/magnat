@@ -74,8 +74,8 @@ pub use transit::{
     STOP_SPACING_M,
 };
 pub use trip::{
-    PendingTrip, TrafficEvent, TrafficNetwork, TrafficStats, TripFailure, TripId, TripLedger,
-    TripOutcome, TripPurpose, GRIDLOCK_RELEASE_MIN, REFUEL_DWELL_MIN,
+    EdgeWatch, PendingTrip, TrafficEvent, TrafficNetwork, TrafficStats, TripFailure, TripId,
+    TripLedger, TripOutcome, TripPurpose, GRIDLOCK_RELEASE_MIN, REFUEL_DWELL_MIN, WATCH_PASS_CAP,
 };
 pub use vehicle::{
     FuelTank, LocationKind, OwnerKind, VehicleClass, VehicleCondition, VehicleLocation,

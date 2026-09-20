@@ -534,6 +534,7 @@ fn uroda(world: &mut World, matka: Entity, day: u64) -> bool {
         .with(AgentState::default())
         .with(KnowledgeRef::default())
         .with(RelationsRef::default())
+        .with(crate::components::BrandsRef::default())
         .with(Lifecycle::default())
         .id();
 

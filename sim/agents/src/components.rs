@@ -586,6 +586,21 @@ pub struct RelationsRef {
     pub _pad: u16,
 }
 
+/// Uchwyt do slabu slotów marek — 8 B (M10b §5.1).
+///
+/// Osobny slab od wiedzy, choć kształt uchwytu jest ten sam, i to jest decyzja:
+/// wpis wiedzy wskazuje **miejsce** (indeks encji), slot marki wskazuje **markę**
+/// (`BrandId`), a limity są różne — 32 wpisy wiedzy wobec 16 slotów marek. Wspólny
+/// magazyn znaczyłby, że kampania reklamowa wypycha z pamięci przystanek autobusowy.
+#[repr(C)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub struct BrandsRef {
+    pub handle: u32,
+    pub len: u8,
+    pub class: u8,
+    pub _pad: u16,
+}
+
 /// Cykl życia — 8 B. `next_event_day` to doba najbliższego zdarzenia życiowego;
 /// samo zdarzenie siedzi w przelewie kolejki DES, nie w kole czasu.
 #[repr(C)]
@@ -731,6 +746,13 @@ impl HashState for RelationsRef {
     }
 }
 
+impl HashState for BrandsRef {
+    fn hash_state(&self, h: &mut StateHasher) {
+        h.write_u32(self.handle);
+        h.write(&[self.len, self.class]);
+    }
+}
+
 impl HashState for Lifecycle {
     fn hash_state(&self, h: &mut StateHasher) {
         h.write_u32(self.partner);
@@ -760,10 +782,15 @@ komponent! {
     AgentState => "agents.AgentState",
     KnowledgeRef => "agents.KnowledgeRef",
     RelationsRef => "agents.RelationsRef",
+    BrandsRef => "agents.BrandsRef",
     Lifecycle => "agents.Lifecycle",
 }
 
-/// Suma `size_of` wszystkich trzynastu komponentów mieszkańca — 140 B (§5.1).
+/// Suma `size_of` wszystkich czternastu komponentów mieszkańca — 148 B (§5.1).
+///
+/// Czternasty to `BrandsRef` (M10b): **uchwyt** do slabu marek, nie same marki.
+/// Sloty leżą w slabie razem z wiedzą i relacjami, więc stan gorący rośnie o osiem
+/// bajtów, a nie o sto dwadzieścia osiem.
 pub const HOT_COMPONENT_BYTES: usize = size_of::<Identity>()
     + size_of::<Personality>()
     + size_of::<Vitals>()
@@ -776,6 +803,7 @@ pub const HOT_COMPONENT_BYTES: usize = size_of::<Identity>()
     + size_of::<AgentState>()
     + size_of::<KnowledgeRef>()
     + size_of::<RelationsRef>()
+    + size_of::<BrandsRef>()
     + size_of::<Lifecycle>();
 
 /// Rejestracja komponentów, magazynów i zasobów M3 w świecie ECS.
@@ -812,6 +840,7 @@ pub fn register_components(world: &mut magnat_ecs::World) {
     world.register_component::<AgentState>();
     world.register_component::<KnowledgeRef>();
     world.register_component::<RelationsRef>();
+    world.register_component::<BrandsRef>();
     world.register_component::<Lifecycle>();
     // Gospodarstwo jest osobną encją, nie komponentem mieszkańca (M3c §5.6) —
     // rejestruje się je tutaj, bo snapshot ma je nieść tak samo jak resztę.
@@ -824,10 +853,16 @@ pub fn register_resources(world: &mut magnat_ecs::World, needs: NeedTable) {
     world.insert_resource(RelationSlab::new());
     world.insert_resource(KnowledgeSlab::new());
     world.insert_resource(PlanSlab::new());
+    world.insert_resource(crate::brand::BrandSlab::new());
+    world.insert_resource(crate::brand::BrandData::default());
     world.insert_resource(EventQueue::new());
     world.register_resource_hash::<RelationSlab>();
     world.register_resource_hash::<KnowledgeSlab>();
     world.register_resource_hash::<PlanSlab>();
+    // Sloty marek są stanem świata tak samo jak wiedza: to, co mieszkaniec myśli
+    // o marce, wchodzi do jego decyzji zakupowej (M10b §5.1). Kalibracja z
+    // `data/tuning/brand.ron` **nie** wchodzi — to dane wejściowe, jak tabela potrzeb.
+    world.register_resource_hash::<crate::brand::BrandSlab>();
     // Kolejka zdarzeń jest stanem trwałym: to, co ma się wydarzyć jutro, jest częścią
     // świata tak samo jak to, co jest dziś (§5.2, lazy scheduling).
     world.register_resource_hash::<EventQueue>();
@@ -855,8 +890,12 @@ mod tests {
         assert_eq!(size_of::<AgentState>(), 8);
         assert_eq!(size_of::<KnowledgeRef>(), 8);
         assert_eq!(size_of::<RelationsRef>(), 8);
+        // Czternasty komponent, dołożony w M10b: uchwyt do slabu marek. Sloty leżą
+        // w slabie razem z wiedzą i relacjami, więc stan gorący rośnie o osiem bajtów,
+        // a nie o sto dwadzieścia osiem (M10b §5.1, wariant C).
+        assert_eq!(size_of::<BrandsRef>(), 8);
         assert_eq!(size_of::<Lifecycle>(), 8);
-        assert_eq!(HOT_COMPONENT_BYTES, 140);
+        assert_eq!(HOT_COMPONENT_BYTES, 148);
     }
 
     #[test]

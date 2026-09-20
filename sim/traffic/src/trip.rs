@@ -335,11 +335,110 @@ pub struct TrafficNetwork {
     /// dla nakładki korków i dla raportu — **nie wchodzi do hasha**, bo nie jest stanem
     /// symulacji, tylko jej pomiarem.
     rejects_total: Vec<u32>,
+    /// Podsłuch krawędzi: kto przejechał tamtędy w tej minucie (M10b WP10.6).
+    watch: EdgeWatch,
+}
+
+/// Podsłuch wybranych krawędzi — **kto** nimi przejechał, nie ilu ich było.
+///
+/// Powstał dla billboardów, ale nie wie o nich nic i wiedzieć nie ma: ruch jest
+/// własnością M4, a to, co znaczy przejazd obok tablicy, jest własnością M10.
+/// To ta sama granica, którą `K-14` postawił między urbanistyką a geometrią pasów.
+///
+/// **Pusty zbiór krawędzi kosztuje zero** — jedno porównanie z pustym wektorem na
+/// wpuszczaną podróż. Świat bez reklamy nie płaci za ten mechanizm ani cyklu, a hash
+/// stanu ma w nim wtedy dwie zerowe długości.
+///
+/// `ponytail:` sufit nazwany — przy ponad `WATCH_EDGE_CAP` obserwowanych krawędziach
+/// (~2000 billboardów w mieście, M10b §5.2) koszt rośnie liniowo z długością tras
+/// wpuszczanych podróży. Droga wyjścia to agregat per krawędź zamiast listy
+/// tożsamości; nie wcześniej, bo dziś to jest `binary_search` po kilkuset wpisach.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct EdgeWatch {
+    /// Posortowane, bez powtórzeń — `binary_search` na gorącej ścieżce `dispatch`.
+    edges: Vec<EdgeId>,
+    /// `(indeks encji podróżnego, krawędź)` w kolejności wpuszczania podróży.
+    passes: Vec<(u32, EdgeId)>,
+}
+
+/// Ile przejazdów po obserwowanych krawędziach sieć zapamięta, zanim zacznie je gubić.
+///
+/// Sufit istnieje dla świata, w którym krawędzie ktoś ustawił, a przejazdów nie
+/// odbiera nikt: bez niego wektor rósłby przez całą sesję. Przejazdy ponad sufit są
+/// **gubione po cichu** i tak ma być: licznik zgubionych byłby albo stanem w hashu
+/// (czyli kolejnym polem, które musi przeżyć zapis), albo pomiarem poza hashem —
+/// a odbiorca opróżnia bufor co godzinę, więc sufit sięgnąłby wyłącznie w świecie,
+/// w którym system mediów w ogóle nie stoi.
+pub const WATCH_PASS_CAP: usize = 65_536;
+
+impl EdgeWatch {
+    /// Ustawia zbiór obserwowanych krawędzi. Pusty zbiór wyłącza mechanizm.
+    pub fn set_edges(&mut self, mut edges: Vec<EdgeId>) {
+        edges.sort_unstable();
+        edges.dedup();
+        self.edges = edges;
+        if self.edges.is_empty() {
+            self.passes.clear();
+        }
+    }
+
+    #[must_use]
+    pub fn edges(&self) -> &[EdgeId] {
+        &self.edges
+    }
+
+    /// Odbiera przejazdy z tej minuty i opróżnia bufor.
+    pub fn take_passes(&mut self) -> Vec<(u32, EdgeId)> {
+        std::mem::take(&mut self.passes)
+    }
+
+    /// Ile przejazdów czeka na odbiór.
+    #[must_use]
+    pub fn pending(&self) -> usize {
+        self.passes.len()
+    }
+
+    /// Notuje przejazd po trasie. Woła to `dispatch` przy wpuszczaniu podróży —
+    /// publiczne, bo to jest **jedyne wejście** do bufora i test zasięgu billboardu
+    /// musi mieć czym podać przejazdy bez stawiania całej sieci drogowej.
+    pub fn note(&mut self, traveller: u32, edges: &[EdgeId]) {
+        if self.edges.is_empty() {
+            return;
+        }
+        for e in edges {
+            if self.edges.binary_search(e).is_ok() {
+                if self.passes.len() >= WATCH_PASS_CAP {
+                    return;
+                }
+                self.passes.push((traveller, *e));
+            }
+        }
+    }
+}
+
+impl HashState for EdgeWatch {
+    /// Do hasha wchodzi **jedno i drugie**: zbiór krawędzi jest wyprowadzony z kampanii,
+    /// a nieodebrane przejazdy są tym, co świat ma do przekazania w następnej minucie.
+    /// Licznik zgubionych **nie** wchodzi — jest pomiarem, nie stanem (jak `rejects_total`).
+    fn hash_state(&self, h: &mut StateHasher) {
+        h.write_u64(self.edges.len() as u64);
+        for e in &self.edges {
+            h.write_u32(e.0);
+        }
+        h.write_u64(self.passes.len() as u64);
+        for (t, e) in &self.passes {
+            h.write_u32(*t);
+            h.write_u32(e.0);
+        }
+    }
 }
 
 impl PartialEq for TrafficNetwork {
     fn eq(&self, other: &TrafficNetwork) -> bool {
-        self.mezo == other.mezo && self.trips == other.trips && self.stats == other.stats
+        self.mezo == other.mezo
+            && self.trips == other.trips
+            && self.stats == other.stats
+            && self.watch == other.watch
     }
 }
 
@@ -353,6 +452,17 @@ impl TrafficNetwork {
             rejects_total: vec![0; road.edge_count()],
             ..TrafficNetwork::default()
         }
+    }
+
+    /// Podsłuch krawędzi do odczytu — dla systemu, który odbiera przejazdy.
+    #[must_use]
+    pub fn watch(&self) -> &EdgeWatch {
+        &self.watch
+    }
+
+    /// Podsłuch krawędzi do zapisu — dla systemu, który ustawia obserwowane krawędzie.
+    pub fn watch_mut(&mut self) -> &mut EdgeWatch {
+        &mut self.watch
     }
 
     #[must_use]
@@ -437,6 +547,7 @@ impl HashState for TrafficNetwork {
     /// niezależnie od tego, jak się do niej doszło (M0, test T-D5).
     fn hash_state(&self, h: &mut StateHasher) {
         self.mezo.hash_state(h);
+        self.watch.hash_state(h);
         let mut order: Vec<(u32, usize)> = self
             .trips
             .iter()

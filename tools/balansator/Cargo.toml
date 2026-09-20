@@ -24,6 +24,7 @@ magnat-io = { workspace = true }
 magnat-agents = { workspace = true }
 magnat-economy = { workspace = true }
 magnat-macro = { workspace = true }
+magnat-media = { workspace = true }
 magnat-firms = { workspace = true }
 magnat-traffic = { workspace = true }
 magnat-headless = { workspace = true }

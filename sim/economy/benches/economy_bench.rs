@@ -55,6 +55,7 @@ fn build_offers() -> (Arena<Offer>, OfferIndex) {
             price_basis: PriceBasis::GrossRetail,
             available: Qty(5_000),
             quality: Q::new(50),
+            brand: None,
             category: CategoryId::Stock(StockCat::Food),
             since: Tick(0),
             price_rev: 0,
@@ -138,6 +139,7 @@ fn bench_uzytecznosc(c: &mut Criterion) {
         openness: Q::new(50),
         budget_ref: Money(1_500),
         vot_gr_per_min: 12,
+        brands: Default::default(),
     };
     let kandydaci: Vec<Candidate> = (0..15u32)
         .map(|i| Candidate {
@@ -149,6 +151,7 @@ fn bench_uzytecznosc(c: &mut Criterion) {
             travel_min: (4 + i % 11) as u16,
             travel_money: Money::ZERO,
             quality: Q::new(50 + (i % 40) as u8),
+            brand: None,
             rating: Some(60),
             visited: i % 3 == 0,
         })
@@ -429,6 +432,7 @@ fn bench_decyzja_zakupowa(c: &mut Criterion) {
                     personality: &osobowosc,
                     residence: &mieszkanie,
                     today: 0,
+                    brands: Default::default(),
                 },
                 &mut out,
             );

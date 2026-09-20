@@ -29,6 +29,7 @@ magnat-supply = { workspace = true }
 magnat-firms = { workspace = true }
 magnat-policy = { workspace = true }
 magnat-macro = { workspace = true }
+magnat-media = { workspace = true }
 magnat-city = { workspace = true }
 magnat-events = { workspace = true }
 magnat-spatial = { workspace = true }

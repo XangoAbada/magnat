@@ -254,6 +254,33 @@ pub enum StreamId {
     // komenda gracza jest funkcją stanu, a nie rzutem.
 
     // ── M10: 280..=299 — głębia (`K-4`, przydział w M10 §7.1) ───────────────────
+    /// Czy mieszkaniec zauważył billboard, obok którego właśnie przejechał
+    /// (M10b §5.2). Klucz: indeks encji mieszkańca, tick minuty przejazdu.
+    ///
+    /// Klucz jest **mieszkańcem, a nie kampanią**, i to jest różnica z planem fazy:
+    /// gdyby losował indeks kampanii, wszyscy przejeżdżający w tej samej minucie
+    /// dostaliby ten sam rzut, więc billboard albo widziałaby cała minuta ruchu,
+    /// albo nikt. Kampania wchodzi do klucza drugim składnikiem ticku.
+    AdNotice = 280,
+    /// Dobór odbiorców reklamy prasowej, radiowej i telewizyjnej z czytelnictwa
+    /// dzielnicy (M10b §5.2). Klucz: indeks encji mieszkańca, tick doby publikacji.
+    AdMediaPick = 281,
+    /// Dobór odbiorców ulotki w promieniu od punktu nadania (M10b §5.2).
+    /// Klucz: indeks encji mieszkańca, tick doby roznoszenia.
+    AdLeaflet = 282,
+    /// Propagacja opinii o marce przez graf relacji i wstrzyknięcie PR (M10b §5.1).
+    /// Klucz: indeks encji opowiadającego, tick doby.
+    ///
+    /// Osobny strumień od `Gossip` (M3) z rozmysłu: tamten wybiera **miejsce**,
+    /// o którym mieszkaniec opowiada, ten — **markę**. Wspólny numer sprzęgłby
+    /// dwa rozkłady, więc dołożenie kampanii PR zmieniłoby to, o których sklepach
+    /// miasto plotkuje, w każdym świecie z tym samym ziarnem.
+    BrandRumor = 283,
+    /// Dobór zdarzeń do publikacji przez redakcję tytułu (M10b §5.3).
+    /// Klucz: indeks encji zakładu redakcji, tick doby wydania.
+    MediaEditorial = 284,
+    // 285–291 zostaje wolne dla M10c–M10e (R&D, giełda, ubezpieczenia, kartele,
+    // związki) wg tabeli M10 §7.1.
     /// Losowość wewnątrz kroku makro: demografia komórki — urodzenia, zgony
     /// i migracja w fazie 1 (M10a §5.7). Klucz: indeks komórki, tick kroku.
     ///
@@ -279,9 +306,10 @@ pub enum StreamId {
     /// Zdarzenia w historii „na sucho" (M10a §5.7, faza 8). Klucz: indeks komórki
     /// albo firmy dotkniętej zdarzeniem, tick losowania.
     DryRunEvent = 295,
-    // 280–291 i 296–299 zostaje wolne jako reszta bloku M10 (`K-4`): marka, media,
-    // R&D, giełda, ubezpieczenia, kartele i związki biorą numery w M10b–M10e,
-    // wg tabeli z M10 §7.1.
+    // 285–291 i 296–299 zostaje wolne jako reszta bloku M10 (`K-4`): R&D, giełda,
+    // ubezpieczenia, kartele i związki biorą numery w M10c–M10e, wg tabeli M10 §7.1.
+    // `MacroSeedMemory = 294` przestał być zarezerwowany i niezajęty: zasiew pamięci
+    // marek po `lower()` (decyzja `D7` fazy M10) wykonuje M10b.
 
     // ── M11: 300..=319 — prezentacja (`K-4`, przydział w M11 §„K-4") ─────────────
     /// Wygląd mieszkańca i lakier pojazdu (M11a §5.2). Klucz: indeks encji, tick 0 —

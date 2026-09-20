@@ -135,6 +135,8 @@ pub struct Chronicle {
     seen_cmd: u64,
     /// Ostatni tick decyzji firmy, który już wszedł do kroniki.
     seen_firm_tick: u64,
+    /// Ostatnia minuta publikacji, którą kronika już zebrała z dziennika redakcji.
+    seen_story_tick: u64,
     /// Ostatnia doba, w której zbierano.
     last_day: Option<u64>,
 }
@@ -170,6 +172,7 @@ impl Chronicle {
         self.last_day = Some(doba);
         self.zbierz_zdarzenia(session);
         self.zbierz_decyzje_firm(session);
+        self.zbierz_publikacje(session);
         self.zbierz_komendy(session);
         self.decimate(SimMinute(session.tick().get()));
     }
@@ -255,6 +258,50 @@ impl Chronicle {
                 payload: ChroniclePayload::Reason(powod),
                 importance: 40,
                 scope: ChronicleScope::Firm(firma),
+            });
+        }
+    }
+
+    /// Publikacje tytułów medialnych (M10b).
+    ///
+    /// Wykonanie `DK-1`: zdarzenie `sim/*` zapisuje powód **u siebie**, a kronika
+    /// gracza dokłada dla niego źródło. `game/` stoi nad wszystkimi `sim/*`, więc
+    /// zgłoszenie w drugą stronę zamknęłoby cykl, którego Cargo nie zbuduje.
+    ///
+    /// Aktorem jest **tytuł**, a nie zdarzenie, i to jest różnica warta zapisania:
+    /// wpis odpowiada na pytanie „kto o tym napisał", a nie „co się stało" — to
+    /// drugie ma już własny wiersz z `zbierz_zdarzenia`.
+    fn zbierz_publikacje(&mut self, session: &Session) {
+        let Some(o) = session.app.world.get_resource::<magnat_media::Outlets>() else {
+            return;
+        };
+        let nowe: Vec<(u64, DecisionReason)> = o
+            .reasons()
+            .iter()
+            .filter(|(t, _)| t.get() > self.seen_story_tick)
+            .map(|(t, r)| (t.get(), *r))
+            .collect();
+        for (t, _) in &nowe {
+            self.seen_story_tick = self.seen_story_tick.max(*t);
+        }
+        for (t, powod) in nowe {
+            let tytul = match powod {
+                DecisionReason::StoryPublished { outlet, .. } => {
+                    Some(Subject::Firm(magnat_supply::firm_of(outlet)))
+                }
+                _ => None,
+            };
+            let id = self.nowy_id();
+            self.push(ChronicleEntry {
+                id,
+                at: SimMinute(t),
+                kind: ChronicleKind::FirmDecision,
+                actor: tytul,
+                payload: ChroniclePayload::Reason(powod),
+                // Publikacja waży mniej niż decyzja firmy gracza i więcej niż nic:
+                // tekst o strajku jest tłem, dopóki nie dotyczy jego zakładu.
+                importance: 25,
+                scope: ChronicleScope::World,
             });
         }
     }

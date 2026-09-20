@@ -46,7 +46,7 @@ fn zatowarowany(seed: u64, pos: &[Vec2], units: i64) -> Bench {
     b
 }
 
-fn zadanie(citizen: u32, household: u32, site: SiteId, budzet: i64) -> FulfilRequest {
+fn zadanie(citizen: u32, household: u32, site: SiteId, budzet: i64) -> FulfilRequest<'static> {
     FulfilRequest {
         citizen: magnat_core::CitizenId(ent(citizen)),
         household: HouseholdId(ent(household)),
@@ -55,6 +55,7 @@ fn zadanie(citizen: u32, household: u32, site: SiteId, budzet: i64) -> FulfilReq
         at: magnat_core::SimMinute(480),
         budget_hint: Money(budzet),
         household_size: 1,
+        brands: Default::default(),
     }
 }
 
@@ -458,6 +459,7 @@ fn pieniadz_i_sztuki_zgadzaja_sie_po_obu_stronach() {
             at: magnat_core::SimMinute(480),
             budget_hint: Money(500_000),
             household_size: 1,
+            brands: Default::default(),
         };
         if let FulfilOutcome::Done { spent, .. } = market.fulfil(&req) {
             assert!(spent.get() > 0);
@@ -515,6 +517,7 @@ fn brak_srodkow_przy_rozliczeniu_oddaje_towar_na_polke() {
         at: magnat_core::SimMinute(480),
         budget_hint: Money(999_999),
         household_size: 1,
+        brands: Default::default(),
     };
     assert!(matches!(market.fulfil(&req), FulfilOutcome::Done { .. }));
     assert!(market.shelf_qty(site, g).unwrap() < polka0);

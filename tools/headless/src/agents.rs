@@ -99,6 +99,7 @@ fn zaludnij(seed: u64, n: u32) -> World {
             .with(AgentState::default())
             .with(KnowledgeRef::default())
             .with(RelationsRef::default())
+            .with(magnat_agents::BrandsRef::default())
             .with(Lifecycle::default());
     }
     w

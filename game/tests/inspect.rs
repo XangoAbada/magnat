@@ -362,9 +362,16 @@ fn dziewiec_nakladek_danych_buduje_pole() {
         );
     }
 
+    // Znajomość marki od M10b **ma** dane: nakładka rysuje raster, a nie milczy.
+    // Marka, której nikt nie zna, daje przy tym same zera i to jest poprawna
+    // odpowiedź — pytanie „ilu zna markę nr 9999" ma sens i brzmi „zero".
+    let marka = magnat_game::OverlayField::BrandAwareness {
+        brand: magnat_core::BrandId(9_999),
+    };
+    let pole = magnat_game::overlays::build(&s, marka).expect("nakładka znajomości marki");
     assert!(
-        magnat_game::overlays::build(&s, magnat_game::OverlayField::BrandAwareness).is_none(),
-        "nakładka zarezerwowana dla M10 rysuje zera zamiast milczeć"
+        pole.values.iter().all(|v| *v == 0),
+        "marka, której nikt nie zna, ma zerową znajomość w każdej dzielnicy"
     );
 }
 

@@ -59,6 +59,7 @@ fn miasto(citizens: u32) -> App {
     .add(LaborSystem::new())
     .add(InsolvencySystem::new())
     .add(MacroSystem::new())
+    .add(magnat_media::MediaSystem::new())
     .add(CitySystem::new())
     .add(DayLoopSystem::new(&world))
     .add(ReplanCooldownSystem::new(&world))

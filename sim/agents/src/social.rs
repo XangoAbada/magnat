@@ -425,7 +425,7 @@ fn zasoby_gospodarstwa(world: &World, e: Entity) -> (Money, Money) {
 fn status_rodzicow(world: &World, e: Entity) -> Option<u8> {
     let rel = world.get::<crate::components::RelationsRef>(e)?;
     let wpisy = world
-        .resource::<RelationSlab>()
+        .resource::<crate::store::RelationSlab>()
         .entries(demography::relations_ref(rel));
     let mut suma = 0u32;
     let mut n = 0u32;
@@ -953,6 +953,26 @@ pub fn learn_place(
         slot.len = sr.len;
         slot.class = sr.class;
     }
+}
+
+/// Z kim mieszkaniec jest w relacji i jak silnej — `(druga strona, waga 0..=100)`.
+///
+/// Wyjście grafu relacji **na zewnątrz `sim/agents`**: plotka M3 chodzi po nim
+/// wewnętrznie, ale PR (M10b §5.2) i związki zawodowe (M10e) muszą po nim przejść
+/// z góry. Zwraca encje, nie indeksy — wołający i tak potrzebuje encji, a konwersja
+/// w jednym miejscu jest tańsza niż w każdym z osobna.
+#[must_use]
+pub fn relations_of(world: &World, citizen: Entity) -> Vec<(Entity, u8)> {
+    let Some(rref) = world.get::<crate::components::RelationsRef>(citizen) else {
+        return Vec::new();
+    };
+    let sr = demography::relations_ref(rref);
+    world
+        .resource::<RelationSlab>()
+        .entries(sr)
+        .iter()
+        .filter_map(|r| demography::citizen_by_index(world, r.other).map(|e| (e, r.weight)))
+        .collect()
 }
 
 /// Czy mieszkaniec zna to miejsce.

@@ -298,7 +298,14 @@ impl PlaceProvider for Market {
         utils.clear();
         for c in cand.iter() {
             let cat = m.goods.spec(c.good).map_or(cats[0], |s| s.cat);
-            let st = m.buyer_state(status, openness, vot, cat, who.identity.household);
+            let st = m.buyer_state(
+                status,
+                openness,
+                vot,
+                cat,
+                who.identity.household,
+                who.brands,
+            );
             let noise = offer_noise(
                 m.seed,
                 who.id.entity().index(),
@@ -445,7 +452,7 @@ impl PlaceProvider for Market {
         m.fallback.opening_hours(place)
     }
 
-    fn fulfil(&mut self, req: &FulfilRequest) -> FulfilOutcome {
+    fn fulfil(&mut self, req: &FulfilRequest<'_>) -> FulfilOutcome {
         Market::fulfil(self, req)
     }
 }
@@ -458,7 +465,7 @@ impl Market {
     /// Trait wymaga `&mut self`, więc deleguje tutaj; wołający spoza pętli doby
     /// (scenariusz, test, panel) nie musi przez to trzymać rynku mutowalnie.
     #[allow(clippy::too_many_lines)]
-    pub fn fulfil(&self, req: &FulfilRequest) -> FulfilOutcome {
+    pub fn fulfil(&self, req: &FulfilRequest<'_>) -> FulfilOutcome {
         let mut m = self.lock();
         let PlaceRef::Site(site) = req.place else {
             return m.fallback.fulfil(req);
@@ -574,6 +581,7 @@ impl Market {
                 vot,
                 spec.cat,
                 req.household.entity().index(),
+                req.brands,
             );
             let cand = Candidate {
                 offer: line.offer,
@@ -584,6 +592,7 @@ impl Market {
                 travel_min: 0,
                 travel_money: Money::ZERO,
                 quality: offer.quality,
+                brand: offer.brand,
                 rating: None,
                 visited: true,
             };
@@ -687,7 +696,7 @@ impl Market {
     }
 }
 
-fn who_key(req: &FulfilRequest) -> u32 {
+fn who_key(req: &FulfilRequest<'_>) -> u32 {
     req.citizen.entity().index()
 }
 
@@ -754,6 +763,7 @@ fn zbierz_kandydatow(
                     travel_min,
                     travel_money: Money::ZERO,
                     quality: o.quality,
+                    brand: o.brand,
                     rating,
                     visited,
                 });

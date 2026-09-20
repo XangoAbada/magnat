@@ -208,6 +208,7 @@ pub fn run(a: &M8MiastoArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
         .add(LaborSystem::new())
         .add(InsolvencySystem::new())
         .add(MacroSystem::new())
+        .add(magnat_media::MediaSystem::new())
         .add(CitySystem::new())
         .add(DayLoopSystem::new(&world))
         .add(ReplanCooldownSystem::new(&world))

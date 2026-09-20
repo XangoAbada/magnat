@@ -6,6 +6,13 @@
 //
 // `office_clerk` w obsadzie hali to przygotowalnia — jedno stanowisko na 1000 m², które
 // odróżnia drukarnię od tłoczni.
+//
+// **Dopisane w M10b:** trzy tytuły (`newspaper`, `radio_station`, `tv_station`).
+// Bez nich rejestr tytułów w `magnat_media` byłby pusty w każdym wygenerowanym mieście,
+// a redakcja — mechanizmem, którego nikt nigdy nie uruchomi. Wszystkie trzy stoją
+// w lokalach biurowych, bo redakcja to biuro, a nie hala; kolejność wpisów nie jest
+// kontraktem zapisu (`SiteTypeId` jest indeksem w katalogu i zmienia się z nim,
+// a `magnat_media` szuka tytułu po **kluczu tekstowym**).
 (
     schema_version: 1,
     site_types: [
@@ -24,6 +31,44 @@
             ],
             capex: ( build: 380000000, equip_per_100m2: 14000000 ),
             fixed_cost: ( rent_per_m2: 1900, admin: 560000 ),
+        ),
+        (
+            key: "newspaper",
+            category: Media,
+            staffing: [
+                ( role: "journalist", per_10000m2: 260, min: 4 ),
+                ( role: "office_clerk", per_10000m2: 60, min: 1 ),
+                ( role: "sales_assistant", per_10000m2: 40, min: 1 ),
+                ( role: "shift_foreman", per_site: 1, managerial: true ),
+            ],
+            capex: ( build: 120000000, equip_per_100m2: 3200000 ),
+            fixed_cost: ( rent_per_m2: 2600, admin: 340000 ),
+        ),
+        (
+            key: "radio_station",
+            category: Media,
+            staffing: [
+                ( role: "journalist", per_10000m2: 180, min: 3 ),
+                ( role: "service_technician", per_10000m2: 60, min: 2 ),
+                ( role: "sales_assistant", per_10000m2: 40, min: 1 ),
+                ( role: "shift_foreman", per_site: 1, managerial: true ),
+            ],
+            capex: ( build: 90000000, equip_per_100m2: 5400000 ),
+            fixed_cost: ( rent_per_m2: 2400, admin: 280000 ),
+        ),
+        (
+            key: "tv_station",
+            category: Media,
+            staffing: [
+                ( role: "journalist", per_10000m2: 200, min: 6 ),
+                ( role: "service_technician", per_10000m2: 120, min: 4 ),
+                ( role: "office_clerk", per_10000m2: 50, min: 2 ),
+                ( role: "sales_assistant", per_10000m2: 40, min: 2 ),
+                ( role: "shift_foreman", per_site: 2, managerial: true ),
+                ( role: "plant_manager", per_site: 1, managerial: true ),
+            ],
+            capex: ( build: 640000000, equip_per_100m2: 26000000 ),
+            fixed_cost: ( rent_per_m2: 3100, admin: 980000 ),
         ),
     ],
 )

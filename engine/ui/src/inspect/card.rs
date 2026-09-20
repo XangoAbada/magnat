@@ -40,6 +40,9 @@ pub enum CardTabKind {
     Wealth,
     /// Praca: zakład, stanowisko, płaca.
     Work,
+    /// Marki, które mieszkaniec zna: sympatia, oczekiwana jakość i **skąd je zna**
+    /// (M10b §5.1). To jest główny dowód, że marka nie jest liczbą po stronie firmy.
+    Brands,
     /// Półki zakładu handlowego.
     Shelves,
     /// Klienci zakładu: skąd, kto, dlaczego.
@@ -64,6 +67,7 @@ impl CardTabKind {
             CardTabKind::Family => "family",
             CardTabKind::Wealth => "wealth",
             CardTabKind::Work => "work",
+            CardTabKind::Brands => "brands",
             CardTabKind::Shelves => "shelves",
             CardTabKind::Customers => "customers",
             CardTabKind::Competition => "competition",
@@ -72,13 +76,14 @@ impl CardTabKind {
         }
     }
 
-    pub const ALL: [CardTabKind; 11] = [
+    pub const ALL: [CardTabKind; 12] = [
         CardTabKind::State,
         CardTabKind::History,
         CardTabKind::Day,
         CardTabKind::Family,
         CardTabKind::Wealth,
         CardTabKind::Work,
+        CardTabKind::Brands,
         CardTabKind::Shelves,
         CardTabKind::Customers,
         CardTabKind::Competition,

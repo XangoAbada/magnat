@@ -101,6 +101,16 @@ pub fn setup(
     // Model makro i tablica uporządkowań wariantów (M7f WP13). Oba wchodzą do hasha.
     magnat_macro::register_macro(world);
 
+    // Kampanie reklamowe i tytuły medialne (M10b WP10.6, WP10.7). Rejestr jest pusty
+    // do pierwszej kampanii i do pierwszej redakcji — świat bez reklamy nie płaci
+    // za ten mechanizm ani bajtem hasha poza dwiema zerowymi długościami.
+    // Strojenie marki i kanałów **z danych**, nie z `Default` (`K-35`): bez tego
+    // `data/tuning/brand.ron` byłby plikiem, którego nikt nie czyta, a walidacje
+    // `schema_version` i asymetrii `k_down > k_up` — martwe.
+    world.insert_resource(magnat_agents::BrandData::load_default()?);
+    magnat_media::register_media(world);
+    magnat_media::ai::stand_up_outlets(world);
+
     Ok(FullCity {
         retail: r,
         firms: report,

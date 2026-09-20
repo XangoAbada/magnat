@@ -32,6 +32,18 @@
         (key: "bank_branch",     sector: Office, zones: ["office", "commercial"], min_parcel_m2: 250, m2_per_workplace: 29, wage_mult: 1.30, weight: 30, consumes: [("mat_paper", 5_000)]),
         (key: "office_suite",    sector: Office, zones: ["office"], min_parcel_m2: 300, m2_per_workplace: 24, wage_mult: 1.12, weight: 90, consumes: [("mat_paper", 7_000)]),
 
+        // ── media (M10b) ───────────────────────────────────────────────────────────
+        // Redakcja jest biurem, nie halą: drukarnia stoi osobno w `industry.ron`
+        // i to ona drukuje nakład. Gazeta zużywa papier, bo bez niego nie wychodzi;
+        // radio i telewizja nie zużywają nic, co miasto produkuje — i to jest prawda
+        // o nich, a nie luka w danych. Wagi są niskie, bo tytułów w mieście jest kilka,
+        // a nie kilkadziesiąt; normatywu ludnościowego nie mają z tego samego powodu,
+        // dla którego nie ma go biuro: gazeta powstaje z rynku reklamy, nie z liczby
+        // mieszkańców na placówkę.
+        (key: "newspaper",       sector: Office, zones: ["office", "commercial"], min_parcel_m2: 350, m2_per_workplace: 26, wage_mult: 1.14, weight: 10, consumes: [("mat_paper", 26_000)]),
+        (key: "radio_station",   sector: Office, zones: ["office"], min_parcel_m2: 300, m2_per_workplace: 30, wage_mult: 1.16, weight: 6, epochs: ["postwar", "transition", "contemporary"]),
+        (key: "tv_station",      sector: Office, zones: ["office"], min_parcel_m2: 1200, m2_per_workplace: 34, wage_mult: 1.28, weight: 4, epochs: ["transition", "contemporary"]),
+
         // ── logistyka ──────────────────────────────────────────────────────────────
         (key: "warehouse",       sector: Logistics, zones: ["logistics"], min_parcel_m2: 2500, m2_per_workplace: 512, wage_mult: 1.00, weight: 80, consumes: [("mat_cardboard", 30_000)]),
         (key: "freight_depot",   sector: Logistics, zones: ["logistics"], min_parcel_m2: 3500, m2_per_workplace: 448, wage_mult: 1.06, weight: 45, consumes: [("fuel_diesel_b7", 600_000)]),

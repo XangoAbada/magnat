@@ -100,3 +100,19 @@ walidator grafu towarów (dok. 00 §5), inaczej odrzucamy zmianę i logujemy bł
 
 **Nowa kategoria oznacza nowy łańcuch.** `NewGood` bez receptury i bez importu to błąd danych
 wykrywany w CI, nie w runtime.
+
+
+---
+
+## Zmiany wpisane po M10b
+
+Zgodnie z `K-18`. Wpisane jest **tylko to, co wiadomo na pewno** po zamknięciu M10b.
+Gwiazdka = zmiana zakresu albo kryterium. Szczegóły — tabela `F-n` w `M10b-marka-i-media.md`.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| FC-1 ★ | **Marka jest firmą i produkt jej nie ma** (`K-79`). `BrandId` to encja firmy, a `magnat_supply::brand_of` jest funkcją czystą bez rejestru. Nowy towar z R&D dziedziczy więc markę **wytwórcy**, a nie dostaje własnej | To jest rozstrzygnięcie M10b, nie przeoczenie: linia produktowa nie miała drugiego konsumenta, a rejestr marek byłby stanem do wpięcia w hash i przeprowadzenia przez zapis. **Jeśli M10c chce marek per produkt** — bo „nowa kategoria produktu" z §7.7 bywa osobną marką — to jest to decyzja otwarta z propozycją domyślną: **zostawić markę przy firmie**. Rozdzielenie kosztuje rejestr, `Batch.brand` przestaje być wyprowadzalne z producenta, a `firm_of(brand)` przestaje być bijekcją, więc karta mieszkańca traci odnośnik do firmy |
+| FC-2 ★ | **`MacroFirm.tech` jest tym samym, czym był `brand_stock` do M10b: polem zawsze zerowym.** `lift()` wypełnia je `TechLevel(tech)` z rejestru firm, ale poziom technologii nikt nie podnosi, więc w każdym przebiegu jest to ta sama liczba | M10b pokazał, ile kosztuje takie pole: `brand_stock` stał w modelu od M7f, przechodził każdy test i wyglądał tak samo jak działający. Wzór domknięcia jest gotowy do przepisania — `sim/macro::brandseed` robi dokładnie dwie rzeczy, których `tech` potrzebuje: agregat przy `lift()` i wpływ przy `lower()` |
+| FC-3 | **Blok `StreamId` M10: zajęte 280–284 (reklama i media) oraz 292–295 (makro).** Wolne dla M10c–M10e: **285–291 i 296–299** | `StreamId::RnDBreakthrough = 285` z tabeli M10 §7.1 jest nadal wolny i nadal zarezerwowany imiennie |
+| FC-4 | **Blok `DecisionReason` M10: zajęte 800–803.** Wolne: **804–899** | Blok M9 (700–799) zostaje w całości wolny (`K-71`) |
+| FC-5 | **Karta mieszkańca ma siedem zakładek, czyli sufit `MAX_CARD_TABS`.** Doszła „Marki" (`F-18`) | Ósma zakładka mieszkańca wymaga decyzji, którą z obecnych złożyć. Dla M10c to znaczy: cecha produktu z R&D pokazuje się w karcie **towaru albo firmy**, nie mieszkańca |

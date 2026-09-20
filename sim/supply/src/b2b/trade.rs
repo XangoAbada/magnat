@@ -502,6 +502,10 @@ impl B2b {
                 // partii. Droga wyjścia to pole w `TradeGood`, ale dopóki nikt nie może
                 // go wypełnić czymś innym niż zgadywaniem, jedna stała jest uczciwsza.
                 quality: magnat_core::Q::new(60),
+                // Import **nie ma marki** i to nie jest przeoczenie: producent siedzi
+                // poza miastem, a `p.buyer` jest importerem, nie wytwórcą. Wpisanie tu
+                // marki importera znaczyłoby, że hurtownia buduje sobie renomę cudzym
+                // towarem — czyli dokładnie to, czego PRD §7.6 zabrania.
                 brand: None,
                 producer: p.buyer,
                 produced_at: now,

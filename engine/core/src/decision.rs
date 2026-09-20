@@ -26,14 +26,14 @@
 
 use crate::ids::{FirmId, SiteId};
 use crate::time::MinuteOfDay;
-use crate::types::{DistrictId, EventId, GoodId, JobRoleId, Money, PolicyId, Q};
+use crate::types::{BrandId, DistrictId, EventId, GoodId, JobRoleId, Money, PolicyId, Q};
 use crate::vocab::{
-    AbateReason, ActionKind, AgencyKind, BankruptcyTrigger, ClaimPriority, CommitmentKind,
-    DeprivationEffect, EventCategory, FirmStrategy, FixedCost, LeaveCause, LifeEventKind,
-    LineStopCause, LoanKind, MigrationKind, NeedKind, PermitKind, PlaceRef, PolicyKind,
-    PriceDriver, ReactionKind, RejectCause, RejectCredit, RemedyKind, ServiceKind,
-    ShortageStageKind, SpendCategory, StockCat, TaxKind, TenderKind, TraitId, TransportMode, Trend,
-    UtilityKind, UtilityService, VoteDriver, WageCause,
+    AbateReason, ActionKind, AdChannelKind, AgencyKind, BankruptcyTrigger, ClaimPriority,
+    CommitmentKind, DeprivationEffect, EditorialBias, EventCategory, FirmStrategy, FixedCost,
+    LeaveCause, LifeEventKind, LineStopCause, LoanKind, MigrationKind, NeedKind, PermitKind,
+    PlaceRef, PolicyKind, PriceDriver, ReactionKind, RejectCause, RejectCredit, RemedyKind,
+    ServiceKind, ShortageStageKind, SpendCategory, StockCat, TaxKind, TenderKind, TouchSource,
+    TraitId, TransportMode, Trend, UtilityKind, UtilityService, VoteDriver, WageCause,
 };
 use serde::{Deserialize, Serialize};
 
@@ -720,6 +720,56 @@ pub enum DecisionReason {
         illegal: bool,
     } = 622,
     // 623–699 zarezerwowane dla M8.
+
+    // ── M10: 800..=899 — głębia (`K-12`) ────────────────────────────────────────
+    // 700–799 zostaje w całości wolne (blok M9 — panele niczego nie decydują, `K-71`).
+    /// Mieszkaniec dowiedział się o marce (M10b WP10.5, PRD §7.6, §5.7).
+    ///
+    /// To jest powód, dla którego marka nie jest liczbą: karta inspekcji mówi
+    /// **skąd** mieszkaniec ją zna i czego się po niej spodziewa. `source` niesie
+    /// źródło (reklama, plotka, media, własne doświadczenie), `channel` — kanał,
+    /// jeśli źródłem była kampania; dla plotki i doświadczenia jest `None`.
+    BrandLearned {
+        brand: BrandId,
+        source: TouchSource,
+        channel: Option<AdChannelKind>,
+        awareness: Q,
+    } = 800,
+    /// Zakup zmienił stosunek mieszkańca do marki (M10b WP10.5, PRD §7.6).
+    ///
+    /// Asymetria z PRD §7.6 jest tu widoczna wprost: `expected` przeciw `actual`
+    /// i wynikowa zmiana afinitetu. Rozczarowanie o 20 punktów kosztuje trzy razy
+    /// więcej, niż daje zachwyt o 20 — a gracz, który przereklamował produkt,
+    /// widzi w tym miejscu, że sam podniósł sobie `expected`.
+    BrandExperience {
+        brand: BrandId,
+        expected: Q,
+        actual: Q,
+        delta: i16,
+    } = 801,
+    /// Firma ruszyła kampanię reklamową (M10b WP10.6, PRD §7.6).
+    ///
+    /// `claim` to deklarowana jakość — liczba, którą kampania wpisuje odbiorcom
+    /// w `expected_quality`. Obietnica ponad stan jest samokarząca i to pole
+    /// jest jej zapisem.
+    AdCampaignStarted {
+        brand: BrandId,
+        channel: AdChannelKind,
+        budget: Money,
+        claim: Q,
+    } = 802,
+    /// Redakcja opublikowała tekst o zdarzeniu (M10b WP10.7, PRD §7.2, §11.2).
+    ///
+    /// `outlet` jest marką tytułu, nie firmą: wiarygodność jest per-para
+    /// (tytuł ↔ czytelnik) i mieszka w tym samym slocie, co marka sklepu.
+    /// `reach_bp` to udział mieszkańców miasta, do których tekst dotarł.
+    StoryPublished {
+        outlet: BrandId,
+        event: EventId,
+        bias: EditorialBias,
+        reach_bp: u16,
+    } = 803,
+    // 804–899 zarezerwowane dla M10c–M10f (R&D, giełda, relacje, związki).
     // ... kolejne fazy dopisują własne bloki na końcu pliku
 }
 
@@ -819,6 +869,10 @@ impl DecisionReason {
             DecisionReason::ElectionHeld { .. } => 620,
             DecisionReason::VoteCast { .. } => 621,
             DecisionReason::CampaignBacked { .. } => 622,
+            DecisionReason::BrandLearned { .. } => 800,
+            DecisionReason::BrandExperience { .. } => 801,
+            DecisionReason::AdCampaignStarted { .. } => 802,
+            DecisionReason::StoryPublished { .. } => 803,
         }
     }
 }

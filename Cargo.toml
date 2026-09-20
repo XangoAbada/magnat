@@ -19,6 +19,7 @@ members = [
     "sim/events",
     "sim/firms",
     "sim/macro",
+    "sim/media",
     "sim/policy",
     "sim/snapshot",
     "sim/supply",
@@ -56,6 +57,7 @@ magnat-economy = { path = "sim/economy" }
 magnat-events = { path = "sim/events" }
 magnat-firms = { path = "sim/firms" }
 magnat-macro = { path = "sim/macro" }
+magnat-media = { path = "sim/media" }
 magnat-policy = { path = "sim/policy" }
 magnat-sim-snapshot = { path = "sim/snapshot" }
 magnat-supply = { path = "sim/supply" }

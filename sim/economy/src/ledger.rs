@@ -85,6 +85,9 @@ pub enum LedgerAccount {
     WriteOffExpense,
     /// HAK M8 — w M5 zawsze 0.
     TaxExpense,
+    /// Reklama i PR (M10b WP10.6). **Dopisane na końcu**, bo kolejność wariantów
+    /// indeksuje tablicę sald wchodzącą do hasha i do zapisu gry.
+    MarketingExpense,
 }
 
 impl LedgerAccount {
@@ -110,6 +113,7 @@ impl LedgerAccount {
         LedgerAccount::InterestExpense,
         LedgerAccount::WriteOffExpense,
         LedgerAccount::TaxExpense,
+        LedgerAccount::MarketingExpense,
     ];
 
     #[must_use]
@@ -141,6 +145,7 @@ impl LedgerAccount {
             LedgerAccount::InterestExpense => "InterestExpense",
             LedgerAccount::WriteOffExpense => "WriteOffExpense",
             LedgerAccount::TaxExpense => "TaxExpense",
+            LedgerAccount::MarketingExpense => "MarketingExpense",
         }
     }
 

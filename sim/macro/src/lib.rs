@@ -29,6 +29,7 @@
 //! [`whatif::RankedVariants`] z `decisive_winner()` i `direction()`. Kwota do grosza
 //! pochodzi z ksiąg firmy, nigdy z prognozy (§5.10, `R14`, `R15`).
 
+pub mod brandseed;
 pub mod dryrun;
 pub mod lift;
 pub mod lod;
@@ -39,6 +40,7 @@ pub mod system;
 pub mod types;
 pub mod whatif;
 
+pub use brandseed::{fill_brand_stock, seed_memory, SEED_MAX, SEED_MIN};
 pub use dryrun::{
     dry_run, ChronicleEvent, ChronicleKind, DryRunConfig, DryRunResult, GateCheck,
     VerificationReport,

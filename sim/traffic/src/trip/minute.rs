@@ -65,6 +65,12 @@ impl TrafficNetwork {
                 refuel_after = edges.len().saturating_sub(1) as u32;
             }
         }
+        // Podsłuch krawędzi (M10b WP10.6): trasa jest znana **teraz** i tylko teraz —
+        // `ActiveTrip` niesie ją dalej, ale tożsamość podróżnego i pełny przebieg
+        // widać naraz wyłącznie przy wpuszczaniu. Pusty zbiór obserwowanych krawędzi
+        // kosztuje jedno porównanie.
+        self.watch.note(p.traveller, &edges);
+
         if edges.is_empty() {
             // Trasa pusta znaczy „origin == cel": mieszkaniec jest już na miejscu.
             out.push(TrafficEvent::Arrived {

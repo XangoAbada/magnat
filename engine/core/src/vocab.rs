@@ -719,6 +719,69 @@ vocab_enum! {
 }
 
 vocab_enum! {
+    /// Skąd mieszkaniec wie o marce — źródło wpisu w slocie marki (M10b §5.1).
+    ///
+    /// W `core`, bo jest **ładunkiem** `DecisionReason::BrandLearned`, a ładunek
+    /// centralnego enuma nie może pochodzić z crate'u, który od `core` zależy —
+    /// ta sama reguła, która wypchnęła tu `PriceDriver` (`K-30`) i `WageCause` (`K-45`).
+    /// Dwóch czytelników znanych z nazwy i numeru fazy: M3/M10 (slot marki
+    /// u mieszkańca) i M10 (kampanie, media, karta inspekcji).
+    ///
+    /// Kolejność wariantów jest kontraktem **podwójnie**: `as_index()` indeksuje
+    /// histogram źródeł w panelu marketingu, a **rosnąca dyskryminanta to malejąca
+    /// siła źródła** — dokładnie jak w `KnowledgeKind` (M3a). `Owned` jest pierwszy
+    /// i najmocniejszy, bo slot przypięty (pracodawca, sklep odwiedzony ≥ 8 razy)
+    /// nie podlega wypieraniu; `Experience` bije reklamę, bo „kupiłem i wiem" nie ma
+    /// prawa zamienić się w „widziałem plakat" (M10 §8, ryzyko `R4`).
+    TouchSource {
+        Owned, Experience, Media, Rumor, Ad,
+    }
+}
+
+pub const TOUCH_SOURCE_COUNT: usize = TouchSource::ALL.len();
+
+vocab_enum! {
+    /// Kanał, którym kampania dociera do mieszkańca (M10b §5.2, PRD §7.6).
+    ///
+    /// W `core` z tego samego powodu co [`TouchSource`]: jest ładunkiem
+    /// `DecisionReason::{BrandLearned, AdCampaignStarted}`. Sam kanał **z parametrami**
+    /// (krawędź billboardu, tytuł prasowy, promień ulotki) mieszka w `magnat_media`,
+    /// bo parametr niesie uchwyty, których `core` nie zna — ta sama korekta, którą
+    /// `K-48` zrobił przy `BankruptcyTrigger`, a `K-64` przy `RemedyKind`.
+    ///
+    /// Kolejność wariantów jest kontraktem: `as_index()` indeksuje tablicę przyrostu
+    /// znajomości `awareness_gain` w `data/tuning/brand.ron` i histogram kanałów w panelu.
+    AdChannelKind {
+        Billboard, Press, Radio, Tv, Leaflet, InStorePromo, Sponsorship, Pr,
+    }
+}
+
+pub const AD_CHANNEL_KIND_COUNT: usize = AdChannelKind::ALL.len();
+
+vocab_enum! {
+    /// Rodzaj tytułu medialnego (M10b §5.3, PRD §7.2).
+    ///
+    /// W `core`, bo jest ładunkiem `DecisionReason::StoryPublished`. Cztery warianty
+    /// odpowiadają czterem rodzajom zakładu w `data/site_types/media.ron`; kolejność
+    /// indeksuje tablicę `outlets` w `data/tuning/brand.ron`.
+    MediaKind {
+        Newspaper, Radio, Tv, Portal,
+    }
+}
+
+pub const MEDIA_KIND_COUNT: usize = MediaKind::ALL.len();
+
+vocab_enum! {
+    /// Linia redakcyjna tytułu — czym redakcja waży wartość informacyjną zdarzenia.
+    ///
+    /// Ładunek `DecisionReason::StoryPublished` razem z [`MediaKind`]. Kolejność
+    /// indeksuje tablicę wag kategorii zdarzeń w `data/tuning/brand.ron`.
+    EditorialBias {
+        Market, Social, Sensational, Local,
+    }
+}
+
+vocab_enum! {
     /// Kierunek zmiany — **bez wielkości** (M7f §5.10, `K-52`).
     ///
     /// W `core`, bo ma trzech czytelników znanych z nazwy i numeru fazy: `sim/macro`

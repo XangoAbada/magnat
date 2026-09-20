@@ -46,6 +46,7 @@ fn swiat(n: u32) -> World {
             .with(AgentState::default())
             .with(KnowledgeRef::default())
             .with(RelationsRef::default())
+            .with(magnat_agents::BrandsRef::default())
             .with(Lifecycle::default());
     }
     w
@@ -350,6 +351,7 @@ impl Mieszkaniec {
             personality: &self.personality,
             residence: &self.residence,
             today: 3,
+            brands: Default::default(),
         }
     }
 

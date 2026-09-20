@@ -8,10 +8,11 @@
 use crate::loc::{Catalog, Locale};
 use magnat_agents::SocialClass;
 use magnat_core::{
-    ActionKind, ActivityKind, BankruptcyTrigger, ClaimPriority, CommitmentKind, DecisionReason,
-    DeprivationEffect, FirmStrategy, FixedCost, LeaveCause, LifeEventKind, LineStopCause, LoanKind,
-    MigrationKind, Money, NeedKind, PriceDriver, ReactionKind, RejectCause, RejectCredit,
-    ShortageStageKind, StockCat, TraitId, TransportMode, UtilityKind, WageCause,
+    ActionKind, ActivityKind, AdChannelKind, BankruptcyTrigger, ClaimPriority, CommitmentKind,
+    DecisionReason, DeprivationEffect, EditorialBias, FirmStrategy, FixedCost, LeaveCause,
+    LifeEventKind, LineStopCause, LoanKind, MigrationKind, Money, NeedKind, PriceDriver,
+    ReactionKind, RejectCause, RejectCredit, ShortageStageKind, StockCat, TouchSource, TraitId,
+    TransportMode, UtilityKind, WageCause,
 };
 
 /// Nazwa potrzeby w języku gracza.
@@ -1254,7 +1255,104 @@ pub fn describe(c: &Catalog, l: Locale, r: DecisionReason) -> String {
                 ("kwota", &crate::zlotowki(amount)),
             ],
         ),
+        DecisionReason::BrandLearned {
+            brand,
+            source,
+            channel,
+            awareness,
+        } => c.fmt_key(
+            l,
+            "ui.reason.BrandLearned",
+            &[
+                ("marka", &marka(brand)),
+                (
+                    "skad",
+                    &match channel {
+                        Some(ch) => ad_channel(c, l, ch),
+                        None => touch_source(c, l, source),
+                    },
+                ),
+                ("znajomosc", &format!("{}", awareness.get())),
+            ],
+        ),
+        DecisionReason::BrandExperience {
+            brand,
+            expected,
+            actual,
+            delta,
+        } => c.fmt_key(
+            l,
+            if delta < 0 {
+                "ui.reason.BrandExperienceDown"
+            } else {
+                "ui.reason.BrandExperienceUp"
+            },
+            &[
+                ("marka", &marka(brand)),
+                ("oczekiwana", &format!("{}", expected.get())),
+                ("faktyczna", &format!("{}", actual.get())),
+                ("zmiana", &format!("{}", delta.abs())),
+            ],
+        ),
+        DecisionReason::AdCampaignStarted {
+            brand,
+            channel,
+            budget,
+            claim,
+        } => c.fmt_key(
+            l,
+            "ui.reason.AdCampaignStarted",
+            &[
+                ("marka", &marka(brand)),
+                ("kanal", &ad_channel(c, l, channel)),
+                ("budzet", &crate::zlotowki(budget)),
+                ("obietnica", &format!("{}", claim.get())),
+            ],
+        ),
+        DecisionReason::StoryPublished {
+            outlet,
+            event,
+            bias,
+            reach_bp,
+        } => c.fmt_key(
+            l,
+            "ui.reason.StoryPublished",
+            &[
+                ("tytul", &marka(outlet)),
+                ("linia", &editorial_bias(c, l, bias)),
+                ("zdarzenie", &format!("{}", event.get())),
+                ("zasieg", &procent(u32::from(reach_bp))),
+            ],
+        ),
     }
+}
+
+/// Marka jako etykieta w karcie inspekcji.
+///
+/// `ponytail:` numer marki zamiast nazwy firmy. Sufit nazwany: `reason::describe`
+/// dostaje `&Catalog` i `Locale`, a nie rejestr firm — nazwa firmy jest stanem
+/// świata, nie tekstem. Droga wyjścia: `Subject::Firm(magnat_supply::firm_of(brand))`
+/// jako odnośnik w karcie (`K-62`), kiedy karta marki powstanie w M10f.
+fn marka(b: magnat_core::BrandId) -> String {
+    format!("#{}", b.0)
+}
+
+/// Skąd mieszkaniec zna markę (M10b §5.1).
+#[must_use]
+pub fn touch_source(c: &Catalog, l: Locale, s: TouchSource) -> String {
+    c.fmt_key(l, &format!("ui.touch_source.{}", s.name()), &[])
+}
+
+/// Kanał kampanii reklamowej (M10b §5.2).
+#[must_use]
+pub fn ad_channel(c: &Catalog, l: Locale, k: AdChannelKind) -> String {
+    c.fmt_key(l, &format!("ui.ad_channel.{}", k.name()), &[])
+}
+
+/// Linia redakcyjna tytułu (M10b §5.3).
+#[must_use]
+pub fn editorial_bias(c: &Catalog, l: Locale, b: EditorialBias) -> String {
+    c.fmt_key(l, &format!("ui.editorial_bias.{}", b.name()), &[])
 }
 
 /// Rodzaj uchwały rady jako nazwa (M8e).
@@ -1761,6 +1859,108 @@ mod tests {
                 share_bp: 1800,
                 last_result: Money(-420_000),
             },
+            // ── M8e: władza i wybory ──
+            // **Powinny tu stać od M8e i nie stały** — ta sama luka, którą komentarz
+            // niżej opisuje dla M8c: ramiona w `describe` były, wpisu tutaj nie było,
+            // więc przez pięć podfaz nikt nie sprawdził, czy te zdania składają się
+            // w obu językach. Znalezione przy dokładaniu bloku M10b.
+            DecisionReason::PolicyEnacted {
+                kind: magnat_core::PolicyKind::MinWage,
+                for_bp: 6_400,
+                delay_days: 30,
+            },
+            DecisionReason::TaxRateChanged {
+                kind: magnat_core::TaxKind::Vat,
+                from_bp: 2_300,
+                to_bp: 2_500,
+                gap_bp: -1_200,
+            },
+            DecisionReason::TenderPublished {
+                subject: magnat_core::TenderKind::WasteCollection,
+                subject_id: 3,
+                budget: Money(12_000_000),
+            },
+            DecisionReason::TenderAwarded {
+                subject: magnat_core::TenderKind::WasteCollection,
+                price: Money(9_800_000),
+                score_bp: 7_600,
+                runner_up_bp: 7_100,
+                bids: 3,
+            },
+            // Drugi wpis: przetarg bez ofert wybiera inny klucz.
+            DecisionReason::TenderAwarded {
+                subject: magnat_core::TenderKind::Construction,
+                price: Money::ZERO,
+                score_bp: 0,
+                runner_up_bp: 0,
+                bids: 0,
+            },
+            DecisionReason::ElectionHeld {
+                turnout_bp: 5_400,
+                winner_bp: 5_100,
+                incumbent: true,
+            },
+            // Drugi wpis: zmiana burmistrza wybiera inny klucz.
+            DecisionReason::ElectionHeld {
+                turnout_bp: 6_200,
+                winner_bp: 4_400,
+                incumbent: false,
+            },
+            DecisionReason::VoteCast {
+                candidate: 1,
+                driver: magnat_core::VoteDriver::Taxes,
+                margin_bp: 800,
+            },
+            DecisionReason::CampaignBacked {
+                candidate: 0,
+                amount: Money(2_500_000),
+                illegal: false,
+            },
+            // Drugi wpis: łapówka wybiera inny klucz niż darowizna.
+            DecisionReason::CampaignBacked {
+                candidate: 2,
+                amount: Money(9_000_000),
+                illegal: true,
+            },
+            // ── M10b: marka i media ──
+            DecisionReason::BrandLearned {
+                brand: magnat_core::BrandId(41),
+                source: TouchSource::Ad,
+                channel: Some(AdChannelKind::Billboard),
+                awareness: Q::new(18),
+            },
+            // Drugi wpis: źródło bez kanału wybiera inne podstawienie.
+            DecisionReason::BrandLearned {
+                brand: magnat_core::BrandId(41),
+                source: TouchSource::Rumor,
+                channel: None,
+                awareness: Q::new(45),
+            },
+            DecisionReason::BrandExperience {
+                brand: magnat_core::BrandId(41),
+                expected: Q::new(80),
+                actual: Q::new(55),
+                delta: -18,
+            },
+            // Drugi wpis: zachwyt wybiera inny klucz niż rozczarowanie.
+            DecisionReason::BrandExperience {
+                brand: magnat_core::BrandId(41),
+                expected: Q::new(50),
+                actual: Q::new(70),
+                delta: 5,
+            },
+            DecisionReason::AdCampaignStarted {
+                brand: magnat_core::BrandId(41),
+                channel: AdChannelKind::Tv,
+                budget: Money(8_400_000),
+                claim: Q::new(88),
+            },
+            DecisionReason::StoryPublished {
+                outlet: magnat_core::BrandId(9),
+                event: magnat_core::EventId(77),
+                bias: EditorialBias::Sensational,
+                reach_bp: 3_200,
+            },
         ]
     }
 
@@ -1816,7 +2016,16 @@ mod tests {
         // Po M9d **trzeci wpis `PolicyApplied`**: menedżer doskonały nie dokłada
         // dopisku o wieku danych i odchyłce, a menedżer słaby dokłada — to są dwa
         // różne zdania z jednego ramienia, więc oba muszą tu stać. Razem 85.
-        assert_eq!(wszystkie().len(), 85);
+        // **Blok M8e (616..=622) dopisany dopiero w M10b** — siedem powodów władzy
+        // i wyborów plus trzy wpisy dwukrotne (przetarg bez ofert, zmiana burmistrza,
+        // łapówka), razem 10. Ta sama luka co przy M8c i ten sam wniosek: ramię
+        // w `describe` kompilator wymusza, wpisu w tej liście nie wymusza nikt.
+        // Razem 95.
+        // Po M10b cztery powody marki i mediów (800..=803) plus **dwa wpisy
+        // dwukrotne**: `BrandLearned` ze źródła z kanałem i bez kanału, oraz
+        // `BrandExperience` przy rozczarowaniu i przy spełnionych oczekiwaniach.
+        // Razem 101.
+        assert_eq!(wszystkie().len(), 101);
     }
 
     #[test]

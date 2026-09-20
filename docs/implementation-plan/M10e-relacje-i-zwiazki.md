@@ -129,3 +129,18 @@ z ksiąg M7; próg akceptacji związku maleje wraz z wyczerpywaniem funduszu str
 zatrzymuje produkcję **zakładu** (nie całej firmy), uruchamia kary z kontraktów B2B M6 u odbiorców
 (kaskada!), jest publikowany przez media, uderza w markę pracodawcy. Fundusz się kończy — nie ma
 strajków wiecznych.
+
+
+---
+
+## Zmiany wpisane po M10b
+
+Zgodnie z `K-18`. Wpisane jest **tylko to, co wiadomo na pewno** po zamknięciu M10b.
+Szczegóły — tabela `F-n` w `M10b-marka-i-media.md`.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| FE-1 | **Graf relacji ma już wyjście na zewnątrz `sim/agents`: `social::relations_of(world, citizen) -> Vec<(Entity, u8)>`.** Zwraca drugą stronę relacji i jej wagę, w kolejności slabu | Powstało dla kampanii PR, która przechodzi po relacjach z góry (`magnat_media`). Związki zawodowe robią to samo z tego samego miejsca — **nie ma potrzeby pisać drugiego przejścia po slabie**, a dwa przejścia o tej samej regule rozjechałyby się przy pierwszej zmianie wagi relacji |
+| FE-2 | **`SocialIndex::coworkers(site)` mierzy wreszcie to, co obiecuje** — ale to zasługa `K-74`, nie M10b; tutaj tylko potwierdzenie, że nic tego nie cofnęło | §5.9 liczy warunek powstania związku na spójnej składowej grafu relacji **wśród pracowników zakładu**. Uczeń wypadł z `by_site` i ma własny indeks (`DK-8`) |
+| FE-3 | **Strajk ma już nośnik po stronie opinii: marka firmy.** Kampania PR, publikacja o strajku i rozczarowanie klienta piszą do tego samego slotu (`BrandAffinity`) | M10 §1 obiecuje kaskadę „strajk → gazeta pisze → marka gracza traci afinitet". Dwa z trzech ogniw są gotowe: publikacja (`Story`, M10b) i afinitet (`Touch::Media`). Brakuje wyłącznie zdarzenia strajku jako wejścia do redakcji — czyli tego, co robi ta podfaza |
+| FE-4 | **Blok `StreamId` M10: zajęte 280–284 i 292–295; wolne 285–291 i 296–299.** `CartelDetection = 289`, `UnionFormation = 290`, `StrikeResolve = 291` są nadal wolne i zarezerwowane imiennie | — |

@@ -30,6 +30,8 @@ pub struct SocietyReport {
     pub lifecycle: Option<MonthReport>,
     pub migration: Option<MigrationReport>,
     pub status: Option<StatusReport>,
+    /// Ile slotów marek zgasło w tym miesiącu (M10b §5.1). `None` poza początkiem miesiąca.
+    pub brands_compacted: Option<u32>,
 }
 
 /// Rejestruje komponent i zasoby podfazy M3c wraz z hakami hasha stanu (00 §3.6).
@@ -89,6 +91,9 @@ pub fn step_day(world: &mut World, day: u64, hooks: &mut dyn InheritanceHook) ->
         raport.status = Some(social::step_month(world, day));
         raport.lifecycle = Some(demography::month::step_month(world, day));
         raport.migration = Some(migration::step_month(world, day));
+        // Jedyny przebieg iterujący po pamięci marek (M10b §5.1): zanik jest liczony
+        // przy odczycie, więc to tylko zwalnia miejsce po wpisach, które już zgasły.
+        raport.brands_compacted = Some(crate::brand::compact_month(world, day));
         odbuduj_indeks(world);
     }
 

@@ -113,21 +113,26 @@ impl Market {
             }
             // Oferta pokazuje **półkę**, nie zapas: towar na zapleczu nie jest
             // na sprzedaż (nagłówek `shop.rs`).
-            let odswiez: Vec<(crate::offer::OfferId, Qty)> = m.shops[i]
+            let odswiez: Vec<(crate::offer::OfferId, Qty, Option<magnat_supply::BrandId>)> = m
+                .shops[i]
                 .shelf
                 .lines
                 .iter()
                 .map(|l| {
-                    (
-                        l.offer,
-                        cat.good(l.good)
-                            .units_of_mass(ch.store.shelf_state(shelf_slot, l.good).mass),
-                    )
+                    let st = ch.store.shelf_state(shelf_slot, l.good);
+                    (l.offer, cat.good(l.good).units_of_mass(st.mass), st.brand)
                 })
                 .collect();
-            for (offer, qty) in odswiez {
+            for (offer, qty, brand) in odswiez {
                 if let Some(o) = m.offers.get_mut(offer) {
                     o.available = qty;
+                    // Marka idzie z półki razem z dostępnością i z tego samego powodu:
+                    // kupujący widzi to, co leży, a nie to, co sklep kiedyś zamówił.
+                    // Pusta półka zachowuje ostatnią markę — inaczej znikałaby i wracała
+                    // co dobę, a mieszkaniec uczyłby się jej od nowa (M10b §5.1).
+                    if brand.is_some() {
+                        o.brand = brand;
+                    }
                 }
             }
         }

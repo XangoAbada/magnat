@@ -28,11 +28,39 @@ pub type BatchId = ArenaHandle<Batch>;
 /// przydatności)`. Krotka, nie struktura, bo jedyne, co się z nią robi, to porównanie.
 pub type CoalesceKey = (u16, u8, u16, u32, u32);
 
-/// Marka. Właścicielem semantyki jest M10 — M6 wyłącznie przenosi wartość w partii
-/// i nie interpretuje jej. Typ mieszka tutaj, bo do M10 nikt inny go nie potrzebuje;
-/// kiedy M10 powstanie, przenosi go do siebie razem z pamięcią marki u agentów.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
-pub struct BrandId(pub u16);
+// `BrandId` wyprowadził się do `engine/core` przy starcie M10b (`K-79`), dokładnie
+// tak, jak zapowiadał tu komentarz M6a. Reeksport zostaje, żeby nazwy z M6 nie drgnęły:
+// M6 nadal wyłącznie **przenosi** markę w partii i nie interpretuje jej.
+pub use magnat_core::BrandId;
+
+/// Marka producenta — **funkcja czysta encji firmy**, bez rejestru i bez zasobu.
+///
+/// Marka jest firmą (`K-79`): `FirmId` powstaje z monotonicznego `FirmKey`
+/// (`magnat_firms::firm_id`), więc indeks encji **jest** gęstym numerem marki i drugi
+/// licznik opisywałby to samo po raz drugi. Rejestr `FirmKey → BrandId` byłby przy tym
+/// stanem, który trzeba wpiąć do hasha, przeprowadzić przez zapis i utrzymać zgodnie
+/// z rejestrem firm — za wygodę, której nikt nie potrzebuje.
+///
+/// `None` powyżej 65 535 firm w historii świata i to jest **jawny sufit, nie
+/// zaokrąglenie**: firma ponad ten numer po prostu marki nie ma, zamiast po cichu
+/// dzielić ją z inną. Przy tempie z M7f (~150 nowych firm na rok gry) sufit zaczyna
+/// obowiązywać po czterech stuleciach.
+///
+/// `ponytail:` gdyby kiedyś dosięgnął, wyjściem jest `BrandId(u32)` i szersze pole
+/// w `Batch` — nie rejestr.
+#[must_use]
+pub fn brand_of(producer: FirmId) -> Option<BrandId> {
+    u16::try_from(producer.0.index()).ok().map(BrandId)
+}
+
+/// Odwrotność [`brand_of`] — dokładna, bo przekształcenie jest bijekcją na swoim zakresie.
+#[must_use]
+pub fn firm_of(brand: BrandId) -> FirmId {
+    FirmId(magnat_core::Entity::new(
+        u32::from(brand.0),
+        std::num::NonZeroU32::MIN,
+    ))
+}
 
 /// Linia produkcyjna (M6b). Tutaj wyłącznie jako miejsce, w którym partia może stać.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]

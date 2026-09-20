@@ -1603,6 +1603,7 @@ dependencies = [
  "magnat-io",
  "magnat-jobs",
  "magnat-macro",
+ "magnat-media",
  "magnat-supply",
  "magnat-traffic",
  "ron",
@@ -1726,6 +1727,7 @@ dependencies = [
  "magnat-io",
  "magnat-jobs",
  "magnat-macro",
+ "magnat-media",
  "magnat-policy",
  "magnat-sim-snapshot",
  "magnat-spatial",
@@ -1755,6 +1757,7 @@ dependencies = [
  "magnat-io",
  "magnat-jobs",
  "magnat-macro",
+ "magnat-media",
  "magnat-nav",
  "magnat-policy",
  "magnat-spatial",
@@ -1802,6 +1805,22 @@ dependencies = [
  "magnat-supply",
  "proptest",
  "smallvec",
+]
+
+[[package]]
+name = "magnat-media"
+version = "0.1.0"
+dependencies = [
+ "magnat-agents",
+ "magnat-core",
+ "magnat-economy",
+ "magnat-ecs",
+ "magnat-events",
+ "magnat-firms",
+ "magnat-nav",
+ "magnat-spatial",
+ "magnat-supply",
+ "magnat-traffic",
 ]
 
 [[package]]

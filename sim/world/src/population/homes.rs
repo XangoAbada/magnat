@@ -309,6 +309,7 @@ fn widok<'a>(p: &'a Pracownik, puste: &'a Puste) -> CitizenView<'a> {
         personality: &puste.personality,
         residence: &puste.residence,
         today: 0,
+        brands: Default::default(),
     }
 }
 

@@ -39,6 +39,7 @@
 #![forbid(unsafe_code)]
 
 pub mod arrayvec;
+pub mod brand;
 pub mod components;
 pub mod demography;
 pub mod des;
@@ -56,12 +57,17 @@ pub mod systems;
 pub mod worldparams;
 
 pub use arrayvec::ArrayVec;
+pub use brand::{
+    affinity_of, brand_strength, compact_month, decayed, slots_of, touch, BrandAffinity, BrandData,
+    BrandDataError, BrandSlab, BrandSlots, BrandStrength, BrandTuning, ChannelTuning, OutletTuning,
+    Touch, BRAND_SCHEMA_VERSION, BRAND_SLOTS, DECAY_BUCKETS,
+};
 pub use components::{
     register, register_components, register_resources, AgentState, EduField, EduLevel, Employment,
     Identity, Lifecycle, Lod, Needs, Personality, PlanRef, Residence, ShiftKind, SkillSlot, Skills,
     Vitals, Wealth, HOT_COMPONENT_BYTES,
 };
-pub use components::{KnowledgeRef, RelationsRef};
+pub use components::{BrandsRef, KnowledgeRef, RelationsRef};
 pub use demography::{
     citizen_by_index, compatibility, household_by_index, knowledge_ref, powiaz, przeklasyfikuj,
     relations_ref, Ages, DayReport, DemographyError, DemographyTable, InheritanceHook, LifeQueue,
@@ -87,7 +93,7 @@ pub use needs::{
 };
 pub use places::{
     choose_place, default_hours, home_of, knowledge_key, nearest_school, place_from_key, site_of,
-    walk_minutes, CitizenView, EmptyPlaces, FlakyPlaces, FulfilOutcome, FulfilRequest,
+    walk_minutes, BrandView, CitizenView, EmptyPlaces, FlakyPlaces, FulfilOutcome, FulfilRequest,
     InfinitePlaces, KnowledgeView, OpenHours, PanickingPlaces, PlaceCandidate, PlaceCatalog,
     PlaceEntry, PlaceProvider, PlaceTable, StraightLineTravel, TravelEstimate, TravelOracle,
     TripHandle, TripRequest, BASE_SPEED_M_PER_MIN, MAX_CANDIDATES, MAX_ON_ROUTE, SITE_KEY_BASE,
@@ -98,8 +104,8 @@ pub use planner::{
     ReasonEntry, ReasonLog, MAX_SLOTS,
 };
 pub use social::{
-    awareness_of, knows_place, learn_place, status_of, CityFacts, SocialClass, SocialIndex,
-    SocialReport, StatusBreakdown, StatusDistribution, StatusInput, StatusReport,
+    awareness_of, knows_place, learn_place, relations_of, status_of, CityFacts, SocialClass,
+    SocialIndex, SocialReport, StatusBreakdown, StatusDistribution, StatusInput, StatusReport,
     SOCIAL_CLASS_COUNT, SOCIAL_SHARDS,
 };
 pub use society::{

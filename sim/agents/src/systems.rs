@@ -130,6 +130,9 @@ pub struct CitizenSnapshot {
     pub escorts: Vec<PlaceRef>,
     pub pickups: Vec<PlaceRef>,
     pub knowledge: Vec<Knowledge>,
+    /// Sloty marek **z naniesionym zanikiem** (M10b §5.1). Zanik liczy się tu raz
+    /// na migawkę, a nie przy każdym z kilkunastu kandydatów decyzji zakupowej.
+    pub brands: crate::brand::BrandSlots,
     pub home: Option<PlaceRef>,
     pub work: Option<PlaceRef>,
     pub school: Option<PlaceRef>,
@@ -153,6 +156,7 @@ impl CitizenSnapshot {
             .resource::<KnowledgeSlab>()
             .entries(demography::knowledge_ref(&kref))
             .to_vec();
+        let brands = crate::brand::slots_of(world, citizen, day);
 
         let hh = demography::household_by_index(world, identity.household);
         let (stock, escorts, pickups) = match hh {
@@ -177,6 +181,7 @@ impl CitizenSnapshot {
             escorts,
             pickups,
             knowledge,
+            brands,
             home: crate::places::home_of(&residence),
             work: if uczen { None } else { miejsce },
             school: if uczen { miejsce } else { None },
@@ -205,6 +210,7 @@ impl CitizenSnapshot {
                 personality: &self.personality,
                 residence: &self.residence,
                 today: day as i32,
+                brands: crate::places::BrandView::new(self.brands.as_slice()),
             },
             household: HouseholdView {
                 id: HouseholdId(self.household),
@@ -754,6 +760,8 @@ fn wyrusz(
         personality: &personality,
         residence: &residence,
         today: day as i32,
+        // Podróż nie pyta o marki — `begin_trip` czyta wiek, zdrowie i energię.
+        brands: crate::places::BrandView::default(),
     };
     let handle = zrodla.travel.begin_trip(
         TripRequest {
@@ -817,6 +825,9 @@ fn zaspokoj(
             )
         },
     );
+    // Sloty marek z naniesionym zanikiem — bez alokacji (16 × 8 B na stosie).
+    // Próg akceptacji liczy się tym samym widokiem, którym liczył się wybór sklepu.
+    let marki = crate::brand::slots_of(world, citizen, u64::from(teraz) / 1_440);
     let wynik = zrodla.places.fulfil(&FulfilRequest {
         citizen: CitizenId(citizen),
         household: HouseholdId(gospodarstwo.unwrap_or(citizen)),
@@ -825,6 +836,7 @@ fn zaspokoj(
         at: magnat_core::SimMinute(u64::from(teraz)),
         budget_hint: budzet,
         household_size: osob,
+        brands: crate::places::BrandView::new(marki.as_slice()),
     });
     if let FulfilOutcome::Done { satisfaction, .. } = wynik {
         let oddane = crate::needs::decay_between(

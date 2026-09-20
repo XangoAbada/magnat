@@ -203,6 +203,7 @@ fn zbuduj_harmonogram(
             .add(magnat_economy::labor::LaborSystem::new())
             .add(magnat_economy::corpfin::system::InsolvencySystem::new())
             .add(magnat_macro::MacroSystem::new())
+            .add(magnat_media::MediaSystem::new())
             .add(magnat_city::CitySystem::new());
     }
     b.add(DayLoopSystem::new(world))

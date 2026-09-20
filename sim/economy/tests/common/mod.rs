@@ -347,6 +347,7 @@ impl Buyer {
             personality: &self.personality,
             residence: &self.residence,
             today: 0,
+            brands: Default::default(),
         }
     }
 }

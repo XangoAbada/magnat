@@ -242,6 +242,7 @@ fn widok<'a>(s: &'a Stan, i: u32, dzien: u64) -> CitizenView<'a> {
         personality: &s.personality,
         residence: &s.residence,
         today: dzien as i32,
+        brands: Default::default(),
     }
 }
 

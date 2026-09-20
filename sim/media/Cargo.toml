@@ -1,0 +1,28 @@
+[package]
+name = "magnat-media"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+# Reklama i media (M10b, WP10.6 i WP10.7). Crate powstał, bo kampania jest
+# **jedynym bytem w projekcie, który widzi naraz** ruch (billboard przy krawędzi),
+# pamięć mieszkańca (ekspozycja), firmę i pieniądz (koszt) oraz zdarzenia
+# (sponsoring i redakcja). Żaden istniejący crate nie stoi nad całą tą czwórką:
+# `sim/events` stoi, ale jest własnością M8 i mieszanie do niego marketingu
+# rozjechałoby własność modułu (00 §1).
+[dependencies]
+magnat-core = { workspace = true }
+magnat-ecs = { workspace = true }
+magnat-agents = { workspace = true }
+magnat-supply = { workspace = true }
+magnat-firms = { workspace = true }
+magnat-economy = { workspace = true }
+magnat-nav = { workspace = true }
+magnat-traffic = { workspace = true }
+magnat-events = { workspace = true }
+magnat-spatial = { workspace = true }
+
+[lints]
+workspace = true

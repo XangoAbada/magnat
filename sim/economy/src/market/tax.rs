@@ -73,6 +73,43 @@ impl Market {
         std::mem::take(&mut m.b2b_outbox).into_iter().collect()
     }
 
+    /// Koszt reklamy w księdze zakładu: `Dr MarketingExpense, Cr BankCurrent`
+    /// (M10b WP10.6).
+    ///
+    /// Księguje ten, kto ma księgę (`AI-1`) — `magnat_media` podaje fakt i kwotę,
+    /// a nie zapis. Przelew idzie osobno, przez `Books::transfer`: księga zakładu
+    /// mówi, **na co** poszło, a dziennik transakcji, **do kogo**.
+    pub fn post_marketing_expense(
+        &self,
+        site: SiteId,
+        amount: Money,
+        reason: DecisionReason,
+    ) -> bool {
+        if amount.get() <= 0 {
+            return false;
+        }
+        let mut m = self.lock();
+        let tick = m.tick;
+        let Some(i) = m.by_site.get(&site).copied() else {
+            return false;
+        };
+        crate::ledger::post(
+            &mut m.shops[i as usize].ledger,
+            crate::ledger::JournalEntry::new(
+                tick,
+                reason,
+                &[
+                    (crate::ledger::LedgerAccount::MarketingExpense, amount),
+                    (
+                        crate::ledger::LedgerAccount::BankCurrent,
+                        Money(-amount.get()),
+                    ),
+                ],
+            ),
+        )
+        .is_ok()
+    }
+
     /// Zobowiązanie podatkowe w księdze zakładu: `Dr TaxExpense, Cr TaxPayable`.
     ///
     /// Księguje ten, kto ma księgę (`AI-1`) — miasto podaje fakt, a nie zapis.

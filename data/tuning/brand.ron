@@ -1,0 +1,100 @@
+// Strojenie pamięci marki i kanałów reklamowych — M10b §5.1–5.3, `K-35`.
+//
+// Katalog `data/tuning/` jest **wspólny dla faz**, nie prywatny dla M6: siedzą
+// w nim liczby, które wolno przestawić bez zmiany znaczenia modelu. Ten plik
+// należy do M10 i stoi obok `supply.ron` (M6), `labor.ron` i `insolvency.ron` (M7),
+// `grid.ron`, `city.ron` (M8) oraz `policy.ron` (M9).
+//
+// **Co tu NIE stoi i dlaczego.** Asymetria „rozczarowanie boli trzy razy mocniej,
+// niż zachwyt cieszy" jest kształtem modelu z PRD §7.6, a nie kalibracją — dlatego
+// `k_down > k_up` jest niezmiennikiem pilnowanym testem, a nie liczbą do przestawienia
+// w dowolną stronę. Balansator wolno mu przesuwać proporcję, nie odwracać ją.
+//
+// Wszystko całkowitoliczbowe: współczynniki uczenia w 1/256, skale `Q` w 0..=100,
+// pieniądz w groszach, udziały w punktach bazowych (10 000 = 100 %).
+(
+    schema_version: 1,
+
+    // ── Pamięć marki u mieszkańca (§5.1) ─────────────────────────────────────────
+    memory: (
+        // Jak mocno JEDNA ekspozycja reklamowa przesuwa oczekiwaną jakość ku obietnicy.
+        // 24/256 ≈ 9,4 %: podniesienie oczekiwań o 20 punktów wymaga ośmiu kontaktów,
+        // co jest kryterium WP10.5 („≥ 7 ekspozycji").
+        ad_learn: 24,
+        // Jak mocno JEDEN zakup przesuwa oczekiwania ku faktycznej jakości.
+        // Cztery razy mocniej niż reklama — własne doświadczenie przekonuje.
+        exp_learn: 96,
+        // Przyrost sympatii za punkt zachwytu i ubytek za punkt rozczarowania.
+        // Stosunek 1:3 jest asymetrią z PRD §7.6: −20 Q zabiera 15 punktów afinitetu,
+        // a odbudowa tych 15 wymaga trzech doświadczeń o tej samej sile in plus.
+        k_up: 64,
+        k_down: 192,
+        // Ile wizyt w sklepie przypina jego markę (ryzyko `R4`: kampania konkurenta
+        // nie ma prawa wypchnąć z pamięci sklepu, do którego ktoś chodzi od lat).
+        pin_visits: 8,
+        // Jak mocno plotka zbliża opinię słuchacza do opinii opowiadającego.
+        // Mnożone jeszcze przez wagę relacji i wiarygodność — 48/256 to sufit.
+        rumor_pull: 48,
+    ),
+
+    // ── Przyrost znajomości za jedną ekspozycję, per kanał (§5.2) ────────────────
+    // Kolejność jest kontraktem: indeksuje ją `AdChannelKind::as_index()`.
+    // Telewizja daje najwięcej za kontakt i najwięcej kosztuje; PR nie jest
+    // ekspozycją i dostaje najmniej, bo działa plotką, nie zasięgiem.
+    //
+    //                Billboard Press Radio  Tv  Leaflet Promo Sponsor  Pr
+    // Nawiasy okrągłe, nie kwadratowe: pole jest tablicą o **stałym rozmiarze**
+    // (`[u8; AD_CHANNEL_KIND_COUNT]`), a RON czyta takie jak krotki. Lista `[...]`
+    // jest dla `Vec` i walidatora długości — tu długość pilnuje typ.
+    awareness_gain: (        6,    9,    7,  12,       8,   10,      5,  4),
+
+    // ── Zanik pamięci (§5.1) ────────────────────────────────────────────────────
+    // Mnożnik w 1/256 po n pełnych miesiącach bez kontaktu; indeks 12 znaczy
+    // „rok i dłużej". Liczony **przy odczycie**, więc tablica jest wszystkim,
+    // co zanik kosztuje — nie ma systemu iterującego po 6,4 mln slotów.
+    //
+    // Znajomość gaśnie szybciej niż sympatia: „nie pamiętam takiej firmy" przychodzi
+    // wcześniej niż „nie lubiłem jej". Po roku zostaje 72 % sympatii i 47 % znajomości.
+    decay_affinity:  (256, 250, 244, 238, 232, 226, 220, 214, 208, 202, 196, 190, 184),
+    decay_awareness: (256, 240, 226, 212, 199, 187, 176, 165, 155, 146, 137, 129, 121),
+
+    // ── Kanały: koszt i skuteczność (§5.2) ──────────────────────────────────────
+    channels: (
+        // Domyślna szansa, że przejeżdżający zauważy billboard, w punktach bazowych.
+        // 1200 = 12 % — liczba z kryterium WP10.6 (8000 przejazdów → 960 ekspozycji).
+        billboard_notice_bps: 1200,
+        // Koszt tysiąca ekspozycji, per kanał, w groszach. Kolejność jak wyżej.
+        //          Billboard Press  Radio     Tv Leaflet  Promo Sponsor     Pr
+        cpm_gr: (      18000, 42000, 26000, 95000,  12000,  6000, 55000,  4000),
+        // Ile procent mieszkańców w promieniu dostaje ulotkę do ręki.
+        leaflet_hit_bps: 3500,
+        // Promień ulotkowania domyślnie — metry.
+        leaflet_radius_m: 800,
+    ),
+
+    // ── Media jako firmy (§5.3) ─────────────────────────────────────────────────
+    outlets: (
+        // Startowa wiarygodność tytułu w skali Q. Rośnie, gdy tytuł pisze rzeczy
+        // zgodne z obserwacją czytelnika, spada, gdy pisze niezgodne — per para,
+        // tak samo jak marka, i w tym samym slocie.
+        base_credibility: 65,
+        // Ile zdarzeń redakcja bierze na wydanie: od n_min do n_max (M10b §5.3).
+        stories_min: 3,
+        stories_max: 8,
+        // Waga kategorii zdarzenia per linia redakcyjna, w punktach bazowych.
+        // Wiersze: Market, Social, Sensational, Local (kolejność `EditorialBias`).
+        // Kolumny: Natural, Infrastructure, External, Social, Firm, Political
+        // (kolejność `EventCategory`).
+        bias_weights: (
+            ( 6000,  9000, 12000,  5000, 14000,  9000),
+            ( 9000, 10000,  6000, 15000,  7000, 12000),
+            (14000,  8000,  9000, 12000,  9000, 11000),
+            (11000, 13000,  4000, 12000, 10000, 10000),
+        ),
+        // Ile slotów reklamowych tytuł sprzedaje na dobę, per `MediaKind`.
+        //               Newspaper Radio  Tv Portal
+        inventory_daily: (      12,   24,   8,    40),
+        // Cena slotu reklamowego w groszach, per `MediaKind`.
+        slot_price_gr:   (  240000, 90000, 1800000, 45000),
+    ),
+)

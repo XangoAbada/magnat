@@ -485,6 +485,23 @@ fn settle_one(world: &mut World, market: &Market, it: &PurchaseIntent, t: Tick) 
         h.stock[i] = h.stock[i].saturating_add(it.days);
     }
     market.record_sale(it);
+    // **Pętla zwrotna marki** (M10b WP10.5): mieszkaniec dowiaduje się, ile ten towar
+    // naprawdę był wart, i porównuje to z tym, czego się spodziewał. Tu — a nie przy
+    // decyzji — bo dopiero teraz partia zeszła z półki i zna się jej **faktyczną**
+    // jakość. Rozczarowanie kosztuje trzy razy tyle, ile daje zachwyt (PRD §7.6).
+    if let Some(slice) = it.taken {
+        if let Some(brand) = slice.brand {
+            let _ = magnat_agents::touch(
+                world,
+                it.buyer.entity(),
+                brand,
+                magnat_agents::Touch::Experience {
+                    actual: slice.quality,
+                },
+                t.get() / 1_440,
+            );
+        }
+    }
     true
 }
 

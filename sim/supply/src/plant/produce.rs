@@ -710,7 +710,9 @@ fn zamknij_szarze(
             good: o.good,
             mass: masa,
             quality: jakosc,
-            brand: None,
+            // Marka jest firmą, która to wyprodukowała (`K-79`) — od M10b partia niesie
+            // ją realnie, a nie jako pole zawsze puste.
+            brand: crate::batch::brand_of(zaklad.owner),
             producer: zaklad.owner,
             produced_at: now,
             cost: koszt,

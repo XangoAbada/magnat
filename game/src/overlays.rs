@@ -55,9 +55,15 @@ pub enum OverlayField {
     GoodFlow {
         good: GoodId,
     },
-    /// Zarezerwowane dla M10 — marki jeszcze nie ma, więc nakładka nie ma czego
-    /// pokazać i mówi to wprost, zamiast rysować zera (`R2`, decyzja §9 pkt 11).
-    BrandAwareness,
+    /// Znajomość marki: jaka część mieszkańców dzielnicy ma ją w pamięci (M10b §5.1).
+    ///
+    /// Do M10b wariant był **rezerwacją bez danych** i `build` zwracał dla niego
+    /// `None` — paleta bez treści rysowałaby zera, a zero znaczyłoby „nikt nie zna"
+    /// zamiast „nie ma czego mierzyć" (`R2`, `DK-4`). Od M10b niesie markę, bo
+    /// „znajomość marki" bez wskazania marki nie jest pytaniem.
+    BrandAwareness {
+        brand: magnat_core::BrandId,
+    },
 }
 
 impl OverlayField {
@@ -74,19 +80,23 @@ impl OverlayField {
             OverlayField::Health => "health",
             OverlayField::Pollution => "pollution",
             OverlayField::GoodFlow { .. } => "good_flow",
-            OverlayField::BrandAwareness => "brand_awareness",
+            OverlayField::BrandAwareness { .. } => "brand_awareness",
         }
     }
 
     /// Czy pole czeka na fazę, która je zasili.
+    ///
+    /// Od M10b **żadne nie czeka**: `BrandAwareness` dostało dane razem z pamięcią
+    /// marki. Funkcja zostaje, bo M10c–M10e dołożą kolejne rezerwacje i mechanizm
+    /// „nakładka mówi wprost, że nie ma czego pokazać" ma się nie rozejść.
     #[must_use]
     pub const fn is_reserved(self) -> bool {
-        matches!(self, OverlayField::BrandAwareness)
+        false
     }
 
-    /// Dziewięć nakładek z §14.2 — bez rezerwacji dla M10.
+    /// Dziesięć nakładek: dziewięć z §14.2 plus znajomość marki (M10b).
     #[must_use]
-    pub fn all(site: SiteId, good: GoodId) -> [OverlayField; 9] {
+    pub fn all(site: SiteId, good: GoodId) -> [OverlayField; 10] {
         [
             OverlayField::LandValue,
             OverlayField::HouseholdIncome,
@@ -97,6 +107,9 @@ impl OverlayField {
             OverlayField::Health,
             OverlayField::Pollution,
             OverlayField::GoodFlow { good },
+            OverlayField::BrandAwareness {
+                brand: magnat_core::BrandId(site.entity().index().min(u32::from(u16::MAX)) as u16),
+            },
         ]
     }
 }
@@ -199,7 +212,10 @@ pub fn build(session: &Session, field: OverlayField) -> Option<OverlayField2d> {
         OverlayField::Pollution => punkty(session, &spec, &emisje(session)),
         OverlayField::GoodFlow { good } => odcinki(session, &spec, &przeplyw(session, good)),
         OverlayField::Traffic => ruch(session, &spec)?,
-        OverlayField::BrandAwareness => return None,
+        OverlayField::BrandAwareness { brand } => {
+            let per = znajomosc_marki(session, brand);
+            po_dzielnicach(session, &spec, &per)
+        }
     };
 
     Some(OverlayField2d {
@@ -216,6 +232,43 @@ pub fn build(session: &Session, field: OverlayField) -> Option<OverlayField2d> {
 
 fn ile_dzielnic(session: &Session) -> usize {
     session.built.city.districts.districts.len().max(1)
+}
+
+/// Jaka część mieszkańców dzielnicy zna tę markę, w promilach (M10b §5.1).
+///
+/// Liczone na żądanie z pamięci mieszkańców, a nie z pola trzymanego przy firmie —
+/// pole byłoby drugim źródłem prawdy i rozjechałoby się przy pierwszym mieszkańcu,
+/// który umarł ze slotem tej marki w pamięci.
+fn znajomosc_marki(session: &Session, brand: magnat_core::BrandId) -> Vec<i64> {
+    let world = &session.app.world;
+    let n = ile_dzielnic(session);
+    let (mut zna, mut ile) = (vec![0i64; n], vec![0i64; n]);
+    let Some(p) = world.get_resource::<magnat_agents::Population>() else {
+        return zna;
+    };
+    let dzis = session.tick().get() / magnat_core::time::MINUTES_PER_DAY;
+    for e in p.citizens() {
+        let Some(r) = world.get::<magnat_agents::Residence>(*e) else {
+            continue;
+        };
+        let d = usize::from(r.district).min(n - 1);
+        ile[d] += 1;
+        if magnat_agents::slots_of(world, *e, dzis)
+            .as_slice()
+            .iter()
+            .any(|s| s.brand == brand)
+        {
+            zna[d] += 1;
+        }
+    }
+    for d in 0..n {
+        zna[d] = if ile[d] > 0 {
+            zna[d] * 1_000 / ile[d]
+        } else {
+            0
+        };
+    }
+    zna
 }
 
 /// Średni miesięczny dochód gospodarstwa w dzielnicy, w groszach.
@@ -547,9 +600,19 @@ mod tests {
                 f.key()
             );
         }
-        // Rezerwacja M10 celowo **nie ma** wpisu: paleta bez danych rysowałaby zera.
-        assert!(OverlayField::BrandAwareness.is_reserved());
-        assert!(t.get(OverlayField::BrandAwareness.key()).is_err());
+        // Od M10b znajomość marki ma dane, więc **musi** mieć też paletę.
+        assert!(!OverlayField::BrandAwareness {
+            brand: magnat_core::BrandId(0)
+        }
+        .is_reserved());
+        assert!(t
+            .get(
+                OverlayField::BrandAwareness {
+                    brand: magnat_core::BrandId(0)
+                }
+                .key()
+            )
+            .is_ok());
     }
 
     #[test]
@@ -577,6 +640,9 @@ mod tests {
         let ile = k.len();
         k.dedup();
         assert_eq!(k.len(), ile, "dwie nakładki o tym samym kluczu");
-        assert_eq!(ile, 9, "§14.2 wymienia dziewięć nakładek bez marki");
+        assert_eq!(
+            ile, 10,
+            "dziewięć nakładek z §14.2 plus znajomość marki (M10b)"
+        );
     }
 }

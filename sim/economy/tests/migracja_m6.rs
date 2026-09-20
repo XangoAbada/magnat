@@ -88,6 +88,7 @@ fn sklepy_przestaly_byc_nieskonczone() {
                 // i przykrył odpowiedź na pytanie, które test naprawdę zadaje.
                 budget_hint: Money(5_000_000),
                 household_size: 1,
+                brands: Default::default(),
             };
             let wynik = market.fulfil(&req);
             if matches!(

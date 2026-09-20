@@ -728,3 +728,68 @@ fn status_rozklada_sie_na_klasy_a_nie_stoi_w_miejscu() {
         "rozkład dochodów nie został policzony"
     );
 }
+
+/// Każdy żywy mieszkaniec ma **komplet komponentów**, także te dołożone późno.
+///
+/// Test powstał po M10b, gdzie `BrandsRef` dołożono do rejestracji i do trzech
+/// światów testowych, ale **nie** do dwóch produkcyjnych miejsc, w których
+/// mieszkaniec naprawdę powstaje: narodzin i napływu migracyjnego. `World::get`
+/// jest archetypowe, więc cała pamięć marki milczałaby w grającym świecie i nie
+/// złamałaby ani jednego testu — bo testy stawiały własne encje.
+///
+/// Reguła, którą ten test egzekwuje, jest ogólniejsza niż marka: **komponent
+/// zarejestrowany w `register_components` ma być u każdego mieszkańca**. Faza
+/// dokładająca komponent dokłada go w obu spawnerach albo ten test świeci czerwono.
+#[test]
+fn kazdy_mieszkaniec_ma_komplet_komponentow() {
+    let (mut world, _) = swiat(91, 20, 120);
+    let start = world.resource::<Population>().len();
+    przebieg(&mut world, 0, 720);
+    let pop = world.resource::<Population>();
+    // **Test bez tego warunku przechodziłby pusto.** Sprawdza komplet komponentów
+    // u mieszkańców, którzy powstali **po** zasiewie, więc musi najpierw upewnić się,
+    // że tacy w ogóle są — inaczej mierzyłby wyłącznie Etap 8 i przepuściłby spawner
+    // narodzin oraz spawner napływu migracyjnego, czyli obie drogi, którymi M10b
+    // faktycznie się rozjechało.
+    assert!(
+        pop.births > 0,
+        "przez dwa lata nikt się nie urodził — test nie dotyka spawnera narodzin"
+    );
+    let spis: Vec<_> = pop.citizens().to_vec();
+    assert!(
+        spis.len() > start,
+        "populacja nie urosła: {start} → {}",
+        spis.len()
+    );
+    for c in spis {
+        for (nazwa, jest) in [
+            (
+                "Identity",
+                world.get::<magnat_agents::Identity>(c).is_some(),
+            ),
+            ("Needs", world.get::<magnat_agents::Needs>(c).is_some()),
+            (
+                "KnowledgeRef",
+                world.get::<magnat_agents::KnowledgeRef>(c).is_some(),
+            ),
+            (
+                "RelationsRef",
+                world.get::<magnat_agents::RelationsRef>(c).is_some(),
+            ),
+            (
+                "BrandsRef",
+                world.get::<magnat_agents::BrandsRef>(c).is_some(),
+            ),
+            (
+                "Lifecycle",
+                world.get::<magnat_agents::Lifecycle>(c).is_some(),
+            ),
+        ] {
+            assert!(
+                jest,
+                "mieszkaniec {} bez komponentu {nazwa} — spawner go pominął",
+                c.index()
+            );
+        }
+    }
+}

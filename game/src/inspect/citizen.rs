@@ -83,6 +83,7 @@ pub fn card(ctx: &CardCtx<'_>, citizen: CitizenId) -> InspectionCard {
         .tab(CardTabKind::Family, rodzina(ctx, citizen))
         .tab(CardTabKind::Wealth, majatek(ctx, citizen, &model))
         .tab(CardTabKind::Work, praca(ctx, citizen))
+        .tab(CardTabKind::Brands, marki(ctx, citizen))
         .tab(CardTabKind::Why, dlaczego(ctx, citizen))
 }
 
@@ -268,6 +269,46 @@ fn majatek(ctx: &CardCtx<'_>, citizen: CitizenId, m: &CitizenModel) -> Rich {
     }
     for v in pojazdy(ctx, citizen) {
         ctx.link_line(&mut out, "ui.card.vehicle", v);
+    }
+    out
+}
+
+/// Marki, które mieszkaniec zna (M10b §5.1, M10 §6 pkt 6).
+///
+/// To jest miejsce, w którym widać, że marka **nie jest liczbą po stronie firmy**:
+/// każdy wiersz mówi, czego ten człowiek się po marce spodziewa, jak ją lubi i skąd
+/// ją zna. Sloty są już z naniesionym zanikiem — `slots_of` liczy go przy odczycie.
+///
+/// Mieszkaniec bez ani jednego slotu nie dostaje zakładki: `InspectionCard::tab`
+/// pomija pustą treść, a pusta zakładka obiecuje coś, czego nie ma.
+fn marki(ctx: &CardCtx<'_>, citizen: CitizenId) -> Rich {
+    let world = &ctx.session.app.world;
+    let mut sloty = magnat_agents::slots_of(world, citizen.entity(), ctx.day())
+        .as_slice()
+        .to_vec();
+    if sloty.is_empty() {
+        return Vec::new();
+    }
+    // Najmocniej odczuwane najpierw; remis po numerze marki (determinizm wydruku).
+    sloty.sort_by_key(|s| (std::cmp::Reverse(s.salience()), s.brand.0));
+    let mut out: Rich = Vec::new();
+    for s in sloty {
+        out.push(ctx.subject_span(Subject::Firm(magnat_supply::firm_of(s.brand))));
+        out.push(Span::plain(format!(
+            " — {}\n",
+            ctx.fmt(
+                "ui.brand.line",
+                &[
+                    ("sympatia", &format!("{}", s.affinity)),
+                    ("jakosc", &format!("{}", s.expected_quality)),
+                    ("znajomosc", &format!("{}", s.awareness)),
+                    (
+                        "skad",
+                        &magnat_ui::inspect::reason::touch_source(ctx.c, ctx.l, s.source()),
+                    ),
+                ],
+            )
+        )));
     }
     out
 }

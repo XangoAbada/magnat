@@ -355,6 +355,7 @@ fn po_roku_bilans_zamyka_sie_co_do_grosza() {
                 at: magnat_core::SimMinute(480),
                 budget_hint: Money(5_000_000),
                 household_size: 1,
+                brands: Default::default(),
             };
             if matches!(market.fulfil(&req), FulfilOutcome::Done { .. }) {
                 sprzedanych += 1;

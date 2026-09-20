@@ -13,8 +13,8 @@
 //! zakładów, więc nie wchodzi do hasha (ta sama zasada co `TrafficOverlay` w M4).
 
 use magnat_core::{
-    Arena, ArenaHandle, FirmId, GoodId, HashState, Money, Qty, SiteId, StateHasher, StockCat, Tick,
-    Q, STOCK_CAT_COUNT,
+    Arena, ArenaHandle, BrandId, FirmId, GoodId, HashState, Money, Qty, SiteId, StateHasher,
+    StockCat, Tick, Q, STOCK_CAT_COUNT,
 };
 use magnat_jobs::JobPool;
 use magnat_spatial::{DynamicGrid, GridSpec, Vec2};
@@ -74,6 +74,13 @@ pub struct Offer {
     /// mieszkaniec mógł się o braku dowiedzieć i żeby `LostSale` miał co wskazać.
     pub available: Qty,
     pub quality: Q,
+    /// Marka towaru leżącego na półce — producent partii (`magnat_supply::brand_of`).
+    ///
+    /// `None` znaczy „towar bez marki" i jest normalnym stanem: import zza granicy
+    /// producenta z tego miasta nie ma, a mieszkaniec kupuje wtedy samą jakość i cenę.
+    /// Synchronizowana ze stanu półki w `restock`, tak samo jak dostępność — oferta
+    /// pokazuje **półkę**, nie zapas, więc i markę pokazuje tę, która na niej leży.
+    pub brand: Option<BrandId>,
     pub category: CategoryId,
     pub since: Tick,
     /// Licznik zmian ceny — obserwacja konkurencji z opóźnieniem 1–7 dni (M5c) porównuje
@@ -102,6 +109,7 @@ impl HashState for Offer {
         h.write_u8(self.price_basis as u8);
         self.available.hash_state(h);
         self.quality.hash_state(h);
+        h.write_u16(self.brand.map_or(u16::MAX, |b| b.0));
         h.write_u8(self.category.layer() as u8);
         self.since.hash_state(h);
         h.write_u32(self.price_rev);
@@ -283,6 +291,7 @@ mod tests {
             price_basis: PriceBasis::GrossRetail,
             available: Qty(5_000),
             quality: Q::new(50),
+            brand: None,
             category: CategoryId::Stock(cat),
             since: Tick(0),
             price_rev: 0,

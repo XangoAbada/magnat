@@ -21,12 +21,13 @@
 
 use magnat_agents::{Knowledge, KnowledgeKind};
 use magnat_core::{
-    det_math, mix64, rng, GoodId, Money, Qty, RejectCause, SiteId, StockCat, StreamId, Tick,
-    UtilityKind, Q,
+    det_math, mix64, rng, BrandId, GoodId, Money, Qty, RejectCause, SiteId, StockCat, StreamId,
+    Tick, UtilityKind, Q,
 };
 
 use crate::data::{EconomyData, UtilityWeights};
 use crate::offer::OfferId;
+use magnat_agents::BrandView;
 
 /// Kandydat decyzji zakupowej: jedna oferta jednego sklepu, wyceniona na ilość,
 /// której kupujący chce.
@@ -49,7 +50,14 @@ pub struct Candidate {
     /// fazy: `PlaceCandidate` dostaje `travel_cost: Money` wypełniane przez tego,
     /// kto i tak zna `travel_min` — jedno wywołanie zamiast piętnastu.
     pub travel_money: Money,
+    /// Jakość **deklarowana przez ofertę** — to, co leży na półce.
+    ///
+    /// Kupujący widzi ją tylko wtedy, gdy marki nie zna. Znający markę ocenia towar
+    /// przez `expected_quality` ze swojej pamięci, bo jakości przed zakupem się nie
+    /// widzi — widzi się reputację (PRD §6.4, §7.6).
     pub quality: Q,
+    /// Marka towaru na półce; `None` = towar bez marki (import, `K-79`).
+    pub brand: Option<BrandId>,
     /// Ocena sklepu z pamięci mieszkańca, 0..=100; `None` = zna, ale nie był.
     pub rating: Option<u8>,
     /// Czy mieszkaniec już tu był (premia za nowość dotyczy tylko tych, gdzie nie był).
@@ -57,14 +65,17 @@ pub struct Candidate {
 }
 
 /// To, co kupujący wnosi do funkcji użyteczności poza samą ofertą.
-#[derive(Clone, Copy, PartialEq, Debug)]
-pub struct BuyerState {
+#[derive(Clone, Copy, Debug, Default)]
+pub struct BuyerState<'a> {
     pub status: Q,
     pub openness: Q,
     /// Mianownik członu ceny i odległości (§5.4). M5d podmieni na kopertę.
     pub budget_ref: Money,
     /// Wartość czasu w groszach na minutę.
     pub vot_gr_per_min: i64,
+    /// Co kupujący wie o markach (M10b §5.1). Pusty widok = człon marki ≡ 0,
+    /// czyli dokładnie zachowanie sprzed M10b.
+    pub brands: BrandView<'a>,
 }
 
 /// `f(x) = −ln(1 + x)` dla `x ≥ 0` (§5.4).
@@ -102,8 +113,8 @@ pub fn weights_for(
         loyalty: base.loyalty * t(magnat_core::TraitId::Loyalty),
         novelty: base.novelty * t(magnat_core::TraitId::Openness),
         status: base.status * s * (t(magnat_core::TraitId::Ambition) + 0.5),
-        // M5: mnożone przez afinitet ≡ 0. Człon istnieje, żeby M10 dopisał wartość,
-        // a nie strukturę.
+        // Od M10b mnożone przez realny afinitet z pamięci mieszkańca (§5.1);
+        // do M10b człon istniał strukturalnie i dawał zawsze zero.
         brand: base.brand,
     }
     .normalized()
@@ -113,7 +124,7 @@ pub fn weights_for(
 /// **stały dla trójki (kupujący, oferta, decyzja)** — inaczej ponowna ewaluacja
 /// dałaby inny wynik.
 #[must_use]
-pub fn utility_of_offer(c: &Candidate, w: &UtilityWeights, st: &BuyerState, noise: f64) -> f64 {
+pub fn utility_of_offer(c: &Candidate, w: &UtilityWeights, st: &BuyerState<'_>, noise: f64) -> f64 {
     crate::kernel::purchase_score(&score_input(c, st), w, noise)
 }
 
@@ -122,7 +133,7 @@ pub fn utility_of_offer(c: &Candidate, w: &UtilityWeights, st: &BuyerState, nois
 /// To jest cała treść wydzielenia z `D20`: człony liczy `kernel::purchase_score`,
 /// a tutaj zostaje wiedza o tym, czym jest oferta, pamięć miejsca i wartość czasu —
 /// czyli rzeczy, których model makro nie ma i mieć nie powinien.
-fn score_input(c: &Candidate, st: &BuyerState) -> crate::kernel::ScoreInput {
+fn score_input(c: &Candidate, st: &BuyerState<'_>) -> crate::kernel::ScoreInput {
     let travel = c
         .travel_money
         .get()
@@ -140,16 +151,26 @@ fn score_input(c: &Candidate, st: &BuyerState) -> crate::kernel::ScoreInput {
     } else {
         f64::from(st.openness.get()) / 100.0
     };
+    // Marka i jakość postrzegana — wypełnienie §6.4 przez M10b. Do tej chwili
+    // `brand` było stałym zerem, a `quality` jakością **zadeklarowaną przez sprzedawcę**,
+    // czyli liczbą, której kupujący przed zakupem nie ma skąd znać.
+    //
+    // Kto marki nie zna, ocenia towar po tym, co widzi na półce — i to jest stan
+    // sprzed M10b, zachowany co do bitu. Kto zna, ocenia po tym, czego się spodziewa:
+    // reklama podnosi oczekiwania, rozczarowanie je obniża, a różnica między obietnicą
+    // a towarem wraca do sprzedawcy jako afinitet (PRD §7.6).
+    let (brand, quality) = match c.brand.and_then(|b| st.brands.get(b)) {
+        Some(a) => (f64::from(a.affinity) / 100.0, Q::new(a.expected_quality)),
+        None => (0.0, c.quality),
+    };
     crate::kernel::ScoreInput {
         price_total: c.price_total,
         budget_ref: st.budget_ref,
         travel_cost: Money(travel),
-        quality: c.quality,
+        quality,
         status: st.status,
         loyalty,
-        // M5: afinitet marki ≡ 0. Człon istnieje, żeby M10 dopisał wartość,
-        // a nie strukturę.
-        brand: 0.0,
+        brand,
         novelty,
     }
 }
@@ -332,18 +353,80 @@ mod tests {
             travel_min: travel,
             travel_money: Money::ZERO,
             quality: Q::new(quality),
+            brand: None,
             rating: None,
             visited: false,
         }
     }
 
-    fn stan() -> BuyerState {
+    fn stan() -> BuyerState<'static> {
         BuyerState {
             status: Q::new(50),
             openness: Q::new(50),
             budget_ref: Money(6_000),
             vot_gr_per_min: 9,
+            brands: Default::default(),
         }
+    }
+
+    /// Wypełnienie §6.4 przez M10b: człon marki i jakość postrzegana przestały być
+    /// stałymi. Test jest tu, a nie przy rynku, bo `score_input` jest funkcją czystą
+    /// i to ona jest miejscem, w którym marka wchodzi do decyzji.
+    #[test]
+    fn marka_zmienia_wybor_i_zastepuje_jakosc_polkowa() {
+        use magnat_agents::BrandAffinity;
+        use magnat_core::{BrandId, TouchSource};
+
+        let dane = EconomyData::load_default().expect("data/economy");
+        let w = weights_for(
+            &magnat_agents::Personality([50; 8]),
+            Q::new(50),
+            magnat_core::NeedKind::Hunger,
+            &dane,
+        );
+
+        let mut c = kandydat(3_000, 60, 5);
+        c.brand = Some(BrandId(7));
+
+        // Nieznana marka: decyzja wygląda dokładnie tak, jak przed M10b.
+        let bez = utility_of_offer(&c, &w, &stan(), 0.0);
+
+        let lubiana = [BrandAffinity {
+            brand: BrandId(7),
+            affinity: 80,
+            expected_quality: 85,
+            awareness: 90,
+            source: TouchSource::Experience as u8,
+            last_touch_day: 0,
+        }];
+        let nielubiana = [BrandAffinity {
+            affinity: -80,
+            expected_quality: 20,
+            ..lubiana[0]
+        }];
+        let mut st = stan();
+        st.brands = magnat_agents::BrandView::new(&lubiana);
+        let z_lubiana = utility_of_offer(&c, &w, &st, 0.0);
+        st.brands = magnat_agents::BrandView::new(&nielubiana);
+        let z_nielubiana = utility_of_offer(&c, &w, &st, 0.0);
+
+        assert!(
+            z_lubiana > bez && bez > z_nielubiana,
+            "marka nie rusza decyzji: lubiana {z_lubiana:.4}, nieznana {bez:.4},              nielubiana {z_nielubiana:.4}"
+        );
+
+        // Jakość postrzegana zastępuje półkową: ta sama oferta, dwie różne opinie
+        // o jakości, dwie różne użyteczności — mimo identycznego `Candidate.quality`.
+        let gorsza_opinia = [BrandAffinity {
+            expected_quality: 20,
+            ..lubiana[0]
+        }];
+        st.brands = magnat_agents::BrandView::new(&gorsza_opinia);
+        let z_gorsza = utility_of_offer(&c, &w, &st, 0.0);
+        assert!(
+            z_lubiana > z_gorsza,
+            "oczekiwana jakość nie wchodzi do decyzji zamiast deklarowanej"
+        );
     }
 
     #[test]

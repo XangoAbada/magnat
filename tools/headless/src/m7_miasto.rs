@@ -129,6 +129,7 @@ pub fn run(a: &M7MiastoArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
         .add(LaborSystem::new())
         .add(InsolvencySystem::new())
         .add(MacroSystem::new())
+        .add(magnat_media::MediaSystem::new())
         .add(DayLoopSystem::new(&world))
         .add(ReplanCooldownSystem::new(&world))
         .add(NeedDecaySystem::new(&world))
@@ -388,6 +389,60 @@ fn raport(
             "ROZJAZD: akcja bez powodu"
         }
     );
+
+    println!("── marka i media (M10b) ──────────────────────────────");
+    let kampanie = world.get_resource::<magnat_media::Campaigns>();
+    let tytuly = world.get_resource::<magnat_media::Outlets>();
+    match (kampanie, tytuly) {
+        (Some(k), Some(o)) => {
+            let ekspozycje: u64 = k.iter().map(|(_, c)| c.metrics.exposures_total).sum();
+            let pierwsze: u64 = k.iter().map(|(_, c)| c.metrics.first_contacts).sum();
+            let wydane: i64 = k.iter().map(|(_, c)| c.spent.get()).sum();
+            println!(
+                "kampanie {} (ekspozycje {ekspozycje}, pierwsze kontakty {pierwsze},                  wydane {} zł), tytuły {}, teksty w obiegu {}",
+                k.len(),
+                wydane / 100,
+                o.len(),
+                o.stories().len()
+            );
+            // Ilu mieszkańców ma w pamięci **jakąkolwiek** markę — to jest liczba,
+            // która odróżnia świat z marką od świata, w którym marka jest strukturą.
+            let spis = world.resource::<magnat_agents::Population>().citizens();
+            // Zanik liczy się od doby odczytu; raport pyta o „dziś", czyli o koniec
+            // przebiegu — a ten jest w `czas`, nie w świecie.
+            let doba = u64::from(a.days);
+            let znajacy = spis
+                .iter()
+                .filter(|e| !magnat_agents::slots_of(world, **e, doba).is_empty())
+                .count();
+            println!(
+                "mieszkańcy ze slotem marki: {znajacy} z {} ({} ‰)",
+                spis.len(),
+                if spis.is_empty() {
+                    0
+                } else {
+                    znajacy * 1000 / spis.len()
+                }
+            );
+            // Najszerzej znana marka w mieście — agregat liczony z pamięci
+            // mieszkańców, a nie z pola przy firmie (`brand_strength`).
+            let najlepsza = firms
+                .iter()
+                .filter_map(|(key, _)| magnat_supply::brand_of(magnat_firms::firm_id(key)))
+                .map(|b| (magnat_agents::brand_strength(world, b, doba), b))
+                .max_by_key(|(s, b)| (s.known, std::cmp::Reverse(b.0)));
+            if let Some((sila, marka)) = najlepsza {
+                println!(
+                    "najszerzej znana marka: #{} — zna ją {} osób, średnia sympatia {},                      spodziewana jakość {}",
+                    marka.0,
+                    sila.known,
+                    sila.mean_affinity,
+                    sila.mean_expected.get()
+                );
+            }
+        }
+        _ => println!("brak rejestru kampanii albo tytułów — media nie stoją w tym świecie"),
+    }
 
     println!("── rynek detaliczny ──────────────────────────────────");
     let s = market.stats();

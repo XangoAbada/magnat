@@ -75,6 +75,7 @@ fn miasto(dni: u32, citizens: u32, szara_strefa_bp: u16) -> App {
         .add(LaborSystem::new())
         .add(InsolvencySystem::new())
         .add(MacroSystem::new())
+        .add(magnat_media::MediaSystem::new())
         .add(CitySystem::new())
         .add(DayLoopSystem::new(&world))
         .add(ReplanCooldownSystem::new(&world))

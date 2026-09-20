@@ -951,6 +951,7 @@ fn spawn_citizen(
         .with(AgentState::default())
         .with(KnowledgeRef::default())
         .with(RelationsRef::default())
+        .with(crate::components::BrandsRef::default())
         .with(Lifecycle::default())
         .id();
     world.resource_mut::<Population>().add_citizen(e);

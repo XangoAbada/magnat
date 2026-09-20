@@ -69,6 +69,10 @@ pub fn lift(world: &World) -> MacroState {
     zbuduj_komorki(&mut st, &ludzie, role);
     rozlej_gospodarstwa(&mut st, world, &ludzie);
     zbuduj_firmy(&mut st, world);
+    // Renoma marki z pamięci mieszkańców (M10b, `D7`). Do M10b `brand_stock` był
+    // zerem w każdym przebiegu — polem, którego nikt nie wypełniał i nikt nie czytał.
+    let doba = u64::from(st.day);
+    crate::brandseed::fill_brand_stock(&mut st, world, doba);
     zbuduj_ksiege(&mut st, world);
     st
 }

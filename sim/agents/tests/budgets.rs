@@ -9,12 +9,13 @@
 //! `benches/agents_bench.rs` + `scripts/bench_guard.py` (D-8).
 
 use magnat_agents::{
-    register, AgentState, EventKind, EventQueue, Identity, Knowledge, KnowledgeRef, KnowledgeSlab,
-    Lifecycle, NeedTable, Needs, Personality, PlanRef, PlanSlot, Relation, RelationSlab,
-    RelationsRef, Residence, SimEvent, SkillSlot, Skills, SlabRef, Vitals, Wealth,
-    HOT_COMPONENT_BYTES,
+    register, AgentState, BrandAffinity, BrandSlab, BrandsRef, EventKind, EventQueue, Identity,
+    Knowledge, KnowledgeRef, KnowledgeSlab, Lifecycle, NeedTable, Needs, Personality, PlanRef,
+    PlanSlot, Relation, RelationSlab, RelationsRef, Residence, SimEvent, SkillSlot, Skills,
+    SlabRef, Vitals, Wealth, BRAND_SLOTS, HOT_COMPONENT_BYTES,
 };
 use magnat_agents::{Employment, PlanSlab};
+use magnat_core::BrandId;
 use magnat_ecs::World;
 
 const N: u32 = 400_000;
@@ -64,6 +65,7 @@ fn swiat_populacji(n: u32) -> World {
             .with(AgentState::default())
             .with(KnowledgeRef::default())
             .with(RelationsRef::default())
+            .with(BrandsRef::default())
             .with(Lifecycle::default());
     }
     w
@@ -150,13 +152,53 @@ fn mem_population_400k() {
         na_osobe <= 430.0,
         "stan gorący to {na_osobe:.0} B/mieszkańca, budżet po korekcie D-1 to 430 B"
     );
-    // Sam narzut chunkowania ECS nad surowymi komponentami — 13 komponentów + Entity.
+    // Sam narzut chunkowania ECS nad surowymi komponentami — 14 komponentów + Entity
+    // (czternasty to `BrandsRef` z M10b: uchwyt do slabu marek, 8 B).
     let uzyteczne = N as usize * (HOT_COMPONENT_BYTES + 8);
     let narzut = ecs as f64 / uzyteczne as f64;
     assert!(
         narzut < 1.15,
         "narzut chunkowania {:.1} %",
         (narzut - 1.0) * 100.0
+    );
+}
+
+/// Kryterium WP10.5 fazy M10: 400 tys. mieszkańców × 16 slotów marek ≤ 55 MB,
+/// **mierzone, nie szacowane**.
+///
+/// Mierzymy przypadek najgorszy — komplet szesnastu slotów u każdego — bo to jest
+/// sufit, o który pyta kryterium. W grze rozkład jest rzadszy: slot powstaje dopiero
+/// przy pierwszym kontakcie z marką, a `Slab` alokuje blok klasy 4, nie 16.
+#[test]
+fn sloty_marek_miesza_sie_w_budzecie() {
+    let mut slab = BrandSlab::new();
+    for i in 0..N {
+        let mut r = SlabRef::EMPTY;
+        for j in 0..BRAND_SLOTS {
+            slab.push(
+                &mut r,
+                BrandAffinity {
+                    brand: BrandId(j as u16),
+                    affinity: 20,
+                    expected_quality: 60,
+                    awareness: 50,
+                    source: 4,
+                    last_touch_day: (i % 360) as u16,
+                },
+                |_| 0,
+            );
+        }
+    }
+    let bajty = slab.allocated_bytes();
+    println!(
+        "sloty marek: {} MB ({:.0} B/os.)",
+        bajty / 1_048_576,
+        bajty as f64 / f64::from(N)
+    );
+    assert!(
+        bajty <= 55 * 1_048_576,
+        "sloty marek zajmują {} MB, budżet WP10.5 to 55 MB",
+        bajty / 1_048_576
     );
 }
 
@@ -344,6 +386,7 @@ fn walk_estimate_miesci_sie_w_budzecie() {
         personality: &personality,
         residence: &residence,
         today: 0,
+        brands: Default::default(),
     };
 
     // Jeden przebieg po wszystkich parach. Do M3 estymator liczył Dijkstrę po sieci

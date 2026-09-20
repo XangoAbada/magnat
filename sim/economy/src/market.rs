@@ -576,14 +576,15 @@ impl MarketInner {
         self.data.vot_base_gr_per_min * (100 + i64::from(status.get())) / 100
     }
 
-    fn buyer_state(
+    fn buyer_state<'a>(
         &self,
         status: Q,
         openness: Q,
         vot: i64,
         cat: StockCat,
         household: u32,
-    ) -> BuyerState {
+        brands: magnat_agents::BrandView<'a>,
+    ) -> BuyerState<'a> {
         BuyerState {
             status,
             openness,
@@ -598,6 +599,7 @@ impl MarketInner {
                 None => crate::choice::budget_ref_for(cat, &self.data),
             },
             vot_gr_per_min: vot,
+            brands,
         }
     }
 }
