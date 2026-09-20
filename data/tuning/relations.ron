@@ -1,0 +1,61 @@
+// Relacje międzyfirmowe, zmowy cenowe i związki zawodowe — kalibracja M10e
+// (`K-88`, katalog `data/tuning/` z `K-35`).
+//
+// Granica wobec `data/economy/`: tam siedzą liczby zmieniające **kształt** modelu
+// (widełki marży sklepu, koszty stałe zakładu), tutaj progi, przy których mechanika
+// się odpala. Przestawienie czegokolwiek w tym pliku nie zmienia znaczenia żadnego
+// pojęcia — zmienia tylko to, jak często zmowa i strajk się zdarzają.
+//
+// **Wag żalu nie wolno przestawić tak, żeby nie sumowały się do stu**: skala 0..100
+// przestałaby wtedy być skalą, a próg `grievance_threshold` mierzyłby coś innego
+// w każdym mieście. Pilnuje tego walidator, nie komentarz.
+(
+    schema_version: 1,
+
+    // Zaufanie do dostawcy: rośnie z terminowych dostaw, spada z niedostarczonej
+    // masy i ze spóźnień **ponad tolerancję** kontraktu.
+    supplier: (
+        trust_start: 50,
+        trust_window: 8,
+        late_penalty: 25,
+        trust_neutral: 50,
+        max_discount_bp: 300,
+        forget_days: 360,
+    ),
+
+    // Zmowa cenowa. Hazard wykrycia jest funkcją chciwości, nie czasu: kartel
+    // umiarkowany żyje latami, kartel podnoszący cenę o połowę — kwartał.
+    cartel: (
+        min_members: 3,
+        max_members: 8,
+        risk_threshold: 55,
+        floor_markup_bp: 1500,
+        base_hazard_ppm: 5000,
+        member_hazard_ppm: 3000,
+        deviation_hazard_ppm: 20000,
+        insider_hazard_ppm: 2000,
+        cooldown_months: 24,
+        brand_drop: 20,
+        evidence: 60,
+    ),
+
+    // Związki zawodowe. Trzy warunki powstania są twarde, a rzut rozstrzyga tylko,
+    // w którym miesiącu okna to nastąpi — stąd „3–9 miesięcy" z kryterium WP10.14.
+    union: (
+        grievance_threshold: 55,
+        grievance_days: 60,
+        min_component: 8,
+        component_share_bp: 2500,
+        density_bp: 3000,
+        w_profit: 40,
+        w_wage: 40,
+        w_stress: 20,
+        round_days: 7,
+        max_rounds: 4,
+        demand_cap_bp: 2500,
+        concession_cap_bp: 1200,
+        participation_bp: 9000,
+        max_strike_days: 90,
+        truce_months: 12,
+    ),
+)

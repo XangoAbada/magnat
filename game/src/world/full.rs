@@ -152,6 +152,15 @@ pub fn setup(
     // polisy powstają, ale ani składka, ani odszkodowanie nie ruszają grosza.
     let ubezpieczycieli = magnat_economy::insurance::system::stand_up_insurers(world);
 
+    // Relacje z dostawcami, zmowy cenowe i związki zawodowe (M10e). Wszystkie trzy
+    // rejestry są puste do pierwszej dostawy, pierwszej zmowy i pierwszego sporu,
+    // więc świat bez nich nie płaci ani bajtem hasha poza zerowymi długościami.
+    // Kalibracja **z danych** (`data/tuning/relations.ron`, `K-88`) — ten sam
+    // wniosek co przy `brand.ron` i `insurance.ron`: ładowarka, której nikt nie woła,
+    // ukrywa niepoprawny plik do czasu, aż ktoś go otworzy. Wołanie jest **po**
+    // rynku, bo strojenie zaufania zjeżdża stąd do `sim/supply` przez `Market`.
+    magnat_economy::register_relations(world, magnat_economy::RelationsTuning::load_default()?);
+
     Ok(FullCity {
         retail: r,
         firms: report,

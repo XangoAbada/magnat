@@ -78,6 +78,8 @@ fn zaklad(key: FirmKey, slots: u16, obsadzone: u16) -> Site {
         fixed_cost_month: Money(1_200_000),
         pnl: magnat_firms::Ring::new(),
         opened: SimMinute(0),
+        strike_bps: 0,
+        strike_bp_days: 0,
         delegation: None,
     }
 }

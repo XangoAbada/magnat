@@ -138,6 +138,7 @@ pub fn run(a: &M7MiastoArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
         .add(magnat_media::MediaSystem::new())
         .add(magnat_economy::insurance::system::InsuranceSystem::new())
         .add(magnat_economy::equity::system::EquitySystem::new())
+        .add(magnat_economy::RelationsSystem::new())
         .add(DayLoopSystem::new(&world))
         .add(ReplanCooldownSystem::new(&world))
         .add(NeedDecaySystem::new(&world))
@@ -576,6 +577,58 @@ fn raport(
             }
         }
         _ => println!("brak giełdy albo ubezpieczeń — rynek kapitałowy nie stoi w tym świecie"),
+    }
+
+    println!("── relacje, zmowy i związki (M10e) ───────────────────");
+    match (
+        world.get_resource::<magnat_economy::Unions>(),
+        world.get_resource::<magnat_economy::Cartels>(),
+    ) {
+        (Some(u), Some(c)) => {
+            let strajkuje = u.iter().filter(|z| z.state.is_striking()).count();
+            println!(
+                "związków {}, w tym strajkuje {}; zmów czynnych {}",
+                u.len(),
+                strajkuje,
+                c.len()
+            );
+            for z in u.iter().take(5) {
+                println!(
+                    "zakład {}: gęstość {}, wojowniczość {}, stan {:?}, fundusz {} zł",
+                    z.site.entity().index(),
+                    z.density.get(),
+                    z.militancy.get(),
+                    z.state,
+                    z.strike_fund.get() / 100
+                );
+            }
+            for k in c.iter().take(5) {
+                println!(
+                    "zmowa {} na towarze {} w dzielnicy {}: {} firm, cena {} gr, odchylenie {} %",
+                    k.id.0,
+                    k.good.0,
+                    k.district.0,
+                    k.members.len(),
+                    k.floor_price.get(),
+                    k.deviation_pct()
+                );
+            }
+        }
+        _ => println!("brak związków albo zmów — ten świat ich nie stawia"),
+    }
+    // Zaufanie do dostawców: ile par handluje ze sobą na tyle długo, żeby to
+    // cokolwiek zmieniało w przetargu.
+    {
+        let ch = market.chain();
+        let rel = ch.lock();
+        let wszystkie = rel.b2b.relations().len();
+        let z_preferencja = rel
+            .b2b
+            .relations()
+            .iter()
+            .filter(|r| r.discount_bp(rel.b2b.relations().tuning()) > 0)
+            .count();
+        println!("relacji z dostawcami {wszystkie}, w tym z preferencją {z_preferencja}");
     }
 
     println!("── rynek detaliczny ──────────────────────────────────");

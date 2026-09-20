@@ -22,6 +22,7 @@
 //! netto, a rozróżnienie niesie jawna deklaracja, nie domysł z kontekstu.
 
 pub mod contract;
+pub mod relation;
 pub mod rfq;
 pub mod trade;
 
@@ -44,6 +45,7 @@ pub use contract::{
     ContractDelivery, ContractError, ContractPricing, DeliverySchedule, Penalty, SupplyContract,
     SupplyContractDraft,
 };
+pub use relation::{DeliveryOutcome, RelationTuning, Relations, SupplierRelation};
 pub use rfq::{Quote, QuoteId, Rfq, RfqDraft, RfqOutcome, SellerIndex, WhoTransports};
 pub use trade::{
     gate_allows, ImportQuote, PendingImport, TariffClass, TariffError, TariffTable, TradeError,
@@ -243,6 +245,8 @@ pub struct B2b {
     world_seed: u64,
     /// Wyłączności dostawców (M7e WP14).
     exclusives: Exclusives,
+    /// Relacje z dostawcami: zaufanie, preferencja i priorytet (M10e WP10.13).
+    relations: Relations,
 }
 
 impl B2b {
@@ -258,6 +262,7 @@ impl B2b {
             shock_bp: vec![10_000; goods],
             tariffs,
             exclusives: Exclusives::default(),
+            relations: Relations::default(),
             next_rfq: 1,
             next_quote: 1,
             next_contract: 1,
@@ -402,6 +407,26 @@ impl B2b {
         &mut self.exclusives
     }
 
+    /// Relacje z dostawcami — odczyt dla panelu, dla testów i dla `sim/economy`.
+    #[must_use]
+    pub fn relations(&self) -> &Relations {
+        &self.relations
+    }
+
+    /// Relacje do zapisu. Pisarzy jest dwóch i obaj są w tym crate'cie: rozliczenie
+    /// dostawy kontraktowej i rozliczenie zakupu spotowego. Z zewnątrz sięga tu
+    /// wyłącznie kalibracja — patrz [`B2b::set_relation_tuning`].
+    pub fn relations_mut(&mut self) -> &mut Relations {
+        &mut self.relations
+    }
+
+    /// Kalibracja relacji z `data/tuning/relations.ron` (właściciel M10, `K-88`).
+    /// Świat, w którym nikt jej nie wstawi, liczy przetarg na wartościach domyślnych
+    /// — czyli tak samo, jak liczył go M6c.
+    pub fn set_relation_tuning(&mut self, t: RelationTuning) {
+        self.relations.set_tuning(t);
+    }
+
     /// Średnia cena spot z ostatnich siedmiu dób — `index_now` dla cennika indeksowanego.
     #[must_use]
     pub fn spot_index(&self, good: GoodId) -> Option<Money> {
@@ -414,6 +439,7 @@ impl B2b {
             w.roll_day();
         }
         self.exclusives.expire(now);
+        self.relations.forget(now);
         for n in &mut self.nodes {
             n.roll_day(&t.trade);
         }
@@ -537,5 +563,7 @@ impl HashState for B2b {
         // Wyłączność zmienia to, kto kogo widzi w przetargu — czyli stan gospodarki,
         // a nie szczegół wykonania (M7e WP14).
         self.exclusives.hash_state(h);
+        // Zaufanie zmienia to, kto z kim handluje i po ile — czyli stan gospodarki.
+        self.relations.hash_state(h);
     }
 }

@@ -30,6 +30,7 @@
 //! pochodzi z ksiąg firmy, nigdy z prognozy (§5.10, `R14`, `R15`).
 
 pub mod brandseed;
+pub mod commute;
 pub mod dryrun;
 pub mod lift;
 pub mod lod;

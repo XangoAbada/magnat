@@ -1,14 +1,19 @@
 // Zdarzenia społeczne (M8c WP5, PRD §11.2).
 //
-// Strajk jest tu wzorcem z §5.5 C i jedynym zdarzeniem, którego sonda ma dwa źródła
-// naraz: płace z rejestru firm i medianę zawodu z rynku pracy. Bez mediany „luka
-// płacowa" byłaby liczbą bez odniesienia, a strajk — loterią.
+// **Strajk jest jedynym zdarzeniem w katalogu, którego się nie losuje.** Do M10e
+// wychodził z hazardu nad luką płacową — i to był jawny zastępnik: `K-9` przyznaje
+// mechanikę sporu zbiorowego fazie M10, a M8 zostawia „wyłącznie wyzwalacz
+// zdarzeniowy i skutki miejskie". Od M10e wyzwalaczem jest **decyzja związku
+// zawodowego**: rundy negocjacyjne padły, załoga wyszła, a rejestr zdarzeń dostaje
+// wezwanie (`K-89`). Stąd `base_ppm: 0` — hazard jest wyłączony, a nie zapomniany:
+// druga droga powstania tego samego zdarzenia znaczyłaby dwa strajki naraz
+// w jednym zakładzie, z dwóch różnych powodów.
 //
-// **Strajk kończy się wtedy, gdy firma podniesie płace**, a nie po wylosowanej
-// liczbie dób: `UntilBelow` nad tą samą sondą, która go zaczęła. To zamyka pętlę,
-// o którą chodzi w §1 dokumentu fazy — firma liczy koszt przestoju i porównuje go
-// z kosztem podwyżki, a hazard wygasa sam, bez ani jednej linii kodu o strajku
-// po stronie M7.
+// Zakres to **zakład**, nie firma (decyzja `D6` fazy M10): związek formuje się tam,
+// gdzie ludzie się znają, więc stanąć ma hala, a nie cała korporacja.
+//
+// Koniec rozstrzyga sonda `SiteStrikeBps`, czyli powrót załogi do pracy. Kończy go
+// albo ugoda, albo wyczerpany fundusz strajkowy — jedno i drugie po stronie M10.
 (
     schema_version: 2,
 
@@ -16,26 +21,21 @@
         (
             key: "social/strike",
             category: Social,
-            scope: Firm,
+            scope: Site,
             trigger: (
-                base_ppm: 70,
-                gate: [MinFirmHeadcount(15), MinFirmAgeDays(180)],
-                factors: [
-                    (probe: FirmWageGapPermille, curve: ([(0, 10000), (100, 30000), (250, 100000)])),
-                    (probe: FirmMoraleQ, curve: ([(30, 40000), (50, 10000), (70, 5000)])),
-                    (probe: CpiYoyBp, curve: ([(300, 10000), (1200, 22000)])),
-                ],
+                base_ppm: 0,
+                factors: [],
             ),
-            severity: (min_bps: 3000, max_bps: 10000, from: Some((FirmWageGapPermille, 0, 250))),
-            duration: UntilBelow(probe: FirmWageGapPermille, value: 40, min_days: 3),
+            severity: (min_bps: 3000, max_bps: 10000, from: None),
+            duration: UntilBelow(probe: SiteStrikeBps, value: 1, min_days: 1),
             effects: [
                 // Siła zdarzenia jest **odsetkiem załogi przystępującej do strajku**,
                 // a zakład bez ludzi nie produkuje. Mnożnik 2000 przy pełnej sile
                 // znaczy „zostaje piąta część zdolności produkcyjnej".
                 SiteOutput(mul_bps: 2000, filter: Any),
             ],
-            cooldown_days: 60,
-            max_concurrent: 4,
+            cooldown_days: 0,
+            max_concurrent: 255,
             chronicle: "event.social.strike",
         ),
 

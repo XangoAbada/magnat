@@ -125,6 +125,18 @@ pub enum Touch {
     },
     /// Publikacja w mediach: przekaz i wiarygodność tytułu.
     Media { claim: Q, credibility: u8 },
+    /// Skandal: zmowa cenowa wyszła na jaw, załoga strajkuje, prasa pisze źle
+    /// (M10e WP10.13/WP10.14).
+    ///
+    /// **Jedyny kontakt, który rusza afinitet bez zakupu** — i dlatego jest osobnym
+    /// wariantem, a nie ujemnym `Media { claim }`. Tamten uczy oczekiwań („mówią,
+    /// że słabe"), ten odbiera sympatię („oszukali nas"), a to są dwie różne rzeczy
+    /// dla mieszkańca, który markę zna i lubi mimo przeciętnej jakości.
+    ///
+    /// Siłę podaje **wołający**, a nie `BrandTuning`: zmowa i strajk są zdarzeniami
+    /// M10e i ich kalibracja siedzi w `data/tuning/relations.ron`. Wpisanie jej
+    /// do `brand.ron` znaczyłoby, że plik marki stroi mechanikę, o której nic nie wie.
+    Scandal { drop: u8 },
     /// Przypięcie: pracodawca albo sklep, w którym mieszkaniec bywa.
     Own,
 }
@@ -137,7 +149,7 @@ impl Touch {
             Touch::Ad { .. } => TouchSource::Ad,
             Touch::Experience { .. } => TouchSource::Experience,
             Touch::Rumor { .. } => TouchSource::Rumor,
-            Touch::Media { .. } => TouchSource::Media,
+            Touch::Media { .. } | Touch::Scandal { .. } => TouchSource::Media,
             Touch::Own => TouchSource::Owned,
         }
     }
@@ -303,6 +315,11 @@ pub fn touch(
             slab.entries_mut(sr)[i] = n;
             p
         }
+        // Skandal dotyczy **tylko tych, którzy markę znają** (§5.9). Gdyby zakładał
+        // slot, zmowa cenowa uczyłaby miasto o istnieniu marki, o której nikt nie
+        // słyszał — i im brzydszy skandal, tym szerzej znana firma. Guard stoi tutaj,
+        // w jedynym wejściu do pamięci, a nie w każdym wołającym z osobna.
+        None if matches!(t, Touch::Scandal { .. }) => None,
         None => {
             let pusty = BrandAffinity {
                 brand,
@@ -400,6 +417,21 @@ pub fn apply(
                 channel: Some(AdChannelKind::Press),
                 awareness: Q::new(s.awareness),
             })
+        }
+        Touch::Scandal { drop } => {
+            // Skandal zabiera sympatię i **nie rusza oczekiwanej jakości**: produkt
+            // nie stał się gorszy przez to, że producent zmówił się z konkurencją.
+            // Znajomość też nie rośnie — wpis dostaje wyłącznie ten, kto markę już
+            // zna, więc nie ma czego podnosić (§5.9).
+            s.affinity = (i32::from(s.affinity) - i32::from(drop)).clamp(-100, 100) as i8;
+            if s.affinity == przed.affinity {
+                None
+            } else {
+                Some(DecisionReason::BrandScandal {
+                    brand: s.brand,
+                    drop,
+                })
+            }
         }
         Touch::Experience { actual } => {
             let d = i32::from(actual.get()) - i32::from(s.expected_quality);
@@ -566,6 +598,37 @@ mod tests {
             source: TouchSource::Ad as u8,
             last_touch_day: 0,
         }
+    }
+
+    /// Skandal zabiera sympatię i **nie rusza oczekiwanej jakości** (M10e §5.9).
+    ///
+    /// To jest cała różnica wobec rozczarowania zakupem: produkt nie stał się
+    /// gorszy przez to, że producent zmówił się z konkurencją albo że załoga
+    /// strajkuje. Kryterium WP10.13 („po wykryciu … uderzenie w markę wszystkich
+    /// członków") mierzy się tutaj, bo tu zapada cała arytmetyka.
+    #[test]
+    fn skandal_zabiera_sympatie_a_nie_oczekiwania() {
+        let t = BrandTuning::default();
+        let mut s = pusty(7);
+        s.affinity = 30;
+        s.expected_quality = 70;
+        s.awareness = 80;
+        let (po, powod) = apply(s, Touch::Scandal { drop: 20 }, 5, &t);
+        assert_eq!(po.affinity, 10, "sympatia spada dokładnie o siłę skandalu");
+        assert_eq!(po.expected_quality, 70, "oczekiwana jakość nie drga");
+        assert_eq!(po.awareness, 80, "skandal nie uczy o istnieniu marki");
+        assert!(matches!(
+            powod,
+            Some(DecisionReason::BrandScandal { drop: 20, .. })
+        ));
+        // Skala jest domknięta z dołu: seria skandali nie zejdzie poniżej −100.
+        let mut dno = pusty(7);
+        dno.affinity = -95;
+        let (po, _) = apply(dno, Touch::Scandal { drop: 20 }, 5, &t);
+        assert_eq!(po.affinity, -100);
+        // Zero nie jest kontaktem: nie ma czego pokazać w karcie.
+        let (_, brak) = apply(pusty(7), Touch::Scandal { drop: 0 }, 5, &t);
+        assert!(brak.is_none());
     }
 
     /// `data/tuning/brand.ron` **wczytuje się i przechodzi walidację**.

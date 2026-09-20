@@ -66,6 +66,7 @@ pub mod owner_ops;
 pub mod panel;
 pub mod policy_run;
 pub mod pricing;
+pub mod relations;
 pub mod rnd;
 pub mod shop;
 pub mod supply;
@@ -134,6 +135,10 @@ pub use policy_run::{
 pub use pricing::{
     preview_price, reprice, CompetitorEntry, CompetitorRef, CompetitorSnapshot, FirmPricing,
     ObservedElasticity, PriceController, PriceExperiment, PricePolicy, PricingCtx,
+};
+pub use relations::{
+    register_relations, Cartel, CartelId, Cartels, RelationsDay, RelationsSystem, RelationsTuning,
+    Union, UnionId, UnionState, Unions,
 };
 pub use shop::{
     AssortmentPolicy, B2bTax, LostSale, LostSaleHistogram, LostSaleTracking, ReorderPolicy, Shelf,

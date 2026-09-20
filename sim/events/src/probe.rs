@@ -63,6 +63,12 @@ pub enum Probe {
     SiteMaintenanceOverdueDays,
     /// Pokrycie etatowe zakładu w promilach.
     SiteLaborPct,
+    /// Odsetek załogi zakładu, która strajkuje, w punktach bazowych (M10e, `K-89`).
+    ///
+    /// Jedyna sonda w tym pliku, która nie karmi hazardu, tylko **warunek końca**:
+    /// zdarzenie `social/strike` gaśnie wtedy, gdy załoga wraca do pracy, a o tym
+    /// rozstrzyga związek zawodowy, nie kostka. Zero znaczy „pracują".
+    SiteStrikeBps,
     // ── firma (M7) ──────────────────────────────────────────────────────────
     /// Liczba zatrudnionych we wszystkich zakładach firmy.
     FirmHeadcount,

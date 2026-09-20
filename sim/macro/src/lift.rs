@@ -25,14 +25,17 @@ use magnat_firms::{Firms, SiteTypeCatalog};
 
 use crate::state::{MacroCell, MacroFirm, MacroState, N_NEEDS};
 use crate::types::{
-    cell_grain, BranchId, CitizenSeed, ClassId, CommuteMatrix, EpochState, MacroAccount,
-    MacroLedger, MacroStock, SparseVec, TechLevel,
+    cell_grain, BranchId, CitizenSeed, ClassId, EpochState, MacroAccount, MacroLedger, MacroStock,
+    SparseVec, TechLevel,
 };
 
-/// Ile minut kosztuje przeciętny dojazd między dzielnicami, dopóki `CommuteMatrix`
-/// jest płaska. Liczba pochodzi z rozkładu czasów dojazdu M4 (mediana dojazdu
-/// w mieście 4 km) i jest **stałą odniesienia**, nie kalibracją: zmienia ją
-/// wypełnienie macierzy przez M4, a nie przebieg balansatora.
+/// Ile minut kosztuje dojazd między dzielnicami, o których geometria nic nie mówi.
+/// Liczba pochodzi z rozkładu czasów dojazdu M4 (mediana dojazdu w mieście 4 km)
+/// i jest **stałą odniesienia**, nie kalibracją.
+///
+/// Od M10e jest już tylko wartością zapasową: macierz wypełnia się ze środków
+/// ciężkości dzielnic (`crate::commute`, decyzja `D10`), a płaska zostaje tam,
+/// gdzie nie ma ani mieszkańca, ani zakładu, z którego można by je policzyć.
 const FLAT_COMMUTE_MIN: u16 = 22;
 
 /// Marża odniesienia, z której zdjęcie odtwarza koszt własny półki, w bp.
@@ -61,7 +64,7 @@ pub fn lift(world: &World) -> MacroState {
     let grain = cell_grain(populacja, dzielnice);
 
     let mut st = MacroState::empty(grain, role, dzielnice);
-    st.commute = CommuteMatrix::flat(dzielnice, FLAT_COMMUTE_MIN);
+    st.commute = crate::commute::from_geometry(world, dzielnice, FLAT_COMMUTE_MIN);
     st.day = doba(world);
     st.tick = magnat_core::Tick(u64::from(st.day) * magnat_core::time::MINUTES_PER_DAY);
     st.epoch = EpochState::default();

@@ -54,6 +54,8 @@ fn zaklad(id: SiteId, firm: FirmKey) -> Site {
         rnd_accrued: Money::ZERO,
         pnl: Ring::<SitePnlMonth, 36>::new(),
         opened: SimMinute(0),
+        strike_bps: 0,
+        strike_bp_days: 0,
         delegation: None,
     }
 }

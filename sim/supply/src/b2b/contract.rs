@@ -506,6 +506,9 @@ impl B2b {
         now: SimMinute,
     ) -> Vec<Settlement> {
         let mut wynik = Vec::new();
+        // Wyniki dostaw dla relacji z dostawcą (M10e WP10.13) — zbierane w pętli,
+        // stosowane po niej, bo `self.contracts` jest w pętli pożyczony na mutację.
+        let mut relacje: Vec<crate::b2b::DeliveryOutcome> = Vec::new();
         for d in self.due_deliveries(now) {
             let dostepne = store.available(d.from_slot, d.good, magnat_core::Q::MIN);
             let masa = Mass(d.mass.0.min(dostepne.0.max(0)));
@@ -559,7 +562,27 @@ impl B2b {
                 }
                 if let Some(c) = self.contracts.get_mut(&idx) {
                     if wyslane {
-                        c.record_fulfilled(masa, 0);
+                        // Spóźnienie liczone od terminu harmonogramu, nie od zera.
+                        // Do M10e stała `0` znaczyła, że `late_deliveries` nie rosło
+                        // **nigdy**, a `Penalty::grace_minutes` było polem, którego
+                        // nikt nie czytał — zaufanie do dostawcy stałoby wtedy
+                        // wyłącznie na masie niedostarczonej (`FE-13`).
+                        //
+                        // `ponytail:` to jest spóźnienie **wysyłki**, nie dostawy.
+                        // Sufit jest jawny: opóźnienie rozładunku wymaga haka przy
+                        // przyjęciu partii i należy do M6 (`R2`). Dziś mierzy się
+                        // to, co widać stąd — i to jest więcej niż zero.
+                        let spoznienie =
+                            u32::try_from(now.0.saturating_sub(d.due_at.0)).unwrap_or(u32::MAX);
+                        c.record_fulfilled(masa, spoznienie);
+                        relacje.push(crate::b2b::DeliveryOutcome {
+                            buyer: c.buyer,
+                            supplier: c.seller,
+                            good: d.good,
+                            delivered: masa,
+                            missed: Mass::ZERO,
+                            late: spoznienie > c.penalty.grace_minutes,
+                        });
                         wynik.push(Settlement {
                             buyer: c.buyer,
                             deliver_to: c.deliver_to,
@@ -590,8 +613,19 @@ impl B2b {
                     .unwrap_or(Money::ZERO);
                 if let Some(c) = self.contracts.get_mut(&idx) {
                     c.accrue_penalty(brak, index_now);
+                    relacje.push(crate::b2b::DeliveryOutcome {
+                        buyer: c.buyer,
+                        supplier: c.seller,
+                        good: d.good,
+                        delivered: Mass::ZERO,
+                        missed: brak,
+                        late: false,
+                    });
                 }
             }
+        }
+        for o in relacje {
+            self.relations.record(o, now);
         }
         wynik
     }

@@ -38,6 +38,18 @@ fn kazda_definicja_moze_zajsc_w_dwudziestoleciu() {
         }
     };
     for d in &katalog().defs {
+        // Zdarzenie **wywoływane** przez świat nie ma hazardu i to jest poprawny
+        // stan: strajk jest skutkiem negocjacji, które padły, a nie rzutu (`K-89`).
+        // Lista jest zamknięta i jawna, więc zero wpisane przez pomyłkę nadal
+        // wywraca ten test.
+        if magnat_events::CALLED_EVENTS.contains(&d.key.as_str()) {
+            assert_eq!(
+                d.trigger.base_ppm, 0,
+                "`{}` jest na liście wywoływanych, a ma hazard — dwie drogi powstania                  jednego zdarzenia znaczą dwa zdarzenia naraz",
+                d.key
+            );
+            continue;
+        }
         // Najwyższy mnożnik, jaki krzywe tej definicji mogą dać razem.
         let szczyt: f64 = d
             .trigger

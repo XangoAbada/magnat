@@ -138,6 +138,23 @@ pub struct Site {
     pub rnd_accrued: Money,
     pub pnl: Ring<SitePnlMonth, 36>,
     pub opened: SimMinute,
+    /// Odsetek załogi, która **w tej chwili** strajkuje, w punktach bazowych
+    /// (M10e WP10.14, `K-9`). Zero znaczy „pracują".
+    ///
+    /// Pole jest tu, a nie przy związku, z tego samego powodu co `labor_pct`
+    /// w `PlantSite` (`K-44`): piszącym jest `sim/economy` (związki), a czytelnicy
+    /// stoją **pod** nim — lista płac w tym crate'cie i sonda generatora zdarzeń,
+    /// który zatrzymuje produkcję. Związek w `sim/economy` nie mógłby ich obsłużyć,
+    /// bo oba stoją niżej w grafie zależności.
+    pub strike_bps: u16,
+    /// Suma `strike_bps` po dobach bieżącego miesiąca — mianownikiem jest
+    /// `30 × 10 000`. Lista płac odejmuje z niej nieprzepracowane dni i zeruje.
+    ///
+    /// Osobne pole od `strike_bps`, bo to są dwie różne liczby: jedna mówi, co jest
+    /// dziś, druga — za co firma ma nie zapłacić. Wypłata jest miesięczna, więc bez
+    /// licznika strajk trwający dwa tygodnie kosztowałby dokładnie tyle samo co
+    /// strajk trwający dobę, byle skończył się przed dniem wypłaty.
+    pub strike_bp_days: u32,
     /// Menedżer i polityka, jeśli zakład jest zdelegowany (M7c WP7).
     ///
     /// `None` znaczy „prowadzi go właściciel" — dla firmy AI jest to zakład sterowany
@@ -190,6 +207,8 @@ impl Site {
             rnd_accrued: Money::ZERO,
             pnl: Ring::new(),
             opened: at.opened,
+            strike_bps: 0,
+            strike_bp_days: 0,
             delegation: None,
         }
     }
@@ -362,6 +381,10 @@ impl HashState for Site {
         self.rnd_accrued.hash_state(h);
         self.pnl.hash_state(h);
         self.opened.hash_state(h);
+        // Strajk zmienia to, ile zakład produkuje i komu firma płaci — czyli stan
+        // gospodarki, a nie szczegół prezentacji.
+        h.write_u16(self.strike_bps);
+        h.write_u32(self.strike_bp_days);
         match &self.delegation {
             None => h.write_u8(0),
             Some(d) => {

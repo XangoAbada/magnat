@@ -458,7 +458,7 @@ czasu `D-N6` przy `R2-WP18` zostają bez zmian, a status wraca tutaj po zamknię
 | 8 | Rodzeństwo z zasiedlenia i napływu bez relacji `Sibling` | — | R2-WP2 | `[ ]` |
 | 9 | Babcia dostaje z wnukiem relację `Sibling`; brak `Grandparent` | — | R2-WP2 | `[ ]` |
 | 10 | Dziecko urodzone w pełnym gospodarstwie nie wchodzi do listy członków | — | R2-WP3 | `[ ]` |
-| 11 ⇧ | Uczeń wchodzi do indeksu miejsc pracy i dostaje relacje `Colleague` | zapis `M3d` `E-19` (przyczyna) | R2-WP1 | `[ ]` |
+| 11 ⇧ | Uczeń wchodzi do indeksu miejsc pracy i dostaje relacje `Colleague` | zapis `M3d` `E-19` (przyczyna) | R2-WP1 | `[x]` wykonane w `K-74` (2026-09-18); M10e policzył warunek uzwiązkowienia na `coworkers` bez ani jednego filtra |
 | 12 | Warstwa piesza dopuszcza drogi szybkiego ruchu | — | R2-WP15 → **M11c** | `[x]` **zamknięte w M11c** (`J-13`) |
 | 13 | Motoryzacja to płaska stawka 430 ‰ bez związku z dochodem | zapis `M4b` `L-12` | R2-WP13 | `[ ]` |
 | 14 | Potrzeba `Status`: tempo 0, brak miejsc, `StatusLoss` pusty | zapis `M3a` `D-15` | R2-WP16 | `[ ]` |

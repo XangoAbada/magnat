@@ -352,6 +352,17 @@
         "ui.reason.PerilStruck": One("{ryzyko} in district {dzielnica} — {strata} worth of goods destroyed"),
         "ui.reason.Underwritten": One("a policy against {ryzyko} was written — {stawka} a year, {skladka} a month"),
         "ui.reason.ClaimPaid": One("a claim of {kwota} was paid"),
+
+        // ── M10e: relations, cartels, unions ───────────────────────────────────
+        "ui.reason.TrustedSupplier": One("chose the long-standing supplier despite the higher price — trust {zaufanie} out of 100, scoring edge {przewaga}"),
+        "ui.reason.CartelFormed": One("{firm} firms agreed on a floor price of {cena} — this is illegal and nobody knows yet"),
+        "ui.reason.CartelDetected": One("the regulator uncovered a cartel of {firm} firms after {miesiecy} months"),
+        "ui.reason.BrandScandal": One("a scandal around brand {marka} — goodwill drops by {spadek} points"),
+        "ui.reason.UnionFormed": One("the crew formed a union — support {gestosc} out of 100, grievance level {zal}"),
+        "ui.reason.WageDemandMade": One("the union demands a raise of {podwyzka}, pointing at {odniesienie} paid elsewhere"),
+        "ui.reason.StrikeStarted": One("talks broke down in round {runda} — {udzial} of the crew walked out"),
+        "ui.reason.StrikeEndedWon": One("the strike ended after {dni} days — the crew won {podwyzka}"),
+        "ui.reason.StrikeEndedLost": One("the strike ended after {dni} days — the fund ran dry and people came back with nothing"),
         "ui.peril.Fire": One("fire"),
         "ui.peril.Flood": One("flood"),
         "ui.touch_source.Owned": One("own — employer or regular shop"),

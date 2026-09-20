@@ -1467,6 +1467,92 @@ pub fn describe(c: &Catalog, l: Locale, r: DecisionReason) -> String {
             "ui.reason.ClaimPaid",
             &[("kwota", &crate::zlotowki(paid))],
         ),
+        // ── M10e: relacje, kartele, związki ──────────────────────────────────────
+        // Towar jest w ładunku, ale nie w zdaniu: `GoodId` rozwiązuje katalog
+        // z `sim/supply`, którego `engine/ui` nie widzi — ta sama granica co przy
+        // `SupplierChosen` od M6.
+        DecisionReason::TrustedSupplier {
+            supplier: _,
+            trust,
+            discount_bp,
+        } => c.fmt_key(
+            l,
+            "ui.reason.TrustedSupplier",
+            &[
+                ("zaufanie", &format!("{}", trust.get())),
+                ("przewaga", &procent_bp(i32::from(discount_bp))),
+            ],
+        ),
+        DecisionReason::CartelFormed {
+            good: _,
+            members,
+            floor,
+        } => c.fmt_key(
+            l,
+            "ui.reason.CartelFormed",
+            &[
+                ("firm", &format!("{members}")),
+                ("cena", &crate::zlotowki(floor)),
+            ],
+        ),
+        DecisionReason::CartelDetected {
+            good: _,
+            members,
+            months,
+        } => c.fmt_key(
+            l,
+            "ui.reason.CartelDetected",
+            &[
+                ("firm", &format!("{members}")),
+                ("miesiecy", &months.to_string()),
+            ],
+        ),
+        DecisionReason::BrandScandal { brand, drop } => c.fmt_key(
+            l,
+            "ui.reason.BrandScandal",
+            &[("marka", &marka(brand)), ("spadek", &format!("{drop}"))],
+        ),
+        DecisionReason::UnionFormed { density, grievance } => c.fmt_key(
+            l,
+            "ui.reason.UnionFormed",
+            &[
+                ("gestosc", &format!("{}", density.get())),
+                ("zal", &format!("{}", grievance.get())),
+            ],
+        ),
+        DecisionReason::WageDemandMade { raise_bp, anchor } => c.fmt_key(
+            l,
+            "ui.reason.WageDemandMade",
+            &[
+                ("podwyzka", &procent_bp(i32::from(raise_bp))),
+                ("odniesienie", &crate::zlotowki(anchor)),
+            ],
+        ),
+        DecisionReason::StrikeStarted {
+            participation_bp,
+            round,
+        } => c.fmt_key(
+            l,
+            "ui.reason.StrikeStarted",
+            &[
+                ("udzial", &procent_bp(i32::from(participation_bp))),
+                ("runda", &format!("{round}")),
+            ],
+        ),
+        // Zero podwyżki znaczy kapitulację, a nie brak pomiaru — i to są dwa różne
+        // zdania dla gracza, więc rozstrzyga **klucz**, a nie wstawka.
+        DecisionReason::StrikeEnded { days, raise_bp } => c.fmt_key(
+            l,
+            if raise_bp == 0 {
+                "ui.reason.StrikeEndedLost"
+            } else {
+                "ui.reason.StrikeEndedWon"
+            },
+            &[
+                ("dni", &days.to_string()),
+                ("podwyzka", &procent_bp(i32::from(raise_bp))),
+            ],
+        ),
     }
 }
 

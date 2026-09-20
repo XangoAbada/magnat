@@ -225,6 +225,7 @@ impl Market {
                     district: DistrictId(shop.district),
                     good: linia.good,
                     price_net: m.tax.net_from_gross(linia.good, pc.current),
+                    price_gross: pc.current,
                     qty,
                 });
             }

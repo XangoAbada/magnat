@@ -105,6 +105,13 @@ pub fn krok(ev: &mut Events, world: &mut World, t: Tick, seed: u64) {
         });
     }
 
+    // 3b. Zdarzenia **wywołane**, nie wylosowane: strajk ogłoszony przez związek
+    //     zawodowy (M10e, `K-89`). Stoi po wygaszaniu i przed oceną, bo strajk ma
+    //     zacząć się w tej dobie, w której zapadł, a nie w następnej.
+    if poczatek_doby {
+        wezwania_do_strajku(ev, world, t, day);
+    }
+
     // 4. Ocena: co godzinę awarie, raz na dobę reszta.
     oceny(ev, world, t, seed, true);
     if poczatek_doby {
@@ -271,6 +278,76 @@ fn oceny(ev: &mut Events, world: &mut World, t: Tick, seed: u64, hourly: bool) {
             t,
         );
         zglos_szkode(world, &d, f.scope, f.severity_bps, day);
+    }
+}
+
+/// Klucz definicji strajku w katalogu. Stała tekstowa, a nie indeks: kolejność
+/// wpisów w `data/events/` nigdy nie była kontraktem, a klucz jest (`K-86`).
+pub const STRIKE_KEY: &str = "social/strike";
+
+/// Definicje, które **wywołuje świat**, a nie hazard. Ich `base_ppm` jest zerem
+/// i to jest poprawny stan, a nie martwa definicja (`R2`) — test katalogu pyta
+/// o tę listę, więc zero wpisane przez pomyłkę nadal łamie build.
+pub const CALLED_EVENTS: &[&str] = &[STRIKE_KEY];
+
+/// Otwiera zdarzenia, o które poprosił świat (M10e WP10.14, `K-89`).
+///
+/// **To jest druga droga, którą zdarzenie powstaje, i jedyna wolna od rzutu.**
+/// Pierwsza — hazard ze stanu świata — zostaje bez zmian i jest domyślna. Ta
+/// istnieje, bo strajk nie jest zjawiskiem losowym: jest skutkiem negocjacji,
+/// które padły, a negocjacje prowadzi `sim/economy` (`K-9`). Kierunek jest
+/// wymuszony grafem — `sim/events` zależy od `sim/economy`, nigdy odwrotnie —
+/// więc związek zostawia wezwanie, a rejestr je odbiera. Ta sama droga co przy
+/// [`zglos_szkode`], tylko w drugą stronę.
+///
+/// Świat bez związków nie płaci za to ani cyklu: zasobu nie ma, więc nie ma
+/// czego odbierać.
+fn wezwania_do_strajku(ev: &mut Events, world: &mut World, t: Tick, day: u64) {
+    let wezwania = match world.get_resource_mut::<magnat_economy::Unions>() {
+        Some(u) => u.take_calls(),
+        None => return,
+    };
+    if wezwania.is_empty() {
+        return;
+    }
+    let Some(def) = ev
+        .catalog()
+        .defs
+        .iter()
+        .position(|d| d.key == STRIKE_KEY)
+        .and_then(|i| u16::try_from(i).ok())
+    else {
+        return;
+    };
+    for w in wezwania {
+        let scope = ScopeInstance::Site(w.site);
+        // Drugi strajk w tym samym zakładzie byłby drugim zdarzeniem o jednym
+        // przestoju — a `max_concurrent` tego nie łapie, bo liczy definicję,
+        // nie instancję.
+        if ev.busy(def, scope) {
+            continue;
+        }
+        let patches = {
+            let firms = world.get_resource::<magnat_firms::Firms>();
+            let grids = world.get_resource::<UtilityGrids>();
+            apply::expand(ev, def, scope, w.participation_bp, firms, grids)
+        };
+        ev.open(
+            WorldEvent {
+                id: magnat_core::EventId(0),
+                def,
+                scope,
+                started_day: day,
+                // Koniec rozstrzyga sonda `SiteStrikeBps`, czyli powrót załogi
+                // do pracy — nigdy wylosowana liczba dób.
+                ends_day: None,
+                min_end_day: day + 1,
+                severity_bps: w.participation_bp,
+                cause: EventCause::Forced,
+                patches,
+            },
+            t,
+        );
     }
 }
 

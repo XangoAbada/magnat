@@ -66,6 +66,13 @@ pub fn dobowy(
     //    (`CF-1`); miasto odbiera stąd wyłącznie fakt i zamienia go na sprawę.
     let skontrolowane = swiezo_skontrolowane(world, market, t);
 
+    // 2b. Zmowy cenowe wykryte przez model (M10e WP10.13, `K-10`). Dwie linie
+    //     w dwie strony: miasto mówi modelowi, jak mocny jest jego urząd, a model
+    //     oddaje sprawy do poprowadzenia. Sam hazard liczy `sim/economy`, bo to
+    //     on widzi ceny i skład zmowy; egzekucję prowadzi miasto, bo to ono ma
+    //     urząd, dowody i termin.
+    let zmowy = kartele(city, world);
+
     // 3. Urzędy: otwieranie spraw, dowody, rozstrzygnięcia.
     //
     //    Rejestr firm wyjmuje się ze świata na czas kroku (`std::mem::take`), bo
@@ -75,6 +82,18 @@ pub fn dobowy(
         .get_resource_mut::<magnat_firms::Firms>()
         .map(std::mem::take);
     let mut powody = law::step_day(city, market, firms.as_ref(), &skontrolowane, &tuning, t);
+    for z in zmowy {
+        if let Some(powod) = city.enforcement.otworz_z(
+            magnat_core::AgencyKind::Antitrust,
+            crate::law::CaseOrigin::Cartel,
+            z.site,
+            z.firm,
+            z.evidence,
+            t,
+        ) {
+            powody.push((z.site, powod));
+        }
+    }
     if let (Some(f), Some(slot)) = (firms, world.get_resource_mut::<magnat_firms::Firms>()) {
         *slot = f;
     }
@@ -92,6 +111,30 @@ pub fn dobowy(
         }
     }
     powody
+}
+
+/// Wymiana z modelem zmów: w dół idzie siła urzędu, w górę — wykryte sprawy.
+///
+/// Aktywność liczy się z obsady urzędu antymonopolowego wobec obsady nominalnej
+/// (jeden inspektor = nominał). Sufitem jest dwukrotność, bo urząd nie znajduje
+/// wszystkiego nawet z armią ludzi; **podłogą połowa, a nie zero**, i to jest
+/// decyzja: zmowa wychodzi na jaw także wtedy, gdy nikt jej nie szuka — od
+/// konkurenta, od zwolnionego menedżera, z gazety. Miasto bez inspektorów
+/// przestaje **karać**, bo `Enforcement::otworz` odmówi bez wolnego inspektora,
+/// ale nie przestaje się dowiadywać.
+///
+/// Świat bez zmów nie płaci za to ani cyklu: zasobu nie ma, więc nie ma z kim
+/// rozmawiać — ta sama degradacja co przy `Insurers::report_peril` (`K-86`).
+fn kartele(city: &City, world: &mut World) -> Vec<magnat_economy::relations::DetectedCartel> {
+    let inspektorzy = city
+        .enforcement
+        .agency(magnat_core::AgencyKind::Antitrust)
+        .inspectors;
+    let Some(c) = world.get_resource_mut::<magnat_economy::Cartels>() else {
+        return Vec::new();
+    };
+    c.set_enforcement_bp(inspektorzy.saturating_mul(10_000).max(5_000));
+    c.take_detected()
 }
 
 /// Miesięczny krok M8d: obsada, jakość, pokrycie, ubytki i szara strefa.

@@ -873,7 +873,70 @@ pub enum DecisionReason {
     } = 815,
     /// Ubezpieczyciel wypłacił odszkodowanie (M10d WP10.12).
     ClaimPaid { insurer: FirmId, paid: Money } = 816,
-    // 817–899 zarezerwowane dla M10e–M10f (relacje, kartele, związki, kroniki).
+    /// Kupujący wybrał droższą ofertę, bo jest od stałego dostawcy
+    /// (M10e WP10.13, PRD §7.9).
+    ///
+    /// Powód powstaje **tylko wtedy, gdy rabat rozstrzygnął** — czyli gdy bez
+    /// niego wygrałby ktoś inny. Zapisywanie go przy każdym zakupie od znajomego
+    /// dostawcy zamieniłoby go w szum: gracz pyta „dlaczego przepłaciłem", a nie
+    /// „od kogo kupiłem". `discount_bp` jest preferencją w funkcji celu, a nie
+    /// obniżką ceny: firma **płaci pełną kwotę** i to jest treść tego wariantu.
+    TrustedSupplier {
+        supplier: FirmId,
+        trust: Q,
+        discount_bp: u16,
+    } = 817,
+    /// Firmy uzgodniły cenę minimalną towaru (M10e WP10.13, PRD §7.9).
+    ///
+    /// Zmowa jest **nielegalna od pierwszej minuty**, ale nikt o niej nie wie:
+    /// do kroniki trafia dopiero wykrycie (§5.9), bo wpis w chwili zawiązania
+    /// zdradzałby graczowi tajemnicę, której uczestnicy pilnują.
+    CartelFormed {
+        good: GoodId,
+        members: u8,
+        floor: Money,
+    } = 818,
+    /// Regulator wykrył zmowę (M10e WP10.13, PRD §7.9, `K-10` — sprawę prowadzi M8).
+    ///
+    /// `months` mówi, ile kartel przetrwał. To jest liczba, o którą gra się toczy:
+    /// zmowa umiarkowana żyje latami, chciwa — kwartał.
+    CartelDetected {
+        good: GoodId,
+        members: u8,
+        months: u16,
+    } = 819,
+    /// Marka oberwała od skandalu — zmowy, strajku albo tekstu w prasie
+    /// (M10e WP10.13/WP10.14, PRD §7.6).
+    ///
+    /// Osobny wariant od [`DecisionReason::BrandExperience`] z rozmysłu: tamten
+    /// mówi „kupiłem i się rozczarowałem", ten — „usłyszałem i przestałem lubić".
+    /// Dla gracza to dwa różne pytania i dwie różne naprawy.
+    BrandScandal { brand: BrandId, drop: u8 } = 820,
+    /// Załoga zakładu zawiązała związek zawodowy (M10e WP10.14, PRD §6.6, `K-9`).
+    ///
+    /// Zakład jest kontekstem wpisu (dziennik decyzji firmy), więc w ładunku są
+    /// dwie liczby, które odpowiadają na „dlaczego akurat tu": gęstość poparcia
+    /// i poziom żalu w chwili zawiązania.
+    UnionFormed { density: Q, grievance: Q } = 821,
+    /// Związek przedstawił żądanie płacowe (M10e WP10.14, PRD §6.6).
+    ///
+    /// `anchor` jest **płacą znaną załodze z grafu relacji i plotki**, a nie
+    /// prawdziwą medianą miejską (§5.9): związek może żądać za dużo albo za mało,
+    /// bo ma niepełną informację, i to jest realizm z systemu, nie z parametru.
+    WageDemandMade { raise_bp: u16, anchor: Money } = 822,
+    /// Negocjacje padły i zakład stanął (M10e WP10.14, PRD §6.6).
+    ///
+    /// `participation_bp` jest odsetkiem załogi, która przystąpiła do strajku —
+    /// ta sama liczba jedzie jako siła zdarzenia `social/strike`, więc produkcja
+    /// spada dokładnie o tyle, ilu ludzi wyszło.
+    StrikeStarted { participation_bp: u16, round: u8 } = 823,
+    /// Strajk się skończył (M10e WP10.14, PRD §6.6).
+    ///
+    /// `raise_bp` zero znaczy **kapitulację związku**: fundusz się wyczerpał
+    /// i ludzie wrócili bez podwyżki. To jest jedyny wariant, w którym zero
+    /// jest odpowiedzią, a nie brakiem pomiaru.
+    StrikeEnded { days: u16, raise_bp: u16 } = 824,
+    // 825–899 zarezerwowane dla M10f (kroniki i domknięcie).
     // ... kolejne fazy dopisują własne bloki na końcu pliku
 }
 
@@ -990,6 +1053,14 @@ impl DecisionReason {
             DecisionReason::PerilStruck { .. } => 814,
             DecisionReason::Underwritten { .. } => 815,
             DecisionReason::ClaimPaid { .. } => 816,
+            DecisionReason::TrustedSupplier { .. } => 817,
+            DecisionReason::CartelFormed { .. } => 818,
+            DecisionReason::CartelDetected { .. } => 819,
+            DecisionReason::BrandScandal { .. } => 820,
+            DecisionReason::UnionFormed { .. } => 821,
+            DecisionReason::WageDemandMade { .. } => 822,
+            DecisionReason::StrikeStarted { .. } => 823,
+            DecisionReason::StrikeEnded { .. } => 824,
         }
     }
 }

@@ -80,6 +80,21 @@ impl Remedy {
     }
 }
 
+/// Z czego wzięła się sprawa. Nie jest to słownik dla `core` (`K-8`): ma jednego
+/// właściciela i jednego czytelnika — ten plik.
+///
+/// Istnieje, bo urząd antymonopolowy prowadzi od M10e **dwie różne sprawy**:
+/// za dominację (przymusowy podział) i za zmowę cenową (kara pieniężna). Gdyby
+/// obie kończyły się tym samym środkiem, wykrycie kartelu zamykałoby sklepy
+/// wszystkich członków naraz — czyli karałoby miasto mocniej niż zmowę.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum CaseOrigin {
+    /// Próg na stanie świata: udział w obrocie, masa odpisów, emisja, płaca.
+    Threshold,
+    /// Zmowa cenowa wykryta przez model (M10e WP10.13, `K-10`).
+    Cartel,
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Case {
     pub id: CaseId,
@@ -88,6 +103,7 @@ pub struct Case {
     pub subject: SiteId,
     pub firm: FirmId,
     pub agency: AgencyKind,
+    pub origin: CaseOrigin,
     pub opened_at: Tick,
     pub evidence: Q,
     pub remedy: Option<Remedy>,
@@ -194,6 +210,12 @@ impl Enforcement {
         self.min_wage = if m.get() > 0 { Some(m) } else { None };
     }
 
+    /// Urząd tego rodzaju — odczyt dla panelu i dla kalibracji hazardu zmów.
+    #[must_use]
+    pub fn agency(&self, kind: AgencyKind) -> &Agency {
+        &self.agencies[kind.as_index()]
+    }
+
     pub fn set_inspectors(&mut self, kind: AgencyKind, n: u32) {
         self.agencies[kind.as_index()].inspectors = n;
     }
@@ -253,6 +275,21 @@ impl Enforcement {
         evidence: Q,
         t: Tick,
     ) -> Option<DecisionReason> {
+        self.otworz_z(agency, CaseOrigin::Threshold, site, firm, evidence, t)
+    }
+
+    /// Otwarcie sprawy o znanym pochodzeniu. Druga nazwa, a nie druga ścieżka:
+    /// [`Enforcement::otworz`] jest jej opakowaniem, więc limit spraw, odsiewanie
+    /// powtórek i dowody działają tak samo dla każdego wołającego (`K-11`).
+    pub fn otworz_z(
+        &mut self,
+        agency: AgencyKind,
+        origin: CaseOrigin,
+        site: SiteId,
+        firm: FirmId,
+        evidence: Q,
+        t: Tick,
+    ) -> Option<DecisionReason> {
         if self.ma_otwarta(agency, site) || !self.ma_miejsce(agency) {
             return None;
         }
@@ -263,6 +300,7 @@ impl Enforcement {
             subject: site,
             firm,
             agency,
+            origin,
             opened_at: t,
             evidence,
             remedy: None,
@@ -286,6 +324,7 @@ impl HashState for Enforcement {
             h.write_u32(c.id.0);
             h.write_u64(c.subject.0.to_bits());
             h.write_u8(c.agency.as_index() as u8);
+            h.write_u8(u8::from(c.origin == CaseOrigin::Cartel));
             h.write_u64(c.opened_at.get());
             h.write_u8(c.evidence.get());
             h.write_u8(c.remedy.map_or(255, |r| r.kind().as_index() as u8));
@@ -500,7 +539,7 @@ fn prowadz_sprawy(
         }
     };
 
-    let mut do_rozstrzygniecia: Vec<(usize, AgencyKind, SiteId, FirmId)> = Vec::new();
+    let mut do_rozstrzygniecia: Vec<(usize, AgencyKind, CaseOrigin, SiteId, FirmId)> = Vec::new();
     let mut umorzone: Vec<usize> = Vec::new();
     let limit = u64::from(p.case_expire_days) * 1_440;
     for (i, c) in city.enforcement.cases.iter_mut().enumerate() {
@@ -513,7 +552,7 @@ fn prowadz_sprawy(
         }
         c.evidence = c.evidence.saturating_add(przyrost[c.agency.as_index()]);
         if c.evidence.get() >= p.evidence_to_close {
-            do_rozstrzygniecia.push((i, c.agency, c.subject, c.firm));
+            do_rozstrzygniecia.push((i, c.agency, c.origin, c.subject, c.firm));
         } else if t.get().saturating_sub(c.opened_at.get()) > limit {
             umorzone.push(i);
         }
@@ -525,8 +564,8 @@ fn prowadz_sprawy(
     }
 
     let mut out = Vec::new();
-    for (i, agency, site, _firm) in do_rozstrzygniecia {
-        let srodek = naloz_srodek(city, market, tuning, agency, site, t);
+    for (i, agency, origin, site, _firm) in do_rozstrzygniecia {
+        let srodek = naloz_srodek(city, market, tuning, agency, origin, site, t);
         city.enforcement.cases[i].remedy = Some(srodek);
         city.enforcement.cases[i].closed_at = Some(t);
         city.enforcement.agencies[agency.as_index()].closed += 1;
@@ -542,13 +581,20 @@ fn prowadz_sprawy(
     out
 }
 
+/// Najniższa kara za zmowę, w groszach. Zmowa firmy bez zmierzonego obrotu
+/// (zakład produkcyjny, sklep świeżo otwarty) i tak ma kosztować: kara zero
+/// znaczyłaby, że opłaca się zmawiać przed pierwszym rachunkiem wyniku.
+const CARTEL_MIN_FINE: i64 = 100_000;
+
 /// Nakłada środek zaradczy i wykonuje go. Jedno miejsce, bo wykonanie i zapis
 /// muszą iść razem: środek zapisany bez skutku byłby napisem w kartotece.
+#[allow(clippy::too_many_arguments)]
 fn naloz_srodek(
     city: &mut City,
     market: &Market,
     tuning: &CityTuning,
     agency: AgencyKind,
+    origin: CaseOrigin,
     site: SiteId,
     t: Tick,
 ) -> Remedy {
@@ -611,6 +657,26 @@ fn naloz_srodek(
             // w stan, a sanepid w podatek.
             market.reset_expired_mass(site);
             Remedy::Closure { until }
+        }
+        // Zmowa cenowa kończy się **karą pieniężną**, a nie podziałem: zmówiło się
+        // kilku, a zamknięcie każdego z nich zabrałoby dzielnicy cały handel tym
+        // towarem naraz — kara spadłaby na klientów, nie na winnych (M10e WP10.13).
+        AgencyKind::Antitrust if origin == CaseOrigin::Cartel => {
+            let podstawa = market.declared_revenue_recent(site, 12);
+            let kwota =
+                Money((podstawa.get() * i64::from(p.fine_bp) / 10_000).max(CARTEL_MIN_FINE));
+            city.charges.accrue(
+                TaxPayer::Site(site),
+                TaxKind::License,
+                crate::assess::poprzedni_miesiac(t),
+                podstawa,
+                Mass::ZERO,
+                p.fine_bp,
+                kwota,
+                t,
+                due_on_day(t, city.code.vat_due_day),
+            );
+            Remedy::Fine(kwota)
         }
         AgencyKind::Antitrust => {
             // ponytail: przymusowy podział wykonuje się dziś **zamknięciem** zakładu,

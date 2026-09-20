@@ -354,6 +354,17 @@
         "ui.reason.PerilStruck": One("{ryzyko} w dzielnicy {dzielnica} — przepadło towaru za {strata}"),
         "ui.reason.Underwritten": One("polisa od ryzyka {ryzyko} wystawiona — stawka {stawka} rocznie, składka {skladka} miesięcznie"),
         "ui.reason.ClaimPaid": One("wypłacono odszkodowanie {kwota}"),
+
+        // ── M10e: relacje, kartele, związki ────────────────────────────────────
+        "ui.reason.TrustedSupplier": One("wybrano stałego dostawcę mimo wyższej ceny — zaufanie {zaufanie} na 100, przewaga w ocenie {przewaga}"),
+        "ui.reason.CartelFormed": One("{firm} firm uzgodniło cenę minimalną {cena} — to jest nielegalne i nikt o tym jeszcze nie wie"),
+        "ui.reason.CartelDetected": One("regulator wykrył zmowę {firm} firm po {miesiecy} miesiącach"),
+        "ui.reason.BrandScandal": One("skandal wokół marki {marka} — sympatia spada o {spadek} punktów"),
+        "ui.reason.UnionFormed": One("załoga zawiązała związek zawodowy — poparcie {gestosc} na 100, poziom żalu {zal}"),
+        "ui.reason.WageDemandMade": One("związek żąda podwyżki o {podwyzka}, powołując się na {odniesienie} u innych"),
+        "ui.reason.StrikeStarted": One("negocjacje padły w rundzie {runda} — strajkuje {udzial} załogi"),
+        "ui.reason.StrikeEndedWon": One("strajk skończony po {dni} dniach — załoga wywalczyła {podwyzka}"),
+        "ui.reason.StrikeEndedLost": One("strajk skończony po {dni} dniach — fundusz się wyczerpał i ludzie wrócili bez podwyżki"),
         "ui.peril.Fire": One("pożar"),
         "ui.peril.Flood": One("powódź"),
         "ui.touch_source.Owned": One("własne — pracodawca albo stały sklep"),

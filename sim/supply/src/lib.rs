@@ -36,11 +36,11 @@ pub mod transport;
 pub mod tuning;
 
 pub use b2b::{
-    gate_allows, B2b, ContractDelivery, ContractError, ContractPricing, DeliverySchedule,
-    Exclusives, ImportQuote, Lock, Penalty, PendingImport, Quote, QuoteId, Rfq, RfqDraft,
-    RfqOutcome, SellerIndex, SellerRef, Settlement, SupplyContract, SupplyContractDraft,
-    TariffClass, TariffError, TariffTable, TradeError, TradeGood, TradeNode, TradeNodeId,
-    WhoTransports, TARIFFS_SCHEMA_VERSION,
+    gate_allows, B2b, ContractDelivery, ContractError, ContractPricing, DeliveryOutcome,
+    DeliverySchedule, Exclusives, ImportQuote, Lock, Penalty, PendingImport, Quote, QuoteId,
+    RelationTuning, Relations, Rfq, RfqDraft, RfqOutcome, SellerIndex, SellerRef, Settlement,
+    SupplierRelation, SupplyContract, SupplyContractDraft, TariffClass, TariffError, TariffTable,
+    TradeError, TradeGood, TradeNode, TradeNodeId, WhoTransports, TARIFFS_SCHEMA_VERSION,
 };
 pub use batch::{
     brand_of, firm_of, Batch, BatchEvent, BatchFlags, BatchId, BatchLedger, BatchLocation,

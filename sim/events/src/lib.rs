@@ -59,5 +59,7 @@ pub use registry::{
     ChronicleEntry, Diagnosis, EventCause, Events, ResolveError, ResolvedEffect, ScopeInstance,
     WorldEvent,
 };
-pub use system::{indicators as city_indicators, krok, register_events, EventSystem};
+pub use system::{
+    indicators as city_indicators, krok, register_events, EventSystem, CALLED_EVENTS, STRIKE_KEY,
+};
 pub use weather::{ClimateNorms, WeatherState, PRECIP_RING};

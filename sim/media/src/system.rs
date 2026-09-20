@@ -474,6 +474,16 @@ fn pr(world: &mut World, spis: &DistrictRoster, c: &AdCampaign, t: Tick) {
     }
 }
 
+/// O ile najwyżej spada sympatia do marki po najgorszym możliwym tekście.
+///
+/// `ponytail:` stała w kodzie, nie w `data/tuning/brand.ron`. Sufit jest nazwany:
+/// dopóki nie ma przebiegu balansatora mierzącego, ile marek rocznie obrywa od
+/// prasy, liczba w danych byłaby parametrem bez pytania, na które odpowiada.
+/// Ścieżka wyjścia: pole `scandal_drop` obok `k_up`/`k_down` w sekcji `memory`.
+/// Dla porównania zmowa cenowa zabiera 20 punktów (`data/tuning/relations.ron`)
+/// i ma to być cios mocniejszy niż jeden zły artykuł.
+const SCANDAL_MAX_DROP: u8 = 12;
+
 /// Redakcja: co dobę każdy tytuł wybiera teksty ze strumienia zdarzeń M8.
 fn redakcja(world: &mut World, spis: &DistrictRoster, t: Tick, raport: &mut MediaReport) {
     // **Nowina jest nowa.** Bez tego warunku redakcja opisywałaby ten sam strajk
@@ -505,15 +515,23 @@ fn redakcja(world: &mut World, spis: &DistrictRoster, t: Tick, raport: &mut Medi
 
     for (site, bias, wiarygodnosc, _) in tytuly {
         // Wartość informacyjna: skala zdarzenia przez wagę linii redakcyjnej.
-        let mut ranking: Vec<(u32, magnat_core::EventId, magnat_core::EventCategory)> = kandydaci
+        let mut ranking: Vec<(
+            u32,
+            magnat_core::EventId,
+            magnat_core::EventCategory,
+            u16,
+            magnat_events::ScopeInstance,
+        )> = kandydaci
             .iter()
-            .map(|(id, cat, sev, _)| (dane.news_value(bias, *cat, *sev), *id, *cat))
+            .map(|(id, cat, sev, scope)| {
+                (dane.news_value(bias, *cat, *sev), *id, *cat, *sev, *scope)
+            })
             .collect();
-        ranking.sort_unstable_by_key(|(w, id, _)| (std::cmp::Reverse(*w), id.0));
+        ranking.sort_unstable_by_key(|(w, id, ..)| (std::cmp::Reverse(*w), id.0));
         let mut r = rng(seed, StreamId::MediaEditorial, site.entity().index(), t);
         let ile = u32::from(dane.stories_min)
             + r.gen_range_u32(u32::from(dane.stories_max.saturating_sub(dane.stories_min)) + 1);
-        for (_, event, category) in ranking.into_iter().take(ile as usize) {
+        for (_, event, category, severity, scope) in ranking.into_iter().take(ile as usize) {
             if world
                 .resource::<Outlets>()
                 .stories()
@@ -541,6 +559,25 @@ fn redakcja(world: &mut World, spis: &DistrictRoster, t: Tick, raport: &mut Medi
                 story.add_known(d, n as u32);
             }
             let zasieg = story.reach_permille(spis.population());
+
+            // **Tekst uderza w markę tego, o kim jest** (M10e, `FE-3`). Do M10d
+            // publikacja budowała wyłącznie znajomość tytułu, więc obietnica
+            // z §1 dokumentu fazy — „gazeta pisze o strajku, marka gracza traci
+            // afinitet" — nie miała ostatniego ogniwa. Skandal dociera **tylko
+            // do tych, którzy markę znają**: kto o firmie nie słyszał, ten po
+            // przeczytaniu o cudzym strajku nadal o niej nie słyszał.
+            let bohater = podmiot_tekstu(world, scope);
+            // Zła nowina dotyczy zdarzeń społecznych i firmowych; pogoda i awaria
+            // sieci nie są niczyją winą i marki nie dotykają.
+            let uderzenie = matches!(
+                category,
+                magnat_core::EventCategory::Social | magnat_core::EventCategory::Firm
+            )
+            .then(|| {
+                u8::try_from(u32::from(SCANDAL_MAX_DROP) * u32::from(severity) / 10_000)
+                    .unwrap_or(SCANDAL_MAX_DROP)
+            })
+            .filter(|d| *d > 0);
 
             // Tytuł, który pisze, jest przy okazji poznawany — wiarygodność jest
             // per para i mieszka w tym samym slocie co marka (§5.3).
@@ -570,6 +607,15 @@ fn redakcja(world: &mut World, spis: &DistrictRoster, t: Tick, raport: &mut Medi
                         t,
                     ) {
                         expose_media(world, e, marka, Q::new(60), wiarygodnosc, u64::from(doba));
+                        if let (Some(b), Some(drop)) = (bohater, uderzenie) {
+                            magnat_agents::touch(
+                                world,
+                                e,
+                                b,
+                                magnat_agents::brand::Touch::Scandal { drop },
+                                u64::from(doba),
+                            );
+                        }
                     }
                 }
             }
@@ -587,6 +633,22 @@ fn redakcja(world: &mut World, spis: &DistrictRoster, t: Tick, raport: &mut Medi
             raport.stories_published = raport.stories_published.saturating_add(1);
         }
     }
+}
+
+/// O czyjej marce jest ten tekst. `None` znaczy „o nikim konkretnym" — pogoda,
+/// protest miejski, awaria sieci.
+fn podmiot_tekstu(
+    world: &World,
+    scope: magnat_events::ScopeInstance,
+) -> Option<magnat_core::BrandId> {
+    let firma = match scope {
+        magnat_events::ScopeInstance::Site(s) => {
+            world.get_resource::<magnat_economy::Market>()?.firm_of(s)?
+        }
+        magnat_events::ScopeInstance::Firm(k) => magnat_firms::firm_id(k),
+        _ => return None,
+    };
+    magnat_supply::brand_of(firma)
 }
 
 /// Tekst rozchodzi się plotką przez [`STORY_SPREAD_DAYS`] dób po publikacji.

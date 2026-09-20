@@ -253,6 +253,16 @@ impl CommuteMatrix {
         self.districts
     }
 
+    /// Ustawia czas dojazdu. Poza zakresem nic nie robi — macierz ma stały
+    /// rozmiar z chwili zdjęcia i nie rośnie w trakcie.
+    pub fn set(&mut self, from: u16, to: u16, minutes: u16) {
+        let n = usize::from(self.districts);
+        if usize::from(from) >= n || usize::from(to) >= n {
+            return;
+        }
+        self.minutes[usize::from(from) * n + usize::from(to)] = minutes;
+    }
+
     /// Czas dojazdu z `from` do `to`; poza zakresem zwraca `u16::MAX`,
     /// czyli „nie dojedzie" — a nie zero, które znaczyłoby „za miedzą".
     #[must_use]

@@ -276,15 +276,26 @@ impl Firms {
                 let Some(site) = self.sites.get_mut(&id) else {
                     continue;
                 };
+                // Strajkujący nie dostają wypłaty za dni, w których nie pracowali
+                // (M10e WP10.14). To jest cała presja negocjacyjna widziana od strony
+                // pieniądza: firma oszczędza na płacach, załoga je traci, i to drugie
+                // wyczerpuje fundusz strajkowy. Mianownik `30 × 10 000` to pełny
+                // miesiąc pełnego strajku (kalendarz `K-1`).
+                const PELNY_MIESIAC_BP: u32 = 30 * 10_000;
+                let odjete = std::mem::replace(&mut site.strike_bp_days, 0).min(PELNY_MIESIAC_BP);
+                let przepracowane = i64::from(PELNY_MIESIAC_BP - odjete);
                 let mut labor: i64 = 0;
                 for p in &site.positions {
                     for e in &p.filled {
-                        labor += e.wage_month.get();
+                        let brutto = magnat_core::Money(
+                            e.wage_month.get() * przepracowane / i64::from(PELNY_MIESIAC_BP),
+                        );
+                        labor += brutto.get();
                         run.items.push(PayrollItem {
                             firm: key,
                             site: id,
                             citizen: e.citizen,
-                            gross: e.wage_month,
+                            gross: brutto,
                             // Potrącenia to hook M8 (`D6`).
                             deductions: magnat_core::Money::ZERO,
                         });

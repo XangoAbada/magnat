@@ -2,25 +2,27 @@
 //!
 //! Podaż roli w komórce zestawiona z popytem firm, stawka z `kernel::wage_bid`,
 //! zmiana przycięta do ±2 %/dobę. Firma zatrudnia z **puli swojej dzielnicy**:
-//! `CommuteMatrix` jest dziś płaska (`ponytail:` w `types.rs`), więc ograniczenie
-//! do dzielnicy jest jedyną rzeczą, która w ogóle odróżnia dzielnicę od dzielnicy.
-//! Kiedy M4 wypełni macierz, pula rozszerzy się o dzielnice w zasięgu dojazdu —
-//! i to jest cała zmiana, jakiej to będzie wymagało.
+//! # Rekrutacja poza dzielnicą kosztuje dojazd (M10e, decyzja `D10`)
 //!
-//! # Co ten zakaz kosztuje, zmierzone w M10a
+//! Do M10d firma zatrudniała **wyłącznie** z puli swojej dzielnicy, bo
+//! `CommuteMatrix` była płaska i granica dzielnicy była jedyną rzeczą, która
+//! w ogóle odróżniała dzielnicę od dzielnicy. Kosztowało to jedną trzecią firm:
+//! miasto ma dzielnice przemysłowe bez mieszkań i mieszkaniowe bez zakładów, więc
+//! **29 % firm nie dostawało ani jednego pracownika przez trzydzieści lat** historii
+//! „na sucho". Te firmy nic nie produkowały, rynek zjadał zapas z Etapu 7, a bramka 1
+//! Etapu 10 (nierównowaga) wychodziła 1000 ‰.
 //!
-//! Miasto ma dzielnice przemysłowe bez mieszkań i mieszkaniowe bez zakładów, więc
-//! przy rekrutacji zamkniętej w granicach dzielnicy **jedna trzecia firm nie dostaje
-//! ani jednego pracownika przez trzydzieści lat** historii „na sucho". Te firmy nic
-//! nie produkują, rynek zjada zapas z Etapu 7 i bramka 1 Etapu 10 (nierównowaga)
-//! wychodzi 1000 ‰.
-//!
-//! Otwarcie puli na całe miasto **zostało spróbowane i cofnięte**: bezrobocie schodzi
-//! wtedy do zera, firmy o niższym `FirmId` zabierają całą pulę, a odsetek firm bez
-//! obsady rośnie z 291 ‰ do 342 ‰. Problemem nie jest granica dzielnicy, tylko
+//! Otwarcie puli na całe miasto **zostało spróbowane w M10a i cofnięte**: bezrobocie
+//! schodziło do zera, firmy o niższym `FirmId` zabierały całą pulę, a odsetek firm
+//! bez obsady rósł z 291 ‰ do 342 ‰. Problemem nie była granica dzielnicy, tylko
 //! **brak kosztu dojazdu**: bez niego rekrutacja jest albo zakazana, albo darmowa,
-//! a żadne z tych dwojga nie jest rynkiem pracy. Rozstrzyga to wypełnienie macierzy
-//! przez M4 — wtedy „najpierw swoi" stanie się preferencją kosztową, a nie zakazem.
+//! a żadne z tych dwojga nie jest rynkiem pracy.
+//!
+//! Od M10e macierz jest wypełniona geometrią miasta (`crate::commute`), a pula
+//! jest **ważona gotowością do dojazdu**: z dzielnicy za rogiem przychodzą prawie
+//! wszyscy, z drugiego końca miasta prawie nikt. Dzielnice obchodzi się w kolejności
+//! rosnącego czasu dojazdu, więc „najpierw swoi" zostaje — ale jako preferencja,
+//! a nie zakaz.
 
 use magnat_core::Money;
 use magnat_economy::kernel;
@@ -85,10 +87,24 @@ pub fn phase(st: &mut MacroState, p: &MacroParams) {
             let mozliwe =
                 u32::from(p.hire_speed_permille) * u32::from(p.days_per_step.max(1)) * etaty
                     / 1_000;
-            let chetni = wakaty.min(mozliwe.max(1)).min(pula[d]);
-            if chetni > 0 {
-                pula[d] -= chetni;
-                f.employees = f.employees.saturating_add(chetni);
+            let mut brakuje = wakaty.min(mozliwe.max(1));
+            // Dzielnice w kolejności rosnącego czasu dojazdu; przy remisie niższy
+            // numer, bo kolejność rekrutacji wchodzi do stanu (00 §3.2).
+            let mut zrodla: Vec<(u16, usize)> = (0..dzielnice)
+                .map(|e| (st.commute.minutes(e, f.district.0), usize::from(e)))
+                .collect();
+            zrodla.sort_unstable();
+            for (minuty, e) in zrodla {
+                if brakuje == 0 {
+                    break;
+                }
+                let gotowi = u32::from(gotowosc_bp(minuty)) * pula[e] / 10_000;
+                let chetni = brakuje.min(gotowi);
+                if chetni > 0 {
+                    pula[e] -= chetni;
+                    f.employees = f.employees.saturating_add(chetni);
+                    brakuje -= chetni;
+                }
             }
             f.wage_bill = Money(nowa.saturating_mul(i64::from(f.employees)));
         } else if f.employees > etaty {
@@ -104,6 +120,33 @@ pub fn phase(st: &mut MacroState, p: &MacroParams) {
 
     rozlej_zatrudnienie(st, &pula);
 }
+
+/// Ilu z dziesięciu tysięcy jest gotowych dojeżdżać tyle minut.
+///
+/// Prosta liniowa krzywa od pełnej gotowości przy dojeździe wewnątrzdzielnicowym
+/// do zera przy [`MAX_COMMUTE_MIN`]. Kształtu bardziej wyszukanego tu nie ma
+/// z rozmysłu: o wyborze środka transportu i o wartości czasu rozstrzyga M4 na
+/// poziomie mezo (`data/roads/mode_choice.ron`), a makro potrzebuje wyłącznie
+/// **monotonicznego kosztu odległości**. Druga krzywa nad tą samą rzeczą
+/// rozjechałaby się z pierwszą (`K-50`).
+///
+/// `ponytail:` liniowo, bez wartości czasu i bez różnicy między zawodami. Sufit
+/// jest nazwany: kierownik dojedzie dalej niż kasjer, a makro tego nie odróżnia.
+/// Ścieżka wyjścia: mnożnik per `ClassId`, kiedy bramka Etapu 10 zacznie na to
+/// reagować.
+#[must_use]
+pub fn gotowosc_bp(minuty: u16) -> u16 {
+    if minuty >= MAX_COMMUTE_MIN {
+        return 0;
+    }
+    let zostalo = u32::from(MAX_COMMUTE_MIN - minuty);
+    u16::try_from(zostalo * 10_000 / u32::from(MAX_COMMUTE_MIN)).unwrap_or(10_000)
+}
+
+/// Dojazd, przy którym nikt już nie przychodzi. Godzina w jedną stronę —
+/// dwie godziny dziennie są granicą, powyżej której ludzie się przeprowadzają
+/// zamiast dojeżdżać, a przeprowadzki prowadzi faza 1 kroku.
+pub const MAX_COMMUTE_MIN: u16 = 60;
 
 /// Przepisuje pulę z powrotem na komórki, w kolejności klucza komórki, i domyka
 /// różnicę na `employed`. Bez tego bezrobocie liczyłoby się z liczby, która

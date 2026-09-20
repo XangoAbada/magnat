@@ -305,12 +305,36 @@ pub enum StreamId {
     /// zdania „ktoś wiedział wcześniej": plotka rusza przekonanie, zanim liczba
     /// wyjdzie, a liczba, która wyjdzie, i tak nie jest dokładna.
     EarningsNoise = 287,
-    // 288–291 zostaje wolne dla M10d–M10e wg tabeli M10 §7.1. **`PerilDraw = 288`
-    // z tamtej tabeli zostaje zarezerwowany i niezajęty**, tak samo jak
-    // `StreamId::EventHazard` w `K-63`: szkoda nie jest losowaniem, tylko funkcją
-    // siły zdarzenia i zapasu zakładu, a zdarzenie wylosował już `EventRoll`.
-    // Strumień na „realizację szkody" opisywałby mechanizm, którego ta podfaza
-    // świadomie nie ma.
+    // **`PerilDraw = 288` z tabeli M10 §7.1 zostaje zarezerwowany i niezajęty**,
+    // tak samo jak `StreamId::EventHazard` w `K-63`: szkoda nie jest losowaniem,
+    // tylko funkcją siły zdarzenia i zapasu zakładu, a zdarzenie wylosował już
+    // `EventRoll`. Strumień na „realizację szkody" opisywałby mechanizm, którego
+    // ta faza świadomie nie ma.
+    /// Czy regulator wykrył kartel w tym miesiącu (M10e §5.9).
+    /// Klucz: numer kartelu, tick pierwszej minuty miesiąca.
+    ///
+    /// Klucz jest **kartelem, a nie firmą**, i to jest istota mechanizmu: wykrycie
+    /// dotyczy zmowy jako całości, więc jeden rzut rozstrzyga o wszystkich członkach
+    /// naraz. Gdyby losował każdy z osobna, zmowa rozpadałaby się po kawałku,
+    /// a „kara dla wszystkich członków" z kryterium WP10.13 nie miałaby chwili,
+    /// w której zapada.
+    CartelDetection = 289,
+    /// Czy załoga zakładu zawiązała związek zawodowy (M10e §5.9).
+    /// Klucz: indeks encji zakładu, tick pierwszej minuty miesiąca.
+    ///
+    /// Trzy warunki formowania są twarde i policzalne (żal, spójna składowa grafu
+    /// relacji, gęstość), a rzut rozstrzyga wyłącznie **kiedy w oknie** to nastąpi.
+    /// Bez niego wszystkie zakłady spełniające warunki zawiązywałyby związek w tej
+    /// samej dobie, bo warunki są funkcją tych samych miejskich median.
+    UnionFormation = 290,
+    /// Rozstrzygnięcie rundy negocjacyjnej (M10e §5.9).
+    /// Klucz: indeks encji zakładu, tick doby rundy.
+    ///
+    /// Losuje się **ustępstwo w granicach wyznaczonych przez obie strony**, a nie
+    /// to, czy strony się dogadają: próg akceptacji związku i sufit firmy są
+    /// funkcjami stanu (funduszu strajkowego i rachunku wyniku), więc gdy przedziały
+    /// się rozejdą, negocjacje padają bez rzutu.
+    StrikeResolve = 291,
     /// Losowość wewnątrz kroku makro: demografia komórki — urodzenia, zgony
     /// i migracja w fazie 1 (M10a §5.7). Klucz: indeks komórki, tick kroku.
     ///

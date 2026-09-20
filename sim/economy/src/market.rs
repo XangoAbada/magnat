@@ -794,6 +794,10 @@ pub struct ShelfSnapshot {
     pub good: GoodId,
     /// Cena **netto** (`K-7`): makro liczy marże, a marża zawsze stoi na netto.
     pub price_net: Money,
+    /// Cena **brutto** — ta, którą płaci klient i którą ustawia `Market::set_price`.
+    /// Zmowa cenowa (M10e) pracuje na niej, bo kartel ustala cenę półkową,
+    /// a nie podstawę opodatkowania.
+    pub price_gross: Money,
     /// Półka i zaplecze razem — dla doby makro to jeden zapas.
     pub qty: Qty,
 }

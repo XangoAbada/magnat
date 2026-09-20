@@ -95,6 +95,10 @@ pub struct Quote {
     /// Minuty jazdy z wyceny przewozu — potrzebne przy zamawianiu, żeby nie pytać
     /// wyroczni drugi raz o to samo.
     pub freight_minutes: u32,
+    /// Preferencja stałego dostawcy w funkcji celu, w punktach bazowych
+    /// (M10e WP10.13). **Nie schodzi z ceny** — `price` zostaje bez zmian, bo
+    /// kupujący faktycznie przepłaca za rzetelność (patrz `b2b::relation`).
+    pub discount_bp: u16,
 }
 
 impl Quote {
@@ -116,6 +120,7 @@ impl HashState for Quote {
         self.mass_available.hash_state(h);
         h.write_u8(self.quality.get());
         self.price.hash_state(h);
+        h.write_u16(self.discount_bp);
         match self.transport {
             Some(m) => {
                 h.write_u8(1);
@@ -236,6 +241,7 @@ pub fn collect_quotes(
     plant: &Plant,
     index: &SellerIndex,
     exclusives: &crate::b2b::Exclusives,
+    relations: &crate::b2b::Relations,
     oracle: &dyn FreightOracle,
     t: &B2bTuning,
     world_seed: u64,
@@ -298,6 +304,11 @@ pub fn collect_quotes(
             eta: SimMinute(rfq.opened_at.0 + u64::from(przewoz.minutes)),
             valid_until: rfq.closes_at,
             freight_minutes: przewoz.minutes,
+            // Preferencja stałego dostawcy stoi **obok** premii za wyłączność
+            // i w tym samym miejscu: obie są wiedzą o relacji, a nie o towarze.
+            // Wyłączność podnosi cenę, zaufanie obniża ocenę — i to jest cała
+            // różnica między „zapłać mi więcej" a „wolę ciebie".
+            discount_bp: relations.discount_bp(rfq.buyer, p.owner, rfq.good),
         });
     }
 }
@@ -378,6 +389,10 @@ fn z_narzutem(
 pub fn score(rfq: &Rfq, q: &Quote, t: &B2bTuning) -> i128 {
     let masa = rfq.mass.0.min(q.mass_available.0);
     let towar = i128::from(q.price.0) * i128::from(masa) / 1_000_000;
+    // Preferencja stałego dostawcy: jego oferta **liczy się** taniej, choć kosztuje
+    // tyle samo. `score_raw` niżej jest tą samą funkcją bez tego członu i służy
+    // do jednego pytania: czy to zaufanie rozstrzygnęło przetarg (M10e WP10.13).
+    let preferencja = towar * i128::from(q.discount_bp) / 10_000;
     let przewoz = i128::from(q.transport.map_or(0, |m| m.0));
     let spoznienie = q.eta.0.saturating_sub(rfq.needed_by.0);
     let kara_czas =
@@ -387,7 +402,17 @@ pub fn score(rfq: &Rfq, q: &Quote, t: &B2bTuning) -> i128 {
     let kara_jakosc =
         brak_jakosci * i128::from(t.quality_penalty_gr_per_tonne_point) * i128::from(masa)
             / 1_000_000;
-    towar + przewoz + kara_czas + kara_jakosc
+    towar - preferencja + przewoz + kara_czas + kara_jakosc
+}
+
+/// Ocena bez preferencji stałego dostawcy — do odpowiedzi na pytanie „czy zaufanie
+/// rozstrzygnęło". Osobna funkcja, a nie flaga w [`score`]: flaga byłaby parametrem,
+/// który w gorącej ścieżce zawsze ma tę samą wartość.
+#[must_use]
+pub fn score_raw(rfq: &Rfq, q: &Quote, t: &B2bTuning) -> i128 {
+    let mut bez = *q;
+    bez.discount_bp = 0;
+    score(rfq, &bez, t)
 }
 
 /// Zwycięzca i jego przewaga nad drugim w punktach bazowych funkcji celu.
@@ -500,6 +525,7 @@ impl B2b {
             plant,
             &self.sellers,
             &self.exclusives,
+            &self.relations,
             oracle,
             &t.b2b,
             self.world_seed,
@@ -525,15 +551,21 @@ impl B2b {
         now: SimMinute,
     ) -> Vec<Settlement> {
         let mut wynik = Vec::new();
-        // Kolejność po `RfqId`, czyli po minucie otwarcia i liczniku — nie po tym,
-        // które zapytanie akurat leżało wyżej w mapie (00 §3.2).
-        let dojrzale: Vec<u32> = self
+        // Kolejność: **priorytet stałego klienta, potem `RfqId`** (M10e WP10.13).
+        // Do M10d rozstrzygał sam numer zapytania, czyli minuta otwarcia — a to
+        // znaczyło, że w niedoborze wygrywa ten, kto zapytał pół minuty wcześniej.
+        // Priorytet bierze się z zaufania, więc „stały dostawca ma priorytet
+        // w niedoborze" z PRD §7.9 jest kolejnością tej listy, a nie gałęzią
+        // w środku przydziału. Klucz zostaje w pełni deterministyczny: przy równym
+        // priorytecie nadal rozstrzyga `RfqId` (00 §3.2).
+        let mut dojrzale: Vec<(u8, u32)> = self
             .rfqs
             .iter()
             .filter(|(_, r)| r.outcome == RfqOutcome::Open && r.closes_at.0 <= now.0)
-            .map(|(k, _)| *k)
+            .map(|(k, r)| (self.relations.buyer_priority(r.buyer, r.good), *k))
             .collect();
-        for k in dojrzale {
+        dojrzale.sort_unstable_by_key(|(p, k)| (std::cmp::Reverse(*p), *k));
+        for (_, k) in dojrzale {
             let Some(r) = self.rfqs.get_mut(&k) else {
                 continue;
             };
@@ -543,18 +575,52 @@ impl B2b {
             };
             let q = r.quotes[i];
             let masa = Mass(r.mass.0.min(q.mass_available.0));
-            let powod = reason(r, &q, przewaga);
+            // Czy przetarg rozstrzygnęło zaufanie: bez preferencji wygrałby ktoś inny.
+            // Pytanie zadaje się **tylko** wtedy, gdy preferencja w ogóle jest —
+            // inaczej byłby to drugi przebieg po ofertach w każdym zapytaniu świata.
+            let z_zaufania = q.discount_bp > 0
+                && r.quotes
+                    .iter()
+                    .enumerate()
+                    .any(|(j, o)| j != i && score_raw(r, o, &t.b2b) < score_raw(r, &q, &t.b2b));
+            let powod = if z_zaufania {
+                DecisionReason::TrustedSupplier {
+                    supplier: q.seller,
+                    trust: self
+                        .relations
+                        .get(r.buyer, q.seller, r.good)
+                        .map_or(magnat_core::Q::MIN, |rel| rel.trust),
+                    discount_bp: q.discount_bp,
+                }
+            } else {
+                reason(r, &q, przewaga)
+            };
             r.outcome = RfqOutcome::Awarded {
                 quote: q.id,
                 seller: q.seller,
             };
-            let (good, do_zakladu, do_slotu) = (r.good, r.deliver_to, r.to_slot);
-            let Some(s) = self.wyslij(
+            let (good, kupujacy, do_zakladu, do_slotu) = (r.good, r.buyer, r.deliver_to, r.to_slot);
+            let wyslane = self.wyslij(
                 cat, store, transport, oracle, t, now, &q, good, masa, do_zakladu, do_slotu, powod,
-            ) else {
-                continue;
-            };
-            wynik.push(s);
+            );
+            // Zakup spotowy też buduje relację — i to jest jedyna droga, którą
+            // relacja **powstaje** w świecie bez kontraktów długoterminowych.
+            // Terminu tu nie ma, więc spóźnienia też nie ma; jest za to nieudana
+            // wysyłka, i ona liczy się jako masa niedostarczona.
+            self.relations.record(
+                crate::b2b::DeliveryOutcome {
+                    buyer: kupujacy,
+                    supplier: q.seller,
+                    good,
+                    delivered: if wyslane.is_some() { masa } else { Mass::ZERO },
+                    missed: if wyslane.is_some() { Mass::ZERO } else { masa },
+                    late: false,
+                },
+                now,
+            );
+            if let Some(s) = wyslane {
+                wynik.push(s);
+            }
         }
         wynik
     }

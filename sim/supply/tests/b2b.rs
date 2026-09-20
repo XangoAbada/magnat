@@ -871,3 +871,155 @@ fn kazda_domena_ma_klase_taryfowa() {
     let t = TariffTable::load_default().expect("taryfy");
     t.check_covers(&cat).expect("pokrycie domen jest pełne");
 }
+
+// ── M10e WP10.13: zaufanie do dostawcy ──────────────────────────────────────────
+
+/// Kryterium WP10.13, pierwsza połowa: **zaufanie realnie zmienia wybór dostawcy,
+/// a firma płaci za nie z własnej kieszeni.**
+///
+/// Trzy młyny, z których najtańszy nie jest tym, z którym piekarnia handluje od
+/// lat. Bez historii dostaw wygrywa cena; z historią wygrywa dostawca droższy
+/// o dwa procent — i to jest różnica, o którą chodzi. Cena zapłacona **nie
+/// spada**: rabat jest preferencją w funkcji celu, a nie obniżką, więc piekarnia
+/// faktycznie przepłaca za rzetelność.
+#[test]
+fn stala_wspolpraca_bije_nizsza_cene_i_widac_to_w_powodzie() {
+    // Młyn 0 jest o ~2 % droższy od młyna 1, więc bez relacji przegrywa.
+    let koszty = [100_400, 98_400, 112_000];
+    let piekarnia = FirmId(encja(5));
+    let mlyn0 = FirmId(encja(200));
+
+    let bez_relacji = {
+        let mut m = Miasto::nowe(&koszty, 40_000);
+        let id = m.zapytanie(5_000, 0);
+        m.rozstrzygnij(61);
+        let rfq = m.b2b.rfq(id).expect("zapytanie");
+        let RfqOutcome::Awarded { seller, .. } = rfq.outcome else {
+            panic!("brak rozstrzygnięcia");
+        };
+        (
+            seller,
+            rfq.quotes.iter().map(|q| q.price.0).collect::<Vec<_>>(),
+        )
+    };
+    assert_ne!(
+        bez_relacji.0, mlyn0,
+        "bez historii dostaw wygrywa cena — inaczej test nie mierzy niczego"
+    );
+
+    let mut m = Miasto::nowe(&koszty, 40_000);
+    // Sześćdziesiąt terminowych dostaw od młyna 0 — zaufanie dochodzi do setki,
+    // czyli do trzech procent przewagi w ocenie.
+    for d in 0..60 {
+        m.b2b.relations_mut().record(
+            magnat_supply::DeliveryOutcome {
+                buyer: piekarnia,
+                supplier: mlyn0,
+                good: m.maka,
+                delivered: Mass(5_000_000),
+                missed: Mass::ZERO,
+                late: false,
+            },
+            SimMinute(d * 1_440),
+        );
+    }
+    let zaufanie = m
+        .b2b
+        .relations()
+        .get(piekarnia, mlyn0, m.maka)
+        .expect("relacja")
+        .trust;
+    assert!(
+        zaufanie.get() >= 95,
+        "zaufanie po sześćdziesięciu dostawach"
+    );
+
+    let id = m.zapytanie(5_000, 0);
+    let rozliczenia = m.rozstrzygnij(61);
+    let rfq = m.b2b.rfq(id).expect("zapytanie").clone();
+    let RfqOutcome::Awarded { seller, quote } = rfq.outcome else {
+        panic!("brak rozstrzygnięcia");
+    };
+    assert_eq!(
+        seller, mlyn0,
+        "stały dostawca ma wygrać mimo wyższej ceny (kryterium WP10.13)"
+    );
+
+    let zwyciezca = rfq.quotes.iter().find(|q| q.id == quote).expect("oferta");
+    let najtanszy = rfq.quotes.iter().map(|q| q.price.0).min().expect("oferty");
+    assert!(
+        zwyciezca.price.0 > najtanszy,
+        "piekarnia ma **przepłacić**: {} wobec najtańszych {najtanszy}",
+        zwyciezca.price.0
+    );
+    // Sufit, a nie pasmo: ile dokładnie piekarnia przepłaci, zależy od szumu
+    // wyceny (±2 %), ale **nigdy** więcej niż wynosi preferencja — powyżej trzech
+    // procent zaufanie przestaje wystarczać i wraca cena.
+    let nadplata_bp = (zwyciezca.price.0 - najtanszy) * 10_000 / najtanszy;
+    assert!(
+        nadplata_bp <= 300,
+        "nadpłata {nadplata_bp} bp przekracza sufit preferencji"
+    );
+    assert_eq!(
+        rozliczenia.len(),
+        1,
+        "rozstrzygnięcie ma wysłać towar, a nie samo zmienić zdanie"
+    );
+    assert!(
+        matches!(
+            rozliczenia[0].reason,
+            magnat_core::DecisionReason::TrustedSupplier { supplier, .. } if supplier == mlyn0
+        ),
+        "powód ma nazywać zaufanie, a nie cenę: {:?}",
+        rozliczenia[0].reason
+    );
+}
+
+/// Druga połowa: **zawiedziony dostawca traci preferencję.** Relacja nie jest
+/// odznaką na zawsze — seria niedostarczonych dostaw zbija zaufanie poniżej progu
+/// obojętności i przetarg wraca do liczenia samej ceny.
+#[test]
+fn zawiedzione_zaufanie_oddaje_przetarg_cenie() {
+    let koszty = [100_400, 98_400, 112_000];
+    let piekarnia = FirmId(encja(5));
+    let mlyn0 = FirmId(encja(200));
+    let mut m = Miasto::nowe(&koszty, 40_000);
+    for d in 0..60 {
+        m.b2b.relations_mut().record(
+            magnat_supply::DeliveryOutcome {
+                buyer: piekarnia,
+                supplier: mlyn0,
+                good: m.maka,
+                delivered: Mass(5_000_000),
+                missed: Mass::ZERO,
+                late: false,
+            },
+            SimMinute(d * 1_440),
+        );
+    }
+    for d in 60..90 {
+        m.b2b.relations_mut().record(
+            magnat_supply::DeliveryOutcome {
+                buyer: piekarnia,
+                supplier: mlyn0,
+                good: m.maka,
+                delivered: Mass::ZERO,
+                missed: Mass(5_000_000),
+                late: true,
+            },
+            SimMinute(d * 1_440),
+        );
+    }
+    assert_eq!(
+        m.b2b.relations().discount_bp(piekarnia, mlyn0, m.maka),
+        0,
+        "po trzydziestu zawalonych dostawach nie ma żadnej preferencji"
+    );
+    let id = m.zapytanie(5_000, 0);
+    m.rozstrzygnij(61);
+    let rfq = m.b2b.rfq(id).expect("zapytanie");
+    let RfqOutcome::Awarded { seller, .. } = rfq.outcome else {
+        panic!("brak rozstrzygnięcia");
+    };
+    assert_ne!(seller, mlyn0, "zawiedziony dostawca przegrywa z ceną");
+}

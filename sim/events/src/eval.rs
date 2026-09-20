@@ -107,6 +107,16 @@ impl<'a> ProbeWorld<'a> {
                 })
             }
 
+            Probe::SiteStrikeBps => {
+                let ScopeInstance::Site(s) = scope else {
+                    return 0;
+                };
+                self.world
+                    .get_resource::<magnat_firms::Firms>()
+                    .and_then(|f| f.site(s))
+                    .map_or(0, |z| i64::from(z.strike_bps))
+            }
+
             Probe::FirmHeadcount => self.firma(scope, |f, firms| {
                 f.sites
                     .iter()
