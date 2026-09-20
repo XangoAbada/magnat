@@ -139,6 +139,31 @@ Powód, dla którego ta reguła w ogóle jest: przez sześć faz kryterium ukoń
 „test przechodzi" i to jest właściwe kryterium — ale przechodzący test nie odróżnia czterystu
 linii dopisanych do modułu od czterystu linii dopisanych do worka. Pomiar jest w `R1` §1.
 
+## Reguła: buildy testowe się sprząta
+
+Katalog `target/` urósł do **106 GB**, bo każda podfaza zostawiała po sobie pełne artefakty,
+a część przebiegów szła do własnych katalogów (`target/m10f`, `target/tests`). Nikt tego nie
+widział, bo `target/` jest w `.gitignore` — brak w gicie znaczy „poza zasięgiem wzroku", nie
+„nie istnieje".
+
+- **Jeden katalog artefaktów: domyślny `target/`.** Nie ustawiamy `CARGO_TARGET_DIR` ani
+  `--target-dir` per faza, per podfaza, per eksperyment. Katalog nazwany od podfazy nikomu
+  nie przypomni o sobie, gdy podfaza się skończy.
+- **Po zamkniętej podfazie — `cargo clean`**, w tym samym kroku co commit zamykający. Wyjątek:
+  zostaje, jeśli następna podfaza rusza od razu i czekanie na pełny rebuild kosztuje więcej
+  niż miejsce.
+- **Eksperyment, który chodził we własnym katalogu, kasuje się razem z eksperymentem.**
+  Ta sama zasada co przy gałęziach: praca, która może nie wejść, nie zostawia po sobie śmieci
+  przeżywających sesję.
+- **Profil `release` buduje się tylko wtedy, gdy mierzymy wydajność.** Testy i `clippy` chodzą
+  na `debug`; `release` obok `debug` to drugie 12 GB za nic.
+- Przy sprzątaniu warto najpierw zobaczyć, co zajmuje miejsce (`du -sh target/*` w Git Bash),
+  a potem skasować punktowo: `cargo clean -p <crate>` albo `cargo clean --release`.
+
+Powód jest ten sam co przy regule o przeglądzie strukturalnym: przechodzący test nie odróżnia
+projektu od wysypiska. Miejsce na dysku jest zasobem tej samej klasy co kontekst i czas —
+kończy się nagle i zawsze w najgorszym momencie.
+
 ## Reguła: subagenci oszczędzają kontekst
 
 **Pracę, której wynikiem jest wniosek, a nie treść plików, oddajemy subagentowi** (`Task`).
