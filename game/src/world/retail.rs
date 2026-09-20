@@ -285,6 +285,7 @@ pub fn obsadz_sklepy(
 /// 7. **wypłata przed budżetem** — plan dzieli to, co wpłynęło (`Y-6`).
 ///
 /// Po powrocie wołający dokłada `MarketSystem` do harmonogramu i zasiewa dobę.
+#[allow(clippy::too_many_arguments)]
 pub fn setup(
     world: &mut World,
     city: &CityData,
@@ -293,6 +294,12 @@ pub fn setup(
     traffic: &Arc<TrafficOracle>,
     seed: u64,
     pool: &JobPool,
+    // Towary **poza obiegiem** na starcie partii: te, które dopiero wypuści
+    // technologia (M10c WP10.9). Pusty wycinek = świat bez drzewa technologii,
+    // zachowujący się dokładnie jak przed M10c. Parametr, a nie odczyt z zasobu:
+    // blokada musi stanąć **między** powstaniem rynku a obsadzeniem sklepów, bo
+    // sklep obsadzony wcześniej wystawiłby towar, którego w mieście jeszcze nie ma.
+    locked: &[magnat_core::GoodId],
 ) -> Result<Retail, Box<dyn std::error::Error>> {
     let data = EconomyData::load_default()?;
     let goods = katalog_detaliczny(city, &data);
@@ -318,6 +325,9 @@ pub fn setup(
         places,
         rest,
     );
+    for g in locked {
+        market.lock_good(*g);
+    }
     let shops = obsadz_sklepy(city, &market, &mut books, rest);
     // Zakłady produkcyjne — **po** sklepach, bo obie ścieżki chodzą po tej samej liście
     // `city.sites.sites` i muszą się na niej nie przeciąć, a `to_sklep` jest jedynym

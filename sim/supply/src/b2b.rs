@@ -329,6 +329,23 @@ impl B2b {
         self.contracts.get(&id.entity().index())
     }
 
+    /// Nadaje `ContractId` umowie, której `sim/supply` nie prowadzi.
+    ///
+    /// Istnieje, bo licencja patentowa z M10c **jest** `ContractId` (M10c §5.4:
+    /// „zero nowego mechanizmu umów"), a nie jest umową dostawy: nie ma towaru,
+    /// harmonogramu ani rampy, więc nie zmieści się w [`SupplyContract`]. Numer
+    /// musi jednak pochodzić **stąd**, bo to jest jedyny licznik identyfikatorów
+    /// umów w grze — dwa liczniki dałyby dwie umowy o tym samym numerze
+    /// i `Subject::Contract` prowadziłby raz tu, raz tam.
+    ///
+    /// Numer wydany tą drogą **nie ma wpisu** w `self.contracts` i to jest
+    /// poprawny stan: rejestr umowy prowadzi ten, kto ją zawarł.
+    pub fn mint_contract_id(&mut self) -> ContractId {
+        let idx = self.next_contract;
+        self.next_contract += 1;
+        ContractId(magnat_core::Entity::new(idx, std::num::NonZeroU32::MIN))
+    }
+
     pub fn contracts(&self) -> impl Iterator<Item = &SupplyContract> {
         self.contracts.values()
     }

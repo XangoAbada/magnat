@@ -127,6 +127,15 @@ pub struct Site {
     /// Osobne pole, a nie doliczanie na bieżąco do `pnl`: rachunek wyniku zakładu
     /// domyka się raz w miesiącu i ma opisywać miesiąc, a nie rosnąć w środku doby.
     pub hr_accrued: Money,
+    /// Koszt badań narosły w tym miesiącu: budżet materiałowy laboratorium
+    /// i opłaty licencyjne (M10c WP10.8).
+    ///
+    /// Osobne pole od `hr_accrued` i osobna pozycja w rachunku wyniku: płace badaczy
+    /// są już w koszcie pracy, a to są odczynniki, prototypy i cudzy patent — czyli
+    /// koszt **operacyjny**, nie kadrowy. Domyka się do `SitePnlMonth::fixed` razem
+    /// z czynszem i zeruje przy zamknięciu miesiąca, tak samo jak `hr_accrued`:
+    /// pozycja, która narasta przez całą grę, kłamie coraz bardziej z każdym miesiącem.
+    pub rnd_accrued: Money,
     pub pnl: Ring<SitePnlMonth, 36>,
     pub opened: SimMinute,
     /// Menedżer i polityka, jeśli zakład jest zdelegowany (M7c WP7).
@@ -178,6 +187,7 @@ impl Site {
             tech: Q::new(50),
             fixed_cost_month: spec.fixed_cost_month(at.floor_m2),
             hr_accrued: Money::ZERO,
+            rnd_accrued: Money::ZERO,
             pnl: Ring::new(),
             opened: at.opened,
             delegation: None,
@@ -223,6 +233,12 @@ impl Site {
     /// zerowanie należy do listy płac.
     pub fn accrue_hr(&mut self, kwota: Money) {
         self.hr_accrued = Money(self.hr_accrued.get().saturating_add(kwota.get()));
+    }
+
+    /// Dopisuje koszt badań do miesiąca. Jedyna droga zmiany `rnd_accrued` —
+    /// zerowanie należy do zamknięcia miesiąca, tak samo jak przy kadrach.
+    pub fn accrue_rnd(&mut self, kwota: Money) {
+        self.rnd_accrued = Money(self.rnd_accrued.get().saturating_add(kwota.get()));
     }
 
     /// Liczba zatrudnionych.
@@ -278,6 +294,53 @@ impl Site {
         }
         Qty(suma)
     }
+
+    /// Praca **badawcza** zakładu w milietatach (M10c §5.4).
+    ///
+    /// To samo, co [`Site::effective_labor`], zawężone do jednego stanowiska.
+    /// Osobna funkcja, a nie parametr tamtej, bo pytania są różne: tamto pyta
+    /// „ile pracy stoi za tym zakładem" i odpowiada M6, to pyta „jak szybko tu
+    /// idą badania" i odpowiada R&D. Wspólna funkcja z filtrem zmusiłaby M6
+    /// do podawania roli, której nie zna.
+    ///
+    /// Zakład bez stanowiska badacza zwraca zero i to jest większość miasta.
+    #[must_use]
+    pub fn research_labor(
+        &self,
+        roles: &RoleTable,
+        researcher: magnat_core::JobRoleId,
+        vitals: &impl Fn(CitizenId) -> Option<(magnat_agents::Vitals, Q)>,
+    ) -> Qty {
+        let mut suma: i64 = 0;
+        for p in self.positions.iter().filter(|p| p.role == researcher) {
+            let w = roles.weights(p.role);
+            for e in &p.filled {
+                if let Some((body, skill)) = vitals(e.citizen) {
+                    suma += effective_labor(&body, skill, self.tech, self.mgmt, &w).0;
+                }
+            }
+        }
+        Qty(suma)
+    }
+
+    /// Ilu badaczy faktycznie tu pracuje — mianownik budżetu materiałowego.
+    #[must_use]
+    pub fn researchers(&self, researcher: magnat_core::JobRoleId) -> u32 {
+        self.positions
+            .iter()
+            .filter(|p| p.role == researcher)
+            .map(|p| p.filled.len() as u32)
+            .sum()
+    }
+
+    /// Podnosi poziom wyposażenia o `delta`, z sufitem skali `Q`.
+    ///
+    /// Jedyna droga zmiany `tech` po postawieniu zakładu. Sufit jest twardy, bo
+    /// `Q` przycina sam — ale zapisujemy go jawnie, żeby było widać, że komplet
+    /// drzewa technologii nie robi z warsztatu maszyny doskonałej.
+    pub fn raise_tech(&mut self, delta: u8) {
+        self.tech = Q::new(self.tech.get().saturating_add(delta));
+    }
 }
 
 impl HashState for Site {
@@ -296,6 +359,7 @@ impl HashState for Site {
         h.write_u8(self.tech.get());
         self.fixed_cost_month.hash_state(h);
         self.hr_accrued.hash_state(h);
+        self.rnd_accrued.hash_state(h);
         self.pnl.hash_state(h);
         self.opened.hash_state(h);
         match &self.delegation {

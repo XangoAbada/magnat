@@ -1,0 +1,86 @@
+// Kalibracja badań i rozwoju (M10c §5.4, `K-35`, `K-82`).
+//
+// Tu siedzą liczby, **które wolno przestawić bez zmiany znaczenia modelu** — czyli
+// tempo, próg budżetu materiałowego i rzadkość przełomu. Kształt modelu (co jest
+// węzłem, co odblokowuje, od kiedy świat to wie) siedzi w `data/tech/tech.ron`,
+// bo to jest projekt, a nie strojenie. Ta sama granica, którą `K-56` postawił
+// między `data/city/` a `data/tuning/city.ron`.
+//
+// ## Skąd wzięło się `mrp_per_full_time_day`
+//
+// Kryterium WP10.8 podaje punkt kalibracji wprost: **czterech badaczy o umiejętności
+// 60, budżet 50 tys. zł na miesiąc, węzeł za 1200 RP, dziewięć miesięcy gry**.
+// Rachunek jest zamknięty i wolno go sprawdzić ołówkiem:
+//
+//   badacz w formie (energia 100, nastrój 100, zdrowie 100) o umiejętności 60,
+//   przy wagach roli `researcher` (650/150/150/50):
+//       baza = (650·60 + 150·100 + 150·100 + 50·100) / 1000 = 74
+//       milietaty = 74 · 10 = 740, razy mnożnik wyposażenia (tech 50 → 1000)
+//       i zarządzania (neutralne → 1000) = 740
+//   czterech badaczy .................................. 2960 milietatów
+//   × 1590 mRP na milietat-dobę / 1000 ................ 4706 mRP na dobę
+//   1 200 000 mRP / 4706 .............................. 255 dób = dziewiąty miesiąc
+//
+// 1590, a nie okrągłe 1500: przy 1500 wychodzi 271 dób, czyli **dziesiąty** miesiąc
+// — mieści się w „9 ± 1", ale na krańcu przedziału, a kalibracja ma stać w jego
+// środku. Okrągła liczba na krawędzi kryterium jest gorsza od nieokrągłej w środku.
+//
+// Punkty badawcze liczą się w **milipunktach** (mRP), tak samo jak praca liczy się
+// w milietatach: przy 4,4 RP na dobę zaokrąglenie do pełnego punktu gubiłoby
+// kilkanaście procent dziennie, zawsze w tę samą stronę.
+(
+    schema_version: 1,
+
+    // ── tempo ────────────────────────────────────────────────────────────────────
+    //
+    // Ile milipunktów badawczych daje jeden milietat pracy badacza przez dobę.
+    mrp_per_full_time_day: 1590,
+
+    // Budżet materiałowy: odczynniki, prototypy, aparatura. Poniżej progu tempo
+    // spada **proporcjonalnie** — laboratorium bez materiałów nie stoi, tylko
+    // zwalnia. Kwota w groszach, na badacza, na miesiąc (12 500 zł).
+    material_budget_per_researcher_gr: 1_250_000,
+
+    // Mnożnik budżetu materiałowego per kurs firmy, w promilach. Kolejność wierszy
+    // jest kolejnością `FirmStrategy::ALL` (`K-49`) i jest kontraktem tej tablicy:
+    // Cautious, Discount, NicheQuality, AggressiveExpansion, Innovative, Consolidator.
+    //
+    // To jest drugi czytelnik `FirmStrategy` zapowiedziany w `K-49` („M10 czyta kurs
+    // firmy, zanim zaproponuje wydatek"): firma na kursie innowacyjnym wydaje półtora
+    // raza tyle co ostrożna, a dyskontowa tnie badania pierwsza.
+    //
+    // Zapis krotką, nie listą: RON czyta `[...]` jako `Vec`, a tablicę o stałym
+    // rozmiarze jako krotkę — to jest ta sama pułapka, na której `data/tuning/brand.ron`
+    // przestał się parsować w M10b (`F-22`).
+    budget_by_strategy_permille: (1000, 700, 1100, 1000, 1500, 800),
+
+    // ── przełom ──────────────────────────────────────────────────────────────────
+    //
+    // Jedyny element losowy w całym R&D (`StreamId::RnDBreakthrough`). Szansa
+    // dzienna w dziesięciotysięcznych: 5 = 0,05 % na dobę, czyli mediana raz
+    // na kilkanaście lat badań. Rzadkość jest zamierzona — przełom ma być
+    // wydarzeniem w kronice, a nie składnikiem tempa.
+    breakthrough_per_10k_day: 5,
+    // O ile skraca **pozostały** koszt, w punktach bazowych: 10–40 %.
+    breakthrough_cut_bp: (1000, 4000),
+
+    // ── rok „światowy" ───────────────────────────────────────────────────────────
+    //
+    // Zniżka kosztu dla technologii, którą świat już zna: −60 % (§5.4 pkt 2).
+    world_known_discount_bp: 6000,
+    // Długość ochrony patentowej w latach gry (kalendarz `K-1`: 360 dób).
+    patent_years: 20,
+
+    // ── licencja ─────────────────────────────────────────────────────────────────
+    //
+    // Opłata wstępna liczy się z kosztu węzła: `cost_rp × upfront_per_rp_gr`.
+    // Węzeł za 1800 RP kosztuje licencjobiorcę 72 tys. zł na wejściu.
+    upfront_per_rp_gr: 4_000,
+    // Widełki royalty w punktach bazowych przychodu zakładu. Stawka **nie jest
+    // losowana**: rośnie liniowo z tym, ile życia patentu jeszcze zostało —
+    // licencja na patent z osiemnastoma latami ochrony kosztuje górną krańcówkę,
+    // licencja na patent wygasający za rok dolną. Strumienia `StreamId` ta
+    // mechanika nie zajmuje, bo nie ma w niej rzutu (ta sama zasada, co przy
+    // `StreamId::CityPolicy` w `K-67`).
+    royalty_bp: (300, 700),
+)

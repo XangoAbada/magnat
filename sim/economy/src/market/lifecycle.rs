@@ -25,7 +25,16 @@ impl Market {
         loop {
             let mut dodano = false;
             for c in &cats {
-                if let Some(i) = m.goods.in_cat(*c).get(rzad) {
+                // Towar poza obiegiem nie trafia na półkę nowego sklepu — inaczej
+                // pierwszy telefon komórkowy stałby w witrynie od pierwszej doby
+                // partii, a cała technologia byłaby ozdobą (M10c WP10.9).
+                if let Some(i) = m
+                    .goods
+                    .in_cat(*c)
+                    .iter()
+                    .filter(|i| !m.locked_goods.contains(&m.goods.at(**i).good))
+                    .nth(rzad)
+                {
                     wybor.push(*i);
                     dodano = true;
                 }
@@ -435,7 +444,7 @@ impl Market {
         let slots = usize::from(m.shops[i].shelf.slots);
         let mut chciane: Vec<GoodId> = Vec::new();
         for g in goods {
-            if !chciane.contains(g) && m.goods.spec(*g).is_some() {
+            if !chciane.contains(g) && m.goods.spec(*g).is_some() && !m.locked_goods.contains(g) {
                 chciane.push(*g);
             }
         }
@@ -469,64 +478,73 @@ impl Market {
         // przestawia sterownik na `Fixed`: gracz właśnie wybrał ten towar ręcznie
         // i pierwsza przecena nie ma prawa go zaskoczyć.
         for g in chciane {
-            if m.shops[i].shelf.line(g).is_some() {
-                continue;
-            }
-            let Some(spec) = m.goods.spec(g).copied() else {
-                continue;
-            };
-            let firma = m.shops[i].firm;
-            let offer = m.offers.insert(Offer {
-                seller: firma,
-                site,
-                good: spec.good,
-                unit_price: spec.retail_price(),
-                price_basis: PriceBasis::GrossRetail,
-                available: Qty::ZERO,
-                quality: spec.quality,
-                // Marka wchodzi dopiero z pierwszą partią na półce (`restock`):
-                // pusta półka nie ma producenta, więc nie ma czyjej marki nosić.
-                brand: None,
-                category: CategoryId::Stock(spec.cat),
-                since: t,
-                price_rev: 0,
-            });
-            if !m.shops[i].shelf.insert(ShelfLine {
-                good: spec.good,
-                facings: 1,
-                offer,
-            }) {
-                m.offers.remove(offer);
-                continue;
-            }
-            m.shops[i].controllers.insert(
-                spec.good,
-                PriceController::new(
-                    PricePolicy::Fixed {
-                        price: spec.retail_price(),
-                    },
-                    spec.retail_price(),
-                    t,
-                ),
-            );
-            let krotnosc = if spec.shelf_life_days > 0 {
-                BACKROOM_MULTIPLE.min(i64::from(spec.shelf_life_days))
-            } else {
-                BACKROOM_MULTIPLE
-            };
-            m.shops[i].inventory.reorder.insert(
-                spec.good,
-                ReorderPolicy {
-                    point: Qty(SHELF_UNITS_PER_FACING * REORDER_POINT_MULTIPLE.min(krotnosc)),
-                    target: Qty(SHELF_UNITS_PER_FACING * krotnosc),
-                    lead_time_days: spec.lead_time_days,
-                },
-            );
-            m.index.mark_dirty(CategoryId::Stock(spec.cat));
+            dodaj_linie(&mut m, i, site, g, t);
         }
         let linie = m.shops[i].shelf.lines.iter().map(|l| l.good).collect();
         m.shops[i].assortment = AssortmentPolicy::Manual { goods: linie };
         u16::try_from(m.shops[i].shelf.lines.len()).ok()
+    }
+
+    /// Wyjmuje towar z obiegu: nie stanie na żadnej półce i nikt go nie zamówi.
+    ///
+    /// Wolno **tylko przy stawianiu świata** — towar zdjęty z półek w trakcie partii
+    /// byłby zniknięciem, a nie blokadą, i zostawiłby po sobie oferty bez towaru.
+    /// Listę podaje drzewo technologii (`magnat_firms::gated_goods`).
+    pub fn lock_good(&self, good: GoodId) {
+        self.lock().locked_goods.insert(good);
+    }
+
+    /// Czy towar jest poza obiegiem.
+    #[must_use]
+    pub fn is_good_locked(&self, good: GoodId) -> bool {
+        self.lock().is_locked(good)
+    }
+
+    /// Wstawia świeżo odblokowany towar na półki sklepów jego kategorii (M10c WP10.9).
+    ///
+    /// Zwraca liczbę sklepów, które go przyjęły. Dostają go **wyłącznie sklepy
+    /// prowadzone przez AI** ([`AssortmentPolicy::Auto`]) i **wyłącznie te, którym
+    /// została wolna półka**: sklep, którego asortyment gracz ustawił ręcznie, nie ma
+    /// prawa dostać nowego towaru bez jego wiedzy, a półka bez miejsca musiałaby coś
+    /// z niej zdjąć — a to już jest decyzja, nie skutek odkrycia.
+    ///
+    /// Kolejność jest kolejnością `SiteId`, więc wynik nie zależy od tego, w jakiej
+    /// kolejności sklepy powstały (00 §3.2).
+    pub fn stock_new_good(&self, good: GoodId, t: Tick) -> u16 {
+        let mut m = self.lock();
+        let Some(spec) = m.goods.spec(good).copied() else {
+            return 0;
+        };
+        // Odblokowanie jest zdarzeniem **raz**: ten sam węzeł odkryty przez drugą
+        // firmę nie wypuszcza towaru drugi raz i nie odnawia mu nowości.
+        if !m.locked_goods.remove(&good) {
+            return 0;
+        }
+        // Nowość trwa rok gry (kalendarz `K-1`: 360 dób). Tyle, a nie miesiąc, bo
+        // telefon kupuje się raz na kilka lat i miesięczne okno minęłoby, zanim
+        // pierwszy mieszkaniec w ogóle wyszedłby po niego do sklepu.
+        m.fresh_goods
+            .insert(good, Tick(t.0.saturating_add(360 * 1_440)));
+        let sklepy: Vec<usize> = m
+            .by_site
+            .values()
+            .map(|i| *i as usize)
+            .filter(|i| {
+                let s = &m.shops[*i];
+                !s.closed
+                    && matches!(s.assortment, AssortmentPolicy::Auto { .. })
+                    && m.data.retail.cats_for(s.kind).contains(&spec.cat)
+                    && s.shelf.lines.len() < usize::from(s.shelf.slots)
+            })
+            .collect();
+        let mut ile = 0u16;
+        for i in sklepy {
+            let site = m.shops[i].site;
+            if dodaj_linie(&mut m, i, site, good, t) {
+                ile = ile.saturating_add(1);
+            }
+        }
+        ile
     }
 
     /// Czy zakład handlowy jest zamknięty. `false` także dla zakładu, którego rynek
@@ -540,4 +558,68 @@ impl Market {
             .copied()
             .is_some_and(|i| m.shops[i as usize].closed)
     }
+}
+
+/// Stawia jedną linię na półce zakładu: ofertę, sterownik ceny i regułę zamówień.
+///
+/// Wydzielone przy M10c, bo to samo trzeba zrobić w trzech miejscach: przy otwarciu
+/// sklepu, przy ręcznej zmianie asortymentu i przy wejściu **nowego towaru** na rynek
+/// ([`Market::stock_new_good`]). Trzy kopie tej wiedzy rozjechałyby się przy pierwszej
+/// zmianie polityki zamówień — a to jest jedna reguła domenowa, nie trzy podobne pętle.
+fn dodaj_linie(m: &mut MarketInner, i: usize, site: SiteId, g: GoodId, t: Tick) -> bool {
+    if m.shops[i].shelf.line(g).is_some() {
+        return false;
+    }
+    let Some(spec) = m.goods.spec(g).copied() else {
+        return false;
+    };
+    let firma = m.shops[i].firm;
+    let offer = m.offers.insert(Offer {
+        seller: firma,
+        site,
+        good: spec.good,
+        unit_price: spec.retail_price(),
+        price_basis: PriceBasis::GrossRetail,
+        available: Qty::ZERO,
+        quality: spec.quality,
+        // Marka wchodzi dopiero z pierwszą partią na półce (`restock`):
+        // pusta półka nie ma producenta, więc nie ma czyjej marki nosić.
+        brand: None,
+        category: CategoryId::Stock(spec.cat),
+        since: t,
+        price_rev: 0,
+    });
+    if !m.shops[i].shelf.insert(ShelfLine {
+        good: spec.good,
+        facings: 1,
+        offer,
+    }) {
+        m.offers.remove(offer);
+        return false;
+    }
+    m.shops[i].controllers.insert(
+        spec.good,
+        PriceController::new(
+            PricePolicy::Fixed {
+                price: spec.retail_price(),
+            },
+            spec.retail_price(),
+            t,
+        ),
+    );
+    let krotnosc = if spec.shelf_life_days > 0 {
+        BACKROOM_MULTIPLE.min(i64::from(spec.shelf_life_days))
+    } else {
+        BACKROOM_MULTIPLE
+    };
+    m.shops[i].inventory.reorder.insert(
+        spec.good,
+        ReorderPolicy {
+            point: Qty(SHELF_UNITS_PER_FACING * REORDER_POINT_MULTIPLE.min(krotnosc)),
+            target: Qty(SHELF_UNITS_PER_FACING * krotnosc),
+            lead_time_days: spec.lead_time_days,
+        },
+    );
+    m.index.mark_dirty(CategoryId::Stock(spec.cat));
+    true
 }

@@ -40,6 +40,18 @@
         (key: "cons_toys",            category: "leisure_goods", form: Piece,    unit_mass_g: 350,     unit_volume_ml: 4_000,      storage: Ambient, external_base_price: Some((2600))),
         (key: "cons_furniture",       category: "furniture",   form: Palletized, unit_mass_g: 28_000,  unit_volume_ml: 220_000,    storage: Dry,     external_base_price: Some((56_000))),
         (key: "cons_tv_set",          category: "electronics", form: Piece,      unit_mass_g: 22_000,  unit_volume_ml: 120_000,    storage: Dry,     external_base_price: Some((180_000))),
+        // Telefon komórkowy wchodzi do katalogu **zablokowany** (M10c WP10.9):
+        // istnieje jako wiersz od pierwszej doby, ale `Unlocks` nie wpuszcza go
+        // na półkę, dopóki ktoś nie odkryje `mobile_telephony`. Prealokacja zamiast
+        // dopisywania wiersza w trakcie partii jest tu jedyną drogą: `GoodId` to
+        // pozycja posortowanego klucza, więc nowy towar przenumerowałby połowę
+        // katalogu razem z każdą partią leżącą w magazynach.
+        //
+        // **Źródłem jest import i tylko import**, i to jest zgodne z regułą z M10c
+        // §5.4 („`NewGood` bez receptury **i** bez importu to błąd danych"): pierwsze
+        // telefony w każdym mieście przyjeżdżały zza granicy. Własna montownia
+        // wymaga archetypu budynku, czyli zmiany w generatorze M2 — adres `M10f`.
+        (key: "cons_mobile_phone",    category: "electronics", form: Piece,      unit_mass_g: 180,     unit_volume_ml: 700,        storage: Dry,     external_base_price: Some((92_000))),
         (key: "cons_refrigerator",    category: "appliance",   form: Palletized, unit_mass_g: 60_000,  unit_volume_ml: 450_000,    storage: Ambient, external_base_price: Some((210_000))),
         (key: "cons_washing_machine", category: "appliance",   form: Palletized, unit_mass_g: 70_000,  unit_volume_ml: 400_000,    storage: Ambient, external_base_price: Some((240_000))),
         (key: "cons_bicycle",         category: "vehicle",     form: Piece,      unit_mass_g: 15_000,  unit_volume_ml: 230_000,    storage: Ambient, external_base_price: Some((88_000))),

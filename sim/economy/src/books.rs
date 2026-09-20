@@ -250,6 +250,31 @@ pub enum TxKind {
         campaign: magnat_core::CampaignId,
         channel: magnat_core::AdChannelKind,
     },
+    /// Budżet materiałowy laboratorium (M10c WP10.8, PRD §7.7).
+    ///
+    /// Odbiorcą jest **reszta świata**: odczynniki, prototypy i aparatura przyjeżdżają
+    /// spoza miasta, a udawanie, że pieniądz trafia do konkretnego dostawcy, byłoby
+    /// zmyśleniem drugiej strony przelewu — ta sama zasada, co przy billboardzie
+    /// w `K-80`. Wariant osobny od `AdSpend`, bo `jest_decyzja` w balansatorze
+    /// klasyfikuje oba jako **wybór**, ale panel R&D pyta o same badania.
+    RndSpend {
+        tech: magnat_core::TechId,
+    },
+    /// Opłata licencyjna: wstępna przy podpisaniu i royalty co miesiąc.
+    ///
+    /// Odbiorcą jest **właściciel patentu**, i to jest cała różnica wobec `RndSpend`:
+    /// tamten pieniądz wychodzi z miasta, ten w nim zostaje.
+    ///
+    /// `ponytail:` opłata trafia na **konto** licencjodawcy, ale nie do jego rachunku
+    /// wyniku — `Firms::post_revenue` ma jednego wołającego (domknięcie miesiąca
+    /// sklepu) i `K-75` każe mu przy nim zostać. Sufit nazwany: pieniądz domyka się
+    /// co do grosza, `SitePnlMonth::revenue` licencjodawcy nie rośnie, więc wycena
+    /// firmy z patentów (M10d) zobaczy je na koncie, a nie w marży. Droga wyjścia
+    /// prowadzi przez drugie wejście do rachunku wyniku, a nie przez drugiego
+    /// wołającego `post_revenue`.
+    LicenseFee {
+        tech: magnat_core::TechId,
+    },
 }
 
 /// Opis zapisu podawany przez wołającego. `tax` jest **wyłącznie VAT-em**

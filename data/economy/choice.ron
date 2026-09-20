@@ -10,7 +10,7 @@
 // `thr0` jest ujemne, bo `f(x) = −ln(1+x)` jest ujemna dla każdego dodatniego
 // stosunku ceny do budżetu. Próg bliski zeru znaczy „kupi tylko okazję".
 (
-    schema_version: 2,
+    schema_version: 3,
 
     // Softmax zamiast argmax (PRD §6.4). T → 0 degeneruje rynek do monopolu,
     // T → ∞ do rzutu monetą.
@@ -70,6 +70,10 @@
         (cat: Medicine, gr: 2500),
         (cat: Fuel,     gr: 8000),
         (cat: Other,    gr: 4000),
+        // Telefon kosztuje rząd wielkości więcej niż koszyk spożywczy i rzadko
+        // się go kupuje — mianownik jest odpowiednio duży, inaczej człon ceny
+        // wyszedłby poza skalę i żaden mieszkaniec nigdy by go nie kupił.
+        (cat: Comms,    gr: 12000),
     ],
 
     // Próg odłożenia zakupu per potrzeba (§6.4, decyzja otwarta nr 9 — propozycja

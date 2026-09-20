@@ -159,3 +159,18 @@ Szczegóły — tabela `F-n` w `M10b-marka-i-media.md`.
 | FD-2 | **Plan kont `LedgerAccount` też rośnie na końcu.** M10b dołożył `MarketingExpense` | Kolejność wariantów indeksuje tablicę sald, która wchodzi do hasha stanu i do zapisu gry. Rozdział ról zostaje bez zmian: **księga zakładu mówi, na co poszło, dziennik transakcji — do kogo** (`K-57`, `K-80`) |
 | FD-3 ★ | **Wycena firmy ma już jedno wejście, którego wcześniej nie miała: `MacroFirm.brand_stock`** przestał być zerem (`F-14`) i niesie renomę marki ważoną znajomością, w skali −100..100 | §6.5 PRD chce wyceny „z opóźnionych i zaszumionych wyników plus plotek". Marka jest tym składnikiem wyceny, który **nie** jest wynikiem finansowym, i od M10b jest realną liczbą, a nie polem w strukturze |
 | FD-4 | **Blok `StreamId` M10: zajęte 280–284 i 292–295; wolne 285–291 i 296–299.** `InvestorNoise = 286`, `EarningsNoise = 287`, `PerilDraw = 288` z tabeli M10 §7.1 są nadal wolne i zarezerwowane imiennie | — |
+
+---
+
+## Zmiany wpisane po M10c
+
+Zgodnie z `K-18`. Wpisane jest **tylko to, co wiadomo na pewno** po zamknięciu
+M10c. Gwiazdka = zmiana zakresu albo kryterium. Szczegóły — tabela `FD-n`
+w `M10c-rd-i-nowe-produkty.md`.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| FD-5 ★ | **`SitePnlMonth.fixed` niesie od M10c także koszt badań** (`Site::rnd_accrued`, domykany razem z czynszem przy liście płac). Wycena firmy liczona z marży zakładu widzi więc pełny koszt operacyjny, a nie sam czynsz z katalogu typów | Budżet materiałowy laboratorium i opłaty licencyjne są kosztem **operacyjnym**, nie kadrowym: pensje badaczy siedzą już w `labor`. Dla M10d znaczy to jedno i warto o tym wiedzieć przed wyceną: firma prowadząca badania ma niższą marżę **dziś** i wyższą wartość **jutro**, a `margin_bp()` widzi tylko pierwszą połowę |
+| FD-6 | **`ContractId` mintuje wyłącznie `magnat_supply::B2b::mint_contract_id`** — także dla umów, których `sim/supply` nie prowadzi. M10c wydaje tą drogą numery licencjom patentowym i trzyma ich rejestr u siebie | Drugi licznik dałby dwie umowy o tym samym numerze i `Subject::Contract` prowadziłby raz tu, raz tam. Jeśli M10d zechce umowy inwestorskiej z własnym numerem, bierze go stamtąd — a rejestr prowadzi u siebie |
+| FD-7 | **Blok `DecisionReason` M10: zajęte 800–807.** Wolne: **808–899**. `StreamId` M10: zajęte 280–285 i 292–295; wolne **286–291** i **296–299** | M10c wziął jeden numer strumienia (`RnDBreakthrough = 285`) i cztery powody (804–807) |
+| FD-8 ★ | **Opłata licencyjna trafia na konto licencjodawcy, ale nie do jego rachunku wyniku** (`FD-21` w M10c). `SitePnlMonth::revenue` właściciela patentu nie rośnie, bo `Firms::post_revenue` ma jednego wołającego i `K-75` każe mu przy nim zostać | Dla wyceny firmy to jest różnica widoczna gołym okiem: firma żyjąca z patentów ma pieniądze na koncie i **zero** w marży, więc wycena licząca z `margin_bp()` policzy ją jako nierentowną. Droga wyjścia prowadzi przez drugie **wejście** do rachunku wyniku, a nie przez drugiego wołającego `post_revenue` |

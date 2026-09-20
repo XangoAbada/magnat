@@ -14,7 +14,7 @@
 // Towar spoza `retail.ron` jest błędem ładowania: koszyk, którego nie da się kupić
 // w żadnym sklepie, dałby indeks liczony z pustego zbioru transakcji.
 (
-    schema_version: 2,
+    schema_version: 3,
 
     // Okno uśredniania ceny transakcyjnej. Trzydzieści dób, czyli miesiąc (`K-1`) —
     // ta sama siatka co okresy księgowe i terminy rat. „30 dni" i „miesiąc" są w M5

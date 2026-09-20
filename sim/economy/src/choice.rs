@@ -62,6 +62,13 @@ pub struct Candidate {
     pub rating: Option<u8>,
     /// Czy mieszkaniec już tu był (premia za nowość dotyczy tylko tych, gdzie nie był).
     pub visited: bool,
+    /// Czy **towar** jest nowy na rynku (M10c WP10.9).
+    ///
+    /// Osobno od `visited`, bo to są dwie różne nowości: tamta mówi „nie znam tego
+    /// sklepu", ta — „takiej rzeczy w tym mieście dotąd nie było". Pierwszy telefon
+    /// komórkowy jest nowy także w sklepie, do którego mieszkaniec chodzi od lat,
+    /// i to jest cała różnica.
+    pub fresh: bool,
 }
 
 /// To, co kupujący wnosi do funkcji użyteczności poza samą ofertą.
@@ -146,7 +153,10 @@ fn score_input(c: &Candidate, st: &BuyerState<'_>) -> crate::kernel::ScoreInput 
         Some(r) => (f64::from(r) - 50.0) / 50.0 * if c.visited { 0.75 } else { 0.25 },
         None => 0.0,
     };
-    let novelty = if c.visited {
+    // Nowość ma dwa źródła i wystarczy jedno: nieznany sklep albo towar, którego
+    // w mieście dotąd nie było. Człon jest ten sam, bo dla kupującego to jest to samo
+    // pytanie — „czy spróbować czegoś, czego nie znam" — a odpowiada na nie otwartość.
+    let novelty = if c.visited && !c.fresh {
         0.0
     } else {
         f64::from(st.openness.get()) / 100.0
@@ -356,6 +366,7 @@ mod tests {
             brand: None,
             rating: None,
             visited: false,
+            fresh: false,
         }
     }
 

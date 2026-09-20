@@ -11,3 +11,6 @@ preview*.png
 # plik w gicie byłby zobowiązaniem do nieruszania niczego, a nie bramką.
 /runs/
 /runs-*/
+# Bramki strukturalne są w Pythonie, więc `scripts/` produkuje `__pycache__`
+# przy każdym przebiegu CI i przy każdym lokalnym uruchomieniu.
+__pycache__/

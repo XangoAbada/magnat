@@ -322,6 +322,28 @@ pub(crate) struct MarketInner {
     budget_log: Vec<(u32, DecisionReason)>,
     planned: BTreeMap<u32, PlannedPurchase>,
     intents: Vec<PurchaseIntent>,
+    /// Towary **poza obiegiem**: istnieją w katalogu, ale nie ma ich na żadnej półce
+    /// i żaden sklep ich nie zamawia (M10c WP10.9).
+    ///
+    /// To jest jedyna tablica prawdy o tym, co w mieście jest dostępne. Blokadę
+    /// zakłada raz stawianie świata (z `magnat_firms::gated_goods`), a zdejmuje ją
+    /// [`Market::stock_new_good`] w chwili, gdy technologia wypuszcza towar. Stan,
+    /// nie pomiar: zmienia asortyment każdego sklepu, więc wchodzi do hasha.
+    ///
+    /// Pusty zbiór w świecie bez drzewa technologii — i wtedy wszystko zachowuje się
+    /// dokładnie jak przed M10c.
+    locked_goods: std::collections::BTreeSet<GoodId>,
+    /// Towary **nowe na rynku** i tick, do którego jeszcze nimi są (M10c WP10.9).
+    ///
+    /// Wpisuje je [`Market::stock_new_good`] w chwili, gdy technologia wypuszcza
+    /// towar do obiegu; czyta je decyzja zakupowa, bo nowość ocenia się otwartością
+    /// kupującego (`TraitId::Openness`) — i to jest cała treść kryterium „mieszkańcy
+    /// z wysoką otwartością kupują pierwsi".
+    ///
+    /// Stan, nie pomiar: zmienia to, kto co kupi, więc wchodzi do hasha. Mapa jest
+    /// pusta w świecie bez drzewa technologii i ma co najwyżej tyle wpisów, ile
+    /// towarów któraś technologia wypuszcza — czyli dziś jeden.
+    fresh_goods: BTreeMap<GoodId, Tick>,
     /// Kwoty zaklepane w bieżącym ticku, po indeksie encji gospodarstwa. Bez tego
     /// dwa zakupy tej samej minuty widziałyby ten sam budżet dwa razy.
     committed: BTreeMap<u32, Money>,
@@ -404,6 +426,8 @@ impl Market {
             budget_log: Vec::new(),
             planned: BTreeMap::new(),
             intents: Vec::new(),
+            locked_goods: std::collections::BTreeSet::new(),
+            fresh_goods: BTreeMap::new(),
             committed: BTreeMap::new(),
             rest_of_world,
             tax: Box::new(NoTax),
@@ -479,6 +503,23 @@ impl Market {
 }
 
 impl MarketInner {
+    /// Czy towar jest jeszcze **nowy na rynku** (M10c WP10.9).
+    ///
+    /// Pusta mapa kosztuje jedno porównanie, więc świat bez drzewa technologii
+    /// nie płaci za ten mechanizm ani cyklu na gorącej ścieżce decyzji zakupowej.
+    pub(crate) fn is_fresh(&self, g: GoodId) -> bool {
+        !self.fresh_goods.is_empty()
+            && self
+                .fresh_goods
+                .get(&g)
+                .is_some_and(|do_| self.tick.0 < do_.0)
+    }
+
+    /// Czy towar jest poza obiegiem — nie wolno go wystawić ani zamówić.
+    pub(crate) fn is_locked(&self, g: GoodId) -> bool {
+        !self.locked_goods.is_empty() && self.locked_goods.contains(&g)
+    }
+
     // ── półka jako slot magazynu (WP11) ────────────────────────────────────────
     //
     // Trzy najkrótsze funkcje w tym pliku i trzy, które zdejmują z rynku detalicznego
@@ -695,6 +736,15 @@ impl HashState for Market {
             it.qty.hash_state(h);
             it.agreed_price.hash_state(h);
             it.cogs.hash_state(h);
+        }
+        h.write_u32(m.locked_goods.len() as u32);
+        for g in &m.locked_goods {
+            g.hash_state(h);
+        }
+        h.write_u32(m.fresh_goods.len() as u32);
+        for (g, t) in &m.fresh_goods {
+            g.hash_state(h);
+            h.write_u64(t.0);
         }
         // M5d. Budżety, kredyty i koszyk CPI **są stanem**, a nie pomiarem: stopa
         // bazowa wpływa na oprocentowanie, oprocentowanie na ratę, rata na saldo

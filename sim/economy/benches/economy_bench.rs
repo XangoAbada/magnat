@@ -154,6 +154,7 @@ fn bench_uzytecznosc(c: &mut Criterion) {
             brand: None,
             rating: Some(60),
             visited: i % 3 == 0,
+            fresh: false,
         })
         .collect();
 

@@ -132,15 +132,22 @@ vocab_enum! {
 }
 
 vocab_enum! {
-    /// Kategoria zapasu gospodarstwa domowego — indeks w `Household.stock: [u8; 8]`
+    /// Kategoria zapasu gospodarstwa domowego — indeks w `Household.stock`
     /// (M3c §5.6) i ładunek `DecisionReason::StockBelowThreshold` (M3b §5.4).
     ///
     /// Kolejność jest kontraktem tak samo jak przy `NeedKind`: to ona indeksuje tablicę
     /// dni zapasu. W M3 zapas jest abstrakcyjnymi „dniami"; M5 zastępuje go realnymi
     /// towarami i to on przypisuje `GoodId` do kategorii — `core` nadal nie wie,
     /// co w kategorii leży.
+    ///
+    /// **`Comms` dopisane na końcu w M10c** (`K-83`) i to jest jedyny dozwolony ruch
+    /// w tej liście: kolejność indeksuje `Household.stock`, więc wstawienie wariantu
+    /// w środku przenumerowałoby spiżarnię każdego gospodarstwa w każdym zapisie.
+    /// Powód dopisania jest jeden i wynika z kryterium WP10.9: potrzeba `Social`
+    /// nie miała **żadnej** kategorii zakupowej, więc „kontakt społeczny" był
+    /// wyłącznie wizytą w miejscu i żaden nowy towar nie mógł go zaspokoić.
     StockCat {
-        Food, Drink, Hygiene, Cleaning, Clothing, Medicine, Fuel, Other,
+        Food, Drink, Hygiene, Cleaning, Clothing, Medicine, Fuel, Other, Comms,
     }
 }
 
@@ -418,6 +425,11 @@ impl StockCat {
             StockCat::Clothing => NeedKind::Clothing,
             StockCat::Medicine => NeedKind::Health,
             StockCat::Fuel | StockCat::Other => NeedKind::Housing,
+            // Telefon, abonament, znaczek pocztowy — rzeczy, które kupuje się po to,
+            // żeby utrzymać kontakt (M10c WP10.9, PRD §11.3). Do M10c `Social` nie
+            // miał żadnej kategorii zakupowej, więc `cats_of(Social)` zwracało pustkę
+            // i potrzeba zaspokajała się wyłącznie wizytą w miejscu.
+            StockCat::Comms => NeedKind::Social,
         }
     }
 }

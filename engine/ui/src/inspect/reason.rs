@@ -1324,7 +1324,76 @@ pub fn describe(c: &Catalog, l: Locale, r: DecisionReason) -> String {
                 ("zasieg", &procent(u32::from(reach_bp))),
             ],
         ),
+        // ── M10c: R&D i nowe produkty ────────────────────────────────────────────
+        // Towar znowu jest w ładunku, a nie w zdaniu, i po raz pierwszy tak samo
+        // jest z technologią: `TechId` rozwiązuje `data/tech/`, którego `engine/ui`
+        // nie widzi — ta sama granica co przy `GoodId` od M6.
+        DecisionReason::ResearchStarted {
+            tech,
+            cost_rp,
+            months_est,
+        } => c.fmt_key(
+            l,
+            "ui.reason.ResearchStarted",
+            &[
+                ("technologia", &technologia(tech)),
+                ("koszt", &format!("{cost_rp}")),
+                ("miesiecy", &months(c, l, u32::from(months_est))),
+            ],
+        ),
+        DecisionReason::TechDiscovered {
+            tech,
+            patented,
+            rp_spent,
+            months,
+        } => c.fmt_key(
+            l,
+            if patented {
+                "ui.reason.TechDiscoveredPatent"
+            } else {
+                "ui.reason.TechDiscoveredOpen"
+            },
+            &[
+                ("technologia", &technologia(tech)),
+                ("punkty", &format!("{rp_spent}")),
+                ("miesiecy", &self::months(c, l, u32::from(months))),
+            ],
+        ),
+        DecisionReason::LicenseSigned {
+            tech,
+            licensor: _,
+            royalty_bp,
+        } => c.fmt_key(
+            l,
+            "ui.reason.LicenseSigned",
+            &[
+                ("technologia", &technologia(tech)),
+                ("oplata", &procent_bp(i32::from(royalty_bp))),
+            ],
+        ),
+        DecisionReason::ProductLaunched {
+            good: _,
+            tech,
+            shops,
+        } => c.fmt_key(
+            l,
+            "ui.reason.ProductLaunched",
+            &[
+                ("technologia", &technologia(tech)),
+                ("sklepow", &format!("{shops}")),
+            ],
+        ),
     }
+}
+
+/// Technologia jako etykieta w karcie inspekcji.
+///
+/// `ponytail:` numer węzła zamiast nazwy. Sufit nazwany i taki sam jak przy
+/// [`marka`]: `describe` dostaje katalog tekstów i `Locale`, a drzewo technologii
+/// mieszka w `sim/firms` i w `data/tech/`. Droga wyjścia: panel R&D (M10f) trzyma
+/// drzewo i podmienia numer na nazwę węzła.
+fn technologia(t: magnat_core::TechId) -> String {
+    format!("#{}", t.0)
 }
 
 /// Marka jako etykieta w karcie inspekcji.
@@ -1961,6 +2030,39 @@ mod tests {
                 bias: EditorialBias::Sensational,
                 reach_bp: 3_200,
             },
+            // ── M10c: R&D i nowe produkty ──
+            DecisionReason::ResearchStarted {
+                tech: magnat_core::TechId(4),
+                cost_rp: 1_200,
+                months_est: 9,
+            },
+            DecisionReason::TechDiscovered {
+                tech: magnat_core::TechId(4),
+                patented: true,
+                rp_spent: 1_200,
+                months: 9,
+            },
+            // Drugi wpis: odkrycie po roku „światowym" wybiera inny klucz — nie ma
+            // patentu, więc nie ma tego samego zdania z dopiskiem, tylko inne zdanie.
+            DecisionReason::TechDiscovered {
+                tech: magnat_core::TechId(7),
+                patented: false,
+                rp_spent: 480,
+                months: 4,
+            },
+            DecisionReason::LicenseSigned {
+                tech: magnat_core::TechId(4),
+                licensor: magnat_core::FirmId(magnat_core::Entity::new(
+                    12,
+                    std::num::NonZeroU32::MIN,
+                )),
+                royalty_bp: 450,
+            },
+            DecisionReason::ProductLaunched {
+                good: magnat_core::GoodId(11),
+                tech: magnat_core::TechId(4),
+                shops: 23,
+            },
         ]
     }
 
@@ -2025,7 +2127,10 @@ mod tests {
         // dwukrotne**: `BrandLearned` ze źródła z kanałem i bez kanału, oraz
         // `BrandExperience` przy rozczarowaniu i przy spełnionych oczekiwaniach.
         // Razem 101.
-        assert_eq!(wszystkie().len(), 101);
+        // Po M10c cztery powody R&D (804..=807) plus **jeden wpis dwukrotny**:
+        // `TechDiscovered` z patentem i bez patentu to dwa różne zdania o tym samym
+        // odkryciu, bo różnicę robi rok „światowy", a nie znak liczby. Razem 106.
+        assert_eq!(wszystkie().len(), 106);
     }
 
     #[test]

@@ -636,8 +636,12 @@ fn zamknij_szarze(
     let wsad = charge.mass;
 
     // ── media szarży ────────────────────────────────────────────────────────────
-    let energia = Energy(skaluj(Mass(r.energy.0), wsad, r.batch_mass).0);
-    let woda = Volume(skaluj(Mass(r.water.0), wsad, r.batch_mass).0);
+    // Zniżka technologiczna (M10c `TechEffect::CostReduction`) zdejmuje część
+    // rachunku za media i **tylko** jego: masa wsadu i masa wyrobu zostają, bo
+    // inaczej bilans masy z 00 §6 przestałby się domykać.
+    let zostaje = i64::from(10_000u16.saturating_sub(zaklad.utility_bonus_bp));
+    let energia = Energy(skaluj(Mass(r.energy.0), wsad, r.batch_mass).0 * zostaje / 10_000);
+    let woda = Volume(skaluj(Mass(r.water.0), wsad, r.batch_mass).0 * zostaje / 10_000);
     if let Some(m) = zaklad.meter_mut(UtilityService::Electricity) {
         m.draw_energy(WattMinutes::from_energy(energia));
     }

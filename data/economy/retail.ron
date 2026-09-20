@@ -14,7 +14,7 @@
 // `None` → `default_markup_bp`. **To jest cena startowa, nie polityka cenowa**:
 // od M5c cenę ustala `reprice`, a ta kolumna zostaje tylko jako punkt wyjścia.
 (
-    schema_version: 2,
+    schema_version: 3,
     default_markup_bp: 3200,
 
     // Jaki sklep czym handluje. `PlaceKind` przychodzi z archetypu zakładu
@@ -23,7 +23,13 @@
     shop_kinds: [
         (kind: Grocery,  cats: [Food, Drink, Hygiene, Cleaning]),
         (kind: Pharmacy, cats: [Medicine, Hygiene]),
-        (kind: Clothing, cats: [Clothing]),
+        // `ponytail:` telefon ląduje w sklepie „odzieżowym" i to jest sufit nazwany.
+        // `PlaceKind::Clothing` niesie archetyp `specialty_shop` („sklep
+        // specjalistyczny"), czyli jedyne miejsce w generatorze, w którym towar
+        // sztukowy spoza spożywczaka ma gdzie stanąć. Droga wyjścia: własny
+        // `PlaceKind` dla elektroniki — kosztuje archetyp budynku, wagi generatora
+        // i godziny handlu, czyli zmianę po stronie M2, nie M10.
+        (kind: Clothing, cats: [Clothing, Comms]),
     ],
 
     goods: [
@@ -56,5 +62,11 @@
         // ── Clothing ─────────────────────────────────────────────────────────────
         (key: "cons_clothing",       cat: Clothing,  quality: 58, shelf_life_days: 0,   lead_time_days: 7, markup_bp: Some(8000)),
         (key: "cons_shoes",          cat: Clothing,  quality: 62, shelf_life_days: 0,   lead_time_days: 9, markup_bp: Some(9000)),
+
+        // ── Comms ────────────────────────────────────────────────────────────────
+        // Jedyny towar kategorii i jedyny towar w tym pliku, który **na starcie
+        // nie istnieje na żadnej półce**: `Unlocks` trzyma go poza obiegiem, dopóki
+        // ktoś nie odkryje `mobile_telephony` (M10c WP10.9).
+        (key: "cons_mobile_phone",   cat: Comms,     quality: 68, shelf_life_days: 0,   lead_time_days: 5, markup_bp: Some(5200)),
     ],
 )

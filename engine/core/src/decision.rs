@@ -26,7 +26,7 @@
 
 use crate::ids::{FirmId, SiteId};
 use crate::time::MinuteOfDay;
-use crate::types::{BrandId, DistrictId, EventId, GoodId, JobRoleId, Money, PolicyId, Q};
+use crate::types::{BrandId, DistrictId, EventId, GoodId, JobRoleId, Money, PolicyId, TechId, Q};
 use crate::vocab::{
     AbateReason, ActionKind, AdChannelKind, AgencyKind, BankruptcyTrigger, ClaimPriority,
     CommitmentKind, DeprivationEffect, EditorialBias, EventCategory, FirmStrategy, FixedCost,
@@ -769,7 +769,51 @@ pub enum DecisionReason {
         bias: EditorialBias,
         reach_bp: u16,
     } = 803,
-    // 804–899 zarezerwowane dla M10c–M10f (R&D, giełda, relacje, związki).
+    /// Firma wybrała węzeł drzewa technologii i zaczęła go badać (M10c WP10.8, PRD §7.7).
+    ///
+    /// `months_est` to prognoza z **bieżącego** tempa, nie obietnica: zwolnienie
+    /// badaczy albo cięcie budżetu materiałowego wydłuża projekt, a przełom go skraca.
+    /// Gracz ma z tego pola dowiedzieć się, czego firma się spodziewała w chwili
+    /// decyzji — i porównać z tym, co wyszło w [`DecisionReason::TechDiscovered`].
+    ResearchStarted {
+        tech: TechId,
+        cost_rp: u32,
+        months_est: u16,
+    } = 804,
+    /// Firma odkryła technologię (M10c WP10.8, PRD §7.7, §11.3).
+    ///
+    /// `patented` rozstrzyga, czy odkrycie wyprzedziło rok „światowy": przed nim
+    /// daje patent i wyłączność na dwadzieścia lat gry, po nim jest już wiedzą
+    /// w obiegu i jedyną nagrodą jest obniżony koszt. To jest cała różnica między
+    /// byciem pierwszym a byciem na czas.
+    TechDiscovered {
+        tech: TechId,
+        patented: bool,
+        rp_spent: u32,
+        months: u16,
+    } = 805,
+    /// Firma kupiła licencję na cudzy patent (M10c WP10.8, PRD §7.7).
+    ///
+    /// Licencja **nie jest nowym mechanizmem umowy**: niesie `ContractId` z M6,
+    /// tak samo jak franczyza w M10e. Tutaj są dwie liczby, których umowa dostawy
+    /// nie ma czym wyrazić — stawka royalty i to, komu się ją płaci.
+    LicenseSigned {
+        tech: TechId,
+        licensor: FirmId,
+        royalty_bp: u16,
+    } = 806,
+    /// Technologia wypuściła na rynek towar, którego wcześniej nie było
+    /// (M10c WP10.9, PRD §11.3).
+    ///
+    /// To jest powód, który widać w mieście: przed nim towaru nie było na żadnej
+    /// półce i nie było go w koszyku żadnej potrzeby, po nim jest. `shops` mówi,
+    /// ile sklepów wstawiło go na półkę tego samego dnia.
+    ProductLaunched {
+        good: GoodId,
+        tech: TechId,
+        shops: u16,
+    } = 807,
+    // 808–899 zarezerwowane dla M10d–M10f (giełda, relacje, związki).
     // ... kolejne fazy dopisują własne bloki na końcu pliku
 }
 
@@ -873,6 +917,10 @@ impl DecisionReason {
             DecisionReason::BrandExperience { .. } => 801,
             DecisionReason::AdCampaignStarted { .. } => 802,
             DecisionReason::StoryPublished { .. } => 803,
+            DecisionReason::ResearchStarted { .. } => 804,
+            DecisionReason::TechDiscovered { .. } => 805,
+            DecisionReason::LicenseSigned { .. } => 806,
+            DecisionReason::ProductLaunched { .. } => 807,
         }
     }
 }

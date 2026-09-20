@@ -27,7 +27,13 @@ use magnat_core::{
 };
 use serde::Deserialize;
 
-pub const ECONOMY_SCHEMA_VERSION: u32 = 2;
+/// Jedna wersja na **cały** katalog `data/economy/`, nie na plik.
+///
+/// 2 → 3 w M10c: `StockCat` dostał dziewiąty wariant (`Comms`, `K-83`), więc
+/// `envelopes.ron` ma o jeden wiersz wag więcej w każdym typie gospodarstwa,
+/// a `retail.ron` — nową kategorię w asortymencie. Pozostałe pliki nie zmieniły
+/// kształtu i podnoszą numer razem z nimi, bo numer opisuje katalog.
+pub const ECONOMY_SCHEMA_VERSION: u32 = 3;
 
 // ── błędy ────────────────────────────────────────────────────────────────────────
 

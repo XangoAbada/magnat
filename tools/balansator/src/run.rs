@@ -451,9 +451,16 @@ fn jest_decyzja(kind: &magnat_economy::TxKind) -> bool {
         | K::CampaignDonation { .. }
         // Reklama też: nikt nie zobowiązał firmy do kupienia billboardu, a decyduje
         // o tym rachunek „czy ta kampania mi się zwróci" (M10b).
-        | K::AdSpend { .. } => true,
+        | K::AdSpend { .. }
+        // Budżet laboratorium tak samo: badania są wydatkiem, którego nikt firmie
+        // nie narzuca, a przestawia go kurs firmy (M10c, `K-49`).
+        | K::RndSpend { .. } => true,
         // Zobowiązanie: umowa, harmonogram albo warunek początkowy świata.
         K::Wage { .. }
+        // Licencja jest **zobowiązaniem**, nie wyborem, i to jest różnica wobec
+        // budżetu badań: podpisana umowa każe płacić royalty co miesiąc niezależnie
+        // od tego, czy firma nadal chce (M10c §5.4 pkt 3).
+        | K::LicenseFee { .. }
         | K::Rent { .. }
         | K::Utility { .. }
         | K::LoanPayment { .. }

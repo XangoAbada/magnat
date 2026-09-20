@@ -64,6 +64,7 @@ pub mod owner_ops;
 pub mod panel;
 pub mod policy_run;
 pub mod pricing;
+pub mod rnd;
 pub mod shop;
 pub mod supply;
 pub mod systems;

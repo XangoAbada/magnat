@@ -144,3 +144,16 @@ Szczegóły — tabela `F-n` w `M10b-marka-i-media.md`.
 | FE-2 | **`SocialIndex::coworkers(site)` mierzy wreszcie to, co obiecuje** — ale to zasługa `K-74`, nie M10b; tutaj tylko potwierdzenie, że nic tego nie cofnęło | §5.9 liczy warunek powstania związku na spójnej składowej grafu relacji **wśród pracowników zakładu**. Uczeń wypadł z `by_site` i ma własny indeks (`DK-8`) |
 | FE-3 | **Strajk ma już nośnik po stronie opinii: marka firmy.** Kampania PR, publikacja o strajku i rozczarowanie klienta piszą do tego samego slotu (`BrandAffinity`) | M10 §1 obiecuje kaskadę „strajk → gazeta pisze → marka gracza traci afinitet". Dwa z trzech ogniw są gotowe: publikacja (`Story`, M10b) i afinitet (`Touch::Media`). Brakuje wyłącznie zdarzenia strajku jako wejścia do redakcji — czyli tego, co robi ta podfaza |
 | FE-4 | **Blok `StreamId` M10: zajęte 280–284 i 292–295; wolne 285–291 i 296–299.** `CartelDetection = 289`, `UnionFormation = 290`, `StrikeResolve = 291` są nadal wolne i zarezerwowane imiennie | — |
+
+---
+
+## Zmiany wpisane po M10c
+
+Zgodnie z `K-18`. Wpisane jest **tylko to, co wiadomo na pewno** po zamknięciu
+M10c. Gwiazdka = zmiana zakresu albo kryterium. Szczegóły — tabela `FD-n`
+w `M10c-rd-i-nowe-produkty.md`.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| FE-5 | **Blok `DecisionReason` M10: zajęte 800–807.** Wolne: **808–899**. `StreamId` M10: wolne **286–291** i **296–299** | M10c wziął `RnDBreakthrough = 285` i powody 804–807 |
+| FE-6 | **`StockCat` ma od M10c dziewięć wariantów**, a `Household.stock` dziewięć bajtów (`K-83`). Kolejność jest kontraktem zapisu gry i dopisywać wolno wyłącznie na końcu | Żądanie płacowe związku liczy się z budżetu gospodarstwa, a ten dzieli się na koperty indeksowane `StockCat`. Wpis, który zakłada osiem kopert, policzy o jedną za mało |

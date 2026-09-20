@@ -595,6 +595,7 @@ impl Market {
                 brand: offer.brand,
                 rating: None,
                 visited: true,
+                fresh: m.is_fresh(spec.good),
             };
             let u = utility_of_offer(&cand, &w, &st, 0.0);
             if u < prog {
@@ -766,6 +767,7 @@ fn zbierz_kandydatow(
                     brand: o.brand,
                     rating,
                     visited,
+                    fresh: m.is_fresh(o.good),
                 });
             }
         }

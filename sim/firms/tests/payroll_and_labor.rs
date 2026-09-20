@@ -74,6 +74,7 @@ fn zaklad(key: FirmKey, slots: u16, obsadzone: u16) -> Site {
         mgmt: magnat_firms::ManagementQuality::NEUTRAL,
         tech: Q::new(50),
         hr_accrued: Money::ZERO,
+        rnd_accrued: Money::ZERO,
         fixed_cost_month: Money(1_200_000),
         pnl: magnat_firms::Ring::new(),
         opened: SimMinute(0),

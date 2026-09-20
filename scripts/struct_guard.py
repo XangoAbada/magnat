@@ -84,12 +84,18 @@ HEADLESS = "tools/headless/src/"
 # `struct-guard` w CI może przestać być czerwony na stałe. Bramka, która zawsze świeci
 # na czerwono, zostanie wyłączona (ryzyko R-5), a wtedy nie łapie już niczego.
 REJESTR = {
-    ("sim/world/src/city/lsystem.rs", "impl", 605): 33,
+    # 605 do M11b, **609 po M11c** — cztery linie, których M11c nie zamroziło,
+    # więc job `struct-guard` świecił na czerwono od 2026-09-17 do M10c. Odmrożenie
+    # jest tu poprawką bramki, nie zgodą na wzrost: pozycja 33 rejestru długu
+    # i jej adres zostają bez zmian.
+    ("sim/world/src/city/lsystem.rs", "impl", 609): 33,
     ("sim/world/src/city/lsystem.rs", "fn", 317): 34,
     ("sim/world/src/city/lsystem.rs", "fn", 257): 35,
     # 365 do M6d, 368 po M6e: trzy linie za bilans otwarcia złóż (`AP-1`) —
     # jedno wywołanie `bilans_zloz`, jedno pole w `CityData` i pusta linia.
-    ("sim/world/src/city/mod.rs", "fn", 368): 24,
+    # **370 po M11c** — dwie linie, których M11c nie zamroziło; patrz komentarz
+    # przy `lsystem.rs` wyżej, to ten sam przypadek i ta sama data.
+    ("sim/world/src/city/mod.rs", "fn", 370): 24,
     ("sim/world/src/city/zoning.rs", "fn", 322): 36,
     # Rośnie o jedno ramię na wariant `DecisionReason`. 319 przed M6b, 355 po bloku
     # M6b (400–402), 397 po M6c (403–405), 451 po M7b (500–502, przy czym `WageRaise`
@@ -156,8 +162,14 @@ REJESTR = {
     # aktorze rozcina razem z nim ten `match`, bo to jest ten sam podział widziany
     # z drugiej strony. Do tego czasu funkcja rośnie liniowo z liczbą wariantów
     # i jest to wzrost, który da się przewidzieć co do rzędu wielkości.
-    ("engine/ui/src/inspect/reason.rs", "fn", 978): 37,
-    ("engine/ui/src/inspect/reason.rs", "plik", 1360): 37,
+    # 1047 po M10b, **1106 po M10c** (+59): cztery powody R&D (804–807), z czego
+    # jeden rozgałęziony na dwa klucze — odkrycie z patentem i odkrycie po roku
+    # „światowym" to dwa różne zdania o tym samym wyniku, bo różnicę robi
+    # wyprzedzenie świata, a nie znak liczby. Plus jedna funkcja pomocnicza
+    # nazywająca technologię. Przyrost trafia w regułę tej pozycji: jedno
+    # rozgałęzienie plus dziewięć podstawień.
+    ("engine/ui/src/inspect/reason.rs", "fn", 1106): 37,
+    ("engine/ui/src/inspect/reason.rs", "plik", 1527): 37,
     # 269 po M7d: jedna linia za `finance: bf.finance` w budowie `BankParams`.
     ("sim/economy/src/data.rs", "fn", 269): 38,
 }
@@ -419,10 +431,19 @@ def test_wykrywacza() -> int:
     # Wykluczenie scenariuszy `tools/headless` jest filtrem, nie metryką — regres
     # w nim (np. wykluczenie całego `tools/`) byłby **cichy**, bo bramka świeciłaby
     # wtedy na zielono z mniejszą liczbą plików. Sprawdzamy więc na prawdziwym
-    # repozytorium, że most `retail` nadal jest mierzony, a scenariusz już nie.
+    # repozytorium, że rusztowanie biblioteki nadal jest mierzone, a scenariusz już nie.
+    #
+    # **Do M10c ta asercja wskazywała `tools/headless/src/retail.rs`, którego nie ma
+    # od M9a**: most detaliczny wyprowadził się do `game/src/world/retail.rs`
+    # (`K-68`), a fikstura o tym nie wiedziała — więc `--self-test` świecił na
+    # czerwono od tamtej pory i job `struct-guard` w CI nie przechodził wcale.
+    # Plikiem, który zostaje po tej stronie i jest mierzony, jest `population.rs`.
     korzen = pathlib.Path(__file__).resolve().parent.parent
     mierzone = {p.as_posix() for p in pliki_produkcyjne(korzen.glob("**/*.rs"), korzen)}
-    for wzgledna, ma_byc in (("tools/headless/src/retail.rs", True), ("tools/headless/src/m5shop.rs", False)):
+    for wzgledna, ma_byc in (
+        ("tools/headless/src/population.rs", True),
+        ("tools/headless/src/m5shop.rs", False),
+    ):
         jest = any(s.endswith(wzgledna) for s in mierzone)
         ok = jest == ma_byc
         kod |= 0 if ok else 1

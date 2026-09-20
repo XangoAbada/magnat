@@ -197,6 +197,22 @@ scalar_newtype! {
     CampaignId(u32)
 }
 
+scalar_newtype! {
+    /// Węzeł drzewa technologii — indeks do `data/tech/tech.ron` (M10c §5.4, `K-82`).
+    ///
+    /// Indeks nadawany przy ładowaniu, w **stabilnej kolejności alfabetycznej klucza
+    /// tekstowego**, tak samo jak [`GoodId`] i [`RecipeId`] (00 §5). W zapisie gry
+    /// trzyma się klucz, nie indeks, więc dopisanie technologii nie psuje starych
+    /// zapisów — to jest różnica wobec `JobRoleId` i klas pojazdów, gdzie indeks
+    /// jest kontraktem.
+    ///
+    /// Mieszka w `core`, bo jest **ładunkiem centralnego enuma**: `DecisionReason::
+    /// {ResearchStarted, TechDiscovered, LicenseSigned, ProductLaunched}` niosą go do
+    /// karty inspekcji, a ładunek nie może pochodzić z crate'u, który od `core` zależy —
+    /// ta sama reguła, która wypchnęła tu `PriceDriver` (`K-30`) i `WageCause` (`K-45`).
+    TechId(u16)
+}
+
 /// Skala 0..=100: jakość, zaspokojenie potrzeby, poziom umiejętności.
 /// Konstruktor przycina do zakresu — wartość spoza skali nigdy nie powstaje.
 #[derive(

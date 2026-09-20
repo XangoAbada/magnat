@@ -279,7 +279,18 @@ pub enum StreamId {
     /// Dobór zdarzeń do publikacji przez redakcję tytułu (M10b §5.3).
     /// Klucz: indeks encji zakładu redakcji, tick doby wydania.
     MediaEditorial = 284,
-    // 285–291 zostaje wolne dla M10c–M10e (R&D, giełda, ubezpieczenia, kartele,
+    /// Przełom w badaniach: skraca pozostały koszt węzła technologii o 10–40 %
+    /// (M10c §5.4). Klucz: indeks encji **zakładu prowadzącego projekt**, tick doby.
+    ///
+    /// Klucz jest zakładem, a nie firmą, i to jest ta sama poprawka co przy
+    /// `AdNotice`: firma z trzema laboratoriami losowałaby dla nich jeden rzut,
+    /// więc przełom wypadałby we wszystkich naraz albo w żadnym.
+    ///
+    /// **To jest jedyny element losowy w R&D.** Losowego „nie udało się" nie ma
+    /// z rozmysłu (§5.4): postęp bez wyniku jest dla gracza nieodróżnialny od błędu
+    /// programu, a jedyne, czego się z niego dowiaduje, to że nie warto patrzeć.
+    RnDBreakthrough = 285,
+    // 286–291 zostaje wolne dla M10d–M10e (giełda, ubezpieczenia, kartele,
     // związki) wg tabeli M10 §7.1.
     /// Losowość wewnątrz kroku makro: demografia komórki — urodzenia, zgony
     /// i migracja w fazie 1 (M10a §5.7). Klucz: indeks komórki, tick kroku.

@@ -159,6 +159,9 @@ pub fn run(a: &M5ShopArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
         &zaludnione.traffic,
         a.seed,
         &pool,
+        // Scenariusz `m5shop` stawia **wycinek** świata bez warstwy firm, więc nie
+        // ma kto prowadzić badań i nie ma czego blokować.
+        &[],
     )?;
     let market = r.market.clone();
     eprintln!(

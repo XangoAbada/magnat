@@ -62,16 +62,35 @@ pub fn setup(
     seed: u64,
     pool: &JobPool,
 ) -> Result<FullCity, Box<dyn Error>> {
-    let r = retail::setup(world, city, places, travel, traffic, seed, pool)?;
+    // Drzewo technologii wczytuje się **przed** rynkiem i to jest kolejność, nie
+    // przypadek: blokada towarów musi stanąć zanim generator obsadzi sklepy
+    // asortymentem. Rok startowy partii wchodzi tutaj i nigdzie indziej —
+    // `TechTree::load` zamienia rok „światowy" każdego węzła na dobę świata,
+    // więc symulacja nigdy nie pyta o kalendarz i nie ma drugiego źródła roku
+    // obok `EpochClock` z M8.
+    let goods = magnat_supply::catalog::load_default("contemporary")?;
+    let rnd = magnat_firms::load_rnd_default(i32::from(city.plan.epoch.year()), &goods)?;
+    let zablokowane = magnat_firms::gated_goods(&rnd.tree);
+    let r = retail::setup(
+        world,
+        city,
+        places,
+        travel,
+        traffic,
+        seed,
+        pool,
+        &zablokowane,
+    )?;
 
     let roles = RoleTable::load_default()?;
-    let types = katalog_typow(city, &roles)?;
+    let types = katalog_typow(city, &roles, &goods)?;
     let (mut firmy, report) = firms::zbuduj_firmy(city, world, &types);
     let slots = firmy.sites().map(|(_, s)| s.required_slots()).sum();
     // Firmy zastane w mieście nie mają dyrektora-mieszkańca (`Owner::External`),
     // więc cechy biorą się z klucza i ziarna świata. Firmy zakładane w trakcie gry
     // dostają cechy swojego założyciela — tą samą funkcją.
     firmy.refresh_personalities(seed, |_| None);
+    world.insert_resource(rnd);
     magnat_firms::systems::register_firms(world, firmy);
     world.insert_resource(magnat_firms::systems::PayrollOutbox::default());
     world.insert_resource(magnat_firms::systems::DecisionOutbox::default());
@@ -121,8 +140,11 @@ pub fn setup(
 
 /// Katalog typów zakładów dla tego miasta. Wymaga receptur archetypów, bo walidator
 /// sprawdza, czy receptura z `data/site_types/` w ogóle istnieje w katalogu towarów.
-fn katalog_typow(city: &CityData, roles: &RoleTable) -> Result<SiteTypeCatalog, Box<dyn Error>> {
-    let goods = magnat_supply::catalog::load_default("contemporary")?;
+fn katalog_typow(
+    city: &CityData,
+    roles: &RoleTable,
+    goods: &magnat_supply::Catalog,
+) -> Result<SiteTypeCatalog, Box<dyn Error>> {
     let archetypy: std::collections::BTreeMap<String, Vec<String>> = city
         .site_catalog
         .archetypes
@@ -137,5 +159,5 @@ fn katalog_typow(city: &CityData, roles: &RoleTable) -> Result<SiteTypeCatalog, 
             )
         })
         .collect();
-    Ok(SiteTypeCatalog::load_default(roles, &goods, &archetypy)?)
+    Ok(SiteTypeCatalog::load_default(roles, goods, &archetypy)?)
 }

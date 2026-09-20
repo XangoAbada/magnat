@@ -457,5 +457,22 @@
             shift: III,
             wage_base: (230000, 280000, 350000),
         ),
+        // ── dopisane w M10c (WP10.8) ────────────────────────────────────────────
+        // Badacz. Dopisany **na końcu**, bo `JobRoleId` jest pozycją w tej liście
+        // i siedzi w komponencie `Employment` każdego zatrudnionego (`K-43`).
+        //
+        // Waga umiejętności jest najwyższa w całym katalogu i to nie jest ozdoba:
+        // tempo badań liczy się wprost z `effective_labor` badaczy (M10c §5.4),
+        // więc to ta liczba decyduje o tym, ile dwóch dobrych badaczy bije czterech
+        // słabych. Zdrowie waży mało — laboratorium nie jest hutą.
+        (
+            key: "researcher",
+            weights: (skill: 650, energy: 150, mood: 150, health: 50),
+            prestige: 78,
+            unit: Office,
+            m2_per_workplace: 45,
+            shift: I,
+            wage_base: (520000, 760000, 1450000),
+        ),
     ],
 )

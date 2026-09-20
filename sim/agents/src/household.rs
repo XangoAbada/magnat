@@ -102,7 +102,11 @@ pub struct Household {
     pub stock: [u8; STOCK_CAT_COUNT],
     /// Indeks członka robiącego zakupy; rotuje wg grafików.
     pub shopper_rotation: u8,
-    pub _pad3: [u8; 3],
+    /// Wyrównanie do `vehicle_slots`. **Skróciło się z 3 B do 2 B w M10c**, bo
+    /// `StockCat` dostał dziewiąty wariant (`K-83`) i `stock` urosło o bajt.
+    /// Rezerwa wyrównania jest po to, żeby dopisanie kategorii nie przesuwało
+    /// offsetów — i tu właśnie zadziałała.
+    pub _pad3: [u8; 2],
     /// M4 wypełnia.
     pub vehicle_slots: [u32; 2],
     /// Rezerwa dla M5/M9, żeby nie przebudowywać archetypu (ryzyko R5).
@@ -129,7 +133,7 @@ impl Default for Household {
             income_monthly: Money::ZERO,
             stock: [0; STOCK_CAT_COUNT],
             shopper_rotation: 0,
-            _pad3: [0; 3],
+            _pad3: [0; 2],
             vehicle_slots: [u32::MAX; 2],
             _reserved: [0; 16],
             _pad4: [0; 4],

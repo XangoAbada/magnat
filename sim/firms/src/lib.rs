@@ -29,6 +29,7 @@ pub mod personality;
 pub mod registry;
 pub mod registry_managers;
 pub mod ring;
+pub mod rnd;
 pub mod site;
 pub mod systems;
 pub mod view;
@@ -59,6 +60,11 @@ pub use panel::{firm_panel, EmployeeRow, FirmPanelSnapshot, ManagerRow, OutlookR
 pub use personality::{personality_from_director, FirmPersonality};
 pub use registry::Firms;
 pub use ring::Ring;
+pub use rnd::{
+    gated_goods, load_default as load_rnd_default, ChargeKind, License, Patent, PlantEffect,
+    PlantEffectKind, Project, RndCharge, RndData, RndDay, RndOutcome, RndState, RndTuning,
+    TechEffect, TechNode, TechTree,
+};
 pub use site::{Site, SitePlacement, SitePnlMonth};
 pub use systems::{register_firms, DecisionOutbox, FirmSystem, PayrollOutbox};
 pub use view::{CityFacts, FirmView, GoodFacts, SiteFacts};

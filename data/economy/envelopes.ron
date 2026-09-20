@@ -17,7 +17,7 @@
 //
 // Kwoty w groszach (00 §2), udziały w promilach.
 (
-    schema_version: 2,
+    schema_version: 3,
 
     // ── koszty stałe ─────────────────────────────────────────────────────────────
     //
@@ -53,39 +53,47 @@
     // rodzina po wyprowadzce dzieci przestaje być rodziną z dziećmi w tej samej
     // minucie, w której ostatnie z nich wychodzi, i wagi zmieniają się same.
     //
-    // Każdy z siedmiu typów i każda z ośmiu kategorii **musi** tu być — brak wpisu
+    // Każdy z siedmiu typów i każda z **dziewięciu** kategorii **musi** tu być —
+    // brak wpisu
     // jest błędem ładowania, nie cichym zerem. Suma promili per typ musi dać 1000.
     kinds: [
         (kind: "Single", weights: [
             (cat: Food, w: 330), (cat: Drink, w:  90), (cat: Hygiene,  w: 70), (cat: Cleaning, w: 40),
-            (cat: Clothing, w: 130), (cat: Medicine, w: 40), (cat: Fuel, w: 150), (cat: Other, w: 150),
+            (cat: Clothing, w: 130), (cat: Medicine, w: 40), (cat: Fuel, w: 150), (cat: Other, w: 120),
+            (cat: Comms, w: 30),
         ]),
         (kind: "Couple", weights: [
             (cat: Food, w: 350), (cat: Drink, w:  90), (cat: Hygiene,  w: 70), (cat: Cleaning, w: 45),
-            (cat: Clothing, w: 125), (cat: Medicine, w: 45), (cat: Fuel, w: 150), (cat: Other, w: 125),
+            (cat: Clothing, w: 125), (cat: Medicine, w: 45), (cat: Fuel, w: 150), (cat: Other, w:  95),
+            (cat: Comms, w: 30),
         ]),
         // Rodzina z dziećmi: jedzenie zjada trzynaście punktów Innych i Napojów.
         (kind: "FamilyWithKids", weights: [
             (cat: Food, w: 430), (cat: Drink, w:  70), (cat: Hygiene,  w: 75), (cat: Cleaning, w: 55),
-            (cat: Clothing, w: 130), (cat: Medicine, w: 45), (cat: Fuel, w: 125), (cat: Other, w:  70),
+            (cat: Clothing, w: 130), (cat: Medicine, w: 45), (cat: Fuel, w: 125), (cat: Other, w:  45),
+            (cat: Comms, w: 25),
         ]),
         // Wielopokoleniowe: to samo co rodzina plus podwojone leki.
         (kind: "MultiGen", weights: [
             (cat: Food, w: 420), (cat: Drink, w:  60), (cat: Hygiene,  w: 75), (cat: Cleaning, w: 55),
-            (cat: Clothing, w: 105), (cat: Medicine, w: 90), (cat: Fuel, w: 125), (cat: Other, w:  70),
+            (cat: Clothing, w: 105), (cat: Medicine, w: 90), (cat: Fuel, w: 125), (cat: Other, w:  50),
+            (cat: Comms, w: 20),
         ]),
         (kind: "Roommates", weights: [
             (cat: Food, w: 340), (cat: Drink, w: 130), (cat: Hygiene,  w: 70), (cat: Cleaning, w: 40),
-            (cat: Clothing, w: 130), (cat: Medicine, w: 35), (cat: Fuel, w: 135), (cat: Other, w: 120),
+            (cat: Clothing, w: 130), (cat: Medicine, w: 35), (cat: Fuel, w: 135), (cat: Other, w:  85),
+            (cat: Comms, w: 35),
         ]),
         (kind: "Dorm", weights: [
             (cat: Food, w: 330), (cat: Drink, w: 150), (cat: Hygiene,  w: 70), (cat: Cleaning, w: 40),
-            (cat: Clothing, w: 130), (cat: Medicine, w: 30), (cat: Fuel, w: 100), (cat: Other, w: 150),
+            (cat: Clothing, w: 130), (cat: Medicine, w: 30), (cat: Fuel, w: 100), (cat: Other, w: 110),
+            (cat: Comms, w: 40),
         ]),
         // Samotny senior: najwyższy udział leków w całej tabeli i najniższy odzieży.
         (kind: "LoneSenior", weights: [
             (cat: Food, w: 400), (cat: Drink, w:  50), (cat: Hygiene,  w: 80), (cat: Cleaning, w: 50),
-            (cat: Clothing, w:  80), (cat: Medicine, w: 160), (cat: Fuel, w: 140), (cat: Other, w: 40),
+            (cat: Clothing, w:  80), (cat: Medicine, w: 160), (cat: Fuel, w: 140), (cat: Other, w: 25),
+            (cat: Comms, w: 15),
         ]),
     ],
 )

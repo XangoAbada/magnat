@@ -71,6 +71,13 @@ pub struct Firms {
     /// **sumy od początku**, a suma z pierścienia jest nie do odczytania: trzydziesta
     /// trzecia decyzja nadpisuje pierwszą.
     reasons_logged: u64,
+    /// Wiedza, projekty, patenty, licencje i towary w obiegu (M10c §5.4).
+    ///
+    /// Tutaj, a nie w osobnym zasobie, z dwóch powodów naraz: pisze to jeden krok
+    /// nad tym samym rejestrem, a doczepienie do `Firms` daje hash stanu bez
+    /// drugiego haka. Katalog technologii **nie** jest tutaj — jest wejściem
+    /// (`rnd::RndData`) i nie wchodzi do hasha.
+    rnd: crate::rnd::RndState,
 }
 
 impl Default for Firms {
@@ -83,6 +90,7 @@ impl Default for Firms {
             scheduler: Scheduler::new(),
             slot_index: SlotIndex::new(),
             reasons_logged: 0,
+            rnd: crate::rnd::RndState::default(),
         }
     }
 }
@@ -150,6 +158,33 @@ impl Firms {
     #[must_use]
     pub fn site_count(&self) -> usize {
         self.sites.len()
+    }
+
+    /// Stan badań i rozwoju (M10c).
+    #[must_use]
+    pub fn rnd(&self) -> &crate::rnd::RndState {
+        &self.rnd
+    }
+
+    pub fn rnd_mut(&mut self) -> &mut crate::rnd::RndState {
+        &mut self.rnd
+    }
+
+    /// Klucze firm czynnych, rosnąco. Kopia, a nie iterator: wołający zaraz
+    /// sięgnie po `&mut self` i pożyczka po mapie by mu na to nie pozwoliła.
+    #[must_use]
+    pub fn active_keys(&self) -> Vec<FirmKey> {
+        self.firms
+            .iter()
+            .filter(|(_, f)| f.status == FirmStatus::Active)
+            .map(|(k, _)| *k)
+            .collect()
+    }
+
+    /// Firma pod kluczem — alias [`Firms::get`] czytelniejszy w kodzie R&D.
+    #[must_use]
+    pub fn firm(&self, key: FirmKey) -> Option<&Firm> {
+        self.firms.get(&key)
     }
 
     pub fn iter(&self) -> impl Iterator<Item = (FirmKey, &Firm)> {
@@ -265,12 +300,17 @@ impl Firms {
                 }
                 // Przychód i koszt własny dopisuje później księga sklepu
                 // (`Firms::post_revenue`), bo zna je dopiero przy domknięciu okresu.
+                // Koszt badań domyka się razem z czynszem, a nie razem z płacami:
+                // pensje badaczy są już w `labor`, a to są odczynniki i cudze patenty.
+                let badania = std::mem::replace(&mut site.rnd_accrued, magnat_core::Money::ZERO);
                 site.pnl.push(SitePnlMonth {
                     month: miesiac,
                     revenue: magnat_core::Money::ZERO,
                     cogs: magnat_core::Money::ZERO,
                     labor: magnat_core::Money(labor.saturating_add(kadry.get())),
-                    fixed: site.fixed_cost_month,
+                    fixed: magnat_core::Money(
+                        site.fixed_cost_month.get().saturating_add(badania.get()),
+                    ),
                 });
             }
         }
@@ -424,5 +464,8 @@ impl HashState for Firms {
         // Kolejka przepełnienia **musi** wejść do hasha (M7 §7.5): przesunięcie
         // decyzji na następny tick jest stanem, a nie szczegółem wykonania.
         self.scheduler.hash_state(h);
+        // Badania są stanem tak samo jak zapas w magazynie: zmieniają to, co świat
+        // zrobi w następnej dobie, i przeżywają zapis gry.
+        self.rnd.hash_state(h);
     }
 }

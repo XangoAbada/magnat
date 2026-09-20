@@ -133,12 +133,33 @@ pub struct PlantSite {
     /// Znaczenie jest też inne: „nie ma komu" i „nie ma czym" to dla gracza
     /// dwa różne zdania o tym samym zakładzie, a powód zdarzenia mówi które.
     pub event_output_bps: u16,
+    /// O ile technologia firmy obniża zużycie mediów na szarżę, w punktach bazowych
+    /// (0 = bez zmian, 2000 = o piątą część mniej). Pisze go **wyłącznie** R&D z M10c
+    /// (`TechEffect::CostReduction`), czytelnik jest jeden: rozliczenie szarży.
+    ///
+    /// Ten sam wzorzec, którym M7 pisze `labor_pct` (`K-44`): M6 mnoży przez gotową
+    /// liczbę i **nie zagląda do środka** — nie wie ani o drzewie technologii, ani
+    /// o tym, kto który węzeł odkrył.
+    ///
+    /// **Obniżka dotyczy mediów, nie wsadu, i to nie jest wygoda implementacji.**
+    /// Zmniejszenie masy wejściowej przy niezmienionym wyjściu tworzyłoby masę
+    /// z niczego i łamało test własnościowy z 00 §6; prąd i woda są jedynymi
+    /// pozycjami kosztu szarży, które wolno obniżyć bez ruszania bilansu.
+    ///
+    /// `ponytail:` mnożnik jest **per zakład**, a `CostReduction` mówi o recepturze.
+    /// Sufit nazwany: zakład prowadzący dwie receptury dostaje zniżkę na obie. Droga
+    /// wyjścia — pole per linia, kiedy ktoś zmierzy, że to robi różnicę.
+    pub utility_bonus_bp: u16,
     reasons: Vec<(SimMinute, DecisionReason)>,
 }
 
 impl PlantSite {
     /// Obsada kompletna — wartość neutralna dla przepustowości.
     pub const FULL_LABOR: u16 = 1000;
+
+    /// Sufit zniżki na media: nawet komplet technologii nie zdejmie więcej niż
+    /// połowę rachunku. Zakład zużywający zero prądu byłby perpetuum mobile.
+    pub const MAX_UTILITY_BONUS_BP: u16 = 5_000;
 
     /// Brak zdarzenia dotykającego zakładu — wartość neutralna mnożnika M8c.
     pub const NO_EVENT: u16 = 10_000;
@@ -174,6 +195,7 @@ impl PlantSite {
             // musiałby zakładać firmę, żeby cokolwiek wyprodukować.
             labor_pct: PlantSite::FULL_LABOR,
             event_output_bps: PlantSite::NO_EVENT,
+            utility_bonus_bp: 0,
             reasons: Vec::new(),
         }
     }
@@ -315,6 +337,7 @@ impl HashState for PlantSite {
         // Pokrycie etatowe jest stanem: zmienia to, ile zakład wyprodukuje.
         h.write_u16(self.labor_pct);
         h.write_u16(self.event_output_bps);
+        h.write_u16(self.utility_bonus_bp);
         h.write_u32(self.reasons.len() as u32);
         for (at, r) in &self.reasons {
             at.hash_state(h);

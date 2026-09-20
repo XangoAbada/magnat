@@ -444,6 +444,85 @@ fn raport(
         _ => println!("brak rejestru kampanii albo tytułów — media nie stoją w tym świecie"),
     }
 
+    println!("── badania i rozwój (M10c) ───────────────────────────");
+    match world.get_resource::<magnat_firms::RndData>() {
+        Some(dane) if !dane.tree.is_empty() => {
+            let st = firms.rnd();
+            let w_toku: Vec<_> = st.projects.iter().collect();
+            let badaczy: u32 = magnat_firms::RoleTable::load_default()
+                .ok()
+                .and_then(|r| r.id(magnat_economy::rnd::RESEARCHER_ROLE))
+                .map(|rola| firms.sites().map(|(_, s)| s.researchers(rola)).sum())
+                .unwrap_or(0);
+            println!(
+                "drzewo: {} węzłów w {} gałęziach; badaczy na etatach {badaczy}",
+                dane.tree.len(),
+                dane.tree.branches.len()
+            );
+            // Średni opłacony budżet materiałowy to liczba, która tłumaczy tempo:
+            // projekt firmy bez gotówki nie stoi, tylko pełznie.
+            let oplacony: u32 = if w_toku.is_empty() {
+                0
+            } else {
+                w_toku
+                    .iter()
+                    .map(|(_, p)| u32::from(p.budget_permille))
+                    .sum::<u32>()
+                    / w_toku.len() as u32
+            };
+            println!(
+                "projekty w toku {}, firmy z wiedzą {}, patenty {}, licencje {}",
+                w_toku.len(),
+                st.known.len(),
+                st.patents.len(),
+                st.licenses.len()
+            );
+            println!("średni opłacony budżet badań: {oplacony} ‰");
+            if let Some((key, p)) = w_toku
+                .iter()
+                .max_by_key(|(_, p)| p.done_mrp.saturating_mul(1000) / p.cost_mrp.max(1))
+            {
+                println!(
+                    "najdalej zaawansowany: firma {} bada `{}` (świat zna od {}) — \
+                     {} % kosztu zebrane, projekt od doby {}, przełomów {}",
+                    key.0,
+                    dane.tree.node(p.tech).key,
+                    dane.tree.node(p.tech).world_year,
+                    p.done_mrp.saturating_mul(100) / p.cost_mrp.max(1),
+                    p.started.0 / 1_440,
+                    p.breakthroughs
+                );
+            }
+            // Licencje z datą podpisania i stawką — to jest jedyne miejsce, w którym
+            // widać, że patent komuś płaci. Karta umowy należy do M10f.
+            for l in st.licenses.values() {
+                println!(
+                    "licencja: firma {} płaci firmie {} {} bp od utargu za `{}` (od doby {})",
+                    l.licensee.0,
+                    l.licensor.0,
+                    l.royalty_bp,
+                    dane.tree.node(l.tech).key,
+                    l.signed.0 / 1_440
+                );
+            }
+            // Towary poza obiegiem: ile technologia jeszcze trzyma za drzwiami.
+            let poza: Vec<String> = magnat_firms::gated_goods(&dane.tree)
+                .into_iter()
+                .filter(|g| market.is_good_locked(*g))
+                .map(|g| format!("#{}", g.0))
+                .collect();
+            println!(
+                "towary poza obiegiem: {}",
+                if poza.is_empty() {
+                    "— (wszystko wypuszczone)".to_owned()
+                } else {
+                    poza.join(", ")
+                }
+            );
+        }
+        _ => println!("brak drzewa technologii — badania nie stoją w tym świecie"),
+    }
+
     println!("── rynek detaliczny ──────────────────────────────────");
     let s = market.stats();
     println!(

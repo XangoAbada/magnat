@@ -18,6 +18,7 @@
             key: "car_plant",
             category: Manufacturing,
             staffing: [
+                ( role: "researcher", per_site: 5 ),
                 ( role: "assembler", per_10000m2: 40, min: 20 ),
                 ( role: "welder", per_10000m2: 10, min: 6 ),
                 ( role: "machine_operator", per_10000m2: 10, min: 6 ),
@@ -51,6 +52,7 @@
             key: "clothing_factory",
             category: Manufacturing,
             staffing: [
+                ( role: "researcher", per_site: 1 ),
                 ( role: "production_worker", per_10000m2: 170, min: 20 ),
                 ( role: "quality_inspector", per_10000m2: 20, min: 2 ),
                 ( role: "mechanic", per_10000m2: 10, min: 1 ),
@@ -65,6 +67,7 @@
             key: "shoe_factory",
             category: Manufacturing,
             staffing: [
+                ( role: "researcher", per_site: 1 ),
                 ( role: "production_worker", per_10000m2: 160, min: 18 ),
                 ( role: "quality_inspector", per_10000m2: 20, min: 2 ),
                 ( role: "mechanic", per_10000m2: 10, min: 1 ),
@@ -79,6 +82,7 @@
             key: "furniture_works",
             category: Manufacturing,
             staffing: [
+                ( role: "researcher", per_site: 1 ),
                 ( role: "production_worker", per_10000m2: 70, min: 8 ),
                 ( role: "machine_operator", per_10000m2: 20, min: 3 ),
                 ( role: "quality_inspector", per_10000m2: 10, min: 1 ),
@@ -93,6 +97,7 @@
             key: "electronics_plant",
             category: Manufacturing,
             staffing: [
+                ( role: "researcher", per_site: 4 ),
                 ( role: "assembler", per_10000m2: 120, min: 15 ),
                 ( role: "machine_operator", per_10000m2: 20, min: 3 ),
                 ( role: "quality_inspector", per_10000m2: 20, min: 2 ),
@@ -109,6 +114,7 @@
             key: "fridge_plant",
             category: Manufacturing,
             staffing: [
+                ( role: "researcher", per_site: 1 ),
                 ( role: "assembler", per_10000m2: 70, min: 10 ),
                 ( role: "welder", per_10000m2: 20, min: 3 ),
                 ( role: "machine_operator", per_10000m2: 10, min: 2 ),
@@ -125,6 +131,7 @@
             key: "washer_plant",
             category: Manufacturing,
             staffing: [
+                ( role: "researcher", per_site: 1 ),
                 ( role: "assembler", per_10000m2: 70, min: 10 ),
                 ( role: "welder", per_10000m2: 20, min: 3 ),
                 ( role: "machine_operator", per_10000m2: 10, min: 2 ),
@@ -141,6 +148,7 @@
             key: "bicycle_plant",
             category: Manufacturing,
             staffing: [
+                ( role: "researcher", per_site: 1 ),
                 ( role: "assembler", per_10000m2: 100, min: 10 ),
                 ( role: "welder", per_10000m2: 20, min: 2 ),
                 ( role: "machine_operator", per_10000m2: 10, min: 2 ),
@@ -156,6 +164,7 @@
             key: "toy_factory",
             category: Manufacturing,
             staffing: [
+                ( role: "researcher", per_site: 1 ),
                 ( role: "production_worker", per_10000m2: 130, min: 12 ),
                 ( role: "machine_operator", per_10000m2: 20, min: 2 ),
                 ( role: "quality_inspector", per_10000m2: 10, min: 1 ),
@@ -170,6 +179,7 @@
             key: "soap_plant",
             category: Manufacturing,
             staffing: [
+                ( role: "researcher", per_site: 1 ),
                 ( role: "machine_operator", per_10000m2: 60, min: 6 ),
                 ( role: "process_operator", per_10000m2: 20, min: 2 ),
                 ( role: "lab_technician", per_10000m2: 10, min: 1 ),
@@ -184,6 +194,7 @@
             key: "detergent_plant",
             category: Manufacturing,
             staffing: [
+                ( role: "researcher", per_site: 1 ),
                 ( role: "machine_operator", per_10000m2: 60, min: 6 ),
                 ( role: "process_operator", per_10000m2: 20, min: 2 ),
                 ( role: "lab_technician", per_10000m2: 10, min: 1 ),
@@ -198,6 +209,7 @@
             key: "cosmetics_plant",
             category: Manufacturing,
             staffing: [
+                ( role: "researcher", per_site: 1 ),
                 ( role: "machine_operator", per_10000m2: 80, min: 8 ),
                 ( role: "process_operator", per_10000m2: 20, min: 3 ),
                 ( role: "lab_technician", per_10000m2: 20, min: 2 ),
@@ -213,6 +225,7 @@
             key: "pharma_plant",
             category: Manufacturing,
             staffing: [
+                ( role: "researcher", per_site: 6 ),
                 ( role: "process_operator", per_10000m2: 70, min: 8 ),
                 ( role: "lab_technician", per_10000m2: 40, min: 5 ),
                 ( role: "machine_operator", per_10000m2: 20, min: 3 ),
@@ -229,6 +242,7 @@
             key: "cigarette_factory",
             category: Manufacturing,
             staffing: [
+                ( role: "researcher", per_site: 1 ),
                 ( role: "machine_operator", per_10000m2: 70, min: 8 ),
                 ( role: "quality_inspector", per_10000m2: 20, min: 2 ),
                 ( role: "mechanic", per_10000m2: 10, min: 2 ),
@@ -243,6 +257,7 @@
             key: "bread_plant",
             category: Manufacturing,
             staffing: [
+                ( role: "researcher", per_site: 1 ),
                 ( role: "baker", per_10000m2: 90, min: 10 ),
                 ( role: "machine_operator", per_10000m2: 30, min: 4 ),
                 ( role: "food_processor", per_10000m2: 20, min: 2 ),
@@ -258,6 +273,7 @@
             key: "brewery",
             category: Manufacturing,
             staffing: [
+                ( role: "researcher", per_site: 1 ),
                 ( role: "process_operator", per_10000m2: 40, min: 6 ),
                 ( role: "machine_operator", per_10000m2: 20, min: 3 ),
                 ( role: "lab_technician", per_10000m2: 10, min: 1 ),
@@ -273,6 +289,7 @@
             key: "juice_plant",
             category: Manufacturing,
             staffing: [
+                ( role: "researcher", per_site: 1 ),
                 ( role: "food_processor", per_10000m2: 50, min: 6 ),
                 ( role: "machine_operator", per_10000m2: 30, min: 4 ),
                 ( role: "lab_technician", per_10000m2: 10, min: 1 ),
@@ -287,6 +304,7 @@
             key: "carton_plant",
             category: Manufacturing,
             staffing: [
+                ( role: "researcher", per_site: 1 ),
                 ( role: "machine_operator", per_10000m2: 50, min: 6 ),
                 ( role: "printer_operator", per_10000m2: 10, min: 2 ),
                 ( role: "forklift_operator", per_10000m2: 10, min: 1 ),
@@ -301,6 +319,7 @@
             key: "pet_bottle_plant",
             category: Manufacturing,
             staffing: [
+                ( role: "researcher", per_site: 1 ),
                 ( role: "machine_operator", per_10000m2: 60, min: 6 ),
                 ( role: "process_operator", per_10000m2: 10, min: 2 ),
                 ( role: "forklift_operator", per_10000m2: 10, min: 1 ),
@@ -315,6 +334,7 @@
             key: "pallet_works",
             category: Manufacturing,
             staffing: [
+                ( role: "researcher", per_site: 1 ),
                 ( role: "production_worker", per_10000m2: 40, min: 5 ),
                 ( role: "machine_operator", per_10000m2: 20, min: 2 ),
                 ( role: "forklift_operator", per_10000m2: 10, min: 1 ),
@@ -328,6 +348,7 @@
             key: "bearing_works",
             category: Manufacturing,
             staffing: [
+                ( role: "researcher", per_site: 1 ),
                 ( role: "machine_operator", per_10000m2: 60, min: 8 ),
                 ( role: "quality_inspector", per_10000m2: 20, min: 2 ),
                 ( role: "mechanic", per_10000m2: 10, min: 2 ),
@@ -343,6 +364,7 @@
             key: "electric_motor_plant",
             category: Manufacturing,
             staffing: [
+                ( role: "researcher", per_site: 1 ),
                 ( role: "assembler", per_10000m2: 50, min: 8 ),
                 ( role: "machine_operator", per_10000m2: 20, min: 3 ),
                 ( role: "electrician", per_10000m2: 20, min: 3 ),
@@ -358,6 +380,7 @@
             key: "machine_shop",
             category: Manufacturing,
             staffing: [
+                ( role: "researcher", per_site: 1 ),
                 ( role: "machine_operator", per_10000m2: 60, min: 3 ),
                 ( role: "welder", per_10000m2: 20, min: 1 ),
                 ( role: "mechanic", per_10000m2: 20, min: 1 ),
@@ -371,6 +394,7 @@
             key: "repair_works",
             category: Manufacturing,
             staffing: [
+                ( role: "researcher", per_site: 1 ),
                 ( role: "mechanic", per_10000m2: 60, min: 3 ),
                 ( role: "welder", per_10000m2: 20, min: 1 ),
                 ( role: "electrician", per_10000m2: 10, min: 1 ),
@@ -384,6 +408,7 @@
             key: "seal_works",
             category: Manufacturing,
             staffing: [
+                ( role: "researcher", per_site: 1 ),
                 ( role: "machine_operator", per_10000m2: 80, min: 5 ),
                 ( role: "quality_inspector", per_10000m2: 20, min: 1 ),
                 ( role: "mechanic", per_10000m2: 10, min: 1 ),

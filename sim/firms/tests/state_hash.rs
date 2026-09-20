@@ -107,6 +107,7 @@ fn menedzer_i_delegacja_wchodza_do_hasha() {
         tech: Q::new(50),
         fixed_cost_month: Money(100_000),
         hr_accrued: Money::ZERO,
+        rnd_accrued: Money::ZERO,
         pnl: Ring::<SitePnlMonth, 36>::new(),
         opened: SimMinute(0),
         delegation: None,

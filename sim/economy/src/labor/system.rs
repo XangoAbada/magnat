@@ -133,6 +133,12 @@ impl System for LaborSystem {
             market.step_day(&mut firms, &mut people, seed, tick);
         }
         write_labor_pct(ctx.world_mut(), &firms, market.roles());
+        // Doba badań jedzie **za** rynkiem pracy i to jest kolejność, nie przypadek:
+        // tempo liczy się z obsady laboratorium, więc musi widzieć obsadę po dzisiejszych
+        // przyjęciach i odejściach. Osobnego systemu nie ma z rozmysłu — rejestr firm
+        // jest już wyjęty z ECS-u, a drugie wyjęcie w tej samej dobie nie kupiłoby nic
+        // poza kolejnym poziomem harmonogramu (`AP-4`).
+        crate::rnd::step_day(ctx.world_mut(), &mut firms, market.roles(), tick);
         *ctx.world_mut().resource_mut::<Firms>() = firms;
         ctx.world_mut().resource_mut::<LaborHandle>().put(market);
     }

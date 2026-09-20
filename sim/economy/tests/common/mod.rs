@@ -116,6 +116,24 @@ pub fn bench(seed: u64, pos: &[Vec2]) -> Bench {
 /// i żaden z nich o dzielnicę nie pyta.
 #[must_use]
 pub fn bench_w_dzielnicy(seed: u64, pos: &[Vec2], dzielnica: Option<u16>) -> Bench {
+    bench_pelny(seed, pos, dzielnica, PlaceKind::Grocery, &[])
+}
+
+/// To samo, co [`bench_w_dzielnicy`], z dwoma dodatkowymi pokrętłami: **rodzajem
+/// sklepu** i **listą towarów poza obiegiem**.
+///
+/// Rodzaj jest potrzebny, bo spożywczak nie handluje wszystkim: kategorię `Comms`
+/// prowadzi sklep specjalistyczny (`PlaceKind::Clothing`, `data/economy/retail.ron`).
+/// Blokada jest potrzebna, bo musi stanąć **przed** obsadzeniem sklepów — dokładnie
+/// tak jak w `game::world::retail::setup`.
+#[must_use]
+pub fn bench_pelny(
+    seed: u64,
+    pos: &[Vec2],
+    dzielnica: Option<u16>,
+    kind: PlaceKind,
+    zablokowane: &[GoodId],
+) -> Bench {
     let data = EconomyData::load_default().expect("data/economy/");
     let katalog = goods(&data);
     let needs = Arc::new(NeedTable::load_default().expect("data/needs/"));
@@ -132,7 +150,7 @@ pub fn bench_w_dzielnicy(seed: u64, pos: &[Vec2], dzielnica: Option<u16>) -> Ben
     for (i, p) in pos.iter().enumerate() {
         entries.push(PlaceEntry {
             place: PlaceRef::Site(sites[i]),
-            kind: PlaceKind::Grocery,
+            kind,
             at: WorldCoord::new((p.x * 100.0) as i32, (p.y * 100.0) as i32, 0),
         });
     }
@@ -162,6 +180,9 @@ pub fn bench_w_dzielnicy(seed: u64, pos: &[Vec2], dzielnica: Option<u16>) -> Ben
         places,
         rest,
     );
+    for g in zablokowane {
+        market.lock_good(*g);
+    }
     for (i, p) in pos.iter().enumerate() {
         let firm = FirmId(ent(200 + i as u32));
         let acc = books.open_account(
@@ -184,7 +205,7 @@ pub fn bench_w_dzielnicy(seed: u64, pos: &[Vec2], dzielnica: Option<u16>) -> Ben
                 site: sites[i],
                 firm,
                 pos: *p,
-                kind: PlaceKind::Grocery,
+                kind,
                 shelf_slots: 4,
                 capacity_m3: 200,
                 district: dzielnica.unwrap_or(i as u16),

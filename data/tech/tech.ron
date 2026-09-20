@@ -1,0 +1,222 @@
+// Drzewo technologii (M10c §5.4, PRD §7.7, §11.3; katalog dopisany do dok. 00 §5
+// rozstrzygnięciem `K-82`).
+//
+// ## Jak czytać ten plik
+//
+// Węzeł jest **jedną rzeczą, której firma może się nauczyć**, i ma dokładnie trzy
+// wymiary: ile to kosztuje pracy badawczej (`cost_rp`), od kiedy świat i tak to wie
+// (`world_year`) i co się przez to zmienia (`gain` plus `effects`).
+//
+// `TechId` jest pozycją **posortowanego klucza tekstowego**, tak samo jak `GoodId`
+// i `RecipeId` (dok. 00 §5). W zapisie gry trzyma się klucz, więc dopisanie węzła
+// niczego nie przenumerowuje — to jest różnica wobec ról zawodowych i klas pojazdów,
+// gdzie indeks jest kontraktem zapisu.
+//
+// ## Rok „światowy"
+//
+// `world_year` to rok kalendarzowy, od którego technologia jest w obiegu. Odkrycie
+// **przed** nim daje patent na dwadzieścia lat gry i wyłączność; odkrycie **po** nim
+// patentu nie daje, ale kosztuje o 60 % mniej punktów badawczych, bo wiedzę da się
+// podpatrzeć. Rok przelicza się na dobę świata **przy ładowaniu**, z roku startowego
+// partii — dzięki temu symulacja nigdy nie pyta o rok kalendarzowy i nie ma drugiego
+// źródła prawdy obok `EpochClock` z M8.
+//
+// Węzeł, którego `world_year` wypadł przed startem partii, jest wiedzą powszechną
+// od pierwszej doby: kosztuje mniej i patentu nie da nigdy.
+//
+// ## `gain` kontra `effects`
+//
+// `gain` to **jedyny kanał ciągły**: podnosi poziom wyposażenia zakładów firmy
+// (`Site.tech`, ten sam, który czyta model jakości M6 i agregat makro M10a). Nie ma
+// osobnego efektu „bonus jakości do towaru X", bo model jakości już ma wejście `w_tech`
+// i drugie wejście obok niego byłoby drugą prawdą o tej samej rzeczy.
+//
+// `effects` to **zmiany nieciągłe** — rzeczy, których przed odkryciem nie było wcale:
+//   - `NewGood(klucz)`    — towar wchodzi do obiegu i na półki,
+//   - `CostReduction(recipe: klucz, bps: N)` — zużycie wsadu tej receptury spada o N bp,
+//   - `MachineUpgrade(machine_class: klucz, throughput_bps: N, failure_bps: M)` —
+//     linie tej klasy w zakładach firmy dostają N bp przepustowości i M bp MTBF.
+//
+// Wariantu `NewRecipe` z planu §5.4 **nie ma** i to jest rozstrzygnięcie, nie
+// przeoczenie: recepturę uruchamia linia, linia stoi w zakładzie, zakład wymaga
+// archetypu budynku z `data/buildings/` — a archetypy stawia generator M2, który
+// o technologii nie wie i wiedzieć nie ma. Wariant bez wyzwalacza przechodzi każdy
+// test i wygląda tak samo jak działający (`K-67`). Adres: `M10f`.
+//
+// Walidator (`sim/firms/tests/tech_graph.rs`, CI) sprawdza: każdy `prereq` istnieje,
+// graf nie ma cykli, każda gałąź istnieje, każdy `NewGood` ma wpis w `data/goods/`,
+// każdy `CostReduction` w `data/recipes/`, a każda `machine_class` jest klasą,
+// której używa jakaś receptura.
+(
+    schema_version: 1,
+
+    // Gałąź to szuflada w panelu R&D, nie mechanika: węzeł z jednej gałęzi może być
+    // warunkiem węzła z innej i tak właśnie jest przy elektronice.
+    branches: [
+        (key: "materials"),
+        (key: "energy"),
+        (key: "food"),
+        (key: "electronics"),
+        (key: "logistics"),
+    ],
+
+    nodes: [
+        // ── materiały ──────────────────────────────────────────────────────────────
+        (
+            key: "continuous_casting",
+            branch: "materials",
+            prereqs: [],
+            cost_rp: 900,
+            world_year: 1962,
+            gain: 6,
+            effects: [
+                CostReduction(recipe: "rolling_mill", bps: 600),
+                MachineUpgrade(machine_class: "converter", throughput_bps: 800, failure_bps: 200),
+            ],
+        ),
+        (
+            key: "oxygen_steelmaking",
+            branch: "materials",
+            prereqs: ["continuous_casting"],
+            cost_rp: 1_400,
+            world_year: 1971,
+            gain: 8,
+            effects: [
+                CostReduction(recipe: "steelmaking", bps: 900),
+                MachineUpgrade(machine_class: "blast_furnace", throughput_bps: 1_200, failure_bps: 0),
+            ],
+        ),
+        (
+            key: "float_glass",
+            branch: "materials",
+            prereqs: [],
+            cost_rp: 700,
+            world_year: 1965,
+            gain: 5,
+            effects: [
+                CostReduction(recipe: "glassworks", bps: 1_100),
+                MachineUpgrade(machine_class: "glass_furnace", throughput_bps: 900, failure_bps: 300),
+            ],
+        ),
+        (
+            key: "polymer_blends",
+            branch: "materials",
+            prereqs: ["continuous_casting"],
+            cost_rp: 1_100,
+            world_year: 1978,
+            gain: 7,
+            effects: [
+                CostReduction(recipe: "petrochemical", bps: 700),
+                MachineUpgrade(machine_class: "injection_molding", throughput_bps: 1_000, failure_bps: 400),
+            ],
+        ),
+
+        // ── energia ────────────────────────────────────────────────────────────────
+        (
+            key: "heat_recovery",
+            branch: "energy",
+            prereqs: [],
+            cost_rp: 800,
+            world_year: 1968,
+            gain: 6,
+            effects: [
+                MachineUpgrade(machine_class: "heat_boiler", throughput_bps: 600, failure_bps: 500),
+                MachineUpgrade(machine_class: "power_boiler_turbine", throughput_bps: 700, failure_bps: 400),
+            ],
+        ),
+        (
+            key: "catalytic_cracking",
+            branch: "energy",
+            prereqs: ["heat_recovery"],
+            cost_rp: 1_600,
+            world_year: 1974,
+            gain: 9,
+            effects: [
+                CostReduction(recipe: "refinery_crude_fractionation", bps: 1_000),
+                MachineUpgrade(machine_class: "cracker", throughput_bps: 1_100, failure_bps: 0),
+            ],
+        ),
+
+        // ── żywność ────────────────────────────────────────────────────────────────
+        (
+            key: "cold_chain",
+            branch: "food",
+            prereqs: [],
+            cost_rp: 600,
+            world_year: 1960,
+            gain: 5,
+            effects: [
+                CostReduction(recipe: "dairy", bps: 800),
+                CostReduction(recipe: "meat_plant", bps: 600),
+            ],
+        ),
+        (
+            key: "aseptic_packaging",
+            branch: "food",
+            prereqs: ["cold_chain"],
+            cost_rp: 1_000,
+            world_year: 1976,
+            gain: 6,
+            effects: [
+                CostReduction(recipe: "juice_plant", bps: 900),
+                MachineUpgrade(machine_class: "pasteurizer", throughput_bps: 800, failure_bps: 300),
+            ],
+        ),
+
+        // ── elektronika ────────────────────────────────────────────────────────────
+        (
+            key: "integrated_circuit",
+            branch: "electronics",
+            prereqs: ["float_glass"],
+            cost_rp: 1_200,
+            world_year: 1972,
+            gain: 8,
+            effects: [
+                CostReduction(recipe: "electronics_plant", bps: 1_200),
+                MachineUpgrade(machine_class: "assembly_line", throughput_bps: 900, failure_bps: 300),
+            ],
+        ),
+        // Węzeł, o który chodzi w kryterium WP10.9. Jedyny węzeł w tym pliku
+        // z `NewGood` — dopóki nikt go nie odkryje, telefon komórkowy stoi
+        // w katalogu i nie istnieje w mieście: nie ma go na żadnej półce,
+        // nie ma go w kopercie `Comms` żadnego gospodarstwa i nie sprowadza go
+        // żaden importer.
+        (
+            key: "mobile_telephony",
+            branch: "electronics",
+            prereqs: ["integrated_circuit", "polymer_blends"],
+            cost_rp: 1_800,
+            world_year: 1992,
+            gain: 10,
+            effects: [
+                NewGood("cons_mobile_phone"),
+            ],
+        ),
+
+        // ── logistyka ──────────────────────────────────────────────────────────────
+        (
+            key: "unit_load_pallets",
+            branch: "logistics",
+            prereqs: [],
+            cost_rp: 500,
+            world_year: 1958,
+            gain: 4,
+            effects: [
+                CostReduction(recipe: "pallet_works", bps: 700),
+                MachineUpgrade(machine_class: "nailing_line", throughput_bps: 1_000, failure_bps: 200),
+            ],
+        ),
+        (
+            key: "warehouse_automation",
+            branch: "logistics",
+            prereqs: ["unit_load_pallets", "integrated_circuit"],
+            cost_rp: 1_500,
+            world_year: 1986,
+            gain: 9,
+            effects: [
+                MachineUpgrade(machine_class: "cutting_line", throughput_bps: 800, failure_bps: 400),
+                MachineUpgrade(machine_class: "assembly_line", throughput_bps: 700, failure_bps: 500),
+            ],
+        ),
+    ],
+)

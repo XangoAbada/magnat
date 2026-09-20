@@ -55,7 +55,7 @@ pub use time::{Cadence, DayOfWeek, MinuteOfDay, OpenHours, SimCalendar, SimClock
 pub use types::{
     BrandId, CampaignId, CaseId, DepositId, DistrictId, Energy, EventId, GoodId, JobRoleId, Mass,
     Money, Mood, NeedCategoryId, PermitId, PolicyId, Qty, RecipeId, SimInstant, SimMinute,
-    TariffClassId, TenderId, Tick, Volume, Q,
+    TariffClassId, TechId, TenderId, Tick, Volume, Q,
 };
 pub use vocab::{
     AbateReason, ActionKind, ActivityKind, AdChannelKind, AgencyKind, BankruptcyTrigger, Biome,
