@@ -326,7 +326,14 @@ fn zwiazki_powstaja(world: &mut World, tune: &RelationsTuning, day: u32, t: Tick
     let mut logi: Vec<(FirmKey, DecisionReason)> = Vec::new();
     if let Some(u) = world.get_resource_mut::<Unions>() {
         for (site, firm, poziom, skladowa, gestosc_bp, crew) in wnioski {
-            let g = u.note_grievance(site, poziom, p.grievance_threshold, DAYS_PER_MONTH as u16);
+            let g = u.note_grievance(
+                site,
+                poziom,
+                p.grievance_threshold,
+                DAYS_PER_MONTH as u16,
+                skladowa,
+                gestosc_bp,
+            );
             if u.get(site).is_some() || !may_form(g.days_above, crew, skladowa, gestosc_bp, &p) {
                 continue;
             }

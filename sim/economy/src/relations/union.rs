@@ -143,12 +143,23 @@ impl Union {
     }
 }
 
-/// Ile dób z rzędu żal w zakładzie trzyma się powyżej progu. Licznik istnieje
-/// **zanim** powstanie związek, więc nie może mieszkać w [`Union`].
+/// Stan zakładu widziany przez warunki powstania związku (§5.9).
+///
+/// Istnieje **zanim** powstanie związek, więc nie może mieszkać w [`Union`].
+/// Trzyma wszystkie trzy warunki naraz, a nie samą sumę, i to jest jego istota:
+/// §6 pkt 5 dokumentu fazy żąda „`grievance` per zakład jako ostrzeżenia
+/// wyprzedzającego", a suma na to nie odpowiada. Zakład, w którym żal sięga
+/// progu, ale załoga się nie zna, i zakład, w którym załoga się zna, ale nie ma
+/// o co walczyć, wyglądają w jednej liczbie tak samo — a są dwiema różnymi
+/// sytuacjami i wymagają dwóch różnych ruchów pracodawcy.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub struct Grievance {
     pub level: u8,
     pub days_above: u16,
+    /// Największa spójna składowa grafu relacji wśród pracowników zakładu.
+    pub component: u16,
+    /// Gęstość potencjalnego członkostwa w punktach bazowych.
+    pub density_bp: u16,
 }
 
 /// Wezwanie do strajku przekazywane w górę, do `sim/events` (§5.9).
@@ -229,6 +240,17 @@ impl Unions {
             .unwrap_or_default()
     }
 
+    /// Wszystkie zmierzone zakłady razem z ich żalem, w kolejności indeksu.
+    ///
+    /// Potrzebne do pomiaru `FF-24`: ile zakładów w mieście z generatora stoi nad
+    /// progiem. Sama liczba związków tego nie mówi — związek powstaje dopiero po
+    /// dwóch pomiarach z rzędu i przy dość gęstej składowej grafu relacji, więc
+    /// miasto z setką rozżalonych załóg i zerem związków wygląda w raporcie tak
+    /// samo jak miasto zadowolone.
+    pub fn watched(&self) -> impl Iterator<Item = (u32, Grievance)> + '_ {
+        self.watch.iter().map(|(i, g)| (*i, *g))
+    }
+
     /// Zapisuje pomiar żalu i przesuwa licznik o `days` dób.
     ///
     /// Pomiar jest **miesięczny**, a nie dobowy, więc krok wynosi trzydzieści.
@@ -242,9 +264,13 @@ impl Unions {
         level: u8,
         threshold: u8,
         days: u16,
+        component: u32,
+        density_bp: u32,
     ) -> Grievance {
         let g = self.watch.entry(site.entity().index()).or_default();
         g.level = level;
+        g.component = u16::try_from(component).unwrap_or(u16::MAX);
+        g.density_bp = u16::try_from(density_bp).unwrap_or(u16::MAX);
         g.days_above = if level >= threshold {
             g.days_above.saturating_add(days)
         } else {
@@ -308,6 +334,8 @@ impl HashState for Unions {
             h.write_u32(*site);
             h.write_u8(g.level);
             h.write_u16(g.days_above);
+            h.write_u16(g.component);
+            h.write_u16(g.density_bp);
         }
         h.write_u32(self.next_id);
         // Nieodebrane wezwania są tym, co świat ma do przekazania w następnym kroku —

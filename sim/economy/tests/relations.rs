@@ -702,3 +702,44 @@ fn wykryta_zmowa_znika_zglasza_sie_urzedowi_i_zostawia_karencje() {
         "zmowa odrodziła się w środku dwuletniej karencji"
     );
 }
+
+/// Trzy warunki powstania związku są **mierzone osobno i widać je osobno**
+/// (§5.9, §6 pkt 5 dokumentu fazy).
+///
+/// Sama liczba związków nie odpowiada na pytanie „dlaczego go nie ma": zakład,
+/// w którym żal sięga progu, ale załoga się nie zna, i zakład, w którym załoga
+/// się zna, ale nie ma o co walczyć, wyglądają w niej identycznie — a są dwiema
+/// różnymi sytuacjami i wymagają dwóch różnych ruchów pracodawcy. Ten test
+/// pilnuje, że `Grievance` niesie wszystkie trzy liczby, a nie samą sumę.
+#[test]
+fn obserwacja_zakladu_niesie_wszystkie_trzy_warunki_osobno() {
+    let (mut w, zaklady) = swiat(1, 12, 3_500);
+    let badany = zaklady[1].site;
+    let rynkowy = zaklady[0].site;
+    przebieg(&mut w, 0, 31);
+
+    let u = w.resource::<Unions>();
+    let g = u.grievance(badany);
+    assert!(
+        g.level >= RelationsTuning::default().union.grievance_threshold,
+        "żal {} nie sięga progu w zakładzie z kryterium",
+        g.level
+    );
+    assert_eq!(
+        g.component, 12,
+        "klika dwunastu to spójna składowa dwunastu"
+    );
+    assert_eq!(g.density_bp, 10_000, "cała załoga zarabia poniżej mediany");
+
+    // Zakład rynkowy jest przeciwieństwem: płaci jak miasto i nikt się w nim
+    // nie zna, więc żaden z warunków nie jest spełniony.
+    let r = u.grievance(rynkowy);
+    assert_eq!(r.component, 0, "bez znajomości nie ma składowej");
+    assert_eq!(r.density_bp, 0, "nikt nie zarabia poniżej mediany");
+    assert_eq!(r.days_above, 0, "licznik dób stoi, bo żal nie sięga progu");
+
+    // Obserwacja obejmuje **oba** zakłady, także ten bez sporu — inaczej raport
+    // mierzyłby wyłącznie te, które już się buntują.
+    let ile = u.watched().count();
+    assert_eq!(ile, 2, "pod obserwacją mają być wszystkie zakłady z załogą");
+}
