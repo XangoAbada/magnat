@@ -10,7 +10,7 @@
 // kształtowania skalibrowanym do świata 256 m**, nie geochronologią: kształt sieci dolin
 // zależy od iloczynu K·dt·A^m, a nie od tego, ile lat mu przypiszemy.
 (
-    schema_version: 1,
+    schema_version: 2,
 
     // Wykładniki równania stream-power: ∂h/∂t = U − K·A^m·S^n.
     // n = 1 ma skutek, dla którego został wybrany: schemat niejawny Brauna–Willetta
@@ -51,4 +51,31 @@
 
     // Udział nadmiaru nachylenia usuwany w jednym podkroku erozji termicznej.
     repose_relaxation: 0.5,
+
+    // Ile razy w trakcie erozji przeliczyć topologię odwodnienia (P4 + P5), równomiernie
+    // po przebiegu. 0 = ani razu: sieć rzeczna zostaje ta, którą wyznaczył szum przed
+    // erozją, tylko głębiej wcięta. Dopiero przetrasowanie pozwala rzece przeciąć niski
+    // dział wodny i zabrać sąsiednią zlewnię, czyli na przechwycenie rzeczne.
+    //
+    // ZERO JEST DECYZJĄ, NIE DOMYŚLNOŚCIĄ — R2-WP19, pomiar 2026-09-21 (8 wątków,
+    // mountain, ziarno 17):
+    //
+    //   16 km bez przetrasowania   8,43 s   ·   z jednym   10,27 s   (cel M1 §10: 10 s)
+    //    4 km bez przetrasowania   0,33 s   ·   z jednym    0,41 s   (cel: 1 s)
+    //
+    // Jedno przetrasowanie wystarcza — na 16 km przechwytuje 478 395 komórek, wydłuża
+    // koryta o 6,7 % i ścina jeziora o 14 %. Nie mieści się jednak w budżecie: najtańsze
+    // możliwe przetrasowanie to pełne P4 (1,10 s) + P5 (0,28 s) = 1,38 s, a zapasu do celu
+    // jest 1,2 s w regionie górskim i 1,0 s na nizinie. Na mapie 4 km mieści się z zapasem,
+    // ale jedna wartość obowiązuje wszystkie rozmiary, a metropolia z inną siecią rzeczną
+    // niż świat 4 km z tego samego ziarna byłaby gorsza niż brak przechwyceń.
+    //
+    // Ścieżka wyjścia nie prowadzi przez rzadsze przetrasowanie — jedno to już minimum —
+    // tylko przez **tańsze P4**: priority-flood chodzi na kopcu binarnym, a wysokości są
+    // w milimetrach całkowitych, więc kolejka kubełkowa jest wprost stosowalna. Dopiero
+    // wtedy ta liczba ma prawo być większa od zera.
+    //
+    // Zmiana tej wartości zmienia **każdy świat z każdego ziarna** — macierz 160 hashy
+    // terenu w `sim/world/tests/determinism.rs` wymaga wtedy przeliczenia i zatwierdzenia.
+    reroutes: 0,
 )

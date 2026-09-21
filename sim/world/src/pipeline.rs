@@ -95,6 +95,9 @@ pub struct WorldStats {
     pub min_height_dm: i16,
     pub max_height_dm: i16,
     pub persistent_bytes: usize,
+    /// Komórki, które w trakcie erozji zmieniły ujście — miara przechwyceń rzecznych.
+    /// Przy `reroutes = 0` w `data/geology/erosion.ron` z definicji zero.
+    pub basin_captures: u64,
 }
 
 impl WorldGenReport {
@@ -130,6 +133,10 @@ impl WorldGenReport {
         out.push(format!(
             "wysokość min/max             {} / {} dm",
             self.stats.min_height_dm, self.stats.max_height_dm
+        ));
+        out.push(format!(
+            "przechwycenia rzeczne        {} komórek",
+            self.stats.basin_captures
         ));
         out.push(format!(
             "stan trwały                  {:.1} MB",
@@ -256,6 +263,7 @@ pub fn generate_observed(
     ctx.world.hash_state(&mut h);
     report.terrain_hash = h.finish();
     report.stats = collect_stats(&ctx.world);
+    report.stats.basin_captures = ctx.work.basin_captures;
 
     Ok(Some((ctx.world, report)))
 }

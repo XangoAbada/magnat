@@ -45,6 +45,10 @@ pub struct WorkFields {
     /// Jedna alokacja zamiast 16,8 mln małych wektorów.
     pub donor_start: Vec<u32>,
     pub donors: Vec<u32>,
+    /// Ile komórek zmieniło ujście, do którego spływają, przy przetrasowaniach w trakcie
+    /// erozji (P6). To jest miara przechwyceń rzecznych — przy `reroutes = 0`
+    /// z definicji zero, bo topologia odwodnienia jest wtedy ustalana raz, przed pętlą.
+    pub basin_captures: u64,
 }
 
 impl WorkFields {
@@ -64,6 +68,7 @@ impl WorkFields {
             basin_ranges: Vec::new(),
             donor_start: Vec::new(),
             donors: Vec::new(),
+            basin_captures: 0,
         }
     }
 

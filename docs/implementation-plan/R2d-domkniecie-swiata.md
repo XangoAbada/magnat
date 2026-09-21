@@ -10,6 +10,7 @@ dokumentu R2.
 | **Wynik do pokazania** | `headless generate --size 4km` z rozszerzonym `GenerationReport`: liczba zakładów wydobywczych stojących na złożu, stosunek mieszkańców do firm, liczba przechwyceń rzecznych w erozji. Dziś pierwsza z tych liczb jest zerem, druga wynosi ~130, trzeciej nikt nie liczy. |
 | **Kryterium zamknięcia** | Kryteria R2-WP17…R2-WP19 plus: przebieg pięcioletni na mieście 4 km kończy się **stopą bezrobocia w paśmie bramki G11 (3–12 %)** albo pomiarem i decyzją, że nie da się tego osiągnąć bez przeprojektowania Etapu 7 (`D-N6`). |
 | **Poprzednia / następna** | `R2c-rozjazdy-danych-i-kodu.md` / `R2e-dlug-i-martwy-kod.md` |
+| **Zamknięta** | 2026-09-21, **drugą gałęzią kryterium w obu pozycjach, które ją mają.** Pasmo bramki G11 nie zostało osiągnięte: `R2-WP18` skończył się pomiarem i decyzją `D-N20` (zakład bierze cały budynek — to przeprojektowanie Etapu 7, adres R3), a `R2-WP19` zakończeniem drugim (przechwytywanie działa, ale nie mieści się w budżecie 16 km — `D-8`). `R2-WP17` zamknięty w M11c z testem. Wszystkie trzy pozycje wykazu (5, 6, 42) mają status, a to jest twarde kryterium całego R2. |
 
 ---
 
@@ -37,9 +38,9 @@ naprawy i wchodzi tu tylko dlatego, że dotyka tego samego generatora i tej same
 
 | WP | Nazwa | Zależy od | Rozmiar | Status |
 |---|---|---|---|---|
-| R2-WP17 → **M11c** | Kopalnia staje na złożu | `D-N13` (przyjęta) | M | `[ ]` |
-| R2-WP18 → **M11c** | Gęstość firm i pasmo bezrobocia | R2-WP17 (WP12 zamknięty w M8c) | L | `[ ]` |
-| R2-WP19 | Przechwytywanie rzek w erozji | — | M | `[ ]` |
+| R2-WP17 → **M11c** | Kopalnia staje na złożu | `D-N13` (przyjęta) | M | `[x]` **zamknięte w M11c** |
+| R2-WP18 → **M11c** → **R3** | Gęstość firm i pasmo bezrobocia | R2-WP17 (WP12 zamknięty w M8c) | L | `[~]` **zmierzone, sufit `D-N6` zadziałał** (`D-N20`) |
+| R2-WP19 | Przechwytywanie rzek w erozji | — | M | `[x]` **zakończenie drugie** (`D-8`) |
 
 ---
 
@@ -203,6 +204,36 @@ wodny, po erozji z `reroute_every = 40` co najmniej jedna komórka zmieniła zle
 albo pakiet kończy się zakończeniem drugim — z zatwierdzoną macierzą hashy w obu przypadkach,
 bo zakończenie drugie też jest decyzją, a nie brakiem zmiany.
 
+#### Wykonanie — zakończenie drugie (2026-09-21)
+
+Mechanizm powstał i działa; **budżet go nie przyjął**. Pomiar, 8 wątków, `mountain`, ziarno 17:
+
+| | bez przetrasowania | z jednym | cel M1 §10 |
+|---|---|---|---|
+| 16 km, razem | 8,43 s | **10,27 s** | 10 s |
+| 16 km, P6 erozja | 6,27 s | 8,11 s | 5–6 s |
+| 4 km, razem | 0,33 s | 0,41 s | 1 s |
+
+Zakończenie pierwsze („jedno przeliczenie wystarcza i mieści się") rozpada się na dwie połowy
+i tylko jedna wyszła: przechwytywanie **zachodzi** — 478 395 komórek zmienia ujście (2,8 % mapy),
+koryta rosną z 414 km do 441 km, powierzchnia jezior spada o 14 % — ale przetrasowanie kosztuje
+**1,38 s** (P4 1,10 s + P5 0,28 s) wobec zapasu 1,2 s w regionie górskim i 1,0 s na nizinie.
+Rzadziej się nie da: jedno przetrasowanie na przebieg to już minimum.
+
+Dlatego wartość w danych to **`reroutes: 0`** i jest to decyzja, nie brak zmiany. Zapisana
+w `M1-swiat-statyczny.md` §5.7a razem z pomiarem, a komentarz `ponytail:` z oszacowaniem
+„1,4 s za powtórzenie" zniknął z `erosion.rs` — bo oszacowanie było zaniżone o 27 %.
+
+**Ścieżka wyjścia prowadzi przez tańsze P4, nie przez rzadsze przetrasowanie.** Priority-flood
+chodzi na kopcu binarnym, a wysokości są w milimetrach całkowitych: klucz jest ograniczonym
+intem, więc kolejka kubełkowa jest wprost stosowalna i nie zmienia wyniku. Adresata nie ma —
+pozycja stoi jako **80** w wykazie §11 dokumentu R2, kandydat do R3 albo do M12 (profilowanie).
+
+**Macierz hashy zatwierdzona bez zmian.** Przy `reroutes = 0` ścieżka jest arytmetycznie ta sama
+co przed pakietem — wcięcie progu odpływowego przeniosło się z przygotowania stanu do jego
+rozsypania, ale wyrażenie zostało to samo. 160 hashy `terrain_hash_matrix` przechodzi bez
+przeliczania i to jest zatwierdzenie, którego wymaga kryterium.
+
 ---
 
 ## 5.12 Decyzje otwarte tej podfazy
@@ -228,4 +259,10 @@ Zgodnie z `K-18`. Wpisane jest **tylko to, co wiadomo na pewno** po zamknięciu 
 
 | # | Zmiana | Dlaczego |
 |---|---|---|
-| | *(tabela wypełnia się w trakcie R2d)* | |
+| `D-8`* | `R2-WP19` kończy się **zakończeniem drugim**: mechanizm przetrasowania jest w kodzie i ma test, ale w danych stoi `0`. Kryterium budżetowe („16 km poniżej 10 s") nie zostało spełnione — 10,27 s przy jednym przetrasowaniu | Przetrasowanie kosztuje 1,38 s wobec 1,2 s zapasu. Plan zakładał 1,4 s i „mieści się na styk"; pomiar mówi, że nie mieści się w żadnym regionie. Obie połowy zakończenia pierwszego musiały wyjść, wyszła jedna |
+| `D-9`* | Parametr nazywa się **`reroutes`** (ile przetrasowań na przebieg), nie `reroute_every` (co ile iteracji) | Iteracji erozji jest 40 na mapie 4 i 8 km, a 80 na 12 i 16 km. Zapisane w planie `reroute_every = 40` dawałoby **zero** przetrasowań na mapie 4 km i jedno na 16 km — czyli przechwycenia tylko w metropolii, a to dokładnie odwrotnie, niż każe budżet czasu. Jednostka była zła, nie wartość |
+| `D-10` | Liczba przechwyconych komórek jest pozycją `GenerationReport` (`WorldStats::basin_captures`, wiersz „przechwycenia rzeczne"), a nie osobnym pomiarem w `tools/headless/src/worldgen.rs` | Zakres pakietu kierował pomiar do scenariusza. Raport już wypisuje czasy per przebieg, więc „czas generacji per N" jest w nim bez dopisywania czegokolwiek — brakowało tylko drugiej liczby. Osobny pomiar w scenariuszu byłby drugą kopią tej samej wiedzy |
+| `D-11` | Wcięcie progu odpływowego (`OUTLET_INCISION_M`, `SEDIMENT_INFILL`) przeniosło się z przygotowania stanu erozji do jego rozsypania i nakłada je **tylko ostatni** rozsyp | Przy przetrasowaniu w trakcie erozji misa jest zdejmowana i nakładana z powrotem. Gdyby ścięcie szło razem z nią, każde przetrasowanie ścinałoby jeziora o kolejne sześć metrów i liczba przetrasowań zmieniałaby powierzchnię jezior mocniej niż sama erozja. Przy `reroutes = 0` wyrażenie jest to samo, więc macierz hashy nie drgnęła |
+| `D-12`* | Tańsze P4 (kolejka kubełkowa zamiast kopca binarnego w priority-flood) jest **warunkiem** włączenia przechwyceń i dostaje pozycję **80** w wykazie §11 dokumentu R2 — nie w rejestrze długu strukturalnego, który mierzy długość plików, a nie koszt algorytmu | Bez tego `reroutes` nigdy nie będzie większe od zera, bo brakuje 0,2–0,4 s i nie ma innego miejsca, z którego je wziąć. Pozycja bez adresata to dokładnie to, co łapie `R2-WP26` |
+
+`*` = zmiana zakresu albo kryterium.

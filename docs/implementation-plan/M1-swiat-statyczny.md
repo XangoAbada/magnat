@@ -563,6 +563,40 @@ Szerokość z geometrii hydraulicznej `w = a · Q^b` (a ≈ 2,5; b ≈ 0,5; `Q �
 głębokość `d = c · Q^f` (c ≈ 0,25; f ≈ 0,4). Rząd Strahlera liczony po drzewie odbiorników.
 Jeziora: komórki podniesione przez priority-flood o więcej niż `ε × 4` tworzą misę — wypełniamy do progu odpływu.
 
+### 5.7a Przechwytywanie rzeczne — decyzja z pomiarem (wpisane przez R2-WP19, 2026-09-21)
+
+Topologia odwodnienia (P4 + P5) jest ustalana **raz, przed pętlą erozji**. W trakcie P6
+wysokości się zmieniają, ale odbiorniki D8 już nie, więc rzeka nie może przeciąć niskiego
+działu wodnego i zabrać sąsiedniej zlewni. W rzeczywistości przechwycenia kształtują większość
+dużych dorzeczy; bez nich sieć rzeczna jest tą, którą wyznaczył szum przed erozją, tylko
+głębiej wciętą.
+
+Do R2 stał tu komentarz `ponytail:` z oszacowaniem „kosztuje 1,4 s za powtórzenie". R2-WP19
+zbudował mechanizm (`reroutes` w `data/geology/erosion.ron`), zmierzył go i **wyłączył**.
+Pomiar, 8 wątków, region `mountain`, ziarno 17:
+
+| | bez przetrasowania | z jednym | cel §10 |
+|---|---|---|---|
+| 16 km, razem | 8,43 s | **10,27 s** | 10 s |
+| 16 km, P6 | 6,27 s | 8,11 s | 5–6 s |
+| 4 km, razem | 0,33 s | 0,41 s | 1 s |
+
+Jedno przetrasowanie **wystarcza merytorycznie**: na mapie 16 km przechwytuje 478 395 komórek
+(2,8 % mapy), wydłuża koryta z 414 km do 441 km i ścina powierzchnię jezior o 14 %. Nie mieści
+się jednak w budżecie i nie jest to kwestia częstotliwości — jedno przetrasowanie to już
+minimum, a jego koszt to pełne P4 (1,10 s) + P5 (0,28 s) = **1,38 s** wobec zapasu 1,2 s
+w regionie górskim i 1,0 s na nizinie.
+
+Mapa 4 km mieści się z ogromnym zapasem, ale jedna wartość obowiązuje wszystkie rozmiary:
+metropolia z inną siecią rzeczną niż świat 4 km z tego samego ziarna byłaby gorsza niż brak
+przechwyceń w obu.
+
+**Ścieżka wyjścia prowadzi przez tańsze P4, nie przez rzadsze przetrasowanie.** Priority-flood
+chodzi dziś na kopcu binarnym (`BinaryHeap<Reverse<(i32, u32)>>`), a wysokości są w milimetrach
+całkowitych — czyli klucz jest ograniczonym intem i kolejka kubełkowa jest wprost stosowalna,
+bez zmiany wyniku. Dopiero po tym `reroutes` ma prawo być większe od zera; zmiana tej wartości
+przelicza macierz 160 hashy terenu w `sim/world/tests/determinism.rs`.
+
 ### 5.8 `engine/render` — frame graph
 
 | Pass | Typ | Zawartość | Budżet GPU (widok dzielnicy, 1440p) |
@@ -1033,3 +1067,17 @@ Nie udało się ich uzgodnić w trakcie planowania, bo M0 i M2 są planowane ró
 Ścieżka krytyczna: **W1 → W2 → W3 → W5 → V1 → V2 → V3 → V4**, równolegle **R1 → R2 → R3 → R4**.
 WP-W3 (hydrologia) i WP-V2 (meshing) to dwa pakiety, których niedoszacowanie przesunie całą fazę —
 oba mają budżet wydajnościowy jako kryterium ukończenia, żeby problem wyszedł wcześnie, a nie w M11.
+
+---
+
+## Zmiany wpisane po R2d
+
+Zgodnie z `K-18`. Pierwsza taka tabela w tym dokumencie — M1 zamknęło się przed wprowadzeniem
+reguły, więc wcześniejsze poprawki szły wprost w treść.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| `M1-1`* | Nowa sekcja **§5.7a**: przechwytywanie rzeczne jest decyzją budżetową z pomiarem, a nie skrótem. `data/geology/erosion.ron` dostaje `reroutes` (schemat 1 → 2), a `WorldStats` — `basin_captures` | Do R2 stał w `erosion.rs` komentarz `ponytail:` z **oszacowaniem** „1,4 s za powtórzenie". `R2-WP19` zmierzył: 1,38 s samego P4 + P5 plus 0,4 s odbudowy stanu, razem 1,83 s na mapie 16 km wobec 1,2 s zapasu do celu 10 s. Oszacowanie było zaniżone o ponad jedną czwartą i przez sześć faz nikt tego nie sprawdził |
+| `M1-2` | Budżet §10 wiersz „P6 (erozja)" ma prognozę 5–6 s dla 16 km, a pomiar na 8 wątkach daje **6,27 s** (górski, ziarno 17). To nie jest nowa wiedza — dziennik `00-postep.md` odnotował 7,5 s przy zamknięciu W3 — ale tabela §10 nadal podaje prognozę bez odsyłacza do pomiaru | Wiersz zostaje bez zmian, bo prognoza ma prawo być prognozą. Odnotowane, żeby następny pomiar czasu generacji nie zaczynał się od pytania, czy 6,27 s to regres |
+
+`*` = zmiana zakresu albo kryterium.

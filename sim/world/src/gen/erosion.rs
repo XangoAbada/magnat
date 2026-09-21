@@ -35,9 +35,17 @@ pub struct ErosionParams {
     pub slope_every: u32,
     pub repose_angle_deg: f32,
     pub repose_relaxation: f32,
+    /// Ile razy w trakcie erozji przeliczyć topologię odwodnienia, równomiernie po przebiegu.
+    /// `0` = ani razu, czyli sieć rzeczna zostaje ta, którą wyznaczył szum przed erozją.
+    ///
+    /// Liczba przetrasowań, a nie „co N iteracji": iteracji erozji jest 40 na mapie 4 i 8 km,
+    /// a 80 na 12 i 16 km, więc ta sama wartość N dawałaby różną liczbę przetrasowań zależnie
+    /// od rozmiaru świata — a przy N = 40 nawet zero na mapie 4 km i jedno na 16 km, czyli
+    /// dokładnie odwrotnie, niż każe budżet czasu. Patrz [`erode`].
+    pub reroutes: u32,
 }
 
-pub const EROSION_SCHEMA_VERSION: u32 = 1;
+pub const EROSION_SCHEMA_VERSION: u32 = 2;
 
 /// Ile metrów wcina się **próg odpływowy** misy bezodpływowej przez modelowany czas.
 ///
@@ -65,6 +73,7 @@ impl Default for ErosionParams {
             slope_every: 4,
             repose_angle_deg: 42.0,
             repose_relaxation: 0.5,
+            reroutes: 0,
         }
     }
 }
@@ -109,13 +118,30 @@ pub fn run(ctx: &mut GenCtx) {
     erode(ctx, params);
 }
 
-pub fn erode(ctx: &mut GenCtx, p: ErosionParams) {
+/// Stan erozji w przestrzeni stosu. Wszystko tutaj jest pochodną topologii odwodnienia,
+/// więc przetrasowanie unieważnia to naraz — stąd jedna struktura, a nie sześć wektorów
+/// wożonych osobno.
+struct Stos {
+    /// Kolejność komórek od ujść w górę zlewni; `stack[k]` to indeks komórki w siatce.
+    stack: Vec<u32>,
+    /// Głębokość misy bezodpływowej per komórka siatki, **surowa** (`filled − height`).
+    /// Wcięcie progu odpływowego nakłada dopiero [`rozsyp`], i tylko ten ostatni.
+    depression: Vec<f32>,
+    h: Vec<f32>,
+    u: Vec<f32>,
+    coef: Vec<f32>,
+    /// Indeks odbiornika w przestrzeni stosu; `u32::MAX` = ujście.
+    recv: Vec<u32>,
+    ranges: Vec<(u32, u32)>,
+}
+
+/// Przenumerowuje komórki na kolejność stosu i liczy współczynniki kroku stream-power.
+///
+/// Wydzielone z [`erode`], bo przetrasowanie w trakcie erozji musi to powtórzyć: nowe
+/// odbiorniki znaczą nowy stos, nowe zakresy zlewni i nowe pola akumulacji w `coef`.
+fn przygotuj(ctx: &GenCtx, p: ErosionParams) -> Stos {
     let dim = ctx.dim();
     let n = dim * dim;
-    let iterations = ctx.params.size.erosion_iterations();
-    if ctx.work.stack.len() != n {
-        return; // brak trasowania — nic do zerodowania
-    }
 
     // ── Zagłębienia jako osobna warstwa ──────────────────────────────────────────────
     //
@@ -129,15 +155,8 @@ pub fn erode(ctx: &mut GenCtx, p: ErosionParams) {
     // Głębokość misy zdejmujemy przed erozją i nakładamy po niej z powrotem. Dzięki temu
     // erozja pracuje na całej mapie, a jeziora nie znikają — stają się misami w **nowym**,
     // wyrzeźbionym terenie.
-    // Zagłębienie wraca pomniejszone o wcięcie progu odpływowego i o zasypanie osadem —
-    // patrz [`OUTLET_INCISION_M`]. Bez tego mapa 16 km w regionie górskim wychodzi
-    // z jeziorami na jednej trzeciej powierzchni i z 80 MB stanu trwałego wobec 60 MB
-    // budżetu (§5.9).
     let depression: Vec<f32> = (0..n)
-        .map(|i| {
-            let raw = ctx.work.filled_m[i] - ctx.work.height_m[i];
-            (raw - OUTLET_INCISION_M).max(0.0) * SEDIMENT_INFILL
-        })
+        .map(|i| ctx.work.filled_m[i] - ctx.work.height_m[i])
         .collect();
 
     // ── Przenumerowanie na kolejność stosu ───────────────────────────────────────────
@@ -149,23 +168,23 @@ pub fn erode(ctx: &mut GenCtx, p: ErosionParams) {
 
     let dist_lut: [f32; 8] =
         std::array::from_fn(|k| neighbor_dist_m(k, f64::from(WORK_CELL_M)) as f32);
-    let mut k_h = vec![0.0f32; n];
-    let mut k_u = vec![0.0f32; n];
+    let mut h = vec![0.0f32; n];
+    let mut u = vec![0.0f32; n];
     // Współczynnik erozji komórki: K · dt · A^m / dist. Liczony raz — w pętli zostaje
     // wyłącznie dzielenie i dwa mnożenia.
-    let mut k_coef = vec![0.0f32; n];
+    let mut coef = vec![0.0f32; n];
     // Indeks odbiornika w przestrzeni stosu; `u32::MAX` = ujście, czyli poziom odniesienia.
-    let mut k_recv = vec![u32::MAX; n];
+    let mut recv = vec![u32::MAX; n];
 
     for (k, c) in stack.iter().enumerate() {
         let c = *c as usize;
-        k_h[k] = ctx.work.filled_m[c];
-        k_u[k] = ctx.work.uplift[c] * p.dt_years;
+        h[k] = ctx.work.filled_m[c];
+        u[k] = ctx.work.uplift[c] * p.dt_years;
         let r = ctx.work.receiver[c];
         if r == NO_RECEIVER {
             continue;
         }
-        k_recv[k] = pos[r as usize];
+        recv[k] = pos[r as usize];
         // Odległość do odbiornika: osiowa albo po przekątnej, rozpoznana z różnicy indeksów.
         let (cx, cy) = ((c % dim) as i64, (c / dim) as i64);
         let (rx, ry) = ((r as usize % dim) as i64, (r as usize / dim) as i64);
@@ -174,21 +193,84 @@ pub fn erode(ctx: &mut GenCtx, p: ErosionParams) {
         // A^m dla m = 0,5 to sqrt — jedyna funkcja nieelementarna w gorącej pętli,
         // i akurat ta jest dokładnie zaokrąglana w IEEE-754 (00 §K-6).
         let area_m = ctx.work.flow_acc[c].sqrt();
-        k_coef[k] = ctx.work.erodibility[c] * p.dt_years * area_m / d;
+        coef[k] = ctx.work.erodibility[c] * p.dt_years * area_m / d;
     }
 
-    let ranges = ctx.work.basin_ranges.clone();
+    Stos {
+        stack,
+        depression,
+        h,
+        u,
+        coef,
+        recv,
+        ranges: ctx.work.basin_ranges.clone(),
+    }
+}
+
+/// Odkłada wyerodowaną powierzchnię do `work.height_m`, zdejmując z niej misy.
+///
+/// `wciecie` nakłada wcięcie progu odpływowego i zasypanie osadem (patrz
+/// [`OUTLET_INCISION_M`]) — robi to **wyłącznie ostatni** rozsyp. Przy przetrasowaniu
+/// w trakcie erozji misa ma wrócić taka, jaka była: inaczej każde powtórzenie ścinałoby
+/// jeziora o kolejne sześć metrów i liczba przetrasowań zmieniałaby powierzchnię jezior
+/// mocniej niż sama erozja. Bez tego ścięcia mapa 16 km w regionie górskim wychodzi
+/// z jeziorami na jednej trzeciej powierzchni i z 80 MB stanu trwałego wobec 60 MB
+/// budżetu (M1 §5.9).
+fn rozsyp(ctx: &mut GenCtx, s: &Stos, wciecie: bool) {
+    for (k, c) in s.stack.iter().enumerate() {
+        let c = *c as usize;
+        let d = if wciecie {
+            (s.depression[c] - OUTLET_INCISION_M).max(0.0) * SEDIMENT_INFILL
+        } else {
+            s.depression[c]
+        };
+        ctx.work.height_m[c] = s.h[k] - d;
+    }
+}
+
+/// Ujście, do którego spływa każda komórka. Tożsamość zlewni odporna na przenumerowanie:
+/// identyfikatory zlewni nadaje się kolejno rosnącym indeksom ujść, więc pojawienie się
+/// jednego nowego ujścia przesunęłoby numery wszystkich zlewni za nim i każda komórka
+/// wyglądałaby na przechwyconą.
+fn ujscia_komorek(ctx: &GenCtx) -> Vec<u32> {
+    let outlets = &ctx.work.outlets;
+    ctx.work
+        .basin
+        .as_slice()
+        .iter()
+        .map(|b| outlets[*b as usize])
+        .collect()
+}
+
+pub fn erode(ctx: &mut GenCtx, p: ErosionParams) {
+    let dim = ctx.dim();
+    let n = dim * dim;
+    let iterations = ctx.params.size.erosion_iterations();
+    if ctx.work.stack.len() != n {
+        return; // brak trasowania — nic do zerodowania
+    }
+
+    // Odstęp między przetrasowaniami. `reroutes + 1` w mianowniku, bo ostatnie przypadłoby
+    // na koniec przebiegu, gdzie i tak biegnie trasowanie końcowe — `r` przetrasowań dzieli
+    // przebieg na `r + 1` odcinków.
+    let reroute_step = match p.reroutes {
+        0 => 0,
+        r => (iterations / (r + 1)).max(1),
+    };
+
+    let mut s = przygotuj(ctx, p);
     let mut buf = vec![0.0f32; n];
+    ctx.work.basin_captures = 0;
 
     for iter in 0..iterations {
-        stream_power_step(ctx.pool, &mut k_h, &k_u, &k_coef, &k_recv, &ranges);
+        stream_power_step(ctx.pool, &mut s.h, &s.u, &s.coef, &s.recv, &s.ranges);
 
         if p.slope_every > 0 && (iter + 1).is_multiple_of(p.slope_every) {
             // Rozsypanie do siatki: dyfuzja i osuwanie działają na sąsiedztwie przestrzennym,
             // którego przestrzeń stosu nie zna.
             let mut grid = vec![0.0f32; n];
-            for (k, c) in stack.iter().enumerate() {
-                grid[*c as usize] = k_h[k];
+            for (k, c) in s.stack.iter().enumerate() {
+                grid[*c as usize] = s.h[k];
             }
             let mut g = Grid2::from_vec(dim, grid);
             // Tyle podkroków, ile iteracji pominięto — ten sam całkowity czas dyfuzji
@@ -197,25 +279,49 @@ pub fn erode(ctx: &mut GenCtx, p: ErosionParams) {
                 diffusion_step(ctx.pool, &mut g, &mut buf, p);
                 repose_step(ctx.pool, &mut g, &mut buf, p);
             }
-            for (k, c) in stack.iter().enumerate() {
-                k_h[k] = g[*c as usize];
+            for (k, c) in s.stack.iter().enumerate() {
+                s.h[k] = g[*c as usize];
             }
+        }
+
+        // ── Przechwytywanie rzeczne ──────────────────────────────────────────────────
+        //
+        // Bez tego kroku odbiorniki D8 są te, które wyznaczył szum **przed** erozją: doliny
+        // pogłębiają się, ale rzeka nie może przeciąć niskiego działu wodnego i zabrać
+        // sąsiedniej zlewni. W rzeczywistości przechwycenia kształtują większość dużych
+        // dorzeczy, więc sieć bez nich jest siecią szumu, tylko głębiej wciętą.
+        //
+        // Przetrasowanie to pełne P4 + P5, więc idzie kilka razy na przebieg, a nie w każdej
+        // iteracji — i to koszt, a nie algorytm, ustala ile razy (budżet generacji 16 km,
+        // M1 §10; zmierzone w R2-WP19). Ostatnią iterację pomijamy: po niej nie ma już czego
+        // erodować, a trasowanie i tak biegnie na końcu.
+        if reroute_step > 0 && (iter + 1).is_multiple_of(reroute_step) && iter + 1 < iterations {
+            rozsyp(ctx, &s, false);
+            let przed = ujscia_komorek(ctx);
+            crate::gen::flood::fill(ctx);
+            crate::gen::flow::route(ctx);
+            let outlets = &ctx.work.outlets;
+            ctx.work.basin_captures += ctx
+                .work
+                .basin
+                .as_slice()
+                .iter()
+                .zip(&przed)
+                .filter(|(b, p)| outlets[**b as usize] != **p)
+                .count() as u64;
+            s = przygotuj(ctx, p);
         }
     }
 
-    for (k, c) in stack.iter().enumerate() {
-        let c = *c as usize;
-        ctx.work.height_m[c] = k_h[k] - depression[c];
-    }
+    rozsyp(ctx, &s, true);
     normalize_relief(ctx);
 
     // Erozja potrafi wydrążyć nowe misy, a wszystko za nią zakłada teren bez zagłębień.
-    // Jedno powtórzenie P4 i P5 na końcu jest tańsze niż trasowanie w każdej iteracji
-    // (80 × 1,4 s wobec 1,4 s) i wystarcza, bo sieć dolin już się wtedy nie przebudowuje.
     //
-    // ponytail: sieć odwodnienia jest ustalana raz, przed erozją — doliny pogłębiają się,
-    // ale nie zmieniają biegu (brak przechwyceń rzecznych). Ścieżka wyjścia: przetrasowanie
-    // co N iteracji, gdy kiedyś będzie potrzebne; kosztuje 1,4 s za każde powtórzenie.
+    // To jest **jedyne** trasowanie przy `reroutes = 0`, czyli przy dzisiejszej kalibracji:
+    // sieć rzeczna jest tą, którą wyznaczył szum przed erozją, tylko głębiej wciętą. Nie jest
+    // to skrót bez pomiaru, tylko decyzja budżetowa z liczbami — M1 §5.7a i komentarz przy
+    // `reroutes` w `data/geology/erosion.ron`.
     crate::gen::flood::fill(ctx);
     crate::gen::flow::route(ctx);
     crate::gen::commit_height(ctx);
@@ -406,6 +512,9 @@ mod tests {
         );
         assert_eq!(p.hillslope_diffusion, d.hillslope_diffusion);
         assert_eq!(p.repose_angle_deg, d.repose_angle_deg);
+        // Rozjazd akurat tutaj zmieniłby sieć rzeczną każdego świata z każdego ziarna,
+        // a przy `unwrap_or_default()` w `run` nikt by się nie dowiedział, że do niego doszło.
+        assert_eq!(p.reroutes, d.reroutes, "liczba przetrasowań się rozjechała");
     }
 
     #[test]
@@ -478,6 +587,49 @@ mod tests {
             b.work.height_m.as_slice(),
             "erozja dała inny teren przy 1 i 8 wątkach"
         );
+    }
+
+    /// R2-WP19. Przechwycenie rzeczne: rzeka przecina niski dział wodny i zabiera sąsiednią
+    /// zlewnię, więc komórka spływa po erozji do **innego ujścia** niż przed nią.
+    ///
+    /// Przed naprawą ten test padał zawsze i dla każdej liczby przetrasowań, bo topologia
+    /// odwodnienia była ustalana raz, przed pętlą: przechwycenie nie miało jak zajść.
+    #[test]
+    fn erozja_przechwytuje_zlewnie_dopiero_po_przetrasowaniu() {
+        let bez = ErosionParams {
+            reroutes: 0,
+            ..ErosionParams::default()
+        };
+        let mut a = swiat(Region::Mountain, 17, 2);
+        erode(&mut a, bez);
+        assert_eq!(
+            a.work.basin_captures, 0,
+            "bez przetrasowania nie ma jak zmienić zlewni"
+        );
+
+        let mut b = swiat(Region::Mountain, 17, 2);
+        erode(&mut b, ErosionParams { reroutes: 1, ..bez });
+        assert!(
+            b.work.basin_captures > 0,
+            "erozja nie przechwyciła ani jednej komórki"
+        );
+        assert_ne!(
+            a.work.height_m.as_slice(),
+            b.work.height_m.as_slice(),
+            "przechwycenie policzone, ale teren wyszedł ten sam — pomiar mierzy nie to, co trzeba"
+        );
+
+        // Ryzyko R1 na ścieżce przetrasowania: między iteracjami wchodzi tu P4 (szeregowe)
+        // i P5 (po wierszach), więc `erozja_nie_zalezy_od_liczby_watkow` ich nie pokrywa —
+        // ono chodzi po kalibracji z danych, czyli po `reroutes = 0`.
+        let mut c = swiat(Region::Mountain, 17, 8);
+        erode(&mut c, ErosionParams { reroutes: 1, ..bez });
+        assert_eq!(
+            b.work.height_m.as_slice(),
+            c.work.height_m.as_slice(),
+            "przetrasowanie dało inny teren przy 2 i 8 wątkach"
+        );
+        assert_eq!(b.work.basin_captures, c.work.basin_captures);
     }
 
     #[test]

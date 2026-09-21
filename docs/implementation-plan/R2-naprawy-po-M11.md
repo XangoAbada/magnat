@@ -10,7 +10,7 @@ jak R1.
 
 R1 mierzył jedną rzecz — długość plików — i naprawiał ją jednym ruchem. R2 mierzy co innego:
 **rozjazd między tym, co dokumenty faz uznały za zamknięte, a tym, co robi kod**. Wykaz w §11 ma
-**78 wierszy** i powstał w siedmiu rzutach (dwa wiersze wyszły z wykonania pozycji 1, 2 i 21 przed R2, dwa dopisała M11c, trzy — R2b): 42 z przeglądu repozytorium po M7f, jeden dopisany
+**80 pozycji** i powstał w siedmiu rzutach (dwa wiersze wyszły z wykonania pozycji 1, 2 i 21 przed R2, dwa dopisała M11c, trzy — R2b): 42 z przeglądu repozytorium po M7f, jeden dopisany
 przy weryfikacji, trzy z przeglądów w trakcie M8, **dziesięć z recenzji przed commitem M9d**
 (pozycje 47–56), jeden z M9e (57), **osiem z przeglądu sesji po M9e** (pozycje 58–65), jeden z gry uruchomionej
 po M9e (68) i **dwa z M11b** (70–71) — obie wyszły dopiero wtedy, gdy pieszy przestał być plamką
@@ -219,7 +219,7 @@ Tabela pakietów z rozmiarami i statusem stoi w dokumencie każdej podfazy. Zbio
 | R2-WP16 | Potrzeby bez martwych slotów | R2c | — | M | `[x]` (`K-96`; z pozycją 43) |
 | R2-WP17 | Kopalnia staje na złożu | R2d → **M11c** | `D-N13` (przyjęta) | M | `[x]` |
 | R2-WP18 | Gęstość firm i pasmo bezrobocia | R2d → M11c → **R3** | `D-N20` | L | `[~]` |
-| R2-WP19 | Przechwytywanie rzek w erozji | R2d | — | M | `[ ]` |
+| R2-WP19 | Przechwytywanie rzek w erozji | R2d | — | M | `[x]` **zakończenie drugie** (pomiar, `M1` §5.7a; warunek włączenia — poz. 80) |
 | R2-WP20 | Podział `DecisionReason` | R2e | wszystkie pozostałe | L | `[ ]` |
 | R2-WP21 | Generator dróg: rozcięcie `lsystem.rs` | R2e | — | M | `[ ]` |
 | R2-WP22 | Martwe warianty i nieużywane pola | R2e | — | M | `[ ]` |
@@ -286,6 +286,7 @@ a nie zmienia jej treści:
 | `M8-miasto-jako-aktor.md` (`CJ-9`) | Obie pozycje obiecane wykazowi R2 istnieją teraz jako 58 i 59. Wiersz w tabeli korekt z datą wpisania — bo między obietnicą a wpisem minęły dwie podfazy M9 |
 | `R1-refaktor-po-M5.md` (`D-R8`) | Decyzja „odnowić linię bazową w pierwszym commicie po R1" nie miała adresata i R1 zamknęło się bez niej. Adresat: R2-WP33. Wiersz przy `D-R8` |
 | `M6-lancuch-dostaw.md` (`AI-8`) | Scenariusz `export_drains` z §7.7 miał powstać w M6e i nie powstał; kryterium WP9 zostało zawężone, a pomiar przeniesiony donikąd. Adresat: R2-WP34 |
+| `M1-swiat-statyczny.md` (dopisane w R2d) | Komentarz `ponytail:` o braku przechwyceń rzecznych podawał **oszacowanie** kosztu, którego nikt nie sprawdził przez sześć faz. Nowa §5.7a z pomiarem i warunkiem włączenia; pierwsza tabela „Zmiany wpisane po" w tym dokumencie — M1 zamknęło się przed wprowadzeniem `K-18` |
 
 ---
 
@@ -417,6 +418,8 @@ i staje się osobnym commitem bez żadnej innej zmiany — tak samo jak `cargo f
 Zmiany R2 dotykające kontraktów z dokumentu 00 wymagają wpisu `K-n` zgodnie z jego §4a.
 Wpisy powstają w commicie pakietu, który zmianę wprowadza, a nie z góry.
 
+**Numeracja sprawdzona po R2d (2026-09-21): R2d nie dopisało żadnego `K-n` i to jest wynik, a nie przeoczenie.** `R2-WP19` dotknął schematu `data/geology/erosion.ron` (`schema_version` 1 → 2) i struktury raportu generacji (`WorldStats`), a żadne z nich nie jest kontraktem z dokumentu 00 — oba należą w całości do M1 i tam są opisane (§5.7a). `K-58` i `K-73` są nadal wolne i zostają przy swoich pakietach.
+
 **Numeracja sprawdzona po R2c (2026-09-21):** `K-96`, `K-97` i `K-98` dopisane — pierwszym wolnym numerem po R2b było `K-96`. `K-58` i `K-73` są nadal wolne i zostają przy swoich pakietach (`R2-WP20`, `R2-WP31`).
 
 **Numeracja sprawdzona po R2b (2026-09-21):** `K-61` i `K-72` wykonane — dokładnie w treści, w której były zarezerwowane. Dodatkowo `K-93`, `K-94` i `K-95`, bo R2b zmieniło trzy kontrakty, których §10 nie przewidywał: umowę o pracę (gospodarstwo w `Employment`), `Household` (liczba dzieci i skala ekwiwalentna) oraz `InheritanceHook` (świat, `estate_charge`, wołanie bezwarunkowe). `K-58` i `K-73` są nadal wolne i zostają przy swoich pakietach.
@@ -449,11 +452,17 @@ się numery w tabeli, a nie w głowie.
 
 ---
 
-## 11. Wykaz — 78 wierszy
+## 11. Wykaz — 80 pozycji
 
 Numeracja jest numeracją przeglądu i nie zmienia się. Kolumna „Plan" mówi, co wiedziały dokumenty
 przed R2: `—` = nieznane planowi, `zapis` = zapisane jako znana usterka bez wykonawcy,
 `WP` = miało pakiet. Kolumna „Status" wypełnia się w trakcie R2.
+
+**Liczba w nagłówku była nieprawdziwa i to jest odnotowane, a nie po cichu poprawione.** Nagłówek
+mówił 78, `00-postep.md` mówiło 73, a policzone pozycje dawały 79 (numer 38 stoi w dwóch wierszach).
+Rozjazd wziął się stąd, że każdy rzut dopisywał wiersze, a liczbę w nagłówku poprawiał ten, kto
+akurat pamiętał. Od R2d obie liczby są liczone, a nie przepisywane — to ta sama klasa usterki,
+którą wykaz opisuje, tyle że we własnym nagłówku.
 
 **Pięć pozycji ma adresata poza R2.** Decyzją właściciela produktu z 2026-09-19 pozycje
 **5, 6, 12, 70 i 71** wykonuje **M11c**, razem z pakietami `R2-WP15`, `R2-WP17` i `R2-WP18`.
@@ -506,7 +515,7 @@ czasu `D-N6` przy `R2-WP18` zostają bez zmian, a status wraca tutaj po zamknię
 | 39 | Bramka G4 doradcza — 5 dób wobec widełek 14–56 | zapis `00-postep` M7 | R2-WP24 | `[ ]` |
 | 40 | Większość testów miasta `#[ignore]` | zapis `R1` `D-R7` | R2-WP25 | `[ ]` |
 | 41 | Brak testu `income_monthly` po zdarzeniu życiowym | — | R2-WP9 | `[x]` **zamknięte** (`K-93`; trzy testy w `sim/economy/tests/labor.rs` — zgon, emerytura, wyjazd z miasta — na prawdziwym świecie, bo atrapa `TestPeople` gospodarstw nie zna) |
-| 42 | Erozja nie przechwytuje rzek | — | R2-WP19 | `[ ]` |
+| 42 | Erozja nie przechwytuje rzek | — | R2-WP19 | `[x]` **zakończenie drugie** — mechanizm jest, ma test (`erozja_przechwytuje_zlewnie_dopiero_po_przetrasowaniu`) i stoi w danych na zerze, bo budżet go nie przyjął. Jedno przetrasowanie przechwytuje 478 395 komórek na mapie 16 km, ale kosztuje **1,38 s** wobec 1,2 s zapasu: 8,43 s → 10,27 s przy celu 10 s. Skrót przestał być skrótem bez pomiaru — decyzja z liczbami stoi w `M1` §5.7a. Warunek włączenia: poz. 80 |
 | 43 | **Nastrój mieszkańca tylko spada i nic go nie odbudowuje** — `DeprivationEffect::MoodLoss` jest jedynym pisarzem `Vitals.mood` w całym repozytorium (`sim/agents/src/needs.rs`, `saturating_sub`). Po roku gry cała populacja siedzi na −100, a przebieg 400-dobowy `m8miasto` mierzy średnią **−99** | — | R2-WP16 (ten sam pakiet co `StatusLoss` i `ProductivityLoss`) | `[x]` **zamknięte** (`K-96`, testy w `sim/agents/tests/needs_mood.rs`; odbudowa jest bezwarunkowa i konkuruje z karami, a zero jest sufitem — nic nie podnosi nastroju ponad neutralny, bo żadna faza do niego nie pisze) |
 | 44 | **`README.md` opisywał stan „M1 zamknięte"** przez siedem faz — poprawione w M8c na „M8c zamknięte". Pozycja 36 zostaje, bo jej treścią jest **test CI pilnujący opisu**, a nie jednorazowa poprawka | — | R2-WP23 (test) | `[~]` tekst poprawiony w M8c, testu nadal nie ma |
 | 45 | **Wartość gruntu nie zmienia się w trakcie gry.** Jedyne dwa zapisy `Parcel.land_value_per_m2` w całym repozytorium to `city::value::pass_1` i `pass_2`, obie wołane raz przy generacji miasta (`city/mod.rs`). Każdy kanał skutku kończący się na wartości gruntu — parki, zaległy wywóz odpadów, hałas — jest przez to **niewykonalny**, a nie tylko odłożony. Znalezione w M8d przy kanałach skutków usług publicznych (`CG-3`) | — | **bez pakietu** — kandydat na R2-WP27, bo żaden istniejący go nie obejmuje | `[ ]` |
@@ -579,6 +588,7 @@ Ujednolicenie nagłówków jest zadaniem R2-WP23.
 | 75 | **Dochód nie idzie za mieszkańcem, który zmienia gospodarstwo.** `Household.income_monthly` prowadzą zatrudnienie, zwolnienie i podwyżka, a **nie** wyprowadzka z gniazda ani rozstanie: dwudziestopięciolatek zakłada dom z dochodem zero, a jego płaca zostaje w dochodzie rodziców. Od `K-93` nie jest to już cicha niespójność — `+wage` i `−wage` trafiają zawsze po tej samej stronie, bo umowa pamięta gospodarstwo — ale liczba nadal opisuje nieprawdę. Znalezione przy `R2-WP9` | — | **bez pakietu** — kandydat do R3, bo domknięcie wymaga przeniesienia płacy razem z umową, czyli dotknięcia rejestru firm z `sim/agents` | `[ ]` |
 | 76 | **Miasto nie jest pracodawcą** (`CH-4`). Most `game::world::firms` **pomija** zakłady municypalne (`skipped_municipal`, „ich firmy stawia M8”), więc nauczyciela nie ma w rejestrze firm w ogóle, a plan wydatków dalej wychodzi na konto reszty świata. Łańcuch „budżet miasta → pensja nauczyciela → jakość szkoły” zostaje przerwany, choć `R2-WP30` domknęło jego drugą połowę: skrzynka płac ma konsumenta i pieniądz wychodzi od pracodawcy — tam, gdzie pracodawca istnieje | zapis `M8` `CH-4`, zakres `R2-WP30` | **bez pakietu** — postawienie firmy miasta, zakładów dla placówek i realnej listy płac jest **mechaniką**, której `R2` §2 zabrania; adres: M8 albo R3 | `[ ]` |
 | 79 | **Zamiennika nikt nie zamawia.** Od `R2-WP14` szósty szczebel kaskady faktycznie karmi linię (`K-97`), ale kaskada, zapytania ofertowe i punkty zamówieniowe chodzą wyłącznie po `RecipeInput.good` (`shortage::wejscia_zakladu`), a towar-zamiennik wejściem receptury nie jest. Podmiana zadziała więc tyle razy, ile zamiennika stoi w magazynie **przypadkiem**: w łańcuchu odniesienia otręby są produktem ubocznym młyna, więc zwykle stoją, ale reguły na to nie ma i w innym łańcuchu nie będzie. Sufit nazwany w `plant::produce::podmiana`. Znalezione przy recenzji przed commitem `R2c` | — | **bez pakietu** — kandydat do R3 albo do fazy dotykającej zaopatrzenia: zapytanie ofertowe na zamiennik w chwili wejścia na `Substituted` zmienia to, **co firma kupuje**, czyli jest mechaniką, nie domknięciem | `[ ]` |
+| 80 | **Priority-flood (P4) na kopcu binarnym kosztuje 1,10 s na mapie 16 km i to on blokuje przechwytywanie rzeczne.** `R2-WP19` zbudował mechanizm przetrasowania w trakcie erozji, zmierzył go i musiał zostawić wyłączony: przetrasowanie kosztuje P4 + P5 = 1,38 s, a do celu 10 s zostaje 1,2 s. Rzadziej się nie da — jedno przetrasowanie na przebieg to minimum. Kolejka jest przy tym **wprost wymienialna**: `flood::fill` pracuje w milimetrach całkowitych (`i32`), więc klucz jest ograniczonym intem i kolejka kubełkowa daje ten sam wynik bit w bit, bez zmiany macierzy hashy. Znalezione pomiarem w `R2-WP19` | — | **bez pakietu** — kandydat do R3 albo do M12 (profilowanie); dopiero po nim `reroutes` w `data/geology/erosion.ron` ma prawo być większe od zera | `[ ]` |
 
 ## 12. Szacunek wielkości
 
