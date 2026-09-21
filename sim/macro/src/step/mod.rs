@@ -64,6 +64,14 @@ pub struct MacroParams {
     /// Tarcie wyszukiwania w skali agregatu — bez niego zatrudnienie skakałoby
     /// do pełna w pierwszej dobie i rynek pracy przestałby cokolwiek znaczyć.
     pub hire_speed_permille: u16,
+    /// Ciśnienie na odejście dobrowolne, w dziesięciotysięcznych obsady na dobę —
+    /// `hr.quit_base_per_10k` z `data/tuning/labor.ron`.
+    ///
+    /// **Ta sama liczba, którą rotacja liczy w mezo** (`K-50`): bez niej makro nie
+    /// ma ani jednego źródła bezrobocia poza redukcją etatów, więc firmy zatrudniają
+    /// wszystkich i bezrobocie schodzi do zera. Dokładnie to zmierzyła bramka 4
+    /// Etapu 10 po `GE-12` — 0 ‰ wobec pasma 30–150 (`GF-7`).
+    pub quit_per_10k_day: u16,
     /// Nominalna przepustowość jednego etatu na godzinę, w jednostkach natywnych
     /// towaru. Mnożnik skali, nie twierdzenie fizyczne — patrz [`produce`].
     pub nominal_per_slot_hour: i64,
@@ -165,6 +173,7 @@ impl Default for MacroParams {
             target_cover_days: 7,
             debt_rate_bp_month: 80,
             hire_speed_permille: 120,
+            quit_per_10k_day: LaborTuning::load_default().map_or(2, |t| t.hr.quit_base_per_10k),
             nominal_per_slot_hour: 12,
             default_wage_month: magnat_core::Money(400_000),
             aggression: 50,

@@ -169,6 +169,10 @@ impl Market {
                 .offers
                 .get(linia.offer)
                 .map_or(Money::ZERO, |o| o.unit_price);
+            let quality = m
+                .offers
+                .get(linia.offer)
+                .map_or(magnat_core::Q::new(0), |o| o.quality);
             let (policy, delegated, turnover) = match s.controllers.get(&good) {
                 Some(pc) => (pc.policy, pc.delegated, pc.turnover_7d()),
                 None => (PricePolicy::Fixed { price }, false, Qty::ZERO),
@@ -176,6 +180,7 @@ impl Market {
             shelves.push(ShelfRow {
                 good,
                 price,
+                quality,
                 unit_cost,
                 margin_bp: ShelfRow::margin_of(price, unit_cost),
                 on_shelf: m.shelf_units(i as usize, good),

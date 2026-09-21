@@ -73,6 +73,12 @@ pub enum StopCondition {
     CityEvent,
     /// Cel scenariusza został osiągnięty (WP12).
     ObjectiveMet,
+    /// Załoga któregoś mojego zakładu wyszła do strajku (`DK-6`).
+    ///
+    /// Wariant dopisany dopiero w `M10g`, razem z mechaniką: warunek, którego nikt
+    /// nigdy nie zgłosi, przechodzi każdy test i wygląda tak samo jak działający
+    /// (`K-67`). Do M10e nie było czego zgłaszać, bo nie było strajków.
+    Strike,
 }
 
 impl StopCondition {
@@ -89,6 +95,7 @@ impl StopCondition {
             StopCondition::PriceWar => "price_war",
             StopCondition::CityEvent => "city_event",
             StopCondition::ObjectiveMet => "objective_met",
+            StopCondition::Strike => "strike",
         }
     }
 
@@ -107,6 +114,7 @@ impl StopCondition {
             StopCondition::PriceWar,
             StopCondition::CityEvent,
             StopCondition::ObjectiveMet,
+            StopCondition::Strike,
         ]
     }
 }
@@ -292,6 +300,16 @@ impl StopWatch {
                 let przyrost = ile > self.znane_zdarzenia;
                 self.znane_zdarzenia = ile;
                 przyrost.then_some(None)
+            }
+            // Strajk czytamy z **tej samej liczby**, którą czyta sonda gasząca
+            // zdarzenie `social/strike` (`K-89`): odsetek załogi, która wyszła.
+            // Drugie źródło rozjechałoby się z pierwszym przy pierwszej ugodzie.
+            StopCondition::Strike => {
+                let firms = session.app.world.get_resource::<magnat_firms::Firms>()?;
+                h.sites
+                    .iter()
+                    .find(|s| firms.site(**s).is_some_and(|z| z.strike_bps > 0))
+                    .map(|s| Some(Subject::Site(*s)))
             }
             StopCondition::ObjectiveMet => {
                 if objective_met && !self.cel_zgloszony {

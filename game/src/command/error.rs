@@ -119,6 +119,44 @@ pub enum CommandError {
     NotAnHeir {
         citizen: CitizenId,
     },
+
+    // ── M10g: czego brakuje komendom paneli głębi ────────────────────────────
+    /// Świat nie ma mediów ani rejestru kampanii.
+    NoMedia,
+    /// Kanał nie ma gdzie stanąć: nie ma takiej krawędzi, tytułu ani zdarzenia —
+    /// albo indeks kanału jest spoza słownika. Jeden komunikat na oba, bo dla
+    /// gracza to jest ta sama odpowiedź: **tej reklamy nie da się tu kupić**.
+    NoAdTarget,
+    /// Zakład prowadzi już kampanię. Dwie naraz znaczyłyby dwa razy ten sam
+    /// przekaz w jednym miejscu i tak samo odsiewa je AI firm.
+    CampaignRunning {
+        site: SiteId,
+    },
+    /// Firma nie ma marki, więc nie ma czego reklamować (`brand_of` ma sufit
+    /// 65 535 firm w historii świata, `K-79`).
+    NoBrand,
+    /// Świat nie ma drzewa technologii.
+    NoRnd,
+    /// Takiego węzła nie ma w `data/tech/`.
+    UnknownTech {
+        key: String,
+    },
+    /// Firma prowadzi już projekt badawczy. Jeden naraz — dział badań ma jeden
+    /// zespół i jeden budżet.
+    ResearchBusy,
+    /// Węzeł jest zamknięty: brakuje warunku wstępnego, firma już go zna albo
+    /// blokuje go cudzy patent.
+    TechLocked {
+        key: String,
+    },
+    /// Świat nie ma giełdy.
+    NoEquity,
+    /// Ta spółka nie jest notowana.
+    NotListed,
+    /// W tym zakładzie nie toczy się spór zbiorowy.
+    NoDispute {
+        site: SiteId,
+    },
 }
 
 impl std::fmt::Display for CommandError {
@@ -190,6 +228,21 @@ impl std::fmt::Display for CommandError {
                     "mieszkaniec {citizen:?} nie dziedziczy po postaci gracza"
                 )
             }
+            CommandError::NoMedia => write!(f, "świat nie ma mediów"),
+            CommandError::NoAdTarget => write!(f, "kanał reklamowy nie ma gdzie stanąć"),
+            CommandError::CampaignRunning { site } => {
+                write!(f, "zakład {site:?} prowadzi już kampanię")
+            }
+            CommandError::NoBrand => write!(f, "firma nie ma marki"),
+            CommandError::NoRnd => write!(f, "świat nie ma drzewa technologii"),
+            CommandError::UnknownTech { key } => write!(f, "nie ma technologii o kluczu {key}"),
+            CommandError::ResearchBusy => write!(f, "firma prowadzi już projekt badawczy"),
+            CommandError::TechLocked { key } => write!(f, "technologia {key} jest zamknięta"),
+            CommandError::NoEquity => write!(f, "świat nie ma giełdy"),
+            CommandError::NotListed => write!(f, "spółka nie jest notowana"),
+            CommandError::NoDispute { site } => {
+                write!(f, "w zakładzie {site:?} nie ma sporu zbiorowego")
+            }
         }
     }
 }
@@ -236,6 +289,17 @@ impl CommandError {
             CommandError::AlreadyEmployed { .. } => "already_employed",
             CommandError::PlayerAlive => "player_alive",
             CommandError::NotAnHeir { .. } => "not_an_heir",
+            CommandError::NoMedia => "no_media",
+            CommandError::NoAdTarget => "no_ad_target",
+            CommandError::CampaignRunning { .. } => "campaign_running",
+            CommandError::NoBrand => "no_brand",
+            CommandError::NoRnd => "no_rnd",
+            CommandError::UnknownTech { .. } => "unknown_tech",
+            CommandError::ResearchBusy => "research_busy",
+            CommandError::TechLocked { .. } => "tech_locked",
+            CommandError::NoEquity => "no_equity",
+            CommandError::NotListed => "not_listed",
+            CommandError::NoDispute { .. } => "no_dispute",
         }
     }
 
@@ -249,6 +313,9 @@ impl CommandError {
         match self {
             CommandError::UnknownGood { key } | CommandError::NotOnShelf { key, .. } => {
                 c.fmt_key(l, &klucz, &[("towar", key)])
+            }
+            CommandError::UnknownTech { key } | CommandError::TechLocked { key } => {
+                c.fmt_key(l, &klucz, &[("wezel", key)])
             }
             CommandError::PriceNotPositive { price } => c.fmt_key(
                 l,

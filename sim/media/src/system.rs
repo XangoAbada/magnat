@@ -161,23 +161,36 @@ fn billboardy(world: &mut World, t: Tick, raport: &mut MediaReport) {
                 continue;
             };
             let pierwszy = expose(world, e, c.brand, AdChannelKind::Billboard, c.claim, doba);
-            zapisz_ekspozycje(world, *id, pierwszy, raport);
+            zapisz_ekspozycje(world, *id, e, pierwszy, raport);
         }
     }
 }
 
 /// Doliczenie ekspozycji do metryk kampanii.
+///
+/// `kto` jest potrzebne wyłącznie po to, żeby doliczyć ekspozycję do **dzielnicy
+/// zamieszkania** odbiorcy — to jest liczba, po którą gracz otwiera panel marketingu
+/// (kryterium WP10.19: „ilu mieszkańców i z jakich dzielnic"). Mieszkaniec bez
+/// przypisanego miejsca zamieszkania podnosi sumę, ale nie podnosi żadnej dzielnicy.
 fn zapisz_ekspozycje(
     world: &mut World,
     id: magnat_core::CampaignId,
+    kto: magnat_ecs::Entity,
     pierwszy: bool,
     raport: &mut MediaReport,
 ) {
+    let dzielnica = world
+        .get::<magnat_agents::Residence>(kto)
+        .map(|r| usize::from(r.district))
+        .filter(|d| *d < crate::campaign::METRIC_DISTRICTS);
     if let Some(c) = world.resource_mut::<Campaigns>().get_mut(id) {
         c.metrics.exposures_today = c.metrics.exposures_today.saturating_add(1);
         c.metrics.exposures_total = c.metrics.exposures_total.saturating_add(1);
         if pierwszy {
             c.metrics.first_contacts = c.metrics.first_contacts.saturating_add(1);
+        }
+        if let Some(d) = dzielnica {
+            c.metrics.by_district[d] = c.metrics.by_district[d].saturating_add(1);
         }
     }
     raport.exposures = raport.exposures.saturating_add(1);
@@ -193,6 +206,15 @@ fn doba(world: &mut World, t: Tick, raport: &mut MediaReport) {
     let doba = t.0 / 1_440;
 
     let zywe: Vec<AdCampaign> = world.resource::<Campaigns>().live(now).copied().collect();
+    // Dwa kanały pytają **każdego mieszkańca z osobna** i dlatego nie idą w tej pętli:
+    // promocja pyta magazyn wiedzy („czy tu bywasz"), PR pyta pamięć marki („czy ją
+    // lubisz"). Wołane raz na kampanię dają koszt „liczba kampanii × liczba
+    // mieszkańców" i to jest cała treść pomiaru `GF-1`: przy 250 kampaniach i 20 tys.
+    // mieszkańców było to 6079 ms i 6479 ms na dobę gry wobec 225 ms budżetu na
+    // wszystkie osiem kanałów razem. Zbieramy je więc do planu i przechodzimy po
+    // mieście **raz na dobę dla wszystkich naraz**.
+    let mut plan_promocji: Vec<Promocja> = Vec::new();
+    let mut plan_pr: Vec<magnat_core::BrandId> = Vec::new();
     for c in &zywe {
         match c.channel {
             AdChannel::Billboard { .. } => {}
@@ -205,14 +227,21 @@ fn doba(world: &mut World, t: Tick, raport: &mut MediaReport) {
                 ulotki(world, &spis, c, origin, radius_m, t, raport);
             }
             AdChannel::InStorePromo { site } => {
-                promocja(world, &spis, c, site, t, raport);
+                if let Some(klucz) = magnat_agents::knowledge_key(magnat_core::PlaceRef::Site(site))
+                {
+                    plan_promocji.push((klucz, c.id, c.brand, c.claim));
+                }
             }
             AdChannel::Sponsorship { event } => {
                 sponsoring(world, &spis, c, event, t, raport);
             }
-            AdChannel::Pr => pr(world, &spis, c, t),
+            AdChannel::Pr => plan_pr.push(c.brand),
         }
     }
+    promocje(world, &spis, &mut plan_promocji, t, raport);
+    plan_pr.sort_unstable();
+    plan_pr.dedup();
+    public_relations(world, &spis, &plan_pr, t);
 
     // Raz na miesiąc: firmy AI decydują, czy kupić kampanię (§5.2). Bez tego cały
     // mechanizm czekałby na pierwszy panel gracza, czyli na M10f.
@@ -268,9 +297,59 @@ fn kanal_medialny(
             t,
         ) {
             let pierwszy = expose(world, e, c.brand, kanal, c.claim, doba);
-            zapisz_ekspozycje(world, c.id, pierwszy, raport);
+            zapisz_ekspozycje(world, c.id, e, pierwszy, raport);
         }
     }
+}
+
+/// Skąd wychodzi roznoszący — trzy próby, bo pierwsza bywa pusta (`GF-2`).
+///
+/// **Katalog miejsc powstaje raz, przy zaludnianiu miasta**, z zakładów generatora
+/// (`sim/world::population::katalog_miejsc`). Zakład założony **w trakcie gry** —
+/// przez firmę AI albo przez gracza — nigdy do niego nie trafia, więc
+/// `coord_of(Site)` odpowiada dla niego `None`. Do `M10g` kampania ulotkowa takiego
+/// zakładu kończyła się w tym miejscu i nie dostarczała ani jednej ekspozycji;
+/// nie było tego widać, bo raport pokazywał sumę po wszystkich kanałach.
+///
+/// Trzy próby, od najdokładniejszej: sam zakład, jego budynek (kamienica ze sklepem
+/// na parterze **jest** w katalogu, bo ma mieszkania), a na końcu środek ciężkości
+/// domów dzielnicy. Ostatnia zawsze coś daje w dzielnicy, w której ktoś mieszka,
+/// i jest uczciwa: roznoszący zaczyna od środka osiedla.
+///
+/// `ponytail:` prawdziwy sufit jest gdzie indziej i jest nazwany — **katalog miejsc
+/// nie odbudowuje się po założeniu zakładu**. Dotyczy to każdego pytania o położenie
+/// nowego zakładu, nie tylko ulotek. Droga wyjścia: przebudowa `PlaceTable`
+/// w `sim/world` przy zmianie rejestru zakładów, razem z indeksem, który z niej
+/// korzysta — to jest własna naprawa z własnym przebiegiem, nie dopisek do reklamy.
+fn punkt_nadania(
+    miejsca: &magnat_agents::PlaceTable,
+    spis: &DistrictRoster,
+    world: &World,
+    origin: magnat_core::SiteId,
+    budynek: magnat_core::BuildingId,
+    dzielnica: DistrictId,
+) -> Option<magnat_core::WorldCoord> {
+    if let Some(at) = miejsca.coord_of(magnat_core::PlaceRef::Site(origin)) {
+        return Some(at);
+    }
+    if let Some(at) = miejsca.coord_of(magnat_core::PlaceRef::Building(budynek)) {
+        return Some(at);
+    }
+    let (mut sx, mut sy, mut sz, mut n) = (0i64, 0i64, 0i64, 0i64);
+    for e in spis.in_district(dzielnica) {
+        let Some(at) = world
+            .get::<magnat_agents::Residence>(*e)
+            .and_then(magnat_agents::home_of)
+            .and_then(|dom| miejsca.coord_of(dom))
+        else {
+            continue;
+        };
+        sx += i64::from(at.x);
+        sy += i64::from(at.y);
+        sz += i64::from(at.z);
+        n += 1;
+    }
+    (n > 0).then(|| magnat_core::WorldCoord::new((sx / n) as i32, (sy / n) as i32, (sz / n) as i32))
 }
 
 /// Ulotki: mieszkańcy, których dom leży w promieniu od punktu nadania.
@@ -286,13 +365,6 @@ fn ulotki(
     t: Tick,
     raport: &mut MediaReport,
 ) {
-    let Some(srodek) = world
-        .resource::<magnat_agents::PlaceCatalog>()
-        .get()
-        .and_then(|p| p.coord_of(magnat_core::PlaceRef::Site(origin)))
-    else {
-        return;
-    };
     let hit = world
         .resource::<magnat_agents::BrandData>()
         .channels
@@ -317,11 +389,14 @@ fn ulotki(
     //
     // `ponytail:` droga wyjścia, gdyby promień miał naprawdę przecinać dzielnice:
     // sąsiedztwo dzielnic z `CityData`, którego dziś `magnat_media` nie widzi.
-    let Some(moja) = world
+    let Some((moja, budynek)) = world
         .get_resource::<magnat_firms::Firms>()
         .and_then(|f| f.site(origin))
-        .map(|s| s.district)
+        .map(|s| (s.district, s.building))
     else {
+        return;
+    };
+    let Some(srodek) = punkt_nadania(miejsca, spis, world, origin, budynek, moja) else {
         return;
     };
     let kandydaci: Vec<magnat_ecs::Entity> = spis
@@ -347,42 +422,63 @@ fn ulotki(
     let ilu = (kandydaci.len() as u64 * u64::from(hit) / 10_000) as u32;
     for e in sample_stride(&kandydaci, ilu, seed, StreamId::AdLeaflet, c.id.0, t) {
         let pierwszy = expose(world, e, c.brand, AdChannelKind::Leaflet, c.claim, doba);
-        zapisz_ekspozycje(world, c.id, pierwszy, raport);
+        zapisz_ekspozycje(world, c.id, e, pierwszy, raport);
     }
 }
 
-/// Promocja w sklepie: dociera do tych, którzy już tam byli.
+/// Jedna kampania promocyjna w planie doby: klucz miejsca, numer, marka, obietnica.
+type Promocja = (u32, magnat_core::CampaignId, magnat_core::BrandId, Q);
+
+/// Wszyscy mieszkańcy miasta w kolejności dzielnic — jedna lista na dobę.
+fn mieszkancy(spis: &DistrictRoster) -> Vec<magnat_ecs::Entity> {
+    let dzielnice: Vec<DistrictId> = spis.districts().collect();
+    dzielnice
+        .iter()
+        .flat_map(|d| spis.in_district(*d).iter().copied())
+        .collect()
+}
+
+/// Promocje w sklepach: docierają do tych, którzy już tam byli.
 ///
-/// Darmowa w sensie zasięgu — mieszkaniec i tak tam jest — i dlatego najtańsza
+/// Darmowe w sensie zasięgu — mieszkaniec i tak tam jest — i dlatego najtańsze
 /// w tabeli CPM. „Byłem tam" czytamy z magazynu wiedzy M3, a nie z drugiego licznika.
-fn promocja(
+///
+/// **Jeden przebieg po mieście dla wszystkich kampanii** (`GF-1`): plan jest
+/// posortowany po kluczu miejsca, a każdy mieszkaniec przechodzi swój magazyn wiedzy
+/// raz i sam sprawdza, w którą kampanię trafia. Poprzednia postać pytała
+/// `knows_place` raz na kampanię i raz na mieszkańca, czyli przechodziła ten sam
+/// magazyn tyle razy, ile w mieście stało promocji.
+///
+/// Jedna kampania na miejsce: `ai::monthly` pomija zakład z żywą kampanią, a komenda
+/// gracza sprawdza to samo. Duplikat w planie znaczyłby dwie promocje w jednym sklepie
+/// tego samego dnia, więc wygrywa pierwsza — i to jest ta sama reguła, nie wyjątek.
+fn promocje(
     world: &mut World,
     spis: &DistrictRoster,
-    c: &AdCampaign,
-    site: magnat_core::SiteId,
+    plan: &mut Vec<Promocja>,
     t: Tick,
     raport: &mut MediaReport,
 ) {
-    let Some(klucz) = magnat_agents::knowledge_key(magnat_core::PlaceRef::Site(site)) else {
+    plan.sort_unstable_by_key(|p| p.0);
+    plan.dedup_by_key(|p| p.0);
+    if plan.is_empty() {
         return;
-    };
+    }
     let doba = t.0 / 1_440;
-    let dzielnice: Vec<magnat_core::DistrictId> = spis.districts().collect();
-    let bywalcy: Vec<magnat_ecs::Entity> = dzielnice
-        .iter()
-        .flat_map(|d| spis.in_district(*d).iter().copied())
-        .filter(|e| magnat_agents::knows_place(world, *e, klucz))
-        .collect();
-    for e in bywalcy {
-        let pierwszy = expose(
-            world,
-            e,
-            c.brand,
-            AdChannelKind::InStorePromo,
-            c.claim,
-            doba,
-        );
-        zapisz_ekspozycje(world, c.id, pierwszy, raport);
+    // Trafienia najpierw, ekspozycje potem: `expose` bierze `&mut World`, a przejście
+    // po magazynie wiedzy pożycza go niemutowalnie.
+    let mut trafienia: Vec<(magnat_ecs::Entity, usize)> = Vec::new();
+    for e in mieszkancy(spis) {
+        magnat_agents::for_each_known_place(world, e, |target| {
+            if let Ok(i) = plan.binary_search_by_key(&target, |p| p.0) {
+                trafienia.push((e, i));
+            }
+        });
+    }
+    for (e, i) in trafienia {
+        let (_, id, brand, claim) = plan[i];
+        let pierwszy = expose(world, e, brand, AdChannelKind::InStorePromo, claim, doba);
+        zapisz_ekspozycje(world, id, e, pierwszy, raport);
     }
 }
 
@@ -424,7 +520,7 @@ fn sponsoring(
         let klucz = c.id.0 ^ (u32::from(d.0) << 16) ^ 0x5350_4f4e;
         for e in sample_stride(ludzie, ilu, seed, StreamId::AdMediaPick, klucz, t) {
             let pierwszy = expose(world, e, c.brand, AdChannelKind::Sponsorship, c.claim, doba);
-            zapisz_ekspozycje(world, c.id, pierwszy, raport);
+            zapisz_ekspozycje(world, c.id, e, pierwszy, raport);
         }
     }
 }
@@ -434,24 +530,31 @@ fn sponsoring(
 ///
 /// Dlatego PR nie ma czym zadziałać na markę, której nikt nie zna: nie ma kogo
 /// zacytować. To jest zamierzone i jest jedyną różnicą między PR a tanią reklamą.
-fn pr(world: &mut World, spis: &DistrictRoster, c: &AdCampaign, t: Tick) {
+/// **Jeden przebieg po mieście dla wszystkich kampanii PR naraz** (`GF-1`): marki są
+/// posortowane, a każdy mieszkaniec czyta swoje szesnaście slotów raz i sam sprawdza,
+/// o której z nich ma co powiedzieć. Poprzednia postać wołała `affinity_of` raz na
+/// kampanię i raz na mieszkańca — przy 250 kampaniach PR i 20 tys. mieszkańców
+/// kosztowało to 6479 ms na dobę gry wobec 225 ms budżetu na wszystkie kanały.
+fn public_relations(
+    world: &mut World,
+    spis: &DistrictRoster,
+    marki: &[magnat_core::BrandId],
+    t: Tick,
+) {
+    if marki.is_empty() {
+        return;
+    }
     let doba = t.0 / 1_440;
     let seed = world.seed;
-    let tune = world.resource::<magnat_agents::BrandData>().memory.clone();
-    let dzielnice: Vec<magnat_core::DistrictId> = spis.districts().collect();
-    let wszyscy: Vec<magnat_ecs::Entity> = dzielnice
-        .iter()
-        .flat_map(|d| spis.in_district(*d).iter().copied())
-        .collect();
     // Nadawcy: ci, którzy markę znają i lubią.
-    let nadawcy: Vec<(magnat_ecs::Entity, magnat_agents::BrandAffinity)> = wszyscy
-        .iter()
-        .filter_map(|e| {
-            magnat_agents::affinity_of(world, *e, c.brand, doba, &tune)
-                .filter(|a| a.affinity > 0)
-                .map(|a| (*e, a))
-        })
-        .collect();
+    let mut nadawcy: Vec<(magnat_ecs::Entity, magnat_agents::BrandAffinity)> = Vec::new();
+    for e in mieszkancy(spis) {
+        for a in magnat_agents::slots_of(world, e, doba).as_slice() {
+            if a.affinity > 0 && marki.binary_search(&a.brand).is_ok() {
+                nadawcy.push((e, *a));
+            }
+        }
+    }
     for (nadawca, opinia) in nadawcy {
         let sluchacze = magnat_agents::relations_of(world, nadawca);
         for (sluchacz, waga) in sluchacze {
@@ -462,7 +565,7 @@ fn pr(world: &mut World, spis: &DistrictRoster, c: &AdCampaign, t: Tick) {
             let _ = magnat_agents::touch(
                 world,
                 sluchacz,
-                c.brand,
+                opinia.brand,
                 magnat_agents::Touch::Rumor {
                     from: opinia,
                     weight: waga,

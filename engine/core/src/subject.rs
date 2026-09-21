@@ -30,7 +30,7 @@ use crate::arena::ArenaRef;
 use crate::ids::{
     BuildingId, CitizenId, ContractId, FirmId, HouseholdId, ParcelId, SiteId, VehicleId,
 };
-use crate::types::{CaseId, DistrictId, EventId, PermitId, TenderId};
+use crate::types::{CaseId, CoverId, DistrictId, EventId, PermitId, TenderId};
 
 /// Podmiot, który ma własną kartę inspekcji.
 ///
@@ -65,6 +65,10 @@ pub enum Subject {
     /// Sprawa urzędowa (M8d).
     Case(CaseId),
     Permit(PermitId),
+    /// Polisa ubezpieczeniowa (M10d, `K-85`). Dopisana w `M10g` **razem z kartą**:
+    /// wariant bez ramienia w `game::inspect::card` łamie kompilację (`K-69`),
+    /// a ramię bez treści pokazuje pustą stronę.
+    Cover(CoverId),
 }
 
 /// Rodzaj podmiotu bez ładunku — do wyboru układu zakładek i ikony.
@@ -89,6 +93,7 @@ pub enum SubjectKind {
     Tender,
     Case,
     Permit,
+    Cover,
 }
 
 impl SubjectKind {
@@ -112,10 +117,11 @@ impl SubjectKind {
             SubjectKind::Tender => "tender",
             SubjectKind::Case => "case",
             SubjectKind::Permit => "permit",
+            SubjectKind::Cover => "cover",
         }
     }
 
-    pub const ALL: [SubjectKind; 16] = [
+    pub const ALL: [SubjectKind; 17] = [
         SubjectKind::Citizen,
         SubjectKind::Household,
         SubjectKind::Firm,
@@ -132,6 +138,7 @@ impl SubjectKind {
         SubjectKind::Tender,
         SubjectKind::Case,
         SubjectKind::Permit,
+        SubjectKind::Cover,
     ];
 }
 
@@ -155,6 +162,7 @@ impl Subject {
             Subject::Tender(_) => SubjectKind::Tender,
             Subject::Case(_) => SubjectKind::Case,
             Subject::Permit(_) => SubjectKind::Permit,
+            Subject::Cover(_) => SubjectKind::Cover,
         }
     }
 
@@ -178,7 +186,8 @@ impl Subject {
             | Subject::Offer(_)
             | Subject::Tender(_)
             | Subject::Case(_)
-            | Subject::Permit(_) => None,
+            | Subject::Permit(_)
+            | Subject::Cover(_) => None,
         }
     }
 }
@@ -215,6 +224,7 @@ mod tests {
             Subject::Tender(TenderId(13)),
             Subject::Case(CaseId(14)),
             Subject::Permit(PermitId(15)),
+            Subject::Cover(CoverId(16)),
         ];
         // Pokrycie: każdy rodzaj ma swój wariant i odwrotnie. Wariant dopisany bez
         // rodzaju złamie `kind()`, rodzaj dopisany bez wariantu — ten test.

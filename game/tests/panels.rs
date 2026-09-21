@@ -217,6 +217,15 @@ fn kazdy_panel_operacyjny_wydaje_komende() {
     let s = swiat(ScenarioId::SANDBOX);
     let (c, th) = (katalog(), theme());
     for id in Panels::default().reg.ids() {
+        // **Giełda ma własny test i własny powód** (`GG-6`): w dobie pierwszej nie
+        // jest notowana ani jedna spółka, bo debiut wymaga **opublikowanego
+        // dodatniego wyniku**, a pierwszy raport wychodzi w dobie 75. Panel wystawia
+        // wtedy jeden przycisk — „wprowadź moją spółkę na giełdę" — i jest on
+        // wygaszony z nazwanym powodem. To jest mechanizm, nie brak: sprawdza go
+        // `panel_gieldy_sklada_zlecenie_gdy_jest_co_kupowac`.
+        if id == PanelId::Stock {
+            continue;
+        }
         let mut panele = Panels::default();
         let cmd = klikaj_az_wyda(&mut panele, &s, &c, &th, id);
         if id.is_operational() {
@@ -441,10 +450,20 @@ fn panel_pokazuje_podmiot_zamiast_rysowac_druga_karte() {
     ] {
         assert!(id.is_operational(), "{id:?} wypadł z listy operacyjnych");
     }
-    // Panele M10 są zarezerwowane i nie ma ich w rejestrze.
+    // Po `M10g` **żaden panel nie jest zarezerwowany**: marka, badania i giełda
+    // mają rejestr, model i komendę. Identyfikator bez ekranu byłby wariantem
+    // bez skutku (`K-67`), więc rezerwacja ma znikać razem z napisaniem panelu.
+    let reg = Panels::default();
     for id in [PanelId::Brand, PanelId::Rnd, PanelId::Stock] {
-        assert!(id.is_reserved());
-        assert!(Panels::default().reg.get(id).is_none());
+        assert!(
+            !id.is_reserved(),
+            "{id:?} jest napisany, a udaje rezerwację"
+        );
+        assert!(
+            id.is_operational(),
+            "{id:?} ma komendę, więc jest operacyjny"
+        );
+        assert!(reg.reg.get(id).is_some(), "{id:?} nie jest w rejestrze");
     }
 }
 
@@ -468,4 +487,127 @@ fn domyslny_uklad_ma_dwa_panele() {
         reg.len(),
         "magnat ma przypięte wszystko"
     );
+}
+
+/// Kryterium WP10.21: gracz składa zlecenie kupna i widzi jego los po fixingu.
+///
+/// Notowanie stawiamy **ścieżką symulacji** (`Equity::list`), a nie przewijaniem
+/// świata o siedemdziesiąt pięć dób: test ma sprawdzić panel, a nie warunek debiutu
+/// — ten ma własny test po stronie `sim/economy`. Gdyby stawiał go przez przewijanie,
+/// mierzyłby przy okazji rentowność firm w pierwszym kwartale i pękałby z powodu,
+/// który z panelem nie ma nic wspólnego.
+#[test]
+#[ignore = "pełne miasto — uruchamiane z --release"]
+fn panel_gieldy_sklada_zlecenie_gdy_jest_co_kupowac() {
+    let mut s = swiat(ScenarioId::SANDBOX);
+    let (c, th) = (katalog(), theme());
+
+    // Pierwsza firma z rejestru wchodzi na giełdę po kursie 1 gr za punkt bazowy.
+    let klucz = s
+        .app
+        .world
+        .get_resource::<magnat_firms::Firms>()
+        .and_then(|f| f.iter().next().map(|(k, _)| k))
+        .expect("miasto bez firm");
+    let t = s.tick();
+    {
+        let eq = s
+            .app
+            .world
+            .get_resource_mut::<magnat_economy::equity::Equity>()
+            .expect("giełda");
+        assert!(
+            eq.list(klucz, 2_500, Money(100), magnat_core::SimMinute(t.get())),
+            "spółka nie weszła na giełdę"
+        );
+    }
+
+    let mut panele = Panels::default();
+    let cmd = klikaj_az_wyda(&mut panele, &s, &c, &th, PanelId::Stock);
+    assert!(
+        matches!(cmd, Some(PlayerCommand::PlaceStockOrder { .. })),
+        "panel giełdy z notowaną spółką nie złożył zlecenia, tylko {cmd:?}"
+    );
+
+    // Zlecenie idzie do arkusza — to jest „los zlecenia", który gracz widzi.
+    let cmd = cmd.expect("komenda");
+    s.submit(cmd).expect("zlecenie odrzucone");
+    s.step(1, 0);
+    let ile = s
+        .app
+        .world
+        .get_resource::<magnat_economy::equity::Equity>()
+        .map_or(0, |e| e.orders(klucz).len());
+    assert!(ile > 0, "zlecenie gracza nie trafiło do arkusza");
+}
+
+/// Kryterium WP10.19: gracz kupuje reklamę i kampania zaczyna istnieć.
+///
+/// Klikamy **w panel**, a nie składamy komendy ręcznie: kryterium mówi „gracz
+/// kupuje", a komenda zbudowana w teście przeszłaby nawet wtedy, gdyby żaden
+/// przycisk nie był do niej podpięty (`K-67`).
+#[test]
+#[ignore = "pełne miasto — uruchamiane z --release"]
+fn panel_marki_kupuje_kampanie_i_ta_zaczyna_istniec() {
+    let mut s = swiat(ScenarioId::SANDBOX);
+    let (c, th) = (katalog(), theme());
+    let przed = s
+        .app
+        .world
+        .get_resource::<magnat_media::Campaigns>()
+        .map_or(0, magnat_media::Campaigns::len);
+
+    let mut panele = Panels::default();
+    let cmd = klikaj_az_wyda(&mut panele, &s, &c, &th, PanelId::Brand);
+    let Some(PlayerCommand::OpenCampaign { .. }) = cmd else {
+        panic!("panel marki nie kupił reklamy, tylko {cmd:?}");
+    };
+    s.submit(cmd.expect("komenda")).expect("kampania odrzucona");
+    s.step(1, 0);
+    let po = s
+        .app
+        .world
+        .get_resource::<magnat_media::Campaigns>()
+        .map_or(0, magnat_media::Campaigns::len);
+    assert_eq!(po, przed + 1, "kampania gracza nie trafiła do rejestru");
+}
+
+/// Kryterium WP10.20: gracz wskazuje węzeł do badania i projekt rusza.
+///
+/// Sprawdzamy przy okazji, że **to gracz wybrał**, a nie reguła „najtańszy
+/// osiągalny": projekt ma istnieć zaraz po komendzie, a nie po najbliższym
+/// miesięcznym kroku R&D.
+#[test]
+#[ignore = "pełne miasto — uruchamiane z --release"]
+fn panel_badan_otwiera_projekt_wskazany_przez_gracza() {
+    let mut s = swiat(ScenarioId::SANDBOX);
+    let (c, th) = (katalog(), theme());
+    let mut panele = Panels::default();
+    let cmd = klikaj_az_wyda(&mut panele, &s, &c, &th, PanelId::Rnd);
+    let Some(PlayerCommand::StartResearch { site, ref tech }) = cmd else {
+        panic!("panel badań nie otworzył projektu, tylko {cmd:?}");
+    };
+    let klucz = tech.clone();
+    let firma = s
+        .app
+        .world
+        .get_resource::<magnat_firms::Firms>()
+        .and_then(|f| f.site(site))
+        .map(|z| z.firm)
+        .expect("zakład bez firmy");
+    s.submit(cmd.expect("komenda")).expect("badania odrzucone");
+    s.step(1, 0);
+    let firms = s
+        .app
+        .world
+        .get_resource::<magnat_firms::Firms>()
+        .expect("rejestr");
+    let projekt = firms.rnd().projects.get(&firma).expect("brak projektu");
+    let nazwa = s
+        .app
+        .world
+        .get_resource::<magnat_firms::RndData>()
+        .and_then(|d| d.tree.get(projekt.tech).map(|n| n.key.to_string()))
+        .expect("węzeł");
+    assert_eq!(nazwa, klucz, "firma bada co innego, niż wskazał gracz");
 }

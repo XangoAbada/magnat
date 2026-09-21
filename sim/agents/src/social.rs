@@ -987,6 +987,27 @@ pub fn knows_place(world: &World, citizen: Entity, target: u32) -> bool {
     })
 }
 
+/// Wszystkie miejsca, które mieszkaniec zna — po jednym przejściu po magazynie wiedzy.
+///
+/// Odwrócenie pytania z [`knows_place`] i cała treść poprawki `GF-1`: tamta funkcja
+/// przechodzi magazyn **raz na pytanie**, więc N kampanii promocyjnych razy M
+/// mieszkańców to N×M przejść. Krok, który pyta o wiele miejsc naraz, przechodzi
+/// magazyn raz i sam sprawdza trafienie w swoim zbiorze.
+///
+/// Wywołanie zwrotne, a nie `Vec`: funkcja leży na przebiegu dobowym po całym
+/// mieście, a alokacja na mieszkańca byłaby setkami tysięcy alokacji na dobę.
+pub fn for_each_known_place(world: &World, citizen: Entity, mut f: impl FnMut(u32)) {
+    let Some(kref) = world.get::<KnowledgeRef>(citizen) else {
+        return;
+    };
+    for k in world
+        .resource::<KnowledgeSlab>()
+        .entries(demography::knowledge_ref(kref))
+    {
+        f(k.target);
+    }
+}
+
 /// Ilu mieszkańców zna to miejsce i ilu jest w ogóle (§5.7).
 ///
 /// Fundament pod markę w M10: „świadomość" marki to dokładnie ta liczba, policzona

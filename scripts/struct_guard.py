@@ -175,7 +175,7 @@ REJESTR = {
     # tej pozycji piąty raz z rzędu: liczy się liczba rozgałęzień, nie wariantów.
     # Zostaje jedna podfaza fazy M10.
     ("engine/ui/src/inspect/reason.rs", "fn", 1276): 37,
-    ("engine/ui/src/inspect/reason.rs", "plik", 1724): 37,
+    ("engine/ui/src/inspect/reason.rs", "plik", 1747): 37,
     # 269 po M7d: jedna linia za `finance: bf.finance` w budowie `BankParams`.
     ("sim/economy/src/data.rs", "fn", 269): 38,
 }

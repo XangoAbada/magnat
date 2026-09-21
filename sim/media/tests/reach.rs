@@ -412,3 +412,113 @@ fn koszt_kampanii_w_rozbiciu_na_kanaly() {
         );
     }
 }
+
+/// `GF-2`: ulotka zakładu, którego **nie ma w katalogu miejsc**, i tak dociera.
+///
+/// Katalog miejsc powstaje raz, przy zaludnianiu miasta, i zna wyłącznie zakłady
+/// generatora. Zakład założony w trakcie gry — przez firmę AI albo przez gracza —
+/// nigdy do niego nie trafia, a to właśnie takie zakłady schodzą na kanał ulotkowy,
+/// bo jest najtańszy. Do `M10g` kampania kończyła się wtedy w pierwszym wierszu
+/// i nie dostarczała ani jednej ekspozycji; histogram kanałów po trzystu dobach
+/// pokazywał sześć kampanii i zero ekspozycji.
+///
+/// Test stawia dokładnie ten układ: mieszkańcy mają domy w katalogu, zakład nie ma
+/// w nim nic — ani siebie, ani swojego budynku.
+#[test]
+fn ulotka_dociera_z_zakladu_spoza_katalogu_miejsc() {
+    let mut w = miasto(400, 1);
+    // Domy mieszkańców: siatka 20 × 20 co 50 m, czyli osiedle o boku kilometra.
+    let wpisy: Vec<magnat_agents::PlaceEntry> = (0..400u32)
+        .map(|i| magnat_agents::PlaceEntry {
+            place: magnat_core::PlaceRef::Building(magnat_core::BuildingId(Entity::new(
+                i,
+                std::num::NonZeroU32::MIN,
+            ))),
+            kind: magnat_core::PlaceKind::Home,
+            at: magnat_core::WorldCoord::new((i % 20) as i32 * 5_000, (i / 20) as i32 * 5_000, 0),
+        })
+        .collect();
+    *w.resource_mut::<magnat_agents::PlaceCatalog>() = magnat_agents::PlaceCatalog::new(
+        std::sync::Arc::new(magnat_agents::PlaceTable::build(wpisy)),
+    );
+
+    // Zakład założony „w trakcie gry": jego numer jest poza numeracją generatora,
+    // więc katalog nie zna ani jego, ani jego budynku.
+    let origin = SiteId(Entity::new(90_000, std::num::NonZeroU32::MIN));
+    let mut firms = magnat_firms::Firms::default();
+    let key = firms.insert(|k| {
+        magnat_firms::Firm::sole_owner(
+            k,
+            "Test".to_string(),
+            SimMinute(0),
+            magnat_core::DistrictId(0),
+            magnat_firms::Owner::Player,
+        )
+    });
+    assert!(firms.add_site(magnat_firms::Site {
+        id: origin,
+        firm: key,
+        site_type: magnat_firms::SiteTypeId(0),
+        building: magnat_core::BuildingId(Entity::new(90_000, std::num::NonZeroU32::MIN)),
+        district: magnat_core::DistrictId(0),
+        floor_m2: 120,
+        positions: Vec::new(),
+        mgmt: magnat_firms::ManagementQuality::NEUTRAL,
+        tech: Q::new(50),
+        fixed_cost_month: Money::ZERO,
+        hr_accrued: Money::ZERO,
+        rnd_accrued: Money::ZERO,
+        pnl: magnat_firms::Ring::new(),
+        opened: SimMinute(0),
+        strike_bps: 0,
+        strike_bp_days: 0,
+        delegation: None,
+    }));
+    w.insert_resource(firms);
+
+    let brand = BrandId(7);
+    let id = w.resource_mut::<Campaigns>().open(|id| AdCampaign {
+        id,
+        site: origin,
+        brand,
+        channel: AdChannel::Leaflet {
+            origin,
+            // Promień obejmujący całe osiedle: sprawdzamy, czy roznoszący w ogóle
+            // wyszedł, a nie ile domów zmieściło się w kole.
+            radius_m: 2_000,
+        },
+        claim: Q::new(80),
+        budget: Money(10_000_000),
+        spent: Money::ZERO,
+        window: (SimMinute(0), SimMinute(10 * 1_440)),
+        metrics: CampaignMetrics::default(),
+    });
+
+    assert!(
+        w.resource::<magnat_firms::Firms>().site(origin).is_some(),
+        "rejestr nie zna zakładu"
+    );
+    assert!(
+        w.resource::<magnat_agents::PlaceCatalog>()
+            .get()
+            .expect("katalog")
+            .coord_of(magnat_core::PlaceRef::Building(magnat_core::BuildingId(
+                Entity::new(5, std::num::NonZeroU32::MIN)
+            )))
+            .is_some(),
+        "katalog nie zna domu mieszkańca"
+    );
+    let _ = magnat_media::step(&mut w, Tick(1));
+    let m = w.resource::<Campaigns>().get(id).expect("kampania").metrics;
+    assert!(
+        m.exposures_total > 0,
+        "ulotka z zakładu spoza katalogu miejsc nie dotarła do nikogo"
+    );
+    // Ekspozycje muszą się przy okazji rozpisać na dzielnicę zamieszkania —
+    // to jest liczba, po którą gracz otwiera panel marketingu (`WP10.19`).
+    let suma: u64 = m.by_district.iter().map(|n| u64::from(*n)).sum();
+    assert_eq!(
+        suma, m.exposures_total,
+        "rozbicie na dzielnice nie zgadza się z sumą ekspozycji"
+    );
+}

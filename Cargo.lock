@@ -1729,6 +1729,7 @@ dependencies = [
  "magnat-jobs",
  "magnat-macro",
  "magnat-media",
+ "magnat-nav",
  "magnat-policy",
  "magnat-sim-snapshot",
  "magnat-spatial",

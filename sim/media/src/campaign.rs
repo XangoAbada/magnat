@@ -6,8 +6,8 @@
 //! dzielnic" (panel marketingu M9, M10 §6 pkt 1).
 
 use magnat_core::{
-    AdChannelKind, BrandId, CampaignId, EventId, HashState, Money, SimMinute, SiteId, StateHasher,
-    Q,
+    AdChannelKind, BrandId, CampaignId, DistrictId, EventId, HashState, Money, SimMinute, SiteId,
+    StateHasher, Q,
 };
 use magnat_nav::EdgeId;
 
@@ -98,8 +98,17 @@ impl AdChannel {
     }
 }
 
+/// Ile dzielnic mieści rozbicie ekspozycji.
+///
+/// `ponytail:` sufit nazwany: tyle samo, ile mieści migawka renderu
+/// (`sim-snapshot::MAX_DISTRICTS`), ale **stała jest tutaj**, bo `sim/media` nie
+/// zależy od prezentacji i zależeć nie ma. Miasto z większą liczbą dzielnic policzy
+/// ekspozycje tych pierwszych sześćdziesięciu czterech; ścieżka wyjścia to wspólna
+/// stała w `engine/core`, kiedy pojawi się trzeci czytelnik.
+pub const METRIC_DISTRICTS: usize = 64;
+
 /// Pomiar kampanii — to, co widzi gracz w panelu marketingu.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct CampaignMetrics {
     /// Ekspozycje dostarczone w bieżącej dobie.
     pub exposures_today: u32,
@@ -107,6 +116,46 @@ pub struct CampaignMetrics {
     pub exposures_total: u64,
     /// Ile z nich trafiło do kogoś, kto marki **nie znał** — lejek „znajomość" z §6.
     pub first_contacts: u64,
+    /// Ekspozycje od początku kampanii w rozbiciu na dzielnicę **zamieszkania**
+    /// odbiorcy (`GF-1` nie rusza tej liczby; wymaga jej kryterium WP10.19).
+    ///
+    /// Dzielnica zamieszkania, a nie miejsca kontaktu, i to jest rozstrzygnięcie:
+    /// billboard przy trasie dojazdowej dociera do ludzi, **którzy mieszkają gdzie
+    /// indziej**, a to jest właśnie ta informacja, po którą gracz otwiera panel.
+    /// Suma tej tablicy bywa mniejsza niż `exposures_total`, bo odbiorca bez
+    /// przypisanego miejsca zamieszkania nie ma dzielnicy — i tak jest uczciwiej
+    /// niż wrzucać go do dzielnicy zerowej.
+    pub by_district: [u32; METRIC_DISTRICTS],
+}
+
+impl Default for CampaignMetrics {
+    fn default() -> CampaignMetrics {
+        CampaignMetrics {
+            exposures_today: 0,
+            exposures_total: 0,
+            first_contacts: 0,
+            by_district: [0; METRIC_DISTRICTS],
+        }
+    }
+}
+
+impl CampaignMetrics {
+    /// Dzielnice, które kampania dosięgła, od największej liczby ekspozycji.
+    ///
+    /// Do panelu, nie do symulacji: kolejność jest malejąca po liczbie, a remis
+    /// rozstrzyga niższy numer dzielnicy, więc wynik jest deterministyczny.
+    #[must_use]
+    pub fn top_districts(&self) -> Vec<(DistrictId, u32)> {
+        let mut out: Vec<(DistrictId, u32)> = self
+            .by_district
+            .iter()
+            .enumerate()
+            .filter(|(_, n)| **n > 0)
+            .map(|(i, n)| (DistrictId(i as u16), *n))
+            .collect();
+        out.sort_unstable_by(|a, b| b.1.cmp(&a.1).then(a.0 .0.cmp(&b.0 .0)));
+        out
+    }
 }
 
 impl HashState for CampaignMetrics {
@@ -114,6 +163,9 @@ impl HashState for CampaignMetrics {
         h.write_u32(self.exposures_today);
         h.write_u64(self.exposures_total);
         h.write_u64(self.first_contacts);
+        for n in &self.by_district {
+            h.write_u32(*n);
+        }
     }
 }
 

@@ -42,10 +42,17 @@ pub enum MetricId {
     LostSales,
     /// Indeks cen konsumenckich miasta w punktach bazowych.
     Cpi,
+    /// Kurs spółki gracza — **cena jednego punktu bazowego** (`K-85`), w groszach.
+    ///
+    /// Historia kursu jest stroną widoku, a nie stanem świata: `Listing` trzyma
+    /// ostatni i poprzedni fixing i niczego więcej trzymać nie ma, bo pierścień
+    /// notowań wchodziłby do hasha i do zapisu za wykres. Zero znaczy „spółka
+    /// nienotowana", a nie „kurs zerowy" — i tak to czyta panel giełdy.
+    StockPrice,
 }
 
 impl MetricId {
-    pub const ALL: [MetricId; 7] = [
+    pub const ALL: [MetricId; 8] = [
         MetricId::Cash,
         MetricId::RevenueNet,
         MetricId::Profit,
@@ -53,6 +60,7 @@ impl MetricId {
         MetricId::Sites,
         MetricId::LostSales,
         MetricId::Cpi,
+        MetricId::StockPrice,
     ];
 
     #[must_use]
@@ -71,6 +79,7 @@ impl MetricId {
             MetricId::Sites => "sites",
             MetricId::LostSales => "lost_sales",
             MetricId::Cpi => "cpi",
+            MetricId::StockPrice => "stock_price",
         }
     }
 
@@ -79,7 +88,7 @@ impl MetricId {
     pub const fn is_money(self) -> bool {
         matches!(
             self,
-            MetricId::Cash | MetricId::RevenueNet | MetricId::Profit
+            MetricId::Cash | MetricId::RevenueNet | MetricId::Profit | MetricId::StockPrice
         )
     }
 }
@@ -170,6 +179,16 @@ impl MetricsRecorder {
             .market
             .as_ref()
             .map_or(10_000, |m| i64::from(m.cpi_index_bp()));
+        // Kurs spółki gracza. Firm gracz ma najwyżej jedną, więc „pierwsza" jest
+        // jedyną — a spółka nienotowana daje zero, czyli przerwę w wykresie.
+        let kurs = h.firms.first().map_or(0, |k| {
+            session
+                .app
+                .world
+                .get_resource::<magnat_economy::equity::Equity>()
+                .and_then(|e| e.listing(*k))
+                .map_or(0, |l| l.last_fixing.get())
+        });
         let wartosci = [
             gotowka,
             self.day_revenue,
@@ -178,6 +197,7 @@ impl MetricsRecorder {
             i64::try_from(h.sites.len()).unwrap_or(0),
             self.day_lost,
             cpi,
+            kurs,
         ];
         for (i, v) in wartosci.iter().enumerate() {
             self.series[i].push_day(*v);

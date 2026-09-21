@@ -64,6 +64,13 @@ pub struct ShelfRow {
     pub good: GoodId,
     /// Cena brutto z oferty (`K-7`) — ta, którą płaci kupujący.
     pub price: Money,
+    /// Jakość tego, co **faktycznie** stoi na półce (z oferty).
+    ///
+    /// To jest druga połowa pary „obiecane vs dostarczone" z panelu marki
+    /// (M10 §6 pkt 1, `WP10.19`): reklama wpisuje kupującym `claim` w oczekiwania,
+    /// a ta liczba mówi, co dostaną. Rozjazd między nimi jest jedynym miejscem,
+    /// w którym gracz zobaczy, że przereklamował produkt.
+    pub quality: magnat_core::Q,
     /// Koszt własny za jednostkę ceny, średnia ważona zapasu (§5.8).
     pub unit_cost: Money,
     /// Marża w punktach bazowych ponad koszt własny.

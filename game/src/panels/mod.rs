@@ -1,12 +1,14 @@
 //! Panele biznesowe (M9e §5.9, PRD §14.3) — rejestr, układ doku i stan.
 //!
-//! # Dziewięć paneli i jeden rejestr
+//! # Dwanaście paneli i jeden rejestr
 //!
 //! [`PanelRegistry`] jest **punktem rozszerzenia**, a nie abstrakcją na zapas:
-//! M10 dokłada panele marki, R&D i giełdy, M12 panele z modów, i żaden z nich nie
-//! ma dotykać kodu tej podfazy. Dlatego opis panelu jest **daną** ([`PanelDesc`]) —
-//! nazwa, zależności danych, funkcja rysująca i etap kariery, przy którym panel
-//! jest domyślnie przypięty.
+//! dziewięć paneli postawił `M9e`, trzy (marka, badania, giełda) dołożył `M10g`
+//! i nie dotknął przy tym ani jednej linii tamtej podfazy, a M12 dołoży panele
+//! z modów. Dlatego opis panelu jest **daną** ([`PanelDesc`]) — nazwa, zależności
+//! danych, funkcja rysująca i etap kariery, przy którym panel jest domyślnie
+//! przypięty. Koszt dołożenia panelu wyszedł na cztery zmiany i ani jedną więcej:
+//! plik, wariant [`PanelModel`], wpis w rejestrze, klucz tytułu.
 //!
 //! # `min_tier` nie blokuje
 //!
@@ -31,6 +33,7 @@
 
 pub mod layout;
 
+pub(crate) mod brand;
 mod chronicle;
 mod city;
 mod dashboard;
@@ -38,7 +41,9 @@ mod finance;
 mod market;
 mod people;
 mod plant;
+pub(crate) mod rnd;
 mod shop;
+pub(crate) mod stock;
 mod supply;
 mod widgets;
 
@@ -55,9 +60,9 @@ use serde::{Deserialize, Serialize};
 use crate::career::{CareerTier, Holdings};
 use crate::{PlayerCommand, Session};
 
-/// Który panel. Warianty M10 istnieją od tej podfazy jako **zarezerwowane** i nie
-/// ma ich w rejestrze — tak samo jak `OverlayField::BrandAwareness` istnieje bez
-/// wpisu w `data/ui/overlays.ron` (decyzja §9 pkt 11 dokumentu fazy).
+/// Który panel. Marka, badania i giełda były do `M10g` **zarezerwowane** — miały
+/// wariant i klucz, nie miały ekranu. Od `M10g` mają jedno i drugie, więc rezerwacji
+/// nie ma już żadnej: identyfikator bez ekranu jest wariantem bez skutku (`K-67`).
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Serialize, Deserialize)]
 pub enum PanelId {
     Dashboard,
@@ -98,9 +103,13 @@ impl PanelId {
     }
 
     /// Czy panel jest zarezerwowany dla fazy, która go jeszcze nie napisała.
+    ///
+    /// Po `M10g` **żaden nie jest** i tak ma zostać: panel bez wpisu w rejestrze
+    /// jest identyfikatorem bez ekranu, czyli dokładnie tym wariantem bez skutku,
+    /// którego zabrania `K-67`. Faza dokładająca panel dokłada go razem z danymi.
     #[must_use]
     pub const fn is_reserved(self) -> bool {
-        matches!(self, PanelId::Brand | PanelId::Rnd | PanelId::Stock)
+        false
     }
 
     /// Czy z panelu da się wydać komendę.
@@ -168,6 +177,9 @@ impl Default for PanelRegistry {
                 finance::DESC,
                 city::DESC,
                 chronicle::DESC,
+                brand::DESC,
+                rnd::DESC,
+                stock::DESC,
             ],
         }
     }
@@ -274,6 +286,9 @@ pub enum PanelModel {
     Finance(finance::Model),
     City(city::Model),
     Chronicle(chronicle::Model),
+    Brand(brand::Model),
+    Rnd(rnd::Model),
+    Stock(stock::Model),
 }
 
 /// Stan widoku panelu między klatkami: co gracz wybrał i jak posortował.

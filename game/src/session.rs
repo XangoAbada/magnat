@@ -346,6 +346,7 @@ impl Session {
             market: self.market.as_ref(),
             world: Some(&self.app.world),
             has_character: self.player.is_some(),
+            tick: self.tick(),
         }
     }
 

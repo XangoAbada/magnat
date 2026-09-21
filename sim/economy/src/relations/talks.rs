@@ -59,13 +59,27 @@ fn oferty_firm(
     t: Tick,
 ) -> BTreeMap<u32, (FirmKey, u16)> {
     let seed = world.seed;
+    // Ustępstwa podstawione przez gracza (`FF-23`). Zdejmujemy je **raz**, bo
+    // odpowiedź dotyczy tej rundy, a nie całych negocjacji — nieodebrane czekałoby
+    // na następną i gracz odpowiadałby raz na cały spór.
+    let gracz = world
+        .get_resource_mut::<Unions>()
+        .map(Unions::take_player_offers)
+        .unwrap_or_default();
     let oferty: Vec<(SiteId, FirmKey, u16)> = z_rejestrem(world, |_, firms| {
         sprawy
             .iter()
             .filter_map(|(site, runda, strajk, _, _, _)| {
                 let s = firms.site(*site)?;
+                // Liczba gracza **zastępuje** wyliczoną, ale nie zdejmuje sufitu:
+                // firma nie obieca więcej, niż wolno obiecać firmie AI w tej samej
+                // sytuacji. Inaczej panel byłby drugim silnikiem negocjacji,
+                // a nie podstawieniem (M5c, `PricePolicy`).
                 let marza = s.pnl.last().and_then(|m| m.margin_bp());
                 let sufit = concession_bp(marza, *runda, *strajk, p);
+                if let Some(bp) = gracz.get(&site.entity().index()).copied() {
+                    return Some((*site, s.firm, bp.min(p.concession_cap_bp)));
+                }
                 let podloga = sufit / 2;
                 let mut r = rng(seed, StreamId::StrikeResolve, site.entity().index(), t);
                 let daje = podloga

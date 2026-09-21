@@ -190,6 +190,19 @@ pub struct Unions {
     watch: BTreeMap<u32, Grievance>,
     next_id: u32,
     calls: Vec<StrikeCall>,
+    /// Ustępstwo **podstawione przez gracza** w miejsce wyliczonego z marży,
+    /// per zakład, w punktach bazowych (`FF-23`, M10g WP10.22).
+    ///
+    /// To jest ta sama reguła, którą `PricePolicy::Fixed` stosuje do ceny (M5c):
+    /// gracz podstawia własną liczbę, a nie dostaje drugiego silnika. Próg
+    /// akceptacji załogi, ugoda i wyjście do strajku liczą się dalej tym samym
+    /// kodem, bo `rundy` czyta **gotową ofertę**, a nie to, skąd pochodzi.
+    ///
+    /// Wpis zużywa się w rundzie, w której padł: gracz odpowiada na **tę** rundę,
+    /// a nie ustawia politykę na całe negocjacje. Nieodebrany wchodzi do hasha
+    /// stanu, bo jest tym, co świat ma do przekazania w najbliższej rundzie —
+    /// ta sama zasada, co przy nieodebranych wezwaniach do strajku.
+    player_offers: BTreeMap<u32, u16>,
 }
 
 impl Unions {
@@ -222,6 +235,30 @@ impl Unions {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.unions.is_empty()
+    }
+
+    /// Gracz podstawia ustępstwo swojego zakładu na najbliższą rundę.
+    ///
+    /// `false` = w tym zakładzie nie toczy się spór, więc nie ma na co odpowiadać.
+    /// Liczba jest **żądaniem odpowiedzi**, a nie jej skutkiem: czy załoga ją
+    /// przyjmie, rozstrzyga jej próg akceptacji, ten sam co przy firmie AI.
+    pub fn set_player_offer(&mut self, site: SiteId, bp: u16) -> bool {
+        if !self.in_dispute(site) {
+            return false;
+        }
+        self.player_offers.insert(site.entity().index(), bp);
+        true
+    }
+
+    /// Ustępstwo podstawione przez gracza, jeśli jakieś czeka. Nie zdejmuje wpisu.
+    #[must_use]
+    pub fn player_offer(&self, site: SiteId) -> Option<u16> {
+        self.player_offers.get(&site.entity().index()).copied()
+    }
+
+    /// Zdejmuje wpisy zużyte w tej rundzie.
+    pub fn take_player_offers(&mut self) -> BTreeMap<u32, u16> {
+        std::mem::take(&mut self.player_offers)
     }
 
     /// Czy załoga tego zakładu jest w sporze z pracodawcą — wejście hazardu
@@ -344,6 +381,13 @@ impl HashState for Unions {
         for c in &self.calls {
             c.site.entity().hash_state(h);
             h.write_u16(c.participation_bp);
+        }
+        // Ustępstwo gracza czekające na rundę — tak samo jak wezwanie: stan, który
+        // świat ma do przekazania, a nie pomiar pomocniczy.
+        h.write_u32(self.player_offers.len() as u32);
+        for (site, bp) in &self.player_offers {
+            h.write_u32(*site);
+            h.write_u16(*bp);
         }
     }
 }

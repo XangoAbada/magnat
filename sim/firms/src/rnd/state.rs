@@ -34,6 +34,25 @@ pub struct Project {
 }
 
 impl Project {
+    /// Nowy projekt: koszt w **punktach**, przeliczony na milipunkty tu, w jednym
+    /// miejscu. Pierwszy miesiąc idzie pełnym tempem — obciążenie wychodzi dopiero
+    /// na najbliższej granicy miesiąca i dopiero ono może tempo przyciąć.
+    ///
+    /// Wejście dla obu stron: wybiera projekt firma AI (`rnd::progress`) albo gracz
+    /// komendą `StartResearch` (M10g). Jeden konstruktor, bo inaczej dwie ścieżki
+    /// rozjechałyby się przy pierwszej zmianie pola.
+    #[must_use]
+    pub fn new(tech: TechId, cost_rp: u32, started: SimMinute) -> Project {
+        Project {
+            tech,
+            cost_mrp: u64::from(cost_rp) * crate::rnd::progress::MRP,
+            done_mrp: 0,
+            started,
+            budget_permille: 1000,
+            breakthroughs: 0,
+        }
+    }
+
     #[must_use]
     pub fn remaining_mrp(&self) -> u64 {
         self.cost_mrp.saturating_sub(self.done_mrp)

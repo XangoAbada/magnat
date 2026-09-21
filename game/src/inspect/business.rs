@@ -6,7 +6,7 @@
 //! Druga arytmetyka tych samych liczb rozjechałaby się z pierwszą (`Y-1`).
 
 use super::CardCtx;
-use magnat_core::{FirmId, SiteId, Subject, Tick, VehicleId};
+use magnat_core::{CoverId, FirmId, SiteId, Subject, Tick, VehicleId};
 use magnat_firms::{FirmKey, Firms};
 use magnat_ui::{CardTabKind, InspectionCard, Rich, ShopCard, ShopTab, ShopView, Span};
 
@@ -34,6 +34,18 @@ pub fn site_exists(session: &crate::Session, s: SiteId) -> bool {
             .market
             .as_ref()
             .is_some_and(|m| m.account_of(s).is_some())
+}
+
+/// Czy polisa istnieje i nie wygasła. `false` jest normalnym stanem świata:
+/// polisa kończy się z upływem okresu i nikt jej nie wskrzesza.
+#[must_use]
+pub fn cover_exists(session: &crate::Session, c: CoverId) -> bool {
+    session
+        .app
+        .world
+        .get_resource::<magnat_economy::insurance::Insurers>()
+        .and_then(|i| i.cover(c))
+        .is_some_and(|x| !x.ended)
 }
 
 #[must_use]
@@ -127,13 +139,18 @@ pub fn firm_card(ctx: &CardCtx<'_>, f: FirmId) -> InspectionCard {
     for s in &firm.sites {
         ctx.link_line(&mut stan, "ui.firm.site", Subject::Site(*s));
     }
+    // Zmowa i stali dostawcy są **sekcjami** karty firmy, a nie własnymi podmiotami
+    // (`FF-22`): pytanie gracza brzmi „z kim ta firma trzyma", a nie „pokaż mi
+    // relację numer cztery". Sufit siedmiu zakładek zostaje nietknięty (§5.12).
+    zmowa(ctx, &mut stan, key_of(f));
+    dostawcy(ctx, &mut stan, f);
 
     let mut dlaczego: Rich = Vec::new();
     for d in firm.log.iter() {
         dlaczego.push(Span::plain(format!(
             "{}  {}\n",
             magnat_ui::zegar((d.tick.get() % 1440) as u16),
-            magnat_ui::describe(ctx.c, ctx.l, d.reason)
+            ctx.reason(d.reason)
         )));
     }
 
@@ -174,12 +191,16 @@ pub fn site_card(ctx: &CardCtx<'_>, s: SiteId) -> InspectionCard {
 
         let mut dlaczego: Rich = Vec::new();
         for r in &snap.reprices {
-            dlaczego.push(Span::plain(format!(
-                "{}\n",
-                magnat_ui::describe(ctx.c, ctx.l, *r)
-            )));
+            dlaczego.push(Span::plain(format!("{}\n", ctx.reason(*r))));
         }
+        // Tytuł medialny i związek zawodowy wchodzą jako sekcje zakładki „Stan",
+        // której karta sklepu do tej pory nie miała — puste ciało nie tworzy
+        // zakładki, więc sklep bez sporu i bez redakcji wygląda jak dotąd.
+        let mut stan: Rich = Vec::new();
+        tytul_medialny(ctx, &mut stan, s);
+        zwiazek(ctx, &mut stan, s);
         return InspectionCard::new(subject, naglowek)
+            .tab(CardTabKind::State, stan)
             .tab(
                 CardTabKind::Shelves,
                 card.render_tab(ctx.c, ctx.l, ShopTab::Shelves),
@@ -222,6 +243,8 @@ pub fn site_card(ctx: &CardCtx<'_>, s: SiteId) -> InspectionCard {
         }
         None => stan.push(magnat_ui::gone_span(ctx.c, ctx.l, &nazwa)),
     }
+    tytul_medialny(ctx, &mut stan, s);
+    zwiazek(ctx, &mut stan, s);
     InspectionCard::new(subject, naglowek).tab(CardTabKind::State, stan)
 }
 
@@ -283,6 +306,262 @@ pub fn vehicle_card(ctx: &CardCtx<'_>, v: VehicleId) -> InspectionCard {
                 Subject::Household(magnat_core::HouseholdId(e)),
             );
         }
+    }
+    InspectionCard::new(subject, naglowek).tab(CardTabKind::State, stan)
+}
+
+// ── M10g: sekcje głębi w kartach zakładu i firmy, karta polisy ──────────────────
+
+/// Sekcja „tytuł medialny" w karcie zakładu (`FF-4`).
+///
+/// Bez własnego wariantu `Subject`, bo **tytuł jest zakładem**: gazeta ma lokal,
+/// załogę i księgę tak samo jak piekarnia. Drugi podmiot o tej samej tożsamości
+/// byłby dokładnie tą drugą prawdą, którą `K-39` raz już usuwał.
+fn tytul_medialny(ctx: &CardCtx<'_>, out: &mut Rich, s: SiteId) {
+    let Some(o) = ctx
+        .session
+        .app
+        .world
+        .get_resource::<magnat_media::Outlets>()
+        .and_then(|r| r.get(s))
+    else {
+        return;
+    };
+    ctx.line(
+        out,
+        "ui.card.outlet_kind",
+        &[(
+            "rodzaj",
+            &ctx.text(&format!("ui.media_kind.{}", o.kind.name())),
+        )],
+    );
+    ctx.line(
+        out,
+        "ui.card.outlet_credibility",
+        &[("ile", &o.credibility.get().to_string())],
+    );
+    ctx.line(
+        out,
+        "ui.card.outlet_bias",
+        &[(
+            "linia",
+            &ctx.text(&format!("ui.editorial_bias.{}", o.bias.name())),
+        )],
+    );
+    // Czytelnictwo: dzielnice, do których tytuł naprawdę dociera, najmocniejsza
+    // pierwsza. Zera nie pokazujemy — „nie dociera" to brak wiersza, nie wiersz zero.
+    let mut zasieg: Vec<(magnat_core::DistrictId, u16)> = o
+        .readership
+        .iter()
+        .copied()
+        .filter(|(_, p)| *p > 0)
+        .collect();
+    zasieg.sort_unstable_by(|a, b| b.1.cmp(&a.1).then(a.0 .0.cmp(&b.0 .0)));
+    for (d, permille) in zasieg.into_iter().take(5) {
+        out.push(Span::plain(format!(
+            "{}: ",
+            ctx.text("ui.card.outlet_readership")
+        )));
+        out.push(ctx.subject_span(Subject::District(d)));
+        out.push(Span::plain(format!(" {permille}\u{2030}\n")));
+    }
+}
+
+/// Sekcja „związek zawodowy" w karcie zakładu (`FF-22`).
+///
+/// Też bez wariantu `Subject`: spór **jest stanem zakładu**, a nie bytem obok niego —
+/// gracz pyta „co się dzieje w tej hali", a nie „pokaż mi związek numer siedem".
+fn zwiazek(ctx: &CardCtx<'_>, out: &mut Rich, s: SiteId) {
+    let Some(u) = ctx
+        .session
+        .app
+        .world
+        .get_resource::<magnat_economy::Unions>()
+    else {
+        return;
+    };
+    let zal = u.grievance(s);
+    if zal.level > 0 {
+        ctx.line(
+            out,
+            "ui.card.grievance",
+            &[
+                ("poziom", &zal.level.to_string()),
+                ("dni", &zal.days_above.to_string()),
+            ],
+        );
+    }
+    let Some(z) = u.get(s) else { return };
+    let stan = match z.state {
+        magnat_economy::UnionState::Dormant { .. } => "dormant",
+        magnat_economy::UnionState::Demand { .. } => "demand",
+        magnat_economy::UnionState::Talks { .. } => "talks",
+        magnat_economy::UnionState::Strike { .. } => "strike",
+    };
+    ctx.line(
+        out,
+        "ui.card.union",
+        &[
+            ("stan", &ctx.text(&format!("ui.union_state.{stan}"))),
+            ("gestosc", &z.density.get().to_string()),
+        ],
+    );
+    if let Some(d) = z.demand {
+        ctx.line(
+            out,
+            "ui.card.union_demand",
+            &[("bp", &d.raise_bp.to_string())],
+        );
+    }
+    if !matches!(z.state, magnat_economy::UnionState::Dormant { .. }) {
+        ctx.line(
+            out,
+            "ui.card.strike_fund",
+            &[("kwota", &ctx.money_str(z.strike_fund))],
+        );
+    }
+}
+
+/// Sekcja „zmowa" w karcie firmy (`FF-22`).
+///
+/// **Widoczna dopiero po wykryciu, nie wcześniej** — i to jest kryterium WP10.22,
+/// nie ozdoba. Zmowa jest nielegalna od pierwszej minuty, ale nikt o niej nie wie:
+/// uczestnicy pilnują tajemnicy, a karta pokazująca żywy kartel zdradzałaby ją
+/// każdemu, kto kliknie w firmę. Dlatego sekcja czyta **dziennik decyzji firmy**
+/// i bierze z niego wyłącznie `CartelDetected`, a nie rejestr `Cartels`.
+///
+/// Rejestr i tak by tu nie pomógł: `Cartels::bust` **usuwa** zmowę z listy razem
+/// z wykryciem, więc po wykryciu nie ma jej w `iter()`, a przed wykryciem jest.
+/// Czytanie go dałoby dokładnie odwrotność kryterium.
+fn zmowa(ctx: &CardCtx<'_>, out: &mut Rich, key: FirmKey) {
+    let Some(firms) = firms(ctx.session) else {
+        return;
+    };
+    let Some(firm) = firms.get(key) else { return };
+    for d in firm.log.iter() {
+        let magnat_core::DecisionReason::CartelDetected {
+            members, months, ..
+        } = d.reason
+        else {
+            continue;
+        };
+        ctx.line(
+            out,
+            "ui.card.cartel",
+            &[
+                ("ilu", &members.to_string()),
+                ("miesiecy", &months.to_string()),
+            ],
+        );
+    }
+}
+
+/// Sekcja „stali dostawcy" w karcie firmy (`FF-22`).
+fn dostawcy(ctx: &CardCtx<'_>, out: &mut Rich, f: FirmId) {
+    let Some(m) = ctx.session.market.as_ref() else {
+        return;
+    };
+    let chain = m.chain();
+    let lock = chain.lock();
+    let tuning = *lock.b2b.relations().tuning();
+    let mut rel: Vec<(FirmId, u8, u16)> = lock
+        .b2b
+        .relations()
+        .iter()
+        .filter(|r| r.buyer == f)
+        .map(|r| (r.supplier, r.trust.get(), r.discount_bp(&tuning)))
+        .collect();
+    // Najbardziej zaufany pierwszy; remis rozstrzyga niższy indeks dostawcy, żeby
+    // karta wyglądała tak samo w dwóch przebiegach tego samego świata.
+    rel.sort_unstable_by(|a, b| {
+        b.1.cmp(&a.1)
+            .then(a.0.entity().index().cmp(&b.0.entity().index()))
+    });
+    for (dostawca, trust, rabat) in rel.into_iter().take(6) {
+        out.push(Span::plain(format!("{}: ", ctx.text("ui.card.supplier"))));
+        out.push(ctx.subject_span(Subject::Firm(dostawca)));
+        out.push(Span::plain(format!(
+            " {} {trust}, {} {rabat} bp\n",
+            ctx.text("ui.card.trust"),
+            ctx.text("ui.card.preference")
+        )));
+    }
+}
+
+/// Karta polisy ubezpieczeniowej (`FF-15`, `K-85`).
+///
+/// Jedna zakładka i zapas do sufitu siedmiu: polisa jest umową o czterech liczbach,
+/// a nie bytem z historią własnych decyzji. **Historia szkód jest dzielnicowa**,
+/// bo taka jest w modelu — ubezpieczyciel wycenia ryzyko z przebiegu dzielnicy,
+/// a nie z przebiegu jednego magazynu (`data/tuning/insurance.ron` nie ma ani jednej
+/// liczby o ryzyku miejsca i to jest treść kryterium WP10.12).
+#[must_use]
+pub fn cover_card(ctx: &CardCtx<'_>, c: CoverId) -> InspectionCard {
+    let subject = Subject::Cover(c);
+    let nazwa = ctx.subject_name(subject);
+    let naglowek = magnat_ui::lines_titled(&format!("{nazwa}\n"));
+    let mut stan: Rich = Vec::new();
+    let polisa = ctx
+        .session
+        .app
+        .world
+        .get_resource::<magnat_economy::insurance::Insurers>()
+        .and_then(|i| i.cover(c).copied());
+    let Some(p) = polisa else {
+        stan.push(magnat_ui::gone_span(ctx.c, ctx.l, &nazwa));
+        return InspectionCard::new(subject, naglowek).tab(CardTabKind::State, stan);
+    };
+    ctx.link_line(&mut stan, "ui.card.insured_site", Subject::Site(p.site));
+    ctx.link_line(
+        &mut stan,
+        "ui.card.insurer",
+        Subject::Firm(magnat_firms::firm_id(p.insurer)),
+    );
+    ctx.line(
+        &mut stan,
+        "ui.card.peril",
+        &[("rodzaj", &ctx.text(&format!("ui.peril.{}", p.peril.name())))],
+    );
+    ctx.line(
+        &mut stan,
+        "ui.card.sum_insured",
+        &[("kwota", &ctx.money_str(p.sum_insured))],
+    );
+    ctx.line(
+        &mut stan,
+        "ui.card.premium",
+        &[("kwota", &ctx.money_str(p.premium_monthly))],
+    );
+    ctx.line(
+        &mut stan,
+        "ui.card.deductible",
+        &[("kwota", &ctx.money_str(p.deductible))],
+    );
+    ctx.line(
+        &mut stan,
+        "ui.card.cover_rate",
+        &[("bp", &p.rate_bp.to_string())],
+    );
+    if p.ended {
+        ctx.line(&mut stan, "ui.card.cover_ended", &[]);
+    }
+    // Historia szkód dzielnicy — to z niej wychodzi składka i to jest jedyne
+    // wyjaśnienie, dlaczego ta polisa kosztuje tyle, ile kosztuje.
+    let st = ctx
+        .session
+        .app
+        .world
+        .get_resource::<magnat_economy::insurance::Insurers>()
+        .map(|i| i.stats(p.peril, p.district));
+    if let Some(st) = st {
+        ctx.line(
+            &mut stan,
+            "ui.card.peril_history",
+            &[
+                ("szkod", &st.claims.to_string()),
+                ("kwota", &ctx.money_str(st.loss_total)),
+            ],
+        );
     }
     InspectionCard::new(subject, naglowek).tab(CardTabKind::State, stan)
 }

@@ -24,6 +24,9 @@ magnat-world = { workspace = true }
 magnat-voxel = { workspace = true }
 magnat-agents = { workspace = true }
 magnat-traffic = { workspace = true }
+# Panel marki nazywa krawędź drogi, przy której gracz stawia billboard (`WP10.19`).
+# Zależność jest już w grafie przez ruch i media — to jest nazwa typu, nie nowy kod.
+magnat-nav = { workspace = true }
 magnat-economy = { workspace = true }
 magnat-supply = { workspace = true }
 magnat-firms = { workspace = true }

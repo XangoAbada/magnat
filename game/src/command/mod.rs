@@ -189,6 +189,70 @@ pub enum PlayerCommand {
     /// więc idą do likwidacji — inaczej miasto zapełniłoby się zakładami bez
     /// właściciela, którymi nikt nigdy nie pokieruje.
     ContinueAsNewCitizen { citizen: CitizenId },
+
+    // ── M10g: komendy paneli głębi (WP10.19–WP10.22) ─────────────────────────
+    //
+    // Cztery mechaniki M10 miały po stronie symulacji wszystko i nie miały wejścia
+    // gracza (`FF-1`, `FF-9`, `FF-14`, `FF-23`). Każda dostaje **jedną** komendę:
+    // tyle, ile potrzeba, żeby decyzja należała do gracza, i ani wariantu więcej.
+    /// Kup kampanię reklamową dla swojego zakładu.
+    ///
+    /// `channel` to indeks `AdChannelKind` (kolejność jest kontraktem, `K-79`),
+    /// a `target` znaczy co innego w każdym kanale i **kanał jest jedyną
+    /// instrukcją, jak go czytać**: billboard — numer krawędzi drogi, prasa,
+    /// radio i telewizja — indeks encji zakładu redakcji, sponsoring — numer
+    /// zdarzenia. Ulotka, promocja i PR nie mają celu i wtedy `target` jest zerem.
+    /// Jedna liczba, a nie siedem pól opcjonalnych: dziennik wejść ma być mały,
+    /// a to jest ten sam zabieg, którym `ApplyForPermit` niesie rodzaj bajtem.
+    OpenCampaign {
+        site: SiteId,
+        channel: u8,
+        target: u32,
+        budget: Money,
+        days: u16,
+    },
+    /// Zacznij badać wskazany węzeł drzewa technologii.
+    ///
+    /// Węzeł jedzie **kluczem tekstowym, nie `TechId`** — tak samo jak towar
+    /// w `SetPrice` i z tego samego powodu: indeks nadaje się przy ładowaniu
+    /// katalogu, a w zapisie gry trzymamy klucz (00 §5).
+    ///
+    /// Zakład wskazuje **firmę**, bo projekt badawczy należy do firmy, a nie do
+    /// hali. Gracz ma jedną firmę, ale komenda i tak pyta o zakład — to ta sama
+    /// droga, którą idą wszystkie pozostałe komendy właścicielskie.
+    StartResearch { site: SiteId, tech: String },
+    /// Złóż zlecenie na giełdzie.
+    ///
+    /// Spółka jedzie `FirmKey` jako `u64`, bo klucz firmy jest monotoniczny
+    /// i wieczny w obrębie świata — `FirmId` byłby tą samą liczbą opakowaną
+    /// w encję z generacją, której rejestr giełdy nie używa.
+    PlaceStockOrder {
+        firm: u64,
+        sell: bool,
+        limit: Money,
+        bp: u16,
+        days: u16,
+    },
+    /// Wprowadź firmę na giełdę.
+    ///
+    /// Osobna komenda od `PlaceStockOrder`, bo to jest osobna decyzja: debiut
+    /// sprzedaje **pakiet dotychczasowych właścicieli**, a zlecenie kupuje albo
+    /// sprzedaje udział na rynku wtórnym. Warunek jest ten sam, który obowiązuje
+    /// firmę AI (`equity::system::debut`) — opublikowany dodatni wynik — bo gracz
+    /// gra według tych samych reguł, a nie własnych (`K-11`).
+    GoPublic { site: SiteId },
+    /// Odpowiedz załodze w sporze zbiorowym: ile podwyżki firma daje w tej rundzie.
+    ///
+    /// Jedna komenda na trzy przyciski panelu, bo to jest jedna decyzja o trzech
+    /// wartościach: „przyjmij żądanie" to `offer_bp` równe żądaniu, „kontruj" to
+    /// liczba gracza, „przeczekaj" to zero. Trzy warianty opisywałyby to samo
+    /// trzy razy.
+    ///
+    /// Liczba **podstawia się** w miejsce wyliczonej z marży — tak samo jak
+    /// `PricePolicy::Fixed` podstawia cenę gracza w miejsce przeceny (M5c).
+    /// Gracz nie dostaje drugiego silnika negocjacji: próg akceptacji załogi,
+    /// ugoda i wyjście do strajku liczą się dalej tym samym kodem.
+    AnswerUnion { site: SiteId, offer_bp: u16 },
 }
 
 /// Ile wolno menedżerowi bez pytania właściciela.
@@ -291,6 +355,10 @@ pub struct CommandView<'a> {
     /// Czy gra ma już postać. Panel wygasza „wybierz postać" po jej wyborze i musi
     /// znać powód **przed** kliknięciem, a nie po odrzuceniu komendy.
     pub has_character: bool,
+    /// Bieżący tick. Sprawdzenia, które pytają o **termin** — czy patent jeszcze
+    /// obowiązuje, czy kampania jeszcze trwa — nie mają go skąd wziąć ze świata:
+    /// zegar jest przelicznikiem prezentacji i nie jest zasobem ECS (`K-22`).
+    pub tick: Tick,
 }
 
 /// Wykonuje komendę. Wołane **wyłącznie** po udanym [`precheck`], w punkcie
@@ -325,7 +393,12 @@ pub fn apply(view: &CommandView<'_>, cmd: &PlayerCommand) -> Result<(), CommandE
         | PlayerCommand::DeclarePersonalBankruptcy
         | PlayerCommand::SetHeir { .. }
         | PlayerCommand::Succeed { .. }
-        | PlayerCommand::ContinueAsNewCitizen { .. } => Ok(()),
+        | PlayerCommand::ContinueAsNewCitizen { .. }
+        | PlayerCommand::OpenCampaign { .. }
+        | PlayerCommand::StartResearch { .. }
+        | PlayerCommand::PlaceStockOrder { .. }
+        | PlayerCommand::AnswerUnion { .. }
+        | PlayerCommand::GoPublic { .. } => Ok(()),
         PlayerCommand::SetPrice { site, good, price } => {
             let market = view.market.ok_or(CommandError::NoMarket)?;
             let g = resolve_good(market, good)?;

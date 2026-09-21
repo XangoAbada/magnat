@@ -56,7 +56,7 @@ pub use graph::{GraphEdge, GraphNode, GraphView};
 pub use heatmap::HeatmapThumb;
 pub use inspect::card::{gone_span, CardTab, CardTabKind, InspectionCard, MAX_CARD_TABS};
 pub use inspect::citizen::{zlotowki, CitizenCard, CitizenModel, CitizenPanel, NeedRow, StatusRow};
-pub use inspect::reason::{describe, zegar};
+pub use inspect::reason::{describe, describe_named, zegar, Names};
 pub use inspect::shop::{ShopCard, ShopTab, ShopView};
 pub use inspect::supply::{SupplyCard, SupplyTab, SupplyView};
 pub use inspect::timeline::{

@@ -7,6 +7,20 @@
 //! Menedżera panel nie przypisuje i nie da się tego zrobić: menedżerem zostaje
 //! najlepszy człowiek na stanowisku kierowniczym i wybiera go rynek pracy codziennie.
 //! Gracz stawia menedżera, **zatrudniając go** na takie stanowisko.
+//!
+//! # Czwarta komenda: odpowiedź załodze (`FF-23`, M10g)
+//!
+//! Spór zbiorowy jest **stanem zakładu**, więc jego miejscem jest ten panel, a nie
+//! nowy. Gracz odpowiada jedną liczbą — ile podwyżki daje w tej rundzie — i trzy
+//! przyciski są trzema jej wartościami: żądanie w całości, połowa, zero. Próg
+//! akceptacji załogi, ugoda i wyjście do strajku liczą się dalej tym samym kodem,
+//! bo `talks::rundy` czyta gotową ofertę, a nie to, skąd pochodzi. To jest ta sama
+//! reguła, którą `PricePolicy::Fixed` stosuje do ceny (M5c): podstawienie, a nie
+//! drugi silnik.
+//!
+//! `grievance` stoi w tym panelu **jako ostrzeżenie wyprzedzające** (M10 §6 pkt 5):
+//! rośnie miesiącami, zanim związek w ogóle powstanie, więc gracz, który go widzi,
+//! ma czas podnieść płace zamiast negocjować pod strajkiem.
 
 use magnat_core::{CitizenId, JobRoleId, Money, SiteId, Subject};
 use magnat_ui::DataSource;
@@ -39,6 +53,10 @@ pub struct Model {
     pub autonomy: Option<Autonomy>,
     /// Oferty pracy dla postaci gracza: bity uchwytu, zakład, zawód, stawka.
     pub jobs: Vec<(u64, SiteId, JobRoleId, Money)>,
+    /// Żal załogi wybranego zakładu: poziom 0..100 i ile dób ponad progiem.
+    pub grievance: (u8, u16),
+    /// Spór, jeśli trwa: klucz stanu, żądanie w bp, fundusz strajkowy, numer rundy.
+    pub spor: Option<(&'static str, u16, Money, u8)>,
 }
 
 fn build(ctx: &PanelCtx<'_>) -> PanelModel {
@@ -108,6 +126,27 @@ fn build(ctx: &PanelCtx<'_>) -> PanelModel {
             .take(KANDYDATOW)
             .collect()
     });
+    let (grievance, spor) = wybrany.map_or(((0, 0), None), |site| {
+        let Some(u) = s.app.world.get_resource::<magnat_economy::Unions>() else {
+            return ((0, 0), None);
+        };
+        let g = u.grievance(site);
+        let z = u.get(site).and_then(|z| {
+            let (stan, runda) = match z.state {
+                magnat_economy::UnionState::Dormant { .. } => return None,
+                magnat_economy::UnionState::Demand { .. } => ("demand", 0),
+                magnat_economy::UnionState::Talks { round, .. } => ("talks", round),
+                magnat_economy::UnionState::Strike { .. } => ("strike", 0),
+            };
+            Some((
+                stan,
+                z.demand.map_or(0, |d| d.raise_bp),
+                z.strike_fund,
+                runda,
+            ))
+        });
+        ((g.level, g.days_above), z)
+    });
     PanelModel::People(Model {
         sites,
         names,
@@ -116,6 +155,8 @@ fn build(ctx: &PanelCtx<'_>) -> PanelModel {
         candidates,
         autonomy,
         jobs,
+        grievance,
+        spor,
     })
 }
 
@@ -209,6 +250,65 @@ fn render(
                     akcja = PanelAction::cmd(cmd);
                 }
             });
+        }
+    }
+
+    // Spór zbiorowy przed autonomią: to jest ta sekcja, przez którą gracz otwiera
+    // panel, kiedy załoga wyszła do bramy.
+    section(ui, th, &ctx.text("ui.people.dispute"));
+    let (poziom, dni) = m.grievance;
+    super::widgets::kpi(
+        ui,
+        th,
+        &ctx.text("ui.people.grievance"),
+        &ctx.fmt(
+            "ui.people.grievance_row",
+            &[("poziom", &poziom.to_string()), ("dni", &dni.to_string())],
+        ),
+        if poziom >= 55 {
+            super::widgets::Sev::Bad
+        } else if poziom >= 35 {
+            super::widgets::Sev::Warn
+        } else {
+            super::widgets::Sev::Normal
+        },
+    );
+    match m.spor {
+        None => {
+            ui.label(ctx.text("ui.people.no_dispute"));
+        }
+        Some((stan, zadanie, fundusz, runda)) => {
+            row(
+                ui,
+                th,
+                &ctx.text(&format!("ui.union_state.{stan}")),
+                &ctx.fmt(
+                    "ui.people.dispute_row",
+                    &[("bp", &zadanie.to_string()), ("runda", &runda.to_string())],
+                ),
+            );
+            row(
+                ui,
+                th,
+                &ctx.text("ui.people.strike_fund"),
+                &ctx.money(fundusz),
+            );
+            // Trzy przyciski, jedna komenda: przyjmij żądanie, kontruj połową,
+            // przeczekaj. Liczba jest **odpowiedzią na tę rundę**, a nie polityką
+            // na całe negocjacje — dlatego zużywa się przy najbliższej.
+            for (key, bp) in [
+                ("ui.people.accept", zadanie),
+                ("ui.people.counter", zadanie / 2),
+                ("ui.people.wait", 0),
+            ] {
+                let cmd = PlayerCommand::AnswerUnion { site, offer_bp: bp };
+                let blokada = crate::precheck(&ctx.session.view(), &cmd)
+                    .err()
+                    .map(|e| e.text(ctx.c, ctx.l));
+                if action(ui, ctx, &ctx.fmt(key, &[("bp", &bp.to_string())]), blokada) {
+                    akcja = PanelAction::cmd(cmd);
+                }
+            }
         }
     }
 

@@ -48,6 +48,8 @@ const OD: Tick = Tick(30 * 1440);
 fn policzona(r: ShelfRow) -> ShelfRow {
     ShelfRow {
         margin_bp: ShelfRow::margin_of(r.price, r.unit_cost),
+        // Jakość nie wchodzi do wydruku sklepu — czyta ją panel marki (`WP10.19`).
+        quality: magnat_core::Q::new(60),
         days_of_cover: ShelfRow::cover_of(Qty(r.on_shelf.get() + r.backroom.get()), r.turnover_7d),
         ..r
     }
@@ -77,6 +79,7 @@ fn migawka(tracking: LostSaleTracking, cash_complete: bool) -> ShopPanelSnapshot
         shelves: vec![
             policzona(ShelfRow {
                 good: CHLEB,
+                quality: magnat_core::Q::new(60),
                 price: Money(429),
                 unit_cost: Money(331),
                 on_shelf: Qty(18_000),
@@ -95,6 +98,7 @@ fn migawka(tracking: LostSaleTracking, cash_complete: bool) -> ShopPanelSnapshot
             // Mleko: gracz podniósł cenę z 2,99 zł na 3,49 zł i wyjął ją spod polityki.
             policzona(ShelfRow {
                 good: MLEKO,
+                quality: magnat_core::Q::new(60),
                 price: Money(349),
                 unit_cost: Money(272),
                 on_shelf: Qty(31_000),
@@ -109,6 +113,7 @@ fn migawka(tracking: LostSaleTracking, cash_complete: bool) -> ShopPanelSnapshot
             // Ser: nic się nie sprzedaje, więc pokrycie jest brakiem odpowiedzi.
             policzona(ShelfRow {
                 good: SER,
+                quality: magnat_core::Q::new(60),
                 price: Money(1_890),
                 unit_cost: Money(1_410),
                 on_shelf: Qty(4_000),

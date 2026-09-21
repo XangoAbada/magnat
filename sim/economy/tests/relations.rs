@@ -743,3 +743,100 @@ fn obserwacja_zakladu_niesie_wszystkie_trzy_warunki_osobno() {
     let ile = u.watched().count();
     assert_eq!(ile, 2, "pod obserwacją mają być wszystkie zakłady z załogą");
 }
+
+/// `FF-23`: liczba podstawiona przez gracza **zastępuje** ustępstwo wyliczone
+/// z marży, a reszta negocjacji liczy się tym samym kodem.
+///
+/// To jest cała treść kanału gracza z M10g: nie drugi silnik negocjacji, tylko
+/// podstawienie — dokładnie tak, jak `PricePolicy::Fixed` podstawia cenę gracza
+/// w miejsce przeceny. Test sprawdza obie strony tego zdania: że liczba gracza
+/// robi różnicę (ugoda zamiast kolejnej rundy) i że **nie omija sufitu**, którym
+/// związany jest każdy pracodawca.
+#[test]
+fn liczba_gracza_zastepuje_ustepstwo_wyliczone_z_marzy() {
+    let (mut w, zaklady) = swiat(1, 12, 3_500);
+    let badany = zaklady[1].site;
+
+    // Doprowadź spór do chwili, w której jest o czym rozmawiać.
+    let mut zadanie = 0u16;
+    let mut doba = 0u32;
+    for d in 0..10u32 * 30 {
+        step_day(&mut w, Tick(u64::from(d) * DOBA));
+        if let Some(z) = w.resource::<Unions>().get(badany) {
+            if let Some(dem) = z.demand {
+                zadanie = dem.raise_bp;
+                doba = d;
+                break;
+            }
+        }
+    }
+    assert!(zadanie > 0, "związek nie przedstawił żądania");
+
+    // Zakład bez sporu nie przyjmuje odpowiedzi — panel wygasza wtedy przycisk,
+    // a `precheck` odmawia z `NoDispute`. Odpowiedź bez pytania nie jest odpowiedzią.
+    let obcy = zaklady[0].site;
+    if !w.resource::<Unions>().in_dispute(obcy) {
+        assert!(
+            !w.resource_mut::<Unions>().set_player_offer(obcy, 500),
+            "odpowiedź przyjęta w zakładzie, w którym nie ma sporu"
+        );
+    }
+
+    // Gracz przyjmuje żądanie w całości. Załoga ma próg akceptacji, ale przy
+    // pełnym żądaniu jest on spełniony z definicji — więc spór ma się zamknąć.
+    assert!(
+        w.resource_mut::<Unions>().set_player_offer(badany, zadanie),
+        "spór trwa, a odpowiedź nie została przyjęta"
+    );
+    for d in doba..doba + 40 {
+        step_day(&mut w, Tick(u64::from(d) * DOBA));
+        if w.resource::<Unions>()
+            .get(badany)
+            .is_some_and(|z| matches!(z.state, UnionState::Dormant { .. }))
+        {
+            return;
+        }
+    }
+    panic!("po przyjęciu całego żądania spór nadal trwa");
+}
+
+/// Sufit ustępstwa obowiązuje **także gracza**: panel jest podstawieniem liczby,
+/// a nie zwolnieniem z reguły. Bez tego warunku gracz mógłby obiecać załodze
+/// tysiąc procent i zamknąć każdy spór jednym kliknięciem.
+#[test]
+fn liczba_gracza_nie_omija_sufitu_ustepstwa() {
+    let (mut w, zaklady) = swiat(1, 12, 3_500);
+    let badany = zaklady[1].site;
+    for d in 0..10u32 * 30 {
+        step_day(&mut w, Tick(u64::from(d) * DOBA));
+        if w.resource::<Unions>()
+            .get(badany)
+            .is_some_and(|z| z.demand.is_some())
+        {
+            break;
+        }
+    }
+    assert!(w
+        .resource_mut::<Unions>()
+        .set_player_offer(badany, u16::MAX));
+    let przed = placa(&w, badany);
+    step_day(&mut w, Tick(u64::from(10u32 * 30) * DOBA));
+    let po = placa(&w, badany);
+    let sufit = RelationsTuning::default().union.concession_cap_bp;
+    let wzrost_bp = (po.saturating_sub(przed)).saturating_mul(10_000) / przed.max(1);
+    assert!(
+        wzrost_bp <= i64::from(sufit),
+        "gracz podniósł płacę o {wzrost_bp} bp wobec sufitu {sufit} bp"
+    );
+}
+
+/// Miesięczna płaca zakładu — suma listy płac podzielona przez obsadę.
+fn placa(w: &World, site: SiteId) -> i64 {
+    let firms = w.resource::<magnat_firms::Firms>();
+    let Some(s) = firms.site(site) else { return 0 };
+    let ilu = s.headcount() as i64;
+    if ilu == 0 {
+        return 0;
+    }
+    s.labor_cost_month().get() / ilu
+}

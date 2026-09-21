@@ -235,22 +235,11 @@ fn wybierz_projekt(
         return;
     };
     let node = data.tree.node(t);
-    let koszt =
-        u64::from(node.effective_cost_rp(u64::from(d.day), data.tuning.world_known_discount_bp))
-            * MRP;
-    firms.rnd_mut().projects.insert(
-        key,
-        Project {
-            tech: t,
-            cost_mrp: koszt,
-            done_mrp: 0,
-            started: d.now,
-            // Pierwszy miesiąc idzie pełnym tempem: obciążenie wychodzi na
-            // najbliższej granicy miesiąca i dopiero ono może tempo przyciąć.
-            budget_permille: 1000,
-            breakthroughs: 0,
-        },
-    );
+    let koszt = node.effective_cost_rp(u64::from(d.day), data.tuning.world_known_discount_bp);
+    firms
+        .rnd_mut()
+        .projects
+        .insert(key, Project::new(t, koszt, d.now));
     out.started.push((key, t));
 }
 

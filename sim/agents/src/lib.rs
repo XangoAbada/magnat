@@ -104,9 +104,9 @@ pub use planner::{
     ReasonEntry, ReasonLog, MAX_SLOTS,
 };
 pub use social::{
-    awareness_of, knows_place, learn_place, relations_of, status_of, CityFacts, SocialClass,
-    SocialIndex, SocialReport, StatusBreakdown, StatusDistribution, StatusInput, StatusReport,
-    SOCIAL_CLASS_COUNT, SOCIAL_SHARDS,
+    awareness_of, for_each_known_place, knows_place, learn_place, relations_of, status_of,
+    CityFacts, SocialClass, SocialIndex, SocialReport, StatusBreakdown, StatusDistribution,
+    StatusInput, StatusReport, SOCIAL_CLASS_COUNT, SOCIAL_SHARDS,
 };
 pub use society::{
     households, is_month_start, population, register_society, total_money, SocietyReport,

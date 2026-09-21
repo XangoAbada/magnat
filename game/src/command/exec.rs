@@ -190,7 +190,193 @@ pub(crate) fn run(s: &mut Session, t: Tick, cmd: &PlayerCommand) -> Result<(), C
             likwiduj(s, t);
             przejmij(s, *citizen, t)
         }
+        PlayerCommand::OpenCampaign {
+            site,
+            channel,
+            target,
+            budget,
+            days,
+        } => open_campaign(s, *site, *channel, *target, *budget, *days, t),
+        PlayerCommand::StartResearch { site, tech } => start_research(s, *site, tech, t),
+        PlayerCommand::PlaceStockOrder {
+            firm,
+            sell,
+            limit,
+            bp,
+            days,
+        } => {
+            let eq = s
+                .app
+                .world
+                .get_resource_mut::<magnat_economy::equity::Equity>()
+                .ok_or(CommandError::NoEquity)?;
+            let wynik = eq.place_order(
+                magnat_firms::FirmKey(*firm),
+                magnat_firms::Owner::Player,
+                if *sell {
+                    magnat_economy::equity::book::Side::Sell
+                } else {
+                    magnat_economy::equity::book::Side::Buy
+                },
+                *limit,
+                *bp,
+                magnat_core::SimMinute(t.get() + u64::from(*days) * DOBA),
+            );
+            wynik.map(|_| ()).ok_or(CommandError::NotListed)
+        }
+        PlayerCommand::GoPublic { site } => {
+            let key = s
+                .app
+                .world
+                .get_resource::<magnat_firms::Firms>()
+                .and_then(|f| f.site(*site))
+                .map(|z| z.firm)
+                .ok_or(CommandError::SiteNotFound { site: *site })?;
+            // Giełdę trzeba wyjąć ze świata, bo `debut` sięga po rejestr firm
+            // na mutowalnie — ta sama droga, którą `take_loan` wyjmuje księgi.
+            let mut eq = s
+                .app
+                .world
+                .get_resource_mut::<magnat_economy::equity::Equity>()
+                .map(std::mem::take)
+                .ok_or(CommandError::NoEquity)?;
+            let wszedl = magnat_economy::equity::system::debut(&mut s.app.world, &mut eq, key, t);
+            *s.app.world.resource_mut::<magnat_economy::equity::Equity>() = eq;
+            if wszedl {
+                Ok(())
+            } else {
+                Err(CommandError::NotListed)
+            }
+        }
+        PlayerCommand::AnswerUnion { site, offer_bp } => {
+            let u = s
+                .app
+                .world
+                .get_resource_mut::<magnat_economy::Unions>()
+                .ok_or(CommandError::NoFirms)?;
+            if u.set_player_offer(*site, *offer_bp) {
+                Ok(())
+            } else {
+                Err(CommandError::NoDispute { site: *site })
+            }
+        }
     }
+}
+
+/// Minut w dobie gry.
+const DOBA: u64 = magnat_core::time::MINUTES_PER_DAY;
+
+/// Kupuje kampanię **tą samą drogą, którą kupuje ją firma AI**: `Campaigns::open`.
+///
+/// Druga ścieżka otwierania kampanii rozjechałaby się z pierwszą przy pierwszej
+/// zmianie w rejestrze — ta sama reguła, którą `FoundFirm` stosuje do zakładania
+/// firmy (`K-11`).
+fn open_campaign(
+    s: &mut Session,
+    site: magnat_core::SiteId,
+    channel: u8,
+    target: u32,
+    budget: magnat_core::Money,
+    days: u16,
+    t: Tick,
+) -> Result<(), CommandError> {
+    let kanal = crate::panels::brand::kanal(&s.app.world, site, channel, target)
+        .ok_or(CommandError::NoAdTarget)?;
+    let key = s
+        .app
+        .world
+        .get_resource::<magnat_firms::Firms>()
+        .and_then(|f| f.site(site))
+        .map(|z| z.firm)
+        .ok_or(CommandError::SiteNotFound { site })?;
+    let brand = magnat_supply::brand_of(magnat_firms::firm_id(key)).ok_or(CommandError::NoBrand)?;
+    // Obietnica gracza jest **jakością jego towaru**, a nie liczbą z suwaka:
+    // przesada jest samokarząca (§5.1), więc gracz, który chce obiecać więcej,
+    // ma to zrobić towarem. `ponytail:` sufit nazwany — suwak obietnicy wymaga
+    // decyzji projektowej („czy gracz może kłamać w reklamie"), której nikt nie
+    // podjął; ścieżka wyjścia to pole `claim` w komendzie.
+    let claim = s.market.as_ref().map_or(magnat_core::Q::new(50), |m| {
+        let od = Tick(t.get() - t.get() % magnat_core::time::MINUTES_PER_MONTH);
+        m.shop_panel(site, od, t)
+            .map_or(magnat_core::Q::new(50), |x| {
+                let n = x.shelves.len() as i64;
+                if n == 0 {
+                    return magnat_core::Q::new(50);
+                }
+                let sr = x
+                    .shelves
+                    .iter()
+                    .map(|w| i64::from(w.quality.get()))
+                    .sum::<i64>()
+                    / n;
+                magnat_core::Q::new(sr.clamp(0, 100) as u8)
+            })
+    });
+    let now = magnat_core::SimMinute(t.get());
+    s.app
+        .world
+        .get_resource_mut::<magnat_media::Campaigns>()
+        .ok_or(CommandError::NoMedia)?
+        .open(|id| magnat_media::AdCampaign {
+            id,
+            site,
+            brand,
+            channel: kanal,
+            claim,
+            budget,
+            spent: magnat_core::Money::ZERO,
+            window: (
+                now,
+                magnat_core::SimMinute(now.get() + u64::from(days) * DOBA),
+            ),
+            metrics: magnat_media::CampaignMetrics::default(),
+        });
+    Ok(())
+}
+
+/// Otwiera projekt badawczy firmy gracza.
+///
+/// Projekt zakłada się **tak samo jak firmie AI** (`rnd::Project`): ten sam koszt
+/// zamrożony w chwili startu, ta sama zniżka za rok „światowy". Gracz wybiera
+/// **który** węzeł — i to jest cała różnica, bo AI wybiera najtańszy osiągalny.
+fn start_research(
+    s: &mut Session,
+    site: magnat_core::SiteId,
+    tech: &str,
+    t: Tick,
+) -> Result<(), CommandError> {
+    let key = s
+        .app
+        .world
+        .get_resource::<magnat_firms::Firms>()
+        .and_then(|f| f.site(site))
+        .map(|z| z.firm)
+        .ok_or(CommandError::SiteNotFound { site })?;
+    let data = s
+        .app
+        .world
+        .get_resource::<magnat_firms::RndData>()
+        .cloned()
+        .ok_or(CommandError::NoRnd)?;
+    let id = data
+        .tree
+        .id(tech)
+        .ok_or_else(|| CommandError::UnknownTech { key: tech.into() })?;
+    let dzien = t.get() / DOBA;
+    let koszt = data
+        .tree
+        .node(id)
+        .effective_cost_rp(dzien, data.tuning.world_known_discount_bp);
+    let firms = s
+        .app
+        .world
+        .get_resource_mut::<magnat_firms::Firms>()
+        .ok_or(CommandError::NoFirms)?;
+    firms.rnd_mut().projects.insert(
+        key,
+        magnat_firms::Project::new(id, koszt, magnat_core::SimMinute(t.get())),
+    );
+    Ok(())
 }
 
 /// Zamyka wszystkie zakłady gracza. Zobowiązania **zostają**: kredyt nie znika

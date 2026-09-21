@@ -98,6 +98,40 @@ impl<'a> CardCtx<'a> {
         }
     }
 
+    /// Powód decyzji w języku gracza, z **nazwami, których `engine/ui` nie zna**.
+    ///
+    /// `describe` dostaje katalog tekstów i `Locale`, a drzewo technologii mieszka
+    /// w `sim/firms` i w `data/tech/` — ta sama granica, którą `GoodId` ma od M6.
+    /// Nazwę podaje strona, która drzewo **ma**, czyli ta (`FF-10`). Bez tego cztery
+    /// powody R&D pokazywały graczowi numer węzła zamiast jego nazwy.
+    #[must_use]
+    pub fn reason(&self, r: magnat_core::DecisionReason) -> String {
+        let tree = self
+            .session
+            .app
+            .world
+            .get_resource::<magnat_firms::RndData>();
+        let Some(tree) = tree else {
+            return magnat_ui::describe(self.c, self.l, r);
+        };
+        let nazwa = |t: magnat_core::TechId| -> Option<String> {
+            tree.tree
+                .get(t)
+                .map(|n| self.fmt_or(&format!("ui.tech.{}", n.key), "ui.tech.unknown", &[]))
+        };
+        magnat_ui::describe_named(self.c, self.l, r, magnat_ui::Names { tech: Some(&nazwa) })
+    }
+
+    /// Tekst klucza, którego **może nie być w katalogu** — zastępczy, gdy nie ma.
+    #[must_use]
+    pub fn fmt_or(&self, key: &str, fallback: &str, args: &[(&str, &str)]) -> String {
+        if self.c.key(key).is_some() {
+            self.c.fmt_key(self.l, key, args)
+        } else {
+            self.c.fmt_key(self.l, fallback, args)
+        }
+    }
+
     /// Nazwa podmiotu w języku gracza. Nazwy własne (mieszkańcy, firmy, dzielnice)
     /// pochodzą z `data/names/` i **nie są lokalizacją UI** (CLAUDE.md) — ta sama
     /// nazwa pada w obu wersjach językowych.
@@ -129,6 +163,7 @@ impl<'a> CardCtx<'a> {
             Subject::Tender(t) => self.fmt("ui.subject.tender", &[("nr", &t.get().to_string())]),
             Subject::Case(k) => self.fmt("ui.subject.case", &[("nr", &k.get().to_string())]),
             Subject::Permit(p) => self.fmt("ui.subject.permit", &[("nr", &p.get().to_string())]),
+            Subject::Cover(c) => self.fmt("ui.subject.cover", &[("nr", &c.0.to_string())]),
         }
     }
 }
@@ -156,6 +191,7 @@ pub fn resolve(session: &Session, subject: Subject) -> bool {
         Subject::District(d) => city::district_exists(session, d),
         Subject::Vehicle(v) => business::vehicle_exists(session, v),
         Subject::Government => true,
+        Subject::Cover(c) => business::cover_exists(session, c),
         Subject::Contract(_)
         | Subject::Event(_)
         | Subject::Batch(_)
@@ -181,6 +217,7 @@ pub fn card(ctx: &CardCtx<'_>, subject: Subject) -> InspectionCard {
         Subject::District(d) => city::district_card(ctx, d),
         Subject::Government => city::government_card(ctx),
         Subject::Batch(b) => batch::card(ctx, b),
+        Subject::Cover(c) => business::cover_card(ctx, c),
         Subject::Contract(_)
         | Subject::Event(_)
         | Subject::Offer(_)
@@ -237,6 +274,7 @@ pub fn sample_subjects(e: impl Fn(u32) -> magnat_core::Entity) -> Vec<Subject> {
         Subject::Tender(TenderId(13)),
         Subject::Case(CaseId(14)),
         Subject::Permit(PermitId(15)),
+        Subject::Cover(magnat_core::CoverId(16)),
     ];
     debug_assert_eq!(v.len(), SubjectKind::ALL.len());
     v

@@ -272,14 +272,36 @@ pub fn years(c: &Catalog, l: Locale, n: u32) -> String {
     c.plural(l, c.must("ui.unit.years"), u64::from(n))
 }
 
+/// Nazwy, których `engine/ui` nie zna, bo mieszkają w danych symulacji.
+///
+/// Jeden punkt wstrzyknięcia zamiast drugiej kopii zdania (`FF-10`). `describe`
+/// dostaje `&Catalog` i `Locale`, a drzewo technologii mieszka w `sim/firms`
+/// i w `data/tech/` — ta sama granica, którą `GoodId` ma od M6. Zamiast przenosić
+/// drzewo albo składać zdanie drugi raz po stronie `game/`, wołający, który drzewo
+/// **ma**, podaje odwzorowanie identyfikatora na nazwę.
+///
+/// `None` w polu znaczy „nie wiem" i daje etykietę zastępczą — numer węzła. Świat
+/// bez R&D (scenariusze M3–M8) nie płaci za ten mechanizm ani jednej gałęzi.
+#[derive(Clone, Copy, Default)]
+pub struct Names<'a> {
+    /// Nazwa węzła technologii w języku gracza.
+    pub tech: Option<&'a dyn Fn(magnat_core::TechId) -> Option<String>>,
+}
+
 /// Powód decyzji w języku gracza.
 ///
 /// **Ta funkcja jest jedynym miejscem, w którym `DecisionReason` staje się tekstem.**
 /// Karta inspekcji, wydruk osi dnia i konsola deweloperska wołają ją — nie mają jak
 /// się rozjechać, bo nie ma drugiej.
 #[must_use]
-#[allow(clippy::too_many_lines)]
 pub fn describe(c: &Catalog, l: Locale, r: DecisionReason) -> String {
+    describe_named(c, l, r, Names::default())
+}
+
+/// To samo, z nazwami, których interfejs sam nie zna (patrz [`Names`]).
+#[must_use]
+#[allow(clippy::too_many_lines)]
+pub fn describe_named(c: &Catalog, l: Locale, r: DecisionReason, n: Names<'_>) -> String {
     match r {
         DecisionReason::Unspecified => c.fmt_key(l, "ui.reason.Unspecified", &[]),
         DecisionReason::Commitment { kind } => c.fmt_key(
@@ -1336,7 +1358,7 @@ pub fn describe(c: &Catalog, l: Locale, r: DecisionReason) -> String {
             l,
             "ui.reason.ResearchStarted",
             &[
-                ("technologia", &technologia(tech)),
+                ("technologia", &technologia(n, tech)),
                 ("koszt", &format!("{cost_rp}")),
                 ("miesiecy", &months(c, l, u32::from(months_est))),
             ],
@@ -1354,7 +1376,7 @@ pub fn describe(c: &Catalog, l: Locale, r: DecisionReason) -> String {
                 "ui.reason.TechDiscoveredOpen"
             },
             &[
-                ("technologia", &technologia(tech)),
+                ("technologia", &technologia(n, tech)),
                 ("punkty", &format!("{rp_spent}")),
                 ("miesiecy", &self::months(c, l, u32::from(months))),
             ],
@@ -1367,7 +1389,7 @@ pub fn describe(c: &Catalog, l: Locale, r: DecisionReason) -> String {
             l,
             "ui.reason.LicenseSigned",
             &[
-                ("technologia", &technologia(tech)),
+                ("technologia", &technologia(n, tech)),
                 ("oplata", &procent_bp(i32::from(royalty_bp))),
             ],
         ),
@@ -1379,7 +1401,7 @@ pub fn describe(c: &Catalog, l: Locale, r: DecisionReason) -> String {
             l,
             "ui.reason.ProductLaunched",
             &[
-                ("technologia", &technologia(tech)),
+                ("technologia", &technologia(n, tech)),
                 ("sklepow", &format!("{shops}")),
             ],
         ),
@@ -1585,12 +1607,13 @@ fn podmiot(s: magnat_core::Subject) -> String {
 
 /// Technologia jako etykieta w karcie inspekcji.
 ///
-/// `ponytail:` numer węzła zamiast nazwy. Sufit nazwany i taki sam jak przy
-/// [`marka`]: `describe` dostaje katalog tekstów i `Locale`, a drzewo technologii
-/// mieszka w `sim/firms` i w `data/tech/`. Droga wyjścia: panel R&D (M10f) trzyma
-/// drzewo i podmienia numer na nazwę węzła.
-fn technologia(t: magnat_core::TechId) -> String {
-    format!("#{}", t.0)
+/// Nazwa, jeśli wołający ją zna (`Names::tech`, `FF-10`), inaczej numer węzła.
+/// Numer zostaje jako etykieta zastępcza, a nie jako brak: powód bez nazwy
+/// technologii nadal mówi, **której** technologii dotyczy.
+fn technologia(n: Names<'_>, t: magnat_core::TechId) -> String {
+    n.tech
+        .and_then(|f| f(t))
+        .unwrap_or_else(|| format!("#{}", t.0))
 }
 
 /// Marka jako etykieta w karcie inspekcji.

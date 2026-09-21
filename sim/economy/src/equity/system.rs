@@ -250,54 +250,73 @@ fn debiuty(world: &mut World, eq: &mut Equity, day: u32, t: Tick) -> u32 {
     if !day.is_multiple_of(30) {
         return 0;
     }
-    let miesiac = month_of(t);
-    if miesiac < IPO_MIN_MONTHS {
+    if month_of(t) < IPO_MIN_MONTHS {
         return 0;
     }
-    let pe = pe_of(world, eq);
-    let mut wchodza: Vec<(FirmKey, Money)> = Vec::new();
-    {
+    // Firmy, które **chcą** wejść. Warunek wykonalności sprawdza `debut` — jeden
+    // dla AI i dla gracza (`K-11`), bo inaczej byłyby dwie giełdy z dwoma progami.
+    let chetne: Vec<FirmKey> = {
         let Some(firms) = world.get_resource::<Firms>() else {
             return 0;
         };
-        for (key, firm) in firms.iter() {
-            if firm.status != FirmStatus::Active || eq.listing(key).is_some() {
-                continue;
-            }
-            if !invest::growth_minded(firm.strategy) {
-                continue;
-            }
-            let Some(p) = eq.published(key) else {
-                continue;
-            };
-            if p.profit_12m.get() <= 0 {
-                continue;
-            }
-            let cena = Money(value::fundamental(p, pe).get() / i64::from(WHOLE_BP));
-            if cena.get() <= 0 {
-                continue;
-            }
-            wchodza.push((key, cena));
+        firms
+            .iter()
+            .filter(|(_, f)| f.status == FirmStatus::Active && invest::growth_minded(f.strategy))
+            .map(|(k, _)| k)
+            .collect()
+    };
+    let mut ile = 0;
+    for key in chetne {
+        if debut(world, eq, key, t) {
+            ile += 1;
         }
     }
-    let mut ile = 0;
-    for (key, cena) in wchodza {
-        if !eq.list(key, IPO_FLOAT_BP, cena, SimMinute(t.0)) {
-            continue;
-        }
-        ile += 1;
-        // Wolny obrót powstaje z pakietu największego właściciela — to on wystawia
-        // zlecenie sprzedaży na pierwszą sesję.
-        let (wlasciciel, ma) = {
-            let Some(firms) = world.get_resource::<Firms>() else {
-                continue;
-            };
-            let Some(firm) = firms.get(key) else { continue };
-            match corp::preemptive_holder(firm) {
-                Some(o) => (o, super::stake_of(firm, o)),
-                None => continue,
-            }
-        };
+    ile
+}
+
+/// Wprowadza **jedną** firmę na giełdę. `false` = nie spełnia warunku.
+///
+/// Wejście dla obu stron: raz na miesiąc woła je AI dla firm o kursie na wzrost,
+/// a komenda gracza — dla jego własnej (M10g WP10.21). Druga ścieżka debiutu
+/// rozjechałaby się z pierwszą przy pierwszej zmianie progu, a próg jest tu istotą:
+/// firma musi mieć **opublikowany dodatni wynik**, inaczej nie ma czego wyceniać.
+///
+/// Debiut jest ofertą **dotychczasowych właścicieli**, nie emisją: [`IPO_FLOAT_BP`]
+/// udziału idzie na rynek, a pieniądz do nich. Emisja — czyli pieniądz do firmy —
+/// jest osobnym mechanizmem (WP10.11), bo to są dwie różne decyzje o dwóch różnych
+/// skutkach dla akcjonariatu.
+pub fn debut(world: &mut World, eq: &mut Equity, key: FirmKey, t: Tick) -> bool {
+    if eq.listing(key).is_some() {
+        return false;
+    }
+    if world
+        .get_resource::<Firms>()
+        .and_then(|f| f.get(key))
+        .is_none_or(|f| f.status != FirmStatus::Active)
+    {
+        return false;
+    }
+    let pe = pe_of(world, eq);
+    let Some(p) = eq.published(key) else {
+        return false;
+    };
+    if p.profit_12m.get() <= 0 {
+        return false;
+    }
+    let cena = Money(value::fundamental(p, pe).get() / i64::from(WHOLE_BP));
+    if cena.get() <= 0 {
+        return false;
+    }
+    if !eq.list(key, IPO_FLOAT_BP, cena, SimMinute(t.0)) {
+        return false;
+    }
+    // Wolny obrót powstaje z pakietu największego właściciela — to on wystawia
+    // zlecenie sprzedaży na pierwszą sesję.
+    let sprzedajacy = world
+        .get_resource::<Firms>()
+        .and_then(|f| f.get(key))
+        .and_then(|firm| corp::preemptive_holder(firm).map(|o| (o, super::stake_of(firm, o))));
+    if let Some((wlasciciel, ma)) = sprzedajacy {
         let bp = IPO_FLOAT_BP.min(ma);
         if bp > 0 {
             eq.place_order(
@@ -309,18 +328,18 @@ fn debiuty(world: &mut World, eq: &mut Equity, day: u32, t: Tick) -> u32 {
                 SimMinute(t.0 + 60 * 24 * 7),
             );
         }
-        if let Some(firms) = world.get_resource_mut::<Firms>() {
-            firms.log(
-                key,
-                t,
-                DecisionReason::StockListed {
-                    firm: firm_id(key),
-                    price: cena,
-                },
-            );
-        }
     }
-    ile
+    if let Some(firms) = world.get_resource_mut::<Firms>() {
+        firms.log(
+            key,
+            t,
+            DecisionReason::StockListed {
+                firm: firm_id(key),
+                price: cena,
+            },
+        );
+    }
+    true
 }
 
 fn pe_of(world: &World, eq: &Equity) -> u32 {

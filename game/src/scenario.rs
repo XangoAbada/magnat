@@ -56,6 +56,14 @@ pub enum Goal {
     SiteSolvent { ordinal: u32, for_days: u32 },
     /// Majątek: gotówka gospodarstwa plus kapitał własny zakładów.
     NetWorth { min: i64 },
+    /// Firma gracza wprowadziła na rynek produkt z własnego odkrycia (`DK-6`).
+    ///
+    /// Wariant dopisany dopiero w `M10g`, razem z mechaniką: cel, którego nikt nigdy
+    /// nie zgłosi, przechodzi każdy test i wygląda tak samo jak działający (`K-67`).
+    /// **Liczą się odkrycia firmy, nie towary na półce**: towar odblokowany cudzym
+    /// patentem trafia do sprzedaży tą samą drogą, a scenariusz pyta o to, co gracz
+    /// wymyślił, a nie o to, czym handluje.
+    ProductLaunched { min: u32 },
 }
 
 impl Goal {
@@ -68,6 +76,7 @@ impl Goal {
             Goal::Employment { .. } => "employment",
             Goal::SiteSolvent { .. } => "site_solvent",
             Goal::NetWorth { .. } => "net_worth",
+            Goal::ProductLaunched { .. } => "product_launched",
         }
     }
 
@@ -122,6 +131,9 @@ impl Goal {
                 }
             }
             Goal::NetWorth { min } => ulamek(majatek(session, h), *min),
+            Goal::ProductLaunched { min } => {
+                ulamek(i64::from(odkrycia(session, h)), i64::from(*min))
+            }
         }
     }
 
@@ -442,6 +454,21 @@ pub fn apply_patches(session: &mut Session, patches: &[WorldPatch]) {
             }
         }
     }
+}
+
+/// Ile technologii firma gracza **odkryła sama** — licznik celu `ProductLaunched`.
+///
+/// Odkryte, a nie kupione licencją: licencja daje prawo do cudzego wynalazku
+/// i nie wchodzi do `RndState::known`, więc ta liczba mówi dokładnie to, o co
+/// pyta cel scenariusza.
+fn odkrycia(session: &Session, h: &Holdings) -> u32 {
+    let Some(firms) = session.app.world.get_resource::<magnat_firms::Firms>() else {
+        return 0;
+    };
+    h.firms
+        .iter()
+        .map(|k| u32::try_from(firms.rnd().known.get(k).map_or(0, Vec::len)).unwrap_or(0))
+        .sum()
 }
 
 /// Majątek gracza: gotówka gospodarstwa plus kapitał własny zakładów.

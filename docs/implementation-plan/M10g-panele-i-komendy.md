@@ -192,3 +192,56 @@ przebiegu pomiarowego" w `M10f-kroniki-i-domkniecie.md`.
 | GF-8 | **Bramka 7 Etapu 10 jest po `D9` zielona na mieście 4 km (704 ‰), a na 8 km wychodzi 872 ‰ — 22 ‰ nad krawędzią pasma 550–850.** Nowa bramka 10 (Gini dochodu) daje 613 i 507 ‰ wobec 250–450 | Rozdzielenie bramki zadziałało: liczba, która świeciła na czerwono od pierwszego pomiaru i nie wiadomo było, czy z winy generatora, czy progu, ma teraz dwa osobne pomiary i dwa osobne pytania. Otwarte zostaje, czy górna krawędź 850 ‰ jest za ciasna dla większych miast — to jest pytanie o **pomiar na pełnym zakresie rozmiarów** (M10 §7.3), nie o próg z sufitu |
 | GF-5 | **Karencja zdarzenia wiąże powyżej 556 zakładów**, więc metropolia ma pożarów na zakład czterokrotnie mniej niż miasto 4 km. `cooldown_days` jest przerwą definicji, nie podmiotu | Nie jest to usterka i nie należy do M10g — jest to **własność modelu, której nikt nie zapisał**, a która zmienia wycenę polisy w dużym mieście. Adres, gdyby miała się zmienić: karencja per podmiot zamiast per definicja, w `sim/events` (crate M8) |
 | GF-6 | **`BRAND_SLOTS` zostaje 16 i decyzja `D4` fazy jest zamknięta.** Mediana liczby marek u mieszkańca, który zna jakąkolwiek, wynosi **6** przy sufcie 16; próg podniesienia to 13 | Pomiar, na który `D4` czekała od M10b. Panel marketingu nie musi zakładać 24 slotów |
+
+---
+
+## Wyniki przebiegu pomiarowego
+
+Liczby z domknięcia podfazy. Przyrządem jest ten sam scenariusz, który mierzył
+M10f — `m7miasto` na mieście 4 km i `dry-run --years 30` — żeby porównanie
+było porównaniem, a nie dwoma różnymi światami.
+
+| Co | Przed M10g | Po M10g | Uwaga |
+|---|---|---|---|
+| Koszt 2000 kampanii na dobę gry (`FF-8`, budżet 225 ms) | **12 514 ms** | **50 ms** | `GF-1` zamknięte; bramka `dwa_tysiace_kampanii_miesci_sie_w_budzecie_ticku` przeszła z czerwonej na zieloną |
+| — w tym `InStorePromo`, 250 kampanii | 6 079 ms | **13 ms** | jeden przebieg po mieście dla wszystkich promocji, nie jeden na kampanię |
+| — w tym `Pr`, 250 kampanii | 6 479 ms | **22 ms** | j.w., plus koniec klonowania tabeli pamięci marki na kampanię |
+| Kanał ulotkowy z zakładu spoza katalogu miejsc | 0 ekspozycji | dostarcza | `GF-2`; test `ulotka_dociera_z_zakladu_spoza_katalogu_miejsc` |
+| Bramka 8 Etapu 10 (koszyk do dochodu, 250–550 ‰) | **0 ‰** czerwona | **411 ‰** zielona | skutek uboczny naprawy licytacji płacowej |
+| Bramka 10 Etapu 10 (Gini dochodu, 250–450 ‰) | **613 ‰** czerwona | **348 ‰** zielona | j.w. |
+| Bramka 7 Etapu 10 (Gini majątku, 550–850 ‰) | 704 ‰ zielona | **665 ‰** zielona | bez zmiany werdyktu |
+| Bramka 4 Etapu 10 (bezrobocie, 30–150 ‰) | **0 ‰** czerwona | **0 ‰** czerwona | `GF-7` **nie domknięte** — powód niżej, `GG-3` |
+| Suma pieniądza po 30 latach historii „na sucho" | zachowana | zachowana | K1, tolerancja 0 groszy; po drodze **złamana i naprawiona**, patrz `GG-2` |
+| Kliknięcie w panel wydaje komendę (M9e WP10) | 9 paneli | **11 paneli** | marka i badania w sweepie dobowym, giełda we własnym teście (`GG-7`) |
+
+Panele i karty mierzy kompilator i testy, nie zegar: `PanelId::is_reserved`
+zwraca od tej chwili `false` dla wszystkiego, `Subject` ma siedemnaście
+wariantów i tyle samo ramion w `game::inspect::card`, a zbiory kluczy
+`pl.ron` i `en.ron` są identyczne (`klucze_obu_jezykow_sa_identyczne`).
+
+### Czego ten przebieg nie zmierzył
+
+`FF-29` — konsument `PayrollOutbox` — **nie powstał w tej podfazie i nie miał
+powstać**: `GF-3` nazywa go własnym pakietem, bo przestawia kalibrację kopert,
+kredytu, CPI i bramek G1–G3 naraz. Trzy liczby, które na nim stoją (gęstość
+badaczy, liczba debiutów giełdowych, budżety reklamowe firm), zostają więc
+nieporuszone, a bramka `G12` zostaje **doradcza** zgodnie z `GF-4`. Panele tego
+nie zasłaniają i nie miały zasłaniać: pokazują to, co jest, a jeśli firm nie stać
+na badania, panel R&D pokaże pusty projekt i będzie miał rację.
+
+---
+
+## Zmiany wpisane po M10g
+
+Zgodnie z `K-18`. Wpisane jest **tylko to, co wiadomo na pewno** po zamknięciu
+podfazy. Gwiazdka = zmiana zakresu albo kryterium.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| GG-1 ★ | **Katalog miejsc nie odbudowuje się po założeniu zakładu — i to jest dług szerszy niż reklama.** `PlaceTable` powstaje **raz**, przy zaludnianiu miasta, z zakładów generatora (`sim/world::population::katalog_miejsc`). Zakład założony w trakcie gry — przez `firmlife::found`, przez `OpenSite` gracza — nigdy do niego nie trafia, więc `PlaceCatalog::coord_of(Site)` odpowiada dla niego `None` na zawsze | `GF-2` naprawiono **w miejscu objawu**: punkt nadania ulotki ma teraz trzy próby (zakład, jego budynek, środek ciężkości domów dzielnicy) i test, który tego pilnuje. Przyczyna zostaje: każde pytanie o położenie nowego zakładu dostaje `None`. Adres naprawy: przebudowa `PlaceTable` przy zmianie rejestru zakładów, razem z indeksem, który z niej korzysta — **własny pakiet z własnym przebiegiem**, nie dopisek do kanału reklamowego. Sufit nazwany `ponytail:` w `sim/media::punkt_nadania`. **Czego nie zmierzono:** histogram kanałów po trzystu dobach, czyli dokładnie ten pomiar, którym `GF-2` została znaleziona. Dowodem naprawy jest test stawiający ten sam układ (zakład spoza katalogu, mieszkańcy z domami w katalogu) i przebieg siedemdziesięciu dób, w którym kanał dostarcza 251 940 ekspozycji — ale to jest przebieg **sprzed** progu, na którym objaw się pojawiał |
+| GG-2 ★ | **Licytacja płacowa w makrze nie miała sufitu i nikt tego nie widział przez dwie podfazy.** `wage_escalation_step` **nigdy nie zwraca zera** (M7: „krok zerowy zatrzymałby licytację przy stawkach groszowych"), a jedynym ogranicznikiem był `sufit = stawka × 3` — liczony z **dzisiejszej** stawki, więc przesuwający się razem z nią. Firma z trwale otwartym wakatem podnosiła płacę o dwa procent na dobę bez końca | Do M10g nie było tego widać, bo bez odejść dobrowolnych każdy wakat kiedyś się zamykał i licytacja milkła sama. Pierwsza próba domknięcia `GF-7` (odejścia w fazie 2) odsłoniła to natychmiast: po trzydziestu latach firmy pożyczały na listę płac **stukrotność** obrotu miasta, a suma pieniądza w mieście rosła z 40 mld do 4,5 bln groszy. **Naprawa ma dwie części, obie odtwarzają regułę mezo:** stawkę rusza dopiero **nieudana** rekrutacja (mezo: `search.escalate_after_days`), a widełki są zakotwiczone w płacy odniesienia z danych, nie w dzisiejszej stawce (mezo: widełki roli z `data/jobs/roles.ron`). Skutek uboczny jest duży i dodatni: bramki 8 i 10 Etapu 10 zzieleniały |
+| GG-3 ★ | **`GF-7` nie domyka się rotacją i przyczyna jest inna, niż zakładał wpis.** Odejścia dobrowolne weszły do fazy 2 kroku makro tą samą liczbą, którą liczy je mezo (`hr.quit_base_per_10k`, `K-50`) — i bezrobocie dalej wynosi **0 ‰**. Powód jest arytmetyczny: miasto 4 km ma **24 645 etatów na ~20 tys. osób w wieku produkcyjnym**, więc popyt na pracę trwale przewyższa podaż i pula pustoszeje w każdym kroku niezależnie od tego, ilu ludzi z niej odejdzie. Przy rotacji 7 % rocznie zapas bezrobotnych w równowadze to ułamek promila, a nie 30–150 ‰ | Mezo pokazuje w tym samym mieście 3–12 %, bo **dopasowuje po rolach**: kandydat ma umiejętność, wykształcenie i próg płacowy, więc część ludzi nie pasuje do żadnego wakatu. Makro traktuje pracę jako jednorodną — `MacroCell` ma tablice `labor` i `skill_sum` per rola, ale faza 2 ich **nie czyta** i zsypuje wszystkich do jednej puli dzielnicowej. To jest prawdziwy adres `GF-7` i jest to **zmiana modelu fazy 2**, nie parametr: rekrutacja per rola, z progiem umiejętności. Właściciel: M10a (§5.7), wykonanie poza M10 — bramka 4 zostaje czerwona z **nazwaną** przyczyną, zamiast czerwonej z nieznaną |
+| GG-6 ★ | **Panel giełdy dostał piątą komendę, której plan nie przewidywał: „wprowadź moją spółkę na giełdę".** Kryterium WP10.21 zaczyna się od „firma gracza **debiutuje** na giełdzie", a `WP10.21` wymieniał jako komendę wyłącznie „złóż zlecenie" — bo `FF-14` zakładał, że kanał symulacji jest otwarty i wystarczy go podłączyć. Debiut był **decyzją firmy AI**: prywatna `fn debiuty` przechodziła raz na miesiąc po firmach o kursie na wzrost i wprowadzała je same | Gracz nie miał jak wejść na giełdę i nie miałby nigdy, bo jego firma nie ma `FirmStrategy` ustawianej przez tier taktyczny. `equity::system::debut` jest od tej chwili **publiczna i jednofirmowa**, a `debiuty` woła ją w pętli — jeden próg dla AI i dla gracza (`K-11`), zamiast dwóch giełd. Próg zostaje ten sam i twardy: **opublikowany dodatni wynik**, czyli najwcześniej doba 75 |
+| GG-7 | **Test „z każdego panelu operacyjnego da się wydać komendę" (M9e WP10) pomija giełdę i ma na to powód wpisany w kod.** W dobie pierwszej nie jest notowana ani jedna spółka i notowana być nie może; panel wystawia wtedy jeden przycisk, wygaszony z nazwanym powodem | To nie jest osłabienie kryterium, tylko jego doprecyzowanie: kryterium mówi o panelu, a nie o świecie, w którym panel akurat stoi. Giełda ma własny test (`panel_gieldy_sklada_zlecenie_gdy_jest_co_kupowac`), który **stawia notowanie ścieżką symulacji** i sprawdza, że kliknięcie w panel składa zlecenie, a zlecenie trafia do arkusza. Przewijanie świata o siedemdziesiąt pięć dób mierzyłoby przy okazji rentowność firm w pierwszym kwartale i pękałoby z powodu, który z panelem nie ma nic wspólnego |
+| GG-4 | **Panel dokłada się czterema zmianami i to się sprawdziło co do liczby.** Trzy panele (`Brand`, `Rnd`, `Stock`) weszły przez `PanelRegistry::default()`, wariant `PanelModel`, plik w `game/src/panels/` i klucz tytułu — bez ani jednej zmiany w `M9e`. `PanelId::is_reserved` zwraca od tej chwili `false` dla wszystkiego i **tak ma zostać**: identyfikator bez ekranu jest wariantem bez skutku (`K-67`) | Wzorzec z `DI-6` i `DK-3` opisywał drogę, której nikt jeszcze nie przeszedł. Przeszedł ją M10g trzy razy i za każdym razem kosztowała cztery zmiany. Uwaga dla M12 (panele z modów): jedyną rzeczą, której mod nie zrobi tą drogą, jest wariant `PanelModel` — enum jest w `game/` i mod do niego nie dopisze |
+| GG-5 | **Karty głębi nie dostały wariantów `Subject` i to było właściwe.** Tytuł medialny, związek zawodowy, zmowa i relacja z dostawcą weszły jako **sekcje** kart zakładu i firmy (`FF-4`, `FF-22`); własny podmiot dostała wyłącznie polisa (`FF-15`), bo jako jedyna nie jest stanem czegoś, co kartę już ma | Kryterium było jedno: czy gracz zapyta „pokaż mi ten byt", czy „co się dzieje w tej hali". Sufit siedmiu zakładek (`MAX_CARD_TABS`) nie drgnął — karta sklepu ma pięć, karta firmy dwie |

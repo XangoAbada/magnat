@@ -23,8 +23,29 @@
 //! wszyscy, z drugiego końca miasta prawie nikt. Dzielnice obchodzi się w kolejności
 //! rosnącego czasu dojazdu, więc „najpierw swoi" zostaje — ale jako preferencja,
 //! a nie zakaz.
+//!
+//! # Skąd w ogóle bierze się bezrobocie (`GF-7`)
+//!
+//! Otwarcie puli miało cenę, której nie zapisano: **granica dzielnicy była jedynym
+//! tarciem, jakie ten model miał**. Kiedy zniknęła, firmy zatrudniły wszystkich
+//! i bramka 4 Etapu 10 pokazała **0 ‰ bezrobocia wobec pasma 30–150**, a `G12`
+//! zobaczyła to samo jako 863 ‰ odchylenia od mezo.
+//!
+//! Brakującym źródłem są **odejścia dobrowolne**. W mezo prowadzi je
+//! `hr::turnover` na liczbie `hr.quit_base_per_10k` z `data/tuning/labor.ron`
+//! (2 na dziesięć tysięcy obsady na dobę, czyli ~7 % rotacji rocznej) i to ona
+//! utrzymuje bezrobocie na dodatnim poziomie równowagi. Makro liczy je **tą samą
+//! liczbą** (`K-50`: jedna reguła, jedno źródło) i przed rekrutacją, nie po —
+//! odchodzący wracają do puli tej samej doby, więc pieniądz ani ludzie nie znikają.
+//!
+//! Zaokrąglenie jest **losowe**, a nie w dół: firma o stu etatach traci
+//! 100 × 2 / 10 000 = 0,02 etatu na dobę, a obcięcie do zera znaczyłoby, że
+//! w mieście małych firm nie odchodzi nikt. Rzut idzie strumieniem
+//! `StreamId::MacroStep` z kluczem `(indeks firmy, tick)` — numer zarezerwowany
+//! w `K-78` właśnie na „losowość wewnątrz kroku makro" i tu dostaje pierwszego
+//! użytkownika.
 
-use magnat_core::Money;
+use magnat_core::{rng, Money, StreamId};
 use magnat_economy::kernel;
 use magnat_firms::hr::productivity::FULL_TIME;
 
@@ -43,6 +64,9 @@ pub fn phase(st: &mut MacroState, p: &MacroParams) {
             *slot = slot.saturating_add(c.unemployed);
         }
     }
+
+    // Odejścia dobrowolne — jedyne źródło bezrobocia poza redukcją etatów.
+    odejscia(st, p, &mut pula);
 
     for f in &mut st.firms {
         // Firma bez kapitału nie licytuje i nie zatrudnia. To nie jest upadłość —
@@ -68,26 +92,11 @@ pub fn phase(st: &mut MacroState, p: &MacroParams) {
             // co `shortage_index` rynku pracy mezo: „ile z tego, czego chcę, stoi puste".
             let niedobor =
                 u16::try_from(u64::from(wakaty) * 1_000 / u64::from(etaty)).unwrap_or(1_000);
-            let sufit = Money(stawka.get() * 3);
-            let bid = kernel::wage_bid(
-                stawka,
-                (Money(stawka.get() / 2), sufit),
-                niedobor,
-                p.aggression,
-                // Zapas marży: makro nie zna rachunku wyniku zakładu, więc podaje
-                // widełki z danych. To jest ten sam hak zerowy, którym M7b stał
-                // do M7e — i tu zostaje, bo `SitePnlMonth` jest wielkością mezo.
-                p.margin_bp.1,
-                &p.wage,
-            );
-            let cel = bid.wage.get();
-            let cap = kernel::apply_bp(stawka, WAGE_STEP_CAP_BP).get();
-            let nowa = cel.min(stawka.get().saturating_add(cap.max(1)));
-
             let mozliwe =
                 u32::from(p.hire_speed_permille) * u32::from(p.days_per_step.max(1)) * etaty
                     / 1_000;
-            let mut brakuje = wakaty.min(mozliwe.max(1));
+            let chciane = wakaty.min(mozliwe.max(1));
+            let mut brakuje = chciane;
             // Dzielnice w kolejności rosnącego czasu dojazdu; przy remisie niższy
             // numer, bo kolejność rekrutacji wchodzi do stanu (00 §3.2).
             let mut zrodla: Vec<(u16, usize)> = (0..dzielnice)
@@ -106,6 +115,38 @@ pub fn phase(st: &mut MacroState, p: &MacroParams) {
                     brakuje -= chetni;
                 }
             }
+
+            // **Stawkę rusza dopiero nieudana rekrutacja, a widełki kotwiczą
+            // w płacy odniesienia** — dwie połowy jednej naprawy (`GG-2`).
+            //
+            // Obie odtwarzają regułę mezo: tam firma podnosi ofertę, kiedy nikt
+            // nie przyszedł (`search.escalate_after_days`), a przedział bierze
+            // z widełek roli w `data/jobs/roles.ron`, czyli z liczby, która nie
+            // zależy od tego, ile firma płaci dziś. Tutaj licytacja szła
+            // w **każdym** kroku z wakatem, `wage_escalation_step` nigdy nie
+            // zwraca zera, a sufit `stawka × 3` przesuwał się razem ze stawką —
+            // czyli nie był sufitem. Bez odejść dobrowolnych nie było tego widać,
+            // bo każdy wakat kiedyś się zamykał; z odejściami wakat jest wieczny
+            // i płace rosły o dwa procent na dobę przez trzydzieści lat, aż firmy
+            // pożyczały na listę płac stokrotność obrotu miasta.
+            let nowa = if brakuje > 0 {
+                let baza = p.default_wage_month.get().max(1);
+                let bid = kernel::wage_bid(
+                    stawka,
+                    (Money(baza / 2), Money(baza * 3)),
+                    niedobor,
+                    p.aggression,
+                    // Zapas marży: makro nie zna rachunku wyniku zakładu, więc podaje
+                    // widełki z danych. To jest ten sam hak zerowy, którym M7b stał
+                    // do M7e — i tu zostaje, bo `SitePnlMonth` jest wielkością mezo.
+                    p.margin_bp.1,
+                    &p.wage,
+                );
+                let cap = kernel::apply_bp(stawka, WAGE_STEP_CAP_BP).get();
+                bid.wage.get().min(stawka.get().saturating_add(cap.max(1)))
+            } else {
+                stawka.get()
+            };
             f.wage_bill = Money(nowa.saturating_mul(i64::from(f.employees)));
         } else if f.employees > etaty {
             // Redukcja do zamówionych etatów. Zwolnieni wracają do puli **tej samej
@@ -119,6 +160,51 @@ pub fn phase(st: &mut MacroState, p: &MacroParams) {
     }
 
     rozlej_zatrudnienie(st, &pula);
+}
+
+/// Odejścia dobrowolne: ludzie wracają do puli swojej **dzielnicy pracy**.
+///
+/// Dzielnicy zakładu, a nie zamieszkania, i to jest świadome uproszczenie: makro nie
+/// wie, skąd dojeżdżał ten konkretny człowiek, bo pula jest liczbą, a nie listą.
+/// `ponytail:` sufit nazwany — ścieżka wyjścia to macierz „kto skąd dojeżdża"
+/// per firma, czyli stan rzędu dzielnic × firm, którego nikt dziś nie potrzebuje.
+fn odejscia(st: &mut MacroState, p: &MacroParams, pula: &mut [u32]) {
+    if p.quit_per_10k_day == 0 {
+        return;
+    }
+    let dni = u64::from(p.days_per_step.max(1));
+    let seed = p.seed;
+    let tick = st.tick;
+    for (i, f) in st.firms.iter_mut().enumerate() {
+        if f.employees == 0 {
+            continue;
+        }
+        let x = u64::from(f.employees) * u64::from(p.quit_per_10k_day) * dni;
+        let mut r = rng(
+            seed,
+            StreamId::MacroStep,
+            u32::try_from(i).unwrap_or(0),
+            tick,
+        );
+        // Zaokrąglenie losowe: reszta jest szansą na jeszcze jedno odejście.
+        let ilu = u32::try_from(x / 10_000).unwrap_or(0)
+            + u32::from(r.gen_range_u32(10_000) < u32::try_from(x % 10_000).unwrap_or(0));
+        let ilu = ilu.min(f.employees);
+        if ilu == 0 {
+            continue;
+        }
+        // **Rachunek płac schodzi razem z obsadą.** Bez tego `stawka` liczona niżej
+        // jako `wage_bill / employees` rośnie przy każdym odejściu, licytacja stawia
+        // na zawyżonej podstawie i lista płac pęcznieje wykładniczo — a suma
+        // pieniądza w mieście przestaje się zgadzać (K1, tolerancja 0 groszy).
+        // Odejście pracownika zmienia **liczbę** pensji, nie ich wysokość.
+        let stawka = f.wage_bill.get() / i64::from(f.employees);
+        f.employees -= ilu;
+        f.wage_bill = Money(stawka.saturating_mul(i64::from(f.employees)));
+        if let Some(slot) = pula.get_mut(usize::from(f.district.0)) {
+            *slot = slot.saturating_add(ilu);
+        }
+    }
 }
 
 /// Ilu z dziesięciu tysięcy jest gotowych dojeżdżać tyle minut.

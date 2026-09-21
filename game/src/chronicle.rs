@@ -538,6 +538,11 @@ const fn akcja_key(cmd: &crate::PlayerCommand) -> &'static str {
         C::SetHeir { .. } => "set_heir",
         C::Succeed { .. } => "succeed",
         C::ContinueAsNewCitizen { .. } => "new_dynasty",
+        C::OpenCampaign { .. } => "open_campaign",
+        C::StartResearch { .. } => "start_research",
+        C::PlaceStockOrder { .. } => "place_stock_order",
+        C::AnswerUnion { .. } => "answer_union",
+        C::GoPublic { .. } => "go_public",
     }
 }
 
