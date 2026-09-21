@@ -199,6 +199,21 @@ fn hazardy(world: &mut World, day: u64, hooks: &mut dyn InheritanceHook, raport:
                 do_szkoly(world, e);
             } else {
                 ze_szkoly(world, e, day, &tabela);
+                // Wyjście ze szkoły jest w dzisiejszych danych **osiemnastką**
+                // (`school_end == ages.adult`), więc gospodarstwo traci dziecko,
+                // a zyskuje dorosłego. Bez przeliczenia składu skala ekwiwalentna
+                // (`R2-WP11`) i typ gospodarstwa czekałyby na najbliższą zmianę
+                // składu, czyli do wyprowadzki z gniazda (`leave_nest`).
+                if let Some(hh_idx) = world.get::<Identity>(e).map(|i| i.household) {
+                    if let Some(hh_e) = encja_gospodarstwa(world, hh_idx) {
+                        if let Some(mut hh) = world.get::<Household>(hh_e).copied() {
+                            przeklasyfikuj(world, hh_idx, &mut hh, day);
+                            if let Some(slot) = world.get_mut::<Household>(hh_e) {
+                                *slot = hh;
+                            }
+                        }
+                    }
+                }
                 raport.reasons.push((
                     e.index(),
                     DecisionReason::LifeEvent {
@@ -625,11 +640,30 @@ fn smierc(
     let mut powody: Vec<(u32, DecisionReason)> = Vec::new();
     let spadkobiercy = spadkobiercy(world, e);
     let majatek = world.get::<Wealth>(e).copied().unwrap_or_default();
-    let suma = majatek
+    let mut suma = majatek
         .cash
         .checked_add(majatek.personal_assets)
         .unwrap_or(majatek.cash);
 
+    // Majątek gospodarstwa wchodzi do masy spadkowej, kiedy odchodzi **ostatni**
+    // domownik (`R2-WP8`, `K-61`). Wcześniej gospodarstwo zostawało z resztą
+    // składu i saldo należy do niego, nie do zmarłego.
+    //
+    // Dlaczego tutaj, a nie w `rozwiaz_gospodarstwo`: to tam gospodarstwo znika,
+    // ale `smierc` woła przedtem `usun_relacje`, więc pod tamtym adresem lista
+    // spadkobierców jest już z definicji pusta i cały majątek szedłby na konto
+    // techniczne. Reguła podziału jest jedna i stoi w jednym miejscu.
+    if let Some(sakiewka) = majatek_ostatniego(world, e) {
+        suma = suma.checked_add(sakiewka.total()).unwrap_or(suma);
+    }
+
+    // Zobowiązania masy schodzą **przed** podziałem (`R2-WP10`): spadkobierca dziedziczy
+    // to, co zostało po wierzycielach, a nie kwotę brutto. Hak, który coś tu zabierze,
+    // wpłaca to w tej samej operacji — inaczej pieniądz zniknąłby ze świata.
+    let obciazenie = hooks.estate_charge(world, CitizenId(e), suma);
+    let suma = Money((suma.get() - obciazenie.get().max(0)).max(0));
+
+    let mut lista: Vec<(CitizenId, u16)> = Vec::with_capacity(spadkobiercy.len());
     if spadkobiercy.is_empty() {
         world.resource_mut::<Population>().escheat = world
             .resource::<Population>()
@@ -640,7 +674,6 @@ fn smierc(
         let wagi: Vec<u64> = vec![1; spadkobiercy.len()];
         let udzialy = magnat_core::split_proportional(suma, &wagi);
         let permil = (1000 / spadkobiercy.len()) as u16;
-        let mut lista: Vec<(CitizenId, u16)> = Vec::with_capacity(spadkobiercy.len());
         for (i, h) in spadkobiercy.iter().enumerate() {
             if let Some(w) = world.get_mut::<Wealth>(*h) {
                 w.cash = w.cash.checked_add(udzialy[i]).unwrap_or(w.cash);
@@ -659,8 +692,11 @@ fn smierc(
                 },
             ));
         }
-        hooks.on_inheritance(CitizenId(e), &lista, cmd);
     }
+    // **Zawsze**, także z pustą listą (`R2-WP10`). Do R2 hak stał w gałęzi „są
+    // spadkobiercy", więc udziały w firmie po bezdzietnym właścicielu zostawały
+    // przy nieżyjącym mieszkańcu i nie miał ich kto przejąć.
+    hooks.on_inheritance(world, CitizenId(e), &lista, cmd);
     if let Some(w) = world.get_mut::<Wealth>(e) {
         w.cash = Money::ZERO;
         w.personal_assets = Money::ZERO;
@@ -730,7 +766,9 @@ fn ustal_opiekuna(
     let mut niedolezni: Vec<Entity> = Vec::new();
     for m in sklad.iter() {
         let Some(c) = encja(world, *m) else { continue };
-        let wiek = world.get::<Identity>(c).map_or(0, |i| i.age_years(day as i32));
+        let wiek = world
+            .get::<Identity>(c)
+            .map_or(0, |i| i.age_years(day as i32));
         if wiek < i32::from(ages.adult) {
             dzieci.push(c);
             continue;
@@ -811,7 +849,9 @@ fn kandydat_na_opiekuna(
             let Some(c) = encja(world, w.other) else {
                 continue;
             };
-            let wiek = world.get::<Identity>(c).map_or(0, |i| i.age_years(day as i32));
+            let wiek = world
+                .get::<Identity>(c)
+                .map_or(0, |i| i.age_years(day as i32));
             if wiek < adult_age {
                 continue;
             }
@@ -861,6 +901,21 @@ fn sasiad_z_dzielnicy(
         }
     }
     None
+}
+
+/// Płynny majątek gospodarstwa, jeśli `e` jest jego **ostatnim** członkiem.
+///
+/// Zdejmuje go z gospodarstwa w tej samej operacji, bo dwa źródła tej samej kwoty
+/// przez jeden krok symulacji znaczyłyby pieniądz policzony dwa razy.
+fn majatek_ostatniego(world: &mut World, e: Entity) -> Option<crate::household::Purse> {
+    let hh_idx = world.get::<Identity>(e)?.household;
+    let hh_e = encja_gospodarstwa(world, hh_idx)?;
+    let hh = world.get::<Household>(hh_e)?;
+    if hh.size != 1 {
+        return None;
+    }
+    let sakiewka = world.get_mut::<Household>(hh_e)?.take_purse();
+    (!sakiewka.is_empty()).then_some(sakiewka)
 }
 
 /// Spadkobiercy: współmałżonek, dalej dzieci po równo (§5.6).
@@ -978,7 +1033,24 @@ pub fn opusc_gospodarstwo(
 /// kątem u innego i nigdy pustostanu nie wzięło. Bez tego warunku ten sam lokal wracałby
 /// do puli dwa razy i miasto miałoby mieszkania, których nie ma — a regulator napływu
 /// liczy `min(wakaty, pustostany)`.
+///
+/// **Reszta płynnego majątku idzie na konto techniczne** (`Population::escheat`,
+/// `R2-WP8`, `K-61`). Normalnie jest zerem, bo pieniądz zdejmuje przedtem ten, kto
+/// odchodzi: masa spadkowa przy zgonie, udział przy wyprowadzce, połowa przy rozstaniu.
+/// Zostaje przy wyjeździe z miasta ostatniego domownika — i wtedy ma mieć adres,
+/// a nie znikać razem z encją.
 fn rozwiaz_gospodarstwo(world: &mut World, hh_e: Entity, hh: &Household, cmd: &mut CommandBuffer) {
+    let reszta = world
+        .get_mut::<Household>(hh_e)
+        .map(Household::take_purse)
+        .unwrap_or_default();
+    if !reszta.is_empty() {
+        let p = world.resource_mut::<Population>();
+        p.escheat = p
+            .escheat
+            .checked_add(reszta.total())
+            .unwrap_or(Money(i64::MAX));
+    }
     if hh.has_home() && !hh.is_overcrowded() {
         world
             .resource_mut::<crate::migration::Vacancies>()

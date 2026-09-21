@@ -446,6 +446,10 @@ pub struct FulfilRequest<'a> {
     /// **na mieszkańca na dobę**, więc bez liczebności nie da się go przeliczyć
     /// na sztuki.
     pub household_size: u8,
+    /// Ilu z nich nie ukończyło `ages.adult` (`R2-WP11`). Skala ekwiwalentna,
+    /// którą M5 z tego liczy, jest **daną gospodarki** (`envelopes.ron`), więc
+    /// `sim/agents` podaje sam skład, a nie wynik.
+    pub household_children: u8,
     /// Marki, które kupujący zna (M10b §5.1) — ten sam widok, którym liczył się
     /// wybór sklepu. Gdyby próg akceptacji liczył się bez niego, mieszkaniec
     /// wybierałby sklep z powodu marki i odrzucał go z braku marki.

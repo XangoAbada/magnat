@@ -34,10 +34,12 @@ use crate::market::{HouseholdMonth, HouseholdMonthReport, Market, PurchaseIntent
 pub struct MarketSystem {
     desc: SystemDesc,
     intents: Vec<PurchaseIntent>,
-    households: Vec<(u32, u8, [u8; STOCK_CAT_COUNT])>,
+    households: Vec<(u32, u8, u8, [u8; STOCK_CAT_COUNT])>,
     /// Bufor miesięcznego rozliczenia gospodarstw — raz na miesiąc, ale dla
     /// wszystkich naraz, więc alokacja per miesiąc byłaby alokacją na 80 tys. wierszy.
     months: Vec<HouseholdMonth>,
+    /// Ostatnia doba listy płac (`R2-WP30`) — do raportu scenariusza.
+    payroll: crate::payroll::PayrollDay,
 }
 
 impl MarketSystem {
@@ -51,6 +53,7 @@ impl MarketSystem {
             intents: Vec::new(),
             households: Vec::new(),
             months: Vec::new(),
+            payroll: crate::payroll::PayrollDay::default(),
         }
     }
 }
@@ -96,6 +99,17 @@ impl System for MarketSystem {
                 }
             }
         }
+
+        // 0b. Lista płac (`R2-WP30`). Obok rozliczeń B2B, bo to ten sam kształt:
+        //     skrzynka pochodzi z `sim/firms`, a księguje `sim/economy`. `run_payroll`
+        //     produkuje wyłącznie o północy, więc w pozostałych minutach kończy się
+        //     na sprawdzeniu, czy skrzynka jest pusta.
+        self.payroll = crate::payroll::absorb_payroll(ctx.world_mut(), &market, t);
+
+        // 0c. Opłaty mobilne (`R2-WP32`). Ten sam kształt co wyżej: `sim/traffic`
+        //     zdjął pieniądz z portfela i odłożył go w `MobilityDue`, a księguje ten,
+        //     kto ma `Books`. Świat bez ruchu nie ma tego zasobu i kończy na `None`.
+        crate::mobility::absorb_mobility(ctx.world_mut(), &market, t);
 
         // 1. Rozliczenie intencji z poprzedniej minuty.
         settle_transactions(ctx.world_mut(), &market, t, &mut self.intents);
@@ -270,10 +284,16 @@ pub fn settle_household_month(
         None => return HouseholdMonthReport::default(),
     };
     for row in buf.iter() {
-        let Some(h) = world.get_mut::<Household>(magnat_core::Entity::new(
-            row.index,
-            std::num::NonZeroU32::MIN,
-        )) else {
+        // Encja **z generacją**, a nie `Entity::new(index, MIN)` (`R2-WP32`): indeks
+        // zwolniony przez rozwiązane gospodarstwo wraca do puli i dostaje następną
+        // generację, więc uchwyt sklejony z samego indeksu przestaje wskazywać cokolwiek.
+        // Cicho pomijany zapis zwrotny znaczył wtedy, że pieniądz **zszedł z konta**
+        // (`household_pay` w `household_month`), a **nie zszedł z komponentu** — czyli
+        // świat go sobie dorabiał. To była druga strona rozjazdu niezmiennika świata.
+        let Some(e) = magnat_agents::demography::household_by_index(world, row.index) else {
+            continue;
+        };
+        let Some(h) = world.get_mut::<Household>(e) else {
             continue;
         };
         h.cash = row.cash;
@@ -313,6 +333,7 @@ fn profile_of(world: &World, h: &Household) -> HouseholdProfile {
     HouseholdProfile {
         kind: h.household_kind(),
         size: h.size,
+        children: h.children,
         thrift,
         ambition,
     }
@@ -375,7 +396,18 @@ pub fn pay_incomes(world: &mut World, market: &Market, t: Tick) -> (u64, Money) 
         .collect();
     let mut ile = 0u64;
     let mut suma = Money::ZERO;
-    for (e, brutto) in plan {
+    for (e, zadeklarowany) in plan {
+        // **Dopłata, nie wypłata** (`R2-WP30`). Płacę wypłaca pracodawca w swoim dniu
+        // wypłaty (`payroll::absorb_payroll`), a ta pętla domyka to, czego żaden
+        // pracodawca nie pokrył: dochód spoza etatu i światy bez rejestru firm
+        // (scenariusze M3 i M5, w których `income_monthly` pochodzi z generatora).
+        // Bez licznika świat z rejestrem płaciłby dwa razy, a świat bez niego —
+        // ani razu.
+        let pokryte = market.take_wages_paid(e.index());
+        let brutto = Money((zadeklarowany.get() - pokryte.get()).max(0));
+        if brutto.get() <= 0 {
+            continue;
+        }
         // Zaliczka PIT potrącana **u źródła** (hak M8, do M8 zero). Gospodarstwo
         // dostaje netto, bo z tego, co dostanie, zaraz planuje koperty — potrącenie
         // doliczone później znaczyłoby, że planer dzieli dochód, którego nie ma.
@@ -525,7 +557,7 @@ fn pay_from_household(h: &mut Household, amount: Money) -> bool {
     true
 }
 
-fn refresh_households(world: &World, out: &mut Vec<(u32, u8, [u8; STOCK_CAT_COUNT])>) {
+fn refresh_households(world: &World, out: &mut Vec<(u32, u8, u8, [u8; STOCK_CAT_COUNT])>) {
     out.clear();
     let Some(p) = world.get_resource::<Population>() else {
         return;
@@ -534,7 +566,7 @@ fn refresh_households(world: &World, out: &mut Vec<(u32, u8, [u8; STOCK_CAT_COUN
         let Some(h) = world.get::<Household>(*e) else {
             continue;
         };
-        out.push((e.index(), h.size.max(1), h.stock));
+        out.push((e.index(), h.size.max(1), h.children, h.stock));
     }
 }
 

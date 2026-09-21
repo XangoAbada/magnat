@@ -247,7 +247,10 @@ fn porod_do_pelnego_gospodarstwa_nie_gubi_dziecka() {
         if hh.size as usize >= magnat_agents::HH_MAX_MEMBERS {
             break;
         }
-        if world.get::<Identity>(c).is_some_and(|i| i.household == hh_idx) {
+        if world
+            .get::<Identity>(c)
+            .is_some_and(|i| i.household == hh_idx)
+        {
             continue;
         }
         let stary = world.get::<Identity>(c).expect("tożsamość").household;
@@ -362,7 +365,10 @@ fn piate_dziecko_zostawia_slad() {
     let same_dzieci: Vec<magnat_agents::MemberView> = (0..2).map(uczen).collect();
     let role = household::roles(&same_dzieci, 10, 18, 0, None);
     assert!(role.escorted.is_empty());
-    assert_eq!(role.unescorted, 2, "dzieci bez dorosłego zniknęły bez śladu");
+    assert_eq!(
+        role.unescorted, 2,
+        "dzieci bez dorosłego zniknęły bez śladu"
+    );
 }
 
 // ── R2-WP4: opiekun prawny i gospodarstwo osierocone ────────────────────────────
@@ -375,7 +381,12 @@ fn piate_dziecko_zostawia_slad() {
 #[test]
 fn smierc_ostatniego_doroslego_daje_dzieciom_opiekuna() {
     let mut world = swiat(29);
-    let mut r = magnat_core::rng(world.seed, magnat_core::StreamId::Migration, 0, magnat_core::Tick(0));
+    let mut r = magnat_core::rng(
+        world.seed,
+        magnat_core::StreamId::Migration,
+        0,
+        magnat_core::Tick(0),
+    );
 
     let dom = |i: u32| HomeSlot {
         building: ID_DOM + i,
@@ -405,7 +416,11 @@ fn smierc_ostatniego_doroslego_daje_dzieciom_opiekuna() {
                 .is_some_and(|i| i.age_years(0) >= i32::from(ages.adult))
         })
         .expect("rodzic");
-    let dzieci: Vec<Entity> = czlonkowie.iter().copied().filter(|c| *c != rodzic).collect();
+    let dzieci: Vec<Entity> = czlonkowie
+        .iter()
+        .copied()
+        .filter(|c| *c != rodzic)
+        .collect();
     assert_eq!(dzieci.len(), 2);
 
     // Dzieci są uczniami w wieku wymagającym odprowadzenia, ciotka zna je z podwórka.
@@ -539,7 +554,9 @@ fn prop_dziecko_nigdy_bez_doroslego_i_bez_opiekuna() {
                 let Some(c) = demography::citizen_by_index(&world, *m) else {
                     continue;
                 };
-                let wiek = world.get::<Identity>(c).map_or(0, |i| i.age_years(d as i32));
+                let wiek = world
+                    .get::<Identity>(c)
+                    .map_or(0, |i| i.age_years(d as i32));
                 if wiek < adult {
                     dzieci += 1;
                 } else {

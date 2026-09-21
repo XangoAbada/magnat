@@ -668,23 +668,33 @@ impl B2b {
                 now,
             )
             .ok()?;
+        // Towar zmienił właściciela w chwili załadunku — tak samo jak przy sprzedaży
+        // hurtowej (`rfq.rs`, `AP-7`). Ładunek zlecenia jest **jedynym** miejscem,
+        // w którym widać, które partie pojechały, a `resell` przepisuje ich koszt
+        // własny na cenę i oddaje wołającemu to, co zszło z bilansu sprzedawcy.
+        //
+        // `R2-WP36`: do R2 stało tu `seller_site: None` z uzasadnieniem „masa schodzi
+        // z bilansu dopiero po rozładunku w węźle, więc nie ma czym zmierzyć kosztu".
+        // Uzasadnienie było nieprawdziwe: `dispatch` zdejmuje partie ze slotu
+        // sprzedawcy **od razu** (`Store::load`), a z bilansu masy schodzą później —
+        // to dwie różne rzeczy. Skutek był ten sam co przed `R2-WP7`: zakład
+        // produkujący wyłącznie na eksport nie miał utargu, więc `margin_bp()`
+        // zwracało „nie wiem" i tier taktyczny nie umiał go zamknąć.
+        let koszt_sprzedawcy = match transport.get(id) {
+            Some(o) => {
+                let cargo = o.cargo.clone();
+                store.resell(&cargo, netto)
+            }
+            None => Money::ZERO,
+        };
         let n = self.nodes.get_mut(node.0 as usize)?;
         n.used_today = Mass(n.used_today.0 + mass.0);
         Some(Settlement {
             buyer: FirmId(site_wezla.entity()),
             deliver_to: site_wezla,
             seller: SellerRef::Firm(seller),
-            // **Eksport nie wchodzi do rachunku wyniku zakładu** i to jest decyzja,
-            // nie przeoczenie. Masa schodzi z bilansu dopiero po rozładunku w węźle
-            // (`absorb_exports`), więc w tej chwili nie ma czym zmierzyć kosztu
-            // własnego — a utarg bez kosztu pokazałby fabryce sto procent marży
-            // i tier taktyczny trzymałby eksportera bez względu na wynik. Zero utargu
-            // znaczy w `margin_bp()` „nie wiem" i to jest uczciwsza odpowiedź niż
-            // fałszywy zysk. `ponytail:` sufit z drogą wyjścia: `Store::export` zwraca
-            // koszt (`trade.rs`, `absorb_exports` wyrzuca go do `_koszt`), brakuje
-            // wyłącznie pamięci, **który zakład** wysłał towar do węzła.
-            seller_site: None,
-            seller_cogs: Money::ZERO,
+            seller_site: Some(from),
+            seller_cogs: koszt_sprzedawcy,
             good,
             mass,
             net: netto,

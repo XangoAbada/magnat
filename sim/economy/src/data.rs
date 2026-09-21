@@ -33,7 +33,10 @@ use serde::Deserialize;
 /// `envelopes.ron` ma o jeden wiersz wag więcej w każdym typie gospodarstwa,
 /// a `retail.ron` — nową kategorię w asortymencie. Pozostałe pliki nie zmieniły
 /// kształtu i podnoszą numer razem z nimi, bo numer opisuje katalog.
-pub const ECONOMY_SCHEMA_VERSION: u32 = 3;
+///
+/// 3 → 4 w `R2-WP11`: `envelopes.ron` dostał sekcję `equivalence` — skalę
+/// ekwiwalentną gospodarstwa. Pozostałe pliki podnoszą numer razem z nim.
+pub const ECONOMY_SCHEMA_VERSION: u32 = 4;
 
 // ── błędy ────────────────────────────────────────────────────────────────────────
 
@@ -393,10 +396,24 @@ pub struct HouseholdFixedCosts {
     pub insurance_gr: i64,
 }
 
+/// Skala ekwiwalentna gospodarstwa domowego (`R2-WP11`), w promilach.
+///
+/// Zmodyfikowana skala OECD: pierwszy dorosły waży pełną jednostkę, każdy następny
+/// mniej, dziecko poniżej `ages.adult` najmniej. Liczbami z pliku, nie stałymi
+/// w kodzie — bo strojenie tej trójki przesuwa cały popyt miasta i ma być widoczne
+/// w diffie, a nie w rekompilacji.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Deserialize)]
+pub struct Equivalence {
+    pub adult_first: u32,
+    pub adult_next: u32,
+    pub child: u32,
+}
+
 /// Parametry budżetowania kopertowego (`data/economy/envelopes.ron`).
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct BudgetParams {
     pub fixed: HouseholdFixedCosts,
+    pub equivalence: Equivalence,
     pub savings_base_bp: i32,
     pub savings_thrift_gain_bp: i32,
     pub status_shift_permille: i32,
@@ -429,6 +446,7 @@ struct EnvelopeKindRow {
 struct EnvelopesFile {
     schema_version: u32,
     fixed: HouseholdFixedCosts,
+    equivalence: Equivalence,
     savings_base_bp: i32,
     savings_thrift_gain_bp: i32,
     status_shift_permille: i32,
@@ -875,6 +893,7 @@ impl EconomyData {
             costs: sf.costs,
             budget: BudgetParams {
                 fixed: ef.fixed,
+                equivalence: ef.equivalence,
                 savings_base_bp: ef.savings_base_bp,
                 savings_thrift_gain_bp: ef.savings_thrift_gain_bp,
                 status_shift_permille: ef.status_shift_permille,

@@ -252,6 +252,19 @@ pub fn dry_run_basket(world: &World) -> Vec<(magnat_core::GoodId, i64)> {
         .collect()
 }
 
+/// Hak dziedziczenia zależny od tego, czy świat ma gospodarkę (`R2-WP10`).
+fn hak_dziedziczenia(
+    world: &World,
+    gospodarka: bool,
+) -> Box<dyn magnat_agents::demography::InheritanceHook> {
+    match world.get_resource::<magnat_economy::Market>() {
+        Some(m) if gospodarka => {
+            Box::new(magnat_economy::inherit::EconomyInheritance::new(m.clone()))
+        }
+        _ => Box::new(NoInheritance),
+    }
+}
+
 /// Harmonogram świata gry. **Jeden dla okna i dla headlessa** — inaczej odcisk
 /// harmonogramu (`Schedule::fingerprint`) różniłby się między nimi, a razem z nim
 /// kolejność systemów, czyli wynik.
@@ -284,7 +297,10 @@ fn zbuduj_harmonogram(
         .add(DeprivationEffectsSystem::new(world))
         .add(SkillDriftSystem::new(world))
         .add(HouseholdStockSystem::new(world))
-        .add(SocietySystem::new(Box::new(NoInheritance)))
+        // Hak dziedziczenia: w świecie z gospodarką udziały w firmach i kredyty mają
+        // gdzie pójść po śmierci właściciela (`R2-WP10`); bez niej nie ma po czym
+        // dziedziczyć i zostaje zaślepka.
+        .add(SocietySystem::new(hak_dziedziczenia(world, gospodarka)))
         // Warstwa mezo musi tu być, i to nie dla widoku. Zlecenie przejazdu
         // zebrane przez `begin_trip` wykonuje **tylko** ten system; bez niego
         // kierowca zgłasza podróż, której nikt nie realizuje.

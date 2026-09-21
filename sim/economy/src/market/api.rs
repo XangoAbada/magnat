@@ -328,6 +328,48 @@ impl Market {
         ile
     }
 
+    /// Odnotowuje wypłatę **brutto** dla gospodarstwa (`R2-WP30`).
+    ///
+    /// Licznik rośnie w dniu wypłaty firmy, a zeruje go `pay_incomes` na granicy
+    /// miesiąca — patrz [`Market::take_wages_paid`].
+    pub fn record_wage_paid(&self, household: u32, gross: Money) {
+        let mut m = self.lock();
+        let i = household as usize;
+        if m.wages_paid_month.len() <= i {
+            m.wages_paid_month.resize(i + 1, Money::ZERO);
+        }
+        m.wages_paid_month[i] = Money(m.wages_paid_month[i].get().saturating_add(gross.get()));
+    }
+
+    /// Wyjmuje i zeruje licznik wypłat gospodarstwa (`R2-WP30`).
+    ///
+    /// Wyjmuje, a nie czyta — z tego samego powodu co `take_charges`: dwa odczyty
+    /// bez wyzerowania kazałyby dopłacić ten sam dochód dwa razy.
+    #[must_use]
+    pub fn take_wages_paid(&self, household: u32) -> Money {
+        let mut m = self.lock();
+        match m.wages_paid_month.get_mut(household as usize) {
+            Some(w) => std::mem::replace(w, Money::ZERO),
+            None => Money::ZERO,
+        }
+    }
+
+    /// Konto kanału opłat mobilnych (`R2-WP32`, `K-72`).
+    #[must_use]
+    pub fn mobility_account(&self, channel: magnat_core::MobilityChannel) -> AccountId {
+        self.lock().mobility_accounts[channel.as_index()]
+    }
+
+    /// Obsadza konto kanału właścicielem z fikcji świata.
+    ///
+    /// Woła to ten, kto stawia stację paliw jako zakład (`T-2`, M5), przewoźnika
+    /// albo parking jako jednostkę miasta (M8b). Do tego czasu wszystkie cztery
+    /// kanały stoją na koncie reszty świata i bilans domyka się mimo to — R2 zamknął
+    /// **przepływ**, a nie obsadził właścicieli.
+    pub fn set_mobility_account(&self, channel: magnat_core::MobilityChannel, acc: AccountId) {
+        self.lock().mobility_accounts[channel.as_index()] = acc;
+    }
+
     pub fn rest_of_world(&self) -> AccountId {
         self.lock().rest_of_world
     }

@@ -21,6 +21,7 @@ ron = { workspace = true }
 [dev-dependencies]
 magnat-io = { workspace = true }
 criterion = { workspace = true }
+proptest = { workspace = true }
 
 [lints]
 workspace = true

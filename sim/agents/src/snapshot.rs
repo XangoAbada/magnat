@@ -7,8 +7,7 @@
 //! Dzieli się pliki, w których są dwa tematy, a nie pliki, które są długie.
 
 use crate::components::{
-    Employment, Identity, KnowledgeRef, Needs, Personality, Residence, Skills,
-    Vitals, Wealth,
+    Employment, Identity, KnowledgeRef, Needs, Personality, Residence, Skills, Vitals, Wealth,
 };
 use crate::household::{self, Household, HouseholdOverflow, MemberView};
 use crate::needs::NeedTable;
@@ -184,9 +183,7 @@ fn role_places(
         })
         .collect();
     let ages = world.resource::<demography::DemographyTable>().ages();
-    let opiekun = h
-        .guardian_of()
-        .and_then(|g| widok_czlonka(world, g, day));
+    let opiekun = h.guardian_of().and_then(|g| widok_czlonka(world, g, day));
     let role = household::roles(
         &widoki,
         i32::from(ages.escort),
@@ -263,4 +260,3 @@ fn opieka_zewnetrzna(
     }
     (escorts, pickups, unescorted)
 }
-

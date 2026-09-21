@@ -137,10 +137,18 @@ pub fn zbuduj_firmy(
 const DOMYSLNE_WIDELKI: (Money, Money) = (Money(280_000), Money(520_000));
 
 /// Obsada per indeks zakładu, czytana z komponentów mieszkańców.
-fn obsada_z_ecs(world: &mut World) -> BTreeMap<u32, Vec<(magnat_core::CitizenId, JobRoleId, u8)>> {
+fn obsada_z_ecs(
+    world: &mut World,
+) -> BTreeMap<u32, Vec<(magnat_core::CitizenId, JobRoleId, u8, u32)>> {
     let mut out: BTreeMap<u32, Vec<_>> = BTreeMap::new();
-    for (e, emp) in world
-        .query::<(magnat_core::Entity, &AgentEmployment), ()>()
+    // Gospodarstwo jedzie razem z etatem (`R2-WP9`): umowa zapamiętuje, do którego
+    // domu weszła ta płaca, bo w chwili odejścia encji mieszkańca może już nie być.
+    for (e, emp, id) in world
+        .query::<(
+            magnat_core::Entity,
+            &AgentEmployment,
+            &magnat_agents::Identity,
+        ), ()>()
         .iter()
     {
         if emp.site == AgentEmployment::NO_SITE || emp.site < SITE_KEY_BASE {
@@ -150,12 +158,13 @@ fn obsada_z_ecs(world: &mut World) -> BTreeMap<u32, Vec<(magnat_core::CitizenId,
             magnat_core::CitizenId(e),
             JobRoleId(emp.role),
             emp.shift,
+            id.household,
         ));
     }
     // Kolejność w obrębie zakładu musi być niezależna od kolejności archetypów w ECS,
     // bo z niej wychodzi kolejność wypłat, a ta wchodzi do hasha stanu.
     for v in out.values_mut() {
-        v.sort_by_key(|(c, _, _)| c.0.to_bits());
+        v.sort_by_key(|(c, _, _, _)| c.0.to_bits());
     }
     out
 }
@@ -166,9 +175,9 @@ fn obsada_z_ecs(world: &mut World) -> BTreeMap<u32, Vec<(magnat_core::CitizenId,
 /// dostaje stanowisko dopisane na końcu. Etap 8 obsadził go wg podziału lokali M2
 /// i to jest fakt o mieście, a nie błąd do wyrzucenia; rozbieżność podziałów zamyka
 /// rynek pracy M7b.
-fn obsadz(site: &mut Site, ludzie: &[(magnat_core::CitizenId, JobRoleId, u8)]) -> u32 {
+fn obsadz(site: &mut Site, ludzie: &[(magnat_core::CitizenId, JobRoleId, u8, u32)]) -> u32 {
     let mut ile = 0;
-    for (c, role, shift) in ludzie {
+    for (c, role, shift, household) in ludzie {
         let idx = match site.positions.iter().position(|p| p.role == *role) {
             Some(i) => i,
             None => {
@@ -191,6 +200,7 @@ fn obsadz(site: &mut Site, ludzie: &[(magnat_core::CitizenId, JobRoleId, u8)]) -
             stawka,
             SimMinute(0),
             zmiana(*shift),
+            *household,
         ));
         // Etat obsadzony poza planem katalogu podnosi liczbę etatów, a nie tworzy
         // ujemnego wakatu.

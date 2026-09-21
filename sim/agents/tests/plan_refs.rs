@@ -10,10 +10,14 @@ use std::collections::BTreeSet;
 /// Wszystkie identyfikatory faz i dokumentów naprawczych, jakie istnieją w planie.
 fn istniejace() -> BTreeSet<String> {
     let mut out = BTreeSet::new();
-    let katalog = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../docs/implementation-plan");
+    let katalog =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/implementation-plan");
     for wpis in std::fs::read_dir(&katalog).expect("docs/implementation-plan") {
-        let nazwa = wpis.expect("wpis").file_name().to_string_lossy().to_string();
+        let nazwa = wpis
+            .expect("wpis")
+            .file_name()
+            .to_string_lossy()
+            .to_string();
         let Some(klucz) = nazwa.split('-').next() else {
             continue;
         };

@@ -6,6 +6,22 @@ use super::*;
 /// półka. Ponad to substytut niższego rzędu przestaje być substytutem.
 const MAX_LINES: usize = 48;
 
+/// Osoby ekwiwalentne gospodarstwa w promilach (`R2-WP11`).
+///
+/// Skala jest **daną gospodarki** (`data/economy/envelopes.ron`), a skład — faktem
+/// demograficznym z `sim/agents`. Ta funkcja jest jedynym miejscem, w którym jedno
+/// spotyka drugie, żeby koszyk i media liczyły się tą samą liczbą.
+fn skala(d: &crate::data::EconomyData, size: u8, children: u8) -> u32 {
+    crate::budget::HouseholdProfile {
+        kind: magnat_agents::HouseholdKind::Single,
+        size,
+        children,
+        thrift: magnat_core::Q::new(50),
+        ambition: magnat_core::Q::new(50),
+    }
+    .equivalent_permille(&d.budget.equivalence)
+}
+
 impl Market {
     /// Wyjmuje zaklepane transakcje w kolejności `(SiteId, GoodId, arrived, CitizenId)`
     /// i zwalnia rezerwacje budżetu (§5.5).
@@ -254,7 +270,7 @@ impl PlaceProvider for Market {
                 k_min,
                 dni,
                 max_travel_min,
-                rozmiar: snap.size,
+                rozmiar: skala(&m.data, snap.size, snap.children),
             },
             known,
             &mut cand,
@@ -484,7 +500,9 @@ impl Market {
         let zaklepane = m.committed.get(&hh).copied().unwrap_or(Money::ZERO);
         let budzet = Money(req.budget_hint.get().saturating_sub(zaklepane.get()).max(0));
         let dni = m.data.purchase_days;
-        let osob = req.household_size;
+        // Osoby **ekwiwalentne**, nie głowy (`R2-WP11`): niemowlę nie je tyle co
+        // dorosły mężczyzna, a różnica szła prosto do kopert i do CPI.
+        let osob = skala(&m.data, req.household_size, req.household_children);
         let tracking = m.shops[i as usize].tracking;
         let slippage = i64::from(m.data.price_slippage_bp);
 
@@ -716,7 +734,8 @@ struct KandydaciCtx<'a> {
     k_min: usize,
     dni: u8,
     max_travel_min: u16,
-    rozmiar: u8,
+    /// Osoby ekwiwalentne w promilach (`R2-WP11`), nie liczba głów.
+    rozmiar: u32,
 }
 
 /// Zbiera oferty w zasięgu, odsiewa te, których kupujący nie zna albo które nie mają

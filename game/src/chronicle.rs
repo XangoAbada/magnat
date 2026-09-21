@@ -422,7 +422,9 @@ impl Chronicle {
                 importance: u8::try_from(e.magnitude.unsigned_abs() / 10)
                     .unwrap_or(100)
                     .min(100),
-                scope: e.district.map_or(ChronicleScope::World, ChronicleScope::District),
+                scope: e
+                    .district
+                    .map_or(ChronicleScope::World, ChronicleScope::District),
                 provenance: Provenance::DryRun,
             });
         }

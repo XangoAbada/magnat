@@ -1018,6 +1018,25 @@ vocab_enum! {
 }
 
 vocab_enum! {
+    /// Kanał opłaty mobilnej — za co mieszkaniec płaci, ruszając się po mieście
+    /// (`R2-WP32`, `K-72`).
+    ///
+    /// Konsumenci znani z nazwy i numeru fazy: **M4** (`sim/traffic`) pobiera opłatę
+    /// i odkłada ją w [`crate::MobilityDue`], **M5** (`sim/economy`) księguje ją jako
+    /// `TxKind::Mobility`. Bez wspólnego słownika każda strona miałaby własną listę
+    /// kanałów i rozjechałyby się przy pierwszym nowym (`K-8`).
+    ///
+    /// Kolejność wariantów jest kontraktem podwójnie: indeksuje tablicę
+    /// [`crate::MobilityDue`] i jedzie w dzienniku transakcji, czyli w zapisie gry.
+    MobilityChannel {
+        Fuel, TransitTicket, Taxi, Parking,
+    }
+}
+
+/// Ile kanałów opłat mobilnych — rozmiar tablicy w [`crate::MobilityDue`].
+pub const MOBILITY_CHANNEL_COUNT: usize = MobilityChannel::ALL.len();
+
+vocab_enum! {
     /// Biom. Konsument poza M1: M2 (strefowanie i zieleń), M5/M6 (rolnictwo i leśnictwo),
     /// M8 (zdarzenia pogodowe zależne od pokrycia terenu).
     Biome {

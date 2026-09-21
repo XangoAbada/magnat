@@ -194,6 +194,8 @@ pub struct MarketStats {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 struct HouseholdSnapshot {
     size: u8,
+    /// Ilu członków nie ukończyło `ages.adult` (`R2-WP11`).
+    children: u8,
     stock: [u8; STOCK_CAT_COUNT],
 }
 
@@ -201,6 +203,7 @@ impl Default for HouseholdSnapshot {
     fn default() -> HouseholdSnapshot {
         HouseholdSnapshot {
             size: 1,
+            children: 0,
             stock: [0; STOCK_CAT_COUNT],
         }
     }
@@ -312,6 +315,15 @@ pub(crate) struct MarketInner {
     /// Budżety gospodarstw, indeks = indeks encji. Stoją tutaj, a nie w zasobie
     /// świata, bo czyta je `candidates` — a `PlaceProvider` nie dostaje `&World`.
     budgets: Vec<HouseholdBudget>,
+    /// Ile **brutto** wypłacili gospodarstwu pracodawcy w tym miesiącu (`R2-WP30`),
+    /// indeksowane indeksem encji gospodarstwa.
+    ///
+    /// Licznik, nie saldo: wypłaty idą w dniu wypłaty firmy, a dochód spoza etatu
+    /// dopłaca się na granicy miesiąca, więc `pay_incomes` musi wiedzieć, ile
+    /// z zadeklarowanego `income_monthly` już przyszło. Bez tego świat z rejestrem
+    /// firm płaciłby dwa razy, a świat bez rejestru (scenariusze M3 i M5) —
+    /// ani razu.
+    wages_paid_month: Vec<Money>,
     loans: LoanBook,
     /// Jedyny bank w M5. `None`, dopóki scenariusz go nie otworzy — wtedy każdy
     /// wniosek kończy się `RejectCredit::NoLender`, a nie cichym brakiem ścieżki.
@@ -348,6 +360,16 @@ pub(crate) struct MarketInner {
     /// dwa zakupy tej samej minuty widziałyby ten sam budżet dwa razy.
     committed: BTreeMap<u32, Money>,
     rest_of_world: AccountId,
+    /// Konta kanałów opłat mobilnych (`R2-WP32`, `K-72`), indeksowane
+    /// `MobilityChannel::as_index()`.
+    ///
+    /// Domyślnie **wszystkie cztery są kontem reszty świata** i to jest jawny sufit,
+    /// nie przeoczenie: stacja paliw jako zakład firmy jest obietnicą `T-2` fazy M5,
+    /// przewoźnik i parking jednostkami miasta po M8b, a taksówka zostaje kontem
+    /// technicznym z rozstrzygnięcia `D-N22`. R2 domyka **bilans**, a nie obsadza
+    /// właścicieli. Kto je obsadzi, woła [`Market::set_mobility_account`]; rozbicie
+    /// per kanał niesie do tego czasu `TxKind::Mobility` w dzienniku.
+    mobility_accounts: [AccountId; magnat_core::MOBILITY_CHANNEL_COUNT],
     /// Hak podatkowy (`K-7`). W M5 `NoTax`; M8 wstawia `CityTaxEngine`.
     pub(crate) tax: Box<dyn TaxEngine>,
     /// Daniny naliczone na rozliczeniu hurtowym, czekające na odebranie przez
@@ -420,6 +442,7 @@ impl Market {
             fallback: InfinitePlaces::new(places, needs),
             households: Vec::new(),
             budgets: Vec::new(),
+            wages_paid_month: Vec::new(),
             loans: LoanBook::new(),
             bank: None,
             cpi,
@@ -430,6 +453,7 @@ impl Market {
             fresh_goods: BTreeMap::new(),
             committed: BTreeMap::new(),
             rest_of_world,
+            mobility_accounts: [rest_of_world; magnat_core::MOBILITY_CHANNEL_COUNT],
             tax: Box::new(NoTax),
             b2b_outbox: BTreeMap::new(),
             wholesale_pnl: BTreeMap::new(),
@@ -469,7 +493,7 @@ impl Market {
     }
 
     /// Migawka gospodarstw dla decyzji zakupowej: liczebność i zapas w dniach.
-    pub fn refresh_households(&self, entries: &[(u32, u8, [u8; STOCK_CAT_COUNT])]) {
+    pub fn refresh_households(&self, entries: &[(u32, u8, u8, [u8; STOCK_CAT_COUNT])]) {
         let mut m = self.lock();
         let max = entries.iter().map(|e| e.0).max().unwrap_or(0) as usize;
         if m.households.len() <= max {
@@ -478,9 +502,13 @@ impl Market {
         if m.budgets.len() <= max {
             m.budgets.resize(max + 1, HouseholdBudget::default());
         }
-        for (i, size, stock) in entries {
+        if m.wages_paid_month.len() <= max {
+            m.wages_paid_month.resize(max + 1, Money::ZERO);
+        }
+        for (i, size, children, stock) in entries {
             m.households[*i as usize] = HouseholdSnapshot {
                 size: *size,
+                children: *children,
                 stock: *stock,
             };
         }
@@ -753,6 +781,13 @@ impl HashState for Market {
         h.write_u32(m.budgets.len() as u32);
         for b in &m.budgets {
             b.hash_state(h);
+        }
+        // Wypłaty tego miesiąca **są stanem** z tego samego powodu co `b2b_outbox`:
+        // między dniem wypłaty firmy a granicą miesiąca są jedynym śladem po tym,
+        // ile dochodu gospodarstwo już dostało (`R2-WP30`).
+        h.write_u32(m.wages_paid_month.len() as u32);
+        for w in &m.wages_paid_month {
+            w.hash_state(h);
         }
         // Cło i akcyza naliczone, a jeszcze nieodebrane przez miasto, **są stanem**:
         // między odprawą a deklaracją są jedynym śladem po pieniądzu, który należy

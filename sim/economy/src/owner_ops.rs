@@ -71,6 +71,10 @@ pub fn hire(world: &mut World, site: SiteId, citizen: CitizenId, role: JobRoleId
     // Drugie wyszukanie musi mieć **ten sam warunek** co pierwsze: bez sprawdzenia
     // wolnego etatu obsada przekroczyłaby `slots`, gdyby archetyp wymienił ten sam
     // zawód dwa razy — czyli dwie pensje za jedno stanowisko.
+    // Gospodarstwo do umowy (`R2-WP9`) — czytane, dopóki encja mieszkańca istnieje.
+    let gospodarstwo = world
+        .get::<magnat_agents::Identity>(citizen.0)
+        .map_or(Employment::NO_HOUSEHOLD, |id| id.household);
     let ok = firms.site_mut(site).is_some_and(|z| {
         z.positions
             .iter_mut()
@@ -82,6 +86,7 @@ pub fn hire(world: &mut World, site: SiteId, citizen: CitizenId, role: JobRoleId
                     stawka,
                     magnat_core::SimMinute(t.get()),
                     zmiana,
+                    gospodarstwo,
                 ));
                 true
             })

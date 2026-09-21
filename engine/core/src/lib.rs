@@ -25,6 +25,7 @@ pub mod fixed;
 pub mod geom;
 pub mod hash;
 pub mod ids;
+pub mod mobility;
 pub mod money;
 pub mod rng;
 pub mod schema;
@@ -46,6 +47,7 @@ pub use hash::{HashState, StateHash, StateHasher};
 pub use ids::{
     BuildingId, CitizenId, ContractId, FirmId, HouseholdId, ParcelId, SiteId, VehicleId,
 };
+pub use mobility::MobilityDue;
 pub use money::split_proportional;
 pub use rng::{mix64, rng, Rng, StreamId, NO_ENTITY};
 pub use schema::ComponentSchemaId;
@@ -61,13 +63,14 @@ pub use vocab::{
     AbateReason, ActionKind, ActivityKind, AdChannelKind, AgencyKind, BankruptcyTrigger, Biome,
     BodyType, ClaimPriority, CommitmentKind, DeprivationEffect, EditorialBias, EventCategory,
     FirmStrategy, FixedCost, GateKind, LeaveCause, LifeEventKind, LineStopCause, LoanKind,
-    LossKind, MediaKind, MigrationKind, NeedKind, PerilKind, PermitKind, PlaceKind, PlaceRef,
-    PolicyKind, PriceBasis, PriceDriver, ReactionKind, RejectCause, RejectCredit, RemedyKind,
-    ResourceKind, RoadClass, Season, ServiceKind, ShortageStageKind, SpendCategory, StockCat,
-    TaxKind, TenderKind, TouchSource, TraitId, TransportMode, Trend, UtilityKind, UtilityService,
-    VoteDriver, WageCause, WorldCoord, AD_CHANNEL_KIND_COUNT, AGENCY_KIND_COUNT,
-    CLAIM_PRIORITY_COUNT, FIXED_COST_COUNT, LOSS_KIND_COUNT, MEDIA_KIND_COUNT, NEED_COUNT,
-    PERIL_KIND_COUNT, POLICY_KIND_COUNT, REJECT_CAUSE_COUNT, SERVICE_KIND_COUNT,
-    SPEND_CATEGORY_COUNT, STOCK_CAT_COUNT, TAX_KIND_COUNT, TOUCH_SOURCE_COUNT, UTILITY_KIND_COUNT,
+    LossKind, MediaKind, MigrationKind, MobilityChannel, NeedKind, PerilKind, PermitKind,
+    PlaceKind, PlaceRef, PolicyKind, PriceBasis, PriceDriver, ReactionKind, RejectCause,
+    RejectCredit, RemedyKind, ResourceKind, RoadClass, Season, ServiceKind, ShortageStageKind,
+    SpendCategory, StockCat, TaxKind, TenderKind, TouchSource, TraitId, TransportMode, Trend,
+    UtilityKind, UtilityService, VoteDriver, WageCause, WorldCoord, AD_CHANNEL_KIND_COUNT,
+    AGENCY_KIND_COUNT, CLAIM_PRIORITY_COUNT, FIXED_COST_COUNT, LOSS_KIND_COUNT, MEDIA_KIND_COUNT,
+    MOBILITY_CHANNEL_COUNT, NEED_COUNT, PERIL_KIND_COUNT, POLICY_KIND_COUNT, REJECT_CAUSE_COUNT,
+    SERVICE_KIND_COUNT, SPEND_CATEGORY_COUNT, STOCK_CAT_COUNT, TAX_KIND_COUNT, TOUCH_SOURCE_COUNT,
+    UTILITY_KIND_COUNT,
 };
 pub use weather::{weather_at, Weather};

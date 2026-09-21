@@ -141,6 +141,24 @@ impl MoneySupplyLedger {
             .and_then(|m| m.checked_sub(self.household_sector_out))
             .expect("MoneySupplyLedger: przepełnienie sumy destrukcji")
     }
+
+    /// Podaż **bez kanału sektora gospodarstw** — prawa strona niezmiennika świata
+    /// (`K-61`).
+    ///
+    /// Kanał gospodarstw nie jest emisją ani destrukcją: to przeprowadzka pieniądza
+    /// między kontem a komponentem. [`MoneySupplyLedger::total`] liczy go dlatego, że
+    /// patrzy wyłącznie na księgi i musi udawać, że gospodarstwo jest na zewnątrz.
+    /// Kto widzi obie strony naraz, ma go **nie** liczyć — inaczej ta sama wypłata
+    /// zwiększyłaby i sumę pieniądza w świecie, i wymaganą podaż.
+    #[must_use]
+    pub fn core_total(&self) -> Money {
+        self.endowment
+            .checked_add(self.credit_created)
+            .and_then(|m| m.checked_add(self.external_capital_in))
+            .and_then(|m| m.checked_sub(self.credit_repaid))
+            .and_then(|m| m.checked_sub(self.external_capital_out))
+            .expect("MoneySupplyLedger: przepełnienie sumy podaży rdzeniowej")
+    }
 }
 
 // ── transakcje ───────────────────────────────────────────────────────────────────
@@ -309,6 +327,19 @@ pub enum TxKind {
     /// Odszkodowanie (M10d WP10.12).
     InsuranceClaim {
         cover: magnat_core::CoverId,
+    },
+    /// Opłata za poruszanie się po mieście: paliwo, bilet, taryfa, parking
+    /// (`R2-WP32`, `K-72`). **Dopisane na końcu**, bo dziennik wchodzi do zapisu gry.
+    ///
+    /// Jeden wariant na cztery kanały, a nie cztery warianty: różnią się wyłącznie
+    /// odbiorcą, a odbiorcę i tak niesie konto. Kanał jest ładunkiem, bo to on jest
+    /// rozbiciem, którego potrzebuje diagnostyka bilansu świata i balansator.
+    ///
+    /// Do R2 tego wariantu nie było i nie było też przelewu: drugą stroną każdego
+    /// grosza wydanego na dojazd był **rejestr w `sim/traffic`**, więc pieniądz
+    /// wychodził z jednej sumy i nie wchodził do drugiej.
+    Mobility {
+        channel: magnat_core::MobilityChannel,
     },
 }
 
@@ -515,6 +546,34 @@ impl Books {
             Ok(())
         } else {
             Err((sum, supply))
+        }
+    }
+
+    /// **Niezmiennik świata** (`K-61`): suma sald kont **plus pieniądz po stronie
+    /// komponentów** równa się podaży rdzeniowej. `Err((lewa, prawa))`.
+    ///
+    /// `sector` podaje wołający, bo saldo gospodarstwa mieszka w komponencie
+    /// `Household`, a nie na koncie, i tak zostanie — dwa źródła tej samej liczby
+    /// rozjechałyby się przy pierwszej transakcji (`books.rs`, komentarz przy
+    /// [`MoneySupplyLedger::household_sector_in`]). Wartością jest
+    /// `magnat_agents::society::total_money`: portfele mieszkańców, salda gospodarstw
+    /// oraz konta techniczne spadków i emigracji.
+    ///
+    /// Różnica wobec [`Books::check_conservation`] jest cała w prawej stronie: P1
+    /// patrzy na same księgi i musi traktować gospodarstwa jak zagranicę, więc liczy
+    /// kanał sektora do podaży. Ten niezmiennik widzi obie strony naraz, więc kanału
+    /// nie liczy — i dopiero wtedy **widzi**, że gospodarstwo rozwiązane razem
+    /// z saldem zabrało pieniądze ze świata (`R2-WP8`).
+    pub fn check_world_conservation(&self, sector: Money) -> Result<(), (Money, Money)> {
+        let lewa = self
+            .total_balance()
+            .checked_add(sector)
+            .expect("Books: przepełnienie sumy świata");
+        let prawa = self.supply.core_total();
+        if lewa == prawa {
+            Ok(())
+        } else {
+            Err((lewa, prawa))
         }
     }
 

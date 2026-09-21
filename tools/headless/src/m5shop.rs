@@ -21,14 +21,14 @@ use magnat_agents::{
     HouseholdStockSystem, NeedDecaySystem, NoInheritance, Population, ReplanCooldownSystem,
     SkillDriftSystem, SocietySystem,
 };
-use magnat_core::{DecisionReason, Money, RejectCause, StockCat, Tick};
+use magnat_core::{DecisionReason, MobilityDue, Money, RejectCause, StockCat, Tick};
 use magnat_economy::{Books, LedgerAccount, MarketSystem};
 use magnat_ecs::{App, ScheduleBuilder};
 use magnat_headless::population::{swiat_agentow, zaludnij, zbuduj_miasto};
 use magnat_headless::retail;
 use magnat_io::world_state_hash;
 use magnat_jobs::JobPool;
-use magnat_traffic::{FareLedger, FuelLedger, TrafficSystem};
+use magnat_traffic::TrafficSystem;
 
 #[derive(Args, Debug)]
 pub struct M5ShopArgs {
@@ -96,13 +96,13 @@ pub struct M5ShopArgs {
 ///    ze świata przy zgonie, przy scaleniu po ślubie i przy wyprowadzce — wszystkie trzy
 ///    na granicy miesiąca. Przebieg 8-dobowy pokazywał więc różnicę 0 gr i wyglądał
 ///    na zielony.
-/// 3. Rejestry ruchu (M4): stacja paliw, przewoźnik, taksówka i parking **nie mają
-///    jeszcze kont** — M5 daje je dopiero razem z obrotem stacji (`T-2`), a przewoźnika
-///    M7. Do tego czasu drugą stroną każdego grosza wydanego przez mieszkańca na dojazd
-///    jest `FuelLedger`/`FareLedger` i bez nich pieniądz „znika" tym szybciej, im więcej
-///    się jeździ. `transit_fuel_cost` odejmuje się, bo przewoźnik płaci nim stacji:
-///    ta sama kwota siedzi już w `FuelLedger.revenue`.
-fn pieniadz_swiata(world: &magnat_ecs::World) -> [i64; 6] {
+/// 3. `MobilityDue` — opłata za dojazd pobrana z portfela w tej minucie, a jeszcze
+///    niezaksięgowana. **Rejestrów ruchu tu nie ma od `R2-WP32`** (`K-72`): paliwo,
+///    bilet i taryfa mają konta w `Books`, więc siedzą w pozycji 1. Do R2 były osobnym
+///    składnikiem, bo drugą stroną każdego grosza wydanego na dojazd był rejestr —
+///    a taryfa taksówkowa nie miała nawet tego i **rosła bez płatnika**, więc suma
+///    świata puchła tym szybciej, im więcej się jeździło (+163,0 tys. zł na 40 dób).
+fn pieniadz_swiata(world: &magnat_ecs::World) -> [i64; KANALOW] {
     let ksiegi = world
         .get_resource::<Books>()
         .map_or(0, |b| b.total_balance().get());
@@ -113,20 +113,33 @@ fn pieniadz_swiata(world: &magnat_ecs::World) -> [i64; 6] {
         }
         None => (0, 0),
     };
-    let paliwo = world
-        .get_resource::<FuelLedger>()
-        .map_or(0, |l| l.revenue.get());
-    let przewoz = world.get_resource::<FareLedger>().map_or(0, |l| {
-        l.transit_revenue.get() + l.parking_revenue.get() - l.transit_fuel_cost.get()
+    // Opłata pobrana z portfela, a jeszcze niezaksięgowana — jedna minuta drogi
+    // między komponentem a kontem (`R2-WP32`). Bez tej pozycji suma świata skakałaby
+    // o wartość jednej minuty dojazdów, zależnie od tego, w której minucie ją zmierzyć.
+    let w_drodze = world.get_resource::<MobilityDue>().map_or(0, |d| {
+        d.channels().map(|(_, m)| m.get()).sum::<i64>() + d.pending_transit_fuel().get()
     });
-    let taxi = world
-        .get_resource::<FareLedger>()
-        .map_or(0, |l| l.taxi_revenue.get());
-    [ksiegi, ludzie, poza, paliwo, przewoz, taxi]
+    [ksiegi, ludzie, poza, w_drodze]
 }
 
+/// Ile pozycji ma suma świata — patrz [`ETYKIETY`].
+const KANALOW: usize = 4;
+
+/// Pozycje sumy świata (`R2-WP32`, `K-72`).
+///
+/// **Rejestrów ruchu już tu nie ma** i to jest cała treść naprawy: paliwo, bilet
+/// i taryfa mają od R2 konta w `Books`, więc siedzą w pierwszej pozycji. Do R2 były
+/// osobnymi składnikami, bo drugą stroną każdego grosza wydanego na dojazd był rejestr,
+/// a nie konto — a taryfa taksówkowa nie miała nawet tego i rosła bez płatnika.
+const ETYKIETY: [&str; KANALOW] = [
+    "księgi (Books)",
+    "ludzie (Wealth + gospodarstwa)",
+    "spadki i emigracja",
+    "opłaty w drodze do ksiąg (MobilityDue)",
+];
+
 /// Suma składników — to ona ma być stała.
-fn suma(p: [i64; 6]) -> i64 {
+fn suma(p: [i64; KANALOW]) -> i64 {
     p.iter().sum()
 }
 
@@ -293,14 +306,7 @@ pub fn run(a: &M5ShopArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
         kredyt_netto,
         suma(pieniadz_koniec) - suma(pieniadz_start) - kredyt_netto
     );
-    for (nazwa, i) in [
-        ("księgi", 0),
-        ("ludzie", 1),
-        ("spadki + emigracja", 2),
-        ("obrót stacji", 3),
-        ("przewoźnicy i parkingi", 4),
-        ("taryfy taksówkowe", 5),
-    ] {
+    for (i, nazwa) in ETYKIETY.iter().enumerate() {
         println!(
             "  {nazwa}: {} zł → {} zł ({:+} gr)",
             pieniadz_start[i] / 100,
@@ -471,16 +477,18 @@ pub fn run(a: &M5ShopArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
         }
     }
 
-    // Bramką jest to, czego M5 jest właścicielem: niezmiennik P1 w księgach
-    // i domknięcie księgowości zakładu — oba z tolerancją 0 groszy.
+    // Bramką jest niezmiennik P1 w księgach i domknięcie księgowości zakładu —
+    // oba z tolerancją 0 groszy.
     //
-    // **Suma całego świata bramką jeszcze nie jest** i jest to stan jawny, nie
-    // przeoczenie: stacja paliw, przewoźnik, taksówka i parking nie mają kont
-    // (`T-2` obiecuje stację M5, przewoźnika M7), więc druga strona każdego grosza
-    // wydanego na dojazd siedzi w rejestrach M4, a nie na rachunku. Rozbicie wyżej
-    // pokazuje, ile zostaje po zsumowaniu wszystkich znanych pozycji; przy 31 dobach
-    // miasta 28 tys. mieszkańców to −5,6 tys. zł na 100 mln zł, czyli 0,006 %.
-    // Domknięcie należy do M5d (decyzja otwarta nr 16 dokumentu fazy).
+    // **Suma świata bramką jeszcze nie jest, ale jest już o rząd wielkości bliżej.**
+    // `R2-WP32` (`K-72`) zamknęło kanały ruchu: paliwo, bilet i taryfa mają konta
+    // w `Books`, a opłatę pobiera jedna funkcja, która rusza obie strony albo żadnej.
+    // Pomiar na 4 km, ziarno 1: przed R2 **+107 812 zł na 31 dób**, po R2
+    // **−49 539 zł**. Znak się odwrócił, bo kanał tworzący pieniądz zniknął,
+    // a kanał, który go gubi, został — i widać teraz dokładnie, gdzie siedzi:
+    // przebieg 3-dobowy domyka się **co do grosza**, 29-dobowy rozjeżdża o 2 430 gr,
+    // a 31-dobowy o −4,95 mln gr. Cała reszta wchodzi więc na **granicy miesiąca**,
+    // a nie w ruchu. Pozycja 78 wykazu `R2`.
     let zgadza_sie = books.check_conservation().is_ok();
     let reszta = suma(pieniadz_koniec) - suma(pieniadz_start) - kredyt_netto;
     let sprzedano = s.purchases > 0;
@@ -489,7 +497,7 @@ pub fn run(a: &M5ShopArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
     }
     if reszta != 0 {
         eprintln!(
-            "UWAGA: suma świata nie domyka się o {reszta} gr — rejestry ruchu M4 bez kont              (decyzja otwarta nr 16 dokumentu fazy, domyka M5d)"
+            "UWAGA: suma świata nie domyka się o {reszta} gr — kanał na granicy miesiąca             (pozycja 78 wykazu R2; kanały ruchu zamknięte przez K-72)"
         );
     }
     if !sprzedano {

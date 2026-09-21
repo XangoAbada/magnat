@@ -508,12 +508,11 @@ komunikacja miejska (WP10)");
             "  spóźnienia kursów: suma {} min, największe {} min",
             s.delay_minutes, s.max_delay_minutes
         );
+        // Kwoty zeszły w `R2-WP32` do ksiąg (`K-72`); tutaj zostają liczniki, a pieniądz
+        // pokazuje sekcja bilansu świata.
         println!(
-            "  bilet: {:.2} zł przychodu z {} biletów; taksówki {:.2} zł; paliwo taboru {:.2} zł",
-            oplaty.transit_revenue.0 as f64 / 100.0,
-            oplaty.transit_tickets,
-            oplaty.taxi_revenue.0 as f64 / 100.0,
-            oplaty.transit_fuel_cost.0 as f64 / 100.0
+            "  bilety: {}; kursy taksówką: {}",
+            oplaty.transit_tickets, oplaty.taxi_rides
         );
         t.runs().iter().all(|r| r.occupancy <= r.capacity)
     })
@@ -577,11 +576,10 @@ ruch (warstwa mezo)"
         s.late_minutes as f64 / s.late_arrivals.max(1) as f64
     );
     println!(
-        "  paliwo: spalone {:.1} l, zatankowane {:.1} l w {} tankowaniach za {:.2} zł",
+        "  paliwo: spalone {:.1} l, zatankowane {:.1} l w {} tankowaniach",
         s.fuel_burned_ul as f64 / (UL_PER_ML * 1_000) as f64,
         paliwo.volume_ul as f64 / (UL_PER_ML * 1_000) as f64,
-        paliwo.purchases,
-        paliwo.revenue.0 as f64 / 100.0
+        paliwo.purchases
     );
     let mut pelne = 0u32;
     let mut male = 0u32;

@@ -307,26 +307,34 @@ pub fn purchase_threshold(
         + s.k_envelope * f64::from(overspend_bp.max(0)) / 10_000.0
 }
 
-/// Ilość, której gospodarstwo chce: `dni × osoby × zużycie na osobę na dobę`.
+/// Ilość, której gospodarstwo chce: `dni × osoby ekwiwalentne × zużycie na dobę`.
+///
+/// `persons_permille` to **skala ekwiwalentna**, nie liczba głów (`R2-WP11`):
+/// 1000 = jeden dorosły mieszkający sam. Do R2 stało tu `persons: u8` i niemowlę
+/// jadło tyle co dorosły mężczyzna, więc rodzina z czwórką dzieci miała koszyk
+/// o jedną trzecią za duży — a szło to prosto do kopert, do progu odłożenia zakupu
+/// i do CPI.
 ///
 /// Zaokrąglenie w górę do pełnej jednostki ceny (`PRICE_UNIT`) byłoby fałszem —
 /// chleb kupuje się na wagę. Zwraca co najmniej jedną jednostkę, żeby zakup
 /// nigdy nie był zerowy.
 #[must_use]
-pub fn wanted_qty(daily_per_person: Qty, persons: u8, days: u8) -> Qty {
+pub fn wanted_qty(daily_per_person: Qty, persons_permille: u32, days: u8) -> Qty {
     let q = daily_per_person
         .get()
-        .saturating_mul(i64::from(persons.max(1)))
-        .saturating_mul(i64::from(days.max(1)));
+        .saturating_mul(i64::from(persons_permille.max(1)))
+        .saturating_mul(i64::from(days.max(1)))
+        / 1_000;
     Qty(q.max(1))
 }
 
 /// Ile dni zapasu kategorii daje kupiona ilość — odwrotność [`wanted_qty`].
 #[must_use]
-pub fn days_bought(daily_per_person: Qty, persons: u8, qty: Qty) -> u8 {
-    let per_day = daily_per_person
+pub fn days_bought(daily_per_person: Qty, persons_permille: u32, qty: Qty) -> u8 {
+    let per_day = (daily_per_person
         .get()
-        .saturating_mul(i64::from(persons.max(1)))
+        .saturating_mul(i64::from(persons_permille.max(1)))
+        / 1_000)
         .max(1);
     (qty.get() / per_day).clamp(0, 255) as u8
 }
@@ -530,11 +538,14 @@ mod tests {
     #[test]
     fn ilosc_i_dni_sa_wzajemnie_odwrotne() {
         let daily = Qty(150);
-        let q = wanted_qty(daily, 3, 4);
+        // Trzy osoby ekwiwalentne (`R2-WP11`), czyli 3 000 promili.
+        let q = wanted_qty(daily, 3_000, 4);
         assert_eq!(q, Qty(1_800));
-        assert_eq!(days_bought(daily, 3, q), 4);
-        assert_eq!(days_bought(daily, 3, Qty(0)), 0);
-        // Zerowa liczebność i zero dni nie produkują zerowego zakupu.
+        assert_eq!(days_bought(daily, 3_000, q), 4);
+        assert_eq!(days_bought(daily, 3_000, Qty(0)), 0);
+        // Zerowa skala i zero dni nie produkują zerowego zakupu.
         assert!(wanted_qty(daily, 0, 0).get() > 0);
+        // Skala ułamkowa: rodzina 2,7 osoby ekwiwalentnej kupuje mniej niż trzy głowy.
+        assert!(wanted_qty(daily, 2_700, 4) < q);
     }
 }

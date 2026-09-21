@@ -138,17 +138,20 @@ fn przebieg(seed: u64, kamera: impl Fn(u64, (i32, i32)) -> Option<(i32, i32)>) -
     }
 
     let net = app.world.resource::<TrafficNetwork>();
-    let fuel = app.world.resource::<magnat_traffic::FuelLedger>();
-    let fare = app.world.resource::<magnat_traffic::FareLedger>();
+    let net_stats = net.stats;
+    // Pieniądz wydany na dojazdy zszedł w `R2-WP32` z rejestrów ruchu do ksiąg
+    // (`K-72`). Ten świat ksiąg nie ma, więc kwoty czekają w `MobilityDue` —
+    // i to jest ta sama liczba, co przedtem w rejestrze, tylko po drodze do konta.
+    let due = *app.world.resource::<magnat_core::MobilityDue>();
     Przebieg {
         hashe,
         gotowka: society::total_money(&app.world),
-        paliwo_spalone_ul: net.stats.fuel_burned_ul,
-        paliwo_kupione_ul: net.stats.fuel_bought_ul,
-        wydane_na_paliwo: fuel.revenue,
-        przybycia: net.stats.arrived,
-        minut_podrozy: net.stats.actual_minutes_total,
-        bilety: fare.transit_revenue,
+        paliwo_spalone_ul: net_stats.fuel_burned_ul,
+        paliwo_kupione_ul: net_stats.fuel_bought_ul,
+        wydane_na_paliwo: due.pending(magnat_core::MobilityChannel::Fuel),
+        przybycia: net_stats.arrived,
+        minut_podrozy: net_stats.actual_minutes_total,
+        bilety: due.pending(magnat_core::MobilityChannel::TransitTicket),
         pojazdow_w_mikro: oracle.micro().vehicles(),
     }
 }

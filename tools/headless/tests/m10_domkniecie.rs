@@ -83,7 +83,10 @@ fn ciag_hashy(mut st: Standing, minut: u64, co: u64) -> Vec<StateHash> {
 fn dwa_przebiegi_pelnego_swiata_daja_ten_sam_ciag_hashy() {
     let a = ciag_hashy(swiat(1, 0), 3 * 1_440, 480);
     let b = ciag_hashy(swiat(1, 0), 3 * 1_440, 480);
-    assert!(!a.is_empty(), "test bez ani jednej próbki niczego nie mierzy");
+    assert!(
+        !a.is_empty(),
+        "test bez ani jednej próbki niczego nie mierzy"
+    );
     assert_eq!(a, b, "ten sam świat, ten sam ciąg hashy");
 }
 
@@ -145,7 +148,10 @@ fn historia_na_sucho_dochodzi_do_swiata_gry() {
 fn historia_zmienia_swiat_startowy() {
     let bez = world_state_hash(&swiat(1, 0).app.world);
     let z = world_state_hash(&swiat(1, 30).app.world);
-    assert_ne!(bez, z, "trzydzieści lat historii nie ruszyło ani jednej liczby");
+    assert_ne!(
+        bez, z,
+        "trzydzieści lat historii nie ruszyło ani jednej liczby"
+    );
 }
 
 /// WP10.15, audyt wpisów: **każdy wpis kroniki daje się wyrenderować w obu

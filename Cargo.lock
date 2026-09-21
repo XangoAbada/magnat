@@ -1574,6 +1574,7 @@ dependencies = [
  "magnat-io",
  "magnat-sim-snapshot",
  "magnat-spatial",
+ "proptest",
  "ron",
  "serde",
 ]

@@ -154,7 +154,11 @@ impl Workforce for TestPeople {
         self.hires += 1;
     }
 
-    fn release(&mut self, c: CitizenId, _wage: Money) {
+    fn household_of(&self, _c: CitizenId) -> u32 {
+        magnat_firms::Employment::NO_HOUSEHOLD
+    }
+
+    fn release(&mut self, c: CitizenId, _wage: Money, _household: u32) {
         if let Some(o) = self.ludzie.get_mut(&c) {
             o.job = None;
         }
@@ -891,6 +895,7 @@ fn upadlosc_konczy_kazda_umowe_dokladnie_raz() {
                 benefits: magnat_firms::BenefitSet(0),
                 perf_ema: 500,
                 warnings: 0,
+                household: magnat_firms::Employment::NO_HOUSEHOLD,
             });
     }
     let przed = people.releases;
@@ -970,15 +975,8 @@ fn zaklad_o_ruchu_ciaglym_obsadza_takze_noc() {
     let mut firms = Firms::new();
     let mut people = TestPeople::default();
     let huta = firma(&mut firms, "Huta");
-    let site = zaklad(
-        &mut firms,
-        huta,
-        0,
-        0,
-        &[(SPAWACZ, 8, WIDELKI_SPAWACZ)],
-    );
-    firms.site_mut(site).expect("zakład").shift_profile =
-        magnat_agents::ShiftProfile::Continuous;
+    let site = zaklad(&mut firms, huta, 0, 0, &[(SPAWACZ, 8, WIDELKI_SPAWACZ)]);
+    firms.site_mut(site).expect("zakład").shift_profile = magnat_agents::ShiftProfile::Continuous;
 
     for i in 0..12u32 {
         people.dodaj(i, Some(SPAWACZ), 60, 0);
@@ -987,7 +985,10 @@ fn zaklad_o_ruchu_ciaglym_obsadza_takze_noc() {
         m.step_day(&mut firms, &mut people, 7, Tick(d * 1440));
     }
 
-    assert!(people.hires > 0, "nikogo nie zatrudniono — test mierzyłby własny brak");
+    assert!(
+        people.hires > 0,
+        "nikogo nie zatrudniono — test mierzyłby własny brak"
+    );
     let pory: std::collections::BTreeSet<u8> =
         people.grafiki.iter().map(|(s, _)| *s as u8).collect();
     assert!(
@@ -1001,10 +1002,198 @@ fn zaklad_o_ruchu_ciaglym_obsadza_takze_noc() {
         pory.len(),
         people.grafiki
     );
-    let maski: std::collections::BTreeSet<u8> =
-        people.grafiki.iter().map(|(_, d)| *d).collect();
-    assert!(
-        maski.len() >= 2,
-        "wszyscy pracują w te same dni: {maski:?}"
-    );
+    let maski: std::collections::BTreeSet<u8> = people.grafiki.iter().map(|(_, d)| *d).collect();
+    assert!(maski.len() >= 2, "wszyscy pracują w te same dni: {maski:?}");
+}
+
+// ── R2-WP9: dochód gospodarstwa po zdarzeniu życiowym ───────────────────────────
+//
+// Te trzy testy nie mogą stać na `TestPeople`: usterka siedzi w porcie produkcyjnym
+// (`WorldWorkforce::przesun_dochod` szuka gospodarstwa **przez komponent `Identity`
+// odchodzącego**), a atrapa nie ma ani gospodarstw, ani dochodu. Świat jest tu więc
+// prawdziwy, tylko mały — jedno gospodarstwo, jeden zakład, jeden etat.
+
+mod zdarzenia_zyciowe {
+    use super::{firma, role, tuning, zaklad, SPAWACZ, WIDELKI_SPAWACZ};
+    use magnat_agents::{
+        society, DemographyTable, Employment as AgentEmployment, Household, Identity, NeedTable,
+        Personality, Population, Residence, Skills, Vitals, SITE_KEY_BASE,
+    };
+    use magnat_core::SiteId;
+    use magnat_core::{CitizenId, Money, SimMinute, Tick};
+    use magnat_economy::labor::{system::WorldWorkforce, LaborMarket};
+    use magnat_ecs::{CommandBuffer, Entity, SystemId, World};
+    use magnat_firms::{Employment, Firms};
+
+    const PLACA: Money = Money(500_000);
+
+    /// Świat z jednym gospodarstwem, jednym mieszkańcem i jego etatem.
+    ///
+    /// Zwraca świat, rejestr firm, rynek, encję mieszkańca i encję gospodarstwa.
+    fn swiat() -> (World, Firms, LaborMarket, Entity, Entity, SiteId) {
+        let mut world = World::new(11);
+        magnat_agents::register(&mut world, NeedTable::load_default().expect("data/needs"));
+        society::register_society(
+            &mut world,
+            DemographyTable::load_default().expect("data/demography"),
+        );
+
+        let mut firms = Firms::new();
+        let huta = firma(&mut firms, "Huta");
+        let site = zaklad(&mut firms, huta, 0, 0, &[(SPAWACZ, 4, WIDELKI_SPAWACZ)]);
+
+        let hh = world
+            .spawn()
+            .with(Household {
+                flags: Household::FLAG_ACTIVE,
+                income_monthly: PLACA,
+                ..Household::default()
+            })
+            .id();
+        world.resource_mut::<Population>().add_household(hh);
+
+        let c = world
+            .spawn()
+            .with(Identity {
+                birth_day: -40 * 360,
+                flags: Identity::FLAG_ALIVE,
+                household: hh.index(),
+                ..Identity::default()
+            })
+            .with(Vitals {
+                health: 90,
+                energy: 90,
+                mood: 40,
+                stress: 20,
+                edu_level: 3,
+                edu_field: 0,
+                status: 50,
+                _pad: 0,
+            })
+            .with(AgentEmployment {
+                site: site.0.index(),
+                role: SPAWACZ.0,
+                flags: 0,
+                work_days: AgentEmployment::WEEKDAYS,
+                ..AgentEmployment::default()
+            })
+            .with(Residence::default())
+            .with(Personality::default())
+            .with(Skills::default())
+            .id();
+        world.resource_mut::<Population>().add_citizen(c);
+        {
+            let mut h = world.get::<Household>(hh).copied().expect("gospodarstwo");
+            let ov = world.resource_mut::<magnat_agents::HouseholdOverflow>();
+            assert!(magnat_agents::household::add_member(
+                hh.index(),
+                &mut h,
+                ov,
+                c.index()
+            ));
+            *world.get_mut::<Household>(hh).expect("gospodarstwo") = h;
+        }
+
+        // Etat po stronie rejestru firm — ten sam człowiek, ten sam zakład.
+        let site_mut = firms.site_mut(site).expect("zakład");
+        site_mut.positions[0].filled.push(Employment::new(
+            CitizenId(c),
+            SPAWACZ,
+            PLACA,
+            SimMinute(0),
+            magnat_agents::ShiftKind::Day,
+            hh.index(),
+        ));
+
+        let m = LaborMarket::new(tuning(), role());
+        (world, firms, m, c, hh, site)
+    }
+
+    fn dochod(world: &World, hh: Entity) -> Money {
+        world
+            .get::<Household>(hh)
+            .map_or(Money::ZERO, |h| h.income_monthly)
+    }
+
+    /// Doba rynku pracy nad prawdziwym światem.
+    fn doba(world: &mut World, firms: &mut Firms, m: &mut LaborMarket, d: u64) {
+        let mut people = WorldWorkforce::new(world);
+        m.step_day(firms, &mut people, 7, Tick(d * 1440));
+    }
+
+    /// Pozycja 17 wykazu: zgon.
+    ///
+    /// Przed naprawą gospodarstwo zostawało z płacą zmarłego **na zawsze**: `odejdz`
+    /// wołało `release`, a `release` szukało gospodarstwa przez `Identity` encji,
+    /// której już nie ma.
+    #[test]
+    fn zgon_zdejmuje_place_z_dochodu_gospodarstwa() {
+        let (mut world, mut firms, mut m, c, hh, _) = swiat();
+        assert_eq!(dochod(&world, hh), PLACA);
+
+        // Zgon tak, jak robi go `sim/agents`: flaga gaśnie, encja znika.
+        if let Some(id) = world.get_mut::<Identity>(c) {
+            id.flags &= !Identity::FLAG_ALIVE;
+        }
+        world.resource_mut::<Population>().remove_citizen(c);
+        let mut cmd = CommandBuffer::new(SystemId::from_name("test.Zgon"));
+        cmd.despawn(c);
+        magnat_ecs::flush_commands(&mut world, std::slice::from_mut(&mut cmd));
+        assert!(world.get::<Identity>(c).is_none(), "encja nie zniknęła");
+
+        doba(&mut world, &mut firms, &mut m, 1);
+
+        assert_eq!(
+            dochod(&world, hh),
+            Money::ZERO,
+            "płaca zmarłego została w dochodzie gospodarstwa"
+        );
+    }
+
+    /// Pozycja 17 wykazu: emerytura. Encja żyje, więc ta ścieżka działała —
+    /// test istnieje, żeby naprawa jej nie zepsuła.
+    #[test]
+    fn emerytura_zdejmuje_place_z_dochodu_gospodarstwa() {
+        let (mut world, mut firms, mut m, c, hh, _) = swiat();
+        if let Some(e) = world.get_mut::<AgentEmployment>(c) {
+            e.site = AgentEmployment::NO_SITE;
+            e.flags |= AgentEmployment::FLAG_RETIRED;
+        }
+        doba(&mut world, &mut firms, &mut m, 1);
+        assert_eq!(dochod(&world, hh), Money::ZERO);
+    }
+
+    /// Pozycja 17 wykazu: wyjazd z miasta. Ta sama przyczyna co przy zgonie —
+    /// encja przestaje istnieć.
+    #[test]
+    fn wyjazd_z_miasta_zdejmuje_place_z_dochodu_gospodarstwa() {
+        let (mut world, mut firms, mut m, c, hh, _) = swiat();
+        world.resource_mut::<Population>().remove_citizen(c);
+        let mut cmd = CommandBuffer::new(SystemId::from_name("test.Wyjazd"));
+        cmd.despawn(c);
+        magnat_ecs::flush_commands(&mut world, std::slice::from_mut(&mut cmd));
+
+        doba(&mut world, &mut firms, &mut m, 1);
+
+        assert_eq!(
+            dochod(&world, hh),
+            Money::ZERO,
+            "płaca wyjeżdżającego została w dochodzie gospodarstwa"
+        );
+    }
+
+    /// Dla porządku: `SITE_KEY_BASE` jest tu nieużywane, bo zakład testu stoi
+    /// w przestrzeni gospodarki (`K-46`) — gdyby przestał, `facts()` nie
+    /// potwierdziłby etatu i testy mierzyłyby własny brak.
+    #[test]
+    fn etat_jest_potwierdzony_zanim_cokolwiek_sie_wydarzy() {
+        let (mut world, mut firms, mut m, _, hh, _) = swiat();
+        doba(&mut world, &mut firms, &mut m, 1);
+        assert_eq!(
+            dochod(&world, hh),
+            PLACA,
+            "rynek pracy zwolnił etat, którego nikt nie opuścił"
+        );
+        let _ = SITE_KEY_BASE;
+    }
 }

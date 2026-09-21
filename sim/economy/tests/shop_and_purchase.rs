@@ -55,6 +55,7 @@ fn zadanie(citizen: u32, household: u32, site: SiteId, budzet: i64) -> FulfilReq
         at: magnat_core::SimMinute(480),
         budget_hint: Money(budzet),
         household_size: 1,
+        household_children: 0,
         brands: Default::default(),
     }
 }
@@ -459,6 +460,7 @@ fn pieniadz_i_sztuki_zgadzaja_sie_po_obu_stronach() {
             at: magnat_core::SimMinute(480),
             budget_hint: Money(500_000),
             household_size: 1,
+            household_children: 0,
             brands: Default::default(),
         };
         if let FulfilOutcome::Done { spent, .. } = market.fulfil(&req) {
@@ -517,6 +519,7 @@ fn brak_srodkow_przy_rozliczeniu_oddaje_towar_na_polke() {
         at: magnat_core::SimMinute(480),
         budget_hint: Money(999_999),
         household_size: 1,
+        household_children: 0,
         brands: Default::default(),
     };
     assert!(matches!(market.fulfil(&req), FulfilOutcome::Done { .. }));

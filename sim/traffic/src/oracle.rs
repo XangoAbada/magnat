@@ -199,9 +199,13 @@ pub struct TrafficOracle {
     /// Czy pogodę prowadzi `sim/events` (M8c). Ustawia się raz, przy pierwszym
     /// `set_weather`, i od tej chwili zaślepka `weather_at` w tym świecie milczy.
     weather_external: std::sync::atomic::AtomicBool,
-    /// Suma taryf zapłaconych przewoźnikom taksówkowym, w groszach. Druga strona
-    /// bilansu pieniądza dla opcji, która nie wjeżdża na sieć (`D5`).
-    taxi_fares: AtomicU64,
+    /// Kursy taksówkowe czekające na pobranie opłaty: `(indeks mieszkańca, taryfa)`.
+    ///
+    /// Do R2 stała tu sama **suma** taryf w `AtomicU64`, więc rejestr rósł, a nikt nie
+    /// płacił: kurs taksówką **tworzył** pieniądz w skali świata (`R2-WP32`, pozycja 60
+    /// wykazu). Lista z tożsamością pasażera jest jedyną rzeczą, której brakowało —
+    /// taryfę zna `journey`, a portfel widzi dopiero system po stronie świata.
+    taxi_fares: Mutex<Vec<(u32, i64)>>,
     /// Ile podróży rozpoczęto którą opcją — **licznik diagnostyczny, nie stan**,
     /// więc nie wchodzi do hasha (tak samo jak `rejects_total` w `TrafficNetwork`).
     /// To on jest wejściem bramki rozkładu udziałów z §20.1.
@@ -295,16 +299,21 @@ impl TrafficOracle {
             day: AtomicU64::new(0),
             weather: Mutex::new(Weather::default()),
             weather_external: std::sync::atomic::AtomicBool::new(false),
-            taxi_fares: AtomicU64::new(0),
+            taxi_fares: Mutex::new(Vec::new()),
             mode_counts: std::array::from_fn(|_| AtomicU64::new(0)),
             infeasible_counts: std::array::from_fn(|_| AtomicU64::new(0)),
         }
     }
 
-    /// Suma taryf taksówkowych od początku sesji, w groszach.
-    #[must_use]
-    pub fn taxi_fares(&self) -> Money {
-        Money(self.taxi_fares.load(Ordering::Relaxed) as i64)
+    /// Wyjmuje kursy taksówkowe czekające na opłatę, posortowane po pasażerze.
+    ///
+    /// Sortowanie, a nie kolejność wstawiania: kursy wpadają z kolejki podróży, której
+    /// porządek zależy od wątku wpuszczającego, a kwoty idą do `Wealth.cash` — więc bez
+    /// ustalonego porządku hash stanu zależałby od szeregowania (00 §3.3, `AR-16`).
+    pub fn take_taxi_fares(&self) -> Vec<(u32, Money)> {
+        let mut v = std::mem::take(&mut *self.taxi_fares.lock().expect("taxi_fares"));
+        v.sort_unstable();
+        v.into_iter().map(|(c, m)| (c, Money(m))).collect()
     }
 
     /// Ile podróży rozpoczęto którą opcją, w kolejności [`TravelOption::ALL`].
@@ -679,7 +688,14 @@ impl HashState for TrafficOracle {
         for m in self.habit.lock().expect("habit").iter() {
             h.write_u8(*m);
         }
-        h.write_u64(self.taxi_fares.load(Ordering::Relaxed));
+        // Kursy czekające na opłatę **są stanem**: między wyruszeniem a pobraniem
+        // są jedynym śladem po pieniądzu, który ma zejść z portfela pasażera.
+        let taryfy = self.taxi_fares.lock().expect("taxi_fares");
+        h.write_u32(taryfy.len() as u32);
+        for (c, m) in taryfy.iter() {
+            h.write_u32(*c);
+            h.write_u64(*m as u64);
+        }
         self.router
             .lock()
             .expect("router")

@@ -92,7 +92,14 @@ impl LaborSystem {
         LaborSystem {
             desc: SystemDesc::new("economy.Labor", Cadence::EveryDay)
                 .exclusive()
-                .after_if_present(SystemId::from_name("firms.Firm")),
+                .after_if_present(SystemId::from_name("firms.Firm"))
+                // Zgon, emerytura i wyjazd z miasta dzieją się w `agents.Society`,
+                // a domyka je tutaj `reconcile` (`R2-WP9`). Do R2 kolejność brała się
+                // z hasha nazwy systemu, bo obydwa są wyłączne i żaden nie deklarował
+                // krawędzi — czyli moment, w którym rynek pracy dowiaduje się o zgonie,
+                // był przypadkiem. `after_if_present`, a nie `after` (`K-51`):
+                // scenariusz `m7labor` stawia rynek pracy bez świata mieszkańców.
+                .after_if_present(SystemId::from_name("agents.Society")),
         }
     }
 }
@@ -204,6 +211,15 @@ impl<'a> WorldWorkforce<'a> {
         let Some(h) = self.gospodarstwo(c) else {
             return;
         };
+        self.przesun_dochod_w(h, delta);
+    }
+
+    /// Ta sama operacja, ale na gospodarstwie wskazanym **wprost** (`R2-WP9`).
+    ///
+    /// Odejście z etatu bywa skutkiem zgonu albo wyjazdu z miasta, a wtedy encji
+    /// mieszkańca już nie ma i [`WorldWorkforce::gospodarstwo`] nie ma czego odczytać.
+    /// Indeks gospodarstwa niesie wtedy umowa (`Employment::household`).
+    fn przesun_dochod_w(&mut self, h: magnat_core::Entity, delta: i64) {
         if let Some(gd) = self.world.get_mut::<magnat_agents::Household>(h) {
             gd.income_monthly = Money(gd.income_monthly.get().saturating_add(delta).max(0));
         }
@@ -314,9 +330,23 @@ impl Workforce for WorldWorkforce<'_> {
         self.przesun_dochod(c, wage.get());
     }
 
-    fn release(&mut self, c: CitizenId, wage: Money) {
+    fn household_of(&self, c: CitizenId) -> u32 {
+        self.world
+            .get::<Identity>(c.0)
+            .map_or(magnat_firms::Employment::NO_HOUSEHOLD, |id| id.household)
+    }
+
+    fn release(&mut self, c: CitizenId, wage: Money, household: u32) {
         magnat_agents::migration::release_job_of(self.world, c.0);
-        self.przesun_dochod(c, -wage.get());
+        // Gospodarstwo **z umowy**, a nie z komponentu odchodzącego (`R2-WP9`):
+        // przy zgonie i przy wyjeździe z miasta encji już nie ma, a płaca zostawała
+        // wtedy w dochodzie gospodarstwa na zawsze. Zapis w umowie pochodzi z chwili
+        // zatrudnienia, więc `+wage` i `−wage` trafiają zawsze po tej samej stronie.
+        let cel = magnat_agents::demography::household_by_index(self.world, household)
+            .or_else(|| self.gospodarstwo(c));
+        if let Some(h) = cel {
+            self.przesun_dochod_w(h, -wage.get());
+        }
     }
 
     fn raise_wage(&mut self, c: CitizenId, from: Money, to: Money) {

@@ -50,10 +50,10 @@ pub mod needs;
 pub mod places;
 pub mod planner;
 pub mod school;
+pub mod snapshot;
 pub mod social;
 pub mod society;
 pub mod store;
-pub mod snapshot;
 
 pub mod systems;
 pub mod worldparams;
@@ -66,8 +66,8 @@ pub use brand::{
 };
 pub use components::{
     register, register_components, register_resources, AgentState, EduField, EduLevel, Employment,
-    Identity, Lifecycle, Lod, Needs, Personality, PlanRef, Residence, ShiftKind, ShiftProfile, SkillSlot, Skills,
-    Vitals, Wealth, HOT_COMPONENT_BYTES,
+    Identity, Lifecycle, Lod, Needs, Personality, PlanRef, Residence, ShiftKind, ShiftProfile,
+    SkillSlot, Skills, Vitals, Wealth, HOT_COMPONENT_BYTES,
 };
 pub use components::{BrandsRef, KnowledgeRef, RelationsRef};
 pub use demography::{
@@ -81,8 +81,9 @@ pub use des::{
     REPLAN_COOLDOWN_MIN, WHEEL_MINUTES,
 };
 pub use household::{
-    add_member, classify, members_of, remove_member, roles, Household, HouseholdKind,
-    HouseholdOverflow, HouseholdRoles, MemberView, HH_INLINE_MEMBERS, HH_MAX_MEMBERS, MAX_ESCORTED,
+    add_member, children_count, classify, members_of, remove_member, roles, Household,
+    HouseholdKind, HouseholdOverflow, HouseholdRoles, MemberView, Purse, HH_INLINE_MEMBERS,
+    HH_MAX_MEMBERS, MAX_ESCORTED,
 };
 pub use migration::{
     attractiveness, seed_population, shock_retire_jobs, spawn_household, spawn_household_aged,
@@ -116,11 +117,11 @@ pub use society::{
 pub use worldparams::{register_world_params, DemographyParams, NeedModifiers, NEUTRAL_BPS};
 
 pub use school::{skill_drift_day, SkillDriftSystem, WEEK_SHARDS};
+pub use snapshot::{CitizenSnapshot, MAX_TASK_TRAVEL_MIN};
 pub use store::{
     Knowledge, KnowledgeKind, KnowledgeSlab, PlanSlab, PlanSlot, Relation, RelationKind,
     RelationSlab, Slab, SlabRef, SLAB_CLASSES, SLAB_MAX,
 };
-pub use snapshot::{CitizenSnapshot, MAX_TASK_TRAVEL_MIN};
 pub use systems::{
     bootstrap_day, micro_count, register_day, set_lod, AgentSources, DayLoopSystem, DayStats,
     HouseholdStockSystem, ReplanCooldownSystem, SocietySystem, Sources, Trace, TraceEntry,

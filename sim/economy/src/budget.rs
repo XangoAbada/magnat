@@ -26,7 +26,7 @@ use magnat_core::{
 };
 
 use crate::books::LoanId;
-use crate::data::EconomyData;
+use crate::data::{EconomyData, Equivalence};
 use crate::kernel::BP;
 
 /// Jedna koperta wydatkowa.
@@ -133,10 +133,43 @@ impl HouseholdBudget {
 pub struct HouseholdProfile {
     pub kind: HouseholdKind,
     pub size: u8,
+    /// Ilu członków nie ukończyło `ages.adult` (`R2-WP11`). Granica jest jedna
+    /// i mieszka w `data/demography/demography.ron`; tu jest już sam wynik.
+    pub children: u8,
     /// Cecha `Thrift` — steruje celem oszczędności.
     pub thrift: Q,
     /// Cecha `Ambition` — przesuwa wagę kopert na konsumpcję statusową (PRD §5.4).
     pub ambition: Q,
+}
+
+impl HouseholdProfile {
+    /// Ile **osób ekwiwalentnych** ma to gospodarstwo, w promilach (`R2-WP11`).
+    ///
+    /// Zmodyfikowana skala OECD: pierwszy dorosły waży pełną jednostkę, każdy
+    /// następny mniej, dziecko najmniej. Wagi są daną (`data/economy/envelopes.ron`),
+    /// bo ich strojenie przesuwa popyt całego miasta i ma być widoczne w diffie.
+    ///
+    /// Gospodarstwo puste albo złożone z samych dzieci (sierota z opiekunem,
+    /// `R2-WP4`) dostaje mimo to wagę pierwszego dorosłego na pierwszego członka:
+    /// dom ma jedno ogrzewanie niezależnie od tego, kto w nim mieszka, a zerowa
+    /// skala znaczyłaby dom, który niczego nie zużywa.
+    #[must_use]
+    pub fn equivalent_permille(&self, eq: &Equivalence) -> u32 {
+        let osob = u32::from(self.size.max(1));
+        let dzieci = u32::from(self.children).min(osob);
+        let dorosli = osob - dzieci;
+        let (pierwszy, reszta_doroslych) = if dorosli == 0 {
+            // Sam pierwszy członek płaci stawkę „pierwszego dorosłego"; reszta
+            // dzieci liczy się jako dzieci.
+            (eq.adult_first, 0)
+        } else {
+            (eq.adult_first, dorosli - 1)
+        };
+        let dzieci_wazone = if dorosli == 0 { dzieci - 1 } else { dzieci };
+        pierwszy
+            .saturating_add(reszta_doroslych.saturating_mul(eq.adult_next))
+            .saturating_add(dzieci_wazone.saturating_mul(eq.child))
+    }
 }
 
 /// Wynik planowania miesiąca.
@@ -190,8 +223,11 @@ pub fn plan_budget(
             .get()
             .max(f.housing_min_gr),
     );
-    b.fixed[FixedCost::Utilities.as_index()] =
-        Money(f.utilities_gr_per_person * i64::from(p.size.max(1)));
+    // Media od **osób ekwiwalentnych**, nie od głów (`R2-WP11`, `D-N10`): jedno
+    // oświetlenie i jedno ogrzewanie obsługuje cały dom.
+    b.fixed[FixedCost::Utilities.as_index()] = Money(
+        f.utilities_gr_per_person * i64::from(p.equivalent_permille(&d.budget.equivalence)) / 1_000,
+    );
     b.fixed[FixedCost::Insurance.as_index()] = Money(f.insurance_gr);
     b.fixed[FixedCost::LoanService.as_index()] = installment;
 
@@ -304,6 +340,7 @@ mod tests {
         HouseholdProfile {
             kind,
             size,
+            children: 0,
             thrift: Q::new(50),
             ambition: Q::new(0),
         }

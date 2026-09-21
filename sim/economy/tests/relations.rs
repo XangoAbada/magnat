@@ -135,6 +135,7 @@ fn postaw(
             Money(placa),
             SimMinute(0),
             ShiftKind::Day,
+            Employment::NO_HOUSEHOLD,
         ));
         // Gospodarstwo z realnym buforem: półtora miesiąca płacy na koncie.
         // Fundusz strajkowy to **nadwyżka ponad miesiąc utrzymania**, więc załoga

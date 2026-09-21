@@ -217,3 +217,89 @@ proptest! {
         assert_p3(&b);
     }
 }
+
+// ── K-61: niezmiennik świata obejmuje gospodarstwa ──────────────────────────────
+
+/// `P1` domyka się co do grosza także wtedy, gdy gospodarstwo znika razem z saldem —
+/// i to jest powód, dla którego usterka z `R2-WP8` przeżyła sześć faz (`R2b` §5.4).
+///
+/// Ten test pokazuje jedno i drugie na tej samej sekwencji: `check_conservation`
+/// przechodzi po wyparowaniu 100 000 gr, a `check_world_conservation` pada.
+#[test]
+fn niezmiennik_swiata_widzi_znikniete_gospodarstwo_a_p1_nie() {
+    let (mut b, ids) = world(5_000_000_000);
+    let firma = ids[2];
+
+    // Sektor gospodarstw startuje od zera: pieniądz wchodzi do komponentów wyłącznie
+    // kanałem `household_receive`, tak samo jak w świecie z generatora.
+    let mut sektor = Money::ZERO;
+    assert_eq!(b.check_world_conservation(sektor), Ok(()));
+
+    // Wypłata: kwota schodzi z konta firmy i ląduje w komponencie gospodarstwa.
+    let wyplata = Money(100_000);
+    b.transfer(ids[0], firma, Money(1_000_000), memo(), Tick(1))
+        .unwrap();
+    b.household_receive(
+        firma,
+        wyplata,
+        TxMemo::new(TxKind::Withdrawal, DecisionReason::Unspecified),
+        Tick(2),
+    )
+    .unwrap();
+    sektor = Money(sektor.get() + wyplata.get());
+
+    assert_eq!(b.check_conservation(), Ok(()));
+    assert_eq!(
+        b.check_world_conservation(sektor),
+        Ok(()),
+        "niezmiennik świata nie domyka się na uczciwej wypłacie"
+    );
+
+    // A teraz gospodarstwo znika razem z saldem — dokładnie to robiło
+    // `rozwiaz_gospodarstwo` przed `R2-WP8`.
+    sektor = Money::ZERO;
+    assert_eq!(
+        b.check_conservation(),
+        Ok(()),
+        "P1 miał przejść — na tym polega cały problem"
+    );
+    assert_eq!(
+        b.check_world_conservation(sektor),
+        Err((Money(4_999_900_000), Money(5_000_000_000))),
+        "niezmiennik świata nie zobaczył zniknięcia 100 000 gr"
+    );
+}
+
+/// Kanał sektora gospodarstw nie tworzy ani nie niszczy pieniądza w obie strony:
+/// milion operacji na przemian w jedną i w drugą, oba niezmienniki zielone.
+#[test]
+fn kanal_gospodarstw_zachowuje_pieniadz_w_obie_strony() {
+    let (mut b, ids) = world(5_000_000_000);
+    let mut rng = Rng::from_state([0x9E37_79B9_7F4A_7C15, 3, 0xBF58_476D_1CE4_E5B9, 5]);
+    let mut sektor = Money::ZERO;
+    b.transfer(ids[0], ids[2], Money(2_000_000_000), memo(), Tick(0))
+        .unwrap();
+
+    for i in 0..200_000u64 {
+        let kwota = Money(1 + i64::from(rng.gen_range_u32(5_000)));
+        let t = Tick(i);
+        if rng.gen_bool_permille(500) {
+            if b.household_receive(ids[2], kwota, memo(), t).is_ok() {
+                sektor = Money(sektor.get() + kwota.get());
+            }
+        } else if kwota <= sektor && b.household_pay(ids[2], kwota, memo(), t).is_ok() {
+            sektor = Money(sektor.get() - kwota.get());
+        }
+        if i % 25_000 == 0 {
+            assert_eq!(b.check_conservation(), Ok(()), "P1 pękł w kroku {i}");
+            assert_eq!(
+                b.check_world_conservation(sektor),
+                Ok(()),
+                "niezmiennik świata pękł w kroku {i}"
+            );
+        }
+    }
+    assert_eq!(b.check_conservation(), Ok(()));
+    assert_eq!(b.check_world_conservation(sektor), Ok(()));
+    assert!(sektor.get() > 0, "kanał nie ruszył ani razu");
+}

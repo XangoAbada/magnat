@@ -202,7 +202,9 @@ mod tests {
         assert_eq!(pokrycie, 0b111_1111, "ruch ciągły nie pokrywa tygodnia");
         for i in 0..4 {
             assert_eq!(
-                ShiftKind::schedule(profil(SectorId::Industry, ShiftId::III), i).1.count_ones(),
+                ShiftKind::schedule(profil(SectorId::Industry, ShiftId::III), i)
+                    .1
+                    .count_ones(),
                 5,
                 "brygada {i} pracuje inną liczbę dni niż pięć"
             );

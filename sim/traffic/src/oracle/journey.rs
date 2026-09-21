@@ -115,8 +115,14 @@ impl TrafficOracle {
         // wjeżdża na sieć (`D5`), więc zdarzenie przybycia stawia się tutaj.
         if decision.chosen == TravelOption::Taxi {
             let arrive_at = now + u32::from(minutes);
-            self.taxi_fares
-                .fetch_add(decision.money.0.max(0) as u64, Ordering::Relaxed);
+            // Kurs trafia na listę do pobrania: taryfę zna ta funkcja, a portfel
+            // pasażera widzi dopiero system po stronie świata (`R2-WP32`).
+            if decision.money.0 > 0 {
+                self.taxi_fares
+                    .lock()
+                    .expect("taxi_fares")
+                    .push((citizen, decision.money.0));
+            }
             q.schedule(SimEvent::new(
                 arrive_at,
                 citizen,

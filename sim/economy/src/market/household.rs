@@ -26,6 +26,58 @@ impl Market {
         self.lock().loans.get(id).cloned()
     }
 
+    /// Spłaca kredyt gospodarstwa z masy spadkowej i zwraca, ile z niej poszło
+    /// (`R2-WP10`).
+    ///
+    /// Wołane wtedy i tylko wtedy, gdy gospodarstwo przestaje istnieć: dopóki żyje,
+    /// kredyt ma dłużnika i idzie harmonogramem. Kwota wchodzi do ksiąg kanałem
+    /// sektora gospodarstw — masa spadkowa jest po stronie komponentów — a dopiero
+    /// z konta banku znika jako pieniądz kredytowy. Ta sama kolejność co w racie
+    /// miesięcznej i z tego samego powodu: `destroy_credit` działa na kontach.
+    ///
+    /// Reszty, na którą masy nie starczyło, **nikt nie spłaci**: gospodarstwa nie ma,
+    /// więc kredyt zamyka się jako strata banku. To jest uczciwsza odpowiedź niż
+    /// zobowiązanie bytu, którego nie ma — a stratę widać, bo `credit_repaid` zostaje
+    /// mniejsze od `credit_created` i niezmiennik P1 nadal się domyka.
+    pub fn settle_household_loan(
+        &self,
+        household: u32,
+        available: Money,
+        books: &mut Books,
+        t: Tick,
+    ) -> Money {
+        let mut m = self.lock();
+        let Some(bank) = m.bank else {
+            return Money::ZERO;
+        };
+        let Some(id) = m.budget_of(household).loan else {
+            return Money::ZERO;
+        };
+        let Some(zostalo) = m.loans.get(id).map(|l| l.outstanding) else {
+            return Money::ZERO;
+        };
+        let kwota = Money(zostalo.get().min(available.get().max(0)));
+        if kwota.get() > 0 {
+            let memo = TxMemo::new(
+                TxKind::LoanPayment {
+                    loan: id,
+                    principal: kwota,
+                    interest: Money::ZERO,
+                },
+                DecisionReason::Unspecified,
+            );
+            if books.household_pay(bank.account, kwota, memo, t).is_err() {
+                return Money::ZERO;
+            }
+            let _ = books.destroy_credit(bank.account, kwota, id, t);
+        }
+        if let Some(l) = m.loans.get_mut(id) {
+            l.outstanding = Money::ZERO;
+            l.arrears_months = 0;
+        }
+        kwota
+    }
+
     #[must_use]
     pub fn loan_count(&self) -> usize {
         self.lock().loans.len()

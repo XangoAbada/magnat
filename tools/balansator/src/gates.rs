@@ -983,7 +983,11 @@ fn g12_seria(lod: &[LodSample], wielkosc: Wielkosc) -> (String, Werdykt) {
     let (ok, opis) = g12_wielkosc(&seria);
     (
         opis,
-        if ok { Werdykt::Zielona } else { Werdykt::Czerwona },
+        if ok {
+            Werdykt::Zielona
+        } else {
+            Werdykt::Czerwona
+        },
     )
 }
 

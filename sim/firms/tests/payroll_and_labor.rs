@@ -59,6 +59,7 @@ fn zaklad(key: FirmKey, slots: u16, obsadzone: u16) -> Site {
             PLACA,
             SimMinute(0),
             ShiftKind::Day,
+            Employment::NO_HOUSEHOLD,
         ));
     }
     // Stanowisko kierownicze zakład ma z katalogu; tu buduję go ręcznie, więc

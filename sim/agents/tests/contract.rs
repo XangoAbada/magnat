@@ -181,6 +181,7 @@ fn sciezka_odmowy_dziala_zanim_m5_bedzie_mial_czym_odmawiac() {
         at: SimMinute(480),
         budget_hint: Money::ZERO,
         household_size: 1,
+        household_children: 0,
         brands: Default::default(),
     };
 

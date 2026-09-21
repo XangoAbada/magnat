@@ -108,9 +108,19 @@ pub trait Workforce {
         wage: Money,
     );
 
+    /// Gospodarstwo mieszkańca jako indeks encji, albo [`magnat_firms::Employment::NO_HOUSEHOLD`].
+    ///
+    /// Odczytuje się je **przy zatrudnieniu** i zapisuje w umowie (`R2-WP9`), bo
+    /// w chwili odejścia encji mieszkańca może już nie być — zgon i wyjazd z miasta
+    /// prowadzi `sim/agents` i on despawnuje encję, zanim rynek pracy zdąży domknąć etat.
+    fn household_of(&self, c: CitizenId) -> u32;
+
     /// Wyjście z etatu. **Jedyna legalna droga** — etat, który nie wraca do puli,
     /// znika z miasta na zawsze (M3c, korekta G-7).
-    fn release(&mut self, c: CitizenId, wage: Money);
+    ///
+    /// `household` pochodzi z umowy, a nie z komponentu odchodzącego: patrz
+    /// [`Workforce::household_of`].
+    fn release(&mut self, c: CitizenId, wage: Money, household: u32);
 
     /// Zmiana stawki bez zmiany pracodawcy (kontroferta, podwyżka).
     fn raise_wage(&mut self, c: CitizenId, from: Money, to: Money);

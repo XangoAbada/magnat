@@ -310,6 +310,7 @@ fn przebieg(seed: u64, dni: u64, skok: Option<u64>, mnoznik: i64) -> i32 {
                 at: magnat_core::SimMinute(t.get()),
                 budget_hint: saldo,
                 household_size: 6,
+                household_children: 0,
                 brands: Default::default(),
             };
             let _ = market.fulfil(&req);

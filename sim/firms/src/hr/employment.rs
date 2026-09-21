@@ -64,10 +64,25 @@ pub struct Employment {
     /// nowa umowa startuje od środka skali, bo nikt nie zna jeszcze tego człowieka.
     pub perf_ema: u16,
     pub warnings: u8,
+    /// Indeks encji gospodarstwa, do którego ta płaca **weszła** (`R2-WP9`).
+    ///
+    /// Jest tu, bo dochód gospodarstwa jest denormalizacją prowadzoną przyrostowo:
+    /// zatrudnienie dopisuje `+wage`, odejście `−wage`. Odejście bywa skutkiem zgonu
+    /// albo wyjazdu z miasta, a wtedy encji mieszkańca **już nie ma** i nie ma czym
+    /// odczytać, do którego gospodarstwa należał. Bez tego pola płaca zmarłego
+    /// zostawała w dochodzie gospodarstwa na zawsze, a gospodarstwo wydawało pieniądze,
+    /// których nikt nie zarabia.
+    ///
+    /// Zapisuje się tu wartość z chwili zatrudnienia i **ta sama** wartość obsługuje
+    /// podwyżkę i odejście — dzięki temu każde `+wage` ma parę `−wage` po tej samej
+    /// stronie. `Household::NO_MEMBER` znaczy „nieznane" (świat bez gospodarstw).
+    pub household: u32,
 }
 
 impl Employment {
     pub const PERF_START: u16 = 500;
+    /// Gospodarstwo nieznane — patrz [`Employment::household`].
+    pub const NO_HOUSEHOLD: u32 = u32::MAX;
 
     #[must_use]
     pub fn new(
@@ -76,6 +91,7 @@ impl Employment {
         wage_month: Money,
         since: SimMinute,
         shift: ShiftKind,
+        household: u32,
     ) -> Employment {
         Employment {
             citizen,
@@ -86,6 +102,7 @@ impl Employment {
             benefits: BenefitSet::NONE,
             perf_ema: Employment::PERF_START,
             warnings: 0,
+            household,
         }
     }
 }
@@ -100,6 +117,7 @@ impl HashState for Employment {
         self.benefits.hash_state(h);
         h.write_u16(self.perf_ema);
         h.write_u8(self.warnings);
+        h.write_u32(self.household);
     }
 }
 
@@ -232,6 +250,7 @@ mod tests {
             Money(wage),
             SimMinute(0),
             ShiftKind::Day,
+            Employment::NO_HOUSEHOLD,
         )
     }
 

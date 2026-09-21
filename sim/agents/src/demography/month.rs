@@ -1,5 +1,6 @@
 use super::day::{usun_relacje, zwolnij_slaby};
 use super::*;
+use crate::migration::Czesci;
 
 /// Przelicza typ gospodarstwa po zmianie składu (§5.6: typ jest funkcją składu).
 pub fn przeklasyfikuj(world: &mut World, hh_idx: u32, hh: &mut Household, day: u64) {
@@ -20,6 +21,9 @@ pub fn przeklasyfikuj(world: &mut World, hh_idx: u32, hh: &mut Household, day: u
         })
         .collect();
     hh.kind = household::classify(&widoki, i32::from(ages.adult), i32::from(ages.senior)) as u8;
+    // Liczba dzieci wychodzi z **tego samego** składu co typ (`R2-WP11`): skala
+    // ekwiwalentna po stronie M5 nie może mieć własnej definicji dziecka.
+    hh.children = household::children_count(&widoki, i32::from(ages.adult));
 }
 
 // -- miesiac: zwiazki, sluby, rozstania -----------------------------------------
@@ -352,7 +356,21 @@ fn rozstania(world: &mut World, day: u64, raport: &mut MonthReport) {
         // Przeprowadzka jest lokalna albo jej nie ma: w mieście bez pustostanu
         // w dzielnicy rozstana para mieszka dalej razem, a próbuje ponownie
         // w następnym miesiącu. Związek jest już rozwiązany w obu `Lifecycle`.
-        crate::migration::zaloz_gospodarstwo(world, partner, day);
+        // Podział majątku i długu na dwie równe części (`R2-WP8`). Dzieci zostają
+        // z jednym z rodziców, ale nie są stroną umowy majątkowej, więc podział jest
+        // na dwoje, a nie na tylu, ilu domowników.
+        let stare = encja_gospodarstwa(world, a.household);
+        if let (Some(stare), Some(nowe)) = (
+            stare,
+            crate::migration::zaloz_gospodarstwo(world, partner, day, Czesci::Polowa),
+        ) {
+            // `LoanBook` wiąże kredyt z gospodarstwem, więc raty nadal pilnuje jedna
+            // strona — R2 odmawia gubienia kwoty, a nie przepisuje umowy kredytowej.
+            let polowa = world.get_mut::<Household>(stare).map(Household::split_debt);
+            if let (Some(polowa), Some(h)) = (polowa, world.get_mut::<Household>(nowe)) {
+                h.debt = polowa;
+            }
+        }
         raport.separations += 1;
         raport.reasons.push((
             e.index(),

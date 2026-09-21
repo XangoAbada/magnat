@@ -737,6 +737,24 @@ fn eksport_zabiera_mase_z_lokalnej_podazy() {
     m.store
         .check_mass(m.zboze)
         .expect("bilans masy po eksporcie");
+
+    // `R2-WP36`: eksport wchodzi do rachunku wyniku zakładu, który towar wysłał.
+    // Przed naprawą oba pola były puste, więc zakład produkujący wyłącznie
+    // na eksport miał `revenue == 0` i był strukturalnie odporny na zamknięcie.
+    assert_eq!(
+        s.seller_site,
+        Some(mlyn),
+        "eksport nie wie, który zakład wysłał towar"
+    );
+    assert!(
+        s.seller_cogs.0 > 0,
+        "eksport bez kosztu własnego pokazałby sto procent marży"
+    );
+    assert!(
+        s.seller_cogs < s.net,
+        "koszt wytworzenia nie może przewyższać ceny eksportowej w tym scenariuszu"
+    );
+    m.store.check_cost().expect("bilans kosztu po eksporcie");
 }
 
 /// Symetrycznie: przy dobrej cenie lokalnej eksport **nie zachodzi**. Gdyby zachodził

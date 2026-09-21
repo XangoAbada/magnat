@@ -124,8 +124,25 @@ pub struct Household {
     /// który jeszcze nie istnieje, a opiekun czytelnika ma dziś (`household::roles`,
     /// `SocialIndex::wards`).
     pub guardian: u32,
+    /// Ilu członków nie ukończyło `ages.adult` (`R2-WP11`).
+    ///
+    /// Liczy ją [`classify`] razem z typem gospodarstwa i utrzymuje ten sam
+    /// `przeklasyfikuj` — jedno źródło, jedna kadencja. Czyta ją skala ekwiwalentna
+    /// po stronie M5: konsumpcja i media liczą się od **osób ekwiwalentnych**,
+    /// a nie od głów, bo niemowlę nie je tyle co dorosły mężczyzna.
+    ///
+    /// Bajt z rezerwy M5/M9 (12 B → 11 B), więc gospodarstwo zostaje **120 B** —
+    /// ta sama droga, którą `K-91` wziął cztery bajty na opiekuna.
+    ///
+    /// `ponytail:` świeżość jest dokładnie taka sama jak świeżość `kind` — obie
+    /// liczy `przeklasyfikuj`, a ten chodzi przy zmianie składu i przy wyjściu
+    /// ze szkoły (18. urodziny w dzisiejszych danych). Dziecko, które wejdzie
+    /// w dorosłość **inną** drogą niż wyjście ze szkoły, waży o 0,2 osoby za mało
+    /// do najbliższej zmiany składu. Wyjście: przeliczanie przy każdej zmianie
+    /// rocznika, gdy któraś faza da mu drugiego czytelnika.
+    pub children: u8,
     /// Rezerwa dla M5/M9, żeby nie przebudowywać archetypu (ryzyko R5).
-    pub _reserved: [u8; 12],
+    pub _reserved: [u8; 11],
     pub _pad4: [u8; 4],
 }
 
@@ -151,7 +168,8 @@ impl Default for Household {
             _pad3: [0; 2],
             vehicle_slots: [u32::MAX; 2],
             guardian: Household::NO_MEMBER,
-            _reserved: [0; 12],
+            children: 0,
+            _reserved: [0; 11],
             _pad4: [0; 4],
         }
     }
@@ -220,6 +238,109 @@ impl Household {
     #[must_use]
     pub fn contains_inline(&self, member: u32) -> bool {
         self.members.contains(&member)
+    }
+
+    /// Płynny majątek gospodarstwa — patrz [`Purse`].
+    #[inline]
+    #[must_use]
+    pub const fn purse(&self) -> Purse {
+        Purse {
+            cash: self.cash,
+            bank: self.bank,
+            savings: self.savings,
+        }
+    }
+
+    /// Zdejmuje cały płynny majątek i oddaje go wołającemu. Gospodarstwo zostaje
+    /// z zerem na wszystkich trzech pozycjach.
+    pub fn take_purse(&mut self) -> Purse {
+        let p = self.purse();
+        self.cash = Money::ZERO;
+        self.bank = Money::ZERO;
+        self.savings = Money::ZERO;
+        p
+    }
+
+    /// Wydziela `1/parts` płynnego majątku dla wyprowadzającego się (`R2-WP8`).
+    ///
+    /// Każda z trzech pozycji dzieli się osobno przez [`magnat_core::split_proportional`],
+    /// więc suma części równa się kwocie dzielonej **co do grosza**, a reszta
+    /// z dzielenia zostaje w gospodarstwie dzielącym (pierwsza pozycja podziału).
+    ///
+    /// Dług nie wchodzi i to jest rozstrzygnięcie `D-N9`, nie przeoczenie: `LoanBook`
+    /// wiąże kredyt z gospodarstwem, nie z osobą, więc zobowiązanie nie ma jak
+    /// pojechać za człowiekiem.
+    pub fn split_off(&mut self, parts: u8) -> Purse {
+        let n = usize::from(parts.max(1));
+        if n == 1 {
+            return self.take_purse();
+        }
+        let wagi = vec![1u64; n];
+        let wez = |pole: &mut Money| -> Money {
+            let czesci = magnat_core::split_proportional(*pole, &wagi);
+            // Podział oddaje resztę pierwszej pozycji, a ta zostaje w domu.
+            let udzial = czesci[n - 1];
+            *pole = Money(pole.get() - udzial.get());
+            udzial
+        };
+        Purse {
+            cash: wez(&mut self.cash),
+            bank: wez(&mut self.bank),
+            savings: wez(&mut self.savings),
+        }
+    }
+
+    /// Zdejmuje **połowę długu** i oddaje ją wołającemu (`R2-WP8`).
+    ///
+    /// Osobno od [`Household::split_off`], bo zobowiązanie dzieli się w jednej z dwóch
+    /// sytuacji, a majątek w obu: przy rozstaniu dług idzie po połowie, przy wyprowadzce
+    /// z gniazda zostaje w całości po stronie gospodarstwa, które go zaciągnęło (`D-N9`).
+    /// Reszta z dzielenia zostaje tutaj.
+    pub fn split_debt(&mut self) -> Money {
+        if self.debt == Money::ZERO {
+            return Money::ZERO;
+        }
+        let czesci = magnat_core::split_proportional(self.debt, &[1, 1]);
+        self.debt = czesci[0];
+        czesci[1]
+    }
+
+    /// Dopisuje sakiewkę do salda — druga połowa [`Household::split_off`].
+    pub fn add_purse(&mut self, p: Purse) {
+        self.cash = self.cash.checked_add(p.cash).unwrap_or(self.cash);
+        self.bank = self.bank.checked_add(p.bank).unwrap_or(self.bank);
+        self.savings = self.savings.checked_add(p.savings).unwrap_or(self.savings);
+    }
+}
+
+/// Płynny majątek gospodarstwa: gotówka, rachunek bieżący i oszczędności.
+///
+/// Istnieje, bo te trzy pozycje przenoszą się **razem** w czterech miejscach
+/// (rozwiązanie gospodarstwa, wyprowadzka z gniazda, rozstanie, scalenie po ślubie)
+/// i trójka powtórzona cztery razy rozjeżdża się przy pierwszej zmianie. Dług nie jest
+/// pieniądzem i tu nie wchodzi — `society::total_money` też go nie liczy.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub struct Purse {
+    pub cash: Money,
+    pub bank: Money,
+    pub savings: Money,
+}
+
+impl Purse {
+    /// Suma trzech pozycji — to, co widzi niezmiennik pieniądza.
+    #[must_use]
+    pub fn total(&self) -> Money {
+        Money(
+            self.cash
+                .get()
+                .saturating_add(self.bank.get())
+                .saturating_add(self.savings.get()),
+        )
+    }
+
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.total() == Money::ZERO
     }
 }
 
@@ -422,6 +543,17 @@ impl MemberView {
     }
 }
 
+/// Ilu członków nie ukończyło `adult_age` — druga liczba, którą daje ten sam skład
+/// co [`classify`] (`R2-WP11`).
+#[must_use]
+pub fn children_count(members: &[MemberView], adult_age: i32) -> u8 {
+    members
+        .iter()
+        .filter(|m| m.age_years < adult_age)
+        .count()
+        .min(255) as u8
+}
+
 /// Typ gospodarstwa wyliczony ze składu (§5.6).
 ///
 /// Kolejność sprawdzeń jest kolejnością szczegółowości: wielopokoleniowość wygrywa
@@ -431,7 +563,7 @@ pub fn classify(members: &[MemberView], adult_age: i32, senior_age: i32) -> Hous
     if members.is_empty() {
         return HouseholdKind::Single;
     }
-    let dzieci = members.iter().filter(|m| m.age_years < adult_age).count();
+    let dzieci = usize::from(children_count(members, adult_age));
     let dorosli = members.len() - dzieci;
     let seniorzy = members.iter().filter(|m| m.age_years >= senior_age).count();
     let para = members.iter().any(|m| m.partnered_inside);
@@ -620,6 +752,7 @@ impl HashState for Household {
         h.write_u32(self.vehicle_slots[0]);
         h.write_u32(self.vehicle_slots[1]);
         h.write_u32(self.guardian);
+        h.write_u8(self.children);
         h.write(&self._reserved);
     }
 }
@@ -658,10 +791,11 @@ mod tests {
                 std::mem::offset_of!(Household, stock),
                 std::mem::offset_of!(Household, vehicle_slots),
                 std::mem::offset_of!(Household, guardian),
+                std::mem::offset_of!(Household, children),
                 std::mem::offset_of!(Household, _reserved),
                 size_of::<Household>(),
             ),
-            (8, 32, 40, 80, 92, 100, 104, 120)
+            (8, 32, 40, 80, 92, 100, 104, 105, 120)
         );
     }
 

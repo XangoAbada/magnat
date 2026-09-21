@@ -520,7 +520,11 @@ fn jest_decyzja(kind: &magnat_economy::TxKind) -> bool {
         | K::ShareTrade { .. }
         | K::ShareIssue { .. }
         // Dywidenda też: uchwala się ją co miesiąc i wolno jej nie uchwalić.
-        | K::Dividend { .. } => true,
+        | K::Dividend { .. }
+        // Opłata za dojazd jest wyborem: mieszkaniec wybrał środek transportu,
+        // a razem z nim jego cenę (`R2-WP32`). Gdyby była zobowiązaniem, bramka G9
+        // liczyłaby wybór modalny jako wykonanie umowy, której nikt nie zawarł.
+        | K::Mobility { .. } => true,
         // Zobowiązanie: umowa, harmonogram albo warunek początkowy świata.
         K::Wage { .. }
         // Licencja jest **zobowiązaniem**, nie wyborem, i to jest różnica wobec

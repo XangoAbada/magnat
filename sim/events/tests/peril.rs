@@ -148,8 +148,7 @@ fn szkody_na_rok_gry_i_sufit_karencji() {
             let dob_w_sezonie = if sezonowa { 270.0 } else { 360.0 };
             // Hazard przy **neutralnych** sondach: tyle wypada w roku przeciętnym.
             // Krzywe mnożą to w roku mokrym, ale bramka pyta o przeciętny.
-            let z_hazardu =
-                f64::from(d.trigger.base_ppm) / 1e6 * dob_w_sezonie * instancji;
+            let z_hazardu = f64::from(d.trigger.base_ppm) / 1e6 * dob_w_sezonie * instancji;
             // Sufit karencji: definicja milczy `cooldown_days` po każdym wygaśnięciu.
             let sufit = 360.0 / f64::from(d.cooldown_days.max(1));
             let realna = z_hazardu.min(sufit);

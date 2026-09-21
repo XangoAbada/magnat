@@ -653,7 +653,7 @@ fn raport(
     a: &M8MiastoArgs,
     miasto: &City,
     czas: f64,
-    pieniadz_start: [i64; 5],
+    pieniadz_start: [i64; 4],
     world: &magnat_ecs::World,
 ) -> bool {
     let mut ok = true;

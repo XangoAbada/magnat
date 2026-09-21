@@ -34,7 +34,9 @@ fn profil_zakladu_rozdaje_rozne_zmiany() {
 
     let biuro = obsada(ShiftProfile::Office, 8);
     assert!(
-        biuro.iter().all(|(s, d)| *s == ShiftKind::Day && *d == 0b001_1111),
+        biuro
+            .iter()
+            .all(|(s, d)| *s == ShiftKind::Day && *d == 0b001_1111),
         "biuro przestało być biurem: {biuro:?}"
     );
 

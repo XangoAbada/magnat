@@ -805,8 +805,16 @@ pub fn spawn_household_aged(
         // i walidator trzyma go poniżej `HH_MAX_MEMBERS` — ale wynik sprawdzamy,
         // bo dane wolno przestawić, a `R2-WP3` właśnie po to zrobiło z tego
         // `#[must_use]`: mieszkaniec poza składem istnieje i nie istnieje naraz.
+        //
+        // **Wywołanie stoi poza `debug_assert!`, i to nie jest kosmetyka** (`R2-WP8`,
+        // pozycja 77 wykazu): `debug_assert!` **nie oblicza swojego argumentu**
+        // w profilu `release`, więc dopóki dopisanie członka było argumentem asercji,
+        // release stawiał miasto z samych **pustych** gospodarstw. Nikt nie dostawał
+        // etatu, nikt nie miał dochodu, nikt niczego nie kupował — a debug pokazywał
+        // świat zdrowy, więc `cargo test` był zielony i nic tego nie łapało.
+        let dopisany = household::add_member(hh_idx, &mut hh, ov, c.index());
         debug_assert!(
-            household::add_member(hh_idx, &mut hh, ov, c.index()),
+            dopisany,
             "gospodarstwo przyjezdne ponad HH_MAX_MEMBERS — popraw data/demography"
         );
     }
@@ -1072,7 +1080,7 @@ fn usamodzielnienie(world: &mut World, day: u64, raport: &mut MigrationReport) {
 
         let dzielnica = world.get::<Residence>(e).map_or(u16::MAX, |r| r.district);
         if world.resource::<Vacancies>().has_home_in(dzielnica)
-            && zaloz_gospodarstwo(world, e, day).is_some()
+            && zaloz_gospodarstwo(world, e, day, Czesci::Domownicy).is_some()
         {
             raport.left_nest += 1;
             continue;
@@ -1104,6 +1112,46 @@ fn usamodzielnienie(world: &mut World, day: u64, raport: &mut MigrationReport) {
     }
 }
 
+/// Na ile części dzieli się majątek gospodarstwa, kiedy ktoś się z niego wyprowadza.
+///
+/// Dwie wartości, bo dwie sytuacje i dwie różne prawdy o tym, kto jest stroną podziału:
+/// wyprowadzka z gniazda dzieli na tylu, ilu jest domowników (`R2-WP8`, „udział `1/n`"),
+/// a rozstanie na dwoje — dzieci zostają z jednym z rodziców, ale nie są stroną umowy
+/// majątkowej. Jedna wartość dla obu byłaby regułą, której nikt nie zapisał.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Czesci {
+    /// `1/rozmiar` — wyprowadzka z gniazda.
+    Domownicy,
+    /// `1/2` — rozstanie pary.
+    Polowa,
+}
+
+/// Udział wyprowadzającego się w płynnym majątku jego gospodarstwa (`R2-WP8`).
+///
+/// `czesci` podaje wołający, bo tylko on wie, ile stron ma podział: wyprowadzka
+/// z gniazda dzieli na tylu, ilu jest domowników, a rozstanie — na dwoje, bo dzieci
+/// nie są stroną umowy majątkowej. [`Czesci::Domownicy`] rozwiązuje się na miejscu,
+/// żeby liczba nigdy nie pochodziła z pola przeczytanego po wypisaniu ze składu.
+/// Reszta z dzielenia zostaje w gospodarstwie dzielącym.
+fn wydziel_udzial(world: &mut World, citizen: Entity, czesci: Czesci) -> household::Purse {
+    let Some(hh_idx) = world.get::<Identity>(citizen).map(|i| i.household) else {
+        return household::Purse::default();
+    };
+    let Some(hh_e) = demography::household_by_index(world, hh_idx) else {
+        return household::Purse::default();
+    };
+    world
+        .get_mut::<Household>(hh_e)
+        .map(|h| {
+            let n = match czesci {
+                Czesci::Domownicy => h.size,
+                Czesci::Polowa => 2,
+            };
+            h.split_off(n)
+        })
+        .unwrap_or_default()
+}
+
 /// Zakłada gospodarstwo dla jednego mieszkańca: wypisuje go ze starego, bierze
 /// pustostan (jeśli jest) i przenosi pod nowy adres.
 ///
@@ -1111,9 +1159,18 @@ fn usamodzielnienie(world: &mut World, day: u64, raport: &mut MigrationReport) {
 /// `settle_grace_days` na znalezienie dachu i dopiero potem wyprowadza z miasta (§5.7).
 /// Blokowanie rozstań i usamodzielnień brakiem pustostanu byłoby regułą, której nikt
 /// nie zapisał, a która cicho zamrażałaby demografię przy zapełnionym mieście.
-pub fn zaloz_gospodarstwo(world: &mut World, citizen: Entity, day: u64) -> Option<Entity> {
+pub fn zaloz_gospodarstwo(
+    world: &mut World,
+    citizen: Entity,
+    day: u64,
+    czesci: Czesci,
+) -> Option<Entity> {
     let dzielnica = world.get::<Residence>(citizen).map_or(0, |r| r.district);
     let home = world.resource_mut::<Vacancies>().take_home_in(dzielnica)?;
+    // Udział w majątku zdejmuje się **przed** wypisaniem ze składu (`R2-WP8`):
+    // po `opusc_gospodarstwo` gospodarstwo o rozmiarze 1 jest już rozwiązane,
+    // a jego saldo — na koncie technicznym.
+    let udzial = wydziel_udzial(world, citizen, czesci);
     let mut cmd = CommandBuffer::new(demography_system_id());
     demography::day::opusc_gospodarstwo(world, citizen, day, &mut cmd);
     magnat_ecs::flush_commands(world, std::slice::from_mut(&mut cmd));
@@ -1127,6 +1184,9 @@ pub fn zaloz_gospodarstwo(world: &mut World, citizen: Entity, day: u64) -> Optio
             unit,
             flags: Household::FLAG_ACTIVE,
             stock: [7; STOCK_CAT_COUNT],
+            cash: udzial.cash,
+            bank: udzial.bank,
+            savings: udzial.savings,
             ..Household::default()
         })
         .id();
@@ -1137,7 +1197,10 @@ pub fn zaloz_gospodarstwo(world: &mut World, citizen: Entity, day: u64) -> Optio
     {
         let ov = world.resource_mut::<HouseholdOverflow>();
         // Świeże gospodarstwo z jednym członkiem — limitu nie da się tu przekroczyć.
-        debug_assert!(household::add_member(hh_idx, &mut hh, ov, citizen.index()));
+        // Wywołanie **poza** asercją, bo `debug_assert!` nie oblicza argumentu
+        // w release — patrz komentarz w `spawn_household_aged`.
+        let dopisany = household::add_member(hh_idx, &mut hh, ov, citizen.index());
+        debug_assert!(dopisany);
     }
     demography::przeklasyfikuj(world, hh_idx, &mut hh, day);
     if let Some(slot) = world.get_mut::<Household>(hh_e) {
@@ -1186,7 +1249,9 @@ pub fn zaloz_gospodarstwo_pochodne(
     let mut hh = world.get::<Household>(hh_e).copied().unwrap_or_default();
     {
         let ov = world.resource_mut::<HouseholdOverflow>();
-        debug_assert!(household::add_member(hh_idx, &mut hh, ov, citizen.index()));
+        // Poza asercją — `debug_assert!` nie oblicza argumentu w release.
+        let dopisany = household::add_member(hh_idx, &mut hh, ov, citizen.index());
+        debug_assert!(dopisany);
     }
     demography::przeklasyfikuj(world, hh_idx, &mut hh, day);
     if let Some(slot) = world.get_mut::<Household>(hh_e) {

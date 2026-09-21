@@ -240,6 +240,7 @@ fn kup(b: &common::Bench, otwartosc: u8, kto: u32) -> FulfilOutcome {
         at: magnat_core::SimMinute(600),
         budget_hint: Money(50_000_000),
         household_size: 1,
+        household_children: 0,
         brands: Default::default(),
     })
 }

@@ -17,7 +17,7 @@
 //
 // Kwoty w groszach (00 §2), udziały w promilach.
 (
-    schema_version: 3,
+    schema_version: 4,
 
     // ── koszty stałe ─────────────────────────────────────────────────────────────
     //
@@ -30,9 +30,31 @@
         // gdzieś mieszka, a zero w tej pozycji kasowałoby całą ścieżkę zaległości.
         housing_bp_of_income: 2800,
         housing_min_gr: 45000,
-        // Media rosną z liczbą osób, nie z dochodu.
+        // Media rosną z liczbą **osób ekwiwalentnych**, nie z dochodu i nie z głów
+        // (`R2-WP11`, `D-N10`): jedno oświetlenie i jedno ogrzewanie obsługuje cały
+        // dom, więc liniowość per osoba jest tu gorszym przybliżeniem niż w żywności.
         utilities_gr_per_person: 9000,
         insurance_gr: 6000,
+    ),
+
+    // ── skala ekwiwalentna gospodarstwa (`R2-WP11`) ──────────────────────────────
+    //
+    // Do R2 konsumpcja i media liczyły się jako `na osobę × liczba osób`, więc
+    // niemowlę jadło tyle co dorosły mężczyzna. Skala zmodyfikowana OECD mówi, ile
+    // **osób ekwiwalentnych** ma gospodarstwo: pierwszy dorosły waży pełną jednostkę,
+    // każdy następny połowę, dziecko poniżej `ages.adult` — niecałą jedną trzecią.
+    //
+    // Promile, bo cała arytmetyka zapasu i pieniądza jest całkowita (00 §2), a skala
+    // wchodzi w mianownik członu ceny w funkcji użyteczności. `Fx` z planu byłby
+    // drugim układem liczbowym w ścieżce, w której nie ma ani jednego floata.
+    //
+    // Dzieckiem jest ten, kto nie ukończył `ages.adult` z `data/demography/` —
+    // granica jest **jedna** i mieszka tam (`K-60` dla wieku produkcyjnego mówi
+    // dokładnie to samo o swojej granicy).
+    equivalence: (
+        adult_first: 1000,
+        adult_next: 500,
+        child: 300,
     ),
 
     // ── oszczędności ─────────────────────────────────────────────────────────────

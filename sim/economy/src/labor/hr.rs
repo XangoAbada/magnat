@@ -197,6 +197,9 @@ pub(super) struct Leave {
     pub role: JobRoleId,
     pub cause: LeaveCause,
     pub tenure_days: u32,
+    /// Gospodarstwo z **umowy**, nie z komponentu odchodzącego (`R2-WP9`).
+    /// Przy zgonie i przy wyjeździe z miasta encji mieszkańca już nie ma.
+    pub household: u32,
 }
 
 /// Wyjście z etatu — jedyna droga (M3c, `release_job_of`). Zwraca stawkę, którą
@@ -213,6 +216,7 @@ pub(super) fn odejdz(
         role,
         cause,
         tenure_days,
+        household,
     } = l;
     let mut stawka = Money::ZERO;
     let mut firma = None;
@@ -240,8 +244,18 @@ pub(super) fn odejdz(
     // indziej, skasowałoby mu prawdziwą pracę. Dziś taki rozjazd nie powstaje
     // (pilnuje go `K-46`), ale to jest **jedyna** droga wyjścia z etatu i nie wolno
     // jej wierzyć wołającemu na słowo.
-    if people.facts(c).is_none_or(|f| f.job == Some((site, role))) {
-        people.release(c, stawka);
+    //
+    // `f.job.is_none()` jest tu **trzecim** dopuszczalnym przypadkiem i bez niego
+    // emeryt zostawiał płacę w dochodzie gospodarstwa (`R2-WP9`): `sim/agents` czyści
+    // mu komponent przy przejściu na emeryturę, więc fakty mówią „nie ma pracy",
+    // rejestr firm mówi „ma etat tutaj" — i warunek wpadał między jedno a drugie.
+    // Bezpieczeństwo zostaje: nikomu, kto pracuje **gdzie indziej**, nadal nic się
+    // nie kasuje.
+    let zwolnij = people
+        .facts(c)
+        .is_none_or(|f| f.job.is_none() || f.job == Some((site, role)));
+    if zwolnij {
+        people.release(c, stawka, household);
     }
     stawka
 }
@@ -258,7 +272,7 @@ pub(super) fn reconcile(
     now: SimMinute,
     d: &mut LaborDay,
 ) {
-    let mut znikli: Vec<(CitizenId, SiteId, JobRoleId, u32)> = Vec::new();
+    let mut znikli: Vec<(CitizenId, SiteId, JobRoleId, u32, u32)> = Vec::new();
     for (id, site) in firms.sites() {
         for p in &site.positions {
             for e in &p.filled {
@@ -266,7 +280,7 @@ pub(super) fn reconcile(
                     .facts(e.citizen)
                     .is_some_and(|f| f.job == Some((id, p.role)));
                 if !nadal_tu {
-                    znikli.push((e.citizen, id, p.role, staz(e.since, now)));
+                    znikli.push((e.citizen, id, p.role, staz(e.since, now), e.household));
                 }
             }
         }
@@ -284,7 +298,7 @@ pub(super) fn reconcile(
     for c in martwi {
         m.seekers.remove(&c);
     }
-    for (c, site, role, staz) in znikli {
+    for (c, site, role, staz, household) in znikli {
         odejdz(
             firms,
             people,
@@ -294,6 +308,7 @@ pub(super) fn reconcile(
                 role,
                 cause: LeaveCause::LeftLabourForce,
                 tenure_days: staz,
+                household,
             },
             now,
         );
@@ -313,7 +328,7 @@ pub(super) fn turnover(
 ) {
     let hr = m.tuning.hr;
     let mt = m.tuning.manager;
-    let mut plan: Vec<(CitizenId, SiteId, JobRoleId, LeaveCause, u32, Money)> = Vec::new();
+    let mut plan: Vec<(CitizenId, SiteId, JobRoleId, LeaveCause, u32, Money, u32)> = Vec::new();
     for (id, site) in firms.sites() {
         for p in &site.positions {
             for e in &p.filled {
@@ -355,6 +370,7 @@ pub(super) fn turnover(
                         cisnienie.cause,
                         staz_dni,
                         Money::ZERO,
+                        e.household,
                     ));
                 } else if should_dismiss(e.perf_ema, e.warnings, &hr) {
                     plan.push((
@@ -364,12 +380,13 @@ pub(super) fn turnover(
                         LeaveCause::Dismissed,
                         staz_dni,
                         severance(e.wage_month, staz_dni, &hr),
+                        e.household,
                     ));
                 }
             }
         }
     }
-    for (c, site, role, cause, staz_dni, odprawa) in plan {
+    for (c, site, role, cause, staz_dni, odprawa, household) in plan {
         let stawka = odejdz(
             firms,
             people,
@@ -379,6 +396,7 @@ pub(super) fn turnover(
                 role,
                 cause,
                 tenure_days: staz_dni,
+                household,
             },
             now,
         );
@@ -608,20 +626,26 @@ pub fn dismiss_all(
     site: SiteId,
     now: SimMinute,
 ) -> Vec<(CitizenId, Money)> {
-    let zaloga: Vec<(CitizenId, JobRoleId, u32, Money)> = match firms.site(site) {
+    let zaloga: Vec<(CitizenId, JobRoleId, u32, Money, u32)> = match firms.site(site) {
         Some(s) => s
             .positions
             .iter()
             .flat_map(|p| {
-                p.filled
-                    .iter()
-                    .map(move |e| (e.citizen, p.role, staz(e.since, now), e.wage_month))
+                p.filled.iter().map(move |e| {
+                    (
+                        e.citizen,
+                        p.role,
+                        staz(e.since, now),
+                        e.wage_month,
+                        e.household,
+                    )
+                })
             })
             .collect(),
         None => return Vec::new(),
     };
     let mut out = Vec::with_capacity(zaloga.len());
-    for (c, role, staz_dni, stawka) in zaloga {
+    for (c, role, staz_dni, stawka, household) in zaloga {
         odejdz(
             firms,
             people,
@@ -631,6 +655,7 @@ pub fn dismiss_all(
                 role,
                 cause: LeaveCause::Redundancy,
                 tenure_days: staz_dni,
+                household,
             },
             now,
         );

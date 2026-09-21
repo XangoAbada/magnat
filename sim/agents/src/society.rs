@@ -86,6 +86,8 @@ pub const fn is_month_start(day: u64) -> bool {
 /// i miejsca pracy, a plotka rusza już w tej samej dobie.
 pub fn step_day(world: &mut World, day: u64, hooks: &mut dyn InheritanceHook) -> SocietyReport {
     let mut raport = SocietyReport::default();
+    // Hak znakuje swoje zapisy dobą, w której je zrobił (`R2-WP10`).
+    hooks.set_day(day);
 
     if is_month_start(day) {
         raport.status = Some(social::step_month(world, day));

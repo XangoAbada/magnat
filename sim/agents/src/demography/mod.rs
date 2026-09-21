@@ -311,20 +311,57 @@ impl HashState for LifeQueue {
 /// z dzielenia idzie do pierwszego spadkobiercy wg `entity_index` — ta sama reguła,
 /// co przy podziale kwoty w 00 §2.
 pub trait InheritanceHook: Send + Sync {
+    /// Znacznik czasu bieżącej doby — pętla społeczeństwa woła to przed krokiem.
+    ///
+    /// Hak dostaje `day`, a nie `Tick`, bo demografia liczy w dobach; zapisy w rejestrze
+    /// firm są znakowane tickiem i bez tego wszystkie spadki trafiałyby do dziennika
+    /// w minucie zero.
+    fn set_day(&mut self, _day: u64) {}
+
+    /// Zobowiązania masy spadkowej: ile z niej schodzi **przed** podziałem (`R2-WP10`).
+    ///
+    /// Zwraca kwotę, którą wołający ma odjąć od dzielonej sumy. Implementacja, która
+    /// coś tu zwraca, **musi w tej samej operacji wpłacić to wierzycielowi** — inaczej
+    /// pieniądz zniknie ze świata. Domyślnie zero: świat bez ksiąg nie ma wierzycieli.
+    fn estate_charge(
+        &mut self,
+        _world: &mut World,
+        _deceased: CitizenId,
+        _estate: magnat_core::Money,
+    ) -> magnat_core::Money {
+        magnat_core::Money::ZERO
+    }
+
     /// Wołany po podziale `Money` i mieszkania, **przed** usunięciem encji zmarłego.
+    ///
+    /// `world` jest tu od `R2-WP10`: udziały w firmach, kredyty i rachunki siedzą
+    /// w zasobach świata, a hook nie ma do nich innej drogi — `sim/economy` nie może
+    /// trzymać uchwytu do `Firms`, bo `Firms` jest zasobem, a nie `Arc`.
+    ///
+    /// **Wołany także wtedy, gdy `heirs` jest puste.** Do R2 stał w gałęzi „są
+    /// spadkobiercy", więc majątek bez spadkobiercy nie miał gdzie się podziać:
+    /// gotówka szła na konto techniczne, a udziały w firmie zostawały przy trupie.
     fn on_inheritance(
         &mut self,
+        world: &mut World,
         deceased: CitizenId,
         heirs: &[(CitizenId, u16)],
         cmd: &mut CommandBuffer,
     );
 }
 
-/// Hook, który nic nie robi — domyślny do czasu M5/M7.
+/// Hook, który nic nie robi — domyślny dla świata bez gospodarki.
 pub struct NoInheritance;
 
 impl InheritanceHook for NoInheritance {
-    fn on_inheritance(&mut self, _d: CitizenId, _h: &[(CitizenId, u16)], _c: &mut CommandBuffer) {}
+    fn on_inheritance(
+        &mut self,
+        _w: &mut World,
+        _d: CitizenId,
+        _h: &[(CitizenId, u16)],
+        _c: &mut CommandBuffer,
+    ) {
+    }
 }
 
 // ── raport doby ─────────────────────────────────────────────────────────────────
@@ -498,7 +535,14 @@ pub fn zwiaz_rodzine(world: &mut World, sklad: &[Entity], day: u64) {
     for i in 0..osoby.len() {
         for j in (i + 1)..osoby.len() {
             if rodzice[i].iter().any(|r| rodzice[j].contains(r)) {
-                powiaz(world, osoby[i].0, osoby[j].0, RelationKind::Sibling, waga, day);
+                powiaz(
+                    world,
+                    osoby[i].0,
+                    osoby[j].0,
+                    RelationKind::Sibling,
+                    waga,
+                    day,
+                );
             }
         }
     }

@@ -70,6 +70,7 @@ fn zaklad(key: FirmKey, id: u32, badaczy: u16) -> Site {
             Money(760_000),
             SimMinute(0),
             ShiftKind::Day,
+            Employment::NO_HOUSEHOLD,
         ));
     }
     Site {

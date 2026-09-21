@@ -263,3 +263,42 @@ fn trwale_stratny_zaklad_produkcyjny_zostaje_zamkniety() {
         "tier taktyczny nie zamyka zakładu, który trzeci miesiąc sprzedaje poniżej kosztu"
     );
 }
+
+/// Kryterium `R2-WP36`: zakład sprzedający **wyłącznie na eksport** też ma utarg.
+///
+/// Przed naprawą `try_export` budowało rozliczenie z `seller_site: None`
+/// i `seller_cogs: 0`, więc eksporter nie dostawał ani utargu, ani kosztu — i był
+/// strukturalnie odporny na zamknięcie dokładnie tak samo, jak każda fabryka
+/// przed `R2-WP7`.
+///
+/// Węzeł graniczny jest tu zarejestrowany jako zakład z kontem, bo `absorb_settlements`
+/// pomija rozliczenie, którego odbiorcy nie zna — a odbiorcą eksportu jest węzeł.
+#[test]
+fn eksporter_ma_utarg_i_koszt_wlasny() {
+    let mut b = bench(37, &[]);
+    let dane = magnat_economy::EconomyData::load_default().expect("data/economy/");
+    let g = maka(&dane);
+    let m = mlyn(&mut b);
+    let wezel = SiteId(ent(4_711));
+    let acc = konto(&mut b, FirmId(wezel.entity()), 50_000_000);
+    b.market.register_plant(wezel, FirmId(wezel.entity()), acc);
+
+    let wysylki = [wysylka(wezel, m.site, g, 2_500_000, 1_500_000)];
+    b.market.absorb_settlements(&wysylki, &mut b.books, Tick(0));
+
+    let mut fin = magnat_economy::corpfin::CorpFinance::default();
+    let (_, wyniki) = b
+        .market
+        .close_month_with(&mut b.books, &mut fin, Tick(MIESIAC));
+    let wpis = wyniki
+        .iter()
+        .find(|(s, _, _, _)| *s == m.site)
+        .copied()
+        .expect("eksporter nie dostał wiersza w domknięciu miesiąca");
+    assert_eq!(wpis.2, Money(2_500_000), "utarg eksportowy nie doszedł");
+    assert_eq!(
+        wpis.3,
+        Money(1_500_000),
+        "koszt własny eksportu nie doszedł"
+    );
+}

@@ -363,11 +363,12 @@ pub(super) fn hire(
             }
             // Zmiana pracy: najpierw wyjście ze starego etatu, i tylko tą drogą.
             if let Some((stary_site, stara_rola)) = f.job {
-                let staz = firms
+                let umowa = firms
                     .site(stary_site)
                     .and_then(|s| s.positions.iter().find(|p| p.role == stara_rola))
-                    .and_then(|p| p.filled.iter().find(|e| e.citizen == c))
-                    .map_or(0, |e| (now.0.saturating_sub(e.since.0) / 1440) as u32);
+                    .and_then(|p| p.filled.iter().find(|e| e.citizen == c));
+                let staz = umowa.map_or(0, |e| (now.0.saturating_sub(e.since.0) / 1440) as u32);
+                let household = umowa.map_or(Employment::NO_HOUSEHOLD, |e| e.household);
                 super::hr::odejdz(
                     firms,
                     people,
@@ -377,6 +378,7 @@ pub(super) fn hire(
                         role: stara_rola,
                         cause: magnat_core::LeaveCause::BetterOffer,
                         tenure_days: staz,
+                        household,
                     },
                     now,
                 );
@@ -395,8 +397,17 @@ pub(super) fn hire(
             // już obsadzonych etatów, więc kolejni wchodzą kolejno.
             let (zmiana, dni) =
                 magnat_agents::ShiftKind::schedule(site.shift_profile, p.filled.len() as u32);
-            p.filled
-                .push(Employment::new(c, o.role, o.wage_month, now, zmiana));
+            // Gospodarstwo zapisuje się w umowie (`R2-WP9`): w chwili odejścia
+            // encji mieszkańca może już nie być.
+            let gospodarstwo = people.household_of(c);
+            p.filled.push(Employment::new(
+                c,
+                o.role,
+                o.wage_month,
+                now,
+                zmiana,
+                gospodarstwo,
+            ));
             people.hire(c, o.site, o.role, zmiana, dni, o.wage_month);
             m.seekers.remove(&c);
             zatrudnieni_dzis.insert(c);

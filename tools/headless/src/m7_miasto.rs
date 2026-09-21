@@ -228,10 +228,11 @@ pub(crate) fn pasmo(s: &str) -> Option<(u16, u16)> {
 ///
 /// Rozbicie, a nie jedna liczba, bo jedna liczba nie mówi, **gdzie** się rozjechało.
 /// Pierwszy przebieg WP17 pokazał to dosłownie: różnica wyglądała na ubytek warstwy
-/// firm, a siedziała w rejestrach ruchu (M4), które nie mają jeszcze kont i przez to
-/// same z siebie „tworzą" pieniądz — dokładnie tak samo, jak w `m5shop` na tym samym
-/// horyzoncie. Rozbicie odpowiada na to pytanie w jednym spojrzeniu.
-pub(crate) fn pieniadz(world: &magnat_ecs::World) -> [i64; 5] {
+/// firm, a siedziała w rejestrach ruchu (M4), które nie miały wtedy kont i przez to
+/// same z siebie „tworzyły" pieniądz. **Od `R2-WP32` mają je** (`K-72`), więc rejestrów
+/// w tej sumie nie ma; została jedna pozycja przejściowa — opłata pobrana z portfela
+/// i jeszcze niezaksięgowana.
+pub(crate) fn pieniadz(world: &magnat_ecs::World) -> [i64; 4] {
     let ksiegi = world
         .get_resource::<Books>()
         .map_or(0, |b| b.total_balance().get());
@@ -242,20 +243,16 @@ pub(crate) fn pieniadz(world: &magnat_ecs::World) -> [i64; 5] {
         }
         None => (0, 0),
     };
-    let paliwo = world
-        .get_resource::<magnat_traffic::FuelLedger>()
-        .map_or(0, |l| l.revenue.get());
-    let przewoz = world
-        .get_resource::<magnat_traffic::FareLedger>()
-        .map_or(0, |l| {
-            l.transit_revenue.get() + l.parking_revenue.get() - l.transit_fuel_cost.get()
-                + l.taxi_revenue.get()
+    let w_drodze = world
+        .get_resource::<magnat_core::MobilityDue>()
+        .map_or(0, |d| {
+            d.channels().map(|(_, m)| m.get()).sum::<i64>() + d.pending_transit_fuel().get()
         });
-    [ksiegi, ludzie, poza, paliwo, przewoz]
+    [ksiegi, ludzie, poza, w_drodze]
 }
 
 /// Suma składników — to ona ma być stała po odjęciu emisji.
-pub(crate) fn suma(p: [i64; 5]) -> i64 {
+pub(crate) fn suma(p: [i64; 4]) -> i64 {
     p.iter().sum()
 }
 
@@ -266,7 +263,7 @@ fn raport(
     market: &magnat_economy::Market,
     czas: f64,
     firm_start: usize,
-    pieniadz_start: [i64; 5],
+    pieniadz_start: [i64; 4],
 ) {
     let firms = world.resource::<Firms>();
     let zycie = world
@@ -376,8 +373,7 @@ fn raport(
         ("księgi", 0),
         ("ludzie", 1),
         ("spadki + emigracja", 2),
-        ("obrót stacji (M4, bez konta)", 3),
-        ("przewoźnicy i taryfy (M4, bez konta)", 4),
+        ("opłaty w drodze do ksiąg (MobilityDue)", 3),
     ] {
         println!(
             "  {nazwa}: {} zł → {} zł ({:+} gr)",
@@ -691,13 +687,10 @@ fn raport(
                 .map(|d| d.union.grievance_threshold)
                 .unwrap_or(55);
             let (zmierzonych, nad_progiem) =
-                u.watched()
-                    .fold((0usize, 0usize), |(n, k), (_, g)| {
-                        (n + 1, k + usize::from(g.level >= prog))
-                    });
-            println!(
-                "zakładów z pomiarem żalu {zmierzonych}, nad progiem {prog}: {nad_progiem}"
-            );
+                u.watched().fold((0usize, 0usize), |(n, k), (_, g)| {
+                    (n + 1, k + usize::from(g.level >= prog))
+                });
+            println!("zakładów z pomiarem żalu {zmierzonych}, nad progiem {prog}: {nad_progiem}");
             // **Zero związków nie znaczy zero żalu** i to jest cała treść tego
             // akapitu. Związek powstaje dopiero wtedy, gdy trzy warunki zejdą się
             // naraz (§5.9), więc miasto z setką rozżalonych załóg i miasto

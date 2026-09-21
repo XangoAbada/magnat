@@ -20,7 +20,10 @@ use crate::vehicle::{FuelTank, VehicleClass, VehicleCondition, VehicleLocation, 
 use magnat_agents::{
     citizen_by_index, DayStats, EventKind, EventQueue, NeedTable, Needs, SimEvent, Wealth,
 };
-use magnat_core::{Cadence, HashState, Money, NeedKind, PlaceRef, SimMinute, StateHasher};
+use magnat_core::{
+    Cadence, HashState, MobilityChannel, MobilityDue, Money, NeedKind, PlaceRef, SimMinute,
+    StateHasher,
+};
 use magnat_ecs::{Entity, System, SystemCtx, SystemDesc, World};
 use std::sync::Arc;
 
@@ -60,31 +63,28 @@ impl HashState for TrafficServices {
 /// (00 §6). M4b zamknął parę „kierowca ↔ stacja"; M4c dokłada do niej pary
 /// „pasażer ↔ przewoźnik" i „kierowca ↔ parking" (`M-6`) — nie drugi licznik,
 /// tylko drugi wiersz w tym samym.
+/// **Od `R2-WP32` nie ma tu ani jednej kwoty** (`K-72`). Pieniądz idzie kanałem
+/// [`magnat_core::MobilityDue`] na konto w `Books`, a tutaj zostają liczniki —
+/// ile biletów, ile kursów, ile postojów. Powód jest w niezmienniku świata:
+/// `society::total_money + Books::total_balance()` ma się domykać **bez wyłączeń**,
+/// a rejestr obok ksiąg jest dokładnie takim wyłączeniem.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub struct FareLedger {
     /// Bilety komunikacji miejskiej.
-    pub transit_revenue: Money,
     pub transit_tickets: u64,
-    /// Taryfy taksówkowe (`D5` — przewoźnik bez encji do czasu M7).
-    pub taxi_revenue: Money,
+    /// Kursy taksówkowe (`D5` — przewoźnik bez encji, konto techniczne wg `D-N22`).
     pub taxi_rides: u64,
-    /// Opłaty parkingowe.
-    pub parking_revenue: Money,
+    /// Postoje na parkingu. `ponytail:` nikt tego nie zwiększa, bo
+    /// `ParkingLot.price_gr_per_hour` jest wszędzie zerem (taryfy miejskie to M8)
+    /// — licznik bez pisarza należy do `R2-WP22`, nie tutaj.
     pub parking_stays: u64,
-    /// Paliwo spalone przez tabor komunikacji — obciąża operatora i jest drugą
-    /// stroną obrotu stacji, tak samo jak paliwo kierowcy.
-    pub transit_fuel_cost: Money,
 }
 
 impl HashState for FareLedger {
     fn hash_state(&self, h: &mut StateHasher) {
-        h.write_u64(self.transit_revenue.0 as u64);
         h.write_u64(self.transit_tickets);
-        h.write_u64(self.taxi_revenue.0 as u64);
         h.write_u64(self.taxi_rides);
-        h.write_u64(self.parking_revenue.0 as u64);
         h.write_u64(self.parking_stays);
-        h.write_u64(self.transit_fuel_cost.0 as u64);
     }
 }
 
@@ -94,9 +94,10 @@ impl HashState for FareLedger {
 /// „wydatki kierowców == przychody stacji" nie miałby z czym porównywać, a 00 §6
 /// wymaga tolerancji 0. M6 podepnie tu zbiornik, M5 — obrót jako przychód firmy;
 /// kontrakt zdarzenia `FuelPurchased` się przez to nie zmieni.
+/// **Obrót zszedł stąd do ksiąg w `R2-WP32`** (`K-72`) — zostaje bilans paliwa,
+/// czyli to, czego księgi nie policzą.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub struct FuelLedger {
-    pub revenue: Money,
     pub purchases: u64,
     /// Zatankowane w mikrolitrach.
     pub volume_ul: i64,
@@ -106,7 +107,6 @@ pub struct FuelLedger {
 
 impl HashState for FuelLedger {
     fn hash_state(&self, h: &mut StateHasher) {
-        h.write_u64(self.revenue.0 as u64);
         h.write_u64(self.purchases);
         h.write_u64(self.volume_ul as u64);
         h.write_u64(self.burned_ul as u64);
@@ -191,9 +191,14 @@ pub fn register_traffic(world: &mut World, services: TrafficServices, network: T
     // Dziennik podróży, tak samo jak nakładki, jest pomiarem — bez haka hasha.
     world.insert_resource(TripLog::new());
     world.insert_resource(FareLedger::default());
+    // Kanał opłat mobilnych (`R2-WP32`, `K-72`). Wchodzi do hasha, bo kwota między
+    // pobraniem a zaksięgowaniem jest jedynym śladem po pieniądzu, który zszedł
+    // z portfela — ta sama zasada, co przy `b2b_outbox`.
+    world.insert_resource(MobilityDue::default());
     world.register_resource_hash::<TrafficNetwork>();
     world.register_resource_hash::<FuelLedger>();
     world.register_resource_hash::<FareLedger>();
+    world.register_resource_hash::<MobilityDue>();
     world.register_resource_hash::<TrafficServices>();
 }
 
@@ -393,15 +398,44 @@ impl System for TrafficSystem {
         // tyle minut, ile trwa najdłuższa podróż piesza.
         oracle.feed_walkers(magnat_core::MinuteOfDay::new((now % 1440) as u16));
 
-        // 7. Taryfy taksówkowe: oracle je zebrał przy wyruszeniu, tu trafiają do
-        //    rejestru, żeby bilans pieniądza miał drugą stronę (`M-6`).
-        let taryfy = oracle.taxi_fares();
-        let l = world.resource_mut::<FareLedger>();
-        if taryfy.0 > l.taxi_revenue.0 {
-            l.taxi_rides += 1;
-            l.taxi_revenue = taryfy;
+        // 7. Taryfy taksówkowe: oracle zebrał je przy wyruszeniu, tu **pasażer za nie
+        //    płaci** (`R2-WP32`). Do R2 stała tu suma z licznika oracle'a i licznik
+        //    kursów rósł o jeden na minutę, cokolwiek by się w niej wydarzyło —
+        //    a druga strona przelewu nie istniała w ogóle, więc kurs taksówką
+        //    tworzył pieniądz.
+        for (pasazer, taryfa) in oracle.take_taxi_fares() {
+            if pobierz(world, pasazer, taryfa, MobilityChannel::Taxi) {
+                world.resource_mut::<FareLedger>().taxi_rides += 1;
+            }
         }
     }
+}
+
+/// Pobiera opłatę od podróżnego i odkłada ją do zaksięgowania — **obie strony albo
+/// żadna** (`R2-WP32`, `K-72`).
+///
+/// Jedna funkcja na wszystkie trzy kanały, a nie trzy kopie tego samego `if let`, bo
+/// właśnie z rozjazdu między kopiami wziął się rozjazd niezmiennika świata: rejestr
+/// rósł bezwarunkowo, a portfel schodził warunkowo. Tutaj kwota albo zejdzie
+/// z `Wealth.cash` **i** wejdzie do [`MobilityDue`], albo nie stanie się nic — i wtedy
+/// wołający nie zwiększa też swojego licznika.
+///
+/// Podróżny bez komponentu `Wealth` to pojazd floty albo mieszkaniec, który przestał
+/// istnieć w trakcie podróży. Jedno i drugie jest poprawnym stanem świata; niepoprawne
+/// było pobranie od niego pieniędzy.
+fn pobierz(world: &mut World, traveller: u32, kwota: Money, kanal: MobilityChannel) -> bool {
+    if kwota.0 <= 0 {
+        return false;
+    }
+    let Some(c) = citizen_by_index(world, traveller) else {
+        return false;
+    };
+    let Some(w) = world.get_mut::<Wealth>(c) else {
+        return false;
+    };
+    w.cash = Money(w.cash.0 - kwota.0);
+    world.resource_mut::<MobilityDue>().charge(kanal, kwota);
+    true
 }
 
 /// Czy mieszkaniec jest dziś w pracy i zdolny poprowadzić kurs.
@@ -423,17 +457,12 @@ fn kierowca_w_pracy(world: &World, citizen: u32, dow: magnat_core::DayOfWeek) ->
 fn zastosuj_transit(world: &mut World, ev: TransitEvent, satysfakcja: u8) {
     match ev {
         TransitEvent::Boarded { citizen, fare, .. } => {
-            {
-                let l = world.resource_mut::<FareLedger>();
-                l.transit_revenue = Money(l.transit_revenue.0 + fare.0);
-                l.transit_tickets += 1;
-            }
-            // Pasażer płaci dokładnie tyle, ile dostaje przewoźnik — obie strony
-            // biorą tę samą liczbę, więc bilans domyka się z konstrukcji.
-            if let Some(c) = citizen_by_index(world, citizen) {
-                if let Some(w) = world.get_mut::<Wealth>(c) {
-                    w.cash = Money(w.cash.0 - fare.0);
-                }
+            // **Obie strony albo żadna** (`R2-WP32`). Do R2 rejestr rósł bezwarunkowo,
+            // a portfel schodził tylko wtedy, gdy encja pasażera jeszcze istniała —
+            // więc pasażer, który po drodze umarł albo wyjechał, fundował przewoźnikowi
+            // bilet z niczego.
+            if pobierz(world, citizen, fare, MobilityChannel::TransitTicket) {
+                world.resource_mut::<FareLedger>().transit_tickets += 1;
             }
         }
         TransitEvent::Alighted {
@@ -474,13 +503,18 @@ fn zastosuj_transit(world: &mut World, ev: TransitEvent, satysfakcja: u8) {
             );
         }
         TransitEvent::RunFuelled { units_ul, cost, .. } => {
-            let l = world.resource_mut::<FuelLedger>();
-            l.revenue = Money(l.revenue.0 + cost.0);
-            l.purchases += 1;
-            l.volume_ul += units_ul;
-            l.burned_ul += units_ul;
-            let f = world.resource_mut::<FareLedger>();
-            f.transit_fuel_cost = Money(f.transit_fuel_cost.0 + cost.0);
+            {
+                let l = world.resource_mut::<FuelLedger>();
+                l.purchases += 1;
+                l.volume_ul += units_ul;
+                l.burned_ul += units_ul;
+            }
+            // Jedyny przepływ mobilny **między dwoma kontami**: przewoźnik płaci
+            // stacji. Nie ma tu portfela do obciążenia, więc idzie osobnym polem
+            // (`R2-WP32`).
+            world
+                .resource_mut::<MobilityDue>()
+                .charge_transit_fuel(cost);
         }
         TransitEvent::RunCancelled { .. } => {}
     }
@@ -596,18 +630,11 @@ fn zastosuj(world: &mut World, fleet: &[Entity], ev: TrafficEvent, satysfakcja: 
             cost,
             ..
         } => {
-            {
+            // **Obie strony albo żadna** (`R2-WP32`) — patrz komentarz przy bilecie.
+            if pobierz(world, traveller, cost, MobilityChannel::Fuel) {
                 let l = world.resource_mut::<FuelLedger>();
-                l.revenue = Money(l.revenue.0 + cost.0);
                 l.purchases += 1;
                 l.volume_ul += units;
-            }
-            // Kierowca płaci dokładnie tyle, ile stacja dostaje — obie strony
-            // biorą tę samą liczbę, więc tolerancja bilansu jest 0 z konstrukcji.
-            if let Some(c) = citizen_by_index(world, traveller) {
-                if let Some(w) = world.get_mut::<Wealth>(c) {
-                    w.cash = Money(w.cash.0 - cost.0);
-                }
             }
         }
         TrafficEvent::Arrived {
@@ -743,5 +770,99 @@ impl System for VehicleWearSystem {
                     .saturating_add(VehicleCondition::SERVICE_INTERVAL_CM);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use magnat_agents::{Identity, Population};
+
+    /// Świat z jednym mieszkańcem, który ma portfel, i jednym indeksem, który nie
+    /// wskazuje na nikogo.
+    fn swiat() -> (World, u32) {
+        let mut world = World::new(5);
+        magnat_agents::register(
+            &mut world,
+            magnat_agents::NeedTable::load_default().expect("data/needs"),
+        );
+        world.insert_resource(Population::default());
+        world.insert_resource(FuelLedger::default());
+        world.insert_resource(FareLedger::default());
+        world.insert_resource(MobilityDue::default());
+        let c = world
+            .spawn()
+            .with(Identity {
+                flags: Identity::FLAG_ALIVE,
+                ..Identity::default()
+            })
+            .with(Wealth {
+                cash: Money(100_000),
+                personal_assets: Money::ZERO,
+            })
+            .id();
+        world.resource_mut::<Population>().add_citizen(c);
+        (world, c.index())
+    }
+
+    /// `R2-WP32`: opłata schodzi z portfela **i** wchodzi do kanału, obie strony
+    /// tą samą liczbą.
+    #[test]
+    fn oplata_rusza_obie_strony_ta_sama_kwota() {
+        let (mut world, kto) = swiat();
+        assert!(pobierz(
+            &mut world,
+            kto,
+            Money(2_500),
+            MobilityChannel::Fuel
+        ));
+
+        let portfel = world
+            .get::<Wealth>(magnat_agents::demography::citizen_by_index(&world, kto).unwrap())
+            .copied()
+            .expect("portfel");
+        assert_eq!(portfel.cash, Money(97_500), "portfel nie zapłacił");
+        assert_eq!(
+            world
+                .resource::<MobilityDue>()
+                .pending(MobilityChannel::Fuel),
+            Money(2_500),
+            "kanał nie dostał opłaty"
+        );
+    }
+
+    /// …a podróżny, którego nie ma, **nie płaci i nie zasila kanału**.
+    ///
+    /// Przed naprawą rejestr rósł bezwarunkowo, a portfel schodził tylko wtedy, gdy
+    /// encja jeszcze istniała: pasażer, który po drodze umarł albo wyjechał, fundował
+    /// przewoźnikowi bilet z niczego — a suma pieniądza w świecie rosła.
+    #[test]
+    fn duch_nie_placi_i_nie_tworzy_pieniadza() {
+        let (mut world, _) = swiat();
+        let nieistniejacy = 999_999;
+        assert!(!pobierz(
+            &mut world,
+            nieistniejacy,
+            Money(2_500),
+            MobilityChannel::TransitTicket
+        ));
+        assert!(
+            world.resource::<MobilityDue>().is_empty(),
+            "kanał dostał opłatę od podróżnego, którego nie ma"
+        );
+    }
+
+    /// Opłata zerowa albo ujemna nie rusza niczego — inaczej darmowy parking
+    /// zapisywałby w dzienniku przelew na zero groszy.
+    #[test]
+    fn zerowa_oplata_nie_rusza_niczego() {
+        let (mut world, kto) = swiat();
+        assert!(!pobierz(
+            &mut world,
+            kto,
+            Money::ZERO,
+            MobilityChannel::Parking
+        ));
+        assert!(world.resource::<MobilityDue>().is_empty());
     }
 }

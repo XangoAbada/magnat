@@ -34,16 +34,13 @@ use crate::components::{
 use crate::des::{EventKind, EventQueue, ReplanCause, SimEvent};
 use crate::household::Household;
 use crate::needs::NeedTable;
-use crate::places::{
-    FulfilOutcome, FulfilRequest, PlaceProvider, TravelOracle, TripRequest,
-};
+use crate::places::{FulfilOutcome, FulfilRequest, PlaceProvider, TravelOracle, TripRequest};
 use crate::planner::{load_plan, plan_day, replan, store_plan, DayCanvas};
-use crate::store::{PlanSlab, PlanSlot};
 use crate::snapshot::CitizenSnapshot;
+use crate::store::{PlanSlab, PlanSlot};
 use crate::{demography, society};
 use magnat_core::{
-    ActivityKind, Cadence, CitizenId, Entity, HouseholdId, MinuteOfDay, NeedKind,
-    PlaceRef,
+    ActivityKind, Cadence, CitizenId, Entity, HouseholdId, MinuteOfDay, NeedKind, PlaceRef,
 };
 use magnat_ecs::{System, SystemCtx, SystemDesc, World};
 
@@ -630,12 +627,13 @@ fn zaspokoj(
     // Budżet i liczebność czyta się z komponentu `Household` — on jest właścicielem
     // salda gospodarstwa (M5d, korekta po M3c) i M5 nie trzyma drugiej kopii.
     // `budget_hint` to całość dostępnych środków; kopertę per potrzeba wstawi M5d/WP8.
-    let (budzet, osob) = gospodarstwo.and_then(|e| world.get::<Household>(e)).map_or(
-        (magnat_core::Money::ZERO, 1u8),
+    let (budzet, osob, dzieci) = gospodarstwo.and_then(|e| world.get::<Household>(e)).map_or(
+        (magnat_core::Money::ZERO, 1u8, 0u8),
         |h| {
             (
                 magnat_core::Money(h.cash.get().saturating_add(h.bank.get()).max(0)),
                 h.size.max(1),
+                h.children,
             )
         },
     );
@@ -650,6 +648,7 @@ fn zaspokoj(
         at: magnat_core::SimMinute(u64::from(teraz)),
         budget_hint: budzet,
         household_size: osob,
+        household_children: dzieci,
         brands: crate::places::BrandView::new(marki.as_slice()),
     });
     if let FulfilOutcome::Done { satisfaction, .. } = wynik {
