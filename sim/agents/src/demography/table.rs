@@ -98,6 +98,10 @@ pub struct SocialParams {
     pub neighbour_gain_per_week: u8,
     pub neighbour_max: u8,
     pub family_weight: u8,
+    /// Podłoga wagi relacji rodzinnej (`R2-WP2`). Rodzina nie wygasa, ale do R2
+    /// podłogowała się na jedynce — czyli na wartości, przy której przegrywa
+    /// każde zapytanie ważone wagą relacji.
+    pub family_floor: u8,
     pub close_contacts: u8,
     pub gossip_targets: u8,
     pub gossip_min_weight: u8,
@@ -120,6 +124,7 @@ pub(super) struct DemographyFile {
     illness: Vec<AgeRate>,
     pub(super) illness_health_drop: Range8,
     pub(super) illness_days: Range8,
+    care_health_threshold: u8,
     illness_hygiene_threshold: u8,
     partnering: Vec<AgeChance>,
     partner_max_status_delta: u8,
@@ -302,6 +307,13 @@ impl DemographyTable {
     #[must_use]
     pub fn gestation_days(&self) -> u16 {
         self.f.gestation_days
+    }
+
+    /// Zdrowie, poniżej którego senior nie radzi sobie sam (`R2-WP4`).
+    #[inline]
+    #[must_use]
+    pub fn care_health_threshold(&self) -> u8 {
+        self.f.care_health_threshold
     }
 
     /// Poziom wykształcenia po `years` latach szkoły — najwyższy osiągnięty próg.

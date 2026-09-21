@@ -29,21 +29,21 @@
 //!    czasu przy prędkości 1×.
 
 use crate::components::{
-    AgentState, Employment, Identity, KnowledgeRef, Lod, Needs, Personality, PlanRef, Residence,
-    Skills, Vitals, Wealth,
+    AgentState, Identity, Lod, Needs, Personality, PlanRef, Residence, Vitals,
 };
 use crate::des::{EventKind, EventQueue, ReplanCause, SimEvent};
-use crate::household::{self, Household, HouseholdOverflow, MemberView};
+use crate::household::Household;
 use crate::needs::NeedTable;
 use crate::places::{
-    site_of, FulfilOutcome, FulfilRequest, PlaceProvider, TravelOracle, TripRequest,
+    FulfilOutcome, FulfilRequest, PlaceProvider, TravelOracle, TripRequest,
 };
-use crate::planner::{load_plan, plan_day, replan, store_plan, DayCanvas, HouseholdView, PlanCtx};
-use crate::store::{Knowledge, KnowledgeSlab, PlanSlab, PlanSlot};
+use crate::planner::{load_plan, plan_day, replan, store_plan, DayCanvas};
+use crate::store::{PlanSlab, PlanSlot};
+use crate::snapshot::CitizenSnapshot;
 use crate::{demography, society};
 use magnat_core::{
-    ActivityKind, Cadence, CitizenId, DayOfWeek, Entity, HouseholdId, MinuteOfDay, NeedKind,
-    PlaceRef, STOCK_CAT_COUNT,
+    ActivityKind, Cadence, CitizenId, Entity, HouseholdId, MinuteOfDay, NeedKind,
+    PlaceRef,
 };
 use magnat_ecs::{System, SystemCtx, SystemDesc, World};
 
@@ -102,192 +102,6 @@ pub fn register_day(world: &mut World) {
     // odległości są danymi wejściowymi miasta, nie stanem symulacji — ta sama zasada
     // co przy `NeedTable` (M3a) i `DemographyTable` (M3c). `DayStats` to licznik
     // diagnostyczny i też nim nie jest.
-}
-
-// ── migawka mieszkańca ──────────────────────────────────────────────────────────
-
-/// Wszystko, czego planer potrzebuje o mieszkańcu, jako **kopia**.
-///
-/// `PlanCtx` trzyma referencje, a systemy pracują na `&mut World` — bez migawki nie da
-/// się jednocześnie czytać mieszkańca i pisać do areny planów. Kopia jest tania:
-/// trzynaście komponentów to 140 B plus do 32 wpisów wiedzy.
-///
-/// Używa jej też karta inspekcji (M3d §5.11): odtworzenie planu z uzasadnieniami
-/// wymaga dokładnie tego samego kontekstu, w którym plan powstał.
-#[derive(Clone, Debug)]
-pub struct CitizenSnapshot {
-    pub citizen: Entity,
-    pub identity: Identity,
-    pub vitals: Vitals,
-    pub needs: Needs,
-    pub personality: Personality,
-    pub residence: Residence,
-    pub employment: Employment,
-    pub skills: Skills,
-    pub wealth: Wealth,
-    pub household: Entity,
-    pub stock: [u8; STOCK_CAT_COUNT],
-    pub escorts: Vec<PlaceRef>,
-    pub pickups: Vec<PlaceRef>,
-    pub knowledge: Vec<Knowledge>,
-    /// Sloty marek **z naniesionym zanikiem** (M10b §5.1). Zanik liczy się tu raz
-    /// na migawkę, a nie przy każdym z kilkunastu kandydatów decyzji zakupowej.
-    pub brands: crate::brand::BrandSlots,
-    pub home: Option<PlaceRef>,
-    pub work: Option<PlaceRef>,
-    pub school: Option<PlaceRef>,
-}
-
-impl CitizenSnapshot {
-    /// Migawka albo `None`, gdy encja nie jest żywym mieszkańcem.
-    #[must_use]
-    pub fn of(world: &World, citizen: Entity, day: u64) -> Option<CitizenSnapshot> {
-        let identity = *world.get::<Identity>(citizen)?;
-        if !identity.is_alive() {
-            return None;
-        }
-        let employment = *world.get::<Employment>(citizen)?;
-        let residence = *world.get::<Residence>(citizen)?;
-        let kref = world
-            .get::<KnowledgeRef>(citizen)
-            .copied()
-            .unwrap_or_default();
-        let knowledge = world
-            .resource::<KnowledgeSlab>()
-            .entries(demography::knowledge_ref(&kref))
-            .to_vec();
-        let brands = crate::brand::slots_of(world, citizen, day);
-
-        let hh = demography::household_by_index(world, identity.household);
-        let (stock, escorts, pickups) = match hh {
-            Some(e) => role_places(world, e, citizen, day),
-            None => ([0; STOCK_CAT_COUNT], Vec::new(), Vec::new()),
-        };
-
-        let uczen = employment.flags & Employment::FLAG_PUPIL != 0;
-        let miejsce = site_of(&employment);
-        Some(CitizenSnapshot {
-            citizen,
-            identity,
-            vitals: *world.get::<Vitals>(citizen)?,
-            needs: *world.get::<Needs>(citizen)?,
-            personality: *world.get::<Personality>(citizen)?,
-            residence,
-            employment,
-            skills: world.get::<Skills>(citizen).copied().unwrap_or_default(),
-            wealth: world.get::<Wealth>(citizen).copied().unwrap_or_default(),
-            household: hh.unwrap_or(citizen),
-            stock,
-            escorts,
-            pickups,
-            knowledge,
-            brands,
-            home: crate::places::home_of(&residence),
-            work: if uczen { None } else { miejsce },
-            school: if uczen { miejsce } else { None },
-        })
-    }
-
-    /// Kontekst planera nad migawką.
-    #[must_use]
-    pub fn ctx<'a>(
-        &'a self,
-        seed: u64,
-        day: u64,
-        needs: &'a NeedTable,
-        places: &'a dyn PlaceProvider,
-        travel: &'a dyn TravelOracle,
-    ) -> PlanCtx<'a> {
-        PlanCtx {
-            seed,
-            day,
-            dow: DayOfWeek::from_day_index(day),
-            citizen: crate::places::CitizenView {
-                id: CitizenId(self.citizen),
-                identity: &self.identity,
-                vitals: &self.vitals,
-                needs: &self.needs,
-                personality: &self.personality,
-                residence: &self.residence,
-                today: day as i32,
-                brands: crate::places::BrandView::new(self.brands.as_slice()),
-            },
-            household: HouseholdView {
-                id: HouseholdId(self.household),
-                stock: &self.stock,
-                escorts: &self.escorts,
-                pickups: &self.pickups,
-            },
-            employment: &self.employment,
-            known: crate::places::KnowledgeView::new(&self.knowledge),
-            needs,
-            home: self.home.unwrap_or_default(),
-            work: self.work,
-            school: self.school,
-            places,
-            travel,
-            max_task_travel_min: MAX_TASK_TRAVEL_MIN,
-        }
-    }
-}
-
-/// Zasięg osobisty zadania w minutach marszu (§5.4, ryzyko R6).
-pub const MAX_TASK_TRAVEL_MIN: u16 = 30;
-
-/// Zapas gospodarstwa oraz szkoły dzieci, które ten mieszkaniec odprowadza i odbiera.
-///
-/// Podział ról liczy `household::roles` ze składu; tłumaczenie „dziecko → jego szkoła"
-/// jest tutaj, bo `roles` zwraca indeksy encji, a planer potrzebuje `PlaceRef`
-/// (korekta E-19).
-fn role_places(
-    world: &World,
-    hh: Entity,
-    citizen: Entity,
-    day: u64,
-) -> ([u8; STOCK_CAT_COUNT], Vec<PlaceRef>, Vec<PlaceRef>) {
-    let Some(h) = world.get::<Household>(hh).copied() else {
-        return ([0; STOCK_CAT_COUNT], Vec::new(), Vec::new());
-    };
-    let sklad = household::members_of(hh.index(), &h, world.resource::<HouseholdOverflow>());
-    let widoki: Vec<MemberView> = sklad
-        .iter()
-        .filter_map(|m| {
-            let c = demography::citizen_by_index(world, *m)?;
-            Some(MemberView::new(
-                *m,
-                world.get::<Identity>(c)?,
-                world.get::<Employment>(c)?,
-                day as i32,
-                false,
-            ))
-        })
-        .collect();
-    let ages = world.resource::<demography::DemographyTable>().ages();
-    let role = household::roles(&widoki, i32::from(ages.escort), i32::from(ages.adult), day);
-
-    let szkoly = |lista: &[u32]| -> Vec<PlaceRef> {
-        lista
-            .iter()
-            .filter_map(|m| {
-                let c = demography::citizen_by_index(world, *m)?;
-                site_of(world.get::<Employment>(c)?)
-            })
-            .collect()
-    };
-    let escorted = role.escorted.as_slice();
-    (
-        h.stock,
-        if role.escort == citizen.index() {
-            szkoly(escorted)
-        } else {
-            Vec::new()
-        },
-        if role.pickup == citizen.index() {
-            szkoly(escorted)
-        } else {
-            Vec::new()
-        },
-    )
 }
 
 // ── pętla doby ──────────────────────────────────────────────────────────────────

@@ -54,15 +54,20 @@ pub fn hire(world: &mut World, site: SiteId, citizen: CitizenId, role: JobRoleId
         z.positions
             .iter()
             .find(|p| p.role == role && p.filled.len() < usize::from(p.slots))
-            .map(|p| p.wage_band.0)
+            .map(|p| (p.wage_band.0, p.filled.len(), z.shift_profile))
     });
-    let Some(stawka) = dane else {
+    let Some((stawka, obsadzonych, profil)) = dane else {
         *world.resource_mut::<Firms>() = firms;
         return false;
     };
-    // Zmiana dzienna: gracz zatrudnia z panelu, a panel nie pyta o grafik. Grafik
-    // zmianowy przestawia się osobno i należy do zakładu, nie do umowy.
-    let zmiana = magnat_agents::ShiftKind::Day;
+    // Zmiana **z grafiku zakładu**, nie dzienna (`R2-WP37`). Panel gracza o grafik
+    // nie pyta i pytać nie musi: nowy pracownik wchodzi na pierwszą wolną brygadę,
+    // tą samą regułą, którą obsadza zakład rynek pracy i generator miasta. Gdyby
+    // była dzienna, gracz obsadzałby hutę wyłącznie na pierwszą zmianę.
+    let (zmiana, dni) = magnat_agents::ShiftKind::schedule(
+        profil,
+        u32::from(obsadzonych.min(u16::MAX as usize) as u16),
+    );
     // Drugie wyszukanie musi mieć **ten sam warunek** co pierwsze: bez sprawdzenia
     // wolnego etatu obsada przekroczyłaby `slots`, gdyby archetyp wymienił ten sam
     // zawód dwa razy — czyli dwie pensje za jedno stanowisko.
@@ -87,7 +92,7 @@ pub fn hire(world: &mut World, site: SiteId, citizen: CitizenId, role: JobRoleId
     }
     {
         let mut people = crate::labor::system::WorldWorkforce::new(world);
-        people.hire(citizen, site, role, zmiana, stawka);
+        people.hire(citizen, site, role, zmiana, dni, stawka);
     }
     // Zatrudniony **schodzi z listy szukających pracy**, tak samo jak po doborze
     // (`matching::hire`). Bez tego zostawałby w statystyce bezrobocia i wracał

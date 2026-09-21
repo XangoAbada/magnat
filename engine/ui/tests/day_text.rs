@@ -173,6 +173,7 @@ impl Anna {
                 stock: &self.stock,
                 escorts: &self.escorts,
                 pickups: &self.escorts,
+                unescorted: 0,
             },
             employment: &self.employment,
             known: KnowledgeView::new(&self.wiedza),

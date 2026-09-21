@@ -207,6 +207,7 @@ impl Scena {
                 stock: &self.stock,
                 escorts: &self.escorts,
                 pickups: &self.escorts,
+                unescorted: 0,
             },
             employment: &self.employment,
             known: KnowledgeView::new(&self.wiedza),
@@ -244,6 +245,7 @@ fn odbior_dziecka_wraca_przez_szkole_a_bez_niego_prosto() {
         stock: &s.stock,
         escorts: &s.escorts,
         pickups: &brak,
+        unescorted: 0,
     };
     let mut bez_odbioru = DayCanvas::new();
     plan_day(&ctx, &mut bez_odbioru);

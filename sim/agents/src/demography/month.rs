@@ -48,12 +48,6 @@ pub fn compatibility(status_a: u8, status_b: u8, age_a: i32, age_b: i32) -> Q {
     Q::new((100 - ds * 2 - dw * 3).clamp(0, 100) as u8)
 }
 
-const fn rodzinna(kind: u8) -> bool {
-    kind == RelationKind::Parent as u8
-        || kind == RelationKind::Child as u8
-        || kind == RelationKind::Sibling as u8
-}
-
 fn dobierz_partnerow(world: &mut World, day: u64, raport: &mut MonthReport) {
     let tabela = world.resource::<DemographyTable>().clone();
     let ages = tabela.ages();
@@ -91,7 +85,7 @@ fn dobierz_partnerow(world: &mut World, day: u64, raport: &mut MonthReport) {
             .resource::<RelationSlab>()
             .entries(relations_ref(&rel))
             .iter()
-            .filter(|x| x.weight >= min_waga && !rodzinna(x.kind))
+            .filter(|x| x.weight >= min_waga && !RelationKind::from_u8(x.kind).is_family())
             .map(|x| (x.other, x.weight))
             .collect();
 

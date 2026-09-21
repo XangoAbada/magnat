@@ -43,14 +43,15 @@ pub use month::{compatibility, przeklasyfikuj};
 pub use table::{Ages, DemographyError, DemographyTable, EduStep, StatusWeights};
 
 /// Wersja schematu `data/demography/demography.ron`. 2 → 3 przy `R2-WP5`:
-/// doszła tabela `education` (lata nauki → `EduLevel`).
+/// doszła tabela `education` (lata nauki → `EduLevel`). 3 → 4 przy `R2-WP2`:
+/// doszła `social.family_floor` (podłoga wagi relacji rodzinnej).
 ///
 /// **`ages.childcare_end` tu nie ma i to jest decyzja.** Opieka nad dzieckiem poniżej
 /// wieku szkolnego blokuje dorosłego w gospodarstwie, czyli zmienia podaż pracy całego
 /// miasta — to jest własna naprawa z własnym przebiegiem balansatora, a nie pole przy
 /// okazji (`R2` §3 pkt 2). Liczba bez czytelnika wygląda w danych dokładnie tak samo
 /// jak działająca, więc nie wchodzi tu przed swoim konsumentem.
-pub const DEMOGRAPHY_SCHEMA_VERSION: u32 = 3;
+pub const DEMOGRAPHY_SCHEMA_VERSION: u32 = 4;
 
 /// Ile dób dzieli dwa losowania hazardów tego samego mieszkańca (§5.6, sharding 1/360).
 pub const DEMOGRAPHY_SHARDS: u64 = 360;
@@ -419,6 +420,90 @@ const fn odwrotna(k: RelationKind) -> RelationKind {
     }
 }
 
+/// Wiąże **wszystkie** relacje rodzinne w podanym składzie gospodarstwa (`R2-WP2`).
+///
+/// Do R2 robiły to dwie pętle w dwóch plikach i po dwóch różnych regułach: poród
+/// wiązał rodziców i wszystkich pozostałych domowników jako rodzeństwo (więc babcia
+/// była siostrą wnuka), a napływ migracyjny wiązał dorosłych z dziećmi i na tym
+/// kończył (więc dwoje dzieci pod jednym dachem było dla silnika obcymi ludźmi).
+/// Teraz jest jedna reguła i dwóch wołających.
+///
+/// Reguła wychodzi z **pokoleń, a nie z różnicy wieku**. Dla pary (starszy `o`,
+/// młodszy `m`) odległej o co najmniej `ages.adult` lat:
+/// - `o` jest **rodzicem** `m`, jeśli nikt w składzie nie stoi między nimi,
+/// - `o` jest **dziadkiem** `m`, jeśli ktoś stoi (czyli jest pokolenie pośrednie).
+///
+/// Dwie osoby są **rodzeństwem**, gdy mają w tym składzie wspólnego rodzica. Sama
+/// bliskość wieku nie wystarcza: czworo współlokatorów w jednym mieszkaniu nie jest
+/// rodziną i nie ma się stać rodziną przez to, że się wprowadziło razem.
+///
+/// Wpis już istniejący **nie zmienia rodzaju** (`wpisz_relacje` podnosi tylko wagę
+/// i datę), więc wołający, który zna prawdę mocniejszą niż wiek — poród zna matkę
+/// i ojca — wiąże ją **przed** tą funkcją i ona jej nie nadpisze.
+///
+/// `ponytail:` sufit reguły wiekowej: czterdziestopięciolatka z noworodkiem i z
+/// dorosłym dzieckiem w domu wychodzi z niej babcią noworodka, bo dorosłe dziecko
+/// jest pokoleniem pośrednim. Droga wyjścia to pole „kto jest rodzicem" na
+/// mieszkańcu — czyli stan, którego `M10a` §5.8 nie ma gdzie trzymać. Poród, czyli
+/// jedyne miejsce, w którym ta pomyłka miałaby konsekwencje, wiąże matkę jawnie.
+pub fn zwiaz_rodzine(world: &mut World, sklad: &[Entity], day: u64) {
+    if sklad.len() < 2 {
+        return;
+    }
+    let tabela = world.resource::<DemographyTable>();
+    let pokolenie = i32::from(tabela.ages().adult);
+    let waga = tabela.social().family_weight;
+    let dzis = day as i32;
+
+    // Kolejność wejścia jest kolejnością wołającego, a ta jest deterministyczna
+    // (skład gospodarstwa). Wiek liczy się raz — `age_years` czyta komponent.
+    let mut osoby: Vec<(Entity, i32)> = Vec::with_capacity(sklad.len());
+    for e in sklad {
+        let Some(id) = world.get::<Identity>(*e) else {
+            continue;
+        };
+        osoby.push((*e, id.age_years(dzis)));
+    }
+
+    // Rodzice każdej osoby w tym składzie: starsi o pokolenie, bez nikogo pomiędzy.
+    let rodzice: Vec<Vec<usize>> = (0..osoby.len())
+        .map(|i| {
+            (0..osoby.len())
+                .filter(|j| {
+                    osoby[*j].1 - osoby[i].1 >= pokolenie
+                        && !osoby.iter().any(|(_, w)| {
+                            *w - osoby[i].1 >= pokolenie && osoby[*j].1 - *w >= pokolenie
+                        })
+                })
+                .collect()
+        })
+        .collect();
+
+    for i in 0..osoby.len() {
+        for j in 0..osoby.len() {
+            if osoby[j].1 - osoby[i].1 < pokolenie {
+                continue;
+            }
+            let kind = if rodzice[i].contains(&j) {
+                RelationKind::Child
+            } else {
+                RelationKind::Grandparent
+            };
+            // `Child` znaczy „ten drugi jest moim dzieckiem", więc stroną wołającą
+            // jest starszy; `Grandparent` jest symetryczny i strona nie ma znaczenia.
+            powiaz(world, osoby[j].0, osoby[i].0, kind, waga, day);
+        }
+    }
+
+    for i in 0..osoby.len() {
+        for j in (i + 1)..osoby.len() {
+            if rodzice[i].iter().any(|r| rodzice[j].contains(r)) {
+                powiaz(world, osoby[i].0, osoby[j].0, RelationKind::Sibling, waga, day);
+            }
+        }
+    }
+}
+
 fn wpisz_relacje(
     world: &mut World,
     kto: Entity,
@@ -458,10 +543,19 @@ fn wpisz_relacje(
             last_contact_day: dzis,
         },
         |wpisy| {
-            // Wypycha najsłabszą relację, a przy remisie najstarszy kontakt.
+            // Wypycha najsłabszą relację, a przy remisie najstarszy kontakt — ale
+            // **rodzinę dopiero wtedy, gdy nie ma czego innego** (`R2-WP2`, poz. 24).
+            // Waga rodzinna jest podłogowana, więc bez tego filtru nieodwiedzany ojciec
+            // był pierwszym kandydatem do usunięcia przy trzydziestej trzeciej
+            // znajomości: slab mieści 32 wpisy, a miasto dorzuca sąsiadów i
+            // współpracowników co tydzień.
+            let jest_obca = wpisy
+                .iter()
+                .any(|w| !RelationKind::from_u8(w.kind).is_family());
             wpisy
                 .iter()
                 .enumerate()
+                .filter(|(_, w)| !jest_obca || !RelationKind::from_u8(w.kind).is_family())
                 .min_by_key(|(i, w)| (w.weight, w.last_contact_day, *i))
                 .map_or(0, |(i, _)| i)
         },

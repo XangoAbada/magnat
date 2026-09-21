@@ -12,7 +12,29 @@ pub fn step_day(world: &mut World, day: u64, hooks: &mut dyn InheritanceHook) ->
     let mut raport = DayReport::default();
     terminarz(world, day, &mut raport);
     hazardy(world, day, hooks, &mut raport);
+    opieka(world, day, &mut raport);
     raport
+}
+
+/// Przegląd opieki nad gospodarstwami (`R2-WP4`), raz na dobę.
+///
+/// Jedno przejście po gospodarstwach, a nie hak przy każdym zdarzeniu, które może
+/// zabrać domowi ostatniego dorosłego — a takich zdarzeń jest cztery i wszystkie
+/// są w różnych plikach: zgon, wyprowadzka do własnego lokalu, usamodzielnienie
+/// i wyjazd z miasta. Hak w każdym z nich byłby czterema kopiami jednej reguły
+/// i pierwsza z nich rozjechałaby się przy pierwszej piątej ścieżce (`R2` §3 pkt 2).
+///
+/// Cena to przejście po gospodarstwach na dobę — ułamek przejścia po mieszkańcach,
+/// które ta sama doba i tak wykonuje w hazardach.
+fn opieka(world: &mut World, day: u64, raport: &mut DayReport) {
+    let domy: Vec<Entity> = world.resource::<Population>().households().to_vec();
+    let mut cmd = CommandBuffer::new(demography_system_id());
+    for hh_e in domy {
+        if let Some(powod) = ustal_opiekuna(world, hh_e, day, &mut cmd) {
+            raport.reasons.push(powod);
+        }
+    }
+    magnat_ecs::flush_commands(world, std::slice::from_mut(&mut cmd));
 }
 
 fn terminarz(world: &mut World, day: u64, raport: &mut DayReport) {
@@ -490,6 +512,11 @@ fn uroda(world: &mut World, matka: Entity, day: u64) -> bool {
     } else {
         0
     };
+    // **Osiem niezależnych losowań, a nie mieszanka cech rodziców** (`R2-WP6`,
+    // `D-N4`) — i to jest rozstrzygnięcie, a nie brak. Dziedziczenie osobowości
+    // wymaga stanu per mieszkaniec, a `M10a` §5.8 opiera most makro↔mezo na tym,
+    // że cechy są funkcją `(world_seed, birth_index)` i nigdy nie są przechowywane.
+    // Zmiana należałaby do kontraktu M10, nie do `sim/agents`.
     let cechy: [u8; 8] = std::array::from_fn(|_| r.gen_q().get());
 
     // Imię z puli **regionu rodziny**, odczytanego z dziedziczonego nazwiska (§5.10):
@@ -541,42 +568,43 @@ fn uroda(world: &mut World, matka: Entity, day: u64) -> bool {
     world.resource_mut::<Population>().add_citizen(dziecko);
     world.resource_mut::<Population>().births += 1;
 
-    // Miejsce w gospodarstwie; brak miejsca (ponad `HH_MAX_MEMBERS`) znaczy, że
-    // dziecko i tak mieszka z rodzicami — składu się wtedy nie powiększa, ale
-    // `Identity.household` zostaje, więc `prop_no_orphan_household` widzi spójność.
+    // Miejsce w gospodarstwie. Brak miejsca (ponad `HH_MAX_MEMBERS`) był do `R2-WP3`
+    // **milczeniem**: dziecko dostawało `Identity.household` wskazujące na dom rodziców
+    // i nie wchodziło do ich składu, więc nie widziała go ani klasyfikacja, ani role,
+    // ani karta gospodarstwa — a karta mieszkańca pokazywała je pod tym adresem.
+    // Teraz zakłada gospodarstwo pochodne pod tym samym adresem i jest gdzieś w całości.
     let mut hh_kopia = world.get::<Household>(hh_e).copied().unwrap_or_default();
-    {
+    let zmiescil_sie = {
         let ov = world.resource_mut::<HouseholdOverflow>();
-        household::add_member(hh_idx, &mut hh_kopia, ov, dziecko.index());
-    }
+        household::add_member(hh_idx, &mut hh_kopia, ov, dziecko.index())
+    };
     if let Some(slot) = world.get_mut::<Household>(hh_e) {
         *slot = hh_kopia;
     }
+    if !zmiescil_sie {
+        crate::migration::zaloz_gospodarstwo_pochodne(world, dziecko, &hh_kopia, day);
+    }
 
     // Relacje rodzinne — obustronne z definicji (`prop_relation_symmetry`).
+    //
+    // Matka i ojciec **najpierw i jawnie**: to jest wiedza mocniejsza niż wiek,
+    // a `zwiaz_rodzine` nie nadpisuje istniejącego wpisu. Bez tego kroku
+    // czterdziestopięciolatka z dorosłym dzieckiem w domu wyszłaby z reguły
+    // pokoleniowej babcią własnego noworodka.
     let waga = world.resource::<DemographyTable>().social().family_weight;
     powiaz(world, matka, dziecko, RelationKind::Child, waga, day);
     if let Some(o) = ojciec.and_then(|i| encja(world, i)) {
         powiaz(world, o, dziecko, RelationKind::Child, waga, day);
     }
-    for m in household::members_of(hh_idx, &hh_kopia, world.resource::<HouseholdOverflow>())
-        .iter()
-        .copied()
-        .collect::<Vec<u32>>()
-    {
-        if m == dziecko.index() || Some(m) == ojciec || m == matka.index() {
-            continue;
-        }
-        let Some(inny) = encja(world, m) else {
-            continue;
-        };
-        let rodzenstwo = world
-            .get::<Identity>(inny)
-            .is_some_and(|i| i.household == hh_idx);
-        if rodzenstwo {
-            powiaz(world, inny, dziecko, RelationKind::Sibling, waga, day);
-        }
-    }
+    // Reszta domu — rodzeństwo i dziadkowie — jedną regułą, tą samą, którą wiąże
+    // napływ migracyjny (`R2-WP2`). Przedtem stała tu druga pętla i dawała babci
+    // relację rodzeństwa z wnukiem.
+    let sklad: Vec<Entity> =
+        household::members_of(hh_idx, &hh_kopia, world.resource::<HouseholdOverflow>())
+            .iter()
+            .filter_map(|m| encja(world, *m))
+            .collect();
+    zwiaz_rodzine(world, &sklad, day);
     true
 }
 
@@ -664,6 +692,175 @@ fn smierc(
     world.resource_mut::<Population>().deaths += 1;
     cmd.despawn(e);
     powody
+}
+
+// ── opiekun prawny (`R2-WP4`) ───────────────────────────────────────────────────
+
+/// Ustala opiekuna gospodarstwa, jeśli jest potrzebny, i zwraca powód do dziennika.
+///
+/// Do R2 śmierć ostatniego dorosłego nie robiła **nic**: gospodarstwo trwało dalej,
+/// klasyfikacja dawała `FamilyWithKids`, a lista odprowadzanych była czyszczona, bo
+/// dorosłych było zero. Dzieci zostawały same i słowo „sierota" nie występowało
+/// w kodzie symulacji w żadnym znaczeniu domenowym.
+///
+/// Opiekun jest potrzebny, gdy w składzie jest dziecko i **nie ma dorosłego**.
+/// Szuka się go w trzech krokach, każdy deterministyczny:
+/// 1. krewny (`Parent`/`Sibling`/`Grandparent`/`Partner`) któregokolwiek z dzieci —
+///    najwyższa waga relacji, przy remisie najniższy indeks encji;
+/// 2. dowolny dorosły z relacją do któregokolwiek dziecka, ta sama reguła wyboru;
+/// 3. brak kandydata — dzieci **wyjeżdżają z miasta** (`D-N8`). Wariant
+///    „gospodarstwo instytucjonalne" wymaga usługi publicznej i należy do M8d,
+///    a „dziecko zostaje samo" jest tym, co naprawiamy.
+fn ustal_opiekuna(
+    world: &mut World,
+    hh_e: Entity,
+    day: u64,
+    cmd: &mut CommandBuffer,
+) -> Option<(u32, DecisionReason)> {
+    let hh = world.get::<Household>(hh_e).copied()?;
+    if !hh.is_active() {
+        return None;
+    }
+    let tabela = world.resource::<DemographyTable>().clone();
+    let ages = tabela.ages();
+    let prog_opieki = tabela.care_health_threshold();
+    let sklad = household::members_of(hh_e.index(), &hh, world.resource::<HouseholdOverflow>());
+    let mut dzieci: Vec<Entity> = Vec::new();
+    let mut dorosli: Vec<Entity> = Vec::new();
+    let mut niedolezni: Vec<Entity> = Vec::new();
+    for m in sklad.iter() {
+        let Some(c) = encja(world, *m) else { continue };
+        let wiek = world.get::<Identity>(c).map_or(0, |i| i.age_years(day as i32));
+        if wiek < i32::from(ages.adult) {
+            dzieci.push(c);
+            continue;
+        }
+        dorosli.push(c);
+        let zdrowie = world.get::<Vitals>(c).map_or(100, |v| v.health);
+        if wiek >= i32::from(ages.senior) && zdrowie < prog_opieki {
+            niedolezni.push(c);
+        }
+    }
+
+    // Dwa powody, jedna reguła. Sierotą jest gospodarstwo z dzieckiem i bez dorosłego;
+    // niedołężnym — takie, w którym **każdy** dorosły jest seniorem o zdrowiu poniżej
+    // progu. Drugi warunek jest lustrem pierwszego po drugiej stronie wieku i miał
+    // do R2 dokładnie te same skutki: żadnych.
+    let sierota = dorosli.is_empty() && !dzieci.is_empty();
+    let niedolezne = !dorosli.is_empty() && niedolezni.len() == dorosli.len();
+    let podopieczni: &[Entity] = if sierota { &dzieci } else { &niedolezni };
+    if !sierota && !niedolezne {
+        if let Some(slot) = world.get_mut::<Household>(hh_e) {
+            slot.guardian = Household::NO_MEMBER;
+        }
+        return None;
+    }
+
+    let kandydat = kandydat_na_opiekuna(world, podopieczni, i32::from(ages.adult), day)
+        .or_else(|| sasiad_z_dzielnicy(world, hh.district, i32::from(ages.adult), day));
+    let Some((opiekun, waga, rodzina)) = kandydat else {
+        if sierota {
+            // `D-N8`, i to jest **przypadek zwyrodniały**, a nie zwykła ścieżka:
+            // żeby tu dojść, w całej dzielnicy nie może być ani jednego dorosłego.
+            // Wtedy dzieci wyjeżdżają z miasta, tak samo jak dorosły bez pracy
+            // i bez lokalu; rejestruje to `Population::departures`, więc
+            // `prop_population_identity` widzi ubytek jako wyjazd, a nie jako dziurę.
+            crate::migration::wyprowadz(world, hh_e, cmd);
+        }
+        // Senior bez nikogo radzi sobie sam — to jest stan dzisiejszy i nie jest
+        // usterką. Deportowanie go za brak rodziny byłoby mechaniką, nie naprawą.
+        return None;
+    };
+    if opiekun.index() == hh.guardian {
+        return None;
+    }
+    if let Some(slot) = world.get_mut::<Household>(hh_e) {
+        slot.guardian = opiekun.index();
+    }
+    Some((
+        opiekun.index(),
+        DecisionReason::GuardianAppointed {
+            wards: podopieczni.len().min(255) as u8,
+            weight: waga,
+            kin: rodzina,
+        },
+    ))
+}
+
+/// Najlepszy kandydat na opiekuna: `(encja, waga relacji, czy krewny)`.
+///
+/// Krewny bije obcego niezależnie od wagi — babcia, której dziecko nie odwiedzało od
+/// roku, jest bliżej niż sąsiadka, z którą chodzi się na zakupy.
+fn kandydat_na_opiekuna(
+    world: &World,
+    dzieci: &[Entity],
+    adult_age: i32,
+    day: u64,
+) -> Option<(Entity, u8, bool)> {
+    let mut najlepszy: Option<(bool, u8, u32, Entity)> = None;
+    for dziecko in dzieci {
+        let Some(rel) = world.get::<RelationsRef>(*dziecko).copied() else {
+            continue;
+        };
+        // Kopia wpisów: `encja` bierze `&World`, a slab siedzi w tym samym świecie.
+        let wpisy: Vec<Relation> = world
+            .resource::<RelationSlab>()
+            .entries(relations_ref(&rel))
+            .to_vec();
+        for w in wpisy {
+            let Some(c) = encja(world, w.other) else {
+                continue;
+            };
+            let wiek = world.get::<Identity>(c).map_or(0, |i| i.age_years(day as i32));
+            if wiek < adult_age {
+                continue;
+            }
+            let rodzina = RelationKind::from_u8(w.kind).is_family();
+            // Porządek totalny: krewny, potem waga, potem **najniższy** indeks encji.
+            let klucz = (rodzina, w.weight, u32::MAX - w.other, c);
+            if najlepszy.is_none_or(|b| klucz > (b.0, b.1, b.2, b.3)) {
+                najlepszy = Some(klucz);
+            }
+        }
+    }
+    najlepszy.map(|(rodzina, waga, _, e)| (e, waga, rodzina))
+}
+
+/// Trzeci krok wyboru opiekuna: **pierwszy dorosły z dzielnicy** (`R2-WP4`).
+///
+/// Wchodzi wtedy, gdy podopieczni nie mają ani jednej relacji z dorosłym — a to jest
+/// zwykły stan dziecka, które właśnie straciło oboje rodziców i nie zdążyło poznać
+/// nikogo spoza domu. Bez tego kroku jedyną odpowiedzią byłby wyjazd z miasta, czyli
+/// kara za brak znajomości.
+///
+/// Obcy opiekun nie udaje rodziny: powód decyzji niesie `kin: false` i wagę zero,
+/// więc karta inspekcji mówi wprost, że to kuratela, a nie babcia.
+///
+/// `ponytail:` przejście po spisie do pierwszego trafienia, bez indeksu per dzielnica.
+/// Sufit nazwany: ścieżka odpala się wyłącznie dla gospodarstwa osieroconego **bez
+/// żadnej relacji**, czyli rzędu jednostek na rok gry; indeks kosztowałby pamięć
+/// w każdej dobie po to, żeby czasem oszczędzić jedno przejście.
+fn sasiad_z_dzielnicy(
+    world: &World,
+    district: u16,
+    adult_age: i32,
+    day: u64,
+) -> Option<(Entity, u8, bool)> {
+    for c in world.resource::<Population>().citizens() {
+        let Some(res) = world.get::<Residence>(*c) else {
+            continue;
+        };
+        if res.district != district {
+            continue;
+        }
+        let dorosly = world
+            .get::<Identity>(*c)
+            .is_some_and(|i| i.is_alive() && i.age_years(day as i32) >= adult_age);
+        if dorosly {
+            return Some((*c, 0, false));
+        }
+    }
+    None
 }
 
 /// Spadkobiercy: współmałżonek, dalej dzieci po równo (§5.6).
@@ -776,8 +973,13 @@ pub fn opusc_gospodarstwo(
 }
 
 /// Rozwiązanie pustego gospodarstwa: lokal wraca do puli, wpisy pomocnicze znikają.
+///
+/// Gospodarstwo pochodne (`FLAG_OVERCROWDED`, `R2-WP3`) **nie oddaje lokalu**: mieszka
+/// kątem u innego i nigdy pustostanu nie wzięło. Bez tego warunku ten sam lokal wracałby
+/// do puli dwa razy i miasto miałoby mieszkania, których nie ma — a regulator napływu
+/// liczy `min(wakaty, pustostany)`.
 fn rozwiaz_gospodarstwo(world: &mut World, hh_e: Entity, hh: &Household, cmd: &mut CommandBuffer) {
-    if hh.has_home() {
+    if hh.has_home() && !hh.is_overcrowded() {
         world
             .resource_mut::<crate::migration::Vacancies>()
             .release_home(crate::migration::HomeSlot {

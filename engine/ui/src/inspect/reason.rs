@@ -462,6 +462,20 @@ pub fn describe_named(c: &Catalog, l: Locale, r: DecisionReason, n: Names<'_>) -
         DecisionReason::LifeEvent { kind } => {
             c.fmt_key(l, "ui.reason.LifeEvent", &[("co", &life_event(c, l, kind))])
         }
+        DecisionReason::EscortUnavailable { count } => c.fmt_key(
+            l,
+            "ui.reason.EscortUnavailable",
+            &[("ile", &count.to_string())],
+        ),
+        DecisionReason::GuardianAppointed { wards, weight, kin } => c.fmt_key(
+            l,
+            if kin {
+                "ui.reason.GuardianAppointed.kin"
+            } else {
+                "ui.reason.GuardianAppointed.other"
+            },
+            &[("ilu", &wards.to_string()), ("waga", &weight.to_string())],
+        ),
         DecisionReason::ModeChosen { mode, minutes: m } => c.fmt_key(
             l,
             "ui.reason.ModeChosen",

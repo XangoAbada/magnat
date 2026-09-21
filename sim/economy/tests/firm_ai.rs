@@ -53,6 +53,7 @@ fn zaklad(id: SiteId, firm: FirmKey, i: usize) -> Site {
         strike_bps: 0,
         strike_bp_days: 0,
         delegation: None,
+        shift_profile: magnat_agents::ShiftProfile::Office,
     }
 }
 

@@ -369,6 +369,7 @@ impl Mieszkaniec {
                 stock: &self.stock,
                 escorts: &self.escorts,
                 pickups: &self.escorts,
+                unescorted: 0,
             },
             employment: &self.employment,
             known: magnat_agents::KnowledgeView::new(&self.wiedza),

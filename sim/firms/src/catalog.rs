@@ -198,6 +198,34 @@ pub struct SiteType {
     pub fixed_cost: FixedCostSpec,
 }
 
+impl SiteTypeCategory {
+    /// Profil zmianowości branży (`R2-WP37`).
+    ///
+    /// Tłumaczenie branży na profil — sama reguła („kto na którą zmianę i w które
+    /// dni") mieszka w `magnat_agents::ShiftKind::schedule`, bo rozdaje zmiany
+    /// **także** generator miasta i musi rozdawać je tak samo.
+    ///
+    /// Trzeci i czwarty wariant nie są tu z ostrożności: bez ruchu ciągłego huta
+    /// stoi w nocy, a bez zmianowości handlu sklep zamyka się w sobotę — a to jest
+    /// dokładnie to, co `R2-WP37` naprawia po stronie rynku pracy.
+    #[must_use]
+    pub const fn shift_profile(self) -> magnat_agents::ShiftProfile {
+        use magnat_agents::ShiftProfile;
+        match self {
+            SiteTypeCategory::Retail
+            | SiteTypeCategory::ConsumerServices
+            | SiteTypeCategory::Media => ShiftProfile::Shop,
+            SiteTypeCategory::Extraction
+            | SiteTypeCategory::Processing
+            | SiteTypeCategory::Logistics => ShiftProfile::Continuous,
+            SiteTypeCategory::Manufacturing => ShiftProfile::TwoShift,
+            SiteTypeCategory::BusinessServices
+            | SiteTypeCategory::Finance
+            | SiteTypeCategory::RealEstate => ShiftProfile::Office,
+        }
+    }
+}
+
 impl SiteType {
     /// Miesięczny koszt stały zakładu o danej powierzchni.
     #[must_use]

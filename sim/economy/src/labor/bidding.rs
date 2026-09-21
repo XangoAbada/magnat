@@ -313,6 +313,10 @@ pub(super) fn headhunt(
             let Some(p) = zrodlo.positions.iter().find(|p| p.role == role) else {
                 continue;
             };
+            // Ta sama reguła co przy ogłoszeniu zwykłym (`R2-WP37`): przeciągany
+            // pracownik wchodzi na pierwszą wolną brygadę, a nie na zmianę dzienną.
+            let (zmiana, dni) =
+                magnat_agents::ShiftKind::schedule(zrodlo.shift_profile, p.filled.len() as u32);
             juz.insert(c);
             firmy_dzis.insert(firma);
             wyslane.push(JobOffer {
@@ -322,7 +326,8 @@ pub(super) fn headhunt(
                 district,
                 wage_month: proponowana,
                 slots: 1,
-                shift: magnat_agents::ShiftKind::Day,
+                shift: zmiana,
+                work_days: dni,
                 requirements: Default::default(),
                 benefits: magnat_firms::BenefitSet::NONE,
                 targeted: Some(c),

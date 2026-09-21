@@ -190,7 +190,7 @@ dotyka 370 miejsc i każdy wcześniejszy pakiet, który dokłada powód, powięk
 
 | Podfaza | Dokument | Pakiety | Temat |
 |---|---|---|---|
-| `R2a` | `R2a-rodzina-i-cykl-zycia.md` | R2-WP1…R2-WP6 | Cykl szkolny, graf rodziny, gospodarstwo, sieroctwo, wykształcenie, tożsamość |
+| `R2a` | `R2a-rodzina-i-cykl-zycia.md` | R2-WP1…R2-WP6, R2-WP35, R2-WP37 | Cykl szkolny, graf rodziny, gospodarstwo, sieroctwo, wykształcenie, tożsamość, grafik zmianowy |
 | `R2b` | `R2b-pieniadz-gospodarstwa.md` | R2-WP7…R2-WP11, R2-WP30, R2-WP32 | Utarg zakładu, majątek przy rozwiązaniu, dochód po zdarzeniu, dziedziczenie, skala ekwiwalentna, lista płac, konta ruchu |
 | `R2c` | `R2c-rozjazdy-danych-i-kodu.md` | R2-WP12…R2-WP16 | Wiek produkcyjny, wartość czasu, substytucja, chodniki, martwe potrzeby |
 | `R2d` | `R2d-domkniecie-swiata.md` | R2-WP17…R2-WP19 | Kopalnie na złożach, gęstość firm, przechwytywanie rzek |
@@ -202,11 +202,11 @@ Tabela pakietów z rozmiarami i statusem stoi w dokumencie każdej podfazy. Zbio
 | WP | Nazwa | Podfaza | Zależy od | Rozmiar | Status |
 |---|---|---|---|---|---|
 | R2-WP1 ⇧ | Cykl szkolny w trakcie gry | R2a | — | M | `[x]` **przed R2** (`K-74`) |
-| R2-WP2 | Graf rodziny: rodzeństwo, dziadkowie, ochrona wpisu | R2a | — | M | `[ ]` |
-| R2-WP3 | Gospodarstwo bez cichego przepełnienia | R2a | — | S | `[ ]` |
-| R2-WP4 | Opiekun prawny i gospodarstwo osierocone | R2a | R2-WP3 | M | `[ ]` |
+| R2-WP2 | Graf rodziny: rodzeństwo, dziadkowie, ochrona wpisu | R2a | — | M | `[x]` (`K-59`) |
+| R2-WP3 | Gospodarstwo bez cichego przepełnienia | R2a | — | S | `[x]` (`K-91`) |
+| R2-WP4 | Opiekun prawny i gospodarstwo osierocone | R2a | R2-WP3 | M | `[x]` (`K-91`) |
 | R2-WP5 | Wykształcenie jako stan zmienny | R2a | R2-WP1 | M | `[x]` **przed R2** (`K-74`) |
-| R2-WP6 | Tożsamość rodzinna: nazwisko i cechy | R2a | R2-WP2 | S | `[ ]` |
+| R2-WP6 | Tożsamość rodzinna: nazwisko i cechy | R2a | R2-WP2 | S | `[x]` (`D-N4` — odrzucone z powodem) |
 | R2-WP7 ⇧ | Utarg zakładu produkcyjnego | R2b | — | M | `[x]` **przed R2** (`K-75`) |
 | R2-WP8 | Majątek gospodarstwa przy rozwiązaniu i podziale | R2b | — | M | `[ ]` |
 | R2-WP9 | Dochód gospodarstwa po zdarzeniu życiowym | R2b | — | S | `[ ]` |
@@ -237,6 +237,7 @@ Tabela pakietów z rozmiarami i statusem stoi w dokumencie każdej podfazy. Zbio
 | R2-WP34 | Scenariusz `export_drains` i druga połowa kryterium WP9 M6 | R2f | R2-WP32 | M | `[ ]` |
 | R2-WP35 | Opieka nad dzieckiem poniżej wieku szkolnego | R2a | R2-WP1 | M | `[ ]` |
 | R2-WP36 | Utarg eksportowy zakładu produkcyjnego | R2b | R2-WP7 | S | `[ ]` |
+| R2-WP37 | Zmiana robocza idzie za rodzajem zakładu | R2a | — | M | `[x]` (`K-92`) |
 
 `⇧` = kandydat do wyprzedzenia przed R2 zgodnie z §2b.
 
@@ -415,6 +416,8 @@ i staje się osobnym commitem bez żadnej innej zmiany — tak samo jak `cargo f
 Sześć zmian R2 dotyka kontraktów z dokumentu 00 i zgodnie z jego §4a wymaga wpisu `K-n`.
 Wpisy powstają w commicie pakietu, który zmianę wprowadza, a nie z góry.
 
+**Numeracja sprawdzona po R2a (2026-09-21):** `K-59` wykonana, `K-91` i `K-92` dopisane — pierwszym wolnym numerem po M10g było `K-91`. `K-58`, `K-61`, `K-72` i `K-73` są nadal wolne i zostają przy swoich pakietach.
+
 **Numeracja sprawdzona 2026-09-18.** R2 zarezerwowało `K-58`…`K-61`, kiedy pierwszym wolnym
 numerem był `K-58`. W międzyczasie M8 i M9 zajęły `K-62`…`K-71`, a `K-60` **wykonała M8c** —
 dokładnie w tej treści, w której był zarezerwowany (wiek produkcyjny jako dana). `K-58`, `K-59`
@@ -430,6 +433,8 @@ się numery w tabeli, a nie w głowie.
 | `K-61` | R2-WP8 | Rozwiązanie gospodarstwa domowego jest **operacją księgową**: salda przechodzą do spadkobierców albo na konto techniczne, nigdy nie znikają razem z encją. Niezmiennik P1 obejmuje gospodarstwa |
 | `K-72` | R2-WP32 | Rejestry ruchu (`FuelLedger`, `FareLedger`, opłaty parkingowe) przestają być rejestrami i stają się **kontami w `Books`**. Niezmiennik świata `society::total_money + Books::total_balance() == const` obowiązuje wtedy bez wyłączeń i jest bramką scenariusza, nie pomiarem wypisywanym obok |
 | `K-73` | R2-WP31 | `AgencyKind` dostaje wariant `Prosecution` **na końcu** listy — kolejność wariantów jest kontraktem indeksu zapisu gry. Przesłanka „wpłata poza rejestrem wpłat kampanijnych" przechodzi z urzędu antymonopolowego do niego |
+| `K-91` | R2-WP3, R2-WP4 | `DecisionReason::{EscortUnavailable = 120, GuardianAppointed = 121}` przedłużają blok M3; `Household` dostaje `guardian` i `FLAG_OVERCROWDED` **z rezerwy M5/M9**, zostając przy 120 B; `add_member` jest `#[must_use]`; opiekun powstaje w dobowym przeglądzie, a nie w haku przy zgonie |
+| `K-92` | R2-WP37 | Grafik zmianowy jest **jedną regułą o dwóch wołających** (`ShiftKind::schedule`): generator miasta rozdawał zmiany poprawnie, a rynek pracy wpisywał każdemu zmianę dzienną i dni robocze |
 
 ---
 
@@ -455,9 +460,9 @@ czasu `D-N6` przy `R2-WP18` zostają bez zmian, a status wraca tutaj po zamknię
 | 5 | Zero zakładów wydobywczych ze złożem w mieście 4 km | zapis `M6` `AQ-8` | R2-WP17 → **M11c** | `[x]` **zamknięte w M11c** (`J-14`, `J-15`) |
 | 6 | Gęstość firm ~10× za niska; bezrobocie 0,2 % przy 12 032 wakatach | zapis `00-postep` `BF-4`/`BF-10`, pomiar `M11c` | R2-WP18 → M11c → **R3** | `[~]` **zmierzone, sufit `D-N6` zadziałał** (`D-N20`) |
 | 7 ⇧ | `WORKING_AGE` w kodzie (2 miejsca) vs `work_start`/`retirement` w danych | — | R2-WP12 | `[x]` **wykonane w M8c** (`K-60`) |
-| 8 | Rodzeństwo z zasiedlenia i napływu bez relacji `Sibling` | — | R2-WP2 | `[ ]` |
-| 9 | Babcia dostaje z wnukiem relację `Sibling`; brak `Grandparent` | — | R2-WP2 | `[ ]` |
-| 10 | Dziecko urodzone w pełnym gospodarstwie nie wchodzi do listy członków | — | R2-WP3 | `[ ]` |
+| 8 | Rodzeństwo z zasiedlenia i napływu bez relacji `Sibling` | — | R2-WP2 | `[x]` **zamknięte** (`K-59`, test `rodzenstwo_z_zasiedlenia_ma_relacje`) |
+| 9 | Babcia dostaje z wnukiem relację `Sibling`; brak `Grandparent` | — | R2-WP2 | `[x]` **zamknięte** (`K-59`; wariant jest **symetryczny**, nie odwracany na `Child` — inaczej wnuk wchodziłby do `spadkobiercy`) |
+| 10 | Dziecko urodzone w pełnym gospodarstwie nie wchodzi do listy członków | — | R2-WP3 | `[x]` **zamknięte** (`K-91`, test `porod_do_pelnego_gospodarstwa_nie_gubi_dziecka`; przed naprawą 80 osób w składach wobec 81 żywych) |
 | 11 ⇧ | Uczeń wchodzi do indeksu miejsc pracy i dostaje relacje `Colleague` | zapis `M3d` `E-19` (przyczyna) | R2-WP1 | `[x]` wykonane w `K-74` (2026-09-18); M10e policzył warunek uzwiązkowienia na `coworkers` bez ani jednego filtra |
 | 12 | Warstwa piesza dopuszcza drogi szybkiego ruchu | — | R2-WP15 → **M11c** | `[x]` **zamknięte w M11c** (`J-13`) |
 | 13 | Motoryzacja to płaska stawka 430 ‰ bez związku z dochodem | zapis `M4b` `L-12` | R2-WP13 | `[ ]` |
@@ -467,15 +472,15 @@ czasu `D-N6` przy `R2-WP18` zostają bez zmian, a status wraca tutaj po zamknię
 | 17 | Śmierć pracownika może zostawić płacę w `income_monthly` | zapis `M7b` ★ (tylko etat) | R2-WP9 | `[ ]` |
 | 18 | `InheritanceHook` to zaślepka; dziedziczona tylko gotówka osobista | decyzja otwarta `M3` §9.10 | R2-WP10 | `[ ]` |
 | 19 | Wyprowadzka z gniazda i rozstanie nie przenoszą środków | — | R2-WP8 | `[ ]` |
-| 20 | Brak opiekuna, kurateli i sieroctwa | — | R2-WP4 | `[ ]` |
+| 20 | Brak opiekuna, kurateli i sieroctwa | — | R2-WP4 | `[x]` **zamknięte** (`K-91`, testy `smierc_ostatniego_doroslego_daje_dzieciom_opiekuna` i `prop_dziecko_nigdy_bez_doroslego_i_bez_opiekuna`) |
 | 21 | Nikt nie zdobywa wykształcenia w trakcie gry | — | R2-WP5 | `[x]` **wykonane przed R2** (`K-74`) |
 | 22 | Brak żłobka i przedszkola dla dzieci 0–6 lat | zakres `M3` §2 → M8 | R2-WP5 | `[ ]` |
 | 23 | Dziecko konsumuje tyle co dorosły | — | R2-WP11 | `[ ]` |
-| 24 | Relacja rodzinna nie chroniona przed wypchnięciem z slabu | — | R2-WP2 | `[ ]` |
-| 25 | Osobowość noworodka nie jest dziedziczona | — | odrzucone `D-N4` | `[ ]` |
-| 26 | Brak zmiany nazwiska po ślubie | — | odrzucone `D-N4` | `[ ]` |
-| 27 | Maksymalnie czworo dzieci odprowadzanych, piąte pomijane | — | R2-WP3 | `[ ]` |
-| 28 | Brak opieki nad starszymi | — | R2-WP4 | `[ ]` |
+| 24 | Relacja rodzinna nie chroniona przed wypchnięciem z slabu | — | R2-WP2 | `[x]` **zamknięte** (`K-59`, test `relacja_rodzinna_nie_wypada_przy_przepelnieniu`; podłoga wagi przeszła do `social.family_floor`) |
+| 25 | Osobowość noworodka nie jest dziedziczona | — | odrzucone `D-N4` | `[x]` **odrzucone z powodem** (`R2-WP6`; komentarz w `day.rs::uroda` nazywa rozstrzygnięcie, skaner `plan_refs` pilnuje, że nie odsyła do fazy, której nie ma) |
+| 26 | Brak zmiany nazwiska po ślubie | — | odrzucone `D-N4` | `[x]` **odrzucone z powodem** (`R2-WP6`; komentarz w `migration.rs` przestał odsyłać do „fazy, która ślub modeluje" — takiej fazy nie ma i nie będzie) |
+| 27 | Maksymalnie czworo dzieci odprowadzanych, piąte pomijane | — | R2-WP3 | `[x]` **zamknięte** (`K-91`, test `piate_dziecko_zostawia_slad`; limit zostaje, znika milczenie — `HouseholdRoles::unescorted` i `DecisionReason::EscortUnavailable`) |
+| 28 | Brak opieki nad starszymi | — | R2-WP4 | `[x]` **zamknięte** (`K-91`; gospodarstwo samych seniorów o zdrowiu poniżej `care_health_threshold` dostaje opiekuna tą samą regułą co sierota) |
 | 29 | `Carrier::Pipeline` bez ścieżki wykonania | zapis `M6c` `AH-3` (błędny) | R2-WP22 | `[ ]` |
 | 30 | `TripPurpose::Escort` nigdzie nie konstruowany | — | R2-WP22 | `[ ]` |
 | 31 | `shopper_rotation` i `vehicle_slots` nieużywane | — | R2-WP22 | `[ ]` |
@@ -555,20 +560,20 @@ Ujednolicenie nagłówków jest zadaniem R2-WP23.
 | 69 | **Ekran rozgrywki ma dwie z trzech rzeczy, które rysuje `ui-design.md` §5.** Inspekcja jest przeciągalnym oknem `egui` (`tools/magnat/src/citizens.rs`), a nie **dokiem prawym** — więc „lewy prowadzi, prawy pokazuje klikniętego" jest regułą dokumentu, nie ekranu. Pasek czasu nie niesie gotówki ani jej zmiany, choć §5 rysuje je po jego prawej stronie: gracz widzi stan konta tylko po otwarciu pulpitu. Oba są brakiem treści, a nie usterką — układ po naprawie `DI-39` jest już taki, że dok prawy ma gdzie stanąć | zapis `M9e` `DI-39` | **M11c** | `[x]` **zamknięte** (`WP12`, test `pieszy_idzie_ulica_a_nie_przez_kwartal`) |
 | 70 | **Trasa pieszego w warstwie Mikro jest odcinkiem prostym między środkami budynków.** `journey.rs::enter_micro_inner` podaje `MicroLayer::enter` dwa punkty (`coord_of(from)`, `coord_of(to)`) i nic więcej — żadnego routingu geometrycznego, żadnego próbkowania terenu. Pieszy idzie więc przez kwartały, a w połowie drogi bywa pod ziemią albo nad nią, bo interpolacja liniowa nie zna niwelety. Węzły grafu pieszego **mają** poprawne `z_cm` (łańcuch `TerrainQuery::height_at` → `lsystem` → `nav_build`) i nikt ich w tej ścieżce nie czyta. Objaw stał się widoczny w M11b, gdy pieszy przestał być plamką i dostał sylwetkę; poprawka `G-13` wyprostowała **końce** trasy (rzędna wejścia zamiast dna fundamentu), środek zostaje | zapis `M11b` `G-13` | **M11c** | `[x]` **zamknięte** (`WP12`, test `pieszy_idzie_ulica_a_nie_przez_kwartal`) |
 | 71 ⇧ | **Kadr gry jest pusty, bo okno warstwy Mikro i promień rysowania są zaczepione w oku kamery, a nie w tym, na co gracz patrzy.** Zdiagnozowane po M11b, trzy przyczyny naraz. **(1)** `citizens.rs::okno_mikro` podaje `set_micro_window(camera.eye())`, a przy orbicie z 900 m oko stoi 767 m w poziomie od celu — dysk o promieniu 900 m jest przesunięty o tyle samo, więc połowa okna leży za plecami kamery. **(2)** `DRAW_RADIUS_M = 600` mierzy się **od oka**, a `ViewQuery.aabb` to 720 m wokół oka: przy orbicie 900 m punkt, na który gracz patrzy, jest z definicji poza jednym i drugim, więc w domyślnym widoku dzielnicy nie widać **żadnej** encji. **(3)** `MicroLayer::enter` wpuszcza pieszego tylko w minucie wyruszenia i tylko wtedy, gdy początek albo koniec jego trasy trafia w okno — kto idzie przez kadr, ale mieszka i pracuje poza nim, nie pojawia się nigdy, a po przeskoku kamery nowe okno napełnia się przez kilkanaście minut symulacji. Liczba samych pieszych (24–46) jest przy tym **prawdopodobnie poprawna**: `data/roads/mode_choice.ron` daje dla miasta 28 tys. udział pieszy ~70 % i udział samochodowy ~10 %, a `min_car_distance_m: 800` odcina krótkie dojazdy autem. Rekordy pojazdów mają czytelnika (`view.rs::fill_vehicles`) — pusty jest bufor Mikro, nie kanał | zapis `M11b` `G-12` | **M11c** (przejęte z R2 decyzją właściciela produktu) | `[x]` **zamknięte** (`WP12`; czwarta przyczyna — pojazdy w `[0,0,0]` — znaleziona przy okazji, `J-11`) |
-| 72 | **Poza kwadransami szczytu ulica jest pusta.** Plan doby wysyła wszystkich w tej samej minucie, więc miasto ma trzy piki i dwadzieścia godzin ciszy. Zmierzone w M11c na świecie odniesienia (`--seed 7 --size 4km`, mieszkańcy w snapshocie): 7:50 → 4 644, 8:00 → 831, 8:15 → 74, **10:00 → 0**, 14:00 → 2 031, 16:00 → 1 919, 16:30 → 129, **17:00 → 0**, 20:00 → 0. To nie jest usterka prezentacji: warstwa Mikro oddaje dokładnie tych, którzy są w drodze. Rozkład wyruszeń należy do planera doby (M3), a `WP12` fazy M11c jawnie go nie rusza | zapis `M11c` `J-12` | — | `[ ]` |
+| 72 | **Poza kwadransami szczytu ulica jest pusta.** Plan doby wysyła wszystkich w tej samej minucie, więc miasto ma trzy piki i dwadzieścia godzin ciszy. Zmierzone w M11c na świecie odniesienia (`--seed 7 --size 4km`, mieszkańcy w snapshocie): 7:50 → 4 644, 8:00 → 831, 8:15 → 74, **10:00 → 0**, 14:00 → 2 031, 16:00 → 1 919, 16:30 → 129, **17:00 → 0**, 20:00 → 0. To nie jest usterka prezentacji: warstwa Mikro oddaje dokładnie tych, którzy są w drodze. Rozkład wyruszeń należy do planera doby (M3), a `WP12` fazy M11c jawnie go nie rusza | zapis `M11c` `J-12` | **R2-WP37** (pierwsza połowa) | `[~]` **połowa zamknięta** (`K-92`): rynek pracy wpisywał każdemu zmianę dzienną i dni robocze, więc grafik generatora znikał po pierwszej zmianie pracy — teraz idzie za rodzajem zakładu. Druga połowa zostaje: w obrębie jednej zmiany wszyscy wyruszają co do minuty razem, bo plan doby nie ma rozrzutu. Adres drugiej połowy: planer doby M3, pakiet do nadania |
 | 73 | **`debug_assert` w kolejce zdarzeń wywraca każdy przebieg pętli doby w profilu testowym.** `des.rs` sprawdza, że klucz porządku zdarzeń jest **totalny**, i w mieście 4 km z czterema tysiącami mieszkańców trafia na duplikat w minucie 469: „dwa zdarzenia o identycznym kluczu — porządek przestał być totalny, a wynik zaczął zależeć od kolejności wstawiania". Skutkiem jest to, że **wszystkie testy `tools/headless/tests/full_city.rs` są czerwone pod `cargo test`** i zielone dopiero pod `cargo test --release`, gdzie asercja nie istnieje. Zarzut jest przy tym prawdziwy: jeśli klucz nie jest totalny, kolejność dwóch zdarzeń zależy od tego, które wstawiono pierwsze, a to jest wprost naruszenie 00 §3 | zapis `M11c` (znalezione przy `R2-WP17`) | — | `[ ]` |
 
 ## 12. Szacunek wielkości
 
 | Podfaza | Pakiety | Pliki dotknięte | Testy nowe | Rozmiar |
 |---|---|---|---|---|
-| `R2a` | 6 | ~14 w `sim/agents`, `sim/world/population` | 11 | L |
+| `R2a` | 8 | ~20 w `sim/agents`, `sim/world/population`, `sim/economy/labor`, `sim/firms` | 13 | L |
 | `R2b` | 7 | ~14 w `sim/economy`, `sim/agents`, `sim/firms`, `sim/traffic`, `sim/city` | 13 | L |
 | `R2c` | 5 | ~11 w `sim/traffic`, `sim/supply`, `sim/agents`, `data/` | 9 | M |
 | `R2d` | 3 | ~7 w `sim/world` | 5 | L |
 | `R2e` | 7 | ~370 miejsc w 10 crate'ach (sam R2-WP20); R2-WP27 zależny od `D-N19` | 10 | L |
 | `R2f` | 6 | `tools/balansator`, `sim/world/tests`, `scripts/`, `benches/`, `data/scenarios/` | 7 | L |
-| **Razem** | **34** | — | **55** | — |
+| **Razem** | **36** | — | **57** | — |
 
 Szacunek liczby testów jest dolną granicą: kryterium akceptacji nr 2 wymaga testu, który padał,
 dla **każdego** pakietu, a pakiety wielotematyczne (R2-WP2, R2-WP22) potrzebują go dla każdego

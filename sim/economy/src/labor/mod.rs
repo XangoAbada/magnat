@@ -98,7 +98,15 @@ pub trait Workforce {
     fn job_seekers(&mut self, day: u32, on_the_job_every: u16, out: &mut Vec<CitizenId>);
 
     /// Zapis umowy po stronie mieszkańca.
-    fn hire(&mut self, c: CitizenId, site: SiteId, role: JobRoleId, shift: ShiftKind, wage: Money);
+    fn hire(
+        &mut self,
+        c: CitizenId,
+        site: SiteId,
+        role: JobRoleId,
+        shift: ShiftKind,
+        work_days: u8,
+        wage: Money,
+    );
 
     /// Wyjście z etatu. **Jedyna legalna droga** — etat, który nie wraca do puli,
     /// znika z miasta na zawsze (M3c, korekta G-7).

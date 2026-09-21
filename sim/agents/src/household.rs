@@ -72,8 +72,11 @@ pub const HH_MAX_MEMBERS: usize = 12;
 ///
 /// Suma pól wypisanych w §5.6 daje 120 bajtów i nie ma tam czego dołożyć — etykieta
 /// „128 B" była zaokrągleniem w górę, nie rachunkiem. Osiem bajtów mniej na gospodarstwo
-/// to 1,3 MB przy 167 tys. gospodarstw metropolii; rezerwa 16 B dla M5/M9 (ryzyko R5)
-/// zostaje nietknięta.
+/// to 1,3 MB przy 167 tys. gospodarstw metropolii.
+///
+/// Rezerwa dla M5/M9 (ryzyko R5) schudła w `R2-WP4` z 16 B do 12 B — cztery bajty
+/// wziął `guardian`. Struktura zostaje 120 B i to jest cały sens tej rezerwy:
+/// jest miejscem na pole, które właśnie dostało czytelnika, a nie nietykalnym zapasem.
 #[repr(C)]
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Household {
@@ -109,8 +112,20 @@ pub struct Household {
     pub _pad3: [u8; 2],
     /// M4 wypełnia.
     pub vehicle_slots: [u32; 2],
+    /// Opiekun prawny — indeks encji dorosłego **spoza składu**; `NO_MEMBER`, gdy
+    /// gospodarstwo radzi sobie samo (`R2-WP4`, `D-N2`).
+    ///
+    /// Pole, a nie encja: instytucja opiekuńcza wymaga usługi publicznej z obsadą
+    /// i finansowaniem, czyli należy do M8d. R2 domyka stan nieopisany — gospodarstwo
+    /// z dziećmi i zerem dorosłych — a nie buduje mechaniki.
+    ///
+    /// Cztery bajty pochodzą **z rezerwy M5/M9** (16 B → 12 B), a nie z rozmiaru
+    /// struktury: gospodarstwo zostaje 120 B. Rezerwa jest miejscem dla czytelnika,
+    /// który jeszcze nie istnieje, a opiekun czytelnika ma dziś (`household::roles`,
+    /// `SocialIndex::wards`).
+    pub guardian: u32,
     /// Rezerwa dla M5/M9, żeby nie przebudowywać archetypu (ryzyko R5).
-    pub _reserved: [u8; 16],
+    pub _reserved: [u8; 12],
     pub _pad4: [u8; 4],
 }
 
@@ -135,7 +150,8 @@ impl Default for Household {
             shopper_rotation: 0,
             _pad3: [0; 2],
             vehicle_slots: [u32::MAX; 2],
-            _reserved: [0; 16],
+            guardian: Household::NO_MEMBER,
+            _reserved: [0; 12],
             _pad4: [0; 4],
         }
     }
@@ -145,11 +161,40 @@ impl Household {
     pub const NO_MEMBER: u32 = u32::MAX;
     pub const NO_BUILDING: u32 = u32::MAX;
     pub const FLAG_ACTIVE: u16 = 1 << 0;
+    /// Gospodarstwo **dzieli cudzy lokal** (`R2-WP3`).
+    ///
+    /// Powstaje wtedy, gdy do gospodarstwa o pełnym składzie (`HH_MAX_MEMBERS`)
+    /// urodzi się dziecko: zamiast zginąć w milczeniu, zakłada gospodarstwo pochodne
+    /// pod tym samym adresem. Jego rozmiar **jest** liczbą osób ponad limit.
+    ///
+    /// Flaga niesie też skutek księgowy: lokal należy do gospodarstwa pierwotnego,
+    /// więc pochodne **nie oddaje go do puli pustostanów**, kiedy się rozwiązuje.
+    /// Bez tego jeden lokal wracałby do puli dwa razy i miasto miałoby mieszkania,
+    /// których nie ma.
+    pub const FLAG_OVERCROWDED: u16 = 1 << 1;
 
     #[inline]
     #[must_use]
     pub const fn is_active(&self) -> bool {
         self.flags & Household::FLAG_ACTIVE != 0
+    }
+
+    /// Czy gospodarstwo mieszka kątem u innego — patrz [`Household::FLAG_OVERCROWDED`].
+    #[inline]
+    #[must_use]
+    pub const fn is_overcrowded(&self) -> bool {
+        self.flags & Household::FLAG_OVERCROWDED != 0
+    }
+
+    /// Opiekun prawny, jeśli jest — patrz [`Household::guardian`].
+    #[inline]
+    #[must_use]
+    pub const fn guardian_of(&self) -> Option<u32> {
+        if self.guardian == Household::NO_MEMBER {
+            None
+        } else {
+            Some(self.guardian)
+        }
     }
 
     #[inline]
@@ -286,6 +331,13 @@ pub fn members_of(
 
 /// Dopisuje członka. Zwraca `false`, gdy gospodarstwo osiągnęło `HH_MAX_MEMBERS` —
 /// wywołujący ma wtedy założyć nowe gospodarstwo, a nie zgubić mieszkańca.
+///
+/// `#[must_use]` nie jest ozdobą (`R2-WP3`): trzech z czterech wołających ignorowało
+/// wynik, a mieszkaniec, którego nie dopisano, zostawał z `Identity.household`
+/// wskazującym na gospodarstwo, w którego składzie go nie ma. Istniał wtedy i nie
+/// istniał naraz — karta gospodarstwa pokazywała inny skład niż karta mieszkańca,
+/// a role, klasyfikacja i rozmiar go nie widziały.
+#[must_use]
 pub fn add_member(
     household: u32,
     hh: &mut Household,
@@ -425,6 +477,13 @@ pub struct HouseholdRoles {
     pub shopper: u32,
     /// Dzieci wymagające odprowadzenia, w kolejności rosnących indeksów encji.
     pub escorted: ArrayVec<u32, MAX_ESCORTED>,
+    /// Ile dzieci wymagało odprowadzenia i **go nie dostało** (`R2-WP3`).
+    ///
+    /// Dwa powody, jeden licznik: piąte dziecko ponad `MAX_ESCORTED` i każde dziecko
+    /// w gospodarstwie bez dorosłego. Przedtem oba kończyły się `break` albo `clear()`
+    /// i nie zostawiały śladu — a „dlaczego moje dziecko nie poszło do szkoły" jest
+    /// pytaniem, na które karta inspekcji musi umieć odpowiedzieć (00 §7).
+    pub unescorted: u8,
 }
 
 /// Podział ról dla gospodarstwa.
@@ -438,13 +497,25 @@ pub struct HouseholdRoles {
 /// `escort_age` to wiek, poniżej którego dziecko wymaga odprowadzenia (starszy uczeń
 /// chodzi sam), `adult_age` — wiek, od którego mieszkaniec może odprowadzać i robić
 /// zakupy. To są dwa różne progi i mylenie ich odprowadza siedemnastolatka do liceum.
+///
+/// `guardian` to dorosły **spoza składu** (`R2-WP4`): gospodarstwo osierocone nie ma
+/// własnego dorosłego, więc bez niego lista odprowadzanych była czyszczona i dzieci
+/// szły do szkoły same. Opiekun liczy się do ról dokładnie tak jak domownik — zmiana
+/// rozstrzyga, czy odprowadza czy odbiera — bo tylko o to w tej funkcji chodzi.
 #[must_use]
-pub fn roles(members: &[MemberView], escort_age: i32, adult_age: i32, day: u64) -> HouseholdRoles {
+pub fn roles(
+    members: &[MemberView],
+    escort_age: i32,
+    adult_age: i32,
+    day: u64,
+    guardian: Option<MemberView>,
+) -> HouseholdRoles {
     let mut out = HouseholdRoles {
         escort: Household::NO_MEMBER,
         pickup: Household::NO_MEMBER,
         shopper: Household::NO_MEMBER,
         escorted: ArrayVec::new(),
+        unescorted: 0,
     };
     if members.is_empty() {
         return out;
@@ -453,7 +524,8 @@ pub fn roles(members: &[MemberView], escort_age: i32, adult_age: i32, day: u64) 
     for m in members {
         if m.is_pupil && m.age_years < escort_age && m.site != Employment::NO_SITE {
             if out.escorted.is_full() {
-                break;
+                out.unescorted = out.unescorted.saturating_add(1);
+                continue;
             }
             out.escorted.push(m.citizen);
         }
@@ -463,10 +535,15 @@ pub fn roles(members: &[MemberView], escort_age: i32, adult_age: i32, day: u64) 
     // bez przechowywania licznika, i nie zależy od tego, kiedy ktoś do gospodarstwa
     // dołączył. `shopper_rotation` w komponencie zostaje dla M5, które może chcieć
     // rotować rzadziej niż codziennie.
-    let doroslych = members.iter().filter(|m| m.age_years >= adult_age).count();
+    // Opiekun doklejony **za** składem: kolejność składu jest kolejnością wejścia
+    // i nikogo nie przestawia, a on do składu nie należy. Bez kopii — iterator,
+    // bo to jest ścieżka liczona dla każdego mieszkańca przy każdym planowaniu doby.
+    let opiekun = guardian.filter(|g| !members.iter().any(|m| m.citizen == g.citizen));
+    let wszyscy = || members.iter().chain(opiekun.as_ref());
+
+    let doroslych = wszyscy().filter(|m| m.age_years >= adult_age).count();
     if doroslych > 0 {
-        out.shopper = members
-            .iter()
+        out.shopper = wszyscy()
             .filter(|m| m.age_years >= adult_age)
             .nth((day as usize) % doroslych)
             .map_or(Household::NO_MEMBER, |m| m.citizen);
@@ -477,7 +554,11 @@ pub fn roles(members: &[MemberView], escort_age: i32, adult_age: i32, day: u64) 
     }
     if doroslych == 0 {
         // Dziecko bez dorosłego w gospodarstwie nie jest odprowadzane — i to jest
-        // stan do pokazania w karcie inspekcji, a nie do wygładzenia tutaj.
+        // stan do pokazania w karcie inspekcji, a nie do wygładzenia tutaj. Od
+        // `R2-WP3` ma nośnik: licznik, który planer zamienia w powód decyzji.
+        out.unescorted = out
+            .unescorted
+            .saturating_add(out.escorted.len().min(255) as u8);
         out.escorted.clear();
         return out;
     }
@@ -500,19 +581,17 @@ pub fn roles(members: &[MemberView], escort_age: i32, adult_age: i32, day: u64) 
             0
         }
     };
-    let opiekun = |m: &&MemberView| m.age_years >= adult_age;
+    let dorosly = |m: &&MemberView| m.age_years >= adult_age;
 
-    out.escort = members
-        .iter()
-        .filter(opiekun)
+    out.escort = wszyscy()
+        .filter(dorosly)
         .max_by_key(|m| (poczatek(m), std::cmp::Reverse(m.citizen)))
         .map_or(Household::NO_MEMBER, |m| m.citizen);
 
     // Jedna osoba robi oba kursy tylko wtedy, gdy jest sama.
     let escort = out.escort;
-    out.pickup = members
-        .iter()
-        .filter(opiekun)
+    out.pickup = wszyscy()
+        .filter(dorosly)
         .filter(|m| doroslych == 1 || m.citizen != escort)
         .min_by_key(|m| (koniec(m), m.citizen))
         .map_or(escort, |m| m.citizen);
@@ -540,6 +619,7 @@ impl HashState for Household {
         h.write_u8(self.shopper_rotation);
         h.write_u32(self.vehicle_slots[0]);
         h.write_u32(self.vehicle_slots[1]);
+        h.write_u32(self.guardian);
         h.write(&self._reserved);
     }
 }
@@ -577,10 +657,11 @@ mod tests {
                 std::mem::offset_of!(Household, cash),
                 std::mem::offset_of!(Household, stock),
                 std::mem::offset_of!(Household, vehicle_slots),
+                std::mem::offset_of!(Household, guardian),
                 std::mem::offset_of!(Household, _reserved),
                 size_of::<Household>(),
             ),
-            (8, 32, 40, 80, 92, 100, 120)
+            (8, 32, 40, 80, 92, 100, 104, 120)
         );
     }
 
@@ -615,7 +696,7 @@ mod tests {
     fn gospodarstwo_bez_czlonkow_przestaje_byc_aktywne() {
         let mut hh = Household::default();
         let mut ov = HouseholdOverflow::new();
-        add_member(3, &mut hh, &mut ov, 10);
+        assert!(add_member(3, &mut hh, &mut ov, 10));
         assert!(hh.is_active());
         remove_member(3, &mut hh, &mut ov, 10);
         assert!(!hh.is_active());
@@ -682,14 +763,14 @@ mod tests {
         dziecko.is_pupil = true;
         dziecko.site = 4242;
 
-        let r = roles(&[wczesna, dzienna, dziecko], 10, 18, 0);
+        let r = roles(&[wczesna, dzienna, dziecko], 10, 18, 0, None);
         assert_eq!(r.escorted.as_slice(), &[3]);
         assert_eq!(r.escort, 2, "odprowadza zmiana zaczynająca się później");
         assert_eq!(r.pickup, 1, "odbiera zmiana kończąca się wcześniej");
         assert_eq!(ShiftKind::Early.window().1, MinuteOfDay::new(14 * 60));
 
         // Samotny rodzic robi oba kursy — bo nie ma komu ich rozdzielić.
-        let sam = roles(&[dzienna, dziecko], 10, 18, 0);
+        let sam = roles(&[dzienna, dziecko], 10, 18, 0, None);
         assert_eq!(sam.escort, 2);
         assert_eq!(sam.pickup, 2);
 
@@ -697,7 +778,7 @@ mod tests {
         let mut nastolatek = czlonek(4, 15);
         nastolatek.is_pupil = true;
         nastolatek.site = 77;
-        let bez = roles(&[dzienna, nastolatek], 10, 18, 0);
+        let bez = roles(&[dzienna, nastolatek], 10, 18, 0, None);
         assert!(bez.escorted.is_empty());
         assert_eq!(bez.escort, Household::NO_MEMBER);
     }
@@ -705,8 +786,8 @@ mod tests {
     #[test]
     fn zakupy_rotuja_po_dorosłych() {
         let m = [czlonek(5, 40), czlonek(9, 42), czlonek(1, 6)];
-        assert_eq!(roles(&m, 10, 18, 0).shopper, 5);
-        assert_eq!(roles(&m, 10, 18, 1).shopper, 9);
-        assert_eq!(roles(&m, 10, 18, 2).shopper, 5);
+        assert_eq!(roles(&m, 10, 18, 0, None).shopper, 5);
+        assert_eq!(roles(&m, 10, 18, 1, None).shopper, 9);
+        assert_eq!(roles(&m, 10, 18, 2, None).shopper, 5);
     }
 }

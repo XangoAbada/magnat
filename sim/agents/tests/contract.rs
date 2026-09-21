@@ -342,6 +342,7 @@ fn planer_stoi_na_traitach_a_nie_na_implementacjach() {
                 stock: &stock,
                 escorts: &escorts,
                 pickups: &escorts,
+                unescorted: 0,
             },
             employment: &employment,
             known: KnowledgeView::new(&wpisy),

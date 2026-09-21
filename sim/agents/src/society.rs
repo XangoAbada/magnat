@@ -98,6 +98,9 @@ pub fn step_day(world: &mut World, day: u64, hooks: &mut dyn InheritanceHook) ->
     }
 
     raport.day = demography::day::step_day(world, day, hooks);
+    // Opiekun powstaje przy zgonie, czyli w środku miesiąca — indeks odwrotny musi
+    // więc iść za nim co dobę, a nie razem z resztą `SocialIndex` (`R2-WP4`).
+    odbuduj_opiekunow(world);
     raport.social = social::step_day(world, day);
     raport
 }
@@ -107,6 +110,13 @@ pub fn step_day(world: &mut World, day: u64, hooks: &mut dyn InheritanceHook) ->
 fn odbuduj_indeks(world: &mut World) {
     let mut idx = std::mem::take(world.resource_mut::<SocialIndex>());
     idx.rebuild(world);
+    *world.resource_mut::<SocialIndex>() = idx;
+}
+
+/// Odbudowa samego indeksu opiekunów — co dobę, z tego samego powodu co wyżej.
+fn odbuduj_opiekunow(world: &mut World) {
+    let mut idx = std::mem::take(world.resource_mut::<SocialIndex>());
+    idx.rebuild_guardians(world);
     *world.resource_mut::<SocialIndex>() = idx;
 }
 

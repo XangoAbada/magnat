@@ -113,6 +113,7 @@ fn menedzer_i_delegacja_wchodza_do_hasha() {
         strike_bps: 0,
         strike_bp_days: 0,
         delegation: None,
+        shift_profile: magnat_agents::ShiftProfile::Office,
     };
     let t = LaborTuning::load_default()
         .expect("data/tuning/labor.ron")

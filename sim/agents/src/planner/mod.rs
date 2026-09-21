@@ -70,6 +70,11 @@ pub struct HouseholdView<'a> {
     /// dzienna o 16:00, więc odbiera ten, kto kończy wcześniej (`household::roles`).
     /// Dla jedynego dorosłego w gospodarstwie obie listy są takie same.
     pub pickups: &'a [PlaceRef],
+    /// Ile dzieci w gospodarstwie wymagało odprowadzenia i go **nie dostało**
+    /// (`R2-WP3`): piąte ponad `MAX_ESCORTED` albo wszystkie, gdy w domu nie ma
+    /// dorosłego. Planer zamienia to na `DecisionReason::EscortUnavailable`,
+    /// bo inaczej stan nie zostawia śladu nigdzie.
+    pub unescorted: u8,
 }
 
 impl HouseholdView<'_> {
@@ -86,6 +91,7 @@ impl HouseholdView<'_> {
             stock,
             escorts: &[],
             pickups: &[],
+            unescorted: 0,
         }
     }
 }

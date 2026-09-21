@@ -473,6 +473,7 @@ fn ulotka_dociera_z_zakladu_spoza_katalogu_miejsc() {
         strike_bps: 0,
         strike_bp_days: 0,
         delegation: None,
+        shift_profile: magnat_agents::ShiftProfile::Office,
     }));
     w.insert_resource(firms);
 

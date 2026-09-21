@@ -69,6 +69,8 @@ struct TestPeople {
     /// Ile punktów potrzeby dołożyły świadczenia — wprost kryterium WP6.
     need_gain: BTreeMap<(CitizenId, NeedKind), u32>,
     hires: u32,
+    /// Grafik każdego zatrudnienia — `(zmiana, maska dni)` (`R2-WP37`).
+    grafiki: Vec<(ShiftKind, u8)>,
 }
 
 impl TestPeople {
@@ -140,13 +142,15 @@ impl Workforce for TestPeople {
         c: CitizenId,
         site: SiteId,
         role: JobRoleId,
-        _shift: ShiftKind,
+        shift: ShiftKind,
+        work_days: u8,
         _wage: Money,
     ) {
         if let Some(o) = self.ludzie.get_mut(&c) {
             o.job = Some((site, role));
             o.skills.entry(role).or_insert(30);
         }
+        self.grafiki.push((shift, work_days));
         self.hires += 1;
     }
 
@@ -239,6 +243,7 @@ fn zaklad(
         strike_bps: 0,
         strike_bp_days: 0,
         delegation: None,
+        shift_profile: magnat_agents::ShiftProfile::Office,
     };
     assert!(firms.add_site(site), "zakład bez firmy");
     id
@@ -868,7 +873,7 @@ fn upadlosc_konczy_kazda_umowe_dokladnie_raz() {
         } else {
             (SPAWACZ, obok)
         };
-        people.hire(c, gdzie, rola, ShiftKind::Day, Money(500_000));
+        people.hire(c, gdzie, rola, ShiftKind::Day, 0b001_1111, Money(500_000));
         firms
             .site_mut(gdzie)
             .expect("zakład")
@@ -951,4 +956,55 @@ fn upadlosc_konczy_kazda_umowe_dokladnie_raz() {
         SimMinute(400 * 1440),
     );
     assert!(znowu.is_empty(), "druga odprawa dla tej samej załogi");
+}
+
+/// `R2-WP37`: rynek pracy obsadza zakład **wg jego profilu zmianowości**, a nie
+/// wpisuje wszystkim zmiany dziennej od poniedziałku do piątku.
+///
+/// Przed naprawą `post_offers` wstawiało do każdej oferty `ShiftKind::Day`, a `hire`
+/// do każdego etatu `Employment::WEEKDAYS` — więc huta o ruchu ciągłym po pierwszej
+/// rotacji kadrowej przestawała pracować w nocy, a sklep w sobotę.
+#[test]
+fn zaklad_o_ruchu_ciaglym_obsadza_takze_noc() {
+    let mut m = rynek();
+    let mut firms = Firms::new();
+    let mut people = TestPeople::default();
+    let huta = firma(&mut firms, "Huta");
+    let site = zaklad(
+        &mut firms,
+        huta,
+        0,
+        0,
+        &[(SPAWACZ, 8, WIDELKI_SPAWACZ)],
+    );
+    firms.site_mut(site).expect("zakład").shift_profile =
+        magnat_agents::ShiftProfile::Continuous;
+
+    for i in 0..12u32 {
+        people.dodaj(i, Some(SPAWACZ), 60, 0);
+    }
+    for d in 0..40u64 {
+        m.step_day(&mut firms, &mut people, 7, Tick(d * 1440));
+    }
+
+    assert!(people.hires > 0, "nikogo nie zatrudniono — test mierzyłby własny brak");
+    let pory: std::collections::BTreeSet<u8> =
+        people.grafiki.iter().map(|(s, _)| *s as u8).collect();
+    assert!(
+        pory.contains(&(ShiftKind::Night as u8)),
+        "huta o ruchu ciągłym nie obsadziła nocy: {:?}",
+        people.grafiki
+    );
+    assert!(
+        pory.len() >= 3,
+        "cztery brygady, a pór zmian tylko {}: {:?}",
+        pory.len(),
+        people.grafiki
+    );
+    let maski: std::collections::BTreeSet<u8> =
+        people.grafiki.iter().map(|(_, d)| *d).collect();
+    assert!(
+        maski.len() >= 2,
+        "wszyscy pracują w te same dni: {maski:?}"
+    );
 }

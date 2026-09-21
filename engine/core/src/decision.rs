@@ -126,6 +126,18 @@ pub enum DecisionReason {
     /// Zdarzenie cyklu życia, które nie jest wyborem mieszkańca (M3c §5.6):
     /// narodziny, poczęcie, emerytura, choroba, wyzdrowienie, zgon.
     LifeEvent { kind: LifeEventKind } = 119,
+    /// Dziecko wymagało odprowadzenia do szkoły i go nie dostało (`R2-WP3`).
+    ///
+    /// Dwa powody, jeden wariant: gospodarstwo bez dorosłego oraz piąte i dalsze
+    /// dziecko ponad `MAX_ESCORTED`. Rozróżnienie ich kosztowałoby drugi wariant
+    /// i nie zmieniłoby ani jednej decyzji — dla gracza oba znaczą „nie miał kto".
+    EscortUnavailable { count: u8 } = 120,
+    /// Gospodarstwo dostało opiekuna prawnego spoza składu (`R2-WP4`).
+    ///
+    /// `wards` — ilu podopiecznych (osieroconych dzieci albo niedołężnych seniorów),
+    /// `weight` — waga relacji, która zdecydowała, `kin` — czy wybrany jest krewnym.
+    /// Trzy liczby, bo pytanie gracza brzmi „dlaczego **on**", a nie „czy ktoś jest".
+    GuardianAppointed { wards: u8, weight: u8, kin: bool } = 121,
     // ── M4 — ruch: 200..=299 ─────────────────────────────────────────────────────
     // M4b zajmuje 200–204. Wybór środka z pełnym kosztem uogólnionym (M4c/WP6)
     // dopisze `ModeCompared` pod kolejnym numerem — `ModeChosen` zostaje i niesie
@@ -972,6 +984,8 @@ impl DecisionReason {
             DecisionReason::MigrationDecision { .. } => 117,
             DecisionReason::Inheritance { .. } => 118,
             DecisionReason::LifeEvent { .. } => 119,
+            DecisionReason::EscortUnavailable { .. } => 120,
+            DecisionReason::GuardianAppointed { .. } => 121,
             DecisionReason::ModeChosen { .. } => 200,
             DecisionReason::NoRouteForMode { .. } => 201,
             DecisionReason::RefuelNeeded { .. } => 202,
@@ -1194,10 +1208,16 @@ mod tests {
             DecisionReason::LifeEvent {
                 kind: LifeEventKind::Died,
             },
+            DecisionReason::EscortUnavailable { count: 1 },
+            DecisionReason::GuardianAppointed {
+                wards: 2,
+                weight: 90,
+                kin: true,
+            },
         ];
         let numery: Vec<u16> = wszystkie.iter().map(|r| r.discriminant()).collect();
         assert_eq!(numery[0], 0);
-        assert_eq!(numery[1..], (100..=119).collect::<Vec<u16>>()[..]);
+        assert_eq!(numery[1..], (100..=121).collect::<Vec<u16>>()[..]);
         // Blok M8 (600–699) — otwarty w M8a, wartości wieczne.
         assert_eq!(
             DecisionReason::TaxAssessed {

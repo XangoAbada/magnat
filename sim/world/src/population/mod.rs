@@ -40,7 +40,7 @@ use jobs::{dopasuj_prace, przypisz_szkoly};
 use magnat_agents::{
     demography, household, migration, social, Ages, ArrayVec, CitizenView, CityFacts,
     DemographyTable, Employment, HomeSlot, Household, HouseholdOverflow, Identity, JobSlot,
-    KnowledgeKind, Needs, Personality, PlaceEntry, PlaceTable, RelationKind, Residence, ShiftKind,
+    KnowledgeKind, Needs, Personality, PlaceEntry, PlaceTable, RelationKind, Residence, ShiftKind, ShiftProfile,
     SkillSlot, Skills, Vacancies, Vitals, MAX_ON_ROUTE,
 };
 use magnat_core::{

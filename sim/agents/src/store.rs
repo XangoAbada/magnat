@@ -69,6 +69,10 @@ pub struct Relation {
 }
 
 /// Rodzaj relacji. Rodzinne są obustronne z definicji (`prop_relation_symmetry`).
+///
+/// **Kolejność wariantów jest kontraktem zapisu gry** (`K-59`) — `kind` siedzi
+/// w 8-bajtowym wpisie slabu, a slab wchodzi do hasha stanu. Dopisywać wolno
+/// wyłącznie na końcu.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 #[repr(u8)]
 pub enum RelationKind {
@@ -81,6 +85,51 @@ pub enum RelationKind {
     Friend = 5,
     Colleague = 6,
     Neighbour = 7,
+    /// Dziadek albo wnuk — **symetryczny** (`R2-WP2`, `K-59`).
+    ///
+    /// Kierunek odczytuje się z wieku, którym obie strony i tak dysponują
+    /// (`Identity.birth_day`), a nie z osobnego wariantu. Wersja asymetryczna
+    /// (`odwrotna(Grandparent) = Child`) zapisywałaby po stronie babci wpis
+    /// nieodróżnialny od wpisu o własnym dziecku — a `spadkobiercy` filtruje
+    /// dokładnie po `Child`, więc wnuk dziedziczyłby po równo z dziećmi. To jest
+    /// zmiana w podziale spadku i należy do `R2-WP10`, a nie do grafu rodziny.
+    Grandparent = 8,
+}
+
+impl RelationKind {
+    #[must_use]
+    pub const fn from_u8(v: u8) -> RelationKind {
+        match v {
+            1 => RelationKind::Partner,
+            2 => RelationKind::Parent,
+            3 => RelationKind::Child,
+            4 => RelationKind::Sibling,
+            5 => RelationKind::Friend,
+            6 => RelationKind::Colleague,
+            7 => RelationKind::Neighbour,
+            8 => RelationKind::Grandparent,
+            _ => RelationKind::Acquaintance,
+        }
+    }
+
+    /// Czy relacja jest rodzinna. **Jedna definicja dla całego crate'u** — do `R2-WP2`
+    /// były dwie i różniły się o `Partner`: dobór partnera odsiewał krewnych bez
+    /// małżonka, a zanik wagi podłogował rodzinę razem z nim.
+    ///
+    /// Rodzina nie wygasa z braku kontaktu i nie jest ofiarą wypychania, dopóki
+    /// w slabie stoi cokolwiek nierodzinnego.
+    #[inline]
+    #[must_use]
+    pub const fn is_family(self) -> bool {
+        matches!(
+            self,
+            RelationKind::Partner
+                | RelationKind::Parent
+                | RelationKind::Child
+                | RelationKind::Sibling
+                | RelationKind::Grandparent
+        )
+    }
 }
 
 /// Wpis wiedzy albo doświadczenia — 8 B. Jeden magazyn na oba (patrz nagłówek modułu).

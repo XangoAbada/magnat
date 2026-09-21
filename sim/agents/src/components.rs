@@ -296,7 +296,96 @@ pub enum ShiftKind {
     Weekend = 5,
 }
 
+/// Profil zmianowości zakładu: **jak dzieli się doba** w tym rodzaju miejsca pracy.
+///
+/// Mieszka tu, a nie w `sim/firms` ani w `sim/world`, bo rozdają zmiany oba i muszą
+/// rozdawać je tak samo (`R2-WP37`). Generator miasta wyprowadza profil z sektora
+/// zakładu, rynek pracy — z branży rodzaju zakładu; sama **reguła** jest jedna
+/// i jest nią [`ShiftKind::schedule`]. Duplikat rozjechałby się przy pierwszej
+/// zmianie, a widać by go było dopiero jako miasto, w którym wszyscy wychodzą
+/// z domu o tej samej godzinie.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+#[repr(u8)]
+pub enum ShiftProfile {
+    /// Biuro i urząd: jedna zmiana, poniedziałek–piątek.
+    #[default]
+    Office = 0,
+    /// Handel i usługi: sześć wariantów z obsadą weekendową — inaczej sobota
+    /// wygląda jak miasto zamknięte na klucz (PRD §5.5).
+    Shop = 1,
+    /// Ruch ciągły: cztery brygady, w tym nocna.
+    Continuous = 2,
+    /// Dwie zmiany plus rdzeń dzienny — zakład bez trzeciej zmiany w danych.
+    TwoShift = 3,
+}
+
+impl ShiftProfile {
+    #[must_use]
+    pub const fn from_u8(v: u8) -> ShiftProfile {
+        match v {
+            1 => ShiftProfile::Shop,
+            2 => ShiftProfile::Continuous,
+            3 => ShiftProfile::TwoShift,
+            _ => ShiftProfile::Office,
+        }
+    }
+}
+
 impl ShiftKind {
+    /// Zmiana i maska dni dla **`i`-tego stanowiska** w zakładzie o tym profilu.
+    ///
+    /// Jedna reguła i dwóch wołających: Etap 8 generatora obsadza nią zakład przy
+    /// stawianiu miasta, a rynek pracy M7 — przy każdym wakacie, który potem ogłasza.
+    /// Do `R2-WP37` drugi wołający nie istniał: `post_offers` wpisywało do każdej
+    /// oferty `ShiftKind::Day`, a `hire` do każdego etatu `WEEKDAYS`, więc **każda
+    /// zmiana pracy spłaszczała mieszkańca do godzin 8–16 od poniedziałku do piątku**.
+    /// Po jednym pokoleniu całe miasto wychodziło z domu o tej samej godzinie,
+    /// choć generator rozdał zmiany poprawnie.
+    ///
+    /// Maska jest **własnością obsady, nie kalendarza**: tydzień dryfuje względem
+    /// miesiąca (`K-15`), więc liczba dni roboczych w miesiącu waha się między 20 a 23
+    /// i żaden wiersz tej funkcji nie ma prawa tego zakładać.
+    #[must_use]
+    pub const fn schedule(profile: ShiftProfile, i: u32) -> (ShiftKind, u8) {
+        /// Poniedziałek–piątek.
+        const PN_PT: u8 = 0b001_1111;
+        /// Wtorek–sobota.
+        const WT_SB: u8 = 0b011_1110;
+        /// Środa plus weekend — obsada, dla której sobota i niedziela są dniami pracy.
+        const SR_WEEKEND: u8 = 0b110_0100;
+        /// Ruch ciągły: cztery brygady po pięć dni, wolne w innej parze dni każda.
+        const BRYGADY: [u8; 4] = [0b001_1111, 0b011_1110, 0b111_1001, 0b110_0111];
+
+        match profile {
+            ShiftProfile::Shop => match i % 6 {
+                0 => (ShiftKind::Early, PN_PT),
+                1 => (ShiftKind::Day, PN_PT),
+                2 => (ShiftKind::Afternoon, PN_PT),
+                3 => (ShiftKind::Early, WT_SB),
+                4 => (ShiftKind::Afternoon, WT_SB),
+                _ => (ShiftKind::Weekend, SR_WEEKEND),
+            },
+            ShiftProfile::Continuous => {
+                let b = (i % 4) as usize;
+                (
+                    [
+                        ShiftKind::Early,
+                        ShiftKind::Afternoon,
+                        ShiftKind::Night,
+                        ShiftKind::Day,
+                    ][b],
+                    BRYGADY[b],
+                )
+            }
+            ShiftProfile::TwoShift => match i % 4 {
+                0 => (ShiftKind::Early, PN_PT),
+                3 => (ShiftKind::Afternoon, PN_PT),
+                _ => (ShiftKind::Day, PN_PT),
+            },
+            ShiftProfile::Office => (ShiftKind::Day, PN_PT),
+        }
+    }
+
     #[must_use]
     pub const fn from_u8(v: u8) -> ShiftKind {
         match v {

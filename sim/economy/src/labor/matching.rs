@@ -74,6 +74,11 @@ pub(super) fn post_offers(m: &mut LaborMarket, firms: &Firms, now: SimMinute, d:
             if wolne == 0 {
                 continue;
             }
+            // Grafik **następnego** wolnego etatu — ogłoszenie ma mówić, na którą
+            // zmianę się szuka (`R2-WP37`). Wiążący jest ten liczony przy obsadzeniu,
+            // bo jedna oferta wisi na wszystkie wolne etaty stanowiska naraz.
+            let (zmiana, dni) =
+                magnat_agents::ShiftKind::schedule(site.shift_profile, p.filled.len() as u32);
             nowe.push(JobOffer {
                 firm: site.firm,
                 site: id,
@@ -81,7 +86,8 @@ pub(super) fn post_offers(m: &mut LaborMarket, firms: &Firms, now: SimMinute, d:
                 district: site.district,
                 wage_month: p.wage_band.0,
                 slots: wolne,
-                shift: magnat_agents::ShiftKind::Day,
+                shift: zmiana,
+                work_days: dni,
                 requirements: requirements(m, p.role, p.managerial),
                 benefits: magnat_firms::BenefitSet::NONE,
                 targeted: None,
@@ -382,9 +388,16 @@ pub(super) fn hire(
             let Some(p) = site.positions.iter_mut().find(|p| p.role == o.role) else {
                 continue;
             };
+            // Grafik liczy się **przy obsadzeniu**, a nie przy ogłoszeniu (`R2-WP37`).
+            // Oferta wisi na wszystkie wolne etaty stanowiska naraz (`slots`), więc
+            // grafik wzięty z niej dałby całej ósemce tę samą brygadę — huta miałaby
+            // ośmiu spawaczy na porannej i nikogo w nocy. Numerem brygady jest liczba
+            // już obsadzonych etatów, więc kolejni wchodzą kolejno.
+            let (zmiana, dni) =
+                magnat_agents::ShiftKind::schedule(site.shift_profile, p.filled.len() as u32);
             p.filled
-                .push(Employment::new(c, o.role, o.wage_month, now, o.shift));
-            people.hire(c, o.site, o.role, o.shift, o.wage_month);
+                .push(Employment::new(c, o.role, o.wage_month, now, zmiana));
+            people.hire(c, o.site, o.role, zmiana, dni, o.wage_month);
             m.seekers.remove(&c);
             zatrudnieni_dzis.insert(c);
             obsadzeni += 1;

@@ -284,13 +284,23 @@ impl Workforce for WorldWorkforce<'_> {
         out.extend(kandydaci.into_iter().map(|(_, c)| c));
     }
 
-    fn hire(&mut self, c: CitizenId, site: SiteId, role: JobRoleId, shift: ShiftKind, wage: Money) {
+    fn hire(
+        &mut self,
+        c: CitizenId,
+        site: SiteId,
+        role: JobRoleId,
+        shift: ShiftKind,
+        work_days: u8,
+        wage: Money,
+    ) {
         let district = self.world.get::<Residence>(c.0).map_or(0, |r| r.district);
         if let Some(e) = self.world.get_mut::<AgentEmployment>(c.0) {
             e.site = site.entity().index();
             e.role = role.0;
             e.shift = shift as u8;
-            e.work_days = AgentEmployment::WEEKDAYS;
+            // Maska dni **z oferty**, nie stała (`R2-WP37`): ta sama zmiana poranna
+            // wypada raz w poniedziałek–piątek, a raz we wtorek–sobotę.
+            e.work_days = work_days;
             e.flags &= !AgentEmployment::FLAG_UNEMPLOYED;
         }
         // Pula wakatów miasta jest wejściem regulatora napływu (M3c §5.7), więc

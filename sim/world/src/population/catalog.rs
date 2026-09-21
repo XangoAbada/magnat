@@ -102,49 +102,23 @@ pub(super) fn pustostany(city: &CityData) -> Vec<HomeSlot> {
     out
 }
 
-/// Grafik zmiany i maska dni tygodnia wg profilu branży (§5.9 krok 5, K-15).
+/// Profil zmianowości sektora — wejście wspólnej reguły (`R2-WP37`).
 ///
-/// Maska jest **własnością obsady, nie kalendarza**: tydzień dryfuje względem miesiąca,
-/// więc liczba dni roboczych w miesiącu waha się między 20 a 23 i żaden wiersz tej
-/// funkcji nie ma prawa tego zakładać.
-fn grafik(sector: SectorId, base: ShiftId, i: u32) -> (ShiftKind, u8) {
-    const PN_PT: u8 = 0b001_1111;
-    const WT_SB: u8 = 0b011_1110;
-    /// Środa plus weekend — obsada, dla której sobota i niedziela są dniami pracy.
-    const SR_WEEKEND: u8 = 0b110_0100;
-    /// Ruch ciągły: cztery brygady po pięć dni, wolne w innej parze dni każda.
-    const BRYGADY: [u8; 4] = [0b001_1111, 0b011_1110, 0b111_1001, 0b110_0111];
-
+/// Sama reguła („kto na którą zmianę i w które dni") mieszka w
+/// [`magnat_agents::ShiftKind::schedule`], bo rozdaje zmiany **także** rynek pracy
+/// M7 i musi rozdawać je tak samo. Tutaj zostaje wyłącznie tłumaczenie sektora
+/// generatora na profil — wiedza o mieście, której `sim/agents` nie ma.
+fn profil(sector: SectorId, base: ShiftId) -> ShiftProfile {
     match sector {
         // Handel, usługi i zieleń mają obsadę weekendową — inaczej sobota wyglądałaby
         // jak miasto zamknięte na klucz (PRD §5.5, test `prop_weekly_rhythm`).
-        SectorId::Retail | SectorId::Services | SectorId::Green => match i % 6 {
-            0 => (ShiftKind::Early, PN_PT),
-            1 => (ShiftKind::Day, PN_PT),
-            2 => (ShiftKind::Afternoon, PN_PT),
-            3 => (ShiftKind::Early, WT_SB),
-            4 => (ShiftKind::Afternoon, WT_SB),
-            _ => (ShiftKind::Weekend, SR_WEEKEND),
-        },
+        SectorId::Retail | SectorId::Services | SectorId::Green => ShiftProfile::Shop,
         // Ruch ciągły tam, gdzie dane mówią o trzeciej zmianie.
         SectorId::Industry | SectorId::Extraction if base == ShiftId::III => {
-            let b = (i % 4) as usize;
-            (
-                [
-                    ShiftKind::Early,
-                    ShiftKind::Afternoon,
-                    ShiftKind::Night,
-                    ShiftKind::Day,
-                ][b],
-                BRYGADY[b],
-            )
+            ShiftProfile::Continuous
         }
-        SectorId::Office | SectorId::Public => (ShiftKind::Day, PN_PT),
-        _ => match i % 4 {
-            0 => (ShiftKind::Early, PN_PT),
-            3 => (ShiftKind::Afternoon, PN_PT),
-            _ => (ShiftKind::Day, PN_PT),
-        },
+        SectorId::Office | SectorId::Public => ShiftProfile::Office,
+        _ => ShiftProfile::TwoShift,
     }
 }
 
@@ -158,7 +132,7 @@ pub(super) fn wakaty(city: &CityData) -> Vec<JobSlot> {
             let Some(w) = city.buildings.workplaces.get(wi as usize) else {
                 continue;
             };
-            let (shift, days) = grafik(sector, w.shift, k as u32);
+            let (shift, days) = ShiftKind::schedule(profil(sector, w.shift), k as u32);
             out.push(JobSlot {
                 site: SITE_KEY_BASE + si as u32,
                 role: w.role.0,
@@ -219,22 +193,22 @@ mod tests {
     #[test]
     fn grafik_daje_obsade_weekendowa_w_handlu_i_pelny_tydzien_w_ruchu_ciaglym() {
         let weekendowa = (0..6)
-            .map(|i| grafik(SectorId::Retail, ShiftId::II, i).1)
+            .map(|i| ShiftKind::schedule(profil(SectorId::Retail, ShiftId::II), i).1)
             .any(|m| m & 0b110_0000 != 0);
         assert!(weekendowa, "handel bez obsady weekendowej");
         let pokrycie = (0..4)
-            .map(|i| grafik(SectorId::Industry, ShiftId::III, i).1)
+            .map(|i| ShiftKind::schedule(profil(SectorId::Industry, ShiftId::III), i).1)
             .fold(0u8, |a, b| a | b);
         assert_eq!(pokrycie, 0b111_1111, "ruch ciągły nie pokrywa tygodnia");
         for i in 0..4 {
             assert_eq!(
-                grafik(SectorId::Industry, ShiftId::III, i).1.count_ones(),
+                ShiftKind::schedule(profil(SectorId::Industry, ShiftId::III), i).1.count_ones(),
                 5,
                 "brygada {i} pracuje inną liczbę dni niż pięć"
             );
         }
         assert_eq!(
-            grafik(SectorId::Office, ShiftId::I, 3),
+            ShiftKind::schedule(profil(SectorId::Office, ShiftId::I), 3),
             (ShiftKind::Day, 0b001_1111)
         );
     }

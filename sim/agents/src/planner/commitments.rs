@@ -17,6 +17,16 @@ pub(super) fn faza1_zobowiazania(
     log: &mut Log<'_>,
     stats: &mut PlanStats,
 ) {
+    // Dziecko, którego nie ma kto odprowadzić, jest stanem gospodarstwa, a nie
+    // skutkiem układania planu — więc powód idzie do dziennika **przed** pierwszym
+    // slotem i niezależnie od tego, co z planu wyjdzie (`R2-WP3`). Przedtem
+    // `household::roles` kończyło to `break`-iem i `clear()`-em bez śladu.
+    if ctx.household.unescorted > 0 && !ctx.dow.is_weekend() {
+        log.skip(DecisionReason::EscortUnavailable {
+            count: ctx.household.unescorted,
+        });
+    }
+
     let pracuje = ctx.employment.works_on(ctx.dow) && ctx.work.is_some();
     let uczen = ctx.employment.flags & Employment::FLAG_PUPIL != 0
         && !ctx.dow.is_weekend()

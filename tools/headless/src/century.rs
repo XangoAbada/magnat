@@ -212,6 +212,7 @@ pub fn run(a: &CenturyArgs) -> Result<std::process::ExitCode, Box<dyn std::error
 
     piramida(&world, doby.saturating_sub(1));
     klasy(&world);
+    rodzina(&world, doby.saturating_sub(1));
     if a.shock_percent > 0 {
         stabilizacja(&historia, a.shock_year);
     }
@@ -352,6 +353,128 @@ fn piramida(world: &World, doba: u64) {
 }
 
 /// Rozkład klas — dowód, że status jest liczony, a nie przechowywany (§5.8).
+/// Tabela rodziny i cyklu życia — wynik do pokazania podfazy `R2a`.
+///
+/// Cztery liczby, z których **trzy były przed R2 stałe albo zerowe**: uczniów nie
+/// przybywało (flagę stawiał wyłącznie generator), gospodarstw osieroconych nie było
+/// w kodzie w żadnym znaczeniu, a wykształcenie rocznika urodzonego w grze zostawało
+/// na zerze. Czwarta — rozkład rodzajów relacji — nie miała ani `Grandparent`,
+/// ani `Sibling` poza porodem.
+fn rodzina(world: &World, day: u64) {
+    let tabela = world.resource::<DemographyTable>();
+    let ages = tabela.ages();
+    let dzis = day as i32;
+
+    let (mut uczniow, mut w_wieku_szkolnym, mut z_placowka) = (0u32, 0u32, 0u32);
+    let mut edu_25: Vec<u8> = Vec::new();
+    for e in world.resource::<Population>().citizens() {
+        let Some(id) = world.get::<magnat_agents::Identity>(*e) else {
+            continue;
+        };
+        let wiek = id.age_years(dzis);
+        if wiek >= i32::from(ages.school_start) && wiek < i32::from(ages.school_end) {
+            w_wieku_szkolnym += 1;
+            if let Some(emp) = world.get::<magnat_agents::Employment>(*e) {
+                if emp.is_pupil() {
+                    uczniow += 1;
+                    if emp.has_job() {
+                        z_placowka += 1;
+                    }
+                }
+            }
+        }
+        if wiek == 25 {
+            if let Some(v) = world.get::<magnat_agents::Vitals>(*e) {
+                edu_25.push(v.edu_level);
+            }
+        }
+    }
+    edu_25.sort_unstable();
+    let mediana = edu_25.get(edu_25.len() / 2).copied().unwrap_or(0);
+
+    let (mut osierocone, mut z_opiekunem, mut przeludnione) = (0u32, 0u32, 0u32);
+    for hh in world.resource::<Population>().households() {
+        let Some(h) = world.get::<magnat_agents::Household>(*hh).copied() else {
+            continue;
+        };
+        if h.is_overcrowded() {
+            przeludnione += 1;
+        }
+        if h.guardian_of().is_some() {
+            z_opiekunem += 1;
+        }
+        let sklad = magnat_agents::household::members_of(
+            hh.index(),
+            &h,
+            world.resource::<magnat_agents::HouseholdOverflow>(),
+        );
+        let (mut dzieci, mut dorosli) = (0u32, 0u32);
+        for m in sklad.iter() {
+            let Some(c) = magnat_agents::demography::citizen_by_index(world, *m) else {
+                continue;
+            };
+            let wiek = world
+                .get::<magnat_agents::Identity>(c)
+                .map_or(0, |i| i.age_years(dzis));
+            if wiek < i32::from(ages.adult) {
+                dzieci += 1;
+            } else {
+                dorosli += 1;
+            }
+        }
+        if dzieci > 0 && dorosli == 0 {
+            osierocone += 1;
+        }
+    }
+
+    let mut relacje = [0u32; 9];
+    for e in world.resource::<Population>().citizens() {
+        let Some(r) = world.get::<magnat_agents::RelationsRef>(*e).copied() else {
+            continue;
+        };
+        for w in world
+            .resource::<magnat_agents::RelationSlab>()
+            .entries(magnat_agents::demography::relations_ref(&r))
+        {
+            relacje[usize::from(w.kind).min(8)] += 1;
+        }
+    }
+
+    println!("\nrodzina i cykl życia (R2a)");
+    println!(
+        "  uczniowie                {uczniow:>7} / {w_wieku_szkolnym} w wieku {}–{} ({:.1} %)",
+        ages.school_start,
+        ages.school_end - 1,
+        f64::from(uczniow) * 100.0 / f64::from(w_wieku_szkolnym.max(1))
+    );
+    println!(
+        "    w tym z placówką       {z_placowka:>7}  — bez niej `edu_level` zostaje zerem (`K-74`)"
+    );
+    println!("  gospodarstwa osierocone  {osierocone:>7}  (z opiekunem: {z_opiekunem})");
+    println!("  gospodarstwa przeludnione{przeludnione:>7}");
+    println!(
+        "  mediana edu_level (25 lat){mediana:>6}  z {} osób w kohorcie",
+        edu_25.len()
+    );
+    println!("  rozkład relacji:");
+    for (i, nazwa) in [
+        "Acquaintance",
+        "Partner",
+        "Parent",
+        "Child",
+        "Sibling",
+        "Friend",
+        "Colleague",
+        "Neighbour",
+        "Grandparent",
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        println!("    {nazwa:<13} {:>8}", relacje[i]);
+    }
+}
+
 fn klasy(world: &World) {
     let mut liczniki = [0u32; 6];
     let mut razem = 0u32;

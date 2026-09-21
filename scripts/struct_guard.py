@@ -174,8 +174,14 @@ REJESTR = {
     # podwyżki znaczy kapitulację, a nie brak pomiaru. Przyrost trafia w regułę
     # tej pozycji piąty raz z rzędu: liczy się liczba rozgałęzień, nie wariantów.
     # Zostaje jedna podfaza fazy M10.
-    ("engine/ui/src/inspect/reason.rs", "fn", 1276): 37,
-    ("engine/ui/src/inspect/reason.rs", "plik", 1747): 37,
+    # **1290 po R2a** (+14): dwa powody cyklu życia gospodarstwa (120–121), z czego
+    # `GuardianAppointed` rozgałęziony na dwa klucze — kuratela krewnego i kuratela
+    # obcego to dwa różne zdania o tej samej liczbie podopiecznych, bo różnicę robi
+    # pokrewieństwo, a nie waga relacji. Przyrost trafia w regułę tej pozycji szósty
+    # raz z rzędu: liczy się liczba rozgałęzień, nie wariantów. Adres podziału bez
+    # zmian — `K-58` w `R2e`, i to ona rozetnie tę funkcję razem z enumem.
+    ("engine/ui/src/inspect/reason.rs", "fn", 1290): 37,
+    ("engine/ui/src/inspect/reason.rs", "plik", 1761): 37,
     # 269 po M7d: jedna linia za `finance: bf.finance` w budowie `BankParams`.
     ("sim/economy/src/data.rs", "fn", 269): 38,
 }

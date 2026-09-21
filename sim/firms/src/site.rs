@@ -161,6 +161,13 @@ pub struct Site {
     /// tierem operacyjnym M7e, dla gracza zakład, który klika sam. Jedno i drugie jest
     /// poprawnym stanem, a nie brakiem.
     pub delegation: Option<crate::manager::SiteDelegation>,
+    /// Profil zmianowości — wejście reguły `ShiftKind::schedule` przy ogłaszaniu
+    /// wakatu (`R2-WP37`). Wynika z branży rodzaju zakładu i nie zmienia się.
+    ///
+    /// Pole, a nie odpytanie katalogu: rynek pracy (`sim/economy::labor`) widzi
+    /// rejestr firm, a katalogu rodzajów zakładów nie widzi — ten sam układ, przez
+    /// który `labor_pct` siedzi w `PlantSite` (`K-44`).
+    pub shift_profile: magnat_agents::ShiftProfile,
 }
 
 impl Site {
@@ -210,6 +217,7 @@ impl Site {
             strike_bps: 0,
             strike_bp_days: 0,
             delegation: None,
+            shift_profile: spec.category.shift_profile(),
         }
     }
 
@@ -385,6 +393,9 @@ impl HashState for Site {
         // gospodarki, a nie szczegół prezentacji.
         h.write_u16(self.strike_bps);
         h.write_u32(self.strike_bp_days);
+        // Profil wychodzi z `site_type`, więc do hasha nic nie wnosi — wchodzi
+        // mimo to, bo jest polem, a pole można zapisać wbrew wyprowadzeniu.
+        h.write_u8(self.shift_profile as u8);
         match &self.delegation {
             None => h.write_u8(0),
             Some(d) => {

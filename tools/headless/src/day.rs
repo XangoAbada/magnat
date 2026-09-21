@@ -267,6 +267,7 @@ fn kontekst<'a>(
             stock: &s.stock,
             escorts: brak_eskorty,
             pickups: brak_eskorty,
+            unescorted: 0,
         },
         employment: &s.employment,
         known: KnowledgeView::new(&s.wiedza),

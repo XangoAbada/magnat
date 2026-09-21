@@ -68,6 +68,11 @@ pub struct JobOffer {
     pub wage_month: Money,
     pub slots: u16,
     pub shift: ShiftKind,
+    /// Maska `DayOfWeek` etatu (`K-15`, `R2-WP37`). Jedzie w ofercie razem ze zmianą,
+    /// bo **nie jest jej funkcją**: ta sama zmiana poranna wypada raz w poniedziałek–
+    /// piątek, a raz we wtorek–sobotę, i to jest cała obsada weekendowa handlu.
+    /// Do R2 `hire` wpisywało każdemu `WEEKDAYS` i sklep w sobotę nie miał kasjera.
+    pub work_days: u8,
     pub requirements: SkillReq,
     pub benefits: BenefitSet,
     /// `Some` = oferta bezpośrednia (headhunting): rozważa ją **wyłącznie** wskazany
@@ -109,6 +114,7 @@ impl HashState for JobOffer {
         self.wage_month.hash_state(h);
         h.write_u16(self.slots);
         h.write_u8(self.shift as u8);
+        h.write_u8(self.work_days);
         self.requirements.hash_state(h);
         self.benefits.hash_state(h);
         self.targeted.map(|c| c.0).hash_state(h);
@@ -278,6 +284,7 @@ mod tests {
             wage_month: Money(400_000),
             slots: 2,
             shift: ShiftKind::Day,
+            work_days: magnat_agents::Employment::WEEKDAYS,
             requirements: SkillReq::default(),
             benefits: BenefitSet::NONE,
             targeted: None,

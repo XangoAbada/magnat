@@ -171,6 +171,7 @@ fn postaw(
         strike_bps: 0,
         strike_bp_days: 0,
         delegation: None,
+        shift_profile: magnat_agents::ShiftProfile::Office,
     };
     // Rachunek wyniku o zadanej marży — bez niego związek nie wie, czy jest
     // z czego dać, i nie formuje się w ogóle.
@@ -588,6 +589,7 @@ fn swiat_zmowy(ryzyko: u8) -> (World, GoodId, Vec<SiteId>) {
             strike_bps: 0,
             strike_bp_days: 0,
             delegation: None,
+            shift_profile: magnat_agents::ShiftProfile::Office,
         });
     }
     market.restock_shelves();

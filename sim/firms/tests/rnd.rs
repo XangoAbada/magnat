@@ -90,6 +90,7 @@ fn zaklad(key: FirmKey, id: u32, badaczy: u16) -> Site {
         strike_bps: 0,
         strike_bp_days: 0,
         delegation: None,
+        shift_profile: magnat_agents::ShiftProfile::Office,
     }
 }
 

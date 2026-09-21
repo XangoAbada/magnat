@@ -456,6 +456,12 @@ pub struct SocialIndex {
     by_site: Vec<(u32, u32)>,
     by_school: Vec<(u32, u32)>,
     by_building: Vec<(u32, u32)>,
+    /// `(opiekun, gospodarstwo)` — odwrotność `Household.guardian` (`R2-WP4`).
+    ///
+    /// Opiekun mieszka gdzie indziej niż jego podopieczni, a migawka mieszkańca
+    /// powstaje z jego **własnego** gospodarstwa — bez tego indeksu obowiązek
+    /// odprowadzenia dziecka nie miałby jak wejść do jego planu dnia.
+    by_guardian: Vec<(u32, u32)>,
 }
 
 impl SocialIndex {
@@ -464,7 +470,28 @@ impl SocialIndex {
         SocialIndex::default()
     }
 
+    /// Odbudowa samego indeksu opiekunów (`R2-WP4`).
+    ///
+    /// Osobno od [`SocialIndex::rebuild`] i **co dobę**, bo opiekun powstaje przy
+    /// zgonie, a nie na granicy miesiąca: sierota czekająca trzydzieści dób na
+    /// odbudowę indeksu byłaby sierotą, którą nikt nie odprowadza do szkoły. Cena
+    /// jest jedno przejście po gospodarstwach, czyli ułamek przejścia po mieszkańcach,
+    /// które ta doba i tak wykonuje.
+    pub fn rebuild_guardians(&mut self, world: &World) {
+        self.by_guardian.clear();
+        for hh in world.resource::<Population>().households() {
+            if let Some(g) = world
+                .get::<crate::household::Household>(*hh)
+                .and_then(crate::household::Household::guardian_of)
+            {
+                self.by_guardian.push((g, hh.index()));
+            }
+        }
+        self.by_guardian.sort_unstable();
+    }
+
     pub fn rebuild(&mut self, world: &World) {
+        self.rebuild_guardians(world);
         self.by_site.clear();
         self.by_school.clear();
         self.by_building.clear();
@@ -516,10 +543,21 @@ impl SocialIndex {
     pub fn neighbours(&self, block: u32) -> &[(u32, u32)] {
         SocialIndex::grupa(&self.by_building, block)
     }
+
+    /// Gospodarstwa, nad którymi ten mieszkaniec ma opiekę (`R2-WP4`).
+    #[must_use]
+    pub fn wards(&self, guardian: u32) -> &[(u32, u32)] {
+        SocialIndex::grupa(&self.by_guardian, guardian)
+    }
 }
 
 impl HashState for SocialIndex {
     fn hash_state(&self, h: &mut StateHasher) {
+        h.write_u64(self.by_guardian.len() as u64);
+        for (a, b) in &self.by_guardian {
+            h.write_u32(*a);
+            h.write_u32(*b);
+        }
         h.write_u64(self.by_site.len() as u64);
         for (a, b) in &self.by_site {
             h.write_u32(*a);
@@ -744,13 +782,7 @@ fn zanik(
         }
         let ubytek = (tygodnie * u32::from(params.relation_decay_per_week)).min(255) as u8;
         let nowa = r.weight.saturating_sub(ubytek);
-        let rodzinna = matches!(
-            r.kind,
-            x if x == RelationKind::Parent as u8
-                || x == RelationKind::Child as u8
-                || x == RelationKind::Sibling as u8
-                || x == RelationKind::Partner as u8
-        );
+        let rodzinna = RelationKind::from_u8(r.kind).is_family();
         if nowa == 0 && !rodzinna {
             // Relacja wygasła. Zdejmuje się ją **po obu stronach naraz**: shard 1/7
             // znaczyłby inaczej, że przez tydzień jedna strona pamięta drugą, a druga
@@ -760,7 +792,17 @@ fn zanik(
             raport.dropped += 1;
             continue;
         }
-        slab.entries_mut(sr)[i].weight = nowa.max(u8::from(rodzinna));
+        // Podłoga rodzinna jest **daną**, nie jedynką w kodzie (`R2-WP2`). Przy
+        // jedynce relacja rodzinna miała najniższą możliwą wagę w całym slabie,
+        // czyli była pierwszym kandydatem do wypchnięcia — filtr ofiary broni jej
+        // dzisiaj wprost, ale podłoga na poziomie jedynki znaczyła też, że ojciec
+        // przegrywa każde zapytanie ważone wagą relacji (plotka, dobór partnera,
+        // status rodziny).
+        slab.entries_mut(sr)[i].weight = if rodzinna {
+            nowa.max(params.family_floor)
+        } else {
+            nowa
+        };
         raport.decayed += 1;
         i += 1;
     }

@@ -586,7 +586,9 @@ pub fn wyprowadz(world: &mut World, hh_e: Entity, cmd: &mut CommandBuffer) -> u3
         n += 1;
     }
 
-    if hh.has_home() {
+    // Gospodarstwo pochodne (`R2-WP3`) mieszka kątem u innego i lokalu nie ma —
+    // oddanie go do puli tworzyłoby mieszkanie z niczego.
+    if hh.has_home() && !hh.is_overcrowded() {
         world.resource_mut::<Vacancies>().release_home(HomeSlot {
             building: hh.building,
             unit: hh.unit,
@@ -745,8 +747,15 @@ pub fn spawn_household_aged(
     let ages = world.resource::<DemographyTable>().ages();
     // Region i nazwisko losuje się **raz na gospodarstwo**, nie raz na dorosłego:
     // inaczej mąż jest Nowakiem, żona Kowalską, a dzieci dziedziczą po matce, więc
-    // ojciec nazywa się w karcie inaczej niż reszta domu. Nazwisko małżonki po ślubie
-    // to osobna sprawa i należy do fazy, która ślub modeluje.
+    // ojciec nazywa się w karcie inaczej niż reszta domu.
+    //
+    // **Nazwisko nie zmienia się po ślubie i nie zmieni** (`R2-WP6`, `D-N4`). Nie
+    // jest to odłożone do „fazy, która ślub modeluje" — takiej fazy nie ma i nie
+    // będzie. `M10a` §5.8 opiera most makro↔mezo na tym, że imię, nazwisko, płeć
+    // i osobowość są funkcją `(world_seed, birth_index)` i **nigdy nie są
+    // przechowywane**; `MacroCell` ma na mieszkańca osiem bajtów i nie ma gdzie
+    // trzymać nazwiska zmienionego w połowie życia. Zysk byłby kosmetyczny, koszt
+    // to osiem bajtów na mieszkańca w modelu makro plus migracja formatu zapisu.
     let nazwy = crate::names::catalog();
     let region = nazwy.pick_region(r);
     let nazwisko = nazwy.pick_surname(region, r);
@@ -792,7 +801,14 @@ pub fn spawn_household_aged(
     let mut hh = world.get::<Household>(hh_e).copied().unwrap_or_default();
     for c in &czlonkowie {
         let ov = world.resource_mut::<HouseholdOverflow>();
-        household::add_member(hh_idx, &mut hh, ov, c.index());
+        // Rozmiar gospodarstwa przyjezdnego pochodzi z `migration.arrival_sizes`
+        // i walidator trzyma go poniżej `HH_MAX_MEMBERS` — ale wynik sprawdzamy,
+        // bo dane wolno przestawić, a `R2-WP3` właśnie po to zrobiło z tego
+        // `#[must_use]`: mieszkaniec poza składem istnieje i nie istnieje naraz.
+        debug_assert!(
+            household::add_member(hh_idx, &mut hh, ov, c.index()),
+            "gospodarstwo przyjezdne ponad HH_MAX_MEMBERS — popraw data/demography"
+        );
     }
     if adults >= 2 {
         let (a, b) = (czlonkowie[0], czlonkowie[1]);
@@ -807,19 +823,11 @@ pub fn spawn_household_aged(
         let waga = world.resource::<DemographyTable>().social().family_weight;
         demography::powiaz(world, a, b, crate::store::RelationKind::Partner, waga, day);
     }
-    let waga = world.resource::<DemographyTable>().social().family_weight;
-    for i in 0..usize::from(adults) {
-        for j in usize::from(adults)..czlonkowie.len() {
-            demography::powiaz(
-                world,
-                czlonkowie[i],
-                czlonkowie[j],
-                crate::store::RelationKind::Child,
-                waga,
-                day,
-            );
-        }
-    }
+    // Rodzice, rodzeństwo i dziadkowie jedną regułą — tą samą, którą wiąże poród
+    // (`R2-WP2`). Przedtem stała tu podwójna pętla wiążąca dorosłych z dziećmi
+    // i **tylko** ich: dwoje dzieci w gospodarstwie z napływu albo z zasiedlenia
+    // było dla silnika dwojgiem obcych ludzi pod jednym dachem.
+    demography::zwiaz_rodzine(world, &czlonkowie, day);
 
     demography::przeklasyfikuj(world, hh_idx, &mut hh, day);
     if let Some(slot) = world.get_mut::<Household>(hh_e) {
@@ -1128,7 +1136,8 @@ pub fn zaloz_gospodarstwo(world: &mut World, citizen: Entity, day: u64) -> Optio
     let mut hh = world.get::<Household>(hh_e).copied().unwrap_or_default();
     {
         let ov = world.resource_mut::<HouseholdOverflow>();
-        household::add_member(hh_idx, &mut hh, ov, citizen.index());
+        // Świeże gospodarstwo z jednym członkiem — limitu nie da się tu przekroczyć.
+        debug_assert!(household::add_member(hh_idx, &mut hh, ov, citizen.index()));
     }
     demography::przeklasyfikuj(world, hh_idx, &mut hh, day);
     if let Some(slot) = world.get_mut::<Household>(hh_e) {
@@ -1141,6 +1150,50 @@ pub fn zaloz_gospodarstwo(world: &mut World, citizen: Entity, day: u64) -> Optio
         res.building = building;
         res.unit = unit;
         res.district = district;
+    }
+    Some(hh_e)
+}
+
+/// Gospodarstwo pochodne **pod tym samym adresem** (`R2-WP3`).
+///
+/// Jedyny wołający to poród do gospodarstwa o pełnym składzie. Różnice wobec
+/// [`zaloz_gospodarstwo`] są dwie i obie wynikają z tego, że nikt się nie wyprowadza:
+/// lokal nie pochodzi z puli pustostanów, tylko jest cudzy, a gospodarstwo dostaje
+/// [`Household::FLAG_OVERCROWDED`], żeby przy rozwiązaniu nie oddało do puli lokalu,
+/// którego nigdy z niej nie wzięło.
+///
+/// Zapasu spiżarni nie dostaje: dzieli kuchnię z gospodarstwem pierwotnym, a siedem
+/// dób zapasu z niczego byłoby towarem stworzonym przez podział encji.
+pub fn zaloz_gospodarstwo_pochodne(
+    world: &mut World,
+    citizen: Entity,
+    gospodarz: &Household,
+    day: u64,
+) -> Option<Entity> {
+    let hh_e = world
+        .spawn()
+        .with(Household {
+            district: gospodarz.district,
+            building: gospodarz.building,
+            unit: gospodarz.unit,
+            flags: Household::FLAG_ACTIVE | Household::FLAG_OVERCROWDED,
+            ..Household::default()
+        })
+        .id();
+    world.resource_mut::<Population>().add_household(hh_e);
+    let hh_idx = hh_e.index();
+
+    let mut hh = world.get::<Household>(hh_e).copied().unwrap_or_default();
+    {
+        let ov = world.resource_mut::<HouseholdOverflow>();
+        debug_assert!(household::add_member(hh_idx, &mut hh, ov, citizen.index()));
+    }
+    demography::przeklasyfikuj(world, hh_idx, &mut hh, day);
+    if let Some(slot) = world.get_mut::<Household>(hh_e) {
+        *slot = hh;
+    }
+    if let Some(id) = world.get_mut::<Identity>(citizen) {
+        id.household = hh_idx;
     }
     Some(hh_e)
 }

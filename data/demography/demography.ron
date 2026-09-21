@@ -8,7 +8,7 @@
 // kryterium WP7 mówi, że populacja po 100 latach ma zostać w przedziale [0,5×, 2,0×].
 // Balansator M5 i historia „na sucho" M10 przestroją je na epoki.
 (
-    schema_version: 3,
+    schema_version: 4,
 
     ages: (
         // Od tego wieku mieszkaniec jest dorosły: może odprowadzać, robić zakupy,
@@ -117,6 +117,10 @@
     illness_health_drop: (min: 10, max: 60),
     illness_days: (min: 2, max: 14),
     // Poniżej tego poziomu higieny hazard choroby rośnie o połowę.
+    // Poniżej tego zdrowia senior nie radzi sobie sam i gospodarstwo dostaje
+    // opiekuna spoza składu (`R2-WP4`). Nie jest to próg choroby: chorobę niesie
+    // `Lifecycle::FLAG_ILL` i mija, a niedołężność jest stanem trwałym.
+    care_health_threshold: 35,
     illness_hygiene_threshold: 30,
 
     // Związki. Hazard **miesięczny** w promilach, pasmami wieku.
@@ -196,6 +200,13 @@
         neighbour_gain_per_week: 3,
         neighbour_max: 50,
         family_weight: 90,
+        // Podłoga wagi relacji rodzinnej. Rodzina nie wygasa z braku kontaktu —
+        // ale przy podłodze 1 miała najniższą wagę w całym slabie i przegrywała
+        // każde zapytanie ważone wagą (plotka, dobór partnera, status rodziny).
+        // Dwadzieścia to „znajomość, o której się pamięta", a nie „bliska więź":
+        // waga startowa rodziny to `family_weight`, a ta podłoga jest tym, co
+        // zostaje po latach bez odwiedzin.
+        family_floor: 20,
         // Ilu współpracowników i ilu sąsiadów utrzymuje jedna osoba. To jest liczba
         // **bliskich** kontaktów, nie wielkość zakładu: pracuje się z dwudziestoma,
         // rozmawia z trzema.
