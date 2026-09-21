@@ -111,7 +111,7 @@ impl Anna {
             },
             needs_stan: Needs {
                 level: {
-                    let mut l = [70u8; 12];
+                    let mut l = [70u8; magnat_core::NEED_COUNT];
                     l[NeedKind::Sleep.as_index()] = 35;
                     l[NeedKind::Hunger.as_index()] = 45;
                     l[NeedKind::Hygiene.as_index()] = 30;

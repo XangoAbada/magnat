@@ -15,7 +15,7 @@ use magnat_ecs::{Entity, System, SystemCtx, SystemDesc, World};
 use serde::Deserialize;
 use std::path::Path;
 
-pub const NEEDS_SCHEMA_VERSION: u32 = 1;
+pub const NEEDS_SCHEMA_VERSION: u32 = 2;
 
 /// Ile mieszkańców przypada na jeden tick minutowy: 1/60 populacji, każdy z nich
 /// dostaje spadek za pełną godzinę (§5.5).
@@ -25,9 +25,11 @@ pub const DECAY_SHARDS: u32 = 60;
 ///
 /// Jedno pole, dwa odczyty — i to jest świadome. Skutki **rate'owe** (`EnergyLoss`,
 /// `HealthLoss`, `MoodLoss`, `StressGain`) czyta się jako setne punktu na godzinę
-/// i stosuje tu, w M3a. Skutki **progowe** (`AbsenceRisk`, `AccidentRisk`,
-/// `ProductivityLoss`, `StatusLoss`, `AmbitionGain`) czyta jako promile faza, która
-/// jest ich właścicielem (M3b — absencja, M3c — status, M7 — produktywność).
+/// i stosuje je [`DeprivationEffectsSystem`]. Skutki **progowe** czyta jako promile
+/// ten, kto jest ich właścicielem: `AbsenceRisk` — planer doby, `ProductivityLoss`
+/// i `AmbitionGain` — rynek pracy przez [`pressure`] i `PersonFacts` (`R2-WP16`),
+/// `StatusLoss` — funkcja statusu, gdzie status jest **liczony**, a nie odejmowany.
+/// `AccidentRisk` czytelnika nie ma i jest jedynym takim wariantem.
 /// Dwa pola liczbowe zamiast jednego dałyby w każdym wpisie jedno puste.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Deserialize)]
 pub struct NeedEffect {
@@ -54,11 +56,22 @@ pub struct NeedSpec {
     /// zaspokaja wizyta (Safety zależy od dzielnicy, Mobility od dostępu do trasy).
     pub places: Vec<PlaceKind>,
     pub effects: Vec<NeedEffect>,
+    /// Faza, która wnosi mechanizm tej potrzeby — **wymagana**, gdy potrzeba ani nie
+    /// spada, ani nie ma gdzie się zaspokoić (`R2-WP16`).
+    ///
+    /// Bez tego pola „pusto, bo cudza faza" i „pusto, bo martwe" wygląda w danych
+    /// identycznie, a różnicę zna wyłącznie komentarz — czyli nikt, kto czyta kod
+    /// trzy fazy później. Tak przeżył `NeedKind::Status`: właściciela miał w M5,
+    /// M5 zamknęło się bez niego i nic tego nie zauważyło.
+    #[serde(default)]
+    pub owner_phase: Option<String>,
 }
 
 #[derive(Deserialize)]
 struct NeedsFile {
     schema_version: u32,
+    /// Patrz [`NeedTable::mood_recovery_centi_per_hour`].
+    mood_recovery_centi_per_hour: u32,
     needs: Vec<NeedSpec>,
 }
 
@@ -70,6 +83,7 @@ pub enum NeedTableError {
     UnknownNeed(String),
     Missing(&'static str),
     Duplicate(&'static str),
+    NoOwner(&'static str),
 }
 
 impl std::fmt::Display for NeedTableError {
@@ -83,6 +97,10 @@ impl std::fmt::Display for NeedTableError {
             NeedTableError::UnknownNeed(k) => write!(f, "data/needs: nieznana potrzeba {k:?}"),
             NeedTableError::Missing(k) => write!(f, "data/needs: brak potrzeby {k}"),
             NeedTableError::Duplicate(k) => write!(f, "data/needs: potrzeba {k} dwa razy"),
+            NeedTableError::NoOwner(k) => write!(
+                f,
+                "data/needs: potrzeba {k} ani nie spada, ani nie ma gdzie się zaspokoić, a nie mówi, czyja jest — dopisz owner_phase"
+            ),
         }
     }
 }
@@ -95,14 +113,15 @@ impl From<std::io::Error> for NeedTableError {
     }
 }
 
-/// Tabela parametrów wszystkich dwunastu potrzeb, indeksowana `NeedKind`.
+/// Tabela parametrów wszystkich potrzeb, indeksowana `NeedKind`.
 #[derive(Clone, Debug)]
 pub struct NeedTable {
     specs: Vec<NeedSpec>,
+    mood_recovery_centi_per_hour: u32,
 }
 
 impl NeedTable {
-    /// Tabela pusta — dwanaście potrzeb o zerowym tempie spadku i bez miejsc.
+    /// Tabela pusta — komplet potrzeb o zerowym tempie spadku i bez miejsc.
     ///
     /// Nie jest to stan produkcyjny: potrzeba, która nie spada, wygląda jak zaspokojona
     /// na zawsze. Istnieje dla ścieżek, które `PlanCtx` wymaga, a które tabeli nie
@@ -112,6 +131,7 @@ impl NeedTable {
     pub fn empty() -> NeedTable {
         NeedTable {
             specs: vec![NeedSpec::default(); NEED_COUNT],
+            mood_recovery_centi_per_hour: 0,
         }
     }
 
@@ -119,9 +139,13 @@ impl NeedTable {
     /// potrzebę dokładnie raz. Brak wpisu nie może dawać cichego zera — potrzeba,
     /// która nie spada, wygląda w symulacji jak zaspokojona na zawsze.
     pub fn load(path: &Path) -> Result<NeedTable, NeedTableError> {
-        let txt = std::fs::read_to_string(path)?;
-        let file: NeedsFile =
-            ron::from_str(&txt).map_err(|e| NeedTableError::Ron(e.to_string()))?;
+        NeedTable::parse(&std::fs::read_to_string(path)?)
+    }
+
+    /// Sama walidacja, bez pliku — żeby dało się ją sprawdzić testem, a nie tylko
+    /// zaufać, że przy ładowaniu zadziała.
+    fn parse(txt: &str) -> Result<NeedTable, NeedTableError> {
+        let file: NeedsFile = ron::from_str(txt).map_err(|e| NeedTableError::Ron(e.to_string()))?;
         if file.schema_version != NEEDS_SCHEMA_VERSION {
             return Err(NeedTableError::Schema {
                 found: file.schema_version,
@@ -143,9 +167,22 @@ impl NeedTable {
 
         let mut out = Vec::with_capacity(NEED_COUNT);
         for (i, s) in specs.into_iter().enumerate() {
-            out.push(s.ok_or(NeedTableError::Missing(NeedKind::ALL[i].name()))?);
+            let spec = s.ok_or(NeedTableError::Missing(NeedKind::ALL[i].name()))?;
+            // Potrzeba, która ani nie spada, ani nie ma gdzie się zaspokoić, musi
+            // powiedzieć, czyja jest (`R2-WP16`). `Health` tej reguły nie dotyczy:
+            // tempo ma zerowe, ale spada skokiem przy chorobie i **ma** miejsca.
+            if spec.decay_centi_per_hour == 0
+                && spec.places.is_empty()
+                && spec.owner_phase.is_none()
+            {
+                return Err(NeedTableError::NoOwner(NeedKind::ALL[i].name()));
+            }
+            out.push(spec);
         }
-        Ok(NeedTable { specs: out })
+        Ok(NeedTable {
+            specs: out,
+            mood_recovery_centi_per_hour: file.mood_recovery_centi_per_hour,
+        })
     }
 
     pub fn load_default() -> Result<NeedTable, NeedTableError> {
@@ -170,6 +207,22 @@ impl NeedTable {
     #[must_use]
     pub fn decay_between(&self, n: NeedKind, from_min: u64, to_min: u64) -> u32 {
         decay_between(self.spec(n).decay_centi_per_hour, from_min, to_min)
+    }
+
+    /// Tempo powrotu nastroju do zera, w setnych punktu na godzinę (`R2-WP16`).
+    ///
+    /// Jedna liczba na cały plik, a nie pole potrzeby: odbudowa nie należy do żadnej
+    /// z nich. Do `R2-WP16` `MoodLoss` był **jedynym** pisarzem `Vitals.mood` w całym
+    /// repozytorium, więc po roku gry całe miasto siedziało na −100 — a nastrój wchodzi
+    /// do produktywności pracownika i do decyzji zakupowej, czyli mierzył stałą.
+    ///
+    /// Zero jest sufitem i to jest jawne ograniczenie modelu: **nic nie podnosi
+    /// nastroju ponad neutralny**. Dobry nastrój potrzebuje źródła — zdarzenia,
+    /// relacji, marki — a żadna z tych faz do `Vitals.mood` nie pisze.
+    #[inline]
+    #[must_use]
+    pub fn mood_recovery_centi_per_hour(&self) -> u32 {
+        self.mood_recovery_centi_per_hour
     }
 
     /// Czy potrzeba jest w deprywacji.
@@ -201,7 +254,7 @@ pub const fn decay_between(centi_per_hour: u32, from_min: u64, to_min: u64) -> u
 
 /// Skutki deprywacji w chwili `now`, jako gotowe powody do karty inspekcji (00 §7).
 ///
-/// Liczone na żądanie, nie przechowywane: 400 tys. mieszkańców × 12 potrzeb × doba
+/// Liczone na żądanie, nie przechowywane: 400 tys. mieszkańców × potrzeby × doba
 /// to logi, których nikt nie przeczyta, a determinizm gwarantuje, że odtworzenie
 /// da dokładnie to samo (ta sama zasada co przy `plan_day_explained` w M3b).
 /// `out` to zwykły `Vec`, a nie `ArrayVec`: to ścieżka na żądanie (karta inspekcji),
@@ -224,6 +277,64 @@ pub fn deprivation_of(needs: &Needs, table: &NeedTable, out: &mut Vec<DecisionRe
             });
         }
     }
+}
+
+/// Nacisk deprywacji na to, co dzieje się **poza** `Vitals` (`R2-WP16`).
+///
+/// Skutki rate'owe (`EnergyLoss`, `HealthLoss`, `MoodLoss`, `StressGain`) stosuje
+/// [`DeprivationEffectsSystem`] wprost na formie mieszkańca. Skutki progowe formy
+/// nie zmieniają — zmieniają to, **jak mieszkaniec pracuje i czego chce** — więc
+/// mają innego czytelnika i muszą do niego dojechać. Do `R2-WP16` nie dojeżdżały
+/// do nikogo: dane deklarowały je od M3a, a wszystkie trzy ramiona `match` były puste.
+///
+/// Liczy je `sim/agents`, bo tylko on widzi poziomy potrzeb; czyta rynek pracy
+/// przez `PersonFacts`. Wartości są **promilami z danych**, bez interpretacji —
+/// co znaczy „300 promili produktywności", wie ten, kto tę liczbę mnoży.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub struct DeprivationPressure {
+    /// Suma magnitud `ProductivityLoss` zdeprywowanych potrzeb, w promilach.
+    pub productivity_loss_permille: u32,
+    /// Suma magnitud `AmbitionGain` zdeprywowanych potrzeb, w promilach.
+    pub ambition_gain_permille: u32,
+}
+
+impl DeprivationPressure {
+    /// Czy cokolwiek naciska. Mieszkaniec bez deprywacji to większość miasta.
+    #[must_use]
+    pub fn is_none(&self) -> bool {
+        self.productivity_loss_permille == 0 && self.ambition_gain_permille == 0
+    }
+}
+
+/// Nacisk skutków progowych w danej chwili — suma po potrzebach **w deprywacji**.
+///
+/// Sumowanie, a nie maksimum: człowiek głodny i niewyspany naraz pracuje gorzej niż
+/// głodny sam. Sufit nakłada dopiero konsument, bo to on wie, czego ta liczba dotyczy.
+#[must_use]
+pub fn pressure(needs: &Needs, table: &NeedTable) -> DeprivationPressure {
+    let mut out = DeprivationPressure::default();
+    for n in NeedKind::ALL {
+        if !table.is_deprived(*n, needs.get(*n)) {
+            continue;
+        }
+        for e in &table.spec(*n).effects {
+            match e.effect {
+                DeprivationEffect::ProductivityLoss => {
+                    // `saturating_add`, bo magnitudy pochodzą z pliku: plik, który
+                    // dopisze ich dość, ma dać nasycony nacisk, a nie panikę
+                    // przy ładowaniu świata.
+                    out.productivity_loss_permille =
+                        out.productivity_loss_permille.saturating_add(e.magnitude);
+                }
+                DeprivationEffect::AmbitionGain => {
+                    out.ambition_gain_permille =
+                        out.ambition_gain_permille.saturating_add(e.magnitude);
+                }
+                _ => {}
+            }
+        }
+    }
+    out
 }
 
 /// Spadek potrzeb, shardowany 1/60 (§5.5).
@@ -257,7 +368,7 @@ impl System for NeedDecaySystem {
         let shard = (now % u64::from(DECAY_SHARDS)) as u32;
         // Kopia tabeli przez wskaźnik: `res` pożycza świat niemutowalnie, a zapytanie
         // potrzebuje go mutowalnie. Klonowanie tabeli co tick byłoby kosztem bez powodu,
-        // więc bierzemy tempa do tablicy na stosie — dwanaście liczb.
+        // więc bierzemy tempa do tablicy na stosie — jedna liczba na potrzebę.
         let tempa: [u32; NEED_COUNT] = {
             let t = ctx.res::<NeedTable>();
             // Mnożnik zdarzeniowy wchodzi **tutaj**, a nie w tabeli: epidemia
@@ -310,11 +421,13 @@ impl System for NeedDecaySystem {
 
 /// Skutki deprywacji na `Vitals` (§5.5).
 ///
-/// M3a stosuje **wyłącznie skutki rate'owe dotykające `Vitals`**: energię, zdrowie,
-/// nastrój i stres. `StatusLoss` należy do funkcji statusu (M3c §5.8, gdzie status jest
-/// liczony, a nie odejmowany), `AbsenceRisk` do planera (M3b), `ProductivityLoss` do M7.
-/// Wszystkie cztery są w danych i wychodzą przez `deprivation_of` — żeby faza, która
-/// je przejmie, nie musiała ich wymyślać od nowa.
+/// Ten system stosuje **wyłącznie skutki rate'owe dotykające `Vitals`**: energię,
+/// zdrowie, nastrój i stres. Skutki progowe formy nie zmieniają i mają własnych
+/// czytelników: `AbsenceRisk` czyta planer (M3b), `ProductivityLoss` i `AmbitionGain`
+/// — rynek pracy przez [`pressure`] i `PersonFacts` (`R2-WP16`). `StatusLoss` należy
+/// do funkcji statusu (M3c §5.8, gdzie status jest **liczony**, a nie odejmowany),
+/// a `AccidentRisk` czeka na fazę, która modeluje wypadek — jedyny wariant bez
+/// czytelnika i jedyny, który `R2e-WP22` ma jeszcze rozstrzygnąć.
 pub struct DeprivationEffectsSystem {
     desc: SystemDesc,
 }
@@ -346,20 +459,32 @@ impl System for DeprivationEffectsSystem {
             (b - a).min(255) as u8
         };
 
-        let tabela: Vec<(u8, Vec<NeedEffect>)> = {
+        let (tabela, odbudowa): (Vec<(u8, Vec<NeedEffect>)>, u32) = {
             let t = ctx.res::<NeedTable>();
-            NeedKind::ALL
-                .iter()
-                .map(|n| {
-                    let s = t.spec(*n);
-                    (s.critical, s.effects.clone())
-                })
-                .collect()
+            (
+                NeedKind::ALL
+                    .iter()
+                    .map(|n| {
+                        let s = t.spec(*n);
+                        (s.critical, s.effects.clone())
+                    })
+                    .collect(),
+                t.mood_recovery_centi_per_hour(),
+            )
         };
+        let powrot = dawka(odbudowa);
 
         let pool = ctx.pool;
         ctx.query::<(&Needs, &mut Vitals, &AgentState), ()>()
             .par_for_each(pool, |(needs, vitals, _state)| {
+                // Odbudowa **przed** karami i bezwarunkowo: nastrój jest wypadkową
+                // dwóch sił, a nie stanem włączanym przy braku deprywacji. Gdyby
+                // wracał tylko przy zerowej deprywacji, nie wracałby nigdy — zawsze
+                // któraś potrzeba jest pod progiem, a wtedy mieszkaniec tkwiłby
+                // na dnie tak samo jak przed naprawą, tylko mniej widocznie.
+                if vitals.mood < 0 {
+                    vitals.mood = vitals.mood.saturating_add(powrot.min(127) as i8).min(0);
+                }
                 for (i, (prog, skutki)) in tabela.iter().enumerate() {
                     if needs.level[i] >= *prog {
                         continue;
@@ -383,7 +508,7 @@ impl System for DeprivationEffectsSystem {
                             DeprivationEffect::StressGain => {
                                 vitals.stress = vitals.stress.saturating_add(d).min(100);
                             }
-                            // Właściciele: M3c (status), M3b (absencja), M7 (produktywność).
+                            // Progowe — czyta je kto inny, patrz nagłówek systemu.
                             DeprivationEffect::StatusLoss
                             | DeprivationEffect::AbsenceRisk
                             | DeprivationEffect::AccidentRisk
@@ -432,7 +557,7 @@ mod tests {
     }
 
     #[test]
-    fn tabela_z_danych_opisuje_wszystkie_dwanascie_potrzeb() {
+    fn tabela_z_danych_opisuje_wszystkie_potrzeby() {
         let t = NeedTable::load_default().expect("data/needs/needs.ron");
         for n in NeedKind::ALL {
             let s = t.spec(*n);
@@ -449,6 +574,98 @@ mod tests {
         // Health jest zdarzeniowa (§5.5) — jej tempo musi być zerowe, inaczej
         // każdy mieszkaniec umierałby z upływu czasu.
         assert_eq!(t.spec(NeedKind::Health).decay_centi_per_hour, 0);
+    }
+
+    /// Szkielet pliku potrzeb: wszystkie wpisy poprawne poza tym jednym, który
+    /// test podmienia. Bez tego każdy przypadek musiałby powtarzać jedenaście wpisów.
+    fn plik(nadpisz: &str) -> String {
+        let mut wpisy: Vec<String> = NeedKind::ALL
+            .iter()
+            .filter(|n| !nadpisz.contains(&format!("key: \"{}\"", n.name())))
+            .map(|n| {
+                format!(
+                    "(key: \"{}\", visit_min: 30, decay_centi_per_hour: 100, critical: 25,                      satisfaction: 40, places: [Home], effects: []),",
+                    n.name()
+                )
+            })
+            .collect();
+        wpisy.push(nadpisz.to_owned());
+        format!(
+            "(schema_version: {NEEDS_SCHEMA_VERSION}, mood_recovery_centi_per_hour: 150,              needs: [{}])",
+            wpisy.join("")
+        )
+    }
+
+    #[test]
+    fn potrzeba_bez_tempa_i_bez_miejsc_musi_powiedziec_czyja_jest() {
+        // `R2-WP16`. Bez tej reguły „pusto, bo cudza faza" i „pusto, bo martwe"
+        // wygląda w danych identycznie — i tak przeżył `NeedKind::Status`.
+        let sierota = "(key: \"Safety\", visit_min: 15, decay_centi_per_hour: 0, critical: 25,                        satisfaction: 0, places: [], effects: []),";
+        assert!(matches!(
+            NeedTable::parse(&plik(sierota)),
+            Err(NeedTableError::NoOwner("Safety"))
+        ));
+
+        let z_wlascicielem = "(key: \"Safety\", visit_min: 15, decay_centi_per_hour: 0,                               critical: 25, satisfaction: 0, places: [],                               owner_phase: Some(\"M8\"), effects: []),";
+        assert!(NeedTable::parse(&plik(z_wlascicielem)).is_ok());
+
+        // Potrzeba zdarzeniowa **z** miejscami reguły nie dotyczy: `Health` nie spada
+        // z upływu czasu, ale przychodnia ją podnosi, więc ma się gdzie zaspokoić.
+        let zdarzeniowa = "(key: \"Health\", visit_min: 45, decay_centi_per_hour: 0,                            critical: 30, satisfaction: 50, places: [Doctor], effects: []),";
+        assert!(NeedTable::parse(&plik(zdarzeniowa)).is_ok());
+    }
+
+    #[test]
+    fn nacisk_deprywacji_sumuje_sie_tylko_z_potrzeb_ponizej_progu() {
+        // `R2-WP16`. Nacisk liczy się z danych, nie ze stałych w kodzie — a potrzeba
+        // zaspokojona nie naciska wcale.
+        let t = NeedTable::load_default().expect("data/needs/needs.ron");
+        assert!(pressure(&Needs::default(), &t).is_none());
+
+        let mut n = Needs::default();
+        n.set(NeedKind::Hunger, Q::new(0));
+        let glod = pressure(&n, &t);
+        assert_eq!(
+            glod.productivity_loss_permille,
+            t.spec(NeedKind::Hunger)
+                .effects
+                .iter()
+                .find(|e| e.effect == DeprivationEffect::ProductivityLoss)
+                .map_or(0, |e| e.magnitude)
+        );
+        assert_eq!(glod.ambition_gain_permille, 0);
+
+        n.set(NeedKind::Development, Q::new(0));
+        assert!(pressure(&n, &t).ambition_gain_permille > 0);
+
+        // Sumowanie, a nie maksimum: człowiek głodny i niewyspany naraz pracuje gorzej
+        // niż głodny sam — gdyby nacisk brał maksimum, druga deprywacja byłaby darmowa.
+        // Tabela jest tu **syntetyczna**, bo w dzisiejszych danych `ProductivityLoss`
+        // niesie jedna potrzeba; testujemy regułę, a nie zawartość katalogu.
+        let kara = |klucz: &str, ile: u32| {
+            format!(
+                "(key: \"{klucz}\", visit_min: 30, decay_centi_per_hour: 100, critical: 25, satisfaction: 40, places: [Home], effects: [(effect: ProductivityLoss, magnitude: {ile})]),"
+            )
+        };
+        let dwie_kary = NeedTable::parse(&plik(&format!(
+            "{}{}",
+            kara("Hunger", 300),
+            kara("Sleep", 250)
+        )))
+        .expect("tabela syntetyczna");
+        let mut sam_glod = Needs::default();
+        sam_glod.set(NeedKind::Hunger, Q::new(0));
+        assert_eq!(
+            pressure(&sam_glod, &dwie_kary).productivity_loss_permille,
+            300
+        );
+        let mut dwie = sam_glod;
+        dwie.set(NeedKind::Sleep, Q::new(0));
+        assert_eq!(
+            pressure(&dwie, &dwie_kary).productivity_loss_permille,
+            550,
+            "nacisk bierze maksimum zamiast sumy — druga deprywacja byłaby darmowa"
+        );
     }
 
     #[test]
@@ -469,7 +686,7 @@ mod tests {
         )));
 
         // Potrzeby zaspokojone nie produkują powodów — karta inspekcji ma pokazywać
-        // to, co boli, a nie dwanaście wierszy „w porządku".
+        // to, co boli, a nie wiersz na każdą potrzebę z napisem „w porządku".
         let mut pusto = Vec::new();
         deprivation_of(&Needs::default(), &t, &mut pusto);
         assert!(pusto.is_empty());

@@ -57,7 +57,15 @@ pub fn step_day(world: &mut World, firms: &mut Firms, roles: &RoleTable, tick: T
             let skill = world
                 .get::<magnat_agents::Skills>(c.0)
                 .map_or(magnat_core::Q::MIN, |s| s.level_in(emp.role));
-            Some((v, skill))
+            // Badacz głodny pracuje wolniej tak samo jak spawacz (`R2-WP16`).
+            let dep = match (
+                world.get::<magnat_agents::Needs>(c.0),
+                world.get_resource::<magnat_agents::NeedTable>(),
+            ) {
+                (Some(n), Some(t)) => magnat_agents::pressure(n, t),
+                _ => magnat_agents::DeprivationPressure::default(),
+            };
+            Some((v, skill, dep))
         },
     };
     // Numer umowy pochodzi **wyłącznie** z licznika `B2b` — drugi licznik dałby dwie

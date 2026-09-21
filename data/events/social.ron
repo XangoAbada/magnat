@@ -101,7 +101,11 @@
             severity: (min_bps: 2000, max_bps: 9000, from: None),
             duration: RangeDays(20, 60),
             effects: [
-                NeedDecay(need: Status, mul_bps: 14000),
+                // `R2-WP16`: było `Status`, a `Status` miał tempo spadku zero — więc
+                // mnożnik 1,4 działał na zero i moda konsumencka nie robiła nic.
+                // Odzież jest tą potrzebą, którą moda faktycznie przyspiesza: spada
+                // sama, ma sklep, w którym się ją zaspokaja, i niesie `StatusLoss`.
+                NeedDecay(need: Clothing, mul_bps: 14000),
             ],
             cooldown_days: 120,
             max_concurrent: 1,

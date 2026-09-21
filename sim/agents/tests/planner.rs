@@ -145,7 +145,7 @@ impl Scena {
             needs_stan: Needs {
                 // Higiena poniżej progu 40 → faza 2 wstawi poranną toaletę.
                 level: {
-                    let mut l = [70u8; 12];
+                    let mut l = [70u8; magnat_core::NEED_COUNT];
                     l[NeedKind::Sleep.as_index()] = 35;
                     l[NeedKind::Hunger.as_index()] = 45;
                     l[NeedKind::Hygiene.as_index()] = 30;
@@ -447,7 +447,7 @@ fn plan_commitments_never_dropped() {
                                   // Wszystkie zapasy na zerze i wszystkie potrzeby na dnie: maksymalny napór
                                   // na limit slotów.
         s.stock = [0; STOCK_CAT_COUNT];
-        s.needs_stan.level = [1; 12];
+        s.needs_stan.level = [1; magnat_core::NEED_COUNT];
         // Sen na 100, żeby ryzyko absencji ze `Sleep` nie zabrało pracy z planu.
         s.needs_stan.level[NeedKind::Sleep.as_index()] = 100;
         s.needs_stan.level[NeedKind::Health.as_index()] = 100;

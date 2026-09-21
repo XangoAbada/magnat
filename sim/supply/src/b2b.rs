@@ -507,9 +507,6 @@ impl B2b {
                         }
                     }
                 }
-                // Substytucję wykonuje linia produkcyjna, nie rynek — zamiennik jest
-                // właściwością procesu (§5.7), a nie czymś, co się kupuje osobno.
-                ShortageAction::Substitute { .. } => {}
             }
         }
     }

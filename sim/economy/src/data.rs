@@ -36,7 +36,11 @@ use serde::Deserialize;
 ///
 /// 3 → 4 w `R2-WP11`: `envelopes.ron` dostał sekcję `equivalence` — skalę
 /// ekwiwalentną gospodarstwa. Pozostałe pliki podnoszą numer razem z nim.
-pub const ECONOMY_SCHEMA_VERSION: u32 = 4;
+///
+/// 4 → 5 w `R2-WP16`: `NeedKind::Status` przestał istnieć (`D-N11`), więc
+/// `weights.ron` i `choice.ron` mają o jeden wiersz mniej. Potrzeba, której nic
+/// nie podnosi i nic nie zaspokaja, miała w obu plikach pełny komplet parametrów.
+pub const ECONOMY_SCHEMA_VERSION: u32 = 5;
 
 // ── błędy ────────────────────────────────────────────────────────────────────────
 

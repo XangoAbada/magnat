@@ -196,8 +196,8 @@ pub fn run(a: &AgentsArgs) -> Result<std::process::ExitCode, Box<dyn std::error:
 /// wykonywany okiem, obok testu, który sprawdza to liczbowo.
 fn raport_potrzeb(world: &World, n: u32) {
     let tabela = world.resource::<NeedTable>();
-    let mut sumy = [0u64; 12];
-    let mut w_deprywacji = [0u32; 12];
+    let mut sumy = [0u64; magnat_core::NEED_COUNT];
+    let mut w_deprywacji = [0u32; magnat_core::NEED_COUNT];
     let mut powody: Vec<DecisionReason> = Vec::new();
     let mut przyklad: Option<String> = None;
 

@@ -241,7 +241,10 @@ impl Site {
     pub fn labor_pct(
         &self,
         roles: &RoleTable,
-        vitals: &impl Fn(CitizenId) -> Option<(magnat_agents::Vitals, Q)>,
+        vitals: &impl Fn(
+            CitizenId,
+        )
+            -> Option<(magnat_agents::Vitals, Q, magnat_agents::DeprivationPressure)>,
     ) -> u16 {
         let wymagane = self.required_slots();
         if wymagane == 0 {
@@ -301,21 +304,25 @@ impl Site {
     /// po stanowiskach w kolejności `JobRoleId`, a wewnątrz stanowiska w kolejności
     /// obsadzenia — nigdy po mapie (dokument 00 §3.2).
     ///
-    /// `vitals` zwraca formę i umiejętność mieszkańca; `None` znaczy, że mieszkańca
-    /// już nie ma (zmarł, wyprowadził się) i jego etat nie pracuje. Domknięcie zamiast
-    /// traitu, bo konsument jest jeden i zna swoje źródło danych.
+    /// `vitals` zwraca formę, umiejętność i nacisk deprywacji mieszkańca; `None`
+    /// znaczy, że mieszkańca już nie ma (zmarł, wyprowadził się) i jego etat nie
+    /// pracuje. Domknięcie zamiast traitu, bo konsument jest jeden i zna swoje
+    /// źródło danych.
     #[must_use]
     pub fn effective_labor(
         &self,
         roles: &RoleTable,
-        vitals: &impl Fn(CitizenId) -> Option<(magnat_agents::Vitals, Q)>,
+        vitals: &impl Fn(
+            CitizenId,
+        )
+            -> Option<(magnat_agents::Vitals, Q, magnat_agents::DeprivationPressure)>,
     ) -> Qty {
         let mut suma: i64 = 0;
         for p in &self.positions {
             let w = roles.weights(p.role);
             for e in &p.filled {
-                if let Some((body, skill)) = vitals(e.citizen) {
-                    suma += effective_labor(&body, skill, self.tech, self.mgmt, &w).0;
+                if let Some((body, skill, dep)) = vitals(e.citizen) {
+                    suma += effective_labor(&body, skill, self.tech, self.mgmt, &w, dep).0;
                 }
             }
         }
@@ -336,14 +343,17 @@ impl Site {
         &self,
         roles: &RoleTable,
         researcher: magnat_core::JobRoleId,
-        vitals: &impl Fn(CitizenId) -> Option<(magnat_agents::Vitals, Q)>,
+        vitals: &impl Fn(
+            CitizenId,
+        )
+            -> Option<(magnat_agents::Vitals, Q, magnat_agents::DeprivationPressure)>,
     ) -> Qty {
         let mut suma: i64 = 0;
         for p in self.positions.iter().filter(|p| p.role == researcher) {
             let w = roles.weights(p.role);
             for e in &p.filled {
-                if let Some((body, skill)) = vitals(e.citizen) {
-                    suma += effective_labor(&body, skill, self.tech, self.mgmt, &w).0;
+                if let Some((body, skill, dep)) = vitals(e.citizen) {
+                    suma += effective_labor(&body, skill, self.tech, self.mgmt, &w, dep).0;
                 }
             }
         }

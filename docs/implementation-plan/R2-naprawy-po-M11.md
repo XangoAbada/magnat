@@ -213,10 +213,10 @@ Tabela pakietów z rozmiarami i statusem stoi w dokumencie każdej podfazy. Zbio
 | R2-WP10 | Dziedziczenie ponad gotówkę osobistą | R2b | R2-WP8 | M | `[x]` (`K-95`) |
 | R2-WP11 | Skala ekwiwalentna gospodarstwa | R2b | — | S | `[x]` (`K-94`) |
 | R2-WP12 ⇧ | Wiek produkcyjny w jednym miejscu | R2c | — | S | `[ ]` |
-| R2-WP13 | Wartość czasu idzie za dochodem | R2c | — | M | `[ ]` |
-| R2-WP14 | Szczebel substytucji dostaje wykonawcę | R2c | — | M | `[ ]` |
+| R2-WP13 | Wartość czasu idzie za dochodem | R2c | — | M | `[x]` (`K-98`; motoryzacja → `R2-WP38`) |
+| R2-WP14 | Szczebel substytucji dostaje wykonawcę | R2c | — | M | `[x]` (`K-97`) |
 | R2-WP15 | Chodniki: warstwa piesza bez dróg szybkiego ruchu | R2c → **M11c** | — | S | `[x]` |
-| R2-WP16 | Potrzeby bez martwych slotów | R2c | — | M | `[ ]` |
+| R2-WP16 | Potrzeby bez martwych slotów | R2c | — | M | `[x]` (`K-96`; z pozycją 43) |
 | R2-WP17 | Kopalnia staje na złożu | R2d → **M11c** | `D-N13` (przyjęta) | M | `[x]` |
 | R2-WP18 | Gęstość firm i pasmo bezrobocia | R2d → M11c → **R3** | `D-N20` | L | `[~]` |
 | R2-WP19 | Przechwytywanie rzek w erozji | R2d | — | M | `[ ]` |
@@ -224,7 +224,7 @@ Tabela pakietów z rozmiarami i statusem stoi w dokumencie każdej podfazy. Zbio
 | R2-WP21 | Generator dróg: rozcięcie `lsystem.rs` | R2e | — | M | `[ ]` |
 | R2-WP22 | Martwe warianty i nieużywane pola | R2e | — | M | `[ ]` |
 | R2-WP23 | Dokumentacja wejściowa i zakresy strumieni | R2e | — | S | `[ ]` |
-| R2-WP24 | Bramka bezrobocia naprawdę mierzy bezrobocie | R2f | — | M | `[ ]` |
+| R2-WP24 | Bramka bezrobocia naprawdę mierzy bezrobocie | R2f | — | M | `[ ]` (+ widełki udziału środków transportu — `R2-WP13` zmierzyło VoT, ale bramka widełek wyłącza się poniżej 150 tys. mieszkańców) |
 | R2-WP25 | Testy miasta wychodzą z `#[ignore]` | R2f | — | M | `[ ]` |
 | R2-WP26 | Egzekutor rejestru długu i poprawek wędrujących w przód | R2f | — | M | `[ ]` |
 | R2-WP27 | Jeden język w kodzie: identyfikatory i komunikaty | R2e | — | zależny od `D-N19` | `[ ]` |
@@ -238,6 +238,7 @@ Tabela pakietów z rozmiarami i statusem stoi w dokumencie każdej podfazy. Zbio
 | R2-WP35 | Opieka nad dzieckiem poniżej wieku szkolnego | R2a | R2-WP1 | M | `[ ]` |
 | R2-WP36 | Utarg eksportowy zakładu produkcyjnego | R2b | R2-WP7 | S | `[x]` |
 | R2-WP37 | Zmiana robocza idzie za rodzajem zakładu | R2a | — | M | `[x]` (`K-92`) |
+| R2-WP38 | Motoryzacja idzie za dochodem | R2c | R2-WP13 | M | `[ ]` (`D-N12`) |
 
 `⇧` = kandydat do wyprzedzenia przed R2 zgodnie z §2b.
 
@@ -416,6 +417,8 @@ i staje się osobnym commitem bez żadnej innej zmiany — tak samo jak `cargo f
 Zmiany R2 dotykające kontraktów z dokumentu 00 wymagają wpisu `K-n` zgodnie z jego §4a.
 Wpisy powstają w commicie pakietu, który zmianę wprowadza, a nie z góry.
 
+**Numeracja sprawdzona po R2c (2026-09-21):** `K-96`, `K-97` i `K-98` dopisane — pierwszym wolnym numerem po R2b było `K-96`. `K-58` i `K-73` są nadal wolne i zostają przy swoich pakietach (`R2-WP20`, `R2-WP31`).
+
 **Numeracja sprawdzona po R2b (2026-09-21):** `K-61` i `K-72` wykonane — dokładnie w treści, w której były zarezerwowane. Dodatkowo `K-93`, `K-94` i `K-95`, bo R2b zmieniło trzy kontrakty, których §10 nie przewidywał: umowę o pracę (gospodarstwo w `Employment`), `Household` (liczba dzieci i skala ekwiwalentna) oraz `InheritanceHook` (świat, `estate_charge`, wołanie bezwarunkowe). `K-58` i `K-73` są nadal wolne i zostają przy swoich pakietach.
 
 **Numeracja sprawdzona po R2a (2026-09-21):** `K-59` wykonana, `K-91` i `K-92` dopisane — pierwszym wolnym numerem po M10g było `K-91`. `K-58`, `K-61`, `K-72` i `K-73` są nadal wolne i zostają przy swoich pakietach.
@@ -439,6 +442,9 @@ się numery w tabeli, a nie w głowie.
 | `K-93` | R2-WP9, R2-WP30 | Umowa o pracę pamięta gospodarstwo (`Employment.household`), `Workforce::release` bierze je argumentem, `economy.Labor` idzie po `agents.Society`, a `PayrollOutbox` dostaje konsumenta: płaca schodzi z konta zakładu, `pay_incomes` staje się dopłatą |
 | `K-94` | R2-WP11 | Skala ekwiwalentna gospodarstwa jest **daną** (`envelopes.ron`, `equivalence`) w promilach; `Household` dostaje `children` z rezerwy M5/M9, `ECONOMY_SCHEMA_VERSION` idzie z 3 na 4 |
 | `K-95` | R2-WP10 | `InheritanceHook` dostaje `&mut World` i `estate_charge`, i jest wołany **zawsze** — także bez spadkobierców. Udziały dzielą się wagami gotówki, brak spadkobiercy znaczy `Owner::City` |
+| `K-96` | R2-WP16 | `NeedKind` traci `Status` (`D-N11`) i ma jedenaście wariantów; potrzeba bez tempa i bez miejsc musi w danych podać `owner_phase`; skutki progowe deprywacji dostają czytelników (`DeprivationPressure`, szósty argument `effective_labor`, ambicja skuteczna w `PersonFacts`); nastrój wraca do zera, bo `MoodLoss` był jego jedynym pisarzem |
+| `K-97` | R2-WP14 | Szósty szczebel kaskady ma wykonawcę w linii produkcyjnej, a nie na rynku; `ShortageAction::Substitute` znika jako wariant bez wykonawcy; kaskada dostaje sufit na `Substituted`, dopóki zamiennika starcza |
+| `K-98` | R2-WP13 | Tablica dochodów w `TrafficOracle` przestaje być migawką z generacji: odświeża ją co dobę `TrafficSystem`, wchodzi do hasha stanu, a `household_incomes` jest jedną regułą o dwóch wołających. Przyrostowego `bump_income` nie ma — to wzorzec, który naprawiał `K-93` |
 | `K-92` | R2-WP37 | Grafik zmianowy jest **jedną regułą o dwóch wołających** (`ShiftKind::schedule`): generator miasta rozdawał zmiany poprawnie, a rynek pracy wpisywał każdemu zmianę dzienną i dni robocze |
 
 ---
@@ -460,8 +466,8 @@ czasu `D-N6` przy `R2-WP18` zostają bez zmian, a status wraca tutaj po zamknię
 |---|---|---|---|---|
 | 1 ⇧ | Dziecko urodzone w grze nie dostaje flagi ucznia ani szkoły | — | R2-WP1 | `[x]` **wykonane przed R2** (`K-74`) |
 | 2 ⇧ | Zakład produkcyjny nigdy nie ma utargu; tier taktyczny go nie zamknie | zapis `M7e` `BC-8` | R2-WP7 | `[x]` **wykonane przed R2** (`K-75`) |
-| 3 | Szczebel `Substituted` kaskady ma puste ramię `match` | zapis `M6` `AG-6` | R2-WP14 | `[ ]` |
-| 4 | Wartość czasu zamrożona na stanie z generacji świata | — | R2-WP13 | `[ ]` |
+| 3 | Szczebel `Substituted` kaskady ma puste ramię `match` | zapis `M6` `AG-6` | R2-WP14 | `[x]` **zamknięte** (`K-97`, test `piekarnia_bez_maki_piecze_na_otrebach_i_nie_staje`; przed naprawą zakład z pełnym magazynem otrąb dochodził do `Halted` w tej samej dobie co zakład z pustym. Puste ramię było przy tym w `B2b::serve` **słusznie** — podmiany się nie kupuje; brakowało wykonawcy w linii, a nie na rynku) |
+| 4 | Wartość czasu zamrożona na stanie z generacji świata | — | R2-WP13 | `[x]` **zamknięte** (`K-98`, testy `awans_podnosi_wartosc_czasu_w_ciagu_doby` i `utrata_pracy_obniza_wartosc_czasu`; przed naprawą stawka nie drgnęła ani o grosz: 37 → 37 po trzykrotnym awansie) |
 | 5 | Zero zakładów wydobywczych ze złożem w mieście 4 km | zapis `M6` `AQ-8` | R2-WP17 → **M11c** | `[x]` **zamknięte w M11c** (`J-14`, `J-15`) |
 | 6 | Gęstość firm ~10× za niska; bezrobocie 0,2 % przy 12 032 wakatach | zapis `00-postep` `BF-4`/`BF-10`, pomiar `M11c` | R2-WP18 → M11c → **R3** | `[~]` **zmierzone, sufit `D-N6` zadziałał** (`D-N20`) |
 | 7 ⇧ | `WORKING_AGE` w kodzie (2 miejsca) vs `work_start`/`retirement` w danych | — | R2-WP12 | `[x]` **wykonane w M8c** (`K-60`) |
@@ -470,9 +476,9 @@ czasu `D-N6` przy `R2-WP18` zostają bez zmian, a status wraca tutaj po zamknię
 | 10 | Dziecko urodzone w pełnym gospodarstwie nie wchodzi do listy członków | — | R2-WP3 | `[x]` **zamknięte** (`K-91`, test `porod_do_pelnego_gospodarstwa_nie_gubi_dziecka`; przed naprawą 80 osób w składach wobec 81 żywych) |
 | 11 ⇧ | Uczeń wchodzi do indeksu miejsc pracy i dostaje relacje `Colleague` | zapis `M3d` `E-19` (przyczyna) | R2-WP1 | `[x]` wykonane w `K-74` (2026-09-18); M10e policzył warunek uzwiązkowienia na `coworkers` bez ani jednego filtra |
 | 12 | Warstwa piesza dopuszcza drogi szybkiego ruchu | — | R2-WP15 → **M11c** | `[x]` **zamknięte w M11c** (`J-13`) |
-| 13 | Motoryzacja to płaska stawka 430 ‰ bez związku z dochodem | zapis `M4b` `L-12` | R2-WP13 | `[ ]` |
-| 14 | Potrzeba `Status`: tempo 0, brak miejsc, `StatusLoss` pusty | zapis `M3a` `D-15` | R2-WP16 | `[ ]` |
-| 15 | `ProductivityLoss` i `AmbitionGain` jawnie puste | zapis `M7b` ★ | R2-WP16 | `[ ]` |
+| 13 | Motoryzacja to płaska stawka 430 ‰ bez związku z dochodem | zapis `M4b` `L-12` | **R2-WP38** | `[~]` **przeniesione z adresem i powodem** (`D-N12` w `R2c`). Nie jest tą samą przyczyną co pozycja 4: tamta to zamrożona migawka, ta to **brakujący mechanizm**. Przegląd motoryzacji wymaga cyklu życia pojazdu, którego M4 nie zbudował — flota obsadza się raz i nikt jej potem nie tworzy ani nie kasuje. `R2` §3 reguła 2 każe wtedy dać własny pakiet, a §2 zabrania wnosić mechanikę pod pozorem naprawy (ta sama klasa co pozycja 76) |
+| 14 | Potrzeba `Status`: tempo 0, brak miejsc, `StatusLoss` pusty | zapis `M3a` `D-15` | R2-WP16 | `[x]` **zamknięte** (`K-96`, `D-N11`; wariant usunięty, `NEED_COUNT` 12 → 11, a jego jedyny skutek `AmbitionGain` ma drugiego producenta w `Development` i od tej chwili czytelnika. `StatusLoss` zostaje bez czytelnika **świadomie**: status jest liczony, a nie odejmowany — M3c §5.8) |
+| 15 | `ProductivityLoss` i `AmbitionGain` jawnie puste | zapis `M7b` ★ | R2-WP16 | `[x]` **zamknięte** (`K-96`, testy `glod_obniza_produktywnosc_pracownika` i `deprywacja_rozwoju_podnosi_ambicje`; przed naprawą ocena głodnego i najedzonego wynosiła 496 w obu przypadkach, a ambicja 0 w obu) |
 | 16 | Majątek gospodarstwa przepada przy rozwiązaniu | zapis `M3c` `G-7` (tylko lokal i etat) | R2-WP8 | `[x]` **zamknięte** (`K-61`, test `rozwiazane_gospodarstwo_nie_gubi_pieniedzy`; przed naprawą znikało dokładnie 100 000 gr, a `society::total_money` schodziło do zera) |
 | 17 | Śmierć pracownika może zostawić płacę w `income_monthly` | zapis `M7b` ★ (tylko etat) | R2-WP9 | `[x]` **zamknięte** (`K-93`). Usterka zachodzi na dzisiejszym harmonogramie i ma **dwie** przyczyny: `release` szukało gospodarstwa przez `Identity` zmarłego, a `odejdz` pomijało `release` w ogóle dla emeryta, któremu `sim/agents` wyczyściło już komponent |
 | 18 | `InheritanceHook` to zaślepka; dziedziczona tylko gotówka osobista | decyzja otwarta `M3` §9.10 | R2-WP10 | `[x]` **zamknięte** (`K-95`, testy w `sim/economy/tests/inherit.rs`; hak stał przy tym **wewnątrz** gałęzi „są spadkobiercy”, więc majątek bez spadkobiercy nie był nawet zgłaszany) |
@@ -501,7 +507,7 @@ czasu `D-N6` przy `R2-WP18` zostają bez zmian, a status wraca tutaj po zamknię
 | 40 | Większość testów miasta `#[ignore]` | zapis `R1` `D-R7` | R2-WP25 | `[ ]` |
 | 41 | Brak testu `income_monthly` po zdarzeniu życiowym | — | R2-WP9 | `[x]` **zamknięte** (`K-93`; trzy testy w `sim/economy/tests/labor.rs` — zgon, emerytura, wyjazd z miasta — na prawdziwym świecie, bo atrapa `TestPeople` gospodarstw nie zna) |
 | 42 | Erozja nie przechwytuje rzek | — | R2-WP19 | `[ ]` |
-| 43 | **Nastrój mieszkańca tylko spada i nic go nie odbudowuje** — `DeprivationEffect::MoodLoss` jest jedynym pisarzem `Vitals.mood` w całym repozytorium (`sim/agents/src/needs.rs`, `saturating_sub`). Po roku gry cała populacja siedzi na −100, a przebieg 400-dobowy `m8miasto` mierzy średnią **−99** | — | R2-WP16 (ten sam pakiet co `StatusLoss` i `ProductivityLoss`) | `[ ]` |
+| 43 | **Nastrój mieszkańca tylko spada i nic go nie odbudowuje** — `DeprivationEffect::MoodLoss` jest jedynym pisarzem `Vitals.mood` w całym repozytorium (`sim/agents/src/needs.rs`, `saturating_sub`). Po roku gry cała populacja siedzi na −100, a przebieg 400-dobowy `m8miasto` mierzy średnią **−99** | — | R2-WP16 (ten sam pakiet co `StatusLoss` i `ProductivityLoss`) | `[x]` **zamknięte** (`K-96`, testy w `sim/agents/tests/needs_mood.rs`; odbudowa jest bezwarunkowa i konkuruje z karami, a zero jest sufitem — nic nie podnosi nastroju ponad neutralny, bo żadna faza do niego nie pisze) |
 | 44 | **`README.md` opisywał stan „M1 zamknięte"** przez siedem faz — poprawione w M8c na „M8c zamknięte". Pozycja 36 zostaje, bo jej treścią jest **test CI pilnujący opisu**, a nie jednorazowa poprawka | — | R2-WP23 (test) | `[~]` tekst poprawiony w M8c, testu nadal nie ma |
 | 45 | **Wartość gruntu nie zmienia się w trakcie gry.** Jedyne dwa zapisy `Parcel.land_value_per_m2` w całym repozytorium to `city::value::pass_1` i `pass_2`, obie wołane raz przy generacji miasta (`city/mod.rs`). Każdy kanał skutku kończący się na wartości gruntu — parki, zaległy wywóz odpadów, hałas — jest przez to **niewykonalny**, a nie tylko odłożony. Znalezione w M8d przy kanałach skutków usług publicznych (`CG-3`) | — | **bez pakietu** — kandydat na R2-WP27, bo żaden istniejący go nie obejmuje | `[ ]` |
 | 46 | **`ServiceKind::Waste` nie ma żadnego archetypu w `data/buildings/public.ron`.** `SpendCategory::Waste` ma udział w planie wydatków od M8a, więc miasto wydaje pieniądze na usługę, której w mieście nie ma — pokrycie wywozu odpadów jest zerowe w każdej dzielnicy i takie zostanie, dopóki ktoś nie dopisze archetypu. Znalezione w M8d (`CG-4`) | — | R2-WP22 (martwe warianty i nieużywane pola) | `[ ]` |
@@ -572,6 +578,7 @@ Ujednolicenie nagłówków jest zadaniem R2-WP23.
 | 74 | **Eksportu nie woła w grze nikt.** `B2b::try_export` nie ma w repozytorium ani jednego wołającego poza testami, więc mechanizm drenażu podaży — łącznie z utargiem eksportowym z `R2-WP36` — nie uruchamia się w żadnym wygenerowanym mieście. To ta sama klasa co pozycje 3, 5 i 21: kod napisany, przetestowany i martwy. Znalezione przy `R2-WP36` | — | **R2-WP34** (scenariusz `export_drains` i druga połowa kryterium WP9 fazy M6) | `[ ]` |
 | 75 | **Dochód nie idzie za mieszkańcem, który zmienia gospodarstwo.** `Household.income_monthly` prowadzą zatrudnienie, zwolnienie i podwyżka, a **nie** wyprowadzka z gniazda ani rozstanie: dwudziestopięciolatek zakłada dom z dochodem zero, a jego płaca zostaje w dochodzie rodziców. Od `K-93` nie jest to już cicha niespójność — `+wage` i `−wage` trafiają zawsze po tej samej stronie, bo umowa pamięta gospodarstwo — ale liczba nadal opisuje nieprawdę. Znalezione przy `R2-WP9` | — | **bez pakietu** — kandydat do R3, bo domknięcie wymaga przeniesienia płacy razem z umową, czyli dotknięcia rejestru firm z `sim/agents` | `[ ]` |
 | 76 | **Miasto nie jest pracodawcą** (`CH-4`). Most `game::world::firms` **pomija** zakłady municypalne (`skipped_municipal`, „ich firmy stawia M8”), więc nauczyciela nie ma w rejestrze firm w ogóle, a plan wydatków dalej wychodzi na konto reszty świata. Łańcuch „budżet miasta → pensja nauczyciela → jakość szkoły” zostaje przerwany, choć `R2-WP30` domknęło jego drugą połowę: skrzynka płac ma konsumenta i pieniądz wychodzi od pracodawcy — tam, gdzie pracodawca istnieje | zapis `M8` `CH-4`, zakres `R2-WP30` | **bez pakietu** — postawienie firmy miasta, zakładów dla placówek i realnej listy płac jest **mechaniką**, której `R2` §2 zabrania; adres: M8 albo R3 | `[ ]` |
+| 79 | **Zamiennika nikt nie zamawia.** Od `R2-WP14` szósty szczebel kaskady faktycznie karmi linię (`K-97`), ale kaskada, zapytania ofertowe i punkty zamówieniowe chodzą wyłącznie po `RecipeInput.good` (`shortage::wejscia_zakladu`), a towar-zamiennik wejściem receptury nie jest. Podmiana zadziała więc tyle razy, ile zamiennika stoi w magazynie **przypadkiem**: w łańcuchu odniesienia otręby są produktem ubocznym młyna, więc zwykle stoją, ale reguły na to nie ma i w innym łańcuchu nie będzie. Sufit nazwany w `plant::produce::podmiana`. Znalezione przy recenzji przed commitem `R2c` | — | **bez pakietu** — kandydat do R3 albo do fazy dotykającej zaopatrzenia: zapytanie ofertowe na zamiennik w chwili wejścia na `Substituted` zmienia to, **co firma kupuje**, czyli jest mechaniką, nie domknięciem | `[ ]` |
 
 ## 12. Szacunek wielkości
 

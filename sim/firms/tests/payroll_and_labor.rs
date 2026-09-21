@@ -5,7 +5,7 @@
 //! 2. **przebieg mikro i mezo tego samego zakładu daje identyczną sumę wypłat**
 //!    (tolerancja 0) — czyli lista płac nie zależy od tego, jak gęsto liczymy czas.
 
-use magnat_agents::{ShiftKind, Vitals};
+use magnat_agents::{DeprivationPressure, ShiftKind, Vitals};
 use magnat_core::{
     BuildingId, CitizenId, DistrictId, Entity, JobRoleId, Money, SimCalendar, SimMinute, SiteId,
     Tick, Q,
@@ -104,7 +104,7 @@ fn firmy(slots: u16, obsadzone: u16) -> (Firms, FirmKey) {
 #[test]
 fn pokrycie_etatowe_jest_proporcjonalne_do_obsady() {
     let roles = role_table();
-    let zdrowi = |_: CitizenId| Some((w_formie(), Q::new(100)));
+    let zdrowi = |_: CitizenId| Some((w_formie(), Q::new(100), DeprivationPressure::default()));
 
     let (pelna, _) = firmy(10, 10);
     let (polowa, _) = firmy(10, 5);
@@ -133,9 +133,9 @@ fn chora_zaloga_obniza_pokrycie() {
         let mut v = w_formie();
         v.health = 40;
         v.energy = 40;
-        Some((v, Q::new(100)))
+        Some((v, Q::new(100), DeprivationPressure::default()))
     };
-    let zdrowi = |_: CitizenId| Some((w_formie(), Q::new(100)));
+    let zdrowi = |_: CitizenId| Some((w_formie(), Q::new(100), DeprivationPressure::default()));
     assert!(site.labor_pct(&roles, &chorzy) < site.labor_pct(&roles, &zdrowi));
 }
 
@@ -243,6 +243,7 @@ fn wagi_roli_zmieniaja_wynik_a_nie_jego_skale() {
         Q::new(50),
         magnat_firms::ManagementQuality::NEUTRAL,
         &a,
+        DeprivationPressure::default(),
     );
     let fachowiec_b = magnat_firms::effective_labor(
         &v,
@@ -250,6 +251,7 @@ fn wagi_roli_zmieniaja_wynik_a_nie_jego_skale() {
         Q::new(50),
         magnat_firms::ManagementQuality::NEUTRAL,
         &b,
+        DeprivationPressure::default(),
     );
     assert!(
         fachowiec_a.0 > fachowiec_b.0,

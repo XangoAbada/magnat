@@ -15,10 +15,27 @@
 // inspekcji pokazuje jeden wiersz na potrzebę.
 //
 // `places` puste = potrzeby nie zaspokaja wizyta. Bezpieczeństwo zależy od dzielnicy
-// (M8), mobilność od dostępu do trasy (M4), mieszkanie od lokalu (M5/M9), status
-// od konsumpcji (M5). To nie jest luka do uzupełnienia — to granica fazy.
+// (M8), mobilność od dostępu do trasy (M4), mieszkanie od lokalu (M5/M9).
+// To nie jest luka do uzupełnienia — to granica fazy.
+//
+// `owner_phase` nazywa tę granicę **w danych, a nie w komentarzu** (`R2-WP16`).
+// Potrzeba, która ani nie spada, ani nie ma gdzie się zaspokoić, jest nieodróżnialna
+// od martwej — dopóki nie powie, czyja jest. Walidator wymaga tego pola dokładnie
+// w tym przypadku i przerywa ładowanie, gdy go brak.
+//
+// Potrzeby jest jedenaście, nie dwanaście: `Status` wypadł w `R2-WP16` (`D-N11`),
+// bo status społeczny liczy `social.rs` z siedmiu czynników i jest wielkością
+// wyprowadzaną, nie potrzebą.
 (
-    schema_version: 1,
+    schema_version: 2,
+
+    // Tempo powrotu nastroju do zera, w setnych punktu na godzinę (`R2-WP16`).
+    // Do `R2-WP16` `MoodLoss` był jedynym pisarzem `Vitals.mood`, więc po roku gry
+    // całe miasto siedziało na −100. 150 to 1,5 pkt/h wobec 1,0 pkt/h, które zabiera
+    // jedna zdeprywowana potrzeba nastrojowa (wypoczynek albo kontakty) — jedna
+    // deprywacja jeszcze się odrabia, dwie już nie. Zero jest sufitem: nic nie
+    // podnosi nastroju ponad neutralny, bo żadna faza do niego nie pisze.
+    mood_recovery_centi_per_hour: 150,
     needs: [
         (
             key: "Hunger",
@@ -79,6 +96,7 @@
             critical: 25,
             satisfaction: 0,
             places: [],
+            owner_phase: Some("M8"),
             effects: [
                 (effect: StressGain, magnitude: 8),          // +2 pkt/dobę
             ],
@@ -90,6 +108,7 @@
             critical: 25,
             satisfaction: 0,
             places: [],
+            owner_phase: Some("M9"),
             effects: [
                 (effect: StressGain, magnitude: 4),          // +1 pkt/dobę
             ],
@@ -140,17 +159,6 @@
             places: [Social, Home],
             effects: [
                 (effect: MoodLoss, magnitude: 100),
-            ],
-        ),
-        (
-            key: "Status",
-            visit_min: 30,
-            decay_centi_per_hour: 0,     // M5 (konsumpcja) — patrz nagłówek
-            critical: 25,
-            satisfaction: 0,
-            places: [],
-            effects: [
-                (effect: AmbitionGain, magnitude: 100),      // ambicja ↑, satysfakcja ↓
             ],
         ),
         (

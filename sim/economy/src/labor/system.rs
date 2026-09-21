@@ -254,14 +254,36 @@ impl Workforce for WorldWorkforce<'_> {
             .world
             .get::<magnat_agents::Lifecycle>(c.0)
             .is_some_and(magnat_agents::Lifecycle::is_ill);
+        // Skutki progowe deprywacji (`R2-WP16`). Świat bez tabeli potrzeb albo
+        // mieszkaniec bez komponentu `Needs` nie naciska — zero jest tu treścią,
+        // nie brakiem danych.
+        let deprivation = match (
+            self.world.get::<magnat_agents::Needs>(c.0),
+            self.world.get_resource::<magnat_agents::NeedTable>(),
+        ) {
+            (Some(n), Some(t)) => magnat_agents::pressure(n, t),
+            _ => magnat_agents::DeprivationPressure::default(),
+        };
         Some(PersonFacts {
             vitals,
             district,
-            ambition: osobowosc.get(TraitId::Ambition),
+            // Promile deprywacji na punkty skali `Q`: 100 promili = +10 punktów
+            // ambicji, czyli −100 bp progu zmiany pracy. Przelicznik jest tutaj,
+            // bo `sim/agents` nie wie, co znaczy „ambicja" dla rynku pracy.
+            ambition: Q::new(
+                osobowosc
+                    .get(TraitId::Ambition)
+                    .get()
+                    .saturating_add(
+                        u8::try_from(deprivation.ambition_gain_permille / 10).unwrap_or(u8::MAX),
+                    )
+                    .min(100),
+            ),
             loyalty: osobowosc.get(TraitId::Loyalty),
             job,
             best_role,
             on_sick_leave: chory,
+            deprivation,
         })
     }
 

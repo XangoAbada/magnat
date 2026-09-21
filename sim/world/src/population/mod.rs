@@ -359,7 +359,7 @@ pub fn generate_population(
     flota.stations = oracle.stations().len() as u32;
     flota.route_cache_capacity = pojemnosc_cache;
     oracle.set_seed(seed);
-    oracle.set_incomes(crate::traffic_build::dochody_gospodarstw(world));
+    oracle.set_incomes(magnat_traffic::household_incomes(world));
     oracle.set_parking(parking);
     oracle.set_drivers(drivers);
 

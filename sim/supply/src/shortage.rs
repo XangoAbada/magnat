@@ -120,11 +120,18 @@ impl HashState for ShortageState {
     }
 }
 
-/// Co kaskada chce, żeby ktoś zrobił. **Akcje, nie trait**: M6b nie ma rynku ani węzła
-/// granicznego, a trait z jedną atrapą byłby abstrakcją bez drugiego konsumenta.
+/// Co kaskada chce, żeby ktoś **kupił**. **Akcje, nie trait**: M6b nie ma rynku ani
+/// węzła granicznego, a trait z jedną atrapą byłby abstrakcją bez drugiego konsumenta.
 /// M6c czyta tę listę i zamienia ją na `Rfq` i `ImportQuote`; dopóki tego nie robi,
 /// drabina po prostu wchodzi szczebel wyżej — czyli zachowuje się dokładnie tak,
 /// jak ma się zachować spot bez wyniku.
+///
+/// **Substytucji tu nie ma i nie było czego tu robić** (`R2-WP14`). Wariant
+/// `Substitute` istniał, `B2b::serve` miał dla niego puste ramię `match`, a wszystko,
+/// co niósł — zamiennik i karę jakości — stopień `ShortageStage::Substituted` już
+/// niesie. Podmiany się nie kupuje: wykonuje ją linia, sięgając po `RecipeInput.substitutes`
+/// w `plant::produce`. Wariant bez wykonawcy wygląda tak samo jak wariant działający
+/// i dlatego nie ma go w tym enumie.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum ShortageAction {
     OpenRfq {
@@ -136,11 +143,6 @@ pub enum ShortageAction {
         site: SiteId,
         good: GoodId,
         mass: Mass,
-    },
-    Substitute {
-        site: SiteId,
-        good: GoodId,
-        alt: GoodId,
     },
 }
 
@@ -240,6 +242,26 @@ pub fn review(
         };
 
         let alternatywa = substytut(cat, site, good);
+        // `R2-WP14`: zakład, który jedzie na zamienniku, **nie stoi** — więc kaskada
+        // nie ma po co wchodzić na `Halted`. Sufit działa tylko w górę: pierwotna
+        // dostawa nadal ściąga drabinę w dół, a wyczerpanie zamiennika zdejmuje sufit
+        // i postój przychodzi w następnej godzinie. Bez tego szczebel substytucji
+        // byłby przejściem do postoju także wtedy, gdy podmiana faktycznie karmi linię —
+        // bo pokrycie liczy się z **pierwotnego** wsadu i zostaje zerem.
+        //
+        // Rozstrzyga o tym **głodna linia, a nie sam stan magazynu zamiennika**.
+        // „Jest cokolwiek" byłoby warunkiem fałszywym: jeden gram otrąb trzymałby
+        // zakład na `Substituted` w nieskończoność, bo linia i tak stanęłaby na
+        // `Starved`, a sufit ścinałby cel — czyli `Halted` stałby się nieosiągalny
+        // i karta zakładu nigdy nie pokazałaby postoju stojącego zakładu.
+        let podmiana_starcza = !glodna
+            && alternatywa.is_some_and(|s| crate::plant::input_stock(store, site, s.good).0 > 0);
+        let sufit = ShortageStageKind::Substituted.as_index() as u8;
+        let cel = if podmiana_starcza {
+            cel.min(sufit)
+        } else {
+            cel
+        };
         let (nowy_stopien, akcja) = zbuduj(site.site, good, alternatywa, cel, cov, now, t);
         if let Some(a) = akcja {
             akcje.push(a);
@@ -335,7 +357,11 @@ fn obnizenie(cov: u32, t: &ShortageTuning) -> u8 {
 /// przyjmie otręby zamiast części mąki"), a nie towaru samego w sobie. Lista przy towarze
 /// zostaje jako droga odwrotu dla wejść, których żadna receptura nie opisuje szczegółowo —
 /// i dla M5, gdzie podmienia się to, co na półce, a nie to, co w recepturze.
-fn substytut(cat: &Catalog, site: &PlantSite, good: GoodId) -> Option<crate::catalog::Substitute> {
+pub(crate) fn substytut(
+    cat: &Catalog,
+    site: &PlantSite,
+    good: GoodId,
+) -> Option<crate::catalog::Substitute> {
     for l in &site.lines {
         let Some(rid) = l.recipe else { continue };
         if let Some(we) = cat.recipe(rid).inputs.iter().find(|i| i.good == good) {
@@ -395,11 +421,7 @@ fn zbuduj(
                     alt: s.good,
                     quality_loss: s.quality_penalty,
                 },
-                Some(ShortageAction::Substitute {
-                    site,
-                    good,
-                    alt: s.good,
-                }),
+                None,
             ),
             // Nie ma czym podmienić — szczebel po prostu nie istnieje dla tego towaru
             // i zakład staje. Udawanie substytucji byłoby gorsze niż postój.

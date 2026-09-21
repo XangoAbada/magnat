@@ -39,7 +39,11 @@ pub struct RndDay<'a> {
     /// Rola badacza z `data/jobs/roles.ron`. `None` w świecie bez tej roli —
     /// wtedy badania nie ruszają i to jest poprawny stan, nie błąd.
     pub researcher: Option<JobRoleId>,
-    pub vitals: &'a dyn Fn(CitizenId) -> Option<(magnat_agents::Vitals, Q)>,
+    pub vitals:
+        &'a dyn Fn(
+            CitizenId,
+        )
+            -> Option<(magnat_agents::Vitals, Q, magnat_agents::DeprivationPressure)>,
 }
 
 /// Zmiana w zakładzie produkcyjnym, którą R&D zleca, a wykonuje `sim/economy`.

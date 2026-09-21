@@ -29,6 +29,8 @@ struct Piekarnia {
     transport: Transport,
     site: SiteId,
     maka: magnat_core::GoodId,
+    wejscie: magnat_supply::batch::SlotId,
+    wyjscie: magnat_supply::batch::SlotId,
 }
 
 impl Piekarnia {
@@ -120,6 +122,50 @@ impl Piekarnia {
             transport: Transport::new(),
             site,
             maka,
+            wejscie,
+            wyjscie,
+        }
+    }
+
+    /// Dosypuje towar do zaplecza — używane przez test substytucji, który potrzebuje
+    /// otrąb obok mąki.
+    fn dosyp(&mut self, klucz: &str, kg: i64, jakosc: u8) {
+        let g = self.cat.good_id(klucz).expect(klucz);
+        self.store
+            .put(
+                &self.cat,
+                self.wejscie,
+                BatchDraft {
+                    good: g,
+                    mass: Mass(kg * 1_000),
+                    quality: Q::new(jakosc),
+                    brand: None,
+                    producer: FirmId(encja(5)),
+                    produced_at: SimMinute(0),
+                    cost: Money(kg * 40),
+                    origin: Default::default(),
+                    flags: Default::default(),
+                },
+                MassIn::Initial,
+            )
+            .expect("dosypka");
+    }
+
+    /// Ile chleba stoi w magazynie wyrobów.
+    fn chleb(&self) -> i64 {
+        let g = self.cat.good_id("food_bread_wheat").expect("chleb");
+        self.store.available(self.wyjscie, g, Q::MIN).0
+    }
+
+    /// Jakość wsadu szarży, którą piec właśnie robi — średnia ważona masą,
+    /// **substytuty już po karze** (kontrakt `QualityModel::quality`).
+    ///
+    /// Pytamy szarżę, a nie magazyn wyrobów: chleb się psuje, więc jakość bochenka
+    /// po pięciu dobach mówi o czasie leżenia, nie o tym, z czego go upieczono.
+    fn q_in_w_biegu(&self) -> Option<u8> {
+        match self.plant.get(self.site).expect("zakład").lines[0].state {
+            magnat_supply::LineState::Running { charge, .. } => Some(charge.q_in.get()),
+            _ => None,
         }
     }
 
@@ -337,5 +383,71 @@ fn to_co_jedzie_nie_jest_zamawiane_drugi_raz() {
     assert!(
         z_dostawa.is_empty(),
         "zamówienie w drodze pokrywa potrzebę: {z_dostawa:?}"
+    );
+}
+
+/// **Pozycja 3 wykazu `R2`: szósty szczebel kaskady nie miał wykonawcy.**
+///
+/// `review` wybierało substytut, zapisywało `SubstituteUsed` i ustawiało stopień —
+/// a `pobierz_wsad` pytało wyłącznie o `RecipeInput.good` i nigdy nie zaglądało
+/// w `substitutes`. Szczebel „szukam zamiennika" był więc przejściem do postoju:
+/// piekarnia z pełnym magazynem otrąb stawała tak samo jak piekarnia z pustym.
+///
+/// Przed naprawą ten test pada dwa razy: kaskada dochodzi do `Halted`, a produkcja
+/// chleba zatrzymuje się w chwili, w której kończy się mąka.
+#[test]
+fn piekarnia_bez_maki_piecze_na_otrebach_i_nie_staje() {
+    let mut p = Piekarnia::nowa(900);
+    // Otręby są **jedynym** substytutem w katalogu fali A i stoją przy wejściu
+    // `food_flour_t550` receptury `bakery_bread_wheat` (`data/recipes/food.ron`).
+    p.dosyp("feed_bran", 5_000, 67);
+
+    let mut przebieg: Vec<ShortageStageKind> = vec![p.stopien()];
+    let mut chleb_gdy_skonczyla_sie_maka = None;
+    let mut q_na_otrebach: Option<u8> = None;
+    for h in 0..(5 * 24u64) {
+        p.godzina(h * 60);
+        let s = p.stopien();
+        if przebieg.last() != Some(&s) {
+            przebieg.push(s);
+        }
+        if s == ShortageStageKind::Substituted {
+            if chleb_gdy_skonczyla_sie_maka.is_none() {
+                chleb_gdy_skonczyla_sie_maka = Some(p.chleb());
+            }
+            q_na_otrebach = q_na_otrebach.or_else(|| p.q_in_w_biegu());
+        }
+    }
+
+    assert!(
+        przebieg.contains(&ShortageStageKind::Substituted),
+        "kaskada nie doszła do substytucji: {przebieg:?}"
+    );
+    assert!(
+        !przebieg.contains(&ShortageStageKind::Halted),
+        "zakład z pełnym magazynem otrąb stanął: {przebieg:?}"
+    );
+    let na_wejsciu = chleb_gdy_skonczyla_sie_maka.expect("szczebel substytucji");
+    assert!(
+        p.chleb() > na_wejsciu,
+        "po wejściu na substytut nie upieczono ani grama: {} → {}",
+        na_wejsciu,
+        p.chleb()
+    );
+
+    // Jakość: `cap_by_worst_input` receptury tnie wyrób do najgorszego wejścia,
+    // a otręby wchodzą z karą 12 punktów z danych. Nie trzeba nowego parametru —
+    // wystarczy, żeby substytut w ogóle trafił do szarży.
+    let mut wzorcowa = Piekarnia::nowa(20_000);
+    let mut q_na_mace = None;
+    for h in 0..24u64 {
+        wzorcowa.godzina(h * 60);
+        q_na_mace = q_na_mace.or_else(|| wzorcowa.q_in_w_biegu());
+    }
+    let na_otrebach = q_na_otrebach.expect("szarża na zamienniku");
+    let na_mace = q_na_mace.expect("szarża na mące");
+    assert!(
+        na_otrebach < na_mace,
+        "otręby weszły do szarży bez kary jakości z danych: {na_otrebach} vs {na_mace}"
     );
 }

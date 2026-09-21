@@ -53,8 +53,18 @@ pub struct PersonFacts {
     pub vitals: magnat_agents::Vitals,
     /// Dzielnica zamieszkania — w niej kandydat szuka pracy najpierw.
     pub district: DistrictId,
+    /// Ambicja **skuteczna**: cecha osobowości podniesiona o deprywację rozwoju
+    /// (`R2-WP16`). Nie jest kopią `TraitId::Ambition` i nie ma nią być — `AmbitionGain`
+    /// z `data/needs/needs.ron` znaczy dokładnie „ambicja rośnie", a `switch_threshold_bp`
+    /// już umie ją czytać. Drugi parametr tamtej funkcji opisywałby tę samą rzecz
+    /// dwa razy i rozjechałby się z pierwszym przy pierwszej zmianie.
     pub ambition: Q,
     pub loyalty: Q,
+    /// Nacisk skutków progowych deprywacji (`R2-WP16`). Domyślny = brak deprywacji.
+    ///
+    /// `ambition` niesie już swoją część; zostaje `productivity_loss_permille`, które
+    /// wchodzi do `effective_labor` i którego nikt poza produkcją nie czyta.
+    pub deprivation: magnat_agents::DeprivationPressure,
     /// Obecny etat: zakład i zawód. `None` = bez pracy. Stawki tu nie ma i być
     /// nie może — komponent mieszkańca nie niesie ani grosza (`D1`), a jedynym
     /// źródłem prawdy o płacy jest umowa po stronie firmy.

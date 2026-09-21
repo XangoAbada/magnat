@@ -11,7 +11,7 @@
 //! dziewięć"), więc wejście musi być znane co do sztuki. Miasto z generatora mierzyłoby
 //! własny rozkład obsady, a nie tempo badań.
 
-use magnat_agents::{ShiftKind, Vitals};
+use magnat_agents::{DeprivationPressure, ShiftKind, Vitals};
 use magnat_core::{
     BuildingId, CitizenId, ContractId, DistrictId, Entity, JobRoleId, Money, SimMinute, SiteId,
     TechId, Tick, Q,
@@ -159,7 +159,7 @@ fn mint() -> impl FnMut() -> Option<ContractId> {
 /// Puszcza `dob` dób badań i zwraca dobę odkrycia, jeśli nastąpiło.
 fn przebieg(firms: &mut Firms, data: &RndData, dob: u32) -> Option<u32> {
     let roles = role_table();
-    let zdrowi = |_: CitizenId| Some((w_formie(), Q::new(60)));
+    let zdrowi = |_: CitizenId| Some((w_formie(), Q::new(60), DeprivationPressure::default()));
     let mut m = mint();
     for d in 0..dob {
         let dzien = RndDay {
@@ -270,7 +270,7 @@ fn cudzy_patent_zmusza_do_licencji_a_licencja_jest_kontraktem() {
     // Dwie firmy: pierwsza ma cztery lata forsu, druga zaczyna z pustą wiedzą.
     let (mut f, klucze) = firmy(2);
     let roles = role_table();
-    let zdrowi = |_: CitizenId| Some((w_formie(), Q::new(60)));
+    let zdrowi = |_: CitizenId| Some((w_formie(), Q::new(60), DeprivationPressure::default()));
     let mut m = mint();
     let mut podpisana = None;
     for d in 0..800u32 {
@@ -294,6 +294,7 @@ fn cudzy_patent_zmusza_do_licencji_a_licencja_jest_kontraktem() {
                             ..w_formie()
                         },
                         Q::new(1),
+                        DeprivationPressure::default(),
                     ))
                 } else {
                     zdrowi(c)
@@ -352,9 +353,10 @@ fn licencjobiorca_placi_royalty_od_utargu_i_placi_je_bez_badaczy() {
                     ..w_formie()
                 },
                 Q::new(1),
+                DeprivationPressure::default(),
             ))
         } else {
-            Some((w_formie(), Q::new(60)))
+            Some((w_formie(), Q::new(60), DeprivationPressure::default()))
         }
     };
     let mut contract = None;

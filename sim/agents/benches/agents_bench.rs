@@ -310,7 +310,7 @@ fn mieszkaniec() -> Mieszkaniec {
             ..Vitals::default()
         },
         potrzeby: Needs {
-            level: [45; 12],
+            level: [45; magnat_core::NEED_COUNT],
             updated_at: 0,
         },
         personality: Personality([55, 50, 60, 50, 45, 65, 40, 70]),

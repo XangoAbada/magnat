@@ -10,7 +10,7 @@
 //! (dokument 00 §2). Mnożniki są w tysięcznych, dzielenie następuje po każdym z nich
 //! osobno — kolejność działań jest częścią wyniku i nie wolno jej „uprościć".
 
-use magnat_agents::Vitals;
+use magnat_agents::{DeprivationPressure, Vitals};
 use magnat_core::{Qty, Q};
 
 use super::roles::RoleWeights;
@@ -71,11 +71,35 @@ pub const fn mood01(mood: i8) -> Q {
     Q::new(((mood as i32 + 100) / 2) as u8)
 }
 
+/// Ile pracy najwyżej zabiera deprywacja, w promilach (`R2-WP16`).
+///
+/// Sufit jest jawny i to jest jego treść: człowiek głodny, niewyspany i chory naraz
+/// pracuje **gorzej**, ale przychodzi i coś robi. Bez sufitu wystarczyłoby dosypać
+/// skutków w danych, żeby zakład stanął, nie tracąc ani jednego pracownika — a stanie
+/// zakładu ma mieć przyczynę, którą widać w obsadzie, nie w tabeli potrzeb.
+pub const MAX_DEPRIVATION_LOSS_PERMILLE: u32 = 700;
+
+/// Mnożnik deprywacji, w tysięcznych: 1000 bez deprywacji, 300 przy pełnym sufycie.
+///
+/// To jest **drugi** kanał, nie ten sam, którym deprywacja już działa: głód zjada
+/// energię przez `EnergyLoss` i to wchodzi do `body`, a `ProductivityLoss` mówi, o ile
+/// gorzej pracuje człowiek myślący o jedzeniu. Dane deklarują oba osobno od M3a.
+#[must_use]
+pub const fn deprivation_mult(productivity_loss_permille: u32) -> i32 {
+    let strata = if productivity_loss_permille > MAX_DEPRIVATION_LOSS_PERMILLE {
+        MAX_DEPRIVATION_LOSS_PERMILLE
+    } else {
+        productivity_loss_permille
+    };
+    1000 - strata as i32
+}
+
 /// Produktywność jednego pracownika w milietatach (M7 §5.3).
 ///
 /// Składniki idą w kolejności pól [`RoleWeights`], mnożniki po kolei i każdy z własnym
 /// dzieleniem — dwa dzielenia dają inny wynik niż jedno przez iloczyn i to **to**
-/// jest wynik kontraktowy.
+/// jest wynik kontraktowy. Deprywacja wchodzi **po** wyposażeniu i zarządzaniu, bo
+/// dotyczy człowieka, a nie zakładu.
 #[must_use]
 pub fn effective_labor(
     body: &Vitals,
@@ -83,12 +107,14 @@ pub fn effective_labor(
     tech: Q,
     mgmt: ManagementQuality,
     w: &RoleWeights,
+    dep: DeprivationPressure,
 ) -> Qty {
     let base = i64::from(w.base(skill, body.energy_q(), mood01(body.mood), body.health_q()));
     // base ∈ 0..=100 → milietaty przed mnożnikami.
     let mut out = base * 10;
     out = out * i64::from(tech_mult(tech)) / 1000;
     out = out * i64::from(mgmt_mult(mgmt)) / 1000;
+    out = out * i64::from(deprivation_mult(dep.productivity_loss_permille)) / 1000;
     Qty(out)
 }
 
@@ -142,8 +168,10 @@ mod tests {
             Q::new(50),
             ManagementQuality::NEUTRAL,
             &wagi(),
+            DeprivationPressure::default(),
         );
         assert_eq!(q.0, FULL_TIME);
+        assert_eq!(deprivation_mult(0), 1000);
         assert_eq!(tech_mult(Q::new(50)), 1000);
         assert_eq!(mgmt_mult(ManagementQuality::NEUTRAL), 1000);
     }
@@ -158,8 +186,51 @@ mod tests {
             Q::new(50),
             ManagementQuality::NEUTRAL,
             &wagi(),
+            DeprivationPressure::default(),
         );
         assert!(q.0 > 0, "q = {}", q.0);
+    }
+
+    #[test]
+    fn deprywacja_obniza_prace_ale_jej_nie_gasi() {
+        let pelna = effective_labor(
+            &zdrowy(),
+            Q::new(100),
+            Q::new(50),
+            ManagementQuality::NEUTRAL,
+            &wagi(),
+            DeprivationPressure::default(),
+        );
+        let glodny = effective_labor(
+            &zdrowy(),
+            Q::new(100),
+            Q::new(50),
+            ManagementQuality::NEUTRAL,
+            &wagi(),
+            DeprivationPressure {
+                productivity_loss_permille: 300,
+                ambition_gain_permille: 0,
+            },
+        );
+        assert_eq!(glodny.0, pelna.0 * 700 / 1000);
+        // Sufit: dosypanie skutków w danych nie zgasi pracownika do zera. Teza jest
+        // o **pracy**, nie o mnożniku, więc mierzymy pracę — mnożnik sprawdzony obok
+        // powtarzałby definicję zapisaną trzydzieści linii wyżej.
+        let skrajny = DeprivationPressure {
+            productivity_loss_permille: 5_000,
+            ambition_gain_permille: 0,
+        };
+        let na_dnie = effective_labor(
+            &zdrowy(),
+            Q::new(100),
+            Q::new(50),
+            ManagementQuality::NEUTRAL,
+            &wagi(),
+            skrajny,
+        );
+        assert!(na_dnie.0 > 0, "skrajna deprywacja zgasiła pracę do zera");
+        assert!(na_dnie.0 < glodny.0, "sufit nie jest sufitem");
+        assert_eq!(na_dnie.0, pelna.0 * 300 / 1000);
     }
 
     #[test]
@@ -169,7 +240,14 @@ mod tests {
         let mut poprzednie_straty = i32::MAX;
         for m in 0..=100u8 {
             let mq = ManagementQuality(m);
-            let q = effective_labor(&zdrowy(), Q::new(60), Q::new(50), mq, &wagi());
+            let q = effective_labor(
+                &zdrowy(),
+                Q::new(60),
+                Q::new(50),
+                mq,
+                &wagi(),
+                DeprivationPressure::default(),
+            );
             assert!(q.0 >= poprzedni, "produktywność spadła przy mgmt = {m}");
             let s = loss_multiplier(mq);
             assert!(s <= poprzednie_straty, "straty wzrosły przy mgmt = {m}");

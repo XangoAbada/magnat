@@ -287,6 +287,7 @@ pub fn run(a: &M3DayArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
     let parking_ok = parkingi(&app.world);
     let transit_ok = komunikacja(&app.world);
     profil_doby(&app.world);
+    wartosc_czasu(&app.world);
     potrzeby(&app.world);
     if let Some(klucz) = &a.overlay {
         nakladka(&app.world, &city, klucz, &a.overlay_out)?;
@@ -850,7 +851,54 @@ fn profil_doby(world: &magnat_ecs::World) {
     }
 }
 
-/// Średni poziom dwunastu potrzeb — czy doba je zaspokaja, czy miasto głoduje.
+/// Rozkład wartości czasu w populacji (`R2-WP13`).
+///
+/// Sekcja istnieje po to, żeby **było widać różnicę między dobą 1 a dobą 3600**.
+/// Do `R2-WP13` te dwa rozkłady były identyczne co do grosza, bo tablica dochodów
+/// oracle'a była migawką z generacji świata i nikt jej nie odświeżał. Wartość czasu
+/// waży największy składnik kosztu uogólnionego, więc zamrożona znaczyła, że awans
+/// i utrata pracy nie zmieniają wyboru środka transportu ani razu przez całą sesję.
+fn wartosc_czasu(world: &magnat_ecs::World) {
+    let Some(services) = world.get_resource::<magnat_traffic::TrafficServices>() else {
+        return;
+    };
+    // Po gospodarstwie, nie po mieszkańcu: wartość czasu jest własnością domu,
+    // bo dochód jest domowy.
+    let mut stawki: Vec<i64> = Vec::new();
+    for e in world.resource::<Population>().households() {
+        stawki.push(
+            services
+                .oracle
+                .vot_gr_per_min(e.index(), magnat_traffic::TripPurpose::Work),
+        );
+    }
+    if stawki.is_empty() {
+        return;
+    }
+    stawki.sort_unstable();
+    let kwantyl = |p: usize| stawki[(stawki.len() - 1) * p / 100];
+    let srednia: i64 = stawki.iter().sum::<i64>() / stawki.len() as i64;
+    println!(
+        "
+wartość czasu (grosze/min, cel: praca)"
+    );
+    println!(
+        "  gospodarstw {} · min {} · mediana {} · śr. {} · maks {}",
+        stawki.len(),
+        stawki[0],
+        kwantyl(50),
+        srednia,
+        stawki[stawki.len() - 1]
+    );
+    println!(
+        "  kwartyle    Q1 {} · Q3 {} · rozrzut {}",
+        kwantyl(25),
+        kwantyl(75),
+        stawki[stawki.len() - 1] - stawki[0]
+    );
+}
+
+/// Średni poziom potrzeb — czy doba je zaspokaja, czy miasto głoduje.
 fn potrzeby(world: &magnat_ecs::World) {
     let mut suma = [0u64; magnat_core::NEED_COUNT];
     let mut ludzi = 0u64;

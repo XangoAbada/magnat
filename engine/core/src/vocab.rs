@@ -71,13 +71,22 @@ vocab_enum! {
     /// Rodzaj potrzeby. Konsument: M3 (model potrzeb), M5 (co wyzwala zakup),
     /// M8 (usługi publiczne).
     ///
-    /// **Dwanaście wariantów wniesionych przez M3** (M3a §5.5) — kolejność jest
-    /// kontraktem: `Needs.level: [u8; 12]` indeksuje się `as_index()`, więc
-    /// przestawienie wariantów przestawiłoby zapisane poziomy potrzeb wszystkim
-    /// mieszkańcom. Wolno dopisywać na końcu, nie wolno przestawiać (M3 §6.4).
+    /// **Jedenaście wariantów** — kolejność jest kontraktem: `Needs.level` indeksuje
+    /// się `as_index()`, więc przestawienie wariantów przestawiłoby zapisane poziomy
+    /// potrzeb wszystkim mieszkańcom. Wolno dopisywać na końcu, nie wolno przestawiać
+    /// (M3 §6.4).
+    ///
+    /// **`Status` wypadł w `R2-WP16`** (decyzja `D-N11`) i był dwunasty. Status
+    /// społeczny liczy `sim/agents::social` z siedmiu czynników i jest **wielkością
+    /// wyprowadzaną, nie potrzebą** — mieszkaniec go nie zaspokaja, tylko go ma.
+    /// Dwa modele jednej rzeczy to jeden za dużo; slot kosztował bajt w tablicy
+    /// przeliczanej dla każdego mieszkańca w każdym ticku shardu i mylący wiersz
+    /// w karcie inspekcji. Usunięcie ze środka listy przenumerowało `Development`
+    /// z 11 na 10 — wolno tu, bo R2 stoi przed M12b, które format zapisu i tak
+    /// przebudowuje.
     NeedKind {
         Hunger, Sleep, Hygiene, Health, Safety, Housing,
-        Mobility, Clothing, Leisure, Social, Status, Development,
+        Mobility, Clothing, Leisure, Social, Development,
     }
 }
 
@@ -1185,10 +1194,11 @@ mod tests {
     fn kolejnosc_potrzeb_i_cech_jest_kontraktem() {
         // M3 §6.4: przestawienie wariantu przestawia zapisane poziomy potrzeb
         // wszystkim mieszkańcom, bo `Needs.level` indeksuje się `as_index()`.
-        assert_eq!(NEED_COUNT, 12);
+        assert_eq!(NEED_COUNT, 11);
         assert_eq!(NeedKind::Hunger.as_index(), 0);
         assert_eq!(NeedKind::Sleep.as_index(), 1);
-        assert_eq!(NeedKind::Development.as_index(), 11);
+        // `R2-WP16` wyjął `Status` ze środka listy i `Development` zszedł z 11 na 10.
+        assert_eq!(NeedKind::Development.as_index(), 10);
         assert_eq!(TraitId::ALL.len(), 8);
         assert_eq!(TraitId::Ambition.as_index(), 0);
         assert_eq!(TraitId::Conscientiousness.as_index(), 7);

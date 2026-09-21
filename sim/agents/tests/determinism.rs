@@ -205,12 +205,7 @@ fn czas_do_zera_zgadza_sie_z_tabela_paragrafu_5_5() {
         (NeedKind::Development, 83.3 * 24.0),
     ];
     /// Potrzeby zdarzeniowe: nie spadają same, bo w M3 nic ich nie podnosi.
-    const ZDARZENIOWE: [NeedKind; 4] = [
-        NeedKind::Health,
-        NeedKind::Safety,
-        NeedKind::Housing,
-        NeedKind::Status,
-    ];
+    const ZDARZENIOWE: [NeedKind; 3] = [NeedKind::Health, NeedKind::Safety, NeedKind::Housing];
 
     let tabela = NeedTable::load_default().expect("data/needs/needs.ron");
     for need in ZDARZENIOWE {

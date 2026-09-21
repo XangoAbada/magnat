@@ -117,7 +117,7 @@ impl CitizenCard {
                 ("ui.need.Development", b.education, w.education),
                 ("ui.commitment.Work", b.occupation, w.occupation),
                 ("ui.card.address", b.address, w.address),
-                ("ui.need.Status", b.consumption, w.consumption),
+                ("ui.card.consumption", b.consumption, w.consumption),
                 ("ui.card.household", b.family, w.family),
             ]
             .iter()

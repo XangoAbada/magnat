@@ -378,14 +378,39 @@ fn sprobuj_start(
 
     // Wszystkie wejścia sprawdzamy, **zanim** weźmiemy którekolwiek: rezerwacja trzech
     // i porażka na czwartym zostawiłaby zjedzony wsad i nieruszoną szarżę.
+    //
+    // Zamienniki liczą się **wspólnie**: dwa wejścia tej samej receptury mogą mieć ten
+    // sam zamiennik, a wtedy sprawdzenie każdego z osobna przepuściłoby oba na tym samym
+    // zapasie. `pobierz_wsad` dosypałby wówczas tylko pierwszemu, a `Charge.mass` jest
+    // masą **planowaną** — czyli wyrób wyszedłby pełny z niepełnego wsadu i masa
+    // powstałaby z niczego (00 §6).
+    let mut zajete: Vec<(GoodId, i64)> = Vec::new();
     for we in &r.inputs {
         let potrzeba = skaluj(we.mass, wsad, r.batch_mass);
-        let jest: i64 = zaklad
-            .inputs
-            .iter()
-            .map(|s| store.available(*s, we.good, we.min_quality).0)
-            .sum();
-        if jest < potrzeba.0 {
+        let jest = dostepne(store, zaklad, we.good, we.min_quality);
+        if jest >= potrzeba.0 {
+            continue;
+        }
+        // `R2-WP14`: brakującą resztę wolno dobrać zamiennikiem, jeśli kaskada
+        // doszła do szczebla `Substituted`. Zamiennika **nie** filtrujemy progiem
+        // jakości receptury: gdyby go spełniał, nie byłby zamiennikiem — gorszą
+        // jakość niesie kara z danych i sufit `cap_by_worst_input`.
+        let dobrano = podmiana(ctx.cat, zaklad, we.good).is_some_and(|s| {
+            let trzeba = w_zamienniku(potrzeba.0 - jest, &s);
+            let juz = zajete
+                .iter()
+                .find(|(g, _)| *g == s.good)
+                .map_or(0, |(_, m)| *m);
+            if dostepne(store, zaklad, s.good, Q::MIN) - juz < trzeba {
+                return false;
+            }
+            match zajete.iter_mut().find(|(g, _)| *g == s.good) {
+                Some((_, m)) => *m += trzeba,
+                None => zajete.push((s.good, trzeba)),
+            }
+            true
+        });
+        if !dobrano {
             l.state = LineState::Starved { missing: we.good };
             return false;
         }
@@ -498,6 +523,58 @@ fn brak_miejsca(
     }
 }
 
+/// Czym i w jakiej proporcji linia uzupełnia brakujące wejście (`R2-WP14`).
+///
+/// `None` = bez podmiany, i to jest stan zwykły. Zamiennik jest **czynny dopiero
+/// wtedy**, gdy kaskada doszła do szczebla `Substituted`: receptura zna go zawsze,
+/// więc sięganie po niego przy pełnym magazynie zamieniłoby zamiennik w stały
+/// składnik i piekarnia dosypywałaby otrąb do chleba, mając mąkę.
+///
+/// Stopień niesie już `alt` i karę jakości; z rekordu receptury bierze się wyłącznie
+/// `mass_ratio_permille`, którego stopień nie ma.
+///
+/// `ponytail:` sufit nazwany — **zamiennika nikt nie zamawia**. Kaskada, zapytania
+/// ofertowe i punkty zamówieniowe chodzą po `RecipeInput.good` (`shortage::wejscia_zakladu`),
+/// a towar-zamiennik wejściem receptury nie jest. Podmiana zadziała więc tyle razy, ile
+/// zamiennika stoi w magazynie **przypadkiem** — w łańcuchu odniesienia otręby są produktem
+/// ubocznym młyna, więc zwykle stoją, ale reguły na to nie ma. Ścieżka wyjścia: pozycja 79
+/// wykazu `R2` — zapytanie ofertowe na zamiennik, kiedy kaskada wchodzi na `Substituted`.
+fn podmiana(cat: &Catalog, zaklad: &PlantSite, good: GoodId) -> Option<crate::catalog::Substitute> {
+    let crate::shortage::ShortageStage::Substituted { alt, .. } = zaklad.stage(good) else {
+        return None;
+    };
+    crate::shortage::substytut(cat, zaklad, good).filter(|s| s.good == alt)
+}
+
+/// Ile zamiennika odpowiada danej masie pierwotnego wsadu.
+///
+/// `mass_ratio_permille` to gramy zamiennika na 1000 g oryginału, więc mnożenie,
+/// nie dzielenie — a `i128`, bo szarża huty to dziesiątki ton i iloczyn nie mieści
+/// się w `i64` dopiero przy skrajnych proporcjach, czego nie chcemy sprawdzać
+/// katalogiem.
+fn w_zamienniku(brak: i64, s: &crate::catalog::Substitute) -> i64 {
+    i64::try_from(i128::from(brak) * i128::from(s.mass_ratio_permille) / 1000).unwrap_or(i64::MAX)
+}
+
+/// Odwrotność [`w_zamienniku`]: ile pierwotnego wsadu pokrywa ta masa zamiennika.
+///
+/// Zero w proporcji byłoby dzieleniem przez zero, a w danych jest liczbą bez sensu
+/// („zero gramów zamiennika zastępuje kilogram") — stąd `max(1)`, a nie warunek:
+/// zamiennik o proporcji zerowej pokrywa wtedy tysiąckrotnie mniej, niż waży, czyli
+/// praktycznie nic, i linia dalej stoi zamiast dzielić przez zero.
+fn w_pierwotnym(masa: i64, s: &crate::catalog::Substitute) -> i64 {
+    i64::try_from(i128::from(masa) * 1000 / i128::from(s.mass_ratio_permille.max(1))).unwrap_or(0)
+}
+
+/// Ile tego towaru stoi w zapleczu zakładu, licząc wszystkie sloty wejściowe.
+fn dostepne(store: &Store, zaklad: &PlantSite, good: GoodId, min_quality: Q) -> i64 {
+    zaklad
+        .inputs
+        .iter()
+        .map(|s| store.available(*s, good, min_quality).0)
+        .sum()
+}
+
 /// Zabiera wejścia z magazynu i składa z nich wsad linii.
 fn pobierz_wsad(
     ctx: &ProductionCtx<'_>,
@@ -516,31 +593,59 @@ fn pobierz_wsad(
     let mut najgorsze = Q::MAX;
     let mut rodzice: Vec<BatchOrigin> = Vec::new();
 
+    // Jedna pętla pobierania, dwa przebiegi: najpierw pierwotny wsad, potem — jeśli
+    // czegoś zabrakło i kaskada jest na szczeblu `Substituted` — zamiennik (`R2-WP14`).
+    // Kolejność jest treścią: zamiennik **uzupełnia** brak, a nie zastępuje to,
+    // co jest. Piekarnia z połową mąki piecze z mąki i otrąb, nie z samych otrąb.
     for we in &r.inputs {
         let mut zostalo = skaluj(we.mass, wsad, r.batch_mass).0;
-        for slot in &zaklad.inputs {
+        // Dwa przebiegi: pierwotny wsad i — jeśli czegoś zabrakło — zamiennik.
+        // `None` w drugim znaczy „kaskada nie jest na szczeblu `Substituted`",
+        // czyli zwykły stan zakładu.
+        let przebiegi = [None, podmiana(ctx.cat, zaklad, we.good)];
+        for zamiennik in przebiegi {
             if zostalo <= 0 {
                 break;
             }
-            let ile = store
-                .available(*slot, we.good, we.min_quality)
-                .0
-                .min(zostalo);
-            if ile <= 0 {
-                continue;
+            // Zamiennika bierze się tyle, ile odpowiada brakowi — proporcja jest
+            // w danych i nie musi być jeden do jednego. Próg jakości receptury
+            // zamiennika **nie** obowiązuje: gdyby go spełniał, nie byłby zamiennikiem.
+            let (good, min_quality, kara, do_wziecia) = match zamiennik {
+                None => (we.good, we.min_quality, 0, zostalo),
+                Some(s) => (s.good, Q::MIN, s.quality_penalty, w_zamienniku(zostalo, &s)),
+            };
+            let mut do_wziecia = do_wziecia;
+            for slot in &zaklad.inputs {
+                if do_wziecia <= 0 {
+                    break;
+                }
+                let ile = store.available(*slot, good, min_quality).0.min(do_wziecia);
+                if ile <= 0 {
+                    continue;
+                }
+                let Some(rez) = store.reserve(*slot, good, Mass(ile), min_quality) else {
+                    continue;
+                };
+                let Ok(kawalek) = store.take(rez) else {
+                    continue;
+                };
+                // Kara jakości z danych schodzi z **jakości wejścia**, a nie z wyrobu:
+                // dzięki temu `cap_by_worst_input` receptury tnie chleb sam, bez ani
+                // jednego nowego parametru po stronie jakości wyrobu.
+                let q = Q::new(kawalek.quality.get().saturating_sub(kara));
+                masa += kawalek.mass.0;
+                koszt += kawalek.cost_total.0;
+                jakosc_wazona += i128::from(q.get()) * i128::from(kawalek.mass.0);
+                najgorsze = najgorsze.min(q);
+                rodzice.push(kawalek.origin);
+                do_wziecia -= kawalek.mass.0;
+                // Odjęcie po stronie **pierwotnej** masy: zamiennik w proporcji 1:2
+                // pokrywa dwoma gramami jeden gram braku.
+                zostalo -= match zamiennik {
+                    None => kawalek.mass.0,
+                    Some(s) => w_pierwotnym(kawalek.mass.0, &s),
+                };
             }
-            let Some(rez) = store.reserve(*slot, we.good, Mass(ile), we.min_quality) else {
-                continue;
-            };
-            let Ok(kawalek) = store.take(rez) else {
-                continue;
-            };
-            masa += kawalek.mass.0;
-            koszt += kawalek.cost_total.0;
-            jakosc_wazona += i128::from(kawalek.quality.get()) * i128::from(kawalek.mass.0);
-            najgorsze = najgorsze.min(kawalek.quality);
-            rodzice.push(kawalek.origin);
-            zostalo -= kawalek.mass.0;
         }
     }
     let q_in = if masa > 0 {

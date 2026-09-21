@@ -91,8 +91,8 @@ pub use migration::{
 };
 pub use names::{catalog as name_catalog, NameCatalog, NameError, NAMES_SCHEMA_VERSION};
 pub use needs::{
-    decay_between, deprivation_of, DeprivationEffectsSystem, NeedDecaySystem, NeedEffect, NeedSpec,
-    NeedTable, NeedTableError, DECAY_SHARDS,
+    decay_between, deprivation_of, pressure, DeprivationEffectsSystem, DeprivationPressure,
+    NeedDecaySystem, NeedEffect, NeedSpec, NeedTable, NeedTableError, DECAY_SHARDS,
 };
 pub use places::{
     choose_place, default_hours, home_of, knowledge_key, nearest_school, place_from_key, site_of,

@@ -65,8 +65,8 @@ pub use spec::{
     VDF_SCHEMA_VERSION, VEHICLES_SCHEMA_VERSION,
 };
 pub use systems::{
-    register_traffic, FareLedger, FuelLedger, TrafficServices, TrafficSystem, TripLog, TripRecord,
-    VehicleWearSystem,
+    household_incomes, register_traffic, FareLedger, FuelLedger, TrafficServices, TrafficSystem,
+    TripLog, TripRecord, VehicleWearSystem,
 };
 pub use transit::{
     LineId, OperatorRef, Timetable, TransitEvent, TransitJourney, TransitLine, TransitMode,

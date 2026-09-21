@@ -14,7 +14,7 @@
 // Ten plik stroi **balansator** (M5e): `a_bp` i `max_step_bp` decydują o tym, czy
 // pętla kredytowa się stabilizuje, czyli o bramkach G1 i G2.
 (
-    schema_version: 4,
+    schema_version: 5,
 
     // ── ocena zdolności kredytowej (§6.5: „historia, zabezpieczenie, przepływy") ──
     scoring: (

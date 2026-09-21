@@ -183,11 +183,16 @@ pub struct TrafficOracle {
     params: ModeChoiceParams,
     /// Dochód netto gospodarstwa w groszach na godzinę, indeksowany indeksem encji GD.
     ///
-    /// `ponytail:` migawka z generacji świata zamiast odczytu z `Household` co podróż.
-    /// Sufit nazwany: awans i utrata pracy nie zmieniają wartości czasu do końca sesji.
-    /// Ścieżka wyjścia: M5 wprowadza budżet gospodarstwa i wtedy `vot` czyta go wprost,
-    /// bo budżet i tak musi być odpytywalny z decyzji zakupowej.
-    incomes: Vec<i64>,
+    /// Denormalizacja `Household.income_monthly`, odświeżana **co dobę** przez
+    /// [`crate::TrafficSystem`] (`R2-WP13`). Kopia, a nie odczyt wprost, bo wybór
+    /// środka transportu liczy się bez `&World`: oracle dostaje `&self` z portu
+    /// `TravelOracle` i świata nie widzi.
+    ///
+    /// Do `R2-WP13` była migawką z generacji świata i nikt jej nie ruszał — awans,
+    /// utrata pracy i zgon żywiciela nie zmieniały wartości czasu do końca sesji.
+    /// Pod zamkiem, bo od tej chwili zmienia się w trakcie gry, a oracle żyje
+    /// jako `Arc` bez `&mut`.
+    incomes: Mutex<Vec<i64>>,
     /// Ostatnio wybrany środek per mieszkaniec — podstawa premii nawyku (§5.3).
     /// `u8::MAX` = brak historii.
     habit: Mutex<Vec<u8>>,
@@ -293,7 +298,7 @@ impl TrafficOracle {
             transit: Mutex::new(TransitNetwork::default()),
             params: ModeChoiceParams::load_default()
                 .unwrap_or_else(|e| panic!("data/roads/mode_choice.ron: {e}")),
-            incomes: Vec::new(),
+            incomes: Mutex::new(Vec::new()),
             habit: Mutex::new(Vec::new()),
             seed: 0,
             day: AtomicU64::new(0),
@@ -341,8 +346,12 @@ impl TrafficOracle {
     }
 
     /// Dochody gospodarstw w groszach na godzinę, indeksowane indeksem encji GD.
-    pub fn set_incomes(&mut self, incomes: Vec<i64>) {
-        self.incomes = incomes;
+    ///
+    /// Dwóch wołających: zasiedlenie świata (raz) i dobowe odświeżenie w
+    /// [`crate::TrafficSystem`] (`R2-WP13`). Bierze `&self`, bo drugi z nich ma
+    /// oracle wyłącznie przez `Arc`.
+    pub fn set_incomes(&self, incomes: Vec<i64>) {
+        *self.incomes.lock().expect("incomes") = incomes;
     }
 
     /// Ziarno świata — wchodzi do pogody i do losowań wyboru miejsca.
@@ -413,7 +422,26 @@ impl TrafficOracle {
     /// Dochód netto gospodarstwa w groszach na godzinę.
     #[must_use]
     fn income_of(&self, household: u32) -> i64 {
-        self.incomes.get(household as usize).copied().unwrap_or(0)
+        self.incomes
+            .lock()
+            .expect("incomes")
+            .get(household as usize)
+            .copied()
+            .unwrap_or(0)
+    }
+
+    /// Wartość czasu gospodarstwa w groszach na minutę (`R2-WP13`).
+    ///
+    /// Publiczna, bo pytają o nią dwaj: raport `m3day` (sekcja „wartość czasu") i test
+    /// tego pakietu. Sam wzór zostaje w [`ModeChoiceParams::vot_gr_per_min`] — to jest
+    /// widok na liczbę, którą oracle i tak trzyma, a nie druga jej definicja.
+    ///
+    /// Wartość czasu waży **największy składnik** kosztu uogólnionego, więc to ona
+    /// rozstrzyga o podziale między marsz, rower, komunikację i auto.
+    #[must_use]
+    pub fn vot_gr_per_min(&self, household: u32, purpose: TripPurpose) -> i64 {
+        self.params
+            .vot_gr_per_min(self.income_of(household), purpose)
     }
 
     fn habit_of(&self, citizen: u32) -> Option<TravelOption> {
@@ -687,6 +715,13 @@ impl HashState for TrafficOracle {
         self.transit.lock().expect("transit").hash_state(h);
         for m in self.habit.lock().expect("habit").iter() {
             h.write_u8(*m);
+        }
+        // Dochody wchodzą do hasha od `R2-WP13`: przestały być wejściem świata
+        // i stały się stanem, bo odświeża je co dobę pętla symulacji. Rozjazd
+        // w tej tablicy zmienia wybór środka transportu w każdej podróży, więc
+        // milczenie hasha o niej znaczyłoby, że wolno go rozjechać.
+        for d in self.incomes.lock().expect("incomes").iter() {
+            h.write_u64(*d as u64);
         }
         // Kursy czekające na opłatę **są stanem**: między wyruszeniem a pobraniem
         // są jedynym śladem po pieniądzu, który ma zejść z portfela pasażera.

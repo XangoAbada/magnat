@@ -44,7 +44,7 @@ pub fn labor_coverage(
                 if f.on_sick_leave {
                     return None;
                 }
-                Some((f.vitals, people.skill_in(c, role)))
+                Some((f.vitals, people.skill_in(c, role), f.deprivation))
             });
             (id, pct)
         })
@@ -471,6 +471,7 @@ fn doba_kadrowa(
                     site.tech,
                     site.mgmt,
                     &wagi,
+                    f.deprivation,
                 );
                 oceny.push((id, p.role, e.citizen, update_perf(e.perf_ema, praca.0)));
                 if e.benefits != magnat_firms::BenefitSet::NONE {

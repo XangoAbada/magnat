@@ -51,6 +51,9 @@ fn zdrowy() -> Vitals {
 struct Osoba {
     vitals: Vitals,
     district: DistrictId,
+    /// Atrapa potrzeb nie zna, więc nacisk deprywacji podaje się wprost — testy
+    /// `R2-WP16` stoją za to na prawdziwym świecie (moduł `deprywacja`).
+    deprivation: magnat_agents::DeprivationPressure,
     ambition: Q,
     loyalty: Q,
     job: Option<(SiteId, JobRoleId)>,
@@ -85,6 +88,7 @@ impl TestPeople {
             Osoba {
                 vitals: zdrowy(),
                 district: DistrictId(district),
+                deprivation: magnat_agents::DeprivationPressure::default(),
                 ambition: Q::new(50),
                 loyalty: Q::new(50),
                 job: None,
@@ -102,6 +106,7 @@ impl Workforce for TestPeople {
         Some(PersonFacts {
             vitals: o.vitals,
             district: o.district,
+            deprivation: o.deprivation,
             ambition: o.ambition,
             loyalty: o.loyalty,
             job: o.job,
@@ -1195,5 +1200,159 @@ mod zdarzenia_zyciowe {
             "rynek pracy zwolnił etat, którego nikt nie opuścił"
         );
         let _ = SITE_KEY_BASE;
+    }
+}
+
+// ── R2-WP16: skutki deprywacji, które nikt nie stosował ──────────────────────────
+//
+// Dwa skutki z `data/needs/needs.ron` mają w `DeprivationEffectsSystem` puste ramię
+// `match` i nie mają czytelnika nigdzie indziej: `ProductivityLoss` (głód) i `AmbitionGain`
+// (rozwój). Dane deklarują je od M3a, komentarz mówi „czeka na M7", a M7 jest zamknięte
+// od czterech faz. Testy stoją na **prawdziwym świecie**, bo atrapa `TestPeople` potrzeb
+// nie zna, a usterka siedzi dokładnie w porcie produkcyjnym (`WorldWorkforce::facts`).
+
+mod deprywacja {
+    use super::{firma, role, tuning, zaklad, SPAWACZ, WIDELKI_SPAWACZ};
+    use magnat_agents::{
+        DemographyTable, Employment as AgentEmployment, Household, Identity, NeedTable, Needs,
+        Personality, Population, Residence, Skills, Vitals,
+    };
+    use magnat_core::{CitizenId, Money, NeedKind, SimMinute, SiteId, Tick, Q};
+    use magnat_economy::labor::{system::WorldWorkforce, LaborMarket, Workforce};
+    use magnat_ecs::World;
+    use magnat_firms::{Employment, Firms};
+
+    const PLACA: Money = Money(500_000);
+
+    /// Świat z jednym zakładem, jednym gospodarstwem i jednym spawaczem o zadanych
+    /// poziomach potrzeb. Wszystko poza `needs` jest identyczne w obu przebiegach —
+    /// ta sama forma, ta sama umiejętność, ta sama osobowość.
+    fn swiat(needs: Needs) -> (World, Firms, LaborMarket, CitizenId, SiteId) {
+        let mut world = World::new(11);
+        magnat_agents::register(&mut world, NeedTable::load_default().expect("data/needs"));
+        magnat_agents::society::register_society(
+            &mut world,
+            DemographyTable::load_default().expect("data/demography"),
+        );
+
+        let mut firms = Firms::new();
+        let huta = firma(&mut firms, "Huta");
+        let site = zaklad(&mut firms, huta, 0, 0, &[(SPAWACZ, 4, WIDELKI_SPAWACZ)]);
+
+        let hh = world
+            .spawn()
+            .with(Household {
+                flags: Household::FLAG_ACTIVE,
+                income_monthly: PLACA,
+                ..Household::default()
+            })
+            .id();
+        world.resource_mut::<Population>().add_household(hh);
+
+        let c = world
+            .spawn()
+            .with(Identity {
+                birth_day: -40 * 360,
+                flags: Identity::FLAG_ALIVE,
+                household: hh.index(),
+                ..Identity::default()
+            })
+            .with(Vitals {
+                health: 90,
+                energy: 90,
+                mood: 40,
+                stress: 20,
+                edu_level: 3,
+                edu_field: 0,
+                status: 50,
+                _pad: 0,
+            })
+            .with(needs)
+            .with(AgentEmployment {
+                site: site.0.index(),
+                role: SPAWACZ.0,
+                flags: 0,
+                work_days: AgentEmployment::WEEKDAYS,
+                ..AgentEmployment::default()
+            })
+            .with(Residence::default())
+            .with(Personality::default())
+            .with(Skills::default())
+            .id();
+        world.resource_mut::<Population>().add_citizen(c);
+
+        let site_mut = firms.site_mut(site).expect("zakład");
+        site_mut.positions[0].filled.push(Employment::new(
+            CitizenId(c),
+            SPAWACZ,
+            PLACA,
+            SimMinute(0),
+            magnat_agents::ShiftKind::Day,
+            hh.index(),
+        ));
+
+        let m = LaborMarket::new(tuning(), role());
+        (world, firms, m, CitizenId(c), site)
+    }
+
+    fn syty() -> Needs {
+        Needs::default()
+    }
+
+    fn glodny() -> Needs {
+        let mut n = Needs::default();
+        n.set(NeedKind::Hunger, Q::new(0));
+        n
+    }
+
+    /// Ocena pracownika po dobie kadrowej. `perf_ema` liczy się wprost
+    /// z `effective_labor`, więc jest najbliższym obserwowalnym śladem produktywności.
+    fn ocena(world: &mut World, firms: &mut Firms, m: &mut LaborMarket, site: SiteId) -> u16 {
+        let mut people = WorldWorkforce::new(world);
+        m.step_day(firms, &mut people, 7, Tick(1440));
+        firms.site(site).expect("zakład").positions[0].filled[0].perf_ema
+    }
+
+    /// Pozycja 15 wykazu: `ProductivityLoss` jest jawnie pominięty w systemie skutków.
+    ///
+    /// Przed naprawą obie oceny są **identyczne**: głód zjada `Vitals.energy` dopiero
+    /// przez `EnergyLoss`, a osobny mnożnik produktywności z danych nie ma czytelnika.
+    #[test]
+    fn glod_obniza_produktywnosc_pracownika() {
+        let (mut wa, mut fa, mut ma, _, sa) = swiat(syty());
+        let (mut wb, mut fb, mut mb, _, sb) = swiat(glodny());
+        let syty = ocena(&mut wa, &mut fa, &mut ma, sa);
+        let glodny = ocena(&mut wb, &mut fb, &mut mb, sb);
+        assert!(
+            glodny < syty,
+            "głodny pracownik ma tę samą ocenę co najedzony: {glodny} vs {syty}"
+        );
+    }
+
+    /// Pozycja 15 wykazu, druga połowa: `AmbitionGain` też nie ma czytelnika.
+    ///
+    /// Ambicja obniża próg zmiany pracy (`switch_threshold_bp`) i to jest gotowy
+    /// kanał — brakuje tylko tego, żeby deprywacja rozwoju do niej dotarła.
+    /// Przed naprawą obie ambicje są równe, bo `facts` czyta samą cechę osobowości.
+    #[test]
+    fn deprywacja_rozwoju_podnosi_ambicje() {
+        let mut bez_rozwoju = Needs::default();
+        bez_rozwoju.set(NeedKind::Development, Q::new(0));
+        let (mut wa, _, _, ca, _) = swiat(syty());
+        let (mut wb, _, _, cb, _) = swiat(bez_rozwoju);
+        let a = WorldWorkforce::new(&mut wa)
+            .facts(ca)
+            .expect("fakty")
+            .ambition;
+        let b = WorldWorkforce::new(&mut wb)
+            .facts(cb)
+            .expect("fakty")
+            .ambition;
+        assert!(
+            b > a,
+            "deprywacja rozwoju nie ruszyła ambicji: {} vs {}",
+            b.get(),
+            a.get()
+        );
     }
 }

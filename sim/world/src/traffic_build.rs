@@ -38,8 +38,11 @@ pub const FUEL_STATION_KEY: &str = "petrol_station";
 /// polskiej motoryzacji przełomu lat 90.: ~160 aut na 1000 mieszkańców przy
 /// gospodarstwie ~2,7-osobowym to ~430 aut na 1000 gospodarstw.
 ///
-/// `ponytail:` sufit nazwany — posiadanie auta nie zależy od zamożności. Ścieżka
-/// wyjścia: próg majątkowy, gdy M5 wprowadzi budżet gospodarstwa domowego.
+/// `ponytail:` sufit nazwany — posiadanie auta nie zależy od zamożności ani przy
+/// zasiedlaniu, ani później: flota obsadza się raz i nikt jej potem nie tworzy ani nie
+/// kasuje. Ścieżka wyjścia ma od `R2-WP13` **adres, a nie kierunek**: pakiet `R2-WP38`
+/// (pozycja 13 wykazu `R2`, decyzja `D-N12`) wnosi cykl życia pojazdu i miesięczny
+/// przegląd z progiem z `data/roads/mode_choice.ron`.
 pub const MOTORISATION_PER_MILLE: u16 = 430;
 
 /// Udziały klas pojazdów w promilach, w kolejności katalogu. Suma musi dać 1000.
@@ -522,39 +525,6 @@ pub fn install_traffic(
         network,
     );
 }
-
-/// Dochód netto gospodarstw w groszach na godzinę, indeksowany indeksem encji GD.
-///
-/// `income_monthly` jest brutto-miesięczny; dzielimy przez typowy miesięczny czas
-/// pracy. Podatek dochodowy jest w M8 — do tego czasu „netto" znaczy „to, co
-/// gospodarstwo widzi", i jest to ta sama liczba.
-#[must_use]
-pub fn dochody_gospodarstw(world: &World) -> Vec<i64> {
-    let mut out: Vec<i64> = Vec::new();
-    for e in world.resource::<Population>().citizens() {
-        let Some(id) = world.get::<Identity>(*e).copied() else {
-            continue;
-        };
-        if id.household == u32::MAX {
-            continue;
-        }
-        let Some(hh) = hh_entity(world, id.household) else {
-            continue;
-        };
-        let Some(h) = world.get::<Household>(hh).copied() else {
-            continue;
-        };
-        if out.len() <= id.household as usize {
-            out.resize(id.household as usize + 1, 0);
-        }
-        out[id.household as usize] = h.income_monthly.0 / WORK_HOURS_PER_MONTH;
-    }
-    out
-}
-
-/// Typowy miesięczny czas pracy — 168 godzin (21 dni roboczych × 8 h w kalendarzu
-/// 360-dniowym z `K-1`).
-const WORK_HOURS_PER_MONTH: i64 = 168;
 
 /// Rejestracja samych komponentów pojazdu — musi się wydarzyć **przed** obsadzeniem
 /// floty, bo `spawn().with(...)` wymaga zarejestrowanego typu.

@@ -202,6 +202,50 @@ pub fn register_traffic(world: &mut World, services: TrafficServices, network: T
     world.register_resource_hash::<TrafficServices>();
 }
 
+/// Typowy miesięczny czas pracy — 168 godzin (21 dni roboczych × 8 h w kalendarzu
+/// 360-dniowym z `K-1`).
+const WORK_HOURS_PER_MONTH: i64 = 168;
+
+/// Dochód netto gospodarstw w groszach na godzinę, indeksowany indeksem encji GD.
+///
+/// `income_monthly` jest miesięczny; dzielimy przez typowy miesięczny czas pracy.
+/// Podatek dochodowy potrąca się już przy wypłacie (`K-57`), więc „netto" znaczy
+/// tu „to, co gospodarstwo widzi", i jest to ta sama liczba.
+///
+/// **Jedna reguła, dwóch wołających** (`R2-WP13`): zasiedlenie świata (`sim/world`,
+/// raz) i dobowe odświeżenie w [`TrafficSystem`] (co dobę). Mieszka w `sim/traffic`,
+/// bo `sim/world` zależy od niego, nigdy odwrotnie — a druga kopia rozjechałaby się
+/// przy pierwszej zmianie jednostki.
+///
+/// Przeliczenie idzie **całą tablicą**, a nie przyrostem per zdarzenie, i to jest
+/// świadome: przyrostowa denormalizacja dochodu była przyczyną obu usterek
+/// zamkniętych przez `K-93`, bo nikt nie odpowiadał za to, żeby każde `+wage` miało
+/// parę `−wage`. Raz na dobę po wszystkich mieszkańcach kosztuje tyle, co jeden
+/// przebieg listy — a nie ma jak się rozjechać.
+#[must_use]
+pub fn household_incomes(world: &World) -> Vec<i64> {
+    let mut out: Vec<i64> = Vec::new();
+    for e in world.resource::<magnat_agents::Population>().citizens() {
+        let Some(id) = world.get::<magnat_agents::Identity>(*e).copied() else {
+            continue;
+        };
+        if id.household == u32::MAX {
+            continue;
+        }
+        let Some(hh) = magnat_agents::demography::household_by_index(world, id.household) else {
+            continue;
+        };
+        let Some(h) = world.get::<magnat_agents::Household>(hh).copied() else {
+            continue;
+        };
+        if out.len() <= id.household as usize {
+            out.resize(id.household as usize + 1, 0);
+        }
+        out[id.household as usize] = h.income_monthly.0 / WORK_HOURS_PER_MONTH;
+    }
+    out
+}
+
 /// Krok minutowy warstwy mezo: wysłanie zleceń, przejazd, rozliczenie.
 pub struct TrafficSystem {
     desc: SystemDesc,
@@ -243,6 +287,13 @@ impl System for TrafficSystem {
         let catalog = oracle.catalog().clone();
         // Doba świata — pogoda przelicza się tylko przy jej zmianie (`D4`).
         oracle.set_day(u64::from(now) / 1440);
+        // Dochody gospodarstw raz na dobę (`R2-WP13`). Wartość czasu wychodzi z nich
+        // i waży największy składnik kosztu uogólnionego, więc tablica zamrożona
+        // na stanie z generacji świata znaczyła, że awans i utrata pracy nie zmieniają
+        // wyboru środka transportu ani razu przez całą sesję.
+        if now.is_multiple_of(1440) {
+            oracle.set_incomes(household_incomes(world));
+        }
         // Blokady parkingowe, które wygasły: podróż, która nigdy nie wyruszyła, nie
         // ma prawa trzymać miejsca (zawór, nie ścieżka główna — patrz `parking.rs`).
         oracle.with_parking(|p| p.expire(SimMinute(u64::from(now))));
