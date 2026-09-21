@@ -6,7 +6,7 @@
 //! ten hash rusza. Komponent poza hashem to dwa przebiegi jednego ziarna, które
 //! rozjeżdżają się bez śladu.
 
-use magnat_core::{DecisionReason, DistrictId, SimCalendar, SimMinute, Tick};
+use magnat_core::{CitizenReason, DecisionReason, DistrictId, SimCalendar, SimMinute, Tick};
 use magnat_ecs::World;
 use magnat_firms::firm::{Firm, FirmStatus, Owner};
 use magnat_firms::systems::register_firms;
@@ -183,10 +183,10 @@ fn dziennik_decyzji_rozroznia_powod() {
         f.log(
             FirmKey(1),
             Tick(5),
-            DecisionReason::NeedCritical {
+            DecisionReason::Citizen(CitizenReason::NeedCritical {
                 need: magnat_core::NeedKind::Hunger,
                 level: magnat_core::Q::new(10),
-            },
+            }),
         );
     });
     assert_ne!(a, b);

@@ -371,6 +371,7 @@ pub fn run(a: &DayArgs) -> Result<std::process::ExitCode, Box<dyn std::error::Er
                                     to: cel,
                                     depart: MinuteOfDay::new(slot.start_min),
                                     slot: e.slot,
+                                    purpose: slot.purpose(),
                                 },
                                 &w,
                                 &mut q,

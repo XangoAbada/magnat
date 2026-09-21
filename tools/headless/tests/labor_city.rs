@@ -7,7 +7,7 @@
 //! przez `--include-ignored`.
 
 use magnat_agents::Employment;
-use magnat_core::{Entity, SiteId};
+use magnat_core::{Entity, FirmReason, SiteId};
 use magnat_economy::labor::{LaborHandle, LaborSystem};
 use magnat_ecs::{App, ScheduleBuilder};
 use magnat_firms::systems::FirmSystem;
@@ -201,7 +201,7 @@ fn zaklady_dostaja_menedzerow_i_jakosc_zarzadzania_przestaje_byc_stala() {
         .filter(|w| {
             matches!(
                 w.reason,
-                magnat_core::DecisionReason::ManagerAssigned { .. }
+                magnat_core::DecisionReason::Firm(FirmReason::ManagerAssigned { .. })
             )
         })
         .count();

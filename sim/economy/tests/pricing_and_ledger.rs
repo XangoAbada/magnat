@@ -7,7 +7,9 @@
 mod common;
 
 use magnat_agents::{FulfilOutcome, FulfilRequest, Household};
-use magnat_core::{DecisionReason, Entity, HouseholdId, Money, NeedKind, PlaceRef, Qty, Tick};
+use magnat_core::{
+    DecisionReason, Entity, FirmReason, HouseholdId, Money, NeedKind, PlaceRef, Qty, Tick,
+};
 use magnat_economy::{
     settle_transactions, Books, CompetitorRef, EconomyData, LedgerAccount, LostSaleTracking,
     Market, PricePolicy, PurchaseIntent,
@@ -208,7 +210,7 @@ fn kazda_przecena_ma_powod() {
     assert!(!log.is_empty(), "sklep nie ruszył ani razu ceny");
     for r in &log {
         assert!(
-            matches!(r, DecisionReason::Repricing { .. }),
+            matches!(r, DecisionReason::Firm(FirmReason::Repricing { .. })),
             "powód spoza bloku M5c: {r:?}"
         );
         assert_ne!(r.discriminant(), 0, "powód nienazwany");

@@ -12,7 +12,7 @@
 //! i świat z ich formą. Osobny system musiałby wyjąć rejestr z ECS-u drugi raz w tej
 //! samej dobie.
 
-use magnat_core::{DecisionReason, GoodId, Money, SimMinute, TechId, Tick};
+use magnat_core::{DecisionReason, FirmReason, GoodId, Money, SimMinute, TechId, Tick};
 use magnat_ecs::World;
 use magnat_firms::rnd::{ChargeKind, PlantEffectKind, RndCharge, RndDay, RndOutcome};
 use magnat_firms::{firm_id, Firms, RndData, RoleTable};
@@ -98,11 +98,11 @@ fn zapisz_powody(firms: &mut Firms, data: &RndData, w: &RndOutcome, now: SimMinu
         if let Some(f) = firms.get_mut(*key) {
             f.log_decision(
                 tick,
-                DecisionReason::ResearchStarted {
+                DecisionReason::Firm(FirmReason::ResearchStarted {
                     tech: *tech,
                     cost_rp: node.cost_rp,
                     months_est: miesiecy,
-                },
+                }),
             );
         }
     }
@@ -112,12 +112,12 @@ fn zapisz_powody(firms: &mut Firms, data: &RndData, w: &RndOutcome, now: SimMinu
         if let Some(f) = firms.get_mut(*key) {
             f.log_decision(
                 tick,
-                DecisionReason::TechDiscovered {
+                DecisionReason::Firm(FirmReason::TechDiscovered {
                     tech: *tech,
                     patented: *patent,
                     rp_spent: node.cost_rp,
                     months: miesiecy,
-                },
+                }),
             );
         }
     }
@@ -131,11 +131,11 @@ fn zapisz_powody(firms: &mut Firms, data: &RndData, w: &RndOutcome, now: SimMinu
         if let Some(f) = firms.get_mut(*key) {
             f.log_decision(
                 tick,
-                DecisionReason::LicenseSigned {
+                DecisionReason::Firm(FirmReason::LicenseSigned {
                     tech: *tech,
                     licensor: firm_id(*licensor),
                     royalty_bp: royalty,
-                },
+                }),
             );
         }
     }
@@ -223,17 +223,17 @@ fn tx_kind(c: &RndCharge) -> TxKind {
 
 fn powod(c: &RndCharge) -> DecisionReason {
     match c.kind {
-        ChargeKind::Materials { tech } => DecisionReason::ResearchStarted {
+        ChargeKind::Materials { tech } => DecisionReason::Firm(FirmReason::ResearchStarted {
             tech,
             cost_rp: 0,
             months_est: 0,
-        },
+        }),
         ChargeKind::LicenseUpfront { tech, licensor } | ChargeKind::Royalty { tech, licensor } => {
-            DecisionReason::LicenseSigned {
+            DecisionReason::Firm(FirmReason::LicenseSigned {
                 tech,
                 licensor: firm_id(licensor),
                 royalty_bp: 0,
-            }
+            })
         }
     }
 }
@@ -307,7 +307,10 @@ fn wpusc_na_polki(world: &mut World, firms: &mut Firms, w: &RndOutcome, tick: Ti
     };
     for (key, tech, good, shops) in wystawione {
         if let Some(f) = firms.get_mut(key) {
-            f.log_decision(tick, DecisionReason::ProductLaunched { good, tech, shops });
+            f.log_decision(
+                tick,
+                DecisionReason::Firm(FirmReason::ProductLaunched { good, tech, shops }),
+            );
         }
     }
 }

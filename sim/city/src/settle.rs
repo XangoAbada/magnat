@@ -11,7 +11,7 @@
 //! najgorszą z możliwych odpowiedzi — firma bez gotówki to normalny stan
 //! gospodarki, a nie błąd programu.
 
-use magnat_core::{AbateReason, DecisionReason, Money, SimCalendar, TaxKind, Tick};
+use magnat_core::{AbateReason, CityReason, DecisionReason, Money, SimCalendar, TaxKind, Tick};
 use magnat_economy::{Books, ChargeKind, Market, TxKind, TxMemo};
 
 use crate::calc::late_interest;
@@ -66,10 +66,10 @@ pub fn settle_due(
             TxKind::TaxPayment {
                 charge: ChargeKind(c.kind.as_index() as u16),
             },
-            DecisionReason::TaxSettled {
+            DecisionReason::City(CityReason::TaxSettled {
                 kind: c.kind,
                 amount: c.amount,
-            },
+            }),
         );
         if books
             .transfer(zrodlo, konto_miasta, c.amount, memo, t)

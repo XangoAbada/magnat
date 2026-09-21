@@ -19,7 +19,8 @@
 use std::collections::BTreeMap;
 
 use magnat_core::{
-    DecisionReason, DistrictId, Money, SiteId, StateHasher, TenderId, TenderKind, Tick, Q,
+    CityReason, DecisionReason, DistrictId, Money, SiteId, StateHasher, TenderId, TenderKind, Tick,
+    Q,
 };
 use magnat_firms::FirmKey;
 
@@ -198,11 +199,11 @@ impl TenderRegistry {
         });
         Some((
             id,
-            DecisionReason::TenderPublished {
+            DecisionReason::City(CityReason::TenderPublished {
                 subject: subject.kind,
                 subject_id: subject.id,
                 budget,
-            },
+            }),
         ))
     }
 
@@ -254,13 +255,13 @@ impl TenderRegistry {
                 // nikt", a przedmiot wraca na rynek. Miasto robi tę usługę samo
                 // i płaci za nią plan, dopóki ktoś nie stanie do następnego.
                 x.closed = true;
-                powody.push(DecisionReason::TenderAwarded {
+                powody.push(DecisionReason::City(CityReason::TenderAwarded {
                     subject: x.subject.kind,
                     price: Money::ZERO,
                     score_bp: 0,
                     runner_up_bp: 0,
                     bids: 0,
-                });
+                }));
                 continue;
             };
             let drugi = punkty.get(1).map_or(0, |(s, _)| *s);
@@ -281,13 +282,13 @@ impl TenderRegistry {
                     until: Tick(t.0 + u64::from(contract_months) * 43_200),
                 },
             );
-            powody.push(DecisionReason::TenderAwarded {
+            powody.push(DecisionReason::City(CityReason::TenderAwarded {
                 subject: x.subject.kind,
                 price: b.price,
                 score_bp: u16::try_from(score).unwrap_or(u16::MAX),
                 runner_up_bp: u16::try_from(drugi).unwrap_or(u16::MAX),
                 bids: u8::try_from(x.bids.len()).unwrap_or(u8::MAX),
-            });
+            }));
         }
         powody
     }
@@ -447,7 +448,7 @@ mod tests {
         assert_eq!(powody.len(), 1);
         assert!(matches!(
             powody[0],
-            DecisionReason::TenderAwarded { bids: 0, .. }
+            DecisionReason::City(CityReason::TenderAwarded { bids: 0, .. })
         ));
         // Postępowanie jest zamknięte, więc następna doba nie liczy go od nowa…
         assert!(r.close_due(24, Tick(14 * 1_440 + 1_440)).is_empty());

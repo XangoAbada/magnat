@@ -12,7 +12,7 @@
 
 use magnat_agents::demography::InheritanceHook;
 use magnat_agents::Household;
-use magnat_core::{CitizenId, DecisionReason, Money, Tick};
+use magnat_core::{CitizenId, CitizenReason, DecisionReason, Money, Tick};
 use magnat_ecs::{CommandBuffer, World};
 use magnat_firms::{FirmKey, Firms, Owner};
 
@@ -116,10 +116,10 @@ impl InheritanceHook for EconomyInheritance {
                 firms.log(
                     key,
                     t,
-                    DecisionReason::Inheritance {
+                    DecisionReason::Citizen(CitizenReason::Inheritance {
                         permille: 1_000,
                         heirs: 0,
-                    },
+                    }),
                 );
                 continue;
             }
@@ -141,10 +141,10 @@ impl InheritanceHook for EconomyInheritance {
             firms.log(
                 key,
                 t,
-                DecisionReason::Inheritance {
+                DecisionReason::Citizen(CitizenReason::Inheritance {
                     permille: 1_000,
                     heirs: heirs.len().min(255) as u8,
-                },
+                }),
             );
         }
     }

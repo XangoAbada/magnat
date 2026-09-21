@@ -21,8 +21,8 @@
 //! kryterium ukończenia WP7 i jedyna własność, której ten moduł musi dowieść.
 
 use magnat_core::{
-    DayOfWeek, DecisionReason, DistrictId, HashState, Money, PermitId, PermitKind, SiteId,
-    StateHasher, Tick,
+    CityReason, DayOfWeek, DecisionReason, DistrictId, HashState, Money, PermitId, PermitKind,
+    SiteId, StateHasher, Tick,
 };
 
 use crate::tuning::CityTuning;
@@ -290,10 +290,10 @@ pub fn process_queue(
                 wydane.push(id);
                 powody.push((
                     reg.permits[i].applicant,
-                    DecisionReason::PermitIssued {
+                    DecisionReason::City(CityReason::PermitIssued {
                         kind: reg.permits[i].kind,
                         waited_days: czekal,
-                    },
+                    }),
                 ));
             } else {
                 reg.permits[i].status = PermitStatus::UnderReview;

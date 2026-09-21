@@ -1,16 +1,16 @@
 citizen 77 | day 3 | Thursday | age 34
-00:00-06:48 Sleep    home     NeedCritical { need: Sleep, level: Q(35) }
-06:48-07:08 Idle     home     NeedCritical { need: Hygiene, level: Q(30) }
-07:08-07:38 Eat      home     NeedCritical { need: Hunger, level: Q(45) }
-07:38-07:42 Commute  #5       Commitment { kind: Childcare }
-07:42-07:52 Errand   #5       Commitment { kind: Childcare }
-07:52-08:00 Commute  #2       Commitment { kind: Commute }
-08:00-16:00 Work     #2       Commitment { kind: Work }
-16:00-16:08 Commute  #5       Commitment { kind: Childcare }
-16:08-16:18 Errand   #5       Commitment { kind: Childcare }
-16:18-16:22 Commute  #3       StockBelowThreshold { cat: Food, days_left: 1 }
-16:22-16:52 Shop     #3       ChosenOnRoute { detour_min: 8, direct_min: 4 }
-16:52-17:00 Commute  home     Commitment { kind: Commute }
-17:00-17:30 Eat      home     NeedCritical { need: Hunger, level: Q(45) }
-17:30-22:27 Leisure  home     FreeTimePreference { trait_id: Openness, weight: 39 }
-22:27-00:00 Sleep    home     NeedCritical { need: Sleep, level: Q(35) }
+00:00-06:48 Sleep    home     Citizen(NeedCritical { need: Sleep, level: Q(35) })
+06:48-07:08 Idle     home     Citizen(NeedCritical { need: Hygiene, level: Q(30) })
+07:08-07:38 Eat      home     Citizen(NeedCritical { need: Hunger, level: Q(45) })
+07:38-07:42 Commute  #5       Citizen(Commitment { kind: Childcare })
+07:42-07:52 Errand   #5       Citizen(Commitment { kind: Childcare })
+07:52-08:00 Commute  #2       Citizen(Commitment { kind: Commute })
+08:00-16:00 Work     #2       Citizen(Commitment { kind: Work })
+16:00-16:08 Commute  #5       Citizen(Commitment { kind: Childcare })
+16:08-16:18 Errand   #5       Citizen(Commitment { kind: Childcare })
+16:18-16:22 Commute  #3       Citizen(StockBelowThreshold { cat: Food, days_left: 1 })
+16:22-16:52 Shop     #3       Citizen(ChosenOnRoute { detour_min: 8, direct_min: 4 })
+16:52-17:00 Commute  home     Citizen(Commitment { kind: Commute })
+17:00-17:30 Eat      home     Citizen(NeedCritical { need: Hunger, level: Q(45) })
+17:30-22:27 Leisure  home     Citizen(FreeTimePreference { trait_id: Openness, weight: 39 })
+22:27-00:00 Sleep    home     Citizen(NeedCritical { need: Sleep, level: Q(35) })

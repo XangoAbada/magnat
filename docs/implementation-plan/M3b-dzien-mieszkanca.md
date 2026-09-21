@@ -193,7 +193,7 @@ podfaza nie jest tu przeprojektowywana.
 
 ---
 
-## Korekty planu wpisane po implementacji M3b
+## Zmiany wpisane po M3b
 
 Zgodnie z `K-18`. Gwiazdka = zmiana zakresu albo kryterium. Litera `F`, bo `B`
 zajmują zmiany przyniesione przez M3a, a `D` — korekty własne M3a.

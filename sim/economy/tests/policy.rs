@@ -10,8 +10,8 @@
 mod common;
 
 use magnat_core::{
-    BuildingId, CitizenId, DecisionReason, DistrictId, GoodId, Money, PolicyId, Qty, SimMinute,
-    SiteId, Tick, Q,
+    BuildingId, CitizenId, DecisionReason, DistrictId, FirmReason, GoodId, Money, PolicyId, Qty,
+    SimMinute, SiteId, Tick, Q,
 };
 use magnat_economy::{EconomyData, Market, PricePolicy};
 use magnat_firms::{
@@ -150,7 +150,7 @@ fn zaklad_gracza_i_zaklad_ai_wykonuja_regule_tym_samym_kodem() {
                 .log
                 .iter()
                 .map(|w| w.reason)
-                .filter(|r| matches!(r, DecisionReason::PolicyApplied { .. }))
+                .filter(|r| matches!(r, DecisionReason::Firm(FirmReason::PolicyApplied { .. })))
                 .collect()
         })
         .collect();
@@ -587,4 +587,203 @@ fn dyskont_faktycznie_schodzi_ponizej_najtanszego_konkurenta() {
         }
         inne => panic!("reguła nie ustawiła ceny stałej, tylko {inne:?}"),
     }
+}
+
+/// R2-WP22 (poz. 53): `RemoveFromShelf` zdejmuje linię z półki i zwalnia ofertę.
+///
+/// Do R2e akcja przechodziła walidator, wykonywała się i **nie robiła nic** —
+/// wykonawca zwracał `PolicyOutcome::Blind`, bo zwolnienie oferty w arenie razem
+/// z linią półki nie miało ścieżki. Gracz wybierał ją z listy w edytorze reguł,
+/// więc był to nie dług, tylko obietnica bez pokrycia: polityka „Nabiał —
+/// nie wyrzucamy" z `M9d` §5.6 kończyła się akcją, która nic nie wycofywała.
+///
+/// Przed naprawą oferta stoi dalej i `blind` rośnie; po naprawie linia znika,
+/// oferta wraca do areny, a `applied` rośnie.
+#[test]
+fn wycofanie_z_polki_zdejmuje_linie_i_zwalnia_oferte() {
+    use magnat_policy::{Action, Cadence, ConditionExpr, GoodRef, Rule};
+
+    let g = mydlo();
+    let b = bench(91, &[Vec2::new(300.0, 0.0)]);
+    b.market.deliver_now(
+        b.sites[0],
+        g,
+        Qty(2_000_000),
+        Money(2_000 * WHOLESALE_BASE),
+        None,
+        Tick(0),
+    );
+    b.market.restock_shelves();
+    b.market.rebuild_index(&magnat_jobs::JobPool::new(1));
+
+    let ofert_przed = b.market.offer_count();
+    assert!(
+        b.market.shelf_price(b.sites[0], g).is_some(),
+        "towar nie stanął na półce — test nie ma czego zdejmować"
+    );
+
+    // Polityka bezwarunkowa: wycofaj ten towar. Zakres `Always`, bo sprawdzamy
+    // wykonawcę, a nie warunek.
+    let polityka = magnat_policy::FirmPolicy {
+        id: PolicyId(77),
+        name: "Wycofanie".to_string(),
+        domain: PolicyDomain::Stock,
+        rules: vec![Rule {
+            when: ConditionExpr::Always,
+            then: [Action::RemoveFromShelf(GoodRef::Id(g))]
+                .into_iter()
+                .collect(),
+            enabled: true,
+            note: String::new(),
+        }],
+        fallback: None,
+        cadence: Cadence::Daily,
+        cooldown_h: 0,
+    };
+    let mut f = firmy(&b, &polityka, Some(ManagerStyle::Bureaucrat));
+    let d = doba(&b.market, &mut f, Tick(DOBA));
+
+    // Polityka chodzi raz na towar stojący na półce, a wycofuje **wskazany** —
+    // więc pierwsze przejście zdejmuje linię, a kolejne trafiają w pustkę i są
+    // ślepe. To jest poprawne: „zdjąłem coś, czego nie miałem" byłoby nieprawdą.
+    // Przed naprawą `applied` było zerem, bo wykonawca zwracał `Blind` zawsze.
+    assert!(d.applied >= 1, "akcja nie wykonała się: {d:?}");
+    assert!(
+        b.market.shelf_price(b.sites[0], g).is_none(),
+        "towar został na półce mimo wycofania"
+    );
+    assert!(
+        b.market.offer_count() < ofert_przed,
+        "oferta nie wróciła do areny: {} wobec {ofert_przed}",
+        b.market.offer_count()
+    );
+}
+
+/// R2-WP22 (poz. 54): dwie reguły o różnych promieniach dają **różne** liczby.
+///
+/// Pole `radius_m` w metryce konkurencyjnej wchodziło do walidatora (limit 10 km)
+/// i **nie wchodziło do odczytu**: obraz konkurencji powstawał jednym promieniem
+/// obserwacji, więc reguła „najtańszy w 1 km" i reguła „najtańszy w 8 km" dostawały
+/// tę samą cenę. Gracz widział dwie różne reguły i jeden wynik, a PRD §6.3 cytuje
+/// „w promieniu 3 km" jako **treść** reguły.
+///
+/// Scena: dwaj konkurenci w różnej odległości i różnej cenie. Bliski jest droższy,
+/// daleki tańszy — więc zawężenie promienia ma podnieść widzianą cenę najtańszego.
+/// Przed naprawą obie liczby są równe.
+#[test]
+fn promien_metryki_zaweza_obraz_konkurencji() {
+    use magnat_policy::{Action, Cadence, ConditionExpr, Expr, GoodRef, Metric, Rule};
+
+    let g = mydlo();
+    // Nasz sklep w zerze, sąsiad bliski 400 m dalej, daleki 2 500 m dalej.
+    let b = bench(
+        93,
+        &[
+            Vec2::new(0.0, 0.0),
+            Vec2::new(400.0, 0.0),
+            Vec2::new(2_500.0, 0.0),
+        ],
+    );
+    for s in &b.sites {
+        b.market.deliver_now(
+            *s,
+            g,
+            Qty(2_000_000),
+            Money(2_000 * WHOLESALE_BASE),
+            None,
+            Tick(0),
+        );
+    }
+    b.market.restock_shelves();
+    b.market.rebuild_index(&magnat_jobs::JobPool::new(1));
+
+    let start = b.market.price_at(b.sites[0], g).expect("cena");
+    // Bliski sąsiad drożej, daleki zostaje przy cenie katalogowej. Podnosimy tylko
+    // jedną cenę, bo obniżenie drugiej przycięłoby się o ogranicznik marży
+    // (`min_margin_bp`) i obaj sąsiedzi wyszliby z tą samą kwotą — a wtedy test
+    // mierzyłby ogranicznik, nie promień.
+    b.market
+        .set_price(b.sites[1], g, Money(start.get() * 15 / 10));
+    b.market.rebuild_index(&magnat_jobs::JobPool::new(1));
+
+    // Polityka pyta o dwa promienie: ciasny (tylko bliski sąsiad) i szeroki (obaj).
+    let metryka = |r: u32| Metric::CheapestCompetitorPrice {
+        good: GoodRef::This,
+        radius_m: r,
+        basis: magnat_core::PriceBasis::GrossRetail,
+    };
+    let polityka = magnat_policy::FirmPolicy {
+        id: PolicyId(88),
+        name: "Dwa promienie".to_string(),
+        domain: PolicyDomain::Pricing,
+        rules: vec![Rule {
+            when: ConditionExpr::Cmp {
+                lhs: Expr::Metric(metryka(1_000)),
+                op: magnat_policy::CmpOp::Gt,
+                rhs: Expr::Metric(metryka(5_000)),
+            },
+            then: [Action::SetPrice {
+                good: GoodRef::This,
+                to: Expr::Metric(metryka(1_000)),
+            }]
+            .into_iter()
+            .collect(),
+            enabled: true,
+            note: String::new(),
+        }],
+        fallback: None,
+        cadence: Cadence::Daily,
+        cooldown_h: 0,
+    };
+
+    // Delegowany jest **tylko nasz sklep**: gdyby politykę dostali też sąsiedzi,
+    // przestawiliby sobie ceny i test mierzyłby własną scenę zamiast promienia.
+    let mut f = Firms::new();
+    let key = f.insert(|k| {
+        Firm::sole_owner(
+            k,
+            "Obserwator".to_owned(),
+            SimMinute(0),
+            DistrictId(0),
+            Owner::Player,
+        )
+    });
+    assert!(f.add_site(zaklad(b.sites[0], key, 0)));
+    deleguj(
+        &mut f,
+        b.sites[0],
+        polityka,
+        Some(ManagerStyle::Bureaucrat),
+        0,
+    );
+
+    // Trzy doby: pierwsza zgłasza promienie, druga buduje na nich obraz, trzecia
+    // na nim działa. Opóźnienie jest zamierzone i opisane przy `Shop::asked_radii`.
+    for d in 1..=3u64 {
+        b.market.observe_competitors(Tick(d * DOBA));
+        doba(&b.market, &mut f, Tick(d * DOBA));
+    }
+
+    let obs = b
+        .market
+        .observed_of(b.sites[0], g)
+        .expect("obraz konkurencji");
+    let ciasny = obs
+        .near
+        .iter()
+        .find(|n| n.radius_m == 1_000)
+        .expect("slot promienia 1 km");
+    let szeroki = obs
+        .near
+        .iter()
+        .find(|n| n.radius_m == 5_000)
+        .expect("slot promienia 5 km");
+    assert_eq!(ciasny.offers, 1, "w 1 km stoi dokładnie jeden konkurent");
+    assert_eq!(szeroki.offers, 2, "w 5 km stoją obaj");
+    assert!(
+        ciasny.cheapest > szeroki.cheapest,
+        "zawężenie promienia nie zmieniło ceny najtańszego: {} wobec {}",
+        ciasny.cheapest.get(),
+        szeroki.cheapest.get()
+    );
 }

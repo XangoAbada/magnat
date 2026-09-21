@@ -155,7 +155,7 @@ mod tests {
     }
 
     #[test]
-    fn linia_jest_kawalkiem_a_nagłowek_dostaje_wyroznienie() {
+    fn linia_jest_kawalkiem_a_naglowek_dostaje_wyroznienie() {
         let r = lines_titled("Klienci:\n  ktoś\n  ktoś inny\n");
         assert_eq!(r.len(), 3);
         assert_eq!(r[0].style, SpanStyle::Emphasis);

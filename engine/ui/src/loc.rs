@@ -314,12 +314,40 @@ impl Catalog {
             .map(|i| LocKey(i as u32))
     }
 
-    /// Klucz, który **musi** istnieć. Panikuje z nazwą klucza — brak napisu w katalogu
-    /// jest błędem danych wykrywanym przy starcie, nie stanem do obsłużenia w widgecie.
+    /// Klucz, który **musi** istnieć. Panikuje z nazwą klucza.
+    ///
+    /// Wolno go wołać **wyłącznie poza ścieżką rysowania** — w bramce danych, w teście
+    /// i w kodzie startowym. Do R2e wołał go `fmt_key`, czyli najszerszy pośrednik
+    /// w całym interfejsie, więc literówka w nazwie klucza wywracała **klatkę gry**.
+    /// Argument „to błąd danych wykrywany przy starcie" był przy tym nieprawdziwy:
+    /// w kodzie produkcyjnym nie było ani jednego wołania przy starcie, a bramkę
+    /// równości zbiorów `pl`/`en` trzyma [`Catalog::load`] i test — klucz, którego
+    /// nie ma w **żadnym** z dwóch plików, przechodzi jedno i drugie.
     #[must_use]
     pub fn must(&self, key: &str) -> LocKey {
         self.key(key)
             .unwrap_or_else(|| panic!("brak klucza `{key}` w data/locale/"))
+    }
+
+    /// Klucz na ścieżce rysowania: brak daje `None` i **jeden** wpis w dzienniku
+    /// deweloperskim, a nie panikę i nie wpis na klatkę.
+    ///
+    /// Dedupe jest po to, żeby brakujący klucz w nagłówku panelu nie zalał stderr
+    /// sześćdziesiąt razy na sekundę — a wtedy nikt by go i tak nie przeczytał.
+    fn key_na_ekranie(&self, key: &str) -> Option<LocKey> {
+        let k = self.key(key);
+        if k.is_none() {
+            static ZGLOSZONE: std::sync::OnceLock<
+                std::sync::Mutex<std::collections::BTreeSet<String>>,
+            > = std::sync::OnceLock::new();
+            let zbior = ZGLOSZONE.get_or_init(Default::default);
+            if let Ok(mut z) = zbior.lock() {
+                if z.insert(key.to_string()) {
+                    eprintln!("brak klucza `{key}` w data/locale/ — etykieta zostaje pusta");
+                }
+            }
+        }
+        k
     }
 
     /// Tekst bez podstawień.
@@ -366,11 +394,21 @@ impl Catalog {
         podstaw(self.text(locale, key), args)
     }
 
-    /// Skrót do `format` po kluczu tekstowym — dla ścieżek, które i tak panikują
-    /// na brakującym kluczu (renderer powodów, nagłówki karty).
+    /// Skrót do `format` po kluczu tekstowym — renderer powodów, nagłówki karty,
+    /// słowa gramatyki polityki. To jest **ścieżka rysowania**, więc brak klucza
+    /// daje pusty napis i wpis w dzienniku deweloperskim, a nie panikę: klatka gry
+    /// nie ma prawa paść od brakującego tekstu (R2-WP28, poz. 50).
     #[must_use]
     pub fn fmt_key(&self, locale: Locale, key: &str, args: &[(&str, &str)]) -> String {
-        self.format(locale, self.must(key), args)
+        self.key_na_ekranie(key)
+            .map_or_else(String::new, |k| self.format(locale, k, args))
+    }
+
+    /// Liczebnik po kluczu tekstowym, ze ścieżki rysowania. Jak [`Catalog::fmt_key`].
+    #[must_use]
+    pub fn plural_key(&self, locale: Locale, key: &str, n: u64) -> String {
+        self.key_na_ekranie(key)
+            .map_or_else(String::new, |k| self.plural(locale, k, n))
     }
 
     /// Wszystkie klucze — do testu zgodności i do diagnostyki.

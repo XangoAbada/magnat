@@ -47,10 +47,10 @@ use magnat_agents::{
     MAX_CANDIDATES,
 };
 use magnat_core::{
-    Arena, CitizenId, DecisionReason, DistrictId, FirmId, FixedCost, GoodId, HashState,
-    HouseholdId, LoanKind, Money, NeedKind, PlaceKind, PlaceRef, Qty, RejectCause, RejectCredit,
-    SimMinute, SiteId, StateHasher, StockCat, Tick, TraitId, WorldCoord, FIXED_COST_COUNT, Q,
-    STOCK_CAT_COUNT,
+    Arena, CitizenId, CitizenReason, DecisionReason, DistrictId, FirmId, FixedCost, GoodId,
+    HashState, HouseholdId, LoanKind, Money, NeedKind, PlaceKind, PlaceRef, Qty, RejectCause,
+    RejectCredit, SimMinute, SiteId, StateHasher, StockCat, Tick, TraitId, WorldCoord,
+    FIXED_COST_COUNT, Q, STOCK_CAT_COUNT,
 };
 use magnat_jobs::JobPool;
 use magnat_spatial::{GridSpec, Vec2};
@@ -397,7 +397,9 @@ pub(crate) struct MarketInner {
     order_buf: Vec<usize>,
     deliv_buf: Vec<crate::supply::Delivery>,
     /// Bufory obserwacji konkurencji — dobowy przelot, nie wolno mu alokować.
-    obs_buf: Vec<(GoodId, Money, u32, SiteId)>,
+    /// Ostatnia liczba to **odległość w metrach** — bez niej nie da się zawęzić
+    /// obrazu do promienia, o który pyta reguła (`R2-WP22`).
+    obs_buf: Vec<(GoodId, Money, u32, SiteId, u32)>,
     entry_buf: Vec<CompetitorEntry>,
     /// Skrzynka eskalacji polityk zakładów śledzonych (M9d WP9). Poza hashem,
     /// tak samo jak dziennik przecen: prowadzą ją wyłącznie zakłady oznaczone.
@@ -724,7 +726,7 @@ fn wholesale_memo(good: GoodId, qty: Qty, cat: StockCat, days_left: u8) -> TxMem
             qty,
             supplier: SupplierRef::External,
         },
-        DecisionReason::StockBelowThreshold { cat, days_left },
+        DecisionReason::Citizen(CitizenReason::StockBelowThreshold { cat, days_left }),
     )
 }
 

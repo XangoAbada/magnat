@@ -12,8 +12,8 @@ use magnat_agents::{
     MAX_CANDIDATES,
 };
 use magnat_core::{
-    DecisionReason, Entity, HouseholdId, Money, NeedKind, PlaceRef, Qty, RejectCause, SiteId,
-    StockCat, Tick, Q,
+    CitizenReason, DecisionReason, Entity, HouseholdId, Money, NeedKind, PlaceRef, Qty,
+    RejectCause, SiteId, StockCat, Tick, Q,
 };
 use magnat_economy::{settle_transactions, Books, EconomyData, Market, PurchaseIntent};
 use magnat_ecs::World;
@@ -169,10 +169,10 @@ fn zerwanie_dostaw_pustoszy_polke_ale_sklep_zostaje_widoczny() {
                 assert!(
                     matches!(
                         r,
-                        DecisionReason::OfferRejected {
+                        DecisionReason::Citizen(CitizenReason::OfferRejected {
                             cause: RejectCause::OutOfStock,
                             ..
-                        }
+                        })
                     ),
                     "sklep ma powiedzieć, **dlaczego** nie sprzedał: {r:?}"
                 );
@@ -344,10 +344,10 @@ fn kazda_decyzja_ma_powod() {
     // Brak środków ma własny powód, odróżnialny od braku towaru.
     assert!(wyniki.iter().any(|w| matches!(
         w,
-        FulfilOutcome::Refused(DecisionReason::OfferRejected {
+        FulfilOutcome::Refused(DecisionReason::Citizen(CitizenReason::OfferRejected {
             cause: RejectCause::BudgetExhausted,
             ..
-        })
+        }))
     )));
 }
 
@@ -390,10 +390,10 @@ fn wyscig_o_ostatnia_sztuke_konczy_sie_dokladnie_dziesiecioma_transakcjami() {
             FulfilOutcome::Refused(r) => {
                 assert!(matches!(
                     r,
-                    DecisionReason::OfferRejected {
+                    DecisionReason::Citizen(CitizenReason::OfferRejected {
                         cause: RejectCause::OutOfStock,
                         ..
-                    }
+                    })
                 ));
                 braki += 1;
             }

@@ -20,7 +20,7 @@
 //! z wariantami, których nikt nie wykonuje, byłby abstrakcją bez drugiego
 //! konsumenta — to samo rozstrzygnięcie, które M7e zapisał jako `BC-6`.
 
-use magnat_core::{DecisionReason, DistrictId, Money, SiteId, Tick, Trend};
+use magnat_core::{DecisionReason, DistrictId, FirmReason, Money, SiteId, Tick, Trend};
 use magnat_policy::Decided;
 use smallvec::SmallVec;
 
@@ -104,29 +104,29 @@ pub fn decide_strategic(v: &FirmView) -> Option<Decided<StrAction>> {
                 slots,
                 capex,
             },
-            DecisionReason::SiteOpened {
+            DecisionReason::Firm(FirmReason::SiteOpened {
                 district,
                 variants: u8::try_from(outlook.variants.len()).unwrap_or(u8::MAX),
                 margin_bp: u16::try_from(outlook.error_margin_bp).unwrap_or(u16::MAX),
                 trend: outlook.trend,
-            },
+            }),
         )),
         StrAction::CloseSite { site, slots } => Some(Decided::new(
             StrAction::CloseSite { site, slots },
-            DecisionReason::SiteClosed {
+            DecisionReason::Firm(FirmReason::SiteClosed {
                 // Tier strategiczny zamyka zakład **nie** z powodu ciągu strat,
                 // więc liczba miesięcy jest zerem i to jest prawda, a nie brak
                 // danych: powodem jest porównanie wariantów, nie historia.
                 months: 0,
                 margin_bp: v.site(site).and_then(|s| s.last_margin_bp).unwrap_or(0),
-            },
+            }),
         )),
         StrAction::RequestVoluntaryClosure => Some(Decided::new(
             StrAction::RequestVoluntaryClosure,
-            DecisionReason::VoluntaryClosure {
+            DecisionReason::Firm(FirmReason::VoluntaryClosure {
                 months: v.sites.iter().map(|s| s.months_in_loss).max().unwrap_or(0),
                 cash: v.cash,
-            },
+            }),
         )),
     }
 }

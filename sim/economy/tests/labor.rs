@@ -10,8 +10,8 @@ use std::collections::BTreeMap;
 
 use magnat_agents::{ShiftKind, Vitals};
 use magnat_core::{
-    hash::StateHasher, CitizenId, DecisionReason, DistrictId, Entity, HashState, JobRoleId,
-    LeaveCause, Money, NeedKind, SimMinute, SiteId, Tick, WageCause, Q,
+    hash::StateHasher, CitizenId, DecisionReason, DistrictId, Entity, FirmReason, HashState,
+    JobRoleId, LeaveCause, Money, NeedKind, SimMinute, SiteId, Tick, WageCause, Q,
 };
 use magnat_economy::labor::{LaborDay, LaborMarket, PersonFacts, Workforce};
 use magnat_firms::{
@@ -487,9 +487,9 @@ fn kazda_podwyzka_ma_powod_z_przyczyna() {
     let mut sufity = 0;
     for (_, f) in firms.iter() {
         for wpis in f.log.iter() {
-            if let DecisionReason::WageRaise {
+            if let DecisionReason::Firm(FirmReason::WageRaise {
                 delta_bp, cause, ..
-            } = wpis.reason
+            }) = wpis.reason
             {
                 // Każdy wpis niesie przyczynę; przyrost zerowy znaczy sufit i **tylko** sufit.
                 if delta_bp == 0 {
@@ -583,7 +583,7 @@ fn kazde_zatrudnienie_ma_wynik_i_drugiego_w_kolejce() {
     let mut razem = 0;
     for (_, f) in firms.iter() {
         for wpis in f.log.iter() {
-            if let DecisionReason::Hired { runner_up, .. } = wpis.reason {
+            if let DecisionReason::Firm(FirmReason::Hired { runner_up, .. }) = wpis.reason {
                 razem += 1;
                 if runner_up != i32::MIN {
                     z_konkurencja += 1;
@@ -677,7 +677,7 @@ fn odejscie_zawsze_ma_powod_po_stronie_odchodzacego() {
                     .iter()
                     .flat_map(|(_, f)| f.log.iter())
                     .find_map(|w| match w.reason {
-                        DecisionReason::JobLeft { cause, .. } => Some(cause),
+                        DecisionReason::Firm(FirmReason::JobLeft { cause, .. }) => Some(cause),
                         _ => None,
                     });
             if znaleziony.is_some() {

@@ -22,7 +22,7 @@ use magnat_agents::{
     NeedDecaySystem, NoInheritance, ReplanCooldownSystem, SkillDriftSystem, SocietySystem,
 };
 use magnat_city::{City, CitySystem, GovTuning, Government, Preference};
-use magnat_core::{PolicyKind, TaxKind};
+use magnat_core::{CityReason, PolicyKind, TaxKind};
 use magnat_economy::corpfin::system::InsolvencySystem;
 use magnat_economy::labor::LaborSystem;
 use magnat_economy::{Books, Market, MarketSystem};
@@ -236,12 +236,12 @@ fn uchwala_o_stawce_dochodzi_do_ceny_na_polce() {
             effective_from: t,
             sunset: None,
             vote: magnat_city::CouncilVote { for_bp: 10_000 },
-            reason: magnat_core::DecisionReason::TaxRateChanged {
+            reason: magnat_core::DecisionReason::City(CityReason::TaxRateChanged {
                 kind: TaxKind::Vat,
                 from_bp: u16::try_from(stara).unwrap_or(0),
                 to_bp: u16::try_from(stara.saturating_sub(500)).unwrap_or(0),
                 gap_bp: 0,
-            },
+            }),
         });
     }
     // Trzy doby: uchwała nakłada się w dobowym kroku miasta, a cena półkowa
@@ -275,4 +275,75 @@ fn uchwala_o_stawce_dochodzi_do_ceny_na_polce() {
         app.world.resource::<Books>().check_conservation().is_ok(),
         "niezmiennik pieniądza pękł po zmianie stawki"
     );
+}
+
+/// R2-WP31: sprawa o wpłatę poza rejestrem nie jest postępowaniem antymonopolowym.
+///
+/// Urząd antymonopolowy ma **dwie** przesłanki własne i obie są rynkowe: pozycja
+/// dominująca (`law::urzedy`) i zmowa cenowa (`step::kartele`). Wpłata na kampanię
+/// poza rejestrem wpłat jest czynem karalnym, a nie praktyką rynkową, i do R2e
+/// trafiała do tego samego urzędu z braku adresata. Skutek dla gracza: karta sprawy
+/// i histogram mówiły „jesteś za duży", gdy powodem była łapówka.
+///
+/// **Zmierzone przed naprawą na tym przebiegu: 42 sprawy antymonopolowe przy zerze
+/// zakładów ponad progiem udziału** — czyli kartoteka tego urzędu w całości opisywała
+/// co innego, niż mówiła jego nazwa. Test mierzy to bez zaglądania do `ballot.rs`:
+/// spraw antymonopolowych nie może być więcej, niż jest zakładów ponad progiem.
+///
+/// 260 dób, nie 150: kampanię finansuje się w chwili rozpisania wyborów, a szara
+/// strefa rośnie miesiącami. Na 150 dobach pierwsze wybory wypadają, zanim
+/// jakikolwiek sklep zaczyna ukrywać obrót — mechanizm istnieje i nie odpala się,
+/// więc test mierzyłby własny brak.
+#[test]
+#[ignore = "pełna gospodarka — uruchamiać przez --include-ignored"]
+fn wplata_poza_rejestrem_nie_jest_praktyka_monopolistyczna() {
+    use magnat_core::AgencyKind;
+
+    let app = miasto(260, 1_200, Preference::default());
+    let miasto = app.world.resource::<City>();
+    let market = app.world.resource::<Market>().clone();
+
+    let antymonopolowe = miasto.enforcement.agency(AgencyKind::Antitrust).opened;
+    let prokuratorskie = miasto.enforcement.agency(AgencyKind::Prosecution).opened;
+    assert!(
+        antymonopolowe + prokuratorskie > 0,
+        "w tym przebiegu nie otwarto ani jednej sprawy z tych dwóch — nie ma czego mierzyć"
+    );
+
+    // Ile zakładów w ogóle mogło przekroczyć próg udziału. Liczone z tej samej
+    // liczby, którą czyta `law::urzedy`: zadeklarowany utarg wobec utargu miasta.
+    let tuning = magnat_city::CityTuning::load_default().expect("data/tuning/city.ron");
+    let prog = i64::from(tuning.agencies.antitrust_share_bp);
+    let obroty: Vec<i64> = market
+        .sites()
+        .into_iter()
+        .map(|s| market.declared_revenue_recent(s, 12).get())
+        .collect();
+    let obrot_miasta: i64 = obroty.iter().sum();
+    let dominujacych = obroty
+        .iter()
+        .filter(|v| obrot_miasta > 0 && *v * 10_000 / obrot_miasta >= prog)
+        .count();
+
+    assert!(
+        antymonopolowe as usize <= dominujacych,
+        "spraw antymonopolowych {antymonopolowe}, a zakładów ponad progiem udziału          {dominujacych} — różnicę wnoszą afery kampanijne, które nie są praktyką rynkową"
+    );
+    assert!(
+        prokuratorskie > 0,
+        "wpłaty poza rejestrem były, a prokuratura nie otwarła ani jednej sprawy"
+    );
+
+    // Karta sprawy nazywa urząd po imieniu w obu językach — inaczej naprawa kończy
+    // się na kartotece i nie dochodzi do gracza.
+    let katalog = magnat_ui::Catalog::load().expect("data/locale/");
+    for jezyk in magnat_ui::Locale::ALL {
+        let nazwa =
+            magnat_ui::inspect::reason::agency_kind(&katalog, jezyk, AgencyKind::Prosecution);
+        assert!(
+            !nazwa.is_empty() && !nazwa.contains('{'),
+            "urząd bez nazwy w języku {}",
+            jezyk.code()
+        );
+    }
 }

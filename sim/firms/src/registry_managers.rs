@@ -7,7 +7,7 @@
 //! Podział jest przeniesieniem bloku, nie zmianą kształtu: `Firms` zostaje jednym
 //! typem i jednym zasobem świata.
 
-use magnat_core::{CitizenId, DecisionReason, SiteId, Tick, Q};
+use magnat_core::{CitizenId, DecisionReason, FirmReason, SiteId, Tick, Q};
 
 use crate::hr::productivity::ManagementQuality;
 use crate::hr::tuning::ManagerTuning;
@@ -115,11 +115,11 @@ impl Firms {
         if let Some(f) = self.firms.get_mut(&firma) {
             f.log_decision(
                 now,
-                DecisionReason::ManagerAssigned {
+                DecisionReason::Firm(FirmReason::ManagerAssigned {
                     site,
                     skill_mgmt: skill,
                     prev: poprzednia.0,
-                },
+                }),
             );
         }
         true
@@ -203,11 +203,11 @@ impl Firms {
             if let Some(f) = self.firms.get_mut(&firma) {
                 f.log_decision(
                     now,
-                    DecisionReason::ManagerAssigned {
+                    DecisionReason::Firm(FirmReason::ManagerAssigned {
                         site: id,
                         skill_mgmt: Q::new(zastepstwo.0),
                         prev: poprzednia.0,
-                    },
+                    }),
                 );
             }
             ile += 1;

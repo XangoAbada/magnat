@@ -119,6 +119,8 @@ impl Market {
             pricing: osobowosc,
             controllers: BTreeMap::new(),
             observed: CompetitorSnapshot::new(osobowosc.delay_days),
+            // Sklep bez przypiętej polityki nie pyta o żaden dodatkowy promień.
+            asked_radii: [0; crate::pricing::MAX_NEAR_RADII],
             ledger: Ledger::new(seed.site, seed.firm, t),
             reprice_log: Vec::new(),
             trace: crate::policy_run::PolicyTrace::default(),
@@ -461,16 +463,7 @@ impl Market {
             .filter(|g| !chciane.contains(g))
             .collect();
         for g in do_zdjecia {
-            let Some(pos) = m.shops[i].shelf.lines.iter().position(|l| l.good == g) else {
-                continue;
-            };
-            let linia = m.shops[i].shelf.lines.remove(pos);
-            m.offers.remove(linia.offer);
-            m.shops[i].controllers.remove(&g);
-            m.shops[i].inventory.reorder.remove(&g);
-            if let Some(cat) = m.goods.spec(g).map(|s| CategoryId::Stock(s.cat)) {
-                m.index.mark_dirty(cat);
-            }
+            m.zdejmij_linie(i, g);
         }
 
         // Dołożenie: nowa linia startuje z ceny katalogowej i polityki stałej.
@@ -622,4 +615,44 @@ fn dodaj_linie(m: &mut MarketInner, i: usize, site: SiteId, g: GoodId, t: Tick) 
     );
     m.index.mark_dirty(CategoryId::Stock(spec.cat));
     true
+}
+
+impl MarketInner {
+    /// Zdejmuje jedną linię z półki: linia, oferta, sterownik ceny i punkt zamówienia
+    /// schodzą **razem**.
+    ///
+    /// Zostawienie któregokolwiek z nich znaczyłoby sklep, który dalej zamawia towar,
+    /// którego nie sprzedaje, albo ofertę w arenie bez linii, która ją niosła.
+    ///
+    /// Jedna reguła, dwóch wołających: ręczny asortyment gracza
+    /// ([`Market::set_assortment`]) i akcja `RemoveFromShelf` w polityce zakładu.
+    /// Do R2e ta druga zwracała `PolicyOutcome::Blind` — przechodziła walidator,
+    /// wykonywała się i **nie robiła nic**, a gracz wybierał ją z listy w edytorze
+    /// reguł (`R2-WP22`, poz. 53). Druga kopia tej pętli rozjechałaby się z pierwszą
+    /// przy pierwszym nowym polu linii półki.
+    ///
+    /// Zapas **zostaje na zapleczu**: znika ekspozycja i oferta, czyli to, co widzi
+    /// kupujący. To jest ta sama zasada, którą `set_assortment` ma w swojej
+    /// dokumentacji, i to jest cała treść słowa „asortyment".
+    ///
+    /// Zwraca `false`, gdy tego towaru na półce nie było — akcja jest wtedy ślepa,
+    /// a nie wykonana, i polityka ma to zobaczyć.
+    pub(crate) fn zdejmij_linie(&mut self, shop: usize, good: GoodId) -> bool {
+        let Some(pos) = self.shops[shop]
+            .shelf
+            .lines
+            .iter()
+            .position(|l| l.good == good)
+        else {
+            return false;
+        };
+        let linia = self.shops[shop].shelf.lines.remove(pos);
+        self.offers.remove(linia.offer);
+        self.shops[shop].controllers.remove(&good);
+        self.shops[shop].inventory.reorder.remove(&good);
+        if let Some(cat) = self.goods.spec(good).map(|s| CategoryId::Stock(s.cat)) {
+            self.index.mark_dirty(cat);
+        }
+        true
+    }
 }

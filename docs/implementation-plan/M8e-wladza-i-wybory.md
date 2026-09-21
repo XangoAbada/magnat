@@ -253,7 +253,7 @@ zdarzenia `political/scandal` przez sondę — a ujawnienie uderza w kandydata i
 
 ---
 
-## Korekty wpisane w trakcie M8e
+## Zmiany wpisane po M8e
 
 Poprawki do **tego** dokumentu, które implementacja pokazała jako nieprawdziwe
 albo niedopowiedziane. Gwiazdka = zmiana zakresu albo kryterium.

@@ -290,7 +290,7 @@ Gdyby bryła skalowała się z działką, gospodarstwo na 20 ha dostałoby budyn
 
 ---
 
-## Korekty planu wpisane po implementacji
+## Zmiany wpisane po M2d
 
 Numeracja `E-n`; odwołania z kodu (`korekta E3`) wskazują na tę tabelę. Gwiazdką
 oznaczone te, które zmieniają **zakres albo kryterium**, a nie tylko sposób liczenia.

@@ -464,20 +464,35 @@ fn dom(ctx: &CardCtx<'_>, citizen: CitizenId) -> Option<Subject> {
     }
 }
 
-/// Pojazdy gospodarstwa. `vehicle_slots` niesie **numer miejsca we flocie**, a nie
-/// indeks encji — encja stoi w `TrafficServices::fleet` pod tym numerem.
+/// Pojazdy gospodarstwa — z `VehicleOwner`, a nie z numerów slotów.
+///
+/// Do R2e karta czytała `Household.vehicle_slots` i pokazywała **pustą listę
+/// zawsze**: pole miało czytelnika (tę funkcję), ale nie miało pisarza — M4 miał
+/// je wypełniać i nigdy tego nie zrobił. `VehicleOwner.owner` jest za to prawdziwy
+/// i jest jedynym źródłem prawdy o tym, czyj jest pojazd (`R2-WP22`).
+///
+/// `ponytail:` przejście po całej flocie, bo indeksu „gospodarstwo → pojazdy" nie
+/// ma. Sufit: karta otwiera się kliknięciem, a nie co klatkę, a flota metropolii
+/// to rząd stu tysięcy encji. Wyjście, gdy pojawi się drugi czytelnik: odwrotność
+/// `VehicleOwner` w `TrafficServices`, budowana razem z flotą.
 fn pojazdy(ctx: &CardCtx<'_>, citizen: CitizenId) -> Vec<Subject> {
     let world = &ctx.session.app.world;
-    let Some((_, hh)) = gospodarstwo(ctx, citizen) else {
+    let Some((hh_id, _)) = gospodarstwo(ctx, citizen) else {
         return Vec::new();
     };
     let Some(t) = world.get_resource::<magnat_traffic::TrafficServices>() else {
         return Vec::new();
     };
-    hh.vehicle_slots
+    let dom = hh_id.index();
+    t.fleet
         .iter()
-        .filter(|s| **s != u32::MAX)
-        .filter_map(|s| t.fleet.get(*s as usize))
+        .filter(|e| {
+            world
+                .get::<magnat_traffic::VehicleOwner>(**e)
+                .is_some_and(|o| {
+                    o.kind == magnat_traffic::OwnerKind::Household as u8 && o.owner == dom
+                })
+        })
         .map(|e| Subject::Vehicle(magnat_core::VehicleId(*e)))
         .collect()
 }

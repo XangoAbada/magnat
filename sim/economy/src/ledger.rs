@@ -812,7 +812,7 @@ mod tests {
     }
 
     #[test]
-    fn nieśledzony_zaklad_ma_salda_ale_nie_ma_dziennika() {
+    fn niesledzony_zaklad_ma_salda_ale_nie_ma_dziennika() {
         let e = Entity::new(1, NonZeroU32::MIN);
         let mut l = Ledger::new(SiteId(e), FirmId(e), Tick(0));
         sprzedaz(&mut l, 1, 260, 200);

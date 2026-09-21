@@ -133,7 +133,7 @@ strajków wiecznych.
 
 ---
 
-## Korekty planu wpisane w trakcie M10e
+## Zmiany wpisane po M10e
 
 Zgodnie z `K-18` i regułą „popraw plan, zanim napiszesz kod". Gwiazdka = zmiana
 zakresu albo kryterium. Numeracja `GE-n`.

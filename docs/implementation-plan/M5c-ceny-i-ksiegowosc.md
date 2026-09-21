@@ -204,7 +204,7 @@ miesięczna), odsetki i raty kredytu, wypłaty (M5: stała kwota, hook M7).
 
 ---
 
-## Korekty projektu technicznego M5c
+## Zmiany wpisane po M5c
 
 Zgodnie z regułą „popraw plan, zanim napiszesz kod". Gwiazdka = zmiana zakresu
 albo kryterium.

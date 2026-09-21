@@ -18,7 +18,8 @@
 //! CPI: „30 dni" i „miesiąc" są w M5 jednym pojęciem, nigdy dwoma.
 
 use magnat_core::{
-    rng, DecisionReason, HashState, LoanKind, Money, RejectCredit, StateHasher, StreamId, Tick,
+    rng, CitizenReason, DecisionReason, HashState, LoanKind, Money, RejectCredit, StateHasher,
+    StreamId, Tick,
 };
 
 use crate::books::{AccountOwner, LoanId};
@@ -190,11 +191,11 @@ impl CreditDecision {
 fn odmowa(kind: LoanKind, cause: RejectCredit, margin_bp: i32) -> CreditDecision {
     CreditDecision::Rejected {
         cause,
-        reason: DecisionReason::CreditRejected {
+        reason: DecisionReason::Citizen(CitizenReason::CreditRejected {
             kind,
             cause,
             margin_bp: margin_bp.clamp(i32::from(i16::MIN), i32::from(i16::MAX)) as i16,
-        },
+        }),
     }
 }
 
@@ -302,11 +303,11 @@ pub fn assess_credit(
     CreditDecision::Approved {
         limit,
         rate_bp,
-        reason: DecisionReason::CreditApproved {
+        reason: DecisionReason::Citizen(CitizenReason::CreditApproved {
             kind: app.kind,
             rate_bp: rate_bp.clamp(0, i32::from(i16::MAX)) as i16,
             load_bp: load_bp.clamp(0, i32::from(i16::MAX)) as i16,
-        },
+        }),
     }
 }
 
@@ -544,7 +545,9 @@ mod tests {
             CreditDecision::Rejected { cause, reason } => {
                 assert_eq!(cause, RejectCredit::DstiTooHigh);
                 match reason {
-                    DecisionReason::CreditRejected { margin_bp, .. } => assert!(margin_bp > 0),
+                    DecisionReason::Citizen(CitizenReason::CreditRejected {
+                        margin_bp, ..
+                    }) => assert!(margin_bp > 0),
                     r => panic!("{r:?}"),
                 }
             }

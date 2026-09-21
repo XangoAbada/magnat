@@ -24,8 +24,8 @@
 //! Logarytm idzie przez `core::det_math` (`K-6`), nie przez std.
 
 use magnat_core::{
-    det_math, rng, DecisionReason, GoodId, HashState, Money, PriceDriver, Qty, SiteId, StateHasher,
-    StreamId, Tick,
+    det_math, rng, DecisionReason, FirmReason, GoodId, HashState, Money, PriceDriver, Qty, SiteId,
+    StateHasher, StreamId, Tick,
 };
 
 use crate::data::PricingParams;
@@ -136,6 +136,35 @@ pub struct CompetitorEntry {
     /// „konkurencja ruszyła cennik" i jest tańsza niż trzymanie jego kopii — pole
     /// powstało w M5a właśnie na to i do M5c nie miało wołającego.
     pub rev: u32,
+    /// Zawężenia obrazu do promieni, o które pyta **polityka zakładu** (`R2-WP22`).
+    ///
+    /// `radius_m == 0` znaczy „slot pusty". Slotów są dwa, bo tyle metryk
+    /// konkurencyjnych mieści jedna polityka (`magnat_policy::MAX_COMPETITIVE`),
+    /// więc promieni na sklep jest najwyżej trzy: obserwacji plus te dwa.
+    ///
+    /// Do R2e pole `radius_m` w metryce wchodziło do walidatora (limit 10 km)
+    /// i **nie wchodziło do odczytu**: reguła z promieniem 3 km i reguła z 5 km
+    /// dostawały tę samą liczbę, bo obraz konkurencji powstawał jednym promieniem
+    /// obserwacji. Gracz widział dwie różne reguły i jeden wynik.
+    pub near: [NearRadius; MAX_NEAR_RADII],
+}
+
+/// Ile zawężeń obrazu konkurencji trzyma jeden wpis. Równe
+/// `magnat_policy::MAX_COMPETITIVE` — i to nie jest zbieg okoliczności, tylko
+/// ta sama liczba widziana raz przez walidator języka, a raz przez obserwację.
+pub const MAX_NEAR_RADII: usize = magnat_policy::MAX_COMPETITIVE;
+
+/// Obraz konkurencji zawężony do jednego promienia.
+///
+/// Osobna struktura, a nie trzy tablice obok siebie: promień, najtańszy i mediana
+/// opisują **jedną** obserwację i rozjechałyby się przy pierwszym dopisaniu pola.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub struct NearRadius {
+    /// Promień w metrach; `0` = slot pusty.
+    pub radius_m: u32,
+    pub cheapest: Money,
+    pub median: Money,
+    pub offers: u32,
 }
 
 /// Obraz konkurencji całego sklepu, posortowany po `GoodId`.
@@ -357,12 +386,12 @@ pub fn reprice(pc: &mut PriceController, ctx: &PricingCtx<'_>, t: Tick) -> Optio
     } else {
         0
     };
-    Some(DecisionReason::Repricing {
+    Some(DecisionReason::Firm(FirmReason::Repricing {
         site: ctx.site,
         good: ctx.good,
         driver,
         delta_bp,
-    })
+    }))
 }
 
 /// Cena, którą polityka policzyłaby **dziś**, bez ruszania stanu sterownika.
@@ -821,6 +850,7 @@ mod tests {
             offers: 4,
             seen_at: Tick(0),
             rev: 0,
+            near: Default::default(),
         };
         let mut gracz = PriceController::new(polityka, Money(300), Tick(0));
         gracz.delegated = true;
@@ -845,6 +875,7 @@ mod tests {
             offers: 1,
             seen_at: Tick(0),
             rev: 0,
+            near: Default::default(),
         };
         let mut pc = PriceController::new(
             PricePolicy::MatchCompetitor {

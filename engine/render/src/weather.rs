@@ -466,7 +466,7 @@ mod tests {
 
     /// Mgła rośnie z pogodą i nigdy nie schodzi poniżej bazy M1.
     #[test]
-    fn mgla_dokłada_sie_do_bazy() {
+    fn mgla_doklada_sie_do_bazy() {
         let czysto = WeatherState::default();
         let gesto = WeatherState {
             fog_density: 255,

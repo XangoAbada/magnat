@@ -1,5 +1,6 @@
 use super::canvas::wstaw;
 use super::*;
+use magnat_core::CitizenReason;
 
 /// Przekazanie dziecka w szkole.
 const ESCORT_HANDOVER_MIN: u16 = 10;
@@ -22,9 +23,9 @@ pub(super) fn faza1_zobowiazania(
     // slotem i niezależnie od tego, co z planu wyjdzie (`R2-WP3`). Przedtem
     // `household::roles` kończyło to `break`-iem i `clear()`-em bez śladu.
     if ctx.household.unescorted > 0 && !ctx.dow.is_weekend() {
-        log.skip(DecisionReason::EscortUnavailable {
+        log.skip(DecisionReason::Citizen(CitizenReason::EscortUnavailable {
             count: ctx.household.unescorted,
-        });
+        }));
     }
 
     let pracuje = ctx.employment.works_on(ctx.dow) && ctx.work.is_some();
@@ -40,7 +41,10 @@ pub(super) fn faza1_zobowiazania(
         None
     };
     if let Some((need, effect)) = absencja {
-        log.skip(DecisionReason::Deprivation { need, effect });
+        log.skip(DecisionReason::Citizen(CitizenReason::Deprivation {
+            need,
+            effect,
+        }));
         return;
     }
 
@@ -139,7 +143,7 @@ fn wstaw_zobowiazanie(
         ActivityKind::Errand => CommitmentKind::Childcare,
         _ => CommitmentKind::Commute,
     };
-    let powod = DecisionReason::Commitment { kind: rodzaj };
+    let powod = DecisionReason::Citizen(CitizenReason::Commitment { kind: rodzaj });
     if wstaw(canvas, log, kind, start, dur, cel, powod, rodzaj as u8) {
         stats.commitments += 1;
         return true;
@@ -320,7 +324,7 @@ fn wstaw_dojazd(
         start,
         dur,
         to,
-        DecisionReason::Commitment { kind },
+        DecisionReason::Citizen(CitizenReason::Commitment { kind }),
         kind as u8,
     ) {
         stats.commitments += 1;

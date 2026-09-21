@@ -17,7 +17,8 @@
 //! rzeczy, które produkują efekt byczego bicza (`R3`).
 
 use magnat_core::{
-    DecisionReason, GoodId, HashState, Mass, ShortageStageKind, SimMinute, SiteId, StateHasher,
+    DecisionReason, FirmReason, GoodId, HashState, Mass, ShortageStageKind, SimMinute, SiteId,
+    StateHasher,
 };
 
 use crate::catalog::Catalog;
@@ -275,21 +276,21 @@ pub fn review(
         if nowy_stopien.kind() != stan.stage.kind() {
             site.note(
                 now,
-                DecisionReason::Shortage {
+                DecisionReason::Firm(FirmReason::Shortage {
                     good,
                     from: stan.stage.kind(),
                     to: nowy_stopien.kind(),
                     coverage_minutes: cov,
-                },
+                }),
             );
             if let ShortageStage::Substituted { alt, quality_loss } = nowy_stopien {
                 site.note(
                     now,
-                    DecisionReason::SubstituteUsed {
+                    DecisionReason::Firm(FirmReason::SubstituteUsed {
                         good,
                         alt,
                         quality_loss,
-                    },
+                    }),
                 );
             }
         }

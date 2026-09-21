@@ -90,7 +90,7 @@ pub struct PriceInput {
     pub adj_spoil_bp: i32,
 }
 
-/// Rozbicie złożonej ceny — to z niego bierze się `DecisionReason::Repricing`.
+/// Rozbicie złożonej ceny — to z niego bierze się `DecisionReason::Firm(FirmReason::Repricing)`.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct PriceBreakdown {
     pub base: Money,

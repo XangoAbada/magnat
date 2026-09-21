@@ -10,7 +10,9 @@
 //! Tempa, progi i skutki są w `data/needs/needs.ron`. Kod zna kształt, nie liczby.
 
 use crate::components::{AgentState, Needs, Vitals};
-use magnat_core::{Cadence, DecisionReason, DeprivationEffect, NeedKind, PlaceKind, NEED_COUNT, Q};
+use magnat_core::{
+    Cadence, CitizenReason, DecisionReason, DeprivationEffect, NeedKind, PlaceKind, NEED_COUNT, Q,
+};
 use magnat_ecs::{Entity, System, SystemCtx, SystemDesc, World};
 use serde::Deserialize;
 use std::path::Path;
@@ -271,10 +273,10 @@ pub fn deprivation_of(needs: &Needs, table: &NeedTable, out: &mut Vec<DecisionRe
         // Pierwszy skutek jest tym, który mieszkaniec czuje najmocniej — kolejność
         // w danych jest kolejnością ważności, bo karta inspekcji pokazuje jeden wiersz.
         if let Some(e) = table.spec(*n).effects.first() {
-            out.push(DecisionReason::Deprivation {
+            out.push(DecisionReason::Citizen(CitizenReason::Deprivation {
                 need: *n,
                 effect: e.effect,
-            });
+            }));
         }
     }
 }
@@ -679,10 +681,10 @@ mod tests {
         assert_eq!(out.len(), 2, "powody: {out:?}");
         assert!(out.iter().any(|r| matches!(
             r,
-            DecisionReason::Deprivation {
+            DecisionReason::Citizen(CitizenReason::Deprivation {
                 need: NeedKind::Hunger,
                 ..
-            }
+            })
         )));
 
         // Potrzeby zaspokojone nie produkują powodów — karta inspekcji ma pokazywać

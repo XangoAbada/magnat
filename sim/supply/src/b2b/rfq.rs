@@ -13,8 +13,8 @@
 //! nie ma, RFQ liczy się bez rabatu i bez priorytetu — degradacja jest łagodna.
 
 use magnat_core::{
-    rng, DecisionReason, FirmId, GoodId, HashState, Mass, Money, SimMinute, SiteId, StateHasher,
-    StreamId, Tick, Q,
+    rng, DecisionReason, FirmId, FirmReason, GoodId, HashState, Mass, Money, SimMinute, SiteId,
+    StateHasher, StreamId, Tick, Q,
 };
 
 use crate::batch::SlotId;
@@ -462,12 +462,12 @@ pub fn best(rfq: &Rfq, t: &B2bTuning) -> Option<(usize, u16)> {
 /// Powód decyzji dla karty inspekcji i panelu łańcucha (00 §7).
 #[must_use]
 pub fn reason(rfq: &Rfq, q: &Quote, saving_bp: u16) -> DecisionReason {
-    DecisionReason::SupplierChosen {
+    DecisionReason::Firm(FirmReason::SupplierChosen {
         good: rfq.good,
         seller: q.seller,
         quotes: rfq.quotes.len().min(usize::from(u16::MAX)) as u16,
         saving_bp,
-    }
+    })
 }
 
 use crate::b2b::{B2b, SellerRef, Settlement};
@@ -584,14 +584,14 @@ impl B2b {
                     .enumerate()
                     .any(|(j, o)| j != i && score_raw(r, o, &t.b2b) < score_raw(r, &q, &t.b2b));
             let powod = if z_zaufania {
-                DecisionReason::TrustedSupplier {
+                DecisionReason::Firm(FirmReason::TrustedSupplier {
                     supplier: q.seller,
                     trust: self
                         .relations
                         .get(r.buyer, q.seller, r.good)
                         .map_or(magnat_core::Q::MIN, |rel| rel.trust),
                     discount_bp: q.discount_bp,
-                }
+                })
             } else {
                 reason(r, &q, przewaga)
             };

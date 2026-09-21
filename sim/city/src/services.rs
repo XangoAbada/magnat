@@ -13,7 +13,7 @@
 //!
 //! `quality` liczy się co miesiąc z czterech liczb, których żadna nie jest
 //! „jakością": pieniędzy na obsługiwaną osobę, obsady wobec etatów, stanu budynku
-//! i obłożenia. Dlatego `DecisionReason::ServiceQuality` niesie wszystkie cztery —
+//! i obłożenia. Dlatego `DecisionReason::City(CityReason::ServiceQuality)` niesie wszystkie cztery —
 //! szkoła niedofinansowana i szkoła przepełniona mają tę samą jakość z dwóch
 //! różnych powodów, a naprawia się je dwiema różnymi decyzjami.
 //!
@@ -26,7 +26,7 @@
 //! ten sam wzorzec, którym `sim/events` nakłada parametry (`CE-4`).
 
 use magnat_core::{
-    DecisionReason, DistrictId, HashState, Money, ServiceCoverage, ServiceKind, SiteId,
+    CityReason, DecisionReason, DistrictId, HashState, Money, ServiceCoverage, ServiceKind, SiteId,
     SpendCategory, StateHasher, Q, SERVICE_KIND_COUNT, SPEND_CATEGORY_COUNT,
 };
 
@@ -344,7 +344,7 @@ pub fn update_quality(
 
         powody.push((
             s.site,
-            DecisionReason::ServiceQuality {
+            DecisionReason::City(CityReason::ServiceQuality {
                 kind: s.kind,
                 district: s.district,
                 quality: s.quality,
@@ -352,7 +352,7 @@ pub fn update_quality(
                 staff_bp: u16::try_from(staff_bp).unwrap_or(u16::MAX),
                 load_bp: u16::try_from(s.utilization_bps.min(u32::from(u16::MAX)))
                     .unwrap_or(u16::MAX),
-            },
+            }),
         ));
     }
     powody

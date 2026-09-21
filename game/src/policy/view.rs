@@ -281,7 +281,7 @@ impl RuleEditorView {
             );
             return;
         };
-        let dni = c.plural(l, c.must("ui.unit.days"), u64::from(d.days));
+        let dni = c.plural_key(l, "ui.unit.days", u64::from(d.days));
         ui.label(
             egui::RichText::new(c.fmt_key(
                 l,
@@ -330,6 +330,7 @@ pub fn note_text(n: &Note, c: &magnat_ui::Catalog, l: magnat_ui::Locale) -> Stri
     let nr = |i: usize| (i + 1).to_string();
     match n {
         Note::BelowCost { rule } => k("BelowCost", &[("numer", &nr(*rule))]),
+        Note::UnknownMessage { msg } => k("UnknownMessage", &[("nr", &msg.to_string())]),
         Note::Language(d) => match d {
             Diagnostic::UnitMismatch { expected, got, .. } => k(
                 "UnitMismatch",

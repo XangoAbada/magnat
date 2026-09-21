@@ -83,7 +83,7 @@ pub fn money(c: &Catalog, l: Locale, m: Money) -> String {
 /// Liczba z jednostką odmienioną przez liczebnik: `3 sklepy`, `5 sklepów`.
 #[must_use]
 pub fn count(c: &Catalog, l: Locale, key: &str, n: u64) -> String {
-    c.plural(l, c.must(key), n)
+    c.plural_key(l, key, n)
 }
 
 /// Formatowanie dat w kalendarzu **12 × 30** (`K-1`) i tylko w nim.

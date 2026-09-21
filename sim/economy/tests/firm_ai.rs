@@ -11,8 +11,8 @@ use std::collections::BTreeMap;
 
 use common::{bench, bench_w_dzielnicy, ent, good_by_key, Bench, WHOLESALE_BASE};
 use magnat_core::{
-    DecisionReason, DistrictId, FirmStrategy, GoodId, Money, Qty, ReactionKind, SimMinute, SiteId,
-    Tick, Q,
+    DecisionReason, DistrictId, FirmReason, FirmStrategy, GoodId, Money, Qty, ReactionKind,
+    SimMinute, SiteId, Tick, Q,
 };
 use magnat_economy::ai_run::AiInputs;
 use magnat_economy::{Market, PricePolicy, PublicMarketBoard};
@@ -383,7 +383,7 @@ fn trwale_nierentowny_zaklad_zostaje_zamkniety_i_znika_z_rynku() {
         .map(|w| w.reason)
         .expect("powód w dzienniku");
     assert!(
-        matches!(powod, DecisionReason::SiteClosed { months, margin_bp } if months == 3 && margin_bp < 0),
+        matches!(powod, DecisionReason::Firm(FirmReason::SiteClosed { months, margin_bp }) if months == 3 && margin_bp < 0),
         "powód bez liczb: {powod:?}"
     );
 
@@ -492,7 +492,7 @@ fn utrata_udzialu_wyzwala_odpowiedz_z_zapisanym_powodem() {
         .map(|w| w.reason)
         .expect("powód w dzienniku");
     assert!(
-        matches!(powod, DecisionReason::CompetitiveResponse { kind, .. } if kind == ReactionKind::PriceWar),
+        matches!(powod, DecisionReason::Firm(FirmReason::CompetitiveResponse { kind, .. }) if kind == ReactionKind::PriceWar),
         "powód bez odpowiedzi: {powod:?}"
     );
 

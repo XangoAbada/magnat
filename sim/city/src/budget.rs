@@ -12,7 +12,7 @@
 //! sposobu ruszenia pieniądza niż `transfer`.
 
 use magnat_core::{
-    DecisionReason, HashState, Money, SpendCategory, StateHasher, TaxKind, Tick,
+    CityReason, DecisionReason, HashState, Money, SpendCategory, StateHasher, TaxKind, Tick,
     SPEND_CATEGORY_COUNT, TAX_KIND_COUNT,
 };
 use magnat_economy::{AccountId, Books, ProgramId, TxKind, TxMemo};
@@ -350,10 +350,10 @@ fn wydaj(
         TxKind::PublicSpend {
             program: ProgramId(cat.as_index() as u16),
         },
-        DecisionReason::PublicSpend {
+        DecisionReason::City(CityReason::PublicSpend {
             category: cat,
             amount,
-        },
+        }),
     );
     if books
         .transfer(budget.account, rest, amount, memo, t)
@@ -383,10 +383,10 @@ fn obsluz_dlug(budget: &mut CityBudget, books: &mut Books, rest: AccountId, t: T
                 TxKind::PublicSpend {
                     program: ProgramId(SpendCategory::DebtService.as_index() as u16),
                 },
-                DecisionReason::PublicSpend {
+                DecisionReason::City(CityReason::PublicSpend {
                     category: SpendCategory::DebtService,
                     amount: odsetki,
-                },
+                }),
             );
             if books
                 .transfer(budget.account, rest, odsetki, memo, t)
@@ -454,10 +454,10 @@ fn domknij_deficyt(
     }
     let nominal = Money(brakuje);
     let loan = budget.issue_loan_id();
-    let powod = DecisionReason::MunicipalBondIssued {
+    let powod = DecisionReason::City(CityReason::MunicipalBondIssued {
         coupon_bp: u16::try_from(policy.bond_coupon_bp_per_year).unwrap_or(u16::MAX),
         principal: nominal,
-    };
+    });
     if books
         .create_credit(budget.account, nominal, loan, powod, t)
         .is_err()

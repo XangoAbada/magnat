@@ -12,8 +12,8 @@
 
 use magnat_agents::SocialClass;
 use magnat_core::{
-    DecisionReason, DistrictId, Entity, FirmId, GoodId, Money, PlaceKind, PriceDriver, Qty,
-    RejectCause, SimMinute, SiteId, Tick, UtilityKind,
+    DecisionReason, DistrictId, Entity, FirmId, FirmReason, GoodId, Money, PlaceKind, PriceDriver,
+    Qty, RejectCause, SimMinute, SiteId, Tick, UtilityKind,
 };
 use magnat_economy::{
     BalanceSheet, CashFlow, CompetitorRef, CompetitorRow, CustomerStats, FinanceSummary,
@@ -210,12 +210,12 @@ fn migawka(tracking: LostSaleTracking, cash_complete: bool) -> ShopPanelSnapshot
             inventory_value: Money(412_800),
             loan: Some(LoanId(4)),
         },
-        reprices: vec![DecisionReason::Repricing {
+        reprices: vec![DecisionReason::Firm(FirmReason::Repricing {
             site,
             good: MLEKO,
             driver: PriceDriver::Policy,
             delta_bp: 1_670,
-        }],
+        })],
         good_keys: vec![
             (CHLEB, "food_bread_wheat".to_string()),
             (MLEKO, "food_milk".to_string()),

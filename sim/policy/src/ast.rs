@@ -53,6 +53,18 @@ impl Bp {
 /// są w słowniku, bo tak stanowi M9d, ale walidator je odrzuca do czasu, aż ktoś je
 /// wykona — cicha polityka bez wykonawcy byłaby gorsza od odmowy, bo gracz widziałby
 /// regułę, która „działa" i nic nie robi.
+///
+/// **Sprawdzone w R2e (poz. 55 wykazu, `R2-WP22`): odmowa działa i ma test**
+/// (`Diagnostic::DomainNotAvailable`, `validate.rs`). Cichej polityki nie ma i nigdy
+/// nie było — przegląd przed R2 zgłaszał ryzyko, które walidator już zamykał.
+///
+/// Przy okazji wyszło co innego i to zostaje nazwane, a nie naprawione:
+/// **`Logistics` nie ma ani jednej akcji**, podczas gdy `Hr` ma dwie (`Hire`,
+/// `RaiseWage`), a `Production` jedną (`PlanProduction`). Jest więc wariantem, do
+/// którego nie da się dojść nawet po wpisaniu go na listę dostępnych. Nie znika tu,
+/// bo kolejność wariantów jedzie w `Policy.domain`, czyli w zapisie gry, a usunięcie
+/// wariantu jest zmianą formatu — należy do fazy, która transport zleceń w ogóle
+/// zbuduje, albo do M12b razem z migracją. Wpisane do wykazu `R2` jako pozycja 81.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Serialize, Deserialize)]
 pub enum PolicyDomain {
     Pricing,
@@ -354,7 +366,7 @@ pub enum Severity {
 }
 
 /// Akcja. Kolejność wariantów jest ta sama co w [`ActionKind`] z `core` — to ona
-/// indeksuje histogram akcji w panelu i wchodzi do `DecisionReason::PolicyApplied`.
+/// indeksuje histogram akcji w panelu i wchodzi do `DecisionReason::Firm(FirmReason::PolicyApplied)`.
 ///
 /// **Tekstu tu nie ma.** `Alert` i `AskPlayer` z M9d niosą `LocKey`, czyli klucz
 /// lokalizacji — a `LocKey` mieszka w `engine/ui`, od którego symulacja nie zależy

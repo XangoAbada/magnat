@@ -306,6 +306,32 @@ jobs:
       - name: cztery metryki na całym repozytorium
         run: python3 scripts/struct_guard.py --all
 
+  plan-guard:
+    name: opis zgadza się z rzeczą (R2-WP23)
+    runs-on: ubuntu-latest
+    # `README.md` jest jedynym plikiem, który ktoś z zewnątrz przeczyta pierwszy,
+    # a jego nagłówek stanu przeżył sześć faz bez jednej poprawki — nie dlatego,
+    # że ktoś go bronił, tylko dlatego, że nie miał z czym się nie zgadzać.
+    steps:
+      - uses: actions/checkout@v4
+      - name: test wykrywacza
+        run: python3 scripts/plan_guard.py --self-test
+      - name: bramka
+        run: python3 scripts/plan_guard.py
+
+  lang-guard:
+    name: granicą języka jest crate (R2-WP27, D-N19)
+    runs-on: ubuntu-latest
+    # Bramka zamraża konwencję, a nie znajduje usterkę — i to jest jej rola.
+    # Znalazła przy tym siedem identyfikatorów z diakrytykiem, które przeżyły
+    # w repozytorium, bo nikt tej konwencji nigdzie nie zapisał.
+    steps:
+      - uses: actions/checkout@v4
+      - name: test wykrywacza
+        run: python3 scripts/lang_guard.py --self-test
+      - name: identyfikatory w ASCII
+        run: python3 scripts/lang_guard.py
+
   macro-kernel:
     name: sim/macro woła jądro, nie liczy sam (M10a/WP10.2)
     runs-on: ubuntu-latest
@@ -321,7 +347,7 @@ jobs:
         run: python3 scripts/macro_kernel_guard.py
 
   balansator:
-    name: bramki balansatora (G1–G9, M5e/WP13)
+    name: bramki balansatora (G1–G12, M5e/WP13)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

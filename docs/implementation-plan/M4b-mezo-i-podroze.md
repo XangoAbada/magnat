@@ -174,7 +174,7 @@ M4b nie jest tu przeprojektowywany. Gwiazdka = zmiana zakresu albo kryterium.
 
 ---
 
-## Korekty planu wpisane po implementacji M4b
+## Zmiany wpisane po M4b
 
 Zgodnie z `K-18`. Gwiazdka = zmiana zakresu albo kryterium.
 

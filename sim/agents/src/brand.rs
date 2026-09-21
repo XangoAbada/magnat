@@ -29,7 +29,10 @@ pub use tuning::{
 
 use crate::components::BrandsRef;
 use crate::store::{Slab, SlabRef};
-use magnat_core::{AdChannelKind, BrandId, DecisionReason, HashState, StateHasher, TouchSource, Q};
+use magnat_core::{
+    AdChannelKind, BrandId, CitizenReason, DecisionReason, FirmReason, HashState, StateHasher,
+    TouchSource, Q,
+};
 use magnat_ecs::{Entity, World};
 
 /// Ile marek naraz mieści się w pamięci jednego mieszkańca (M10b §5.1, decyzja `D4`).
@@ -396,12 +399,12 @@ pub fn apply(
             let gain = tune.awareness_gain[channel.as_index()];
             s.awareness = s.awareness.saturating_add(gain).min(100);
             s.expected_quality = ucz(s.expected_quality, claim.get(), tune.ad_learn);
-            Some(DecisionReason::BrandLearned {
+            Some(DecisionReason::Citizen(CitizenReason::BrandLearned {
                 brand: s.brand,
                 source: TouchSource::Ad,
                 channel: Some(channel),
                 awareness: Q::new(s.awareness),
-            })
+            }))
         }
         Touch::Media { claim, credibility } => {
             // Wiarygodność tytułu moduluje **siłę** aktualizacji, nie jej kierunek:
@@ -411,12 +414,12 @@ pub fn apply(
             s.awareness = s.awareness.saturating_add(gain).min(100);
             let sila = (u32::from(tune.ad_learn) * u32::from(credibility) / 100) as u16;
             s.expected_quality = ucz(s.expected_quality, claim.get(), sila);
-            Some(DecisionReason::BrandLearned {
+            Some(DecisionReason::Citizen(CitizenReason::BrandLearned {
                 brand: s.brand,
                 source: TouchSource::Media,
                 channel: Some(AdChannelKind::Press),
                 awareness: Q::new(s.awareness),
-            })
+            }))
         }
         Touch::Scandal { drop } => {
             // Skandal zabiera sympatię i **nie rusza oczekiwanej jakości**: produkt
@@ -427,10 +430,10 @@ pub fn apply(
             if s.affinity == przed.affinity {
                 None
             } else {
-                Some(DecisionReason::BrandScandal {
+                Some(DecisionReason::Firm(FirmReason::BrandScandal {
                     brand: s.brand,
                     drop,
-                })
+                }))
             }
         }
         Touch::Experience { actual } => {
@@ -451,12 +454,12 @@ pub fn apply(
                 s.source = TouchSource::Owned as u8;
             }
             s.expected_quality = ucz(s.expected_quality, actual.get(), tune.exp_learn);
-            Some(DecisionReason::BrandExperience {
+            Some(DecisionReason::Citizen(CitizenReason::BrandExperience {
                 brand: s.brand,
                 expected: Q::new(przed.expected_quality),
                 actual,
                 delta: delta as i16,
-            })
+            }))
         }
         Touch::Rumor {
             from,
@@ -486,23 +489,23 @@ pub fn apply(
             if s == przed {
                 None
             } else {
-                Some(DecisionReason::BrandLearned {
+                Some(DecisionReason::Citizen(CitizenReason::BrandLearned {
                     brand: s.brand,
                     source: TouchSource::Rumor,
                     channel: None,
                     awareness: Q::new(s.awareness),
-                })
+                }))
             }
         }
         Touch::Own => {
             s.source = TouchSource::Owned as u8;
             s.awareness = s.awareness.max(60);
-            Some(DecisionReason::BrandLearned {
+            Some(DecisionReason::Citizen(CitizenReason::BrandLearned {
                 brand: s.brand,
                 source: TouchSource::Owned,
                 channel: None,
                 awareness: Q::new(s.awareness),
-            })
+            }))
         }
     };
     (s, powod)
@@ -619,7 +622,10 @@ mod tests {
         assert_eq!(po.awareness, 80, "skandal nie uczy o istnieniu marki");
         assert!(matches!(
             powod,
-            Some(DecisionReason::BrandScandal { drop: 20, .. })
+            Some(DecisionReason::Firm(FirmReason::BrandScandal {
+                drop: 20,
+                ..
+            }))
         ));
         // Skala jest domknięta z dołu: seria skandali nie zejdzie poniżej −100.
         let mut dno = pusty(7);

@@ -21,7 +21,7 @@ use magnat_agents::{
     HouseholdStockSystem, NeedDecaySystem, NoInheritance, Population, ReplanCooldownSystem,
     SkillDriftSystem, SocietySystem,
 };
-use magnat_core::{DecisionReason, MobilityDue, Money, RejectCause, StockCat, Tick};
+use magnat_core::{CitizenReason, DecisionReason, MobilityDue, Money, RejectCause, StockCat, Tick};
 use magnat_economy::{Books, LedgerAccount, MarketSystem};
 use magnat_ecs::{App, ScheduleBuilder};
 use magnat_headless::population::{swiat_agentow, zaludnij, zbuduj_miasto};
@@ -342,11 +342,21 @@ pub fn run(a: &M5ShopArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
     let log = market.budget_log();
     let odmowy = log
         .iter()
-        .filter(|(_, r)| matches!(r, DecisionReason::CreditRejected { .. }))
+        .filter(|(_, r)| {
+            matches!(
+                r,
+                DecisionReason::Citizen(CitizenReason::CreditRejected { .. })
+            )
+        })
         .count();
     let niedopłaty = log
         .iter()
-        .filter(|(_, r)| matches!(r, DecisionReason::BudgetShortfall { .. }))
+        .filter(|(_, r)| {
+            matches!(
+                r,
+                DecisionReason::Citizen(CitizenReason::BudgetShortfall { .. })
+            )
+        })
         .count();
     println!(
         "okno decyzji budżetowych: {} wpisów, w tym {odmowy} odmów kredytu i {niedopłaty} niedopłat",

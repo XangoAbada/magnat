@@ -9,7 +9,7 @@ use magnat_agents::{
     register, AgentState, BrandsRef, Employment, Identity, KnowledgeRef, Lifecycle, NeedTable,
     Needs, Personality, PlanRef, RelationsRef, Residence, SkillSlot, Skills, Vitals, Wealth,
 };
-use magnat_core::{BrandId, CampaignId, DistrictId, Money, SimMinute, SiteId, Tick, Q};
+use magnat_core::{BrandId, CampaignId, DistrictId, FirmReason, Money, SimMinute, SiteId, Tick, Q};
 use magnat_ecs::{Entity, World};
 use magnat_media::{AdCampaign, AdChannel, CampaignMetrics, Campaigns, Outlets};
 use magnat_nav::EdgeId;
@@ -236,12 +236,12 @@ fn tekst_rozchodzi_sie_zgodnie_z_czytelnictwem() {
     w.resource_mut::<Outlets>().publish(
         story,
         Tick(0),
-        magnat_core::DecisionReason::StoryPublished {
+        magnat_core::DecisionReason::Firm(FirmReason::StoryPublished {
             outlet: BrandId(9),
             event: magnat_core::EventId(1),
             bias: magnat_core::EditorialBias::Local,
             reach_bp: 2_150,
-        },
+        }),
     );
 
     for doba in 1..=magnat_media::STORY_SPREAD_DAYS {

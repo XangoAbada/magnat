@@ -653,3 +653,157 @@ fn limit_osmiu_regul_jest_twardy() {
     }
     assert_eq!(e.apply(Edit::AddRule), Err(EditError::TooManyRules));
 }
+
+/// R2-WP28 (poz. 49): ekran ma separator języka, a zapis — zawsze kropkę.
+///
+/// `text::procent` drukowało kropkę niezależnie od języka, bo tekst polityki
+/// **musi wrócić z parsera co do znaku**. Ta sama funkcja zasilała jednak ekran
+/// edytora, więc polski gracz czytał „98.55 %" zamiast „98,55 %" — a `M9b`
+/// wymaga, żeby każda liczba w interfejsie szła przez `fmt` i separator języka.
+///
+/// Rozdzielenie, nie parametr w formacie wymiany: postać tekstowa nie ma języka
+/// i nie może go mieć, bo inaczej polityka zapisana po polsku nie wczytałaby się
+/// po angielsku.
+#[test]
+fn procent_na_ekranie_ma_separator_jezyka_a_w_zapisie_kropke() {
+    let c = Catalog::load().expect("data/locale/");
+    let g = magnat_game::policy::GoodKeys::new([(GoodId(7), "fuel_oil_crude".to_string())]);
+
+    let mut e = RuleEditor::new(
+        PolicyId(9),
+        "Marża niecałkowita",
+        PolicyDomain::Pricing,
+        PolicyScope::Group(TagId(1)),
+    );
+    e.apply(Edit::AddRule).unwrap();
+    e.apply(Edit::AddClause(
+        0,
+        klauzula(
+            met(Metric::StockDays(GoodRef::This)),
+            CmpOp::Gt,
+            lit(Value::Days(3)),
+        ),
+    ))
+    .unwrap();
+    // 1855 bp = 18,55 % — ułamkowe z rozmysłu, bo tylko takie pokazuje separator.
+    e.apply(Edit::AddAction(
+        0,
+        ActionDraft::margin(GoodRef::This, Bp(1855)),
+    ))
+    .unwrap();
+
+    // Zapis: kropka w obu językach, bo format wymiany nie ma języka.
+    for l in Locale::ALL {
+        let txt = magnat_game::policy::write(&e.policy(), e.scope(), &g, &c, l);
+        assert!(
+            txt.contains("18.55%"),
+            "zapis w {l:?} ma mieć kropkę, a ma:\n{txt}"
+        );
+        assert!(
+            !txt.contains("18,55"),
+            "zapis w {l:?} ma przecinek — parser nie wczyta go w drugim języku:\n{txt}"
+        );
+    }
+
+    // Ekran: separator języka.
+    let pl = magnat_game::policy::rule_lines(&e.rules()[0], &g, &c, Locale::Pl).join("\n");
+    let en = magnat_game::policy::rule_lines(&e.rules()[0], &g, &c, Locale::En).join("\n");
+    assert!(
+        pl.contains("18,55%"),
+        "ekran po polsku ma przecinek, a ma:\n{pl}"
+    );
+    assert!(
+        en.contains("18.55%"),
+        "ekran po angielsku ma kropkę, a ma:\n{en}"
+    );
+}
+
+/// R2-WP28 (poz. 51): polityka z numerem komunikatu spoza katalogu nie przechodzi edytora.
+///
+/// `Action::Alert`/`AskPlayer` niosą numer (`msg: u16`), a `data/locale/` ma tabelę
+/// o skończonym rozmiarze. Numer spoza niej dawał regułę **bez zdania** i wpis
+/// w skrzynce eskalacji bez treści — gracz dostawał powiadomienie, które nic nie
+/// mówiło, i nie miał jak się dowiedzieć dlaczego.
+#[test]
+fn komunikat_spoza_katalogu_jest_bledem_edytora() {
+    use magnat_game::policy::editor::KOMUNIKATOW;
+
+    let mut e = RuleEditor::new(
+        PolicyId(11),
+        "Alarm w próżnię",
+        PolicyDomain::Pricing,
+        PolicyScope::Group(TagId(1)),
+    );
+    e.apply(Edit::AddRule).unwrap();
+    e.apply(Edit::AddClause(
+        0,
+        klauzula(
+            met(Metric::StockDays(GoodRef::This)),
+            CmpOp::Gt,
+            lit(Value::Days(3)),
+        ),
+    ))
+    .unwrap();
+
+    // Ostatni istniejący numer przechodzi…
+    e.apply(Edit::AddAction(
+        0,
+        ActionDraft::alert(KOMUNIKATOW - 1, Severity::Info),
+    ))
+    .unwrap();
+    assert!(
+        !e.notes()
+            .iter()
+            .any(|n| matches!(n, Note::UnknownMessage { .. })),
+        "istniejący komunikat zgłoszony jako brakujący: {:?}",
+        e.notes()
+    );
+
+    // …pierwszy nieistniejący nie.
+    e.apply(Edit::AddAction(
+        0,
+        ActionDraft::alert(KOMUNIKATOW, Severity::Info),
+    ))
+    .unwrap();
+    let uwagi = e.notes();
+    assert!(
+        uwagi.contains(&Note::UnknownMessage { msg: KOMUNIKATOW }),
+        "numer spoza tabeli przeszedł bez uwagi: {uwagi:?}"
+    );
+    assert!(
+        !bez_bledow(&e),
+        "brak zdania dla gracza ma być błędem, nie ostrzeżeniem"
+    );
+
+    // Uwaga ma zdanie w obu językach — inaczej naprawa kończy się na typie.
+    let c = Catalog::load().expect("data/locale/");
+    for l in Locale::ALL {
+        let t =
+            magnat_game::policy::view::note_text(&Note::UnknownMessage { msg: KOMUNIKATOW }, &c, l);
+        assert!(!t.is_empty() && !t.contains('{'), "{l:?}: {t}");
+    }
+}
+
+/// Stała `KOMUNIKATOW` jest **lustrem danych**, a nie drugą prawdą.
+///
+/// Zakres numerów komunikatu jest rozmiarem tabeli `ui.policy.msg.N` w `data/locale/`.
+/// Edytor nie może jej czytać przy każdej klatce, więc trzyma liczbę u siebie — a że
+/// liczba się nie rozjedzie, pilnuje ten test: dopisanie klucza bez podniesienia stałej
+/// łamie build. `ui.policy.msg.unknown` się nie liczy, bo jest napisem zastępczym.
+#[test]
+fn liczba_komunikatow_zgadza_sie_z_katalogiem() {
+    use magnat_game::policy::editor::KOMUNIKATOW;
+
+    let c = Catalog::load().expect("data/locale/");
+    let ile = c
+        .keys()
+        .iter()
+        .filter_map(|k| k.strip_prefix("ui.policy.msg."))
+        .filter_map(|n| n.parse::<u16>().ok())
+        .count();
+    assert_eq!(
+        usize::from(KOMUNIKATOW),
+        ile,
+        "tabela komunikatów w data/locale/ ma {ile} pozycji, a edytor sądzi że {KOMUNIKATOW}"
+    );
+}

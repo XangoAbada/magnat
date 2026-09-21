@@ -84,13 +84,18 @@ HEADLESS = "tools/headless/src/"
 # `struct-guard` w CI może przestać być czerwony na stałe. Bramka, która zawsze świeci
 # na czerwono, zostanie wyłączona (ryzyko R-5), a wtedy nie łapie już niczego.
 REJESTR = {
-    # 605 do M11b, **609 po M11c** — cztery linie, których M11c nie zamroziło,
-    # więc job `struct-guard` świecił na czerwono od 2026-09-17 do M10c. Odmrożenie
-    # jest tu poprawką bramki, nie zgodą na wzrost: pozycja 33 rejestru długu
-    # i jej adres zostają bez zmian.
-    ("sim/world/src/city/lsystem.rs", "impl", 609): 33,
-    ("sim/world/src/city/lsystem.rs", "fn", 317): 34,
-    ("sim/world/src/city/lsystem.rs", "fn", 257): 35,
+    # **Pozycje 33 i 34 zamknięte w R2e** (`R2-WP21`): `lsystem.rs` rozpadł się na
+    # `lsystem/{mod,rules,constrain}.rs`, blok `impl` zszedł z 609 na 438 (ostrzeżenie,
+    # nie błąd), a `grow_network` z 317 na 66. Macierz 32 hashy miasta wyszła identyczna
+    # bit w bit (`sim/world/tests/lsystem_split.rs`).
+    #
+    # **Pozycja 35 zostaje i to jest decyzja, nie zaniedbanie.** `Builder::grow` ma
+    # 261 linii (257 przed `cargo fmt`, który rozwinął sygnaturę), bo jest **jednym algorytmem**: drabiną ograniczeń, w której kolejność
+    # kroków jest kontraktem generacji miasta. Podział na „grow_a" i „grow_b" przeniósłby
+    # połowę drabiny do drugiego pliku i nie dodał ani jednej granicy tematycznej —
+    # a CLAUDE.md mówi wprost, że dzieli się pliki z dwoma tematami, nie pliki długie.
+    # Sufit nazwany w kodzie komentarzem `ponytail:`.
+    ("sim/world/src/city/lsystem/constrain.rs", "fn", 261): 35,
     # 365 do M6d, 368 po M6e: trzy linie za bilans otwarcia złóż (`AP-1`) —
     # jedno wywołanie `bilans_zloz`, jedno pole w `CityData` i pusta linia.
     # **370 po M11c** — dwie linie, których M11c nie zamroziło; patrz komentarz
@@ -180,10 +185,36 @@ REJESTR = {
     # pokrewieństwo, a nie waga relacji. Przyrost trafia w regułę tej pozycji szósty
     # raz z rzędu: liczy się liczba rozgałęzień, nie wariantów. Adres podziału bez
     # zmian — `K-58` w `R2e`, i to ona rozetnie tę funkcję razem z enumem.
-    ("engine/ui/src/inspect/reason.rs", "fn", 1290): 37,
-    ("engine/ui/src/inspect/reason.rs", "plik", 1761): 37,
+    # **Pozycja 37 po R2-WP20: rozcięta, ale nie zamknięta — i to jest wynik pomiaru,
+    # a nie porażka.** `describe` (1290 linii, plik 1761) rozpadła się na trzy renderery
+    # po aktorze: 376 linii mieszkaniec, 634 firma, 287 miasto. Kryterium R2e mówiło
+    # „poniżej 300 linii każda" i **było nieosiągalne z arytmetyki**: 1290 linii ramion
+    # podzielone na trzech aktorów to średnio 430, a firma ma 54 ramiona ze 115.
+    #
+    # Dalszy podział **po temacie wewnątrz aktora** nie składa się w nic mniejszego:
+    # dyspozytor musiałby wymienić te same 54 warianty, żeby wiedzieć, do którego pliku
+    # je posłać. Aktor jest jedyną osią, wzdłuż której ten `match` da się rozciąć raz.
+    #
+    # Co się przez to zmieniło i dlaczego pozycja zostaje mimo wszystko otwarta:
+    # funkcja **przestała rosnąć z liczbą faz** i rośnie z liczbą decyzji **swojego**
+    # aktora. M11 dokłada powody firmie i mieszkańcowi, a plik miasta nie drgnie.
+    # Adresat: faza, która dołoży aktora albo zmieni kształt karty inspekcji.
+    ("engine/ui/src/inspect/reason/citizen.rs", "fn", 376): 37,
+    ("engine/ui/src/inspect/reason/firm.rs", "fn", 634): 37,
+    ("engine/ui/src/inspect/reason/city.rs", "fn", 287): 37,
     # 269 po M7d: jedna linia za `finance: bf.finance` w budowie `BankParams`.
-    ("sim/economy/src/data.rs", "fn", 269): 38,
+    # **Cztery pozycje zamrożone w R2e, wszystkie zastane.** Każda ma wiersz w rejestrze
+    # długu z powodem i adresatem (62–65), i każda przeszła przez R2a–R2c bez wpisu tutaj —
+    # więc job `struct-guard` świecił na czerwono od R2a i przestał cokolwiek znaczyć.
+    # Bramka, która zawsze świeci na czerwono, zostaje wyłączona (ryzyko R-5), a wtedy
+    # nie łapie już niczego. Zamrożenie **nie jest zgodą na wzrost**: klucz niesie wartość,
+    # więc dopisanie jednej linii zapala bramkę z powrotem.
+    ("sim/agents/src/migration.rs", "plik", 1265): 62,
+    ("sim/agents/src/demography/mod.rs", "mod.rs", 641): 64,
+    ("sim/economy/src/market/api.rs", "impl", 541): 63,
+    # 269 przed R2c, 270 po niej — `R2-WP16` ubrało `envelopes.ron` o wiersz, a nie
+    # dodało czytnika, więc wyzwalacz z pozycji 38 dalej nie zadziałał.
+    ("sim/economy/src/data.rs", "fn", 270): 65,
 }
 
 POCZATEK_ITEMU = re.compile(

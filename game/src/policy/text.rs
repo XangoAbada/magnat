@@ -372,7 +372,7 @@ pub fn write(p: &Policy, scope: &PolicyScope, goods: &GoodKeys, c: &Catalog, l: 
         out.push_str(&format!(
             "  {} {}\n",
             kw(c, l, "when"),
-            warunek(&d, goods, c, l)
+            warunek(&d, goods, c, l, Styl::Zapis)
         ));
         for (i, a) in d.actions.iter().enumerate() {
             let slowo = if i == 0 {
@@ -380,7 +380,11 @@ pub fn write(p: &Policy, scope: &PolicyScope, goods: &GoodKeys, c: &Catalog, l: 
             } else {
                 kw(c, l, "also")
             };
-            out.push_str(&format!("    {} {}\n", slowo, akcja(a, goods, c, l)));
+            out.push_str(&format!(
+                "    {} {}\n",
+                slowo,
+                akcja(a, goods, c, l, Styl::Zapis)
+            ));
         }
         if !d.note.is_empty() {
             out.push_str(&format!("    {} \"{}\"\n", kw(c, l, "note"), d.note));
@@ -395,7 +399,7 @@ pub fn write(p: &Policy, scope: &PolicyScope, goods: &GoodKeys, c: &Catalog, l: 
             out.push_str(&format!(
                 "  {} {}\n",
                 kw(c, l, "otherwise"),
-                akcja(&d, goods, c, l)
+                akcja(&d, goods, c, l, Styl::Zapis)
             ));
         }
     }
@@ -419,14 +423,18 @@ const fn domena(d: PolicyDomain) -> &'static str {
 /// przy pierwszej nowej metryce, a gracz porównuje jedno z drugim.
 #[must_use]
 pub fn rule_lines(d: &RuleDraft, goods: &GoodKeys, c: &Catalog, l: Locale) -> Vec<String> {
-    let mut out = vec![format!("{} {}", kw(c, l, "when"), warunek(d, goods, c, l))];
+    let mut out = vec![format!(
+        "{} {}",
+        kw(c, l, "when"),
+        warunek(d, goods, c, l, Styl::Ekran)
+    )];
     for (i, a) in d.actions.iter().enumerate() {
         let slowo = if i == 0 {
             kw(c, l, "then")
         } else {
             kw(c, l, "also")
         };
-        out.push(format!("  {slowo} {}", akcja(a, goods, c, l)));
+        out.push(format!("  {slowo} {}", akcja(a, goods, c, l, Styl::Ekran)));
     }
     if !d.note.is_empty() {
         out.push(format!("  {} \"{}\"", kw(c, l, "note"), d.note));
@@ -437,7 +445,7 @@ pub fn rule_lines(d: &RuleDraft, goods: &GoodKeys, c: &Catalog, l: Locale) -> Ve
 /// Jeden wiersz akcji — nagłówek reguły zapasowej w edytorze.
 #[must_use]
 pub fn action_line(a: &ActionDraft, goods: &GoodKeys, c: &Catalog, l: Locale) -> String {
-    akcja(a, goods, c, l)
+    akcja(a, goods, c, l, Styl::Ekran)
 }
 
 fn zakres(s: &PolicyScope, goods: &GoodKeys, c: &Catalog, l: Locale) -> String {
@@ -479,7 +487,7 @@ fn towar(r: magnat_policy::GoodRef, goods: &GoodKeys, c: &Catalog, l: Locale) ->
     }
 }
 
-fn warunek(d: &RuleDraft, goods: &GoodKeys, c: &Catalog, l: Locale) -> String {
+fn warunek(d: &RuleDraft, goods: &GoodKeys, c: &Catalog, l: Locale, styl: Styl) -> String {
     if d.clauses.is_empty() {
         return kw(c, l, "always");
     }
@@ -489,21 +497,21 @@ fn warunek(d: &RuleDraft, goods: &GoodKeys, c: &Catalog, l: Locale) -> String {
     };
     d.clauses
         .iter()
-        .map(|k| klauzula(k, goods, c, l))
+        .map(|k| klauzula(k, goods, c, l, styl))
         .collect::<Vec<_>>()
         .join(&format!(" {spojnik} "))
 }
 
-fn klauzula(k: &Clause, goods: &GoodKeys, c: &Catalog, l: Locale) -> String {
+fn klauzula(k: &Clause, goods: &GoodKeys, c: &Catalog, l: Locale, styl: Styl) -> String {
     let ctx = match k.lhs.base {
         Base::Metric(m) => Some(m),
         Base::Lit(_) => None,
     };
     format!(
         "{} {} {}",
-        slot(&k.lhs, ctx, goods, c, l),
+        slot(&k.lhs, ctx, goods, c, l, styl),
         op_tekst(k.op),
-        slot(&k.rhs, ctx, goods, c, l)
+        slot(&k.rhs, ctx, goods, c, l, styl)
     )
 }
 
@@ -518,13 +526,20 @@ const fn op_tekst(o: CmpOp) -> &'static str {
     }
 }
 
-fn slot(s: &Slot, ctx: Option<Metric>, goods: &GoodKeys, c: &Catalog, l: Locale) -> String {
+fn slot(
+    s: &Slot,
+    ctx: Option<Metric>,
+    goods: &GoodKeys,
+    c: &Catalog,
+    l: Locale,
+    styl: Styl,
+) -> String {
     let rdzen = match s.base {
         Base::Metric(m) => metryka(m, goods, c, l),
-        Base::Lit(v) => wartosc(v, ctx, c, l),
+        Base::Lit(v) => wartosc(v, ctx, c, l, styl),
     };
     let ze_skala = match s.scale {
-        Some(bp) => format!("{rdzen} * {}", procent(bp)),
+        Some(bp) => format!("{rdzen} * {}", procent(bp, styl, l)),
         None => rdzen,
     };
     match s.convert {
@@ -534,12 +549,38 @@ fn slot(s: &Slot, ctx: Option<Metric>, goods: &GoodKeys, c: &Catalog, l: Locale)
     }
 }
 
-/// Punkty bazowe jako procent. Kropka dziesiętna jest tu **formatem**, a nie liczbą
-/// pokazywaną graczowi — te idą przez `fmt::decimal` i separator języka.
-fn procent(bp: Bp) -> String {
+/// Do czego powstaje ten tekst: do zapisu czy na ekran.
+///
+/// Rozróżnienie jest konieczne, bo te dwa mają **sprzeczne** wymagania. Postać
+/// tekstowa musi wrócić z parsera co do znaku, więc nie ma języka i mieć go nie
+/// może — polityka zapisana po polsku wczytuje się po angielsku. Ekran ma za to
+/// pokazywać liczby tak, jak pisze je gracz w swoim języku (`M9b`).
+///
+/// Do R2e obie drogi były jedną drogą i wygrywał zapis, więc polski gracz czytał
+/// „18.55 %" i kwotę w groszach. Rozdziela je ten enum, a nie drugi zestaw
+/// funkcji: reguła składania zdania jest jedna i ma zostać jedna — różni się
+/// w niej wyłącznie to, skąd bierze się separator i jak drukuje się kwota.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Styl {
+    /// Format wymiany: kropka dziesiętna, kwota w groszach, bez separatora tysięcy.
+    Zapis,
+    /// Interfejs: separator języka, kwota z walutą przez `fmt::money`.
+    Ekran,
+}
+
+/// Punkty bazowe jako procent.
+fn procent(bp: Bp, styl: Styl, l: Locale) -> String {
     let v = bp.get();
-    let znak = if v < 0 { "-" } else { "" };
     let a = v.unsigned_abs();
+    if styl == Styl::Ekran {
+        // Minus typograficzny, tak samo jak w `fmt::integer` — ekran jest ekranem.
+        let znak = if v < 0 { "\u{2212}" } else { "" };
+        if a.is_multiple_of(100) {
+            return format!("{znak}{}%", a / 100);
+        }
+        return format!("{znak}{}%", magnat_ui::fmt::decimal(l, i64::from(a), 2));
+    }
+    let znak = if v < 0 { "-" } else { "" };
     if a.is_multiple_of(100) {
         format!("{znak}{}%", a / 100)
     } else {
@@ -547,12 +588,12 @@ fn procent(bp: Bp) -> String {
     }
 }
 
-fn wartosc(v: Value, ctx: Option<Metric>, c: &Catalog, l: Locale) -> String {
+fn wartosc(v: Value, ctx: Option<Metric>, c: &Catalog, l: Locale, styl: Styl) -> String {
     match v {
         Value::Money(m) => format!("{} {}", m.get(), unit_word(c, l, "money")),
         Value::Qty(q) => format!("{q} {}", unit_word(c, l, "qty")),
         Value::Days(d) => format!("{d} {}", unit_word(c, l, "days")),
-        Value::Bp(bp) => procent(bp),
+        Value::Bp(bp) => procent(bp, styl, l),
         Value::Count(n) => n.to_string(),
         Value::Enum(e) => match ctx {
             Some(Metric::Season) => c.fmt_key(
@@ -632,14 +673,14 @@ fn metryka(m: Metric, goods: &GoodKeys, c: &Catalog, l: Locale) -> String {
     }
 }
 
-fn akcja(a: &ActionDraft, goods: &GoodKeys, c: &Catalog, l: Locale) -> String {
+fn akcja(a: &ActionDraft, goods: &GoodKeys, c: &Catalog, l: Locale, styl: Styl) -> String {
     let v = act_word(c, l, a.kind);
     let t = towar(a.good, goods, c, l);
-    let s = |x: &Slot| slot(x, None, goods, c, l);
+    let s = |x: &Slot| slot(x, None, goods, c, l, styl);
     match a.kind {
         ActionKind::SetPrice | ActionKind::AdjustPrice => format!("{v} {t} = {}", s(&a.a)),
         ActionKind::SetMargin | ActionKind::Markdown => {
-            format!("{v} {t} = {}", procent(a.bp))
+            format!("{v} {t} = {}", procent(a.bp, styl, l))
         }
         ActionKind::ClampPrice => format!("{v} {t} {} {} .. {}", kw(c, l, "to"), s(&a.a), s(&a.b)),
         ActionKind::OrderUpTo => format!("{v} {t} {}", s(&a.a)),
@@ -664,7 +705,7 @@ fn akcja(a: &ActionDraft, goods: &GoodKeys, c: &Catalog, l: Locale) -> String {
             s(&a.a)
         ),
         ActionKind::RaiseWage => {
-            let baza = format!("{v} role#{} = {}", a.role.0, procent(a.bp));
+            let baza = format!("{v} role#{} = {}", a.role.0, procent(a.bp, styl, l));
             if a.has_b {
                 format!("{baza} {} {}", kw(c, l, "to"), s(&a.b))
             } else {

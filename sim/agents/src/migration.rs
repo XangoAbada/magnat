@@ -26,8 +26,8 @@ use crate::demography::{
 };
 use crate::household::{self, Household, HouseholdOverflow};
 use magnat_core::{
-    rng, DecisionReason, Entity, HashState, MigrationKind, Money, NeedKind, Rng, StateHasher,
-    StreamId, NEED_COUNT, STOCK_CAT_COUNT,
+    rng, CitizenReason, DecisionReason, Entity, HashState, MigrationKind, Money, NeedKind, Rng,
+    StateHasher, StreamId, NEED_COUNT, STOCK_CAT_COUNT,
 };
 use magnat_ecs::{CommandBuffer, World};
 use std::collections::BTreeMap;
@@ -524,10 +524,10 @@ fn odplyw(world: &mut World, day: u64, raport: &mut MigrationReport) {
         raport.left_citizens += n;
         raport.reasons.push((
             hh_e.index(),
-            DecisionReason::MigrationDecision {
+            DecisionReason::Citizen(CitizenReason::MigrationDecision {
                 kind,
                 months_jobless: miesiace,
-            },
+            }),
         ));
     }
     magnat_ecs::flush_commands(world, std::slice::from_mut(&mut cmd));
@@ -690,10 +690,10 @@ fn naplyw(world: &mut World, day: u64, raport: &mut MigrationReport) {
         raport.arrived_citizens += u32::from(rozmiar);
         raport.reasons.push((
             hh_e.index(),
-            DecisionReason::MigrationDecision {
+            DecisionReason::Citizen(CitizenReason::MigrationDecision {
                 kind: MigrationKind::Arrived,
                 months_jobless: 0,
-            },
+            }),
         ));
     }
 }
@@ -1097,10 +1097,10 @@ fn usamodzielnienie(world: &mut World, day: u64, raport: &mut MigrationReport) {
         wyjechali += 1;
         raport.reasons.push((
             e.index(),
-            DecisionReason::MigrationDecision {
+            DecisionReason::Citizen(CitizenReason::MigrationDecision {
                 kind: MigrationKind::LeftJobless,
                 months_jobless: 0,
-            },
+            }),
         ));
     }
 

@@ -264,6 +264,20 @@ impl ManagerExecution {
         v.mul_ratio(i64::from(10_000 + err_bp), 10_000)
     }
 
+    /// Ilość po odchyleniu menedżera. Ta sama reguła co przy kwocie i **ten sam
+    /// rdzeń zaokrąglania** — `Qty` ma od R2e własne `mul_ratio` (`R2-WP22`).
+    ///
+    /// Do R2e ta funkcja nie istniała, a wykonawca opakowywał ilość w `Money`, żeby
+    /// ją przemnożyć. Wynik był poprawny i typ kłamał: przez trzy linie sztuki były
+    /// groszami.
+    #[must_use]
+    pub fn distort_qty(&self, v: magnat_core::Qty, err_bp: i32) -> magnat_core::Qty {
+        if err_bp == 0 {
+            return v;
+        }
+        v.mul_ratio(i64::from(10_000 + err_bp), 10_000)
+    }
+
     /// Liczba całkowita po odchyleniu — marża w punktach bazowych i liczba dób
     /// pokrycia w zamówieniu.
     #[must_use]

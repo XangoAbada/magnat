@@ -215,6 +215,11 @@ impl Market {
                 },
                 error_bp: exec.error_bp(seed, klucz, t),
             };
+            // Promienie, o które pyta ta polityka — obserwacja następnej doby zawęzi
+            // do nich obraz konkurencji (`R2-WP22`). Zapisywane przy każdym przebiegu,
+            // więc odpięcie reguły zeruje je w tej samej dobie.
+            m.shops[i].asked_radii = promienie_polityki(&polityka);
+
             let decyzje = decyduj(&polityka, &mut fakty, &ctx, &*tax);
 
             m.zapisz_decyzje(i, site, firms, &decyzje, t, &mut d);
@@ -287,7 +292,21 @@ impl MarketInner {
         d: &mut PolicyDay,
     ) {
         for (skutek, powod) in decyzje {
-            match zastosuj(&mut self.shops[shop], *skutek, t) {
+            // Wycofanie z półki dotyka areny ofert i indeksu przestrzennego, a nie
+            // samego sklepu — więc wykonuje się tutaj, a nie w `zastosuj`, który widzi
+            // sam `Shop`. Towar, którego na półce nie było, daje akcję **ślepą**:
+            // „zdjąłem coś, czego nie miałem" byłoby dla gracza nieprawdą.
+            let wynik = match *skutek {
+                PolicyOutcome::Withdraw(g) => {
+                    if self.zdejmij_linie(shop, g) {
+                        Wynik::Zrobione
+                    } else {
+                        Wynik::Slepa
+                    }
+                }
+                inny => zastosuj(&mut self.shops[shop], inny, t),
+            };
+            match wynik {
                 Wynik::Zrobione => d.applied += 1,
                 Wynik::Alert => d.alerts += 1,
                 Wynik::Slepa => d.blind += 1,
@@ -364,4 +383,64 @@ pub fn preset_for(
     let numer = catalog.iter().position(|p| p.key == key)?;
     let p = catalog.instantiate(key, PolicyId(u16::try_from(numer).unwrap_or(u16::MAX)))?;
     (p.domain == domain).then_some(p)
+}
+
+/// Promienie metryk konkurencyjnych tej polityki, rosnąco i bez powtórzeń.
+///
+/// Walidator języka dopuszcza najwyżej [`magnat_policy::MAX_COMPETITIVE`] takich metryk
+/// w jednej polityce, więc lista jest z definicji krótka i mieści się w tablicy
+/// [`crate::pricing::MAX_NEAR_RADII`]. Rosnąco i bez powtórzeń, żeby dwie reguły o tym
+/// samym promieniu nie zajmowały dwóch slotów, a kolejność nie zależała od tego,
+/// w którym miejscu polityki gracz dopisał regułę.
+fn promienie_polityki(p: &magnat_policy::FirmPolicy) -> [u32; crate::pricing::MAX_NEAR_RADII] {
+    let mut out = [0u32; crate::pricing::MAX_NEAR_RADII];
+    let mut zebrane: Vec<u32> = Vec::new();
+    let mut zbierz = |e: &magnat_policy::Expr| {
+        zbierz_promienie(e, &mut zebrane);
+    };
+    for r in &p.rules {
+        zbierz_z_warunku(&r.when, &mut zbierz);
+    }
+    zebrane.sort_unstable();
+    zebrane.dedup();
+    for (slot, r) in zebrane.into_iter().take(out.len()).enumerate() {
+        out[slot] = r;
+    }
+    out
+}
+
+/// Obchodzi warunek i podaje każde wyrażenie do domknięcia.
+fn zbierz_z_warunku(c: &magnat_policy::ConditionExpr, f: &mut impl FnMut(&magnat_policy::Expr)) {
+    use magnat_policy::ConditionExpr as C;
+    match c {
+        C::Always => {}
+        C::Cmp { lhs, rhs, .. } => {
+            f(lhs);
+            f(rhs);
+        }
+        C::And(a, b) | C::Or(a, b) => {
+            zbierz_z_warunku(a, f);
+            zbierz_z_warunku(b, f);
+        }
+        C::Not(x) => zbierz_z_warunku(x, f),
+    }
+}
+
+/// Promienie metryk konkurencyjnych w jednym wyrażeniu.
+fn zbierz_promienie(e: &magnat_policy::Expr, out: &mut Vec<u32>) {
+    use magnat_policy::{Expr, Metric};
+    match e {
+        Expr::Metric(m) => match m {
+            Metric::CheapestCompetitorPrice { radius_m, .. }
+            | Metric::AvgCompetitorPrice { radius_m, .. }
+            | Metric::CompetitorCount { radius_m } => out.push(*radius_m),
+            _ => {}
+        },
+        Expr::Lit(_) => {}
+        Expr::Bin { lhs, rhs, .. } => {
+            zbierz_promienie(lhs, out);
+            zbierz_promienie(rhs, out);
+        }
+        Expr::Convert { of, .. } => zbierz_promienie(of, out),
+    }
 }

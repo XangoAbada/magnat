@@ -116,7 +116,7 @@ const fn rola_key(r: magnat_supply::WarehouseRole) -> &'static str {
     }
 }
 
-/// Powód postoju linii — ładunek `DecisionReason::ProductionHalted`, ten sam,
+/// Powód postoju linii — ładunek `DecisionReason::Firm(FirmReason::ProductionHalted)`, ten sam,
 /// który czyta karta zakładu. Linia w biegu, w przezbrojeniu i na przeglądzie
 /// **nie stoi**: przezbrojenie i przegląd są pracą, a nie awarią.
 const fn powod_postoju(s: magnat_supply::LineState) -> Option<LineStopCause> {

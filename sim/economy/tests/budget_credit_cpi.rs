@@ -15,7 +15,7 @@ mod common;
 use common::*;
 use magnat_agents::{Household, Needs};
 use magnat_core::{
-    DecisionReason, Entity, FixedCost, LoanKind, Money, NeedKind, RejectCredit, Tick,
+    CitizenReason, DecisionReason, Entity, FixedCost, LoanKind, Money, NeedKind, RejectCredit, Tick,
 };
 use magnat_economy::{
     settle_household_month, settle_transactions, Books, HouseholdMonth, Market, PurchaseIntent,
@@ -71,7 +71,7 @@ fn gospodarstwo_bez_dochodu_prosi_o_kredyt_dostaje_odmowe_i_zostaje_z_zaleglosci
     // 2. Odmowa ma powód, i to ten właściwy.
     let credit = buf[0].credit.expect("decyzja kredytowa");
     match credit {
-        DecisionReason::CreditRejected { kind, cause, .. } => {
+        DecisionReason::Citizen(CitizenReason::CreditRejected { kind, cause, .. }) => {
             assert_eq!(kind, LoanKind::Consumer);
             assert_eq!(cause, RejectCredit::NoIncome);
         }
@@ -85,7 +85,7 @@ fn gospodarstwo_bez_dochodu_prosi_o_kredyt_dostaje_odmowe_i_zostaje_z_zaleglosci
     assert_eq!(buf[0].shortfall, raport.arrears_added);
     // 4. Niedopłata ma własny powód z nazwaną pozycją.
     match buf[0].unpaid.expect("powód niedopłaty") {
-        DecisionReason::BudgetShortfall { cost, gap_permille } => {
+        DecisionReason::Citizen(CitizenReason::BudgetShortfall { cost, gap_permille }) => {
             assert_eq!(cost, FixedCost::Housing);
             assert_eq!(gap_permille, 1_000, "nie zapłacono nic z czynszu");
         }
@@ -100,12 +100,14 @@ fn gospodarstwo_bez_dochodu_prosi_o_kredyt_dostaje_odmowe_i_zostaje_z_zaleglosci
     // 6. Cała ścieżka jest w oknie podglądu i żadne jej ogniwo nie jest bezpowodowe.
     let log = market.budget_log();
     assert!(log.iter().all(|(_, r)| *r != DecisionReason::Unspecified));
-    assert!(log
-        .iter()
-        .any(|(_, r)| matches!(r, DecisionReason::CreditRejected { .. })));
-    assert!(log
-        .iter()
-        .any(|(_, r)| matches!(r, DecisionReason::BudgetShortfall { .. })));
+    assert!(log.iter().any(|(_, r)| matches!(
+        r,
+        DecisionReason::Citizen(CitizenReason::CreditRejected { .. })
+    )));
+    assert!(log.iter().any(|(_, r)| matches!(
+        r,
+        DecisionReason::Citizen(CitizenReason::BudgetShortfall { .. })
+    )));
 }
 
 #[test]

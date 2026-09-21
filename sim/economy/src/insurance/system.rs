@@ -12,7 +12,8 @@
 //! mierzyłby opóźnienie, a nie wycenę.
 
 use magnat_core::{
-    Cadence, CoverId, DecisionReason, DistrictId, Money, PerilKind, SimMinute, SiteId, Tick,
+    Cadence, CoverId, DecisionReason, DistrictId, FirmReason, Money, PerilKind, SimMinute, SiteId,
+    Tick,
 };
 use magnat_ecs::{System, SystemCtx, SystemDesc, SystemId, World};
 use magnat_firms::{firm_id, FirmKey, FirmStatus, Firms};
@@ -207,11 +208,11 @@ fn szkody(
         // Powód jedzie **do księgi zakładu**, a nie tylko do dziennika firmy: karta
         // zakładu przy pożarze ma mówić „pożar", a nie „nieokreślone". Dzielnica
         // w powodzie jest ta ze zgłoszenia, bo zdarzenie zna swój zakres.
-        let powod = DecisionReason::PerilStruck {
+        let powod = DecisionReason::Firm(FirmReason::PerilStruck {
             peril: o.peril,
             district: o.district.unwrap_or(DistrictId(0)),
             loss: Money::ZERO,
-        };
+        });
         for (site, odpis) in market.peril_damage(&cele, bp, powod, t) {
             let district = market.district_of(site).unwrap_or(DistrictId(0));
             ins.note_loss(o.peril, district, odpis);
@@ -224,11 +225,11 @@ fn szkody(
                     firms.log(
                         key,
                         t,
-                        DecisionReason::PerilStruck {
+                        DecisionReason::Firm(FirmReason::PerilStruck {
                             peril: o.peril,
                             district,
                             loss: odpis,
-                        },
+                        }),
                     );
                 }
             }
@@ -282,10 +283,10 @@ fn wyplac(
     };
     let memo = TxMemo::new(
         TxKind::InsuranceClaim { cover: c.id },
-        DecisionReason::ClaimPaid {
+        DecisionReason::Firm(FirmReason::ClaimPaid {
             insurer: firm_id(c.insurer),
             paid: kwota,
-        },
+        }),
     );
     // Ubezpieczyciel płaci tyle, ile ma: zabraknie mu — idzie ścieżką
     // niewypłacalności M7d jak każda inna firma, a nie cedują ryzyka.
@@ -304,10 +305,10 @@ fn wyplac(
         firms.log(
             c.insurer,
             t,
-            DecisionReason::ClaimPaid {
+            DecisionReason::Firm(FirmReason::ClaimPaid {
                 insurer: firm_id(c.insurer),
                 paid: mozliwe,
-            },
+            }),
         );
     }
     mozliwe
@@ -337,11 +338,11 @@ fn skladki(
         };
         let memo = TxMemo::new(
             TxKind::InsurancePremium { cover: c.id },
-            DecisionReason::Underwritten {
+            DecisionReason::Firm(FirmReason::Underwritten {
                 peril: c.peril,
                 rate_bp: c.rate_bp,
                 premium: c.premium_monthly,
-            },
+            }),
         );
         let ok = world
             .get_resource_mut::<Books>()
@@ -420,11 +421,11 @@ fn nowe_polisy(
                     firms.log(
                         key,
                         t,
-                        DecisionReason::Underwritten {
+                        DecisionReason::Firm(FirmReason::Underwritten {
                             peril: *peril,
                             rate_bp: rate.min(u32::from(u16::MAX)) as u16,
                             premium: skladka,
-                        },
+                        }),
                     );
                 }
             }

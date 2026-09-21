@@ -39,7 +39,7 @@ pub mod weather;
 pub use arena::{Arena, ArenaChunk, ArenaHandle, ArenaKind, ArenaRef};
 pub use assets::{data_dir, data_path};
 pub use collections::{seeded_map, seeded_set, SeededMap, SeededMapExt, SeededSet};
-pub use decision::DecisionReason;
+pub use decision::{CitizenReason, CityReason, DecisionReason, FirmReason};
 pub use entity::Entity;
 pub use fixed::Fx;
 pub use geom::{IAabb3, IRect, IVec2, IVec3};
@@ -67,10 +67,10 @@ pub use vocab::{
     PlaceKind, PlaceRef, PolicyKind, PriceBasis, PriceDriver, ReactionKind, RejectCause,
     RejectCredit, RemedyKind, ResourceKind, RoadClass, Season, ServiceKind, ShortageStageKind,
     SpendCategory, StockCat, TaxKind, TenderKind, TouchSource, TraitId, TransportMode, Trend,
-    UtilityKind, UtilityService, VoteDriver, WageCause, WorldCoord, AD_CHANNEL_KIND_COUNT,
-    AGENCY_KIND_COUNT, CLAIM_PRIORITY_COUNT, FIXED_COST_COUNT, LOSS_KIND_COUNT, MEDIA_KIND_COUNT,
-    MOBILITY_CHANNEL_COUNT, NEED_COUNT, PERIL_KIND_COUNT, POLICY_KIND_COUNT, REJECT_CAUSE_COUNT,
-    SERVICE_KIND_COUNT, SPEND_CATEGORY_COUNT, STOCK_CAT_COUNT, TAX_KIND_COUNT, TOUCH_SOURCE_COUNT,
-    UTILITY_KIND_COUNT,
+    TripPurpose, UtilityKind, UtilityService, VoteDriver, WageCause, WorldCoord,
+    AD_CHANNEL_KIND_COUNT, AGENCY_KIND_COUNT, CLAIM_PRIORITY_COUNT, FIXED_COST_COUNT,
+    LOSS_KIND_COUNT, MEDIA_KIND_COUNT, MOBILITY_CHANNEL_COUNT, NEED_COUNT, PERIL_KIND_COUNT,
+    POLICY_KIND_COUNT, REJECT_CAUSE_COUNT, SERVICE_KIND_COUNT, SPEND_CATEGORY_COUNT,
+    STOCK_CAT_COUNT, TAX_KIND_COUNT, TOUCH_SOURCE_COUNT, UTILITY_KIND_COUNT,
 };
 pub use weather::{weather_at, Weather};

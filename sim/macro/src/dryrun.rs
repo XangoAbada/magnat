@@ -217,7 +217,7 @@ pub fn dry_run(cfg: &DryRunConfig, world: &mut World, params: &MacroParams) -> D
             ..params.clone()
         };
         if okno.is_none() && st.day + u32::from(dni) >= dob_razem.saturating_sub(OKNO_POMIARU) {
-            okno = Some(Okno::otwórz(&st));
+            okno = Some(Okno::otworz(&st));
         }
         step(&mut st, &p);
         kroki += 1;
@@ -232,7 +232,7 @@ pub fn dry_run(cfg: &DryRunConfig, world: &mut World, params: &MacroParams) -> D
     }
 
     // ── D5: weryfikacja i naprawa ────────────────────────────────────────────
-    let mut okno = okno.unwrap_or_else(|| Okno::otwórz(&st));
+    let mut okno = okno.unwrap_or_else(|| Okno::otworz(&st));
     let mut rundy = 0u8;
     let mut raport = crate::verify::zweryfikuj(&st, &okno, cfg);
     while !raport.passed() && rundy < cfg.max_rebalance_rounds {
@@ -354,7 +354,7 @@ pub(crate) struct Okno {
 }
 
 impl Okno {
-    pub(crate) fn otwórz(st: &MacroState) -> Okno {
+    pub(crate) fn otworz(st: &MacroState) -> Okno {
         Okno {
             stock: suma_zapasow(st),
             demand: suma_popytu(st),

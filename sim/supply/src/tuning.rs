@@ -68,7 +68,6 @@ pub struct TransportTuning {
     pub cost_gr_per_tonne_km: i64,
     pub minutes_per_km: u32,
     pub load_fixed_minutes: u32,
-    pub pipeline_gr_per_tonne: i64,
 }
 
 impl TransportTuning {

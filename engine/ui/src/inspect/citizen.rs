@@ -10,7 +10,7 @@ use crate::inspect::reason;
 use crate::inspect::timeline::{CitizenHeader, DayTimeline};
 use crate::loc::{Catalog, Locale};
 use magnat_agents::{CitizenSnapshot, NeedTable, SocialClass, StatusBreakdown, StatusWeights};
-use magnat_core::{Money, NeedKind, Q};
+use magnat_core::{CitizenReason, Money, NeedKind, Q};
 
 /// Wiersz paska potrzeby.
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -73,9 +73,10 @@ impl CitizenCard {
             let skutek = deprywacje
                 .iter()
                 .find_map(|r| match r {
-                    magnat_core::DecisionReason::Deprivation { need, .. } if need == n => {
-                        Some(reason::describe(c, l, *r))
-                    }
+                    magnat_core::DecisionReason::Citizen(CitizenReason::Deprivation {
+                        need,
+                        ..
+                    }) if need == n => Some(reason::describe(c, l, *r)),
                     _ => None,
                 })
                 .unwrap_or_default();

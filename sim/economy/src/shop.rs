@@ -354,6 +354,18 @@ pub struct Shop {
     pub controllers: BTreeMap<GoodId, PriceController>,
     /// Obraz cen konkurencji z opóźnieniem 1–7 dni (§6.3).
     pub observed: CompetitorSnapshot,
+    /// Promienie, o które pyta **polityka przypięta temu zakładowi** (`R2-WP22`).
+    ///
+    /// `0` = slot pusty. Wypełnia je [`crate::Market::run_policies`], czyta
+    /// [`crate::Market::observe_competitors`] — czyli obserwacja doby `D+1` widzi
+    /// promienie z polityki wykonanej w dobie `D`. To opóźnienie jest tym samym,
+    /// które ma cały obraz konkurencji (1–7 dób), więc nie wnosi nowej klasy błędu:
+    /// reguła dopisana dziś działa od jutra, tak samo jak przecena konkurenta.
+    ///
+    /// Nie wchodzi do hasha stanu: jest **pochodną** polityki zakładu, a ta jest
+    /// stanem i w hashu już siedzi. Druga kopia tej samej wiedzy rozjechałaby się
+    /// przy pierwszym odpięciu reguły.
+    pub asked_radii: [u32; crate::pricing::MAX_NEAR_RADII],
     /// Księga zakładu (§5.8).
     pub ledger: Ledger,
     /// Powody ostatnich przecen — wyjaśnialność §7 dla zakładów śledzonych.

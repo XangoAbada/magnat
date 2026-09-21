@@ -1,0 +1,33 @@
+error[E0004]: non-exhaustive patterns: `CitizenReason::Commitment { .. }`, `CitizenReason::NeedCritical { .. }`, `CitizenReason::StockBelowThreshold { .. }` and 36 more not covered
+  --> tests/ui/citizen_reason_bez_wildcard.rs:12:11
+   |
+12 |     match powod {
+   |           ^^^^^ patterns `CitizenReason::Commitment { .. }`, `CitizenReason::NeedCritical { .. }`, `CitizenReason::StockBelowThreshold { .. }` and 36 more not covered
+   |
+note: `CitizenReason` defined here
+  --> src/decision/citizen.rs
+   |
+   | pub enum CitizenReason {
+   | ^^^^^^^^^^^^^^^^^^^^^^
+...
+   |     Commitment { kind: CommitmentKind },
+   |     ---------- not covered
+   |     /// Potrzeba zeszła poniżej progu krytycznego i wymusiła slot w planie (M3b faza 2).
+   |     NeedCritical { need: NeedKind, level: Q },
+   |     ------------ not covered
+...
+   |     StockBelowThreshold { cat: StockCat, days_left: u8 },
+   |     ------------------- not covered
+...
+   |     FreeTimePreference { trait_id: TraitId, weight: u8 },
+   |     ------------------ not covered
+...
+   |     NoTimeWindow {
+   |     ------------ not covered
+   = note: the matched value is of type `CitizenReason`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern as shown, or multiple match arms
+   |
+12 ~     match powod {
+13 +         _ => todo!(),
+14 +     }
+   |

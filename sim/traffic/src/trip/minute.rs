@@ -5,6 +5,7 @@
 //! tu kontraktem hasha — plik czyta się od `step_minute` w dół, tak jak minuta biegnie.
 
 use super::*;
+use magnat_core::CitizenReason;
 
 impl TrafficNetwork {
     /// Krok minutowy warstwy mezo. Zwraca zdarzenia do zastosowania w świecie.
@@ -351,10 +352,10 @@ impl TrafficNetwork {
             arrive: at,
             mode: TransportMode::Car as u8,
             reason: t.station_reason.unwrap_or(if at.0 > planned_arrive {
-                DecisionReason::TripDelayed {
+                DecisionReason::Citizen(CitizenReason::TripDelayed {
                     planned_min: t.planned_minutes,
                     actual_min: at.0.saturating_sub(t.depart.0).min(u64::from(u16::MAX)) as u16,
-                }
+                })
             } else {
                 t.reason
             }),
@@ -365,13 +366,13 @@ impl TrafficNetwork {
             t.vehicle
         );
         self.stats.reasons[match ledger.reason {
-            DecisionReason::ModeChosen { .. } => 0,
-            DecisionReason::ModeCompared { .. } => 1,
-            DecisionReason::NoRouteForMode { .. } => 2,
-            DecisionReason::NoParkingAtDestination { .. } => 3,
-            DecisionReason::RefuelNeeded { .. } => 4,
-            DecisionReason::StationChosen { .. } => 5,
-            DecisionReason::TripDelayed { .. } => 6,
+            DecisionReason::Citizen(CitizenReason::ModeChosen { .. }) => 0,
+            DecisionReason::Citizen(CitizenReason::ModeCompared { .. }) => 1,
+            DecisionReason::Citizen(CitizenReason::NoRouteForMode { .. }) => 2,
+            DecisionReason::Citizen(CitizenReason::NoParkingAtDestination { .. }) => 3,
+            DecisionReason::Citizen(CitizenReason::RefuelNeeded { .. }) => 4,
+            DecisionReason::Citizen(CitizenReason::StationChosen { .. }) => 5,
+            DecisionReason::Citizen(CitizenReason::TripDelayed { .. }) => 6,
             _ => 7,
         }] += 1;
         out.push(TrafficEvent::Arrived {
@@ -412,10 +413,10 @@ impl TrafficNetwork {
             t.money = Money(t.money.0 + cost.0);
             // Objazd liczony z tego, co już wiadomo: różnica między planem a chwilą
             // dojazdu na stację. Cena jest za litr, więc z mikrolitrów na litry.
-            t.station_reason = Some(DecisionReason::StationChosen {
+            t.station_reason = Some(DecisionReason::Citizen(CitizenReason::StationChosen {
                 detour_min: REFUEL_DWELL_MIN as u16,
                 price_gr_per_l: cat.price_gr(kind).clamp(0, i64::from(u16::MAX)) as u16,
-            });
+            }));
             // Postój przy dystrybutorze przesuwa cały dalszy ciąg podróży.
             t.entry_cs += u64::from(REFUEL_DWELL_MIN) * CS_PER_MINUTE;
             (

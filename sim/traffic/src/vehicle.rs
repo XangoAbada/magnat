@@ -150,7 +150,7 @@ impl FuelTank {
         }
     }
 
-    /// Stan baku w promilach pojemności — ładunek `DecisionReason::RefuelNeeded`.
+    /// Stan baku w promilach pojemności — ładunek `DecisionReason::Citizen(CitizenReason::RefuelNeeded)`.
     #[must_use]
     pub fn level_permille(&self) -> u16 {
         if self.capacity <= 0 {

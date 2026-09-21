@@ -1,5 +1,6 @@
 use super::canvas::{wstaw, Gap};
 use super::*;
+use magnat_core::CitizenReason;
 
 /// Minut między pobudką a wyjściem z domu (mycie, śniadanie, zbieranie się).
 const PREP_MIN: u16 = 50;
@@ -24,10 +25,10 @@ pub(super) fn faza2_potrzeby(ctx: &PlanCtx<'_>, canvas: &mut DayCanvas, log: &mu
     };
 
     let poziom_snu = ctx.citizen.needs.get(NeedKind::Sleep);
-    let powod_snu = DecisionReason::NeedCritical {
+    let powod_snu = DecisionReason::Citizen(CitizenReason::NeedCritical {
         need: NeedKind::Sleep,
         level: poziom_snu,
-    };
+    });
     let mut spal = false;
     if wake > 0 {
         spal |= wstaw(
@@ -90,20 +91,20 @@ pub(super) fn faza2_potrzeby(ctx: &PlanCtx<'_>, canvas: &mut DayCanvas, log: &mu
             },
             dur,
             ActivityKind::Idle,
-            DecisionReason::NeedCritical {
+            DecisionReason::Citizen(CitizenReason::NeedCritical {
                 need: NeedKind::Hygiene,
                 level: higiena,
-            },
+            }),
             NeedKind::Hygiene.as_index() as u8,
         );
     }
 
     let glod = ctx.citizen.needs.get(NeedKind::Hunger);
     let posilek = ctx.needs.spec(NeedKind::Hunger).visit_min;
-    let powod_jedzenia = DecisionReason::NeedCritical {
+    let powod_jedzenia = DecisionReason::Citizen(CitizenReason::NeedCritical {
         need: NeedKind::Hunger,
         level: glod,
-    };
+    });
     let okna = [
         Gap {
             start: wake,
@@ -137,11 +138,11 @@ pub(super) fn faza2_potrzeby(ctx: &PlanCtx<'_>, canvas: &mut DayCanvas, log: &mu
         }
     }
     if zjadl == 0 {
-        log.skip(DecisionReason::NoTimeWindow {
+        log.skip(DecisionReason::Citizen(CitizenReason::NoTimeWindow {
             need: NeedKind::Hunger,
             needed_min: posilek,
             longest_gap_min: najdluzsza,
-        });
+        }));
     }
 }
 
@@ -254,10 +255,10 @@ pub(super) fn faza4_czas_wolny(
                 g.start,
                 g.len(),
                 gdzie,
-                DecisionReason::FreeTimePreference {
+                DecisionReason::Citizen(CitizenReason::FreeTimePreference {
                     trait_id: cecha,
                     weight: waga,
-                },
+                }),
                 waga,
             );
         }

@@ -194,7 +194,7 @@ Zgodnie z `K-18`. Wpisane jest **tylko to, co wiadomo na pewno** po zamknięciu 
 
 ---
 
-## Korekty wpisane w trakcie M5e
+## Zmiany wpisane po M5e
 
 Tabela korekt podfazy. Gwiazdka = zmiana zakresu albo kryterium.
 

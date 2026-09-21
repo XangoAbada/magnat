@@ -33,6 +33,13 @@ impl Market {
                 continue;
             }
             let mut promien = promien_bazowy;
+            // Promienie, o które pyta polityka zakładu. Obserwacja musi sięgnąć
+            // najdalszego z nich, inaczej reguła „najtańszy w 8 km" widziałaby
+            // wyłącznie sąsiadów z promienia obserwacji (`R2-WP22`).
+            let pytane = m.shops[i].asked_radii;
+            for r in pytane {
+                promien = promien.max(r);
+            }
             let mut nazwani: Vec<(GoodId, SiteId)> = Vec::new();
             for (g, pc) in &m.shops[i].controllers {
                 if let PricePolicy::MatchCompetitor {
@@ -68,12 +75,18 @@ impl Market {
                     if o.site == site || m.shops[i].shelf.line(o.good).is_none() {
                         continue;
                     }
-                    obs.push((o.good, o.unit_price, o.price_rev, o.site));
+                    // Odległość do konkurenta — bez niej nie da się zawęzić obrazu
+                    // do promienia, o który pyta reguła. Pozycję ma sklep, nie oferta.
+                    let d = m
+                        .by_site
+                        .get(&o.site)
+                        .map_or(u32::MAX, |j| odleglosc_m(pos, m.shops[*j as usize].pos));
+                    obs.push((o.good, o.unit_price, o.price_rev, o.site, d));
                 }
             }
             // Porządek `(towar, cena, sklep)` — najtańszy i mediana czytają się wprost,
             // a wynik nie zależy od kolejności zwracanej przez indeks.
-            obs.sort_unstable_by_key(|(g, p, _, s)| (g.get(), p.get(), s.entity().index()));
+            obs.sort_unstable_by_key(|(g, p, _, s, _)| (g.get(), p.get(), s.entity().index()));
 
             // 2. Zbicie do jednego wpisu na towar.
             wpisy.clear();
@@ -100,6 +113,10 @@ impl Market {
                     offers: n as u32,
                     seen_at: t,
                     rev,
+                    // Grupa `obs[k..j]` jest już posortowana po cenie, więc zawężenie
+                    // do promienia to jedno przejście: pierwszy mieszczący się jest
+                    // najtańszy, a środkowy z mieszczących się jest medianą.
+                    near: zaw(&obs[k..j], pytane),
                 });
                 k = j;
             }
@@ -284,4 +301,68 @@ fn price_of(m: &MarketInner, site: SiteId, good: GoodId) -> Option<Money> {
     let i = m.by_site.get(&site).copied()?;
     let line = m.shops[i as usize].shelf.line(good)?;
     m.offers.get(line.offer).map(|o| o.unit_price)
+}
+
+/// Odległość między dwiema pozycjami sklepów w metrach.
+///
+/// `sqrt` na `f64` jest tu dozwolone (`K-6`: podstawowa arytmetyka IEEE-754 jest
+/// deterministyczna międzyplatformowo, zakazane są funkcje przestępne), a wynik idzie
+/// przez zaokrąglenie do metra — więc dwa przebiegi tego samego ziarna dają tę samą
+/// liczbę i to samo zawężenie obrazu.
+fn odleglosc_m(a: magnat_spatial::Vec2, b: magnat_spatial::Vec2) -> u32 {
+    let dx = f64::from(a.x - b.x);
+    let dy = f64::from(a.y - b.y);
+    let d = (dx * dx + dy * dy).sqrt();
+    if d >= f64::from(u32::MAX) {
+        u32::MAX
+    } else {
+        d as u32
+    }
+}
+
+/// Zawęża obserwacje jednego towaru do promieni, o które pyta polityka.
+///
+/// Wejście jest **posortowane po cenie rosnąco** (tak je układa `observe_competitors`),
+/// więc najtańszy mieszczący się w promieniu to pierwszy taki, a mediana to środkowy
+/// z mieszczących się. Promień `0` znaczy „slot pusty" i zostaje pusty.
+///
+/// Zero ofert w promieniu daje slot z `offers == 0` i zerowymi kwotami — reguła czyta
+/// to jako „nie wiem", a nie jako „najtańszy kosztuje zero". Rozróżnienie robi
+/// `offers`, bo `Money::ZERO` jest poprawną ceną promocyjną.
+fn zaw(
+    grupa: &[(GoodId, Money, u32, SiteId, u32)],
+    pytane: [u32; magnat_economy_near_radii::N],
+) -> [crate::pricing::NearRadius; magnat_economy_near_radii::N] {
+    let mut out = [crate::pricing::NearRadius::default(); magnat_economy_near_radii::N];
+    for (slot, r) in pytane.into_iter().enumerate() {
+        if r == 0 {
+            continue;
+        }
+        let mut w_promieniu = grupa.iter().filter(|(_, _, _, _, d)| *d <= r);
+        let Some(pierwszy) = w_promieniu.next() else {
+            out[slot] = crate::pricing::NearRadius {
+                radius_m: r,
+                ..Default::default()
+            };
+            continue;
+        };
+        let ile = 1 + w_promieniu.count();
+        let mediana = grupa
+            .iter()
+            .filter(|(_, _, _, _, d)| *d <= r)
+            .nth(ile / 2)
+            .map_or(pierwszy.1, |x| x.1);
+        out[slot] = crate::pricing::NearRadius {
+            radius_m: r,
+            cheapest: pierwszy.1,
+            median: mediana,
+            offers: u32::try_from(ile).unwrap_or(u32::MAX),
+        };
+    }
+    out
+}
+
+/// Skrót nazwy stałej — `MAX_NEAR_RADII` w postaci użytecznej w typie tablicy.
+mod magnat_economy_near_radii {
+    pub const N: usize = crate::pricing::MAX_NEAR_RADII;
 }

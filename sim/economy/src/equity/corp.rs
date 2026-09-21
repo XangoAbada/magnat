@@ -5,7 +5,7 @@
 //! w dywidendzie, rozstrzyga kurs firmy, a nie ten moduł. Decyzje zapadają
 //! w [`super::invest`] (inwestor) i w tierze taktycznym M7e (firma).
 
-use magnat_core::{DecisionReason, Money, Tick};
+use magnat_core::{DecisionReason, FirmReason, Money, Tick};
 use magnat_firms::{Firm, FirmKey, Firms, Owner};
 
 use super::{
@@ -69,9 +69,9 @@ pub fn check_thresholds(
     }
     for z in &zgloszenia {
         let powod = if z.control {
-            DecisionReason::ControlAcquired { holder: z.holder }
+            DecisionReason::Firm(FirmReason::ControlAcquired { holder: z.holder })
         } else {
-            DecisionReason::StakeDisclosed { holder: z.holder }
+            DecisionReason::Firm(FirmReason::StakeDisclosed { holder: z.holder })
         };
         firms.log(key, t, powod);
         eq.push_disclosure(*z);
@@ -187,7 +187,11 @@ pub fn issue(firms: &mut Firms, key: FirmKey, to: Owner, bp: u16, price: Money, 
     if !super::dilute(firm, to, bp) {
         return false;
     }
-    firms.log(key, t, DecisionReason::SharesIssued { bp, price });
+    firms.log(
+        key,
+        t,
+        DecisionReason::Firm(FirmReason::SharesIssued { bp, price }),
+    );
     true
 }
 

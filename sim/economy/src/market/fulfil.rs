@@ -1,6 +1,7 @@
 //! Decyzja zakupowa i rozliczenie transakcji (szwy (e) i (h)).
 
 use super::*;
+use magnat_core::CitizenReason;
 
 /// Sufit liczby towarów rozważanych w jednej wizycie — tyle, ile mieści największa
 /// półka. Ponad to substytut niższego rzędu przestaje być substytutem.
@@ -170,7 +171,7 @@ impl Market {
         // nieoznaczony nie płaci za ten mechanizm nic poza odczytem bitu.
         if s.tracking != LostSaleTracking::None {
             let dominant = match intent.reason {
-                DecisionReason::ShopChosen { dominant, .. } => dominant,
+                DecisionReason::Citizen(CitizenReason::ShopChosen { dominant, .. }) => dominant,
                 // Wizyta bez decyzji z planu dnia (mieszkaniec trafił inną ścieżką):
                 // przeważyła wygoda, bo nic innego nie było porównywane.
                 _ => magnat_core::UtilityKind::Convenience,
@@ -444,10 +445,10 @@ impl PlaceProvider for Market {
                 // powód **wyjścia**; pełne uzasadnienie zakupu (`ShopChosen` z członem
                 // dominującym) powstaje w `fulfil`, gdzie zapada decyzja o pieniądzach,
                 // i idzie do dziennika transakcji oraz do karty inspekcji.
-                reason: DecisionReason::ChosenNearest {
+                reason: DecisionReason::Citizen(CitizenReason::ChosenNearest {
                     travel_min: c.travel_min,
                     runner_up_min: runner,
-                },
+                }),
             });
         }
         porzadek.clear();
@@ -645,11 +646,11 @@ impl Market {
                         .clamp(-32_000, 32_000)) as i16
                 }
             });
-            let reason = DecisionReason::ShopChosen {
+            let reason = DecisionReason::Citizen(CitizenReason::ShopChosen {
                 site,
                 dominant: dominujacy,
                 delta_bp,
-            };
+            });
             m.intents.push(PurchaseIntent {
                 buyer: req.citizen,
                 household: req.household,
@@ -697,17 +698,17 @@ impl Market {
         };
         m.shops[i as usize].lost.record(tracking, day, sale);
         let reason = if powod == RejectCause::BelowThreshold {
-            DecisionReason::PurchaseDeferred {
+            DecisionReason::Citizen(CitizenReason::PurchaseDeferred {
                 need: req.need,
                 cause: powod,
                 gap_permille: brakowalo,
-            }
+            })
         } else {
-            DecisionReason::OfferRejected {
+            DecisionReason::Citizen(CitizenReason::OfferRejected {
                 site,
                 cause: powod,
                 detail: detal,
-            }
+            })
         };
         detal = 0;
         let _ = detal;

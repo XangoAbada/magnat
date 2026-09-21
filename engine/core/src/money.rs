@@ -33,41 +33,63 @@ impl Money {
             None => None,
         }
     }
-
-    /// Mnożenie przez ułamek `num/den` z zaokrągleniem połówek **od zera**.
-    /// Liczone w `i128`, więc nie przepełnia się dla |kwota| < 2^63 i |num|, |den| < 2^63.
-    ///
-    /// Panika przy `den == 0` — to błąd wywołującego, nie stan danych.
-    #[inline]
-    #[must_use]
-    pub fn mul_ratio(self, num: i64, den: i64) -> Money {
-        assert!(den != 0, "Money::mul_ratio: mianownik zerowy");
-        div_round_half_away(i128::from(self.0) * i128::from(num), i128::from(den))
-    }
-
-    /// Dzielenie z zaokrągleniem połówek od zera: `5/2 = 3`, `-5/2 = -3`.
-    ///
-    /// Panika przy `den == 0`.
-    #[inline]
-    #[must_use]
-    pub fn div_round_half_up(self, den: i64) -> Money {
-        assert!(den != 0, "Money::div_round_half_up: mianownik zerowy");
-        div_round_half_away(i128::from(self.0), i128::from(den))
-    }
 }
 
 /// Wspólny rdzeń zaokrąglania: `round_half_away_from_zero(a / b)`, liczony na modułach,
 /// żeby znak nie wpływał na próg zaokrąglenia.
-fn div_round_half_away(a: i128, b: i128) -> Money {
+fn div_round_half_away(a: i128, b: i128) -> i64 {
     debug_assert!(b != 0);
     let negative = (a < 0) != (b < 0);
     let a_abs = a.unsigned_abs();
     let b_abs = b.unsigned_abs();
     let q = (a_abs * 2 + b_abs) / (b_abs * 2);
-    let q = i128::try_from(q).expect("Money: przepełnienie zakresu i128 przy zaokrąglaniu");
+    let q = i128::try_from(q).expect("przepełnienie zakresu i128 przy zaokrąglaniu");
     let q = if negative { -q } else { q };
-    Money(i64::try_from(q).expect("Money: wynik poza zakresem i64 (grosze)"))
+    i64::try_from(q).expect("wynik poza zakresem i64")
 }
+
+/// Mnożenie przez ułamek i dzielenie z jawnym zaokrągleniem — dla **każdej** wielkości
+/// całkowitoliczbowej z 00 §2, nie tylko dla pieniądza.
+///
+/// Do R2e miał to wyłącznie `Money`, więc wykonawca polityki, chcąc przeskalować
+/// zamówienie o odchyłkę menedżera, opakowywał `Qty` w `Money`, mnożył i rozpakowywał
+/// z powrotem. Wynik był poprawny i **typ kłamał**: przez trzy linie ilość sztuk była
+/// kwotą pieniędzy. Zaokrąglenie jest to samo, bo rdzeń jest ten sam — i o to chodzi,
+/// bo dwie implementacje zaokrąglania w jednym projekcie rozjeżdżają się na połówce.
+macro_rules! ratio_ops {
+    ($($t:ident),+ $(,)?) => { $(
+        impl crate::types::$t {
+            #[doc = concat!("Mnożenie przez ułamek `num/den` z zaokrągleniem połówek **od zera**.\n\n")]
+            /// Liczone w `i128`, więc nie przepełnia się dla |wartość| < 2^63
+            /// i |num|, |den| < 2^63. Panika przy `den == 0` — to błąd wywołującego,
+            /// nie stan danych.
+            #[inline]
+            #[must_use]
+            pub fn mul_ratio(self, num: i64, den: i64) -> crate::types::$t {
+                assert!(den != 0, concat!(stringify!($t), "::mul_ratio: mianownik zerowy"));
+                crate::types::$t(div_round_half_away(
+                    i128::from(self.0) * i128::from(num),
+                    i128::from(den),
+                ))
+            }
+
+            /// Dzielenie z zaokrągleniem połówek od zera: `5/2 = 3`, `-5/2 = -3`.
+            ///
+            /// Panika przy `den == 0`.
+            #[inline]
+            #[must_use]
+            pub fn div_round_half_up(self, den: i64) -> crate::types::$t {
+                assert!(
+                    den != 0,
+                    concat!(stringify!($t), "::div_round_half_up: mianownik zerowy")
+                );
+                crate::types::$t(div_round_half_away(i128::from(self.0), i128::from(den)))
+            }
+        }
+    )+ };
+}
+
+ratio_ops!(Money, Mass, Volume, Energy, Qty);
 
 /// Podział kwoty między N stron proporcjonalnie do wag.
 ///
@@ -176,6 +198,55 @@ mod tests {
             Money(i64::MAX)
         );
         assert_eq!(Money(-1999).mul_ratio(23, 100), Money(-460));
+    }
+
+    /// `Qty`, `Mass`, `Volume` i `Energy` zaokrąglają **co do jednostki** tak samo
+    /// jak `Money` co do grosza (`R2-WP22`).
+    ///
+    /// Wektor jest ten sam z rozmysłu: gdyby któraś wielkość zaokrąglała inaczej,
+    /// wykonawca polityki dostałby inną liczbę sztuk niż przed R2e, w którym liczył
+    /// ją opakowaniem w `Money`. Rdzeń jest jeden, więc rozjazd jest niemożliwy —
+    /// a ten test pilnuje, żeby pozostał jeden.
+    #[test]
+    fn kazda_wielkosc_calkowita_zaokragla_tak_samo_jak_pieniadz() {
+        use crate::{Energy, Mass, Qty, Volume};
+
+        let cases: &[(i64, i64, i64, i64)] = &[
+            // (wartość, num, den, wynik)
+            (1999, 23, 100, 460),
+            (-1999, 23, 100, -460),
+            (5, 1, 2, 3),
+            (-5, 1, 2, -3),
+            (1, 1, 3, 0),
+            (2, 1, 3, 1),
+            (1_000, 10_150, 10_000, 1_015),
+            (1_000, 9_850, 10_000, 985),
+        ];
+        for &(v, num, den, want) in cases {
+            let wzorzec = Money(v).mul_ratio(num, den);
+            assert_eq!(wzorzec, Money(want), "{v} * {num}/{den}");
+            assert_eq!(Qty(v).mul_ratio(num, den).get(), wzorzec.get(), "Qty {v}");
+            assert_eq!(Mass(v).mul_ratio(num, den).get(), wzorzec.get(), "Mass {v}");
+            assert_eq!(
+                Volume(v).mul_ratio(num, den).get(),
+                wzorzec.get(),
+                "Volume {v}"
+            );
+            assert_eq!(
+                Energy(v).mul_ratio(num, den).get(),
+                wzorzec.get(),
+                "Energy {v}"
+            );
+        }
+
+        // Dzielenie też — bo to ten sam rdzeń i ta sama obietnica.
+        for &(v, den) in &[(5i64, 2i64), (-5, 2), (250, 100), (249, 100)] {
+            assert_eq!(
+                Qty(v).div_round_half_up(den).get(),
+                Money(v).div_round_half_up(den).get(),
+                "{v} / {den}"
+            );
+        }
     }
 
     #[test]

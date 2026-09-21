@@ -218,7 +218,7 @@ Zgodnie z `K-18`. Gwiazdką oznaczone te, które zmieniają **zakres albo kryter
 
 ---
 
-## Korekty planu wpisane po implementacji
+## Zmiany wpisane po M2f
 
 Numeracja `H-n`, jak `E-n` w M2d. Gwiazdką te, które zmieniają **zakres albo kryterium**.
 

@@ -56,6 +56,49 @@ pub struct GoodFacts {
     pub cheapest_competitor: Option<Money>,
     pub avg_competitor: Option<Money>,
     pub competitors: i32,
+    /// Obraz zawężony do promieni, o które pyta polityka (`R2-WP22`). Pusty slot ma
+    /// `radius_m == 0`; slot o zerowej liczbie ofert znaczy „w tym promieniu nikogo
+    /// nie widać", a nie „najtańszy kosztuje zero".
+    pub near: [crate::pricing::NearRadius; crate::pricing::MAX_NEAR_RADII],
+}
+
+impl GoodFacts {
+    /// Najtańszy konkurent w **zadanym** promieniu.
+    ///
+    /// `None` znaczy „nie wiem": albo obserwacji nie ma, albo w tym promieniu nie ma
+    /// nikogo. Reguła ma wtedy nie podjąć decyzji, a nie podjąć ją na zerze.
+    ///
+    /// Promień, o który nikt nie pytał w chwili obserwacji, wraca do obrazu bazowego —
+    /// bo obserwacja zna promienie z **poprzedniej** doby, a reguła dopisana dziś
+    /// zaczyna być widoczna jutro. To jest to samo opóźnienie, które ma cały obraz
+    /// konkurencji (1–7 dób), a nie nowa klasa błędu.
+    #[must_use]
+    pub fn cheapest_within(&self, radius_m: u32) -> Option<Money> {
+        match self.near.iter().find(|n| n.radius_m == radius_m) {
+            Some(n) if n.offers > 0 => Some(n.cheapest),
+            Some(_) => None,
+            None => self.cheapest_competitor,
+        }
+    }
+
+    /// Mediana ceny konkurencji w zadanym promieniu. Jak [`GoodFacts::cheapest_within`].
+    #[must_use]
+    pub fn avg_within(&self, radius_m: u32) -> Option<Money> {
+        match self.near.iter().find(|n| n.radius_m == radius_m) {
+            Some(n) if n.offers > 0 => Some(n.median),
+            Some(_) => None,
+            None => self.avg_competitor,
+        }
+    }
+
+    /// Ilu konkurentów w zadanym promieniu.
+    #[must_use]
+    pub fn competitors_within(&self, radius_m: u32) -> i32 {
+        match self.near.iter().find(|n| n.radius_m == radius_m) {
+            Some(n) => i32::try_from(n.offers).unwrap_or(i32::MAX),
+            None => self.competitors,
+        }
+    }
 }
 
 /// Jedna doba śladu: fakty, na których polityka pracowała tego dnia.
@@ -157,26 +200,30 @@ impl PolicyView for ShopView<'_> {
                     marza.clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32,
                 )))
             }
-            // Promień jest tu **ignorowany** i to jest świadome. Obraz konkurencji
-            // sklepu (`CompetitorSnapshot`, M5c) jest budowany jednym promieniem
-            // obserwacji dla całego sklepu, bo pełny cennik każdego sąsiada to 1,2 mln
-            // wpisów na metropolię (`W-2`). Reguła z promieniem 3 km i reguła z 5 km
-            // dostają więc dziś tę samą liczbę.
+            // Promień **wchodzi do odczytu** od R2e (`R2-WP22`). Do tej chwili był
+            // sprawdzany przez walidator (limit 10 km) i ignorowany przy liczeniu:
+            // reguła z promieniem 3 km i reguła z 5 km dostawały tę samą liczbę, bo
+            // obraz konkurencji powstawał jednym promieniem obserwacji. Gracz widział
+            // dwie różne reguły i jeden wynik, a PRD §6.3 cytuje „w promieniu 3 km"
+            // jako treść reguły.
             //
-            // ponytail: sufit nazwany — dopóki polityka ma limit dwóch metryk
-            // konkurencyjnych, różnica między promieniami jest różnicą w zapisie,
-            // a nie w wyniku. Ścieżka wyjścia: `observe_competitors` dostaje drugi
-            // promień, kiedy panel M9 pokaże, że gracz na tej różnicy buduje decyzję.
-            Metric::CheapestCompetitorPrice { good, .. } => {
-                self.fakt(good)?.cheapest_competitor.map(Value::Money)
+            // Zawężenia liczy `observe_competitors`, bo to on ma odległości; tutaj
+            // jest wyłącznie wybór slotu. Koszt ogranicza limit dwóch metryk
+            // konkurencyjnych na politykę, więc promieni na sklep jest najwyżej trzy.
+            Metric::CheapestCompetitorPrice { good, radius_m, .. } => {
+                self.fakt(good)?.cheapest_within(radius_m).map(Value::Money)
             }
-            Metric::AvgCompetitorPrice { good, .. } => {
-                self.fakt(good)?.avg_competitor.map(Value::Money)
+            Metric::AvgCompetitorPrice { good, radius_m, .. } => {
+                self.fakt(good)?.avg_within(radius_m).map(Value::Money)
             }
-            Metric::CompetitorCount { .. } => {
+            Metric::CompetitorCount { radius_m } => {
                 // Liczba konkurentów jest cechą sklepu, nie towaru — bierzemy
                 // największą obserwację, bo tyle sąsiadów sklep w ogóle widzi.
-                let n = self.goods.iter().map(|f| f.competitors).max()?;
+                let n = self
+                    .goods
+                    .iter()
+                    .map(|f| f.competitors_within(radius_m))
+                    .max()?;
                 Some(Value::Count(n))
             }
             Metric::Stock(good) => Some(Value::Qty(self.fakt(good)?.stock.get())),
@@ -282,6 +329,7 @@ pub(crate) fn zbierz_fakty(
                 cheapest_competitor: obs.map(|o| o.cheapest),
                 avg_competitor: obs.map(|o| o.median),
                 competitors: obs.map_or(0, |o| i32::try_from(o.offers).unwrap_or(i32::MAX)),
+                near: obs.map(|o| o.near).unwrap_or_default(),
             }
         })
         .collect()

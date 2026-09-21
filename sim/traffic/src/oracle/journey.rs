@@ -46,6 +46,13 @@ impl TrafficOracle {
         depart: MinuteOfDay,
         who: &CitizenView<'_>,
     ) -> TravelEstimate {
+        // `ponytail:` szacunek jedzie jako dojazd do pracy, choć od `R2-WP22` sama
+        // podróż niesie swój cel. Sufit nazwany: `TravelOracle::estimate` jest
+        // kontraktem M3 i celu nie przyjmuje, a planer woła go **zanim** rozstrzygnie,
+        // czym ten slot będzie. Skutek jest ograniczony: szacunek waży o kilkanaście
+        // procent inaczej niż wykonanie, i to wyłącznie tam, gdzie wartość czasu
+        // przeważa o wybór środka. Wyjście: `estimate` bierze `TripPurpose` argumentem
+        // — zmiana sygnatury kontraktu, czyli wpis `K-n`, a nie poprawka w tej funkcji.
         let d = self.plan(from, to, who, TripPurpose::Work, depart, false);
         TravelEstimate {
             minutes: d.minutes,
@@ -69,7 +76,7 @@ impl TrafficOracle {
     ) -> TripHandle {
         let now = q.now();
         let teraz = MinuteOfDay::new((now % 1440) as u16);
-        let decision = self.plan(trip.from, trip.to, who, TripPurpose::Work, teraz, true);
+        let decision = self.plan(trip.from, trip.to, who, trip.purpose, teraz, true);
         self.mode_counts[decision.chosen.as_index()].fetch_add(1, Ordering::Relaxed);
         self.policz_niewykonalne(&decision);
         let (minutes, reason) = (decision.minutes, decision.reason);
@@ -171,7 +178,7 @@ impl TrafficOracle {
                         dest: trip.to,
                         depart: SimMinute(u64::from(now)),
                         planned_minutes: minutes,
-                        purpose: TripPurpose::Work,
+                        purpose: trip.purpose,
                         load: Mass::ZERO,
                         legs: vec![route],
                         station: None,

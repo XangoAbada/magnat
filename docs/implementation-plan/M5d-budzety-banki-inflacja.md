@@ -146,7 +146,7 @@ większe koperty GD → więcej zakupów powyżej progu → szybsze schodzenie z
 
 ---
 
-## Korekty projektu technicznego M5d
+## Zmiany wpisane po M5d
 
 Rzeczy, które w trakcie pracy okazały się inne, niż zapisano wyżej. Gwiazdka = zmiana
 zakresu albo kryterium. Prefiks `Y-n`, bo `V` należy do M5b, a `W` do M5c.

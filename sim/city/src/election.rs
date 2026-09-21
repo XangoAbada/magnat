@@ -21,7 +21,8 @@
 //! treścią zdania z §1 dokumentu fazy („przegrana w tym obwodzie").
 
 use magnat_core::{
-    rng, DecisionReason, DistrictId, Money, StreamId, TaxKind, Tick, VoteDriver, TAX_KIND_COUNT,
+    rng, CitizenReason, DecisionReason, DistrictId, FirmReason, Money, StreamId, TaxKind, Tick,
+    VoteDriver, TAX_KIND_COUNT,
 };
 use magnat_firms::FirmKey;
 
@@ -190,11 +191,11 @@ impl Election {
             c.illegal_funding = Money(c.illegal_funding.get() + amount.get());
         }
         c.backers.push((backer, amount, legality));
-        Some(DecisionReason::CampaignBacked {
+        Some(DecisionReason::Firm(FirmReason::CampaignBacked {
             candidate: u8::try_from(candidate).unwrap_or(u8::MAX),
             amount,
             illegal: legality == Legality::Illegal,
-        })
+        }))
     }
 
     /// Ile pieniędzy poza rejestrem stoi za kandydatem, w punktach bazowych
@@ -460,11 +461,11 @@ pub fn run_election(
         if log.len() < VOTE_LOG_RING {
             log.push((
                 v.citizen,
-                DecisionReason::VoteCast {
+                DecisionReason::Citizen(CitizenReason::VoteCast {
                     candidate: u8::try_from(wybrany).unwrap_or(u8::MAX),
                     driver: motyw,
                     margin_bp: przewaga,
-                },
+                }),
             ));
         }
     }

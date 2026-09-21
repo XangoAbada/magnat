@@ -20,7 +20,7 @@
 use crate::parking::ParkingSlotRef;
 use crate::trip::TripPurpose;
 use magnat_agents::ArrayVec;
-use magnat_core::{data_path, DecisionReason, Money, TransportMode, Weather};
+use magnat_core::{data_path, CitizenReason, DecisionReason, Money, TransportMode, Weather};
 use serde::Deserialize;
 use std::path::Path;
 
@@ -545,23 +545,23 @@ pub fn evaluate_modes(
         money: offer.money,
         parking: offer.parking,
         candidates,
-        reason: DecisionReason::ModeChosen {
+        reason: DecisionReason::Citizen(CitizenReason::ModeChosen {
             mode: chosen.mode(),
             minutes: offer.minutes.max(1),
-        },
+        }),
     };
     // Kolejność ważności uzasadnienia: **brak parkingu przesłania porównanie**.
     // To jest odpowiedź na pytanie z PRD §14.1 — „dlaczego Anna nie kupiła u mnie?"
     // → „bo nie miała gdzie stanąć" — i traci sens, gdy utonie w liście kandydatów.
     decision.reason = match (brak_parkingu, decision.runner_up()) {
         (Some(lots_searched), _) if !chosen.needs_parking() => {
-            DecisionReason::NoParkingAtDestination { lots_searched }
+            DecisionReason::Citizen(CitizenReason::NoParkingAtDestination { lots_searched })
         }
-        (_, Some((runner_up, delta))) => DecisionReason::ModeCompared {
+        (_, Some((runner_up, delta))) => DecisionReason::Citizen(CitizenReason::ModeCompared {
             chosen: chosen.mode(),
             runner_up: runner_up.mode(),
             delta_gr: delta.clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32,
-        },
+        }),
         _ => decision.reason,
     };
     Some(decision)
@@ -618,6 +618,14 @@ mod tests {
             p.vot_gr_per_min(3_000, TripPurpose::Work)
                 > p.vot_gr_per_min(3_000, TripPurpose::Shopping)
         );
+        // Odprowadzenie dziecka jest droższe od dojazdu do pracy: godzina spóźnienia
+        // do szkoły kosztuje więcej niż godzina spóźnienia do biura. Do R2e ta
+        // nierówność była prawdziwa w tabeli i **nieosiągalna w grze**, bo każda
+        // podróż jechała jako `Work` (`R2-WP22`).
+        assert!(
+            p.vot_gr_per_min(3_000, TripPurpose::Escort)
+                > p.vot_gr_per_min(3_000, TripPurpose::Work)
+        );
     }
 
     #[test]
@@ -635,11 +643,11 @@ mod tests {
         assert_eq!(d.chosen, TravelOption::Transit);
         assert!(matches!(
             d.reason,
-            DecisionReason::ModeCompared {
+            DecisionReason::Citizen(CitizenReason::ModeCompared {
                 chosen: TransportMode::Bus,
                 runner_up: TransportMode::Walk,
                 ..
-            }
+            })
         ));
         assert_eq!(
             d.candidates.len(),
@@ -708,7 +716,7 @@ mod tests {
         assert_eq!(d.chosen, TravelOption::Transit);
         assert_eq!(
             d.reason,
-            DecisionReason::NoParkingAtDestination { lots_searched: 11 },
+            DecisionReason::Citizen(CitizenReason::NoParkingAtDestination { lots_searched: 11 }),
             "karta inspekcji nie powie, dlaczego Anna nie przyjechała"
         );
         let auto = d

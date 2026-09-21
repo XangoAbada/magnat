@@ -256,7 +256,7 @@ Wyznaczanie granic:
 
 ---
 
-## Korekty planu wpisane po implementacji
+## Zmiany wpisane po M2c
 
 Numeracja `C-n`; odwołania z kodu (`korekta C7`) wskazują na tę tabelę. Gwiazdką
 oznaczone te, które zmieniają **zakres albo kryterium**, a nie tylko sposób liczenia.

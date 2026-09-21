@@ -5,7 +5,7 @@
 //! Obie rzeczy tutaj są też jedynymi w tym module, które **ruszają akcjonariat poza
 //! sesją** — i dlatego obie muszą odświeżyć pamięć progów, czego sesja robić nie musi.
 
-use magnat_core::{CitizenId, DecisionReason, Money, Tick};
+use magnat_core::{CitizenId, DecisionReason, FirmReason, Money, Tick};
 use magnat_ecs::World;
 use magnat_firms::{firm_id, FirmKey, Firms, Owner};
 
@@ -44,10 +44,10 @@ pub(crate) fn dywidendy(world: &mut World, market: &Market, eq: &mut Equity, t: 
         };
         let memo = TxMemo::new(
             TxKind::Dividend { firm: firm_id(key) },
-            DecisionReason::DividendPaid {
+            DecisionReason::Firm(FirmReason::DividendPaid {
                 firm: firm_id(key),
                 total: kwota,
-            },
+            }),
         );
         let mut wyplacone = Money::ZERO;
         for (o, m) in podzial {
@@ -88,10 +88,10 @@ pub(crate) fn dywidendy(world: &mut World, market: &Market, eq: &mut Equity, t: 
                 firms.log(
                     key,
                     t,
-                    DecisionReason::DividendPaid {
+                    DecisionReason::Firm(FirmReason::DividendPaid {
                         firm: firm_id(key),
                         total: wyplacone,
-                    },
+                    }),
                 );
             }
             razem = Money(razem.get() + wyplacone.get());
@@ -156,10 +156,10 @@ pub(crate) fn emisje(world: &mut World, market: &Market, eq: &mut Equity, t: Tic
                 firm: firm_id(key),
                 bp,
             },
-            DecisionReason::SharesIssued {
+            DecisionReason::Firm(FirmReason::SharesIssued {
                 bp,
                 price: l.last_fixing,
-            },
+            }),
         );
         let row = market.rest_of_world();
         let rozliczenie = pay::Rozliczenie {

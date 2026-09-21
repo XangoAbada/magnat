@@ -6,8 +6,8 @@
 //! w karcie inspekcji.
 
 use magnat_core::{
-    DecisionReason, Energy, Entity, FirmId, Mass, Money, OpenHours, ShortageStageKind, SimMinute,
-    SiteId, UtilityService, Volume, Q,
+    DecisionReason, Energy, Entity, FirmId, FirmReason, Mass, Money, OpenHours, ShortageStageKind,
+    SimMinute, SiteId, UtilityService, Volume, Q,
 };
 use magnat_supply::plant::{Dock, PlantSite};
 use magnat_supply::store::{BatchDraft, MassIn, WarehouseRole};
@@ -260,13 +260,13 @@ fn mlyn_stoi_piec_dni_i_kaskada_schodzi_po_kolei() {
     assert!(
         powody
             .iter()
-            .any(|r| matches!(r, DecisionReason::Shortage { .. })),
+            .any(|r| matches!(r, DecisionReason::Firm(FirmReason::Shortage { .. }))),
         "przejścia kaskady zapisują powód: {powody:?}"
     );
     assert!(
         powody
             .iter()
-            .any(|r| matches!(r, DecisionReason::SubstituteUsed { .. })),
+            .any(|r| matches!(r, DecisionReason::Firm(FirmReason::SubstituteUsed { .. }))),
         "substytucja zapisuje własny powód, bo kosztuje jakość: {powody:?}"
     );
 

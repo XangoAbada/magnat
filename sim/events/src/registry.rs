@@ -7,8 +7,8 @@ use crate::param::{ParamOverlay, ParamPatch, SimParam};
 use crate::probe::{SiteFilter, SiteRef};
 use crate::weather::WeatherState;
 use magnat_core::{
-    DecisionReason, EventCategory, EventId, GoodId, HashState, NeedKind, SiteId, StateHasher,
-    TariffClassId, Tick,
+    CityReason, DecisionReason, EventCategory, EventId, GoodId, HashState, NeedKind, SiteId,
+    StateHasher, TariffClassId, Tick,
 };
 use magnat_firms::FirmKey;
 
@@ -419,11 +419,11 @@ impl Events {
         });
         self.note_reason(
             at,
-            DecisionReason::EventStarted {
+            DecisionReason::City(CityReason::EventStarted {
                 event: id,
                 category: kat,
                 severity_bps: sev,
-            },
+            }),
         );
         if let Some(d) = self.diag.get_mut(ev.def as usize) {
             d.fired += 1;
@@ -471,11 +471,11 @@ impl Events {
             });
             self.note_reason(
                 at,
-                DecisionReason::EventEnded {
+                DecisionReason::City(CityReason::EventEnded {
                     event: e.id,
                     category: kat,
                     days: dni,
-                },
+                }),
             );
             if let Some(d) = self.diag.get_mut(e.def as usize) {
                 d.last_end_day = day;

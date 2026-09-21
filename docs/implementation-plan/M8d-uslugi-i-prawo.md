@@ -141,7 +141,7 @@ odnośnikiem**. Konsekwencja dla tej podfazy jest jedna i mała, ale nie było j
 
 ---
 
-## Korekty planu wpisane w M8d
+## Zmiany wpisane po M8d
 
 Co podfaza pokazała o **własnym** planie. Gwiazdka = zmiana zakresu albo kryterium.
 Poprawki wysłane w przód (do M8e, M9 i wykazu `R2`) są w tabeli „Zmiany wpisane po M8d"

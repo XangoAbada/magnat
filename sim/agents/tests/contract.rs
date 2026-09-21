@@ -12,8 +12,8 @@ use magnat_agents::{
     PlaceEntry, PlaceProvider, PlaceTable, MAX_CANDIDATES,
 };
 use magnat_core::{
-    BuildingId, CitizenId, DecisionReason, Entity, HouseholdId, Money, NeedKind, PlaceKind,
-    PlaceRef, SimMinute, WorldCoord,
+    BuildingId, CitizenId, CitizenReason, DecisionReason, Entity, HouseholdId, Money, NeedKind,
+    PlaceKind, PlaceRef, SimMinute, WorldCoord,
 };
 use std::num::NonZeroU32;
 use std::sync::Arc;
@@ -107,10 +107,10 @@ fn wybor_miejsca_nie_zna_implementacji() {
     // Uzasadnienie niesie alternatywę — bez niej karta inspekcji pokazuje wybór
     // bez kontekstu, a PRD §5.5 chce obu (00 §7).
     match wybor.reason {
-        DecisionReason::ChosenNearest {
+        DecisionReason::Citizen(CitizenReason::ChosenNearest {
             travel_min,
             runner_up_min,
-        } => {
+        }) => {
             assert_eq!(travel_min, wybor.travel_min);
             assert!(
                 runner_up_min > travel_min,
@@ -124,10 +124,10 @@ fn wybor_miejsca_nie_zna_implementacji() {
     let pusto = zadanie_po_drodze(&EmptyPlaces, NeedKind::Hunger, budynek(1), &znane);
     assert_eq!(
         pusto,
-        Err(DecisionReason::PlaceUnknown {
+        Err(DecisionReason::Citizen(CitizenReason::PlaceUnknown {
             need: NeedKind::Hunger,
             known_count: 2
-        })
+        }))
     );
 }
 
@@ -144,10 +144,10 @@ fn mieszkaniec_bez_wiedzy_nie_teleportuje_sie_do_sklepu() {
     let wynik = zadanie_po_drodze(&nieskonczone, NeedKind::Hunger, budynek(1), &znane);
     assert_eq!(
         wynik,
-        Err(DecisionReason::PlaceUnknown {
+        Err(DecisionReason::Citizen(CitizenReason::PlaceUnknown {
             need: NeedKind::Hunger,
             known_count: 0
-        })
+        }))
     );
 }
 
@@ -206,10 +206,10 @@ fn sciezka_odmowy_dziala_zanim_m5_bedzie_mial_czym_odmawiac() {
             assert!(satisfaction.get() > 0 && duration_min > 0);
             assert!(matches!(
                 reason,
-                DecisionReason::NeedSatisfied {
+                DecisionReason::Citizen(CitizenReason::NeedSatisfied {
                     need: NeedKind::Hunger,
                     ..
-                }
+                })
             ));
         }
         FulfilOutcome::Refused(r) => panic!("czwarta wizyta odmówiona: {r:?}"),
@@ -418,7 +418,7 @@ fn warstwa_mikro_jest_krokowana_raz_na_minute() {
                 minutes: 1,
                 cost: Money::ZERO,
                 mode: TransportMode::Walk,
-                reason: DecisionReason::ModeWalkOnly { minutes: 1 },
+                reason: DecisionReason::Citizen(CitizenReason::ModeWalkOnly { minutes: 1 }),
             }
         }
 

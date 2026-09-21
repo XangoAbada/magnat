@@ -17,7 +17,7 @@ use magnat_agents::{
     NeedDecaySystem, NoInheritance, ReplanCooldownSystem, SkillDriftSystem, SocietySystem,
 };
 use magnat_city::{City, CitySystem, TaxPayer};
-use magnat_core::{Money, TaxKind};
+use magnat_core::{CityReason, Money, TaxKind};
 use magnat_economy::corpfin::system::InsolvencySystem;
 use magnat_economy::labor::LaborSystem;
 use magnat_economy::{Books, MarketSystem};
@@ -150,7 +150,7 @@ fn kazde_obciazenie_ma_platnika_i_powod() {
         );
         // Powód jest wyprowadzalny i niesie daninę oraz kwotę (00 §7).
         match c.reason() {
-            magnat_core::DecisionReason::TaxAssessed { kind, amount, .. } => {
+            magnat_core::DecisionReason::City(CityReason::TaxAssessed { kind, amount, .. }) => {
                 assert_eq!(kind, c.kind);
                 assert_eq!(amount, c.amount);
             }

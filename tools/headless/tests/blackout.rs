@@ -15,7 +15,7 @@ use magnat_agents::{
     NeedDecaySystem, NoInheritance, ReplanCooldownSystem, SkillDriftSystem, SocietySystem,
 };
 use magnat_city::CitySystem;
-use magnat_core::{DecisionReason, LineStopCause, Money, SiteId, UtilityService};
+use magnat_core::{DecisionReason, FirmReason, LineStopCause, Money, SiteId, UtilityService};
 use magnat_economy::corpfin::system::InsolvencySystem;
 use magnat_economy::labor::LaborSystem;
 use magnat_economy::MarketSystem;
@@ -200,10 +200,10 @@ fn blackout_zatrzymuje_produkcje_i_widac_to_w_kosztach() {
             z.reasons().iter().any(|(_, r)| {
                 matches!(
                     r,
-                    DecisionReason::ProductionHalted {
+                    DecisionReason::Firm(FirmReason::ProductionHalted {
                         cause: LineStopCause::NoPower,
                         ..
-                    }
+                    })
                 )
             })
         });

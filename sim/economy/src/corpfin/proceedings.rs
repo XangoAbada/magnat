@@ -7,7 +7,7 @@
 //! na dziesięciu tysiącach losowych konfiguracji bez budowania świata, a drugie nie.
 
 use magnat_core::{
-    BankruptcyTrigger, CitizenId, ClaimPriority, DecisionReason, FirmId, Money, Tick,
+    BankruptcyTrigger, CitizenId, ClaimPriority, DecisionReason, FirmId, FirmReason, Money, Tick,
 };
 
 use crate::books::{AccountId, AccountOwner, Books, TxKind, TxMemo};
@@ -186,10 +186,10 @@ impl CorpFinance {
         if cena.get() <= 0 {
             return None;
         }
-        let reason = DecisionReason::ClaimSettled {
+        let reason = DecisionReason::Firm(FirmReason::ClaimSettled {
             priority: ClaimPriority::Unsecured,
             ratio_bp: 0,
-        };
+        });
         let asset = self.cases[id.0 as usize].estate[lot].asset;
         let memo = TxMemo::new(TxKind::Rent { site: asset.site }, reason);
         books.transfer(buyer_account, konto, cena, memo, t).ok()?;
@@ -299,10 +299,10 @@ impl CorpFinance {
             let asset = self.cases[id.0 as usize].estate[i].asset;
             let memo = TxMemo::new(
                 TxKind::Rent { site: asset.site },
-                DecisionReason::BankruptcyOpened {
+                DecisionReason::Firm(FirmReason::BankruptcyOpened {
                     trigger: self.cases[id.0 as usize].trigger,
                     days: 0,
-                },
+                }),
             );
             if books.transfer(rest_of_world, konto, cena, memo, t).is_ok() {
                 suma = Money(suma.get() + cena.get());
@@ -345,10 +345,10 @@ impl CorpFinance {
         if plan.trustee_fee.get() > 0 {
             let memo = TxMemo::new(
                 TxKind::Withdrawal,
-                DecisionReason::BankruptcyOpened {
+                DecisionReason::Firm(FirmReason::BankruptcyOpened {
                     trigger: b.trigger,
                     days: 0,
-                },
+                }),
             );
             let _ = books.transfer(konto, trustee_account, plan.trustee_fee, memo, t);
         }

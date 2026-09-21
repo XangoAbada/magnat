@@ -271,7 +271,7 @@ M4c nie jest tu przeprojektowywany. Gwiazdka = zmiana zakresu albo kryterium.
 
 ---
 
-## Korekty planu wpisane po implementacji M4c
+## Zmiany wpisane po M4c
 
 Zgodnie z `K-18`. Gwiazdka = zmiana zakresu albo kryterium.
 

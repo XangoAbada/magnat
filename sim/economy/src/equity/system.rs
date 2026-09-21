@@ -29,7 +29,9 @@
 //! zapisu, bo gospodarstwo nie ma konta w księgach (M5b).
 
 use magnat_agents::{Household, Identity, Personality, Population};
-use magnat_core::{Cadence, CitizenId, DecisionReason, Entity, Money, SimMinute, Tick, TraitId};
+use magnat_core::{
+    Cadence, CitizenId, DecisionReason, Entity, FirmReason, Money, SimMinute, Tick, TraitId,
+};
 use magnat_ecs::{System, SystemCtx, SystemDesc, SystemId, World};
 use magnat_firms::{firm_id, FirmKey, FirmStatus, Firms, Owner};
 
@@ -333,10 +335,10 @@ pub fn debut(world: &mut World, eq: &mut Equity, key: FirmKey, t: Tick) -> bool 
         firms.log(
             key,
             t,
-            DecisionReason::StockListed {
+            DecisionReason::Firm(FirmReason::StockListed {
                 firm: firm_id(key),
                 price: cena,
-            },
+            }),
         );
     }
     true

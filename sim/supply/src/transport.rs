@@ -32,10 +32,6 @@ use crate::Store;
 pub mod consolidate;
 pub use consolidate::{consolidate, ConsolidationLimits, MilkRun};
 
-/// Rurociąg — środek transportu bez pojazdu, kierowcy i rampy.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
-pub struct PipelineId(pub u32);
-
 /// Nadwozie — słownik mieszka od M6d w `engine/core` (`K-40`), bo deklaruje je także
 /// katalog pojazdów M4 (`data/vehicles/classes.ron`). Tu zostaje re-eksport, więc nazwy
 /// z §5.6 nie drgnęły.
@@ -93,7 +89,6 @@ pub enum Carrier {
         firm: magnat_core::FirmId,
         quote: Money,
     },
-    Pipeline(PipelineId),
     Unassigned,
 }
 
@@ -193,10 +188,10 @@ impl HashState for TransportOrder {
                 firm.entity().hash_state(h);
                 quote.hash_state(h);
             }
-            Carrier::Pipeline(p) => {
-                h.write_u8(2);
-                h.write_u32(p.0);
-            }
+            // Tag 3 zostaje przy `Unassigned`, choć `Pipeline` z tagiem 2 właśnie
+            // znikł (`D-N5`): tagi hasha są **wieczne** z tego samego powodu co
+            // numery `StreamId`. Przenumerowanie zmieniłoby hash każdego świata
+            // z transportem, a dziura po usuniętym wariancie nie kosztuje nic.
             Carrier::Unassigned => h.write_u8(3),
         }
         self.price.hash_state(h);

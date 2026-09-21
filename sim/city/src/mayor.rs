@@ -24,7 +24,7 @@
 //! w groszach, punktacja menu w `i64`.
 
 use magnat_core::{
-    AgencyKind, DecisionReason, DistrictId, Money, OpenHours, PolicyKind, ServiceKind,
+    AgencyKind, CityReason, DecisionReason, DistrictId, Money, OpenHours, PolicyKind, ServiceKind,
     SpendCategory, TaxKind, Tick, UtilityService, SPEND_CATEGORY_COUNT, TAX_KIND_COUNT,
 };
 
@@ -212,12 +212,12 @@ fn zbierz_podatki(
                 bps: nowa,
             },
             score,
-            reason: DecisionReason::TaxRateChanged {
+            reason: DecisionReason::City(CityReason::TaxRateChanged {
                 kind: *k,
                 from_bp: u16::try_from(obecna).unwrap_or(u16::MAX),
                 to_bp: u16::try_from(nowa).unwrap_or(u16::MAX),
                 gap_bp: i16::try_from(sig.fiscal_bp.clamp(-30_000, 30_000) / 10).unwrap_or(0),
-            },
+            }),
         });
     }
 }
@@ -279,11 +279,11 @@ fn zbierz_wydatki(
             },
             score: i64::from(sig.service_gap_bp) * i64::from(gov.goals.approval_w) / 10_000
                 + i64::from(gov.mayor_pref.social_bps) / 4,
-            reason: DecisionReason::PolicyEnacted {
+            reason: DecisionReason::City(CityReason::PolicyEnacted {
                 kind: PolicyKind::SpendShare,
                 for_bp: 0,
                 delay_days: tun.vacatio_legis_days,
-            },
+            }),
         });
     }
     // Dotacje przy wysokim bezrobociu. To jest ten sam mechanizm i ta sama
@@ -297,11 +297,11 @@ fn zbierz_wydatki(
             },
             score: i64::from(sig.unemployment_permille) * i64::from(gov.goals.growth_w) / 1_000
                 + i64::from(gov.mayor_pref.populist_bps) / 4,
-            reason: DecisionReason::PolicyEnacted {
+            reason: DecisionReason::City(CityReason::PolicyEnacted {
                 kind: PolicyKind::SpendShare,
                 for_bp: 0,
                 delay_days: tun.vacatio_legis_days,
-            },
+            }),
         });
     }
     // Deficyt utrwalony: tnie się ten kierunek, który burmistrz ceni najmniej.
@@ -322,11 +322,11 @@ fn zbierz_wydatki(
                 },
                 score: i64::from(sig.fiscal_bp.unsigned_abs()) * i64::from(gov.goals.balance_w)
                     / 10_000,
-                reason: DecisionReason::PolicyEnacted {
+                reason: DecisionReason::City(CityReason::PolicyEnacted {
                     kind: PolicyKind::SpendShare,
                     for_bp: 0,
                     delay_days: tun.vacatio_legis_days,
-                },
+                }),
             });
         }
     }
@@ -347,11 +347,11 @@ fn zbierz_wydatki(
                     inspectors: (obecna + 2).max(4),
                 },
                 score: i64::from(sig.shadow_bp) / 2 + i64::from(gov.goals.balance_w) / 10,
-                reason: DecisionReason::PolicyEnacted {
+                reason: DecisionReason::City(CityReason::PolicyEnacted {
                     kind: PolicyKind::AgencyStaffing,
                     for_bp: 0,
                     delay_days: tun.vacatio_legis_days,
-                },
+                }),
             });
         }
     }
@@ -377,11 +377,11 @@ fn zbierz_regulacje(
                 max_g_per_min: emission_limit * 4 / 5,
             },
             score: i64::from(gov.mayor_pref.green_bps) / 2,
-            reason: DecisionReason::PolicyEnacted {
+            reason: DecisionReason::City(CityReason::PolicyEnacted {
                 kind: PolicyKind::EmissionLimit,
                 for_bp: 0,
                 delay_days: tun.vacatio_legis_days,
-            },
+            }),
         });
     }
     // Sufit taryfy: populista sięga po niego, gdy poparcie siada.
@@ -403,11 +403,11 @@ fn zbierz_regulacje(
             score: i64::from(10_000 - gov.approval_mean_bp())
                 * i64::from(gov.mayor_pref.populist_bps)
                 / 10_000,
-            reason: DecisionReason::PolicyEnacted {
+            reason: DecisionReason::City(CityReason::PolicyEnacted {
                 kind: PolicyKind::TariffCap,
                 for_bp: 0,
                 delay_days: tun.vacatio_legis_days,
-            },
+            }),
         });
     }
     // Płaca minimalna: socjalny burmistrz sięga po nią wcześniej niż inni.
@@ -415,11 +415,11 @@ fn zbierz_regulacje(
         menu.push(Kandydat {
             policy: Policy::MinWage(Money(180_000)),
             score: i64::from(gov.mayor_pref.social_bps) / 2 + i64::from(gov.goals.approval_w) / 4,
-            reason: DecisionReason::PolicyEnacted {
+            reason: DecisionReason::City(CityReason::PolicyEnacted {
                 kind: PolicyKind::MinWage,
                 for_bp: 0,
                 delay_days: tun.vacatio_legis_days,
-            },
+            }),
         });
     }
     // Wolna niedziela w dzielnicy o najniższym poparciu. Socjalny i ekologiczny
@@ -443,11 +443,11 @@ fn zbierz_regulacje(
                         hours: OpenHours::new(360, 1_320, 0b011_1111),
                     },
                     score: i64::from(gov.mayor_pref.social_bps) / 3,
-                    reason: DecisionReason::PolicyEnacted {
+                    reason: DecisionReason::City(CityReason::PolicyEnacted {
                         kind: PolicyKind::TradingHours,
                         for_bp: 0,
                         delay_days: tun.vacatio_legis_days,
-                    },
+                    }),
                 });
             }
         }

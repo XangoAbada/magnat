@@ -50,6 +50,15 @@ macro_rules! vocab_enum {
 vocab_enum! {
     /// Wymiar, w którym agent ocenia opcję. Konsument: M5 (funkcja użyteczności zakupu,
     /// PRD §6.4), M7 (oceny ofert pracy), M9 (podsumowanie decyzji gracza).
+    ///
+    /// **Nie mylić z [`UtilityService`]** — to są dwa różne pojęcia o mylnie podobnych
+    /// nazwach, oba w tym pliku. Tutaj „utility" znaczy *użyteczność* w sensie funkcji
+    /// oceny (cena, jakość, odległość); tam znaczy *media komunalne* (prąd, woda, gaz).
+    /// `CB-1` w M8 zarządziło zmianę nazwy na `UtilityService` i **została wykonana
+    /// w całości**: przemianowano ten enum, który opisuje media. Przegląd przed R2
+    /// odczytał dwa podobne identyfikatory jako połowiczne wykonanie (poz. 63 wykazu)
+    /// — i to jest sprostowanie, a nie naprawa: oba mają czytelników, oba są żywe
+    /// i żaden nie jest martwym kodem. Zostaje różnica nazwana tutaj.
     UtilityKind {
         Price, Quality, Distance, Time, Variety, Brand, Habit, Convenience, Risk,
     }
@@ -120,7 +129,7 @@ vocab_enum! {
 }
 
 vocab_enum! {
-    /// Skutek deprywacji potrzeby — ładunek `DecisionReason::Deprivation` (M3a §5.5).
+    /// Skutek deprywacji potrzeby — ładunek `DecisionReason::Citizen(CitizenReason::Deprivation)` (M3a §5.5).
     /// Nazwa mówi, **co** się pogarsza; o ile, mówią dane w `data/needs/needs.ron`.
     DeprivationEffect {
         EnergyLoss, HealthLoss, MoodLoss, StressGain,
@@ -129,7 +138,7 @@ vocab_enum! {
 }
 
 vocab_enum! {
-    /// Zobowiązanie stałe w planie dnia — ładunek `DecisionReason::Commitment` (M3b §5.4).
+    /// Zobowiązanie stałe w planie dnia — ładunek `DecisionReason::Citizen(CitizenReason::Commitment)` (M3b §5.4).
     ///
     /// W `core`, choć sam planer jest w `sim/agents`: ładunek centralnego enuma nie może
     /// pochodzić z crate'u, który od `core` zależy (ta sama reguła, która wypchnęła
@@ -142,7 +151,7 @@ vocab_enum! {
 
 vocab_enum! {
     /// Kategoria zapasu gospodarstwa domowego — indeks w `Household.stock`
-    /// (M3c §5.6) i ładunek `DecisionReason::StockBelowThreshold` (M3b §5.4).
+    /// (M3c §5.6) i ładunek `DecisionReason::Citizen(CitizenReason::StockBelowThreshold)` (M3b §5.4).
     ///
     /// Kolejność jest kontraktem tak samo jak przy `NeedKind`: to ona indeksuje tablicę
     /// dni zapasu. W M3 zapas jest abstrakcyjnymi „dniami"; M5 zastępuje go realnymi
@@ -165,7 +174,7 @@ pub const STOCK_CAT_COUNT: usize = StockCat::ALL.len();
 
 vocab_enum! {
     /// Który człon korekty przeważył przy zmianie ceny (M5c §5.6) — ładunek
-    /// `DecisionReason::Repricing`.
+    /// `DecisionReason::Firm(FirmReason::Repricing)`.
     ///
     /// W `core` z tego samego powodu co `StockCat` i `RejectCause` (`K-20`): ładunek
     /// centralnego enuma nie może pochodzić z crate'u, który od `core` zależy.
@@ -248,7 +257,7 @@ vocab_enum! {
     /// Co otwarło postępowanie upadłościowe (M7d §5.13, PRD §7.8).
     ///
     /// W `core` z tej samej reguły co [`WageCause`] (`K-45`): jest ładunkiem
-    /// `DecisionReason::BankruptcyOpened`, a ładunek centralnego enuma nie może
+    /// `DecisionReason::Firm(FirmReason::BankruptcyOpened)`, a ładunek centralnego enuma nie może
     /// pochodzić z crate'u, który od `core` zależy. Drugi czytelnik znany z nazwy
     /// i numeru fazy: M8 (kara administracyjna jako `CourtOrder`), M9 (karta firmy).
     ///
@@ -270,7 +279,7 @@ vocab_enum! {
 vocab_enum! {
     /// Kolejność zaspokojenia w upadłości (M7d §5.13, `K-10`).
     ///
-    /// Ładunek `DecisionReason::ClaimSettled`, więc w `core` — ta sama reguła co przy
+    /// Ładunek `DecisionReason::Firm(FirmReason::ClaimSettled)`, więc w `core` — ta sama reguła co przy
     /// [`BankruptcyTrigger`]. Drugi czytelnik: M8 zgłasza roszczenie miasta jako
     /// `Public` i musi je nazwać, nie mając własnej ścieżki egzekucji (`K-10`).
     ///
@@ -329,7 +338,7 @@ vocab_enum! {
 vocab_enum! {
     /// Pozycja kosztów stałych gospodarstwa domowego (M5d §5.9, PRD §5.2).
     ///
-    /// Ładunek `DecisionReason::BudgetShortfall`, więc mieszka w `core` (`K-30`).
+    /// Ładunek `DecisionReason::Citizen(CitizenReason::BudgetShortfall)`, więc mieszka w `core` (`K-30`).
     /// Kolejność indeksuje `HouseholdBudget.fixed` — jest kontraktem zapisu gry.
     ///
     /// - `Housing` — czynsz albo rata mieszkaniowa. W M5 stała z danych; M7/M10 wnoszą
@@ -445,7 +454,7 @@ impl StockCat {
 
 vocab_enum! {
     /// Kierunek i powód decyzji migracyjnej gospodarstwa — ładunek
-    /// `DecisionReason::MigrationDecision` (M3c §5.7).
+    /// `DecisionReason::Citizen(CitizenReason::MigrationDecision)` (M3c §5.7).
     ///
     /// W `core`, bo jest ładunkiem centralnego enuma (K-12): ładunek nie może pochodzić
     /// z crate'u, który od `core` zależy. Czyta go M8 (polityka mieszkaniowa miasta)
@@ -456,7 +465,7 @@ vocab_enum! {
 }
 
 vocab_enum! {
-    /// Zdarzenie cyklu życia mieszkańca — ładunek `DecisionReason::LifeEvent` (M3c §5.6).
+    /// Zdarzenie cyklu życia mieszkańca — ładunek `DecisionReason::Citizen(CitizenReason::LifeEvent)` (M3c §5.6).
     ///
     /// Tu, a nie w `sim/agents`, z tego samego powodu co `MigrationKind`. M7 czyta
     /// `Retired` (zwolnienie etatu), M8 `Died` i `FellIll` (usługi publiczne).
@@ -497,6 +506,11 @@ vocab_enum! {
 vocab_enum! {
     /// Rodzaj mediów. M5 używa go w `TxKind::Utility`, zanim M8 zbuduje sieci przesyłowe —
     /// i to jest dokładnie powód, dla którego enum stoi tutaj, a nie w `sim/city`.
+    ///
+    /// **Nie mylić z [`UtilityKind`]**, który opisuje wymiar oceny w funkcji użyteczności.
+    /// Nazwa `UtilityService` wzięła się z `CB-1` właśnie po to, żeby te dwa dały się
+    /// odróżnić w miejscu wywołania; poz. 63 wykazu R2 zgłaszała je jako jedno pojęcie
+    /// w dwóch nazwach i to była pomyłka przeglądu (patrz `R2-WP22`).
     UtilityService {
         Electricity, Water, Sewage, Gas, Heat, Waste, Internet,
     }
@@ -505,7 +519,7 @@ vocab_enum! {
 vocab_enum! {
     /// Kategoria zdarzenia świata (PRD §11.2, M8c §5.5).
     ///
-    /// Tutaj, a nie w `sim/events`, bo jest **ładunkiem** `DecisionReason::EventStarted`,
+    /// Tutaj, a nie w `sim/events`, bo jest **ładunkiem** `DecisionReason::City(CityReason::EventStarted)`,
     /// a ładunek centralnego enuma nie może pochodzić z crate'u, który od `core` zależy —
     /// ta sama reguła, która wypchnęła tu `PriceDriver` (`K-30`) i `WageCause` (`K-45`).
     /// Kolejność wariantów jest kontraktem: `as_index()` indeksuje histogram zdarzeń
@@ -634,7 +648,7 @@ pub const PERIL_KIND_COUNT: usize = PerilKind::ALL.len();
 
 vocab_enum! {
     /// Dlaczego linia produkcyjna nie produkuje. Właścicielem jest M6, ale słownik mieszka
-    /// w `core`, bo jest **ładunkiem** `DecisionReason::ProductionHalted` — a ładunek
+    /// w `core`, bo jest **ładunkiem** `DecisionReason::Firm(FirmReason::ProductionHalted)` — a ładunek
     /// centralnego enuma nie może pochodzić z crate'u, który od `core` zależy (`K-20`).
     /// Czyta go karta inspekcji zakładu (M6e), pulpit firmy (M7) i alert miejski
     /// przy odcięciu mediów (M8).
@@ -651,7 +665,7 @@ vocab_enum! {
 vocab_enum! {
     /// Stopień kaskady niedoboru (PRD §8.4) **bez ładunku** — ładunek zostaje po stronie
     /// M6 w `supply::ShortageStage`, tutaj jest sam stopień, bo tyle niesie
-    /// `DecisionReason::Shortage` i tyle pokazuje karta inspekcji.
+    /// `DecisionReason::Firm(FirmReason::Shortage)` i tyle pokazuje karta inspekcji.
     ///
     /// Kolejność jest kolejnością prób z PRD i **jest kontraktem**: bufor → obniżenie
     /// produkcji → spot → import → substytut → postój. Test kaskady sprawdza, że
@@ -665,7 +679,7 @@ vocab_enum! {
 vocab_enum! {
     /// Dlaczego firma ruszyła stawkę w ofercie pracy (M7b §5.5, PRD §6.6).
     ///
-    /// Ładunek `DecisionReason::WageRaise`, więc mieszka w `core` z tego samego powodu
+    /// Ładunek `DecisionReason::Firm(FirmReason::WageRaise)`, więc mieszka w `core` z tego samego powodu
     /// co `PriceDriver` i `LineStopCause` (`K-20`): ładunek centralnego enuma nie może
     /// pochodzić z crate'u, który od `core` zależy. Czyta go karta inspekcji firmy,
     /// panel ludzi (M7c) i związki zawodowe (M10, `K-9`) — bo „o ile i dlaczego
@@ -687,7 +701,7 @@ vocab_enum! {
 vocab_enum! {
     /// Dlaczego pracownik przestał pracować w tym zakładzie (M7b §5.5, WP6).
     ///
-    /// Ładunek `DecisionReason::JobLeft`, ta sama reguła co przy [`WageCause`].
+    /// Ładunek `DecisionReason::Firm(FirmReason::JobLeft)`, ta sama reguła co przy [`WageCause`].
     /// Kryterium WP6 brzmi: **odejście zawsze ma powód po stronie odchodzącego** —
     /// więc słownik obejmuje i odejścia dobrowolne, i zwolnienia, i wyjście z rynku
     /// pracy, którego firma nie wywołała (emerytura, zgon, wyjazd z miasta; tamte
@@ -721,7 +735,7 @@ vocab_enum! {
 }
 
 vocab_enum! {
-    /// Rodzaj akcji polityki — ładunek `DecisionReason::PolicyApplied` (M7c WP6b).
+    /// Rodzaj akcji polityki — ładunek `DecisionReason::Firm(FirmReason::PolicyApplied)` (M7c WP6b).
     ///
     /// **Rodzaj, a nie akcja.** Pełna `Action` z języka reguł niesie `Expr`, czyli
     /// drzewo za wskaźnikiem, i do 24-bajtowego powodu nie wejdzie (`K-12` zasada 5).
@@ -739,7 +753,7 @@ vocab_enum! {
 vocab_enum! {
     /// Strategia firmy — kurs, na którym stoi tier taktyczny (M7e §5.7, PRD §12.1).
     ///
-    /// W `core`, bo jest **ładunkiem** `DecisionReason::StrategySet`, a ładunek
+    /// W `core`, bo jest **ładunkiem** `DecisionReason::Firm(FirmReason::StrategySet)`, a ładunek
     /// centralnego enuma nie może pochodzić z crate'u, który od `core` zależy —
     /// ta sama reguła, która wypchnęła tu `WageCause` (`K-45`) i `ActionKind` (`K-47`).
     /// Drugi czytelnik znany z nazwy i numeru fazy: M10 (marka i R&D czytają kurs
@@ -755,7 +769,7 @@ vocab_enum! {
 vocab_enum! {
     /// Czym firma odpowiedziała na utratę udziału w rynku (M7e WP14, PRD §12.2).
     ///
-    /// Ładunek `DecisionReason::CompetitiveResponse`, ta sama reguła co przy
+    /// Ładunek `DecisionReason::Firm(FirmReason::CompetitiveResponse)`, ta sama reguła co przy
     /// [`FirmStrategy`]. Trzy warianty, bo trzy są legalne: kartel i zmowa cenowa
     /// są przestępstwem i należą do M8, a nie do repertuaru firmy AI.
     ///
@@ -771,7 +785,7 @@ vocab_enum! {
 vocab_enum! {
     /// Skąd mieszkaniec wie o marce — źródło wpisu w slocie marki (M10b §5.1).
     ///
-    /// W `core`, bo jest **ładunkiem** `DecisionReason::BrandLearned`, a ładunek
+    /// W `core`, bo jest **ładunkiem** `DecisionReason::Citizen(CitizenReason::BrandLearned)`, a ładunek
     /// centralnego enuma nie może pochodzić z crate'u, który od `core` zależy —
     /// ta sama reguła, która wypchnęła tu `PriceDriver` (`K-30`) i `WageCause` (`K-45`).
     /// Dwóch czytelników znanych z nazwy i numeru fazy: M3/M10 (slot marki
@@ -811,7 +825,7 @@ pub const AD_CHANNEL_KIND_COUNT: usize = AdChannelKind::ALL.len();
 vocab_enum! {
     /// Rodzaj tytułu medialnego (M10b §5.3, PRD §7.2).
     ///
-    /// W `core`, bo jest ładunkiem `DecisionReason::StoryPublished`. Cztery warianty
+    /// W `core`, bo jest ładunkiem `DecisionReason::Firm(FirmReason::StoryPublished)`. Cztery warianty
     /// odpowiadają czterem rodzajom zakładu w `data/site_types/media.ron`; kolejność
     /// indeksuje tablicę `outlets` w `data/tuning/brand.ron`.
     MediaKind {
@@ -824,7 +838,7 @@ pub const MEDIA_KIND_COUNT: usize = MediaKind::ALL.len();
 vocab_enum! {
     /// Linia redakcyjna tytułu — czym redakcja waży wartość informacyjną zdarzenia.
     ///
-    /// Ładunek `DecisionReason::StoryPublished` razem z [`MediaKind`]. Kolejność
+    /// Ładunek `DecisionReason::Firm(FirmReason::StoryPublished)` razem z [`MediaKind`]. Kolejność
     /// indeksuje tablicę wag kategorii zdarzeń w `data/tuning/brand.ron`.
     EditorialBias {
         Market, Social, Sensational, Local,
@@ -873,7 +887,7 @@ vocab_enum! {
 pub const TAX_KIND_COUNT: usize = TaxKind::ALL.len();
 
 vocab_enum! {
-    /// Kierunek wydatku publicznego (M8a §5.1). Ładunek `DecisionReason::PublicSpend`
+    /// Kierunek wydatku publicznego (M8a §5.1). Ładunek `DecisionReason::City(CityReason::PublicSpend)`
     /// i indeks `CityBudget.spend_ytd`; ten sam indeks jedzie do `ProgramId`
     /// w `TxKind::PublicSpend`, więc kolejność jest kontraktem zapisu gry.
     ///
@@ -891,7 +905,7 @@ pub const SPEND_CATEGORY_COUNT: usize = SpendCategory::ALL.len();
 vocab_enum! {
     /// Dlaczego należność podatkowa przestała być wymagalna bez zapłaty (M8a §5.1).
     ///
-    /// Ładunek `DecisionReason::TaxAbated`, ta sama reguła co przy [`TaxKind`].
+    /// Ładunek `DecisionReason::City(CityReason::TaxAbated)`, ta sama reguła co przy [`TaxKind`].
     /// `Bankruptcy` zamyka należność, której postępowanie upadłościowe M7 nie
     /// zaspokoiło w całości (`K-10`, `ClaimPriority::Public`); `Council` to uchwała
     /// rady (M8e); `TimeBarred` — przedawnienie po okresie z `TaxCode`;
@@ -932,10 +946,20 @@ vocab_enum! {
     /// z crate'u, który od `core` zależy. Drugi czytelnik znany z nazwy i numeru
     /// fazy: M7 (ryzyko kontroli w decyzji firmy) i M9 (karta sprawy).
     ///
-    /// Kolejność jest kontraktem, bo `as_index()` indeksuje histogram spraw
-    /// per urząd w panelu miasta.
+    /// Kolejność jest kontraktem, bo `as_index()` indeksuje tablicę urzędów
+    /// w `Enforcement`, klucze `ui.agency.*` w obu językach i liczbę inspektorów
+    /// z uchwały rady — a `AGENCY_KIND_COUNT` wchodzi do rozmiaru tablicy, czyli
+    /// do zapisu gry. Dopisywać wolno **wyłącznie na końcu**.
+    ///
+    /// `Prosecution` dopisane w R2e (`K-73`): wpłata na kampanię poza rejestrem
+    /// wpłat jest **czynem karalnym**, a nie praktyką rynkową, i do R2e trafiała
+    /// do urzędu antymonopolowego z braku adresata. Kosztowało to gracza zdanie
+    /// nieprawdziwe w karcie sprawy — czytał, że jego firma jest za duża, kiedy
+    /// powodem była łapówka. Zmierzone przed naprawą: **42 sprawy antymonopolowe
+    /// przy zerze zakładów ponad progiem udziału**, czyli cała kartoteka tego
+    /// urzędu opisywała co innego, niż mówiła jego nazwa.
     AgencyKind {
-        Antitrust, LaborInspection, Sanitary, Environment, TaxOffice,
+        Antitrust, LaborInspection, Sanitary, Environment, TaxOffice, Prosecution,
     }
 }
 
@@ -962,7 +986,7 @@ vocab_enum! {
 vocab_enum! {
     /// Rodzaj pozwolenia wydawanego przez urząd (M8d WP7, M8e §5.2).
     ///
-    /// Ładunek `DecisionReason::PermitIssued`. Kolejność wariantów jest kontraktem,
+    /// Ładunek `DecisionReason::City(CityReason::PermitIssued)`. Kolejność wariantów jest kontraktem,
     /// bo `as_index()` indeksuje koszt wniosku w jednostkach przerobu urzędu.
     PermitKind {
         Build, ChangeOfUse, Demolition, EnvClearance, AlcoholLicense,
@@ -1014,7 +1038,7 @@ vocab_enum! {
 vocab_enum! {
     /// Co przeważyło w głosie wyborcy (M8e §5.7, PRD §10.2).
     ///
-    /// Ładunek `DecisionReason::VoteCast`. Wyjaśnialność z §7 dokumentu 00 dotyczy
+    /// Ładunek `DecisionReason::Citizen(CitizenReason::VoteCast)`. Wyjaśnialność z §7 dokumentu 00 dotyczy
     /// także wyborcy: „głosowała na Nowaka" bez powodu jest liczbą w tabeli, a nie
     /// odpowiedzią. Wariant niesie **największy** składnik użyteczności kandydata,
     /// a nie całą jej rozpiskę — rozpiska jest w panelu wyborów.
@@ -1044,6 +1068,23 @@ vocab_enum! {
 
 /// Ile kanałów opłat mobilnych — rozmiar tablicy w [`crate::MobilityDue`].
 pub const MOBILITY_CHANNEL_COUNT: usize = MobilityChannel::ALL.len();
+
+vocab_enum! {
+    /// Po co mieszkaniec jedzie. Wchodzi do wartości czasu (`vot_gr_per_min`, M4c).
+    ///
+    /// Mieszka w `core` od R2e (`K-8`, `R2-WP22`), bo ma **dwóch** konsumentów: cel
+    /// podróży ustala planer doby w `sim/agents`, a wycenia go `sim/traffic`. Do R2e
+    /// enum stał w `sim/traffic`, `TripRequest` celu nie niósł i `start_trip` wpisywał
+    /// **każdej** podróży `Work` — więc z siedmiu mnożników w
+    /// `data/roads/mode_choice.ron` żył jeden, a sześć było liczbami w pliku, których
+    /// nikt nigdy nie przeczytał.
+    ///
+    /// Kolejność wariantów jest kontraktem, bo `as_index()` indeksuje
+    /// `purpose_multiplier_permille` w tym pliku.
+    TripPurpose {
+        Work, School, Shopping, Refuel, Leisure, Medical, Escort,
+    }
+}
 
 vocab_enum! {
     /// Biom. Konsument poza M1: M2 (strefowanie i zieleń), M5/M6 (rolnictwo i leśnictwo),

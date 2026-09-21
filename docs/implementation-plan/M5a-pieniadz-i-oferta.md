@@ -305,7 +305,7 @@ co z tego stanu wynika (ta sama zasada, którą M4 zastosował do `TrafficOverla
 
 ---
 
-## Korekty planu wpisane po implementacji M5a
+## Zmiany wpisane po M5a
 
 Zgodnie z `K-18`. Gwiazdka = zmiana zakresu albo kryterium.
 

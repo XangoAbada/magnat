@@ -220,11 +220,31 @@ jednostką recenzji i opisuje zmianę technicznie.
 
 ## Język i lokalizacja
 
-**Angielski:** kod, identyfikatory, nazwy plików i katalogów, klucze w `data/`, nazwy gałęzi,
-komunikaty commitów. Bez wyjątków — również w nowych fazach.
+**Angielski:** wszystko, co **przekracza granicę crate'u** — typy, funkcje, pola i warianty
+enumów publiczne (`pub` bez zawężenia), klucze w `data/`, nazwy plików i katalogów, nazwy gałęzi,
+komunikaty commitów. Tam bez wyjątków, również w nowych fazach.
 
-**Polski:** dokumentacja planu (`docs/implementation-plan/`) i komentarze domenowe wyjaśniające
-regułę biznesową.
+**Polski:** dokumentacja planu (`docs/implementation-plan/`), komentarze domenowe wyjaśniające
+regułę biznesową, **nazwy prywatne wewnątrz modułu** (`zbierz_fakty`, `rozstrzygnij`, `Slownik`,
+także `pub(crate)` i `pub(super)`) oraz **komunikaty deweloperskie** — `panic!`, `expect`,
+`assert!`, `eprintln!`, `debug_assert`. Jedno i drugie czyta ten sam człowiek i w tym samym
+zdaniu co komentarz nad nim, więc idzie w języku tego komentarza.
+
+**Nazwa polska pisze się bez diakrytyków:** `zbierz_fakty`, nie `zbierz_faktę`. Powód jest
+praktyczny — identyfikator czyta się w terminalu, w diffie i w komunikacie kompilatora, a nie
+tylko w edytorze. Pilnuje tego `scripts/lang_guard.py` w CI; przy wpisaniu tej reguły bramka
+znalazła siedem nazw, które ją łamały, i żadna nie była widoczna dla niczego innego.
+
+To brzmienie powstało w `R2e` (`D-N19`) i **opisuje kod, który jest**: publiczne API było
+angielskie od M0, prywatne nazwy polskie od M5, a komunikatów deweloperskich po polsku było 550.
+Do R2e była to druga konwencja, niezapisana; wybór padł na zapisanie jej zamiast przemianowania
+kilkuset symboli i komunikatów bez zmiany zachowania. Granica jest twarda i przebiega tam, gdzie
+nazwę widzi ktoś spoza crate'u.
+
+**Czego bramka nie sprawdza:** czy nazwa publiczna jest angielska. Tego nie da się sprawdzić
+tanio — wykrywacz słownikowy przepuszcza każde słowo, którego w słowniku nie ma (podłożone
+`pub fn pomnoz_ulamek` przeszło). `lang_guard --list` robi skan morfemowy jako pomoc do
+przeglądu, z nazwanym sufitem, i nie ma kodu błędu. Granicy pilnuje recenzja commita.
 
 **Każdy tekst widoczny dla gracza powstaje w obu wersjach w tej samej zmianie:**
 
@@ -232,9 +252,11 @@ regułę biznesową.
   Literał tekstowy w kodzie UI to błąd, nie skrót.
 - Zakaz `TODO: translate` i zakaz wersji angielskiej dopisywanej „później" — później znaczy nigdy,
   a brak wychodzi dopiero przy zmianie języka, czyli u gracza.
-- Pluralizacja przez `plural(locale, n)`: polski ma trzy formy (1 · 2–4 · 5+), angielski dwie.
-  Klucz liczebnikowy musi nieść **wszystkie** formy dla obu języków, nie tylko te, które akurat
-  widać na ekranie.
+- Pluralizacja przez `plural(locale, n)`: polski ma **cztery** formy (1 · 2–4 · 5+ · ułamek),
+  angielski dwie. Czwarta jest CLDR-owym `other` i dotyczy wartości ułamkowych — „1,5 sklepu",
+  a nie „1,5 sklep" ani „1,5 sklepy" (`DE-8` w M9b). Klucz liczebnikowy musi nieść **wszystkie**
+  formy dla obu języków, nie tylko te, które akurat widać na ekranie; wpis o innej liczbie form
+  łamie wczytanie katalogu (`LocError::PluralArity`), a nie gubi formę po cichu.
 - Test CI: zbiory kluczy `pl` i `en` muszą być identyczne. Brakujący klucz łamie build —
   nigdy cichy fallback na drugi język, bo wtedy nikt się nie dowie.
 - Wyjątek: nazwy generowane proceduralnie (imiona, nazwiska, ulice, firmy) pochodzą

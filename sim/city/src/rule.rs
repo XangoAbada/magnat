@@ -23,8 +23,8 @@
 //! którego nie ma od M7b; adres jest w tabeli korekt.
 
 use magnat_core::{
-    rng, AgencyKind, DecisionReason, DistrictId, Money, PolicyKind, ServiceKind, SiteId,
-    SpendCategory, StreamId, TaxKind, TenderKind, Tick, Q, SPEND_CATEGORY_COUNT,
+    rng, AgencyKind, CityReason, DecisionReason, DistrictId, Money, PolicyKind, ServiceKind,
+    SiteId, SpendCategory, StreamId, TaxKind, TenderKind, Tick, Q, SPEND_CATEGORY_COUNT,
 };
 use magnat_economy::Market;
 use magnat_ecs::World;
@@ -98,12 +98,12 @@ pub fn miesieczny(
             city.log_reason(
                 t,
                 match powod {
-                    DecisionReason::PolicyEnacted { delay_days, .. } => {
-                        DecisionReason::PolicyEnacted {
+                    DecisionReason::City(CityReason::PolicyEnacted { delay_days, .. }) => {
+                        DecisionReason::City(CityReason::PolicyEnacted {
                             kind,
                             for_bp,
                             delay_days,
-                        }
+                        })
                     }
                     inny => inny,
                 },
@@ -487,11 +487,11 @@ fn zbierz_oferty(
             if zlozona {
                 powody.push((
                     site,
-                    DecisionReason::TenderPublished {
+                    DecisionReason::City(CityReason::TenderPublished {
                         subject: subject.kind,
                         subject_id: subject.id,
                         budget: cena,
-                    },
+                    }),
                 ));
             }
         }
@@ -533,10 +533,10 @@ fn zaplac_umowy(
                     magnat_core::SpendCategory::Waste.as_index() as u16
                 ),
             },
-            DecisionReason::PublicSpend {
+            DecisionReason::City(CityReason::PublicSpend {
                 category: magnat_core::SpendCategory::Waste,
                 amount: kwota,
-            },
+            }),
         );
         let ok = world
             .get_resource_mut::<magnat_economy::Books>()
@@ -547,10 +547,10 @@ fn zaplac_umowy(
             city.budget.spend_ytd[i] = Money(city.budget.spend_ytd[i].get() + kwota.get());
             out.push((
                 site,
-                DecisionReason::PublicSpend {
+                DecisionReason::City(CityReason::PublicSpend {
                     category: SpendCategory::Waste,
                     amount: kwota,
-                },
+                }),
             ));
         } else {
             // Miasto nie zapłaciło — umowa się kończy. Cicha darmowa usługa
@@ -563,10 +563,10 @@ fn zaplac_umowy(
         city.tenders.terminate(site, t);
         out.push((
             site,
-            DecisionReason::PublicSpend {
+            DecisionReason::City(CityReason::PublicSpend {
                 category: SpendCategory::Waste,
                 amount: Money::ZERO,
-            },
+            }),
         ));
     }
     out

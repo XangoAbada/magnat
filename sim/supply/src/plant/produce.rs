@@ -16,8 +16,8 @@
 //! się nie zmienił, a dziś nie ma czym tego zmierzyć.
 
 use magnat_core::{
-    rng, DecisionReason, Energy, GoodId, LossKind, Mass, Money, RecipeId, SimCalendar, SimMinute,
-    SiteId, StreamId, Tick, UtilityService, Volume, Q,
+    rng, DecisionReason, Energy, FirmReason, GoodId, LossKind, Mass, Money, RecipeId, SimCalendar,
+    SimMinute, SiteId, StreamId, Tick, UtilityService, Volume, Q,
 };
 
 use super::line::{BreakCause, Charge, LineState, ProductionLine};
@@ -194,11 +194,11 @@ fn krok_linii(
     if let Some(powod) = nowy_postoj(przed, l.state) {
         zaklad.note(
             now,
-            DecisionReason::ProductionHalted {
+            DecisionReason::Firm(FirmReason::ProductionHalted {
                 site: zaklad.site,
                 line: i as u16,
                 cause: powod,
-            },
+            }),
         );
         raport.halts += 1;
     }

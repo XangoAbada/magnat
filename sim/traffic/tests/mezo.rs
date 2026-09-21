@@ -5,7 +5,7 @@
 //! własność architektury: zbiór rzeczy, które ruch zapisuje do symulacji, jest
 //! wypisany w jednym miejscu (`systems::zastosuj`), więc da się go przejrzeć okiem.
 
-use magnat_core::{DistrictId, IVec2, Mass, RoadClass, SimMinute};
+use magnat_core::{CitizenReason, DistrictId, IVec2, Mass, RoadClass, SimMinute};
 use magnat_nav::{EdgeSpec, GeomRef, Modality, RoadGraph, RoadGraphBuilder, Route, RouteLeg};
 use magnat_traffic::{
     PendingTrip, TrafficEvent, TrafficNetwork, TripId, TripPurpose, VdfTable, VehicleCatalog,
@@ -92,10 +92,10 @@ fn zlecenie(
         station: None,
         tank_level_ul: tank,
         tank_capacity_ul: tank,
-        reason: magnat_core::DecisionReason::ModeChosen {
+        reason: magnat_core::DecisionReason::Citizen(CitizenReason::ModeChosen {
             mode: magnat_core::TransportMode::Car,
             minutes: 10,
-        },
+        }),
         traced: false,
     }
 }

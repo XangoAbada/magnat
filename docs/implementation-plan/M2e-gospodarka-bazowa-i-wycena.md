@@ -250,7 +250,7 @@ Zgodnie z `K-18`. Pełne uzasadnienie w tabeli „Zmiany wpisane po M2c" dokumen
 
 ## Zmiany wpisane po M2d
 
-Zgodnie z `K-18`. Pełne uzasadnienie w tabeli „Korekty planu wpisane po implementacji"
+Zgodnie z `K-18`. Pełne uzasadnienie w tabeli „Zmiany wpisane po M2e"
 dokumentu `M2d-zabudowa.md` (numeracja `E-n`) — tu tylko to, co dotyczy tej podfazy.
 
 | # | Zmiana | Dlaczego |
@@ -267,7 +267,7 @@ dokumentu `M2d-zabudowa.md` (numeracja `E-n`) — tu tylko to, co dotyczy tej po
 
 ---
 
-## Korekty planu wpisane po implementacji
+## Zmiany wpisane po M2e
 
 Zgodnie z `K-18` i regułą „popraw plan, zanim napiszesz kod". Gwiazdka = zmiana zakresu
 albo kryterium. Numeracja `I-n` — litery `A`–`H` zajęły M2b–M2f.

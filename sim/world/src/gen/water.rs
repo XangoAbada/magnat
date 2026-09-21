@@ -430,7 +430,7 @@ mod tests {
     }
 
     #[test]
-    fn region_nadmorski_ma_morze_a_sródladowy_nie() {
+    fn region_nadmorski_ma_morze_a_srodladowy_nie() {
         let morski = swiat(Region::Coastal, 2);
         let ile_morza = |c: &GenCtx| {
             c.world

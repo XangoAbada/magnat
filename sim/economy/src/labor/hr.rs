@@ -10,8 +10,8 @@
 //! na zawsze (M3c, korekta G-7).
 
 use magnat_core::{
-    rng::rng, CitizenId, DecisionReason, JobRoleId, LeaveCause, Money, SimMinute, SiteId, StreamId,
-    Tick,
+    rng::rng, CitizenId, DecisionReason, FirmReason, JobRoleId, LeaveCause, Money, SimMinute,
+    SiteId, StreamId, Tick,
 };
 use magnat_firms::{
     benefit_cost, benefit_gains, bonus, effective_labor, quit_pressure, severance, should_dismiss,
@@ -232,11 +232,11 @@ pub(super) fn odejdz(
         firms.log(
             f,
             Tick(now.0),
-            DecisionReason::JobLeft {
+            DecisionReason::Firm(FirmReason::JobLeft {
                 role,
                 cause,
                 tenure_days: tenure_days.min(u32::from(u16::MAX)) as u16,
-            },
+            }),
         );
     }
     // Zwalniamy **ten** etat, a nie „jakikolwiek": `release` czyści komponent

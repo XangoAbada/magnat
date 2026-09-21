@@ -482,6 +482,7 @@ fn ruch(c: &mut Criterion) {
                     to: praca(),
                     depart: MinuteOfDay::new(8 * 60),
                     slot: 0,
+                    purpose: magnat_core::TripPurpose::Work,
                 },
                 &widok,
                 &mut q,

@@ -14,7 +14,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use magnat_core::{rng, Cadence, DecisionReason, Money, SiteId, StreamId, Tick, Q};
+use magnat_core::{rng, Cadence, DecisionReason, FirmReason, Money, SiteId, StreamId, Tick, Q};
 use magnat_ecs::{System, SystemCtx, SystemDesc, SystemId, World};
 use magnat_firms::{FirmKey, Firms};
 
@@ -349,10 +349,10 @@ fn zwiazki_powstaja(world: &mut World, tune: &RelationsTuning, day: u32, t: Tick
             powstalo += 1;
             logi.push((
                 firm,
-                DecisionReason::UnionFormed {
+                DecisionReason::Firm(FirmReason::UnionFormed {
                     density: gestosc,
                     grievance: Q::new(poziom),
-                },
+                }),
             ));
         }
     }
@@ -426,10 +426,10 @@ fn zadania(world: &mut World, tune: &RelationsTuning, day: u32, t: Tick) -> u32 
             ile += 1;
             logi.push((
                 firm,
-                DecisionReason::WageDemandMade {
+                DecisionReason::Firm(FirmReason::WageDemandMade {
                     raise_bp: raise,
                     anchor: kotwica,
-                },
+                }),
             ));
         }
     }

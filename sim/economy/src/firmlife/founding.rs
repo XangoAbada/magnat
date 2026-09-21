@@ -19,7 +19,9 @@
 use std::collections::BTreeMap;
 
 use magnat_agents::{Household, Identity, Personality, Population, Residence};
-use magnat_core::{CitizenId, DecisionReason, Money, PlaceKind, SimMinute, Tick, TraitId};
+use magnat_core::{
+    CitizenId, DecisionReason, FirmReason, Money, PlaceKind, SimMinute, Tick, TraitId,
+};
 use magnat_ecs::World;
 use magnat_firms::{Firm, Firms, Owner, Site, SitePlacement, SiteTypeCatalog, SiteTypeCategory};
 
@@ -91,7 +93,7 @@ pub struct FoundingIntent {
     pub district: u16,
     pub kind: PlaceKind,
     pub capital: Money,
-    /// Wynik oceny w setnych — ładunek `DecisionReason::FirmFounded`.
+    /// Wynik oceny w setnych — ładunek `DecisionReason::Firm(FirmReason::FirmFounded)`.
     pub score: u16,
 }
 
@@ -374,10 +376,10 @@ pub fn found(
     firms.log(
         key,
         t,
-        DecisionReason::FirmFounded {
+        DecisionReason::Firm(FirmReason::FirmFounded {
             score: zamiar.score,
             capital: zamiar.capital,
-        },
+        }),
     );
     *world.resource_mut::<Firms>() = firms;
     if !dodany {

@@ -408,7 +408,7 @@ Trzy jawne konsekwencje, które M6 musi znać:
 
 ---
 
-## Korekty planu wpisane po implementacji M5b
+## Zmiany wpisane po M5b
 
 Zgodnie z `K-18`. Gwiazdka = zmiana zakresu albo kryterium.
 

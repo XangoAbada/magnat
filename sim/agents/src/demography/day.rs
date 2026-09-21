@@ -1,4 +1,5 @@
 use super::*;
+use magnat_core::CitizenReason;
 
 // ── doba ────────────────────────────────────────────────────────────────────────
 
@@ -52,9 +53,9 @@ fn terminarz(world: &mut World, day: u64, raport: &mut DayReport) {
                     raport.births += 1;
                     raport.reasons.push((
                         t.actor,
-                        DecisionReason::LifeEvent {
+                        DecisionReason::Citizen(CitizenReason::LifeEvent {
                             kind: LifeEventKind::Born,
-                        },
+                        }),
                     ));
                 }
             }
@@ -64,9 +65,9 @@ fn terminarz(world: &mut World, day: u64, raport: &mut DayReport) {
                     raport.recoveries += 1;
                     raport.reasons.push((
                         t.actor,
-                        DecisionReason::LifeEvent {
+                        DecisionReason::Citizen(CitizenReason::LifeEvent {
                             kind: LifeEventKind::Recovered,
-                        },
+                        }),
                     ));
                 }
             }
@@ -156,9 +157,9 @@ fn hazardy(world: &mut World, day: u64, hooks: &mut dyn InheritanceHook, raport:
             raport.retirements += 1;
             raport.reasons.push((
                 e.index(),
-                DecisionReason::LifeEvent {
+                DecisionReason::Citizen(CitizenReason::LifeEvent {
                     kind: LifeEventKind::Retired,
-                },
+                }),
             ));
         }
 
@@ -216,9 +217,9 @@ fn hazardy(world: &mut World, day: u64, hooks: &mut dyn InheritanceHook, raport:
                 }
                 raport.reasons.push((
                     e.index(),
-                    DecisionReason::LifeEvent {
+                    DecisionReason::Citizen(CitizenReason::LifeEvent {
                         kind: LifeEventKind::LeftSchool,
-                    },
+                    }),
                 ));
             }
         } else if wiek_szkolny && !world.get::<Employment>(e).is_some_and(Employment::has_job) {
@@ -241,9 +242,9 @@ fn hazardy(world: &mut World, day: u64, hooks: &mut dyn InheritanceHook, raport:
                 raport.illnesses += 1;
                 raport.reasons.push((
                     e.index(),
-                    DecisionReason::LifeEvent {
+                    DecisionReason::Citizen(CitizenReason::LifeEvent {
                         kind: LifeEventKind::FellIll,
-                    },
+                    }),
                 ));
             }
         }
@@ -253,9 +254,9 @@ fn hazardy(world: &mut World, day: u64, hooks: &mut dyn InheritanceHook, raport:
             raport.conceptions += 1;
             raport.reasons.push((
                 e.index(),
-                DecisionReason::LifeEvent {
+                DecisionReason::Citizen(CitizenReason::LifeEvent {
                     kind: LifeEventKind::Conceived,
-                },
+                }),
             ));
         }
     }
@@ -266,9 +267,9 @@ fn hazardy(world: &mut World, day: u64, hooks: &mut dyn InheritanceHook, raport:
         for e in zgony {
             raport.reasons.push((
                 e.index(),
-                DecisionReason::LifeEvent {
+                DecisionReason::Citizen(CitizenReason::LifeEvent {
                     kind: LifeEventKind::Died,
-                },
+                }),
             ));
             for (h, permille) in smierc(world, e, day, hooks, &mut cmd) {
                 raport.reasons.push((h, permille));
@@ -686,10 +687,10 @@ fn smierc(
             lista.push((CitizenId(*h), p));
             powody.push((
                 h.index(),
-                DecisionReason::Inheritance {
+                DecisionReason::Citizen(CitizenReason::Inheritance {
                     permille: p,
                     heirs: spadkobiercy.len().min(255) as u8,
-                },
+                }),
             ));
         }
     }
@@ -817,11 +818,11 @@ fn ustal_opiekuna(
     }
     Some((
         opiekun.index(),
-        DecisionReason::GuardianAppointed {
+        DecisionReason::Citizen(CitizenReason::GuardianAppointed {
             wards: podopieczni.len().min(255) as u8,
             weight: waga,
             kin: rodzina,
-        },
+        }),
     ))
 }
 

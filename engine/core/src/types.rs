@@ -107,7 +107,7 @@ scalar_newtype! {
     /// Polityka w katalogu reguł — indeks nadawany przy ładowaniu `data/policies/`
     /// albo przez edytor gracza (M9d §5.6).
     ///
-    /// Mieszka w `core`, bo jest **ładunkiem centralnego enuma**: `DecisionReason::PolicyApplied`
+    /// Mieszka w `core`, bo jest **ładunkiem centralnego enuma**: `DecisionReason::Firm(FirmReason::PolicyApplied)`
     /// niesie go do karty inspekcji, a ładunek nie może pochodzić z crate'u, który od `core`
     /// zależy — ta sama reguła, która wypchnęła tu `PriceDriver` (`K-30`) i `WageCause` (`K-45`).
     /// Konsumenci: M7 (polityki firm AI), M9 (edytor reguł i dry-run), M12 (modding).
@@ -142,7 +142,7 @@ scalar_newtype! {
 scalar_newtype! {
     /// Uchwyt do zdarzenia świata w rejestrze `sim/events` (M8c §5.5).
     ///
-    /// Mieszka w `core`, bo jest **ładunkiem** `DecisionReason::EventStarted` — tak samo
+    /// Mieszka w `core`, bo jest **ładunkiem** `DecisionReason::City(CityReason::EventStarted)` — tak samo
     /// jak `PriceDriver` (`K-30`) i z tego samego powodu: ładunek centralnego enuma
     /// nie może pochodzić z crate'u, który od `core` zależy. Drugim konsumentem znanym
     /// z nazwy i numeru fazy jest M9: `Subject::Event(EventId)` (`K-62`) robi z wpisu

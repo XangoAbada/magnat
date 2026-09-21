@@ -148,7 +148,7 @@ jest jedyną reasekuracją, jaką modelujemy.
 
 ---
 
-## Korekty planu wpisane w trakcie M10d
+## Zmiany wpisane po M10d
 
 Zgodnie z `K-18` i regułą „popraw plan, zanim napiszesz kod". Gwiazdka = zmiana
 zakresu albo kryterium. Numeracja `GD-n`.

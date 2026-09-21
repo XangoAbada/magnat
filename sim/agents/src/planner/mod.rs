@@ -28,8 +28,9 @@ use crate::places::{
 };
 use crate::store::{PlanSlab, PlanSlot, SlabRef};
 use magnat_core::{
-    rng, ActivityKind, CommitmentKind, DayOfWeek, DecisionReason, HouseholdId, MinuteOfDay,
-    NeedKind, PlaceRef, Rng, StockCat, StreamId, Tick, TraitId, TransportMode, Q, STOCK_CAT_COUNT,
+    rng, ActivityKind, CitizenReason, CommitmentKind, DayOfWeek, DecisionReason, HouseholdId,
+    MinuteOfDay, NeedKind, PlaceRef, Rng, StockCat, StreamId, Tick, TraitId, TransportMode, Q,
+    STOCK_CAT_COUNT,
 };
 
 mod canvas;
@@ -72,7 +73,7 @@ pub struct HouseholdView<'a> {
     pub pickups: &'a [PlaceRef],
     /// Ile dzieci w gospodarstwie wymagało odprowadzenia i go **nie dostało**
     /// (`R2-WP3`): piąte ponad `MAX_ESCORTED` albo wszystkie, gdy w domu nie ma
-    /// dorosłego. Planer zamienia to na `DecisionReason::EscortUnavailable`,
+    /// dorosłego. Planer zamienia to na `DecisionReason::Citizen(CitizenReason::EscortUnavailable)`,
     /// bo inaczej stan nie zostawia śladu nigdzie.
     pub unescorted: u8,
 }
@@ -289,10 +290,10 @@ fn replan_explained(
         stats.slots = canvas.len() as u8;
         log.add(
             ReasonLog::NO_SLOT,
-            DecisionReason::Replanned {
+            DecisionReason::Citizen(CitizenReason::Replanned {
                 cause_tag: cause.tag(),
                 slots_changed: stats.slots,
-            },
+            }),
         );
         return stats;
     }
@@ -305,15 +306,15 @@ fn replan_explained(
         let tag = u16::from(s.reason_tag());
         s.start_min < t
             || tag
-                == DecisionReason::Commitment {
+                == DecisionReason::Citizen(CitizenReason::Commitment {
                     kind: CommitmentKind::Work,
-                }
+                })
                 .discriminant()
             || tag
-                == DecisionReason::NeedCritical {
+                == DecisionReason::Citizen(CitizenReason::NeedCritical {
                     need: NeedKind::Sleep,
                     level: Q::MIN,
-                }
+                })
                 .discriminant()
     };
     let mut ocalale = DayCanvas::new();
@@ -329,9 +330,9 @@ fn replan_explained(
         .iter()
         .filter(|s| {
             u16::from(s.reason_tag())
-                == DecisionReason::Commitment {
+                == DecisionReason::Citizen(CitizenReason::Commitment {
                     kind: CommitmentKind::Work,
-                }
+                })
                 .discriminant()
         })
         .count() as u8;
@@ -344,10 +345,10 @@ fn replan_explained(
     podsumuj(canvas, &mut stats);
     log.add(
         ReasonLog::NO_SLOT,
-        DecisionReason::Replanned {
+        DecisionReason::Citizen(CitizenReason::Replanned {
             cause_tag: cause.tag(),
             slots_changed: stats.slots.abs_diff(przed),
-        },
+        }),
     );
     stats
 }

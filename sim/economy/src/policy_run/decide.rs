@@ -15,7 +15,7 @@
 //! arytmetyka po stronie podglądu rozjechałaby się z wykonaniem przy pierwszej zmianie
 //! wzoru — a dry-run istnieje właśnie po to, żeby powiedzieć, co się stanie.
 
-use magnat_core::{DecisionReason, GoodId, Money, PolicyId, Qty, SimCalendar, Tick};
+use magnat_core::{DecisionReason, FirmReason, GoodId, Money, PolicyId, Qty, SimCalendar, Tick};
 use magnat_policy::{
     evaluate, Action, Bp, Expr, GoodRef, MetricCtx, Policy, PolicyView, Severity, Value,
 };
@@ -50,6 +50,13 @@ pub enum PolicyOutcome {
     Margin(GoodId, i32),
     /// Cel zapasu w sztukach.
     Order(GoodId, Qty),
+    /// Wycofanie towaru z półki: linia, oferta, sterownik i punkt zamówienia
+    /// schodzą razem, a zapas zostaje na zapleczu.
+    ///
+    /// Skutek **nie wykonuje się w `zastosuj`**, bo tamten widzi sam sklep, a zwolnienie
+    /// oferty dotyka areny i indeksu przestrzennego rynku. Wykonuje go `zapisz_decyzje`
+    /// po stronie `MarketInner`, który widzi jedno i drugie (`R2-WP22`).
+    Withdraw(GoodId),
     /// Alert albo pytanie do gracza. `ask` odróżnia „wiedz o tym" od „zdecyduj".
     Alert {
         msg: u16,
@@ -158,7 +165,7 @@ fn reka_menedzera(s: PolicyOutcome, ctx: &RunCtx) -> (PolicyOutcome, i16) {
             bp,
         ),
         PolicyOutcome::Order(g, q) => (
-            PolicyOutcome::Order(g, Qty(ctx.exec.distort(Money(q.get()), ctx.error_bp).get())),
+            PolicyOutcome::Order(g, ctx.exec.distort_qty(q, ctx.error_bp)),
             bp,
         ),
         // Alert i pytanie nie mają wartości, w którą można spudłować.
@@ -173,18 +180,18 @@ fn reka_menedzera(s: PolicyOutcome, ctx: &RunCtx) -> (PolicyOutcome, i16) {
 /// się ten sam, bo dla gracza to jest jedno zdarzenie.
 fn dopisz_menedzera(powod: DecisionReason, lag: u8, dev: i16) -> DecisionReason {
     match powod {
-        DecisionReason::PolicyApplied {
+        DecisionReason::Firm(FirmReason::PolicyApplied {
             policy,
             rule,
             action,
             ..
-        } => DecisionReason::PolicyApplied {
+        }) => DecisionReason::Firm(FirmReason::PolicyApplied {
             policy,
             rule,
             action,
             lag_days: lag,
             deviation_bp: dev,
-        },
+        }),
         inne => inne,
     }
 }
@@ -289,10 +296,12 @@ fn rozstrzygnij(
             severity: Severity::Warning,
             ask: true,
         },
-        // Wycofanie z półki wymaga zwolnienia oferty w arenie razem z linią półki
-        // (M5b §5.3), a to jest ta sama ścieżka, którą zamyka zakład w M7d — tam
-        // powstanie raz, a nie dwa razy.
-        Action::RemoveFromShelf(_) => PolicyOutcome::Blind,
+        // Wycofanie z półki: ta sama ścieżka, którą zdejmuje linię ręczny asortyment
+        // gracza (`MarketInner::zdejmij_linie`) — jedna reguła, dwóch wołających.
+        Action::RemoveFromShelf(g) => match cel(*g, ctx) {
+            Some(x) => PolicyOutcome::Withdraw(x),
+            None => PolicyOutcome::Blind,
+        },
         Action::Hire { .. } | Action::RaiseWage { .. } | Action::PlanProduction { .. } => {
             // Walidator nie przepuszcza polityki w tych dziedzinach (`DomainNotAvailable`),
             // więc tutaj nie da się dojść inaczej niż polityką z zapisu gry sprzed
@@ -318,6 +327,10 @@ pub(crate) fn zastosuj(shop: &mut Shop, s: PolicyOutcome, t: Tick) -> Wynik {
     match s {
         PolicyOutcome::Blind => Wynik::Slepa,
         PolicyOutcome::Alert { .. } => Wynik::Alert,
+        // Wycofanie z półki wykonuje `MarketInner::zapisz_decyzje`, bo dotyka areny
+        // ofert i indeksu, a ta funkcja widzi sam sklep. Tutaj jest wyłącznie po to,
+        // żeby `match` był wyczerpujący — i żeby nikt nie policzył tego dwa razy.
+        PolicyOutcome::Withdraw(_) => Wynik::Zrobione,
         PolicyOutcome::Price(good, cena) => {
             let Some(pc) = shop.controllers.get_mut(&good) else {
                 return Wynik::Slepa;
@@ -367,7 +380,7 @@ pub(crate) fn zastosuj(shop: &mut Shop, s: PolicyOutcome, t: Tick) -> Wynik {
 /// Numer polityki z powodu — po nim wpis w skrzynce wraca do reguły, która go wystawiła.
 pub(crate) fn z_powodu(powod: DecisionReason) -> (PolicyId, u8) {
     match powod {
-        DecisionReason::PolicyApplied { policy, rule, .. } => (policy, rule),
+        DecisionReason::Firm(FirmReason::PolicyApplied { policy, rule, .. }) => (policy, rule),
         _ => (PolicyId(0), 0),
     }
 }

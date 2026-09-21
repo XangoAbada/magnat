@@ -14,8 +14,8 @@ use crate::campaign::{AdCampaign, AdChannel, Campaigns};
 use crate::outlet::{Outlets, Story, STORY_SPREAD_DAYS};
 use crate::reach::{expose, expose_media, sample_stride, DistrictRoster};
 use magnat_core::{
-    rng, AdChannelKind, Cadence, DecisionReason, DistrictId, EditorialBias, Money, SimMinute,
-    StreamId, Tick, Q,
+    rng, AdChannelKind, Cadence, DecisionReason, DistrictId, EditorialBias, FirmReason, Money,
+    SimMinute, StreamId, Tick, Q,
 };
 use magnat_ecs::{System, SystemCtx, SystemDesc, World};
 
@@ -738,12 +738,12 @@ fn redakcja(world: &mut World, spis: &DistrictRoster, t: Tick, raport: &mut Medi
             world.resource_mut::<Outlets>().publish(
                 story,
                 t,
-                DecisionReason::StoryPublished {
+                DecisionReason::Firm(FirmReason::StoryPublished {
                     outlet: marka.unwrap_or(magnat_core::BrandId(0)),
                     event,
                     bias,
                     reach_bp: zasieg * 10,
-                },
+                }),
             );
             raport.stories_published = raport.stories_published.saturating_add(1);
         }
@@ -851,12 +851,12 @@ fn rozlicz(world: &mut World, t: Tick, raport: &mut MediaReport) {
             let do_kogo = payee
                 .and_then(|p| market.account_of(p))
                 .unwrap_or_else(|| market.rest_of_world());
-            let powod = DecisionReason::AdCampaignStarted {
+            let powod = DecisionReason::Firm(FirmReason::AdCampaignStarted {
                 brand,
                 channel: kanal,
                 budget: koszt,
                 claim,
-            };
+            });
             // **Księga przed przelewem.** Gdyby szło odwrotnie, odrzucony zapis
             // zostawiłby pieniądz przesunięty i koszt niezaksięgowany — a to jest
             // dokładnie ten rozjazd, którego `check_conservation` nie widzi, bo

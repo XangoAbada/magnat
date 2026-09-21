@@ -6,7 +6,9 @@
 //! na sto linii w środku implementacji traitu, czyli dokładnie to, przed czym
 //! broni reguła przeglądu strukturalnego.
 
-use magnat_core::{DayOfWeek, DecisionReason, PermitKind, ServiceCoverage, SiteId, Tick};
+use magnat_core::{
+    CityReason, DayOfWeek, DecisionReason, PermitKind, ServiceCoverage, SiteId, Tick,
+};
 use magnat_economy::Market;
 use magnat_ecs::World;
 
@@ -193,10 +195,10 @@ pub fn miesieczny(
     {
         powody.push((
             site,
-            DecisionReason::ShadowShareSet {
+            DecisionReason::City(CityReason::ShadowShareSet {
                 share_bp: udzial,
                 last_result: wynik,
-            },
+            }),
         ));
     }
     powody
@@ -291,11 +293,11 @@ fn zloz_wnioski_nowych_zakladow(
         }
         out.push((
             site,
-            DecisionReason::TaxAssessed {
+            DecisionReason::City(CityReason::TaxAssessed {
                 kind: magnat_core::TaxKind::License,
                 rate_bp: 0,
                 amount: oplata,
-            },
+            }),
         ));
     }
     out

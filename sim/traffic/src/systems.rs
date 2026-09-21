@@ -21,8 +21,8 @@ use magnat_agents::{
     citizen_by_index, DayStats, EventKind, EventQueue, NeedTable, Needs, SimEvent, Wealth,
 };
 use magnat_core::{
-    Cadence, HashState, MobilityChannel, MobilityDue, Money, NeedKind, PlaceRef, SimMinute,
-    StateHasher,
+    Cadence, CitizenReason, HashState, MobilityChannel, MobilityDue, Money, NeedKind, PlaceRef,
+    SimMinute, StateHasher,
 };
 use magnat_ecs::{Entity, System, SystemCtx, SystemDesc, World};
 use std::sync::Arc;
@@ -626,9 +626,9 @@ fn przygotuj(
             // zlecenie wraca do wołającego i mieszkaniec idzie pieszo — zamiast
             // wjechać na sieć z zapasem, który nie wystarczy do celu.
             if wstaw_stacje(oracle, &mut p, a, b) {
-                p.reason = magnat_core::DecisionReason::RefuelNeeded {
+                p.reason = magnat_core::DecisionReason::Citizen(CitizenReason::RefuelNeeded {
                     level_permille: tank.level_permille(),
-                };
+                });
             } else if tank.level < szacunek {
                 odrzuc(&mut odrzucone, &p);
                 continue;

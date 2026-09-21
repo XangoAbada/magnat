@@ -20,7 +20,7 @@
 //! `Election::back_candidate`. To jest `K-11` zastosowane poza silnikiem reguł:
 //! gracz naciska to samo, co AI robi samo.
 
-use magnat_core::{DistrictId, Money, SiteId, Tick};
+use magnat_core::{DistrictId, FirmReason, Money, SiteId, Tick};
 use magnat_economy::{firmlife, owner_ops, Books, TxKind, TxMemo};
 
 use super::check::moja_firma;
@@ -558,11 +558,11 @@ fn back_candidate(
     if !jest {
         return Err(CommandError::NoCandidate { candidate });
     }
-    let powod = magnat_core::DecisionReason::CampaignBacked {
+    let powod = magnat_core::DecisionReason::Firm(FirmReason::CampaignBacked {
         candidate,
         amount,
         illegal: false,
-    };
+    });
     let memo = TxMemo::new(
         TxKind::CampaignDonation {
             candidate,

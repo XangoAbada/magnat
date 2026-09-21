@@ -1,5 +1,6 @@
 use super::canvas::{wstaw, Gap};
 use super::*;
+use magnat_core::CitizenReason;
 
 /// Poniżej tego poziomu potrzeba wywołuje własny slot w fazie 2 albo zadanie w fazie 3.
 const HEALTH_TRIGGER: u8 = 30;
@@ -49,10 +50,10 @@ fn lista_zadan(ctx: &PlanCtx<'_>) -> ArrayVec<Zadanie, 16> {
         out.push(Zadanie {
             need: NeedKind::Health,
             pilnosc: 250,
-            powod: DecisionReason::NeedCritical {
+            powod: DecisionReason::Citizen(CitizenReason::NeedCritical {
                 need: NeedKind::Health,
                 level: zdrowie,
-            },
+            }),
         });
     }
 
@@ -66,10 +67,10 @@ fn lista_zadan(ctx: &PlanCtx<'_>) -> ArrayVec<Zadanie, 16> {
             continue;
         }
         let pilnosc = 200 - u16::from(dni.min(20)) * 10;
-        let powod = DecisionReason::StockBelowThreshold {
+        let powod = DecisionReason::Citizen(CitizenReason::StockBelowThreshold {
             cat: *cat,
             days_left: dni,
-        };
+        });
         match out.as_mut_slice().iter_mut().find(|z| z.need == need) {
             Some(istniejace) if pilnosc > istniejace.pilnosc => {
                 istniejace.pilnosc = pilnosc;
@@ -91,10 +92,10 @@ fn lista_zadan(ctx: &PlanCtx<'_>) -> ArrayVec<Zadanie, 16> {
         out.push(Zadanie {
             need: NeedKind::Clothing,
             pilnosc: 150,
-            powod: DecisionReason::NeedCritical {
+            powod: DecisionReason::Citizen(CitizenReason::NeedCritical {
                 need: NeedKind::Clothing,
                 level: ubranie,
-            },
+            }),
         });
     }
 
@@ -131,7 +132,9 @@ pub(super) fn faza3_zadania(
     let mut kandydaci: ArrayVec<PlaceCandidate, MAX_CANDIDATES> = ArrayVec::new();
     for zad in lista_zadan(ctx).iter() {
         if canvas.len() + 3 > MAX_SLOTS {
-            log.skip(DecisionReason::SlotBudgetExhausted { dropped: zad.need });
+            log.skip(DecisionReason::Citizen(
+                CitizenReason::SlotBudgetExhausted { dropped: zad.need },
+            ));
             stats.tasks_dropped += 1;
             continue;
         }
@@ -169,9 +172,9 @@ pub(super) fn faza3_zadania(
                         w.start + w.tam + w.wizyta,
                         w.powrot,
                         w.do_kogo,
-                        DecisionReason::Commitment {
+                        DecisionReason::Citizen(CitizenReason::Commitment {
                             kind: CommitmentKind::Commute,
-                        },
+                        }),
                         CommitmentKind::Commute as u8,
                     );
                 }
@@ -269,11 +272,13 @@ fn najlepsza_realizacja(
 
     match najlepszy {
         Some(w) => Ok(w),
-        None => Err(brak_wiedzy.unwrap_or(DecisionReason::NoTimeWindow {
-            need: zad.need,
-            needed_min: wizyta,
-            longest_gap_min: najdluzsza,
-        })),
+        None => Err(
+            brak_wiedzy.unwrap_or(DecisionReason::Citizen(CitizenReason::NoTimeWindow {
+                need: zad.need,
+                needed_min: wizyta,
+                longest_gap_min: najdluzsza,
+            })),
+        ),
     }
 }
 
@@ -308,10 +313,10 @@ fn rozwaz(
     )
     .is_err()
     {
-        *brak_wiedzy = Some(DecisionReason::PlaceUnknown {
+        *brak_wiedzy = Some(DecisionReason::Citizen(CitizenReason::PlaceUnknown {
             need: zad.need,
             known_count: ctx.known.len().min(255) as u8,
-        });
+        }));
         return;
     }
 
@@ -329,10 +334,10 @@ fn rozwaz(
         let przyjscie = okno.start.saturating_add(tam);
         let godziny = ctx.places.opening_hours(kand.place);
         if !godziny.is_open(ctx.dow, MinuteOfDay::new(przyjscie)) {
-            log.skip(DecisionReason::PlaceClosed {
+            log.skip(DecisionReason::Citizen(CitizenReason::PlaceClosed {
                 place: kand.place,
                 opens_at: godziny.open,
-            });
+            }));
             continue;
         }
         let powrot = if okno.cel_po == kand.place {
@@ -365,10 +370,10 @@ fn rozwaz(
                 .minutes;
             let nadlozenie = tam.saturating_add(powrot).saturating_sub(wprost);
             (
-                DecisionReason::ChosenOnRoute {
+                DecisionReason::Citizen(CitizenReason::ChosenOnRoute {
                     detour_min: nadlozenie,
                     direct_min: wprost,
-                },
+                }),
                 i32::from(nadlozenie),
             )
         } else {

@@ -33,18 +33,10 @@ use std::sync::Arc;
 #[repr(transparent)]
 pub struct TripId(pub u32);
 
-/// Po co mieszkaniec jedzie. Wchodzi do wartości czasu (`vot_gr_per_min`) w M4c.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-#[repr(u8)]
-pub enum TripPurpose {
-    Work = 0,
-    School = 1,
-    Shopping = 2,
-    Refuel = 3,
-    Leisure = 4,
-    Medical = 5,
-    Escort = 6,
-}
+/// Po co mieszkaniec jedzie — słownik mieszka od R2e w `engine/core` (`K-8`),
+/// bo cel podróży ustala planer doby w `sim/agents`, a wycenia go ten crate.
+/// Tu zostaje re-eksport, więc nazwy z M4 §5.3 nie drgnęły.
+pub use magnat_core::TripPurpose;
 
 /// Dlaczego podróż się nie udała.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

@@ -5,6 +5,7 @@
 //! była widoczna, i **nie są** sprowadzone do wspólnej abstrakcji.
 
 use super::*;
+use magnat_core::CitizenReason;
 
 impl TrafficOracle {
     pub(super) fn policz_niewykonalne(&self, d: &ModeDecision) {
@@ -139,7 +140,9 @@ impl TrafficOracle {
                     money: Money::ZERO,
                     parking: None,
                     candidates: ArrayVec::new(),
-                    reason: DecisionReason::ModeWalkOnly { minutes: minuty },
+                    reason: DecisionReason::Citizen(CitizenReason::ModeWalkOnly {
+                        minutes: minuty,
+                    }),
                 }
             }
         }

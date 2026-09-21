@@ -13,7 +13,8 @@ mod common;
 
 use magnat_agents::{ArrayVec, PlaceCandidate, PlaceProvider, MAX_CANDIDATES};
 use magnat_core::{
-    Money, NeedKind, PlaceRef, Qty, RejectCause, StockCat, Tick, UtilityKind, REJECT_CAUSE_COUNT,
+    CitizenReason, Money, NeedKind, PlaceRef, Qty, RejectCause, StockCat, Tick, UtilityKind,
+    REJECT_CAUSE_COUNT,
 };
 use magnat_economy::{LostSaleTracking, ShelfRow};
 use magnat_spatial::Vec2;
@@ -179,11 +180,11 @@ fn obrot_tygodniowy_zbiera_siedem_dob_i_zapomina_osma() {
             cogs: Money(200),
             taken: None,
             arrived: t,
-            reason: magnat_core::DecisionReason::ShopChosen {
+            reason: magnat_core::DecisionReason::Citizen(CitizenReason::ShopChosen {
                 site,
                 dominant: UtilityKind::Price,
                 delta_bp: 0,
-            },
+            }),
             district: 3,
             status: magnat_core::Q::new(50),
         });

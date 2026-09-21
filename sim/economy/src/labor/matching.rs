@@ -5,7 +5,9 @@
 //! po wyniku — z zapisanym wynikiem drugiego w kolejce, bo to on jest odpowiedzią
 //! na pytanie „dlaczego on".
 
-use magnat_core::{rng::rng, DecisionReason, JobRoleId, Money, SimMinute, StreamId, Tick, Q};
+use magnat_core::{
+    rng::rng, DecisionReason, FirmReason, JobRoleId, Money, SimMinute, StreamId, Tick, Q,
+};
 use magnat_firms::{
     hr::employment::Employment, meets_requirements, score_application, switch_threshold_bp,
     CandidateFacts, Firms, HiringPolicy, OpeningFacts,
@@ -418,11 +420,11 @@ pub(super) fn hire(
             firms.log(
                 o.firm,
                 Tick(now.0),
-                DecisionReason::Hired {
+                DecisionReason::Firm(FirmReason::Hired {
                     role: o.role,
                     score: wynik,
                     runner_up: drugi,
-                },
+                }),
             );
             d.hires += 1;
         }

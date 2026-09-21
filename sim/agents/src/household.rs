@@ -103,15 +103,11 @@ pub struct Household {
     pub income_monthly: Money,
     /// Dni zapasu per `StockCat` (K-20). M5 zastąpi realnymi towarami.
     pub stock: [u8; STOCK_CAT_COUNT],
-    /// Indeks członka robiącego zakupy; rotuje wg grafików.
-    pub shopper_rotation: u8,
-    /// Wyrównanie do `vehicle_slots`. **Skróciło się z 3 B do 2 B w M10c**, bo
-    /// `StockCat` dostał dziewiąty wariant (`K-83`) i `stock` urosło o bajt.
-    /// Rezerwa wyrównania jest po to, żeby dopisanie kategorii nie przesuwało
-    /// offsetów — i tu właśnie zadziałała.
-    pub _pad3: [u8; 2],
-    /// M4 wypełnia.
-    pub vehicle_slots: [u32; 2],
+    /// Wyrównanie do `guardian`. **Urosło z 2 B do 3 B w R2e**, bo wypadł stąd
+    /// `shopper_rotation` (`R2-WP22`): pole miało jednego czytelnika i był nim
+    /// funkcja haszująca. Rotacja kupującego liczy się z numeru doby — nie ma
+    /// licznika, więc nie ma czego przechowywać.
+    pub _pad3: [u8; 3],
     /// Opiekun prawny — indeks encji dorosłego **spoza składu**; `NO_MEMBER`, gdy
     /// gospodarstwo radzi sobie samo (`R2-WP4`, `D-N2`).
     ///
@@ -146,6 +142,13 @@ pub struct Household {
     pub _pad4: [u8; 4],
 }
 
+// Gospodarstwo ma od R2e **112 B**, nie 120: wypadły `shopper_rotation` (1 B)
+// i `vehicle_slots` (8 B), bo żadne z nich nie miało czytelnika poza funkcją
+// haszującą (`R2-WP22`). Flota gospodarstwa jest w `sim/traffic` i wiąże się
+// przez `VehicleOwner.owner`, a nie przez numery slotów, których nikt nie
+// zapisywał — karta mieszkańca pokazywała pustą listę pojazdów od M4.
+// Osiem bajtów mniej na gospodarstwo to 3,2 MB na metropolii (400 tys. domów).
+
 impl Default for Household {
     fn default() -> Self {
         Household {
@@ -164,9 +167,7 @@ impl Default for Household {
             debt: Money::ZERO,
             income_monthly: Money::ZERO,
             stock: [0; STOCK_CAT_COUNT],
-            shopper_rotation: 0,
-            _pad3: [0; 2],
-            vehicle_slots: [u32::MAX; 2],
+            _pad3: [0; 3],
             guardian: Household::NO_MEMBER,
             children: 0,
             _reserved: [0; 11],
@@ -665,8 +666,8 @@ pub fn roles(
 
     // Zakupy: rotacja po dorosłych, kluczem jest doba — więc zmienia się sama,
     // bez przechowywania licznika, i nie zależy od tego, kiedy ktoś do gospodarstwa
-    // dołączył. `shopper_rotation` w komponencie zostaje dla M5, które może chcieć
-    // rotować rzadziej niż codziennie.
+    // dołączył. To jest cała reguła; pole `shopper_rotation` w komponencie wypadło
+    // w R2e, bo przez pięć faz nie dostało ani jednego czytelnika poza hashem.
     // Opiekun doklejony **za** składem: kolejność składu jest kolejnością wejścia
     // i nikogo nie przestawia, a on do składu nie należy. Bez kopii — iterator,
     // bo to jest ścieżka liczona dla każdego mieszkańca przy każdym planowaniu doby.
@@ -748,9 +749,6 @@ impl HashState for Household {
         self.debt.hash_state(h);
         self.income_monthly.hash_state(h);
         h.write(&self.stock);
-        h.write_u8(self.shopper_rotation);
-        h.write_u32(self.vehicle_slots[0]);
-        h.write_u32(self.vehicle_slots[1]);
         h.write_u32(self.guardian);
         h.write_u8(self.children);
         h.write(&self._reserved);
@@ -789,13 +787,12 @@ mod tests {
                 std::mem::offset_of!(Household, building),
                 std::mem::offset_of!(Household, cash),
                 std::mem::offset_of!(Household, stock),
-                std::mem::offset_of!(Household, vehicle_slots),
                 std::mem::offset_of!(Household, guardian),
                 std::mem::offset_of!(Household, children),
                 std::mem::offset_of!(Household, _reserved),
                 size_of::<Household>(),
             ),
-            (8, 32, 40, 80, 92, 100, 104, 105, 120)
+            (8, 32, 40, 80, 92, 96, 97, 112)
         );
     }
 
@@ -918,7 +915,7 @@ mod tests {
     }
 
     #[test]
-    fn zakupy_rotuja_po_dorosłych() {
+    fn zakupy_rotuja_po_doroslych() {
         let m = [czlonek(5, 40), czlonek(9, 42), czlonek(1, 6)];
         assert_eq!(roles(&m, 10, 18, 0, None).shopper, 5);
         assert_eq!(roles(&m, 10, 18, 1, None).shopper, 9);

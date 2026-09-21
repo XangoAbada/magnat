@@ -194,7 +194,7 @@ dotyka krawędzi z listy zmian (`dirty_edges`), spada na dwukierunkowe A\* na `R
 
 ---
 
-## Korekty planu wpisane po implementacji M4a
+## Zmiany wpisane po M4a
 
 Zgodnie z `K-18`. Gwiazdka = zmiana zakresu albo kryterium.
 

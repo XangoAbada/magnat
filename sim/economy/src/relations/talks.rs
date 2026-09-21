@@ -5,7 +5,9 @@
 //! oferują, kiedy zakład staje, kiedy urząd puka do drzwi).
 
 use magnat_agents::{brand::Touch, Household, Population};
-use magnat_core::{rng, DecisionReason, DistrictId, GoodId, Money, SiteId, StreamId, Tick, Q};
+use magnat_core::{
+    rng, DecisionReason, DistrictId, FirmReason, GoodId, Money, SiteId, StreamId, Tick, Q,
+};
 use magnat_ecs::World;
 use magnat_firms::{FirmKey, FirmStatus, Firms};
 use smallvec::SmallVec;
@@ -163,10 +165,10 @@ pub(super) fn rundy(world: &mut World, tune: &RelationsTuning, day: u32, t: Tick
                 ugody += 1;
                 logi.push((
                     firm,
-                    DecisionReason::StrikeEnded {
+                    DecisionReason::Firm(FirmReason::StrikeEnded {
                         days: dni,
                         raise_bp: dano,
-                    },
+                    }),
                 ));
                 continue;
             }
@@ -193,10 +195,10 @@ pub(super) fn rundy(world: &mut World, tune: &RelationsTuning, day: u32, t: Tick
             nowe_strajki.push((site, firm, udzial));
             logi.push((
                 firm,
-                DecisionReason::StrikeStarted {
+                DecisionReason::Firm(FirmReason::StrikeStarted {
                     participation_bp: udzial,
                     round: nastepna,
-                },
+                }),
             ));
         }
     }
@@ -400,10 +402,10 @@ pub(super) fn strajki_dobowo(world: &mut World, tune: &RelationsTuning, day: u32
                 s.strike_bps = 0;
                 logi.push((
                     s.firm,
-                    DecisionReason::StrikeEnded {
+                    DecisionReason::Firm(FirmReason::StrikeEnded {
                         days: *dni,
                         raise_bp: 0,
-                    },
+                    }),
                 ));
             }
         }

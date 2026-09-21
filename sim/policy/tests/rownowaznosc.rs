@@ -9,7 +9,7 @@
 //! Przypadki brzegowe są wypisane w §7.9 pkt 2 wprost i wszystkie trzy są tutaj:
 //! brak konkurenta w promieniu, remis cenowy, konkurent poniżej kosztu.
 
-use magnat_core::{DecisionReason, GoodId, Money, PolicyId, PriceBasis};
+use magnat_core::{DecisionReason, FirmReason, GoodId, Money, PolicyId, PriceBasis};
 use magnat_policy::{
     evaluate, validate, Action, ArithOp, Bp, CmpOp, ConditionExpr, Expr, GoodRef, Metric,
     MetricCtx, Policy, PolicyDomain, PolicyView, Rule, Value,
@@ -155,10 +155,10 @@ fn gracz_i_ai_wykonuja_te_sama_regule_tym_samym_kodem() {
         for d in &a {
             assert!(matches!(
                 d.reason(),
-                DecisionReason::PolicyApplied {
+                DecisionReason::Firm(FirmReason::PolicyApplied {
                     policy: PolicyId(7),
                     ..
-                }
+                })
             ));
         }
     }

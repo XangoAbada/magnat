@@ -16,8 +16,8 @@
 //! Wykonanie planu na kontach robi [`super::CorpFinance`], bo ono ma `Books`.
 
 use magnat_core::{
-    split_proportional, BankruptcyTrigger, ClaimPriority, DecisionReason, FirmId, Money, SimMinute,
-    StateHasher, Tick, CLAIM_PRIORITY_COUNT,
+    split_proportional, BankruptcyTrigger, ClaimPriority, DecisionReason, FirmId, FirmReason,
+    Money, SimMinute, StateHasher, Tick, CLAIM_PRIORITY_COUNT,
 };
 
 use crate::books::{AccountId, AccountOwner};
@@ -176,7 +176,7 @@ pub struct Bankruptcy {
     pub trigger: BankruptcyTrigger,
     /// Ile dób firma nie płaciła, zanim sąd otworzył postępowanie. Ma znaczenie
     /// tylko przy `BankruptcyTrigger::Illiquid` — przy pozostałych jest zerem,
-    /// bo tamte nie mierzą się czasem. Ładunek [`DecisionReason::BankruptcyOpened`].
+    /// bo tamte nie mierzą się czasem. Ładunek [`DecisionReason::Firm(FirmReason::BankruptcyOpened)`].
     pub trigger_days: u16,
     pub stage: BankruptcyStage,
     /// Sortowane po `(kind, site)` przy wejściu w `Valuation` — determinizm (00 §3.2).
@@ -225,10 +225,10 @@ impl Bankruptcy {
     /// Powód otwarcia postępowania — do dziennika decyzji firmy i karty inspekcji.
     #[must_use]
     pub const fn reason(&self) -> DecisionReason {
-        DecisionReason::BankruptcyOpened {
+        DecisionReason::Firm(FirmReason::BankruptcyOpened {
             trigger: self.trigger,
             days: self.trigger_days,
-        }
+        })
     }
 
     /// JEDYNA droga zgłoszenia roszczenia. Woła ją M7 (płace, kredyty, leasingi),
@@ -432,7 +432,7 @@ pub struct Distribution {
     /// i w praktyce jest zerem.
     pub residual: Money,
     /// Stopień zaspokojenia per priorytet w punktach bazowych — ładunek powodu
-    /// [`DecisionReason::ClaimSettled`].
+    /// [`DecisionReason::Firm(FirmReason::ClaimSettled)`].
     pub ratio_bp: [u16; CLAIM_PRIORITY_COUNT],
 }
 
@@ -445,9 +445,9 @@ impl Distribution {
     /// Powód wypłaty dla danego priorytetu — do dziennika decyzji firmy.
     #[must_use]
     pub fn reason(&self, p: ClaimPriority) -> DecisionReason {
-        DecisionReason::ClaimSettled {
+        DecisionReason::Firm(FirmReason::ClaimSettled {
             priority: p,
             ratio_bp: self.ratio_bp[p.as_index()],
-        }
+        })
     }
 }

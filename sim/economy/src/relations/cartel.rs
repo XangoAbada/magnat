@@ -28,7 +28,9 @@
 
 use std::collections::BTreeMap;
 
-use magnat_core::{DecisionReason, DistrictId, GoodId, HashState, Money, StateHasher, Q};
+use magnat_core::{
+    DecisionReason, DistrictId, FirmReason, GoodId, HashState, Money, StateHasher, Q,
+};
 use magnat_firms::FirmKey;
 use smallvec::SmallVec;
 
@@ -233,11 +235,11 @@ impl Cartels {
         );
         (
             id,
-            DecisionReason::CartelFormed {
+            DecisionReason::Firm(FirmReason::CartelFormed {
                 good,
                 members: liczba,
                 floor,
-            },
+            }),
         )
     }
 
@@ -256,11 +258,11 @@ impl Cartels {
             day + u32::from(p.cooldown_months) * 30,
         );
         Some((
-            DecisionReason::CartelDetected {
+            DecisionReason::Firm(FirmReason::CartelDetected {
                 good: c.good,
                 members: u8::try_from(c.members.len()).unwrap_or(u8::MAX),
                 months: miesiecy,
-            },
+            }),
             c.members,
         ))
     }
@@ -369,7 +371,7 @@ mod tests {
         let (id, powod) = c.form(czlonkowie, GoodId(4), DistrictId(0), Money(1_000), 10, &p());
         assert!(matches!(
             powod,
-            DecisionReason::CartelFormed { members: 3, .. }
+            DecisionReason::Firm(FirmReason::CartelFormed { members: 3, .. })
         ));
         let k = c.iter().next().expect("zmowa");
         assert_eq!(k.floor_price, Money(1_150), "cena o 15 % ponad medianę");
@@ -384,7 +386,7 @@ mod tests {
         let (powod, czlonkowie) = c.bust(id, 10 + 30 * 7, &p()).expect("wykryta");
         assert!(matches!(
             powod,
-            DecisionReason::CartelDetected { months: 7, .. }
+            DecisionReason::Firm(FirmReason::CartelDetected { months: 7, .. })
         ));
         assert_eq!(czlonkowie.len(), 3);
         assert!(c.is_empty());

@@ -16,7 +16,7 @@
 //! Cierpliwość osobowości przesuwa próg między dwoma a trzema miesiącami i nie dalej —
 //! sufit jest kryterium fazy, nie kalibracją ([`crate::FirmPersonality::loss_patience_months`]).
 
-use magnat_core::{DecisionReason, FirmStrategy, SiteId};
+use magnat_core::{DecisionReason, FirmReason, FirmStrategy, SiteId};
 use magnat_policy::Decided;
 use smallvec::SmallVec;
 
@@ -62,12 +62,12 @@ pub fn decide_tactical(v: &FirmView) -> SmallVec<[Decided<TacAction>; 6]> {
         if s.months_in_loss >= prog {
             out.push(Decided::new(
                 TacAction::CloseSite { site: s.site },
-                DecisionReason::SiteClosed {
+                DecisionReason::Firm(FirmReason::SiteClosed {
                     months: s.months_in_loss,
                     // Zakład w ciągu strat ma zmierzoną marżę z definicji — ciąg
                     // przerywa się na pierwszym miesiącu bez pomiaru.
                     margin_bp: s.last_margin_bp.unwrap_or(0),
-                },
+                }),
             ));
         }
     }
@@ -76,10 +76,10 @@ pub fn decide_tactical(v: &FirmView) -> SmallVec<[Decided<TacAction>; 6]> {
         if out.len() < 6 {
             out.push(Decided::new(
                 TacAction::SetStrategy(kurs),
-                DecisionReason::StrategySet {
+                DecisionReason::Firm(FirmReason::StrategySet {
                     strategy: kurs,
                     prev: v.strategy,
-                },
+                }),
             ));
         }
         // Kurs zmieniony — presety przepina jego wykonanie, więc osobnych
@@ -95,10 +95,10 @@ pub fn decide_tactical(v: &FirmView) -> SmallVec<[Decided<TacAction>; 6]> {
         if s.delegated && s.needs_policy {
             out.push(Decided::new(
                 TacAction::AdoptPolicy { site: s.site },
-                DecisionReason::StrategySet {
+                DecisionReason::Firm(FirmReason::StrategySet {
                     strategy: v.strategy,
                     prev: v.strategy,
-                },
+                }),
             ));
         }
     }
@@ -216,10 +216,10 @@ mod tests {
         let r = d[0].reason();
         assert_eq!(
             r,
-            DecisionReason::SiteClosed {
+            DecisionReason::Firm(FirmReason::SiteClosed {
                 months: 3,
                 margin_bp: -820
-            }
+            })
         );
     }
 

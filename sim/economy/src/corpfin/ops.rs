@@ -8,7 +8,7 @@
 //! mu wyłącznie trzeci produkt (`LoanKind::Investment`) i zaległość z niezapłaconej
 //! raty — obie zmiany są u niego, a nie tutaj.
 
-use magnat_core::{CitizenId, DecisionReason, FirmId, Money, Tick};
+use magnat_core::{CitizenId, DecisionReason, FirmId, FirmReason, Money, Tick};
 
 use crate::books::{AccountId, AccountOwner, Books, TxKind, TxMemo};
 use crate::corpfin::arrears::{ArrearId, ClaimOrigin};
@@ -74,10 +74,10 @@ impl CorpFinance {
         }
         let memo = TxMemo::new(
             TxKind::Rent { site: l.asset.site },
-            DecisionReason::LeaseSigned {
+            DecisionReason::Firm(FirmReason::LeaseSigned {
                 site: l.asset.site,
                 months: 0,
-            },
+            }),
         );
         if l.buyout.get() > 0
             && books
@@ -112,10 +112,10 @@ impl CorpFinance {
         }
         let memo = TxMemo::new(
             TxKind::Rent { site: l.asset.site },
-            DecisionReason::LeaseSigned {
+            DecisionReason::Firm(FirmReason::LeaseSigned {
                 site: l.asset.site,
                 months: l.months_left,
-            },
+            }),
         );
         if books
             .transfer(payer, l.lessor_account, l.monthly, memo, t)
@@ -183,7 +183,7 @@ impl CorpFinance {
         t: Tick,
     ) -> Option<BondId> {
         let id = BondId(u32::try_from(self.bonds.len()).unwrap_or(u32::MAX));
-        let reason = DecisionReason::BondIssued { coupon_bp, months };
+        let reason = DecisionReason::Firm(FirmReason::BondIssued { coupon_bp, months });
         let memo = TxMemo::new(
             TxKind::ExternalCapital {
                 investor: crate::books::ExternalInvestorId(id.0),
@@ -254,10 +254,10 @@ impl CorpFinance {
         let udzialy = magnat_core::split_proportional(kupon, &wagi);
         let konto = b.issuer_account;
         let issuer = b.issuer;
-        let reason = DecisionReason::BondIssued {
+        let reason = DecisionReason::Firm(FirmReason::BondIssued {
             coupon_bp: b.coupon_bp,
             months: 0,
-        };
+        });
         let plan: Vec<(BondHolder, Money)> = b
             .holders
             .iter()
@@ -339,10 +339,10 @@ impl CorpFinance {
         }
         let konto = b.issuer_account;
         let issuer = b.issuer;
-        let reason = DecisionReason::BondIssued {
+        let reason = DecisionReason::Firm(FirmReason::BondIssued {
             coupon_bp: b.coupon_bp,
             months: 0,
-        };
+        });
         let plan: Vec<(BondHolder, Money)> = b.holders.clone();
         let mut wyszlo = Money::ZERO;
         for (who, kwota) in plan {
@@ -434,10 +434,10 @@ impl CorpFinance {
         if cena.get() <= 0 {
             return Money::ZERO;
         }
-        let reason = DecisionReason::ReceivablesFactored {
+        let reason = DecisionReason::Firm(FirmReason::ReceivablesFactored {
             count: 1,
             discount_bp: u16::try_from(discount_bp.clamp(0, 10_000)).unwrap_or(0),
-        };
+        });
         let memo = TxMemo::new(TxKind::Withdrawal, reason);
         if books
             .transfer(factor_account, creditor_account, cena, memo, t)

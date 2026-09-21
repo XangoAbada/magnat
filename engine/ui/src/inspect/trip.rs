@@ -303,12 +303,12 @@ impl TripCard {
                 &[
                     (
                         "odcinki",
-                        &c.plural(l, c.must("ui.unit.segments"), u64::from(self.edges)),
+                        &c.plural_key(l, "ui.unit.segments", u64::from(self.edges)),
                     ),
                     ("metry", &self.distance_m.to_string()),
                     (
                         "postoje",
-                        &c.plural(l, c.must("ui.unit.stops"), u64::from(self.stops)),
+                        &c.plural_key(l, "ui.unit.stops", u64::from(self.stops)),
                     ),
                 ],
             )

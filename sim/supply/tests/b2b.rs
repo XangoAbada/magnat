@@ -5,8 +5,8 @@
 //! a odpowiedź da się sprawdzić ręcznie.
 
 use magnat_core::{
-    ContractId, Energy, Entity, FirmId, GateKind, GoodId, Mass, Money, OpenHours, SimMinute,
-    SiteId, Volume, Q,
+    ContractId, Energy, Entity, FirmId, FirmReason, GateKind, GoodId, Mass, Money, OpenHours,
+    SimMinute, SiteId, Volume, Q,
 };
 use magnat_supply::b2b::{
     contract::{ContractPricing, DeliverySchedule, Penalty, SupplyContractDraft},
@@ -712,7 +712,7 @@ fn eksport_zabiera_mase_z_lokalnej_podazy() {
         .expect("eksport zajmuje ciężarówkę, a nie tylko księgę");
     assert!(matches!(
         s.reason,
-        magnat_core::DecisionReason::ExportChosen { .. }
+        magnat_core::DecisionReason::Firm(FirmReason::ExportChosen { .. })
     ));
     // Przed rozładunkiem w porcie towar jest **w drodze**, a nie za granicą: nie zszedł
     // jeszcze z bilansu, bo przejazd może się nie udać.
@@ -986,7 +986,7 @@ fn stala_wspolpraca_bije_nizsza_cene_i_widac_to_w_powodzie() {
     assert!(
         matches!(
             rozliczenia[0].reason,
-            magnat_core::DecisionReason::TrustedSupplier { supplier, .. } if supplier == mlyn0
+            magnat_core::DecisionReason::Firm(FirmReason::TrustedSupplier { supplier, .. }) if supplier == mlyn0
         ),
         "powód ma nazywać zaufanie, a nie cenę: {:?}",
         rozliczenia[0].reason

@@ -1,0 +1,33 @@
+error[E0004]: non-exhaustive patterns: `FirmReason::Repricing { .. }`, `FirmReason::Shortage { .. }`, `FirmReason::ProductionHalted { .. }` and 48 more not covered
+  --> tests/ui/firm_reason_bez_wildcard.rs:12:11
+   |
+12 |     match powod {
+   |           ^^^^^ patterns `FirmReason::Repricing { .. }`, `FirmReason::Shortage { .. }`, `FirmReason::ProductionHalted { .. }` and 48 more not covered
+   |
+note: `FirmReason` defined here
+  --> src/decision/firm.rs
+   |
+   | pub enum FirmReason {
+   | ^^^^^^^^^^^^^^^^^^^
+...
+   |     Repricing {
+   |     --------- not covered
+...
+   |     Shortage {
+   |     -------- not covered
+...
+   |     ProductionHalted {
+   |     ---------------- not covered
+...
+   |     SubstituteUsed {
+   |     -------------- not covered
+...
+   |     SupplierChosen {
+   |     -------------- not covered
+   = note: the matched value is of type `FirmReason`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern as shown, or multiple match arms
+   |
+12 ~     match powod {
+13 +         _ => todo!(),
+14 +     }
+   |

@@ -224,7 +224,7 @@ pub enum FurnitureKind { StreetLamp, Bench, TreeRow, BusStopPad }
 
 ---
 
-## Korekty planu wpisane po implementacji
+## Zmiany wpisane po M2b
 
 Zgodnie z `CLAUDE.md`: rozjazd kodu z planem jest gorszy niż błąd w planie, bo nikt go nie widzi.
 Poprawki z gwiazdką zmieniły **zakres** albo **kryterium**, reszta doprecyzowuje projekt.

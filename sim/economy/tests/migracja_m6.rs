@@ -26,7 +26,9 @@ mod common;
 
 use common::{bench, good_by_key, swiat_z_gospodarstwami, Gd};
 use magnat_agents::{FulfilOutcome, FulfilRequest};
-use magnat_core::{HouseholdId, Mass, Money, NeedKind, PlaceRef, Qty, RejectCause, Tick};
+use magnat_core::{
+    CitizenReason, HouseholdId, Mass, Money, NeedKind, PlaceRef, Qty, RejectCause, Tick,
+};
 use magnat_economy::{settle_transactions, Books, EconomyData, LostSaleTracking, PurchaseIntent};
 use magnat_spatial::Vec2;
 
@@ -94,10 +96,12 @@ fn sklepy_przestaly_byc_nieskonczone() {
             let wynik = market.fulfil(&req);
             if matches!(
                 wynik,
-                FulfilOutcome::Refused(magnat_core::DecisionReason::OfferRejected {
-                    cause: RejectCause::OutOfStock,
-                    ..
-                })
+                FulfilOutcome::Refused(magnat_core::DecisionReason::Citizen(
+                    CitizenReason::OfferRejected {
+                        cause: RejectCause::OutOfStock,
+                        ..
+                    }
+                ))
             ) {
                 odmow_z_braku += 1;
                 // **Sedno kryterium:** odmowa z braku towaru musi mieć pokrycie

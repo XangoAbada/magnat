@@ -430,7 +430,7 @@ i wychodzą przez `deprivation_of`, ale stosuje je faza będąca ich właścicie
 
 ---
 
-## Korekty planu wpisane po implementacji M3a
+## Zmiany wpisane po M3a
 
 Zgodnie z `K-18`. Gwiazdka = zmiana zakresu albo kryterium.
 

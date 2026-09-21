@@ -116,7 +116,7 @@ na job systemie; składanie wyniku po indeksie porcji, nie po kolejności zakoń
 budynki i parcele 64 m, agenci 32 m, pojazdy 32 m, oferty per kategoria 128 m
 (kategorii jest dużo, encji w każdej mało), pola skalarne 16 m.
 
-**Korekty planu wpisane po implementacji** (CLAUDE.md: rozjazd kodu z planem jest gorszy
+**Zmiany wpisane po M2a** (CLAUDE.md: rozjazd kodu z planem jest gorszy
 niż błąd w planie).
 
 | # | Co | Dlaczego |

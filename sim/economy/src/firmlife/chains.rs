@@ -16,7 +16,7 @@
 use std::collections::BTreeMap;
 
 use magnat_agents::{Identity, Population, Residence};
-use magnat_core::{DecisionReason, DistrictId, Money, SimMinute, Tick};
+use magnat_core::{DecisionReason, DistrictId, FirmReason, Money, SimMinute, Tick};
 use magnat_ecs::World;
 use magnat_firms::{Firm, Firms, Owner, Site, SitePlacement, SiteTypeCatalog};
 
@@ -228,10 +228,10 @@ fn wejdz(
     firms.log(
         key,
         t,
-        DecisionReason::ChainEntered {
+        DecisionReason::Firm(FirmReason::ChainEntered {
             capital: kapital,
             sites: nowe.len() as u8,
-        },
+        }),
     );
     *world.resource_mut::<Firms>() = firms;
     if nowe.is_empty() {

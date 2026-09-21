@@ -9,7 +9,7 @@
 //! jest w [`crate::election`] i jest funkcją czystą: ten plik wyłącznie zbiera dla
 //! niej wejście ze świata i zapisuje wynik do zasobu miasta.
 
-use magnat_core::{DecisionReason, DistrictId, Money, SiteId, Tick, Q};
+use magnat_core::{CityReason, DecisionReason, DistrictId, FirmReason, Money, SiteId, Tick, Q};
 use magnat_economy::Market;
 use magnat_ecs::World;
 
@@ -109,12 +109,12 @@ pub fn cykl(
                 effective_from: Tick(t.0 + u64::from(tun.vacatio_legis_days) * 1_440),
                 sunset: None,
                 vote: crate::policy::CouncilVote { for_bp: 10_000 },
-                reason: DecisionReason::TaxRateChanged {
+                reason: DecisionReason::City(CityReason::TaxRateChanged {
                     kind,
                     from_bp: u16::try_from(obecna).unwrap_or(u16::MAX),
                     to_bp: u16::try_from(nowa).unwrap_or(u16::MAX),
                     gap_bp: 0,
-                },
+                }),
             });
         }
     }
@@ -122,11 +122,11 @@ pub fn cykl(
     city.gov.term_start = t;
     city.log_reason(
         t,
-        DecisionReason::ElectionHeld {
+        DecisionReason::City(CityReason::ElectionHeld {
             turnout_bp: u16::try_from(wynik.turnout_bp).unwrap_or(u16::MAX),
             winner_bp: u16::try_from(wynik.winner_bp).unwrap_or(u16::MAX),
             incumbent: wynik.incumbent_won,
-        },
+        }),
     );
     for (_, powod) in e.vote_log.iter().take(8) {
         city.log_reason(t, *powod);
@@ -206,11 +206,11 @@ fn finansuj_kampanie(
         // pieniądzem, który nigdy nie wyszedł z firmy: próg wejścia stoi na
         // aktywach księgowych, a płaci się gotówką, więc nieudany przelew jest
         // normalnym stanem, a nie awarią.
-        let powod = DecisionReason::CampaignBacked {
+        let powod = DecisionReason::Firm(FirmReason::CampaignBacked {
             candidate: u8::try_from(idx).unwrap_or(0),
             amount: kwota,
             illegal: nielegalnie,
-        };
+        });
         let memo = magnat_economy::TxMemo::new(
             magnat_economy::TxKind::CampaignDonation {
                 candidate: u8::try_from(idx).unwrap_or(0),
@@ -237,15 +237,19 @@ fn finansuj_kampanie(
         }
     }
 
-    // Ujawnienie. Wpłata poza rejestrem jest sprawą dla prokuratury — a tę
-    // prowadzi urząd antymonopolowy, bo to on w tej fazie zajmuje się tym,
-    // co firma robi poza rynkiem (§5.7). Sprawa idzie zwykłą drogą: dowody
+    // Ujawnienie. Wpłata poza rejestrem jest sprawą dla **prokuratury** i od R2e
+    // (`K-73`) prokuratura ma własny wariant `AgencyKind`. Do R2e prowadził ją
+    // urząd antymonopolowy, bo innego adresata nie było — i kosztowało to gracza
+    // zdanie nieprawdziwe w karcie sprawy. Sprawa idzie zwykłą drogą: dowody
     // rosną, kara przychodzi na końcu, budżet ją księguje. **Drugiej ścieżki
     // nie ma i nie będzie** — `political/scandal` jako osobne zdarzenie byłoby
     // drugim wejściem do tego samego skutku (`K-11`, `K-13`).
+    //
+    // Antymonopol zostaje przy swoich dwóch przesłankach rynkowych: pozycji
+    // dominującej (`law::urzedy`) i zmowie cenowej (`step::kartele`).
     for (site, firma) in nielegalni {
         if let Some(powod) = city.enforcement.otworz(
-            magnat_core::AgencyKind::Antitrust,
+            magnat_core::AgencyKind::Prosecution,
             site,
             firma,
             Q::new(20),

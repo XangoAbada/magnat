@@ -4,10 +4,10 @@ Symulator miasta i gospodarki. Własny silnik w Rust — ECS, generacja świata,
 Deterministyczny: ten sam seed daje ten sam świat i ten sam przebieg, niezależnie od liczby wątków
 i platformy.
 
-Stan: **M8 zamknięte, M9a zamknięte** (miasto, ludzie, ruch, gospodarka, łańcuch dostaw, firmy AI,
-podatki, sieci przesyłowe, zdarzenia świata — oraz sesja gry z dziennikiem wejść i odtworzeniem).
-Szczegóły postępu:
-[`docs/implementation-plan/00-postep.md`](docs/implementation-plan/00-postep.md).
+Stan: **R2e zamknięte** — ostatnia odhaczona pozycja w
+[`docs/implementation-plan/00-postep.md`](docs/implementation-plan/00-postep.md), i to ten plik
+jest źródłem prawdy o postępie. Ta linia nie powtarza listy faz z rozmysłu: powtórzona lista
+rozjeżdża się cicho, a zgodności tej jednej nazwy pilnuje `scripts/plan_guard.py` w CI.
 
 ## Wymagania
 

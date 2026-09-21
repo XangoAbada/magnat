@@ -16,8 +16,8 @@ use magnat_agents::{
     PlanSlab, ReasonLog, ReplanCause, Residence, ShiftKind, StraightLineTravel, Vitals, MAX_SLOTS,
 };
 use magnat_core::{
-    ActivityKind, BuildingId, CitizenId, DayOfWeek, DecisionReason, Entity, NeedKind, PlaceKind,
-    PlaceRef, SiteId, StockCat, WorldCoord, STOCK_CAT_COUNT,
+    ActivityKind, BuildingId, CitizenId, CitizenReason, DayOfWeek, DecisionReason, Entity,
+    NeedKind, PlaceKind, PlaceRef, SiteId, StockCat, WorldCoord, STOCK_CAT_COUNT,
 };
 use std::num::NonZeroU32;
 use std::sync::Arc;
@@ -332,7 +332,8 @@ fn plan_golden_anna() {
     assert!(
         powody.iter().any(|r| matches!(
             r,
-            DecisionReason::ChosenOnRoute { .. } | DecisionReason::ChosenNearest { .. }
+            DecisionReason::Citizen(CitizenReason::ChosenOnRoute { .. })
+                | DecisionReason::Citizen(CitizenReason::ChosenNearest { .. })
         )),
         "wybór sklepu bez uzasadnienia: {powody:?}"
     );
@@ -340,10 +341,10 @@ fn plan_golden_anna() {
     assert!(
         log.entries().iter().any(|e| matches!(
             e.reason,
-            DecisionReason::StockBelowThreshold {
+            DecisionReason::Citizen(CitizenReason::StockBelowThreshold {
                 cat: StockCat::Food,
                 days_left: 1
-            }
+            })
         )),
         "brak powodu „zapas pieczywa na jeden dzień”"
     );
@@ -503,10 +504,10 @@ fn plan_unknown_place() {
     assert!(
         log.skipped().any(|e| matches!(
             e.reason,
-            DecisionReason::PlaceUnknown {
+            DecisionReason::Citizen(CitizenReason::PlaceUnknown {
                 need: NeedKind::Hunger,
                 known_count: 0
-            }
+            })
         )),
         "brak powodu pominięcia: {:?}",
         log.skipped().collect::<Vec<_>>()
@@ -561,9 +562,10 @@ fn plan_dziala_przez_atrape_odmawiajaca() {
         );
     }
     assert!(
-        log.entries()
-            .iter()
-            .any(|e| matches!(e.reason, DecisionReason::Replanned { .. })),
+        log.entries().iter().any(|e| matches!(
+            e.reason,
+            DecisionReason::Citizen(CitizenReason::Replanned { .. })
+        )),
         "przeplanowanie bez powodu w logu"
     );
 }
@@ -717,10 +719,10 @@ fn niedobor_zdrowia_wysyla_do_lekarza_a_nie_do_sklepu() {
     assert!(
         log.entries().iter().any(|e| matches!(
             e.reason,
-            DecisionReason::NeedCritical {
+            DecisionReason::Citizen(CitizenReason::NeedCritical {
                 need: NeedKind::Health,
                 ..
-            }
+            })
         )),
         "wizyta bez powodu"
     );
@@ -746,10 +748,10 @@ fn absencja_z_deprywacji_zabiera_prace_z_planu() {
     assert!(
         log.skipped().any(|e| matches!(
             e.reason,
-            DecisionReason::Deprivation {
+            DecisionReason::Citizen(CitizenReason::Deprivation {
                 effect: magnat_core::DeprivationEffect::AbsenceRisk,
                 ..
-            }
+            })
         )),
         "absencja bez powodu w karcie inspekcji"
     );
@@ -812,4 +814,56 @@ fn kazdy_dojazd_trwa_tyle_co_droga_z_miejsca_poprzedniego() {
             );
         }
     }
+}
+
+/// R2-WP22: plan doby niesie **cel** każdej podróży, a nie jeden dla wszystkich.
+///
+/// `TripPurpose` ma siedem wariantów i `data/roads/mode_choice.ron` siedem mnożników
+/// wartości czasu. Do R2e `TripRequest` celu nie niósł, a `TrafficOracle::start_trip`
+/// wpisywał każdej podróży `Work` — więc z siedmiu liczb w pliku żyła **jedna**,
+/// a odprowadzenie dziecka wyceniało czas mnożnikiem 1,30 zamiast 1,50.
+///
+/// Test mierzy to na planie, a nie na ruchu, bo cel ustala planer: to on wie, do czego
+/// mieszkaniec wychodzi. Przed naprawą `PlanSlot::purpose()` nie istniało, a jedyny
+/// cel, jaki dało się odczytać z planu, był stałą po stronie ruchu.
+#[test]
+fn plan_doby_niesie_cel_kazdej_podrozy_a_odprowadzenie_wazy_wiecej_niz_dojazd() {
+    use magnat_core::TripPurpose;
+
+    let s = Scena::anna();
+    let mut canvas = DayCanvas::new();
+    plan_day(&s.ctx(), &mut canvas);
+
+    let cele: Vec<TripPurpose> = canvas.slots().iter().map(|x| x.purpose()).collect();
+    assert!(
+        cele.contains(&TripPurpose::Escort),
+        "odprowadzenie do szkoły nie dostało własnego celu: {cele:?}"
+    );
+    assert!(
+        cele.contains(&TripPurpose::Work),
+        "dojazd do pracy zgubił swój cel: {cele:?}"
+    );
+    let rozne: std::collections::BTreeSet<u8> = cele.iter().map(|p| p.as_index() as u8).collect();
+    assert!(
+        rozne.len() >= 3,
+        "cała doba ma {} cel(e) — tabela mnożników w mode_choice.ron dalej jest martwa: {cele:?}",
+        rozne.len()
+    );
+
+    // Odprowadzenie i dojazd do pracy to ta sama **czynność** (`Commute`) i różne cele.
+    // To jest cała treść naprawy: rozstrzyga ładunek powodu, a nie rodzaj slotu.
+    let dojazdy: Vec<TripPurpose> = canvas
+        .slots()
+        .iter()
+        .filter(|x| x.kind == ActivityKind::Commute as u8)
+        .map(|x| x.purpose())
+        .collect();
+    assert!(
+        dojazdy.contains(&TripPurpose::Escort) && dojazdy.contains(&TripPurpose::Work),
+        "dojazdy mają jeden cel, choć jeden z nich jest odprowadzeniem: {dojazdy:?}"
+    );
+
+    // Że mnożnik z danych faktycznie różni te dwa cele, sprawdza `sim/traffic`
+    // (`odprowadzenie_wazy_wiecej_niz_dojazd`) — `sim/agents` nie widzi ruchu
+    // i widzieć nie ma, bo zależność idzie w drugą stronę.
 }

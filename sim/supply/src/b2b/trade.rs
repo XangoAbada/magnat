@@ -17,8 +17,8 @@
 //! rampę i zabiera masę z lokalnej podaży. Wzrost cen w mieście wychodzi z tego sam.
 
 use magnat_core::{
-    rng, DecisionReason, FirmId, GateKind, GoodId, HashState, Mass, Money, SimMinute, SiteId,
-    StateHasher, StreamId, TariffClassId, Tick,
+    rng, DecisionReason, FirmId, FirmReason, GateKind, GoodId, HashState, Mass, Money, SimMinute,
+    SiteId, StateHasher, StreamId, TariffClassId, Tick,
 };
 use serde::Deserialize;
 
@@ -207,8 +207,15 @@ impl TradeGood {
 /// przeniósł `GateKind` do `core` **właśnie po to**, żeby `Good::import_via` i węzeł
 /// graniczny mówiły o tym samym. Drugi enum rozjechałby się przy pierwszej zmianie
 /// i unieważnił pole `import_via` w całym katalogu fali A (`AH-3`). Głowica rurociągu
-/// z §5.9 nie powstaje: w fali A żaden rurociąg nie przechodzi granicy, a `Carrier::Pipeline`
-/// z M6b wozi ropę **wewnątrz** miasta i nie jest bramą.
+/// z §5.9 nie powstaje: w fali A żaden rurociąg nie przechodzi granicy.
+///
+/// **Sprostowanie wpisane w R2e (`D-N5`):** ten akapit powoływał się na
+/// `Carrier::Pipeline`, który „wozi ropę wewnątrz miasta" — taki wariant istniał
+/// w typie, ale **nie miał ani jednej ścieżki wykonania**: nikt go nie konstruował,
+/// `haul_cost` liczył wyłącznie z `cost_gr_per_tonne_km`, a `pipeline_gr_per_tonne`
+/// w `data/tuning/supply.ron` nie miało czytelnika. Wariant znikł z `Carrier`, bo
+/// `M8b` §5.4 buduje rurociągi jako **sieci przesyłowe z taryfą i fakturą**, co jest
+/// innym mechanizmem; drugi, martwy, był kosztem bez konsumenta.
 #[derive(Clone, Debug)]
 pub struct TradeNode {
     pub id: TradeNodeId,
@@ -360,11 +367,11 @@ pub fn gate_allows(cat: &Catalog, good: GoodId, kind: GateKind) -> bool {
 /// stratę, i gracz miałby rację, nie ufając panelowi.
 #[must_use]
 pub fn export_reason(good: GoodId, premium_bp: u16, mass: Mass) -> DecisionReason {
-    DecisionReason::ExportChosen {
+    DecisionReason::Firm(FirmReason::ExportChosen {
         good,
         premium_bp,
         mass_kg: (mass.0 / 1_000).clamp(0, i64::from(u32::MAX)) as u32,
-    }
+    })
 }
 
 // ── Handel zagraniczny po stronie zasobu ────────────────────────────────────────
@@ -525,12 +532,12 @@ impl B2b {
                 zostaje.push(p);
                 continue;
             }
-            let powod = DecisionReason::Shortage {
+            let powod = DecisionReason::Firm(FirmReason::Shortage {
                 good: p.good,
                 from: magnat_core::ShortageStageKind::Importing,
                 to: magnat_core::ShortageStageKind::Ok,
                 coverage_minutes: 0,
-            };
+            });
             let id = transport.order(
                 oracle,
                 TransportRequest {

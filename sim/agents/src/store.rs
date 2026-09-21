@@ -13,7 +13,7 @@
 //! i §5.7 (wiedza) to ten sam byt z innym polem `kind`. Rozdzielenie dopiero gdyby M10
 //! potrzebował innego cyklu życia dla reklamy.
 
-use magnat_core::{HashState, StateHasher};
+use magnat_core::{CitizenReason, HashState, StateHasher};
 
 /// Klasy rozmiaru slabu. Kolejność rosnąca jest założeniem `promote`.
 ///
@@ -452,6 +452,56 @@ impl PlanSlot {
     #[must_use]
     pub const fn end_min(&self) -> u16 {
         self.start_min + self.dur_min
+    }
+
+    /// Po co mieszkaniec wychodzi do tego slotu — wejście wartości czasu w M4c
+    /// (`R2-WP22`).
+    ///
+    /// Cel podróży ustala **planer doby**, bo to on wie, do czego mieszkaniec wychodzi;
+    /// ruch zna trasę i pojazd, ale nie zna powodu. Do R2e nie ustalał go nikt
+    /// i `start_trip` wpisywał każdej podróży `Work`.
+    ///
+    /// Odprowadzenie dziecka jest **slotem dojazdu** (`ActivityKind::Commute`)
+    /// z powodem `Commitment { kind: Childcare }`, więc rozstrzyga o nim ładunek
+    /// powodu, a nie czynność: dojazd do pracy i odprowadzenie do szkoły mają tę samą
+    /// czynność i różne mnożniki czasu (1,30 wobec 1,50).
+    ///
+    /// `ponytail:` `Medical` nie ma tu producenta i to jest sufit nazwany. Wizyta
+    /// u lekarza jedzie dziś jako `Errand`, bo `ActivityKind` nie odróżnia jej od
+    /// innego załatwiania spraw, a rozstrzygnięcie po rodzaju miejsca docelowego
+    /// (`PlaceKind::Doctor`) wymaga zajrzenia do katalogu miejsc przy każdym
+    /// wyruszeniu. Wyjście: usługi zdrowotne M8d, które i tak dadzą wizycie własną
+    /// czynność. `Refuel` producenta nie potrzebuje — tankowanie jest **odcinkiem
+    /// wewnątrz** podróży i nadaje je `sim/traffic`, a nie plan doby.
+    #[must_use]
+    pub fn purpose(&self) -> magnat_core::TripPurpose {
+        use magnat_core::{ActivityKind, CommitmentKind, DecisionReason, TripPurpose};
+
+        // Dojazd: powód niesie rodzaj zobowiązania i to on rozstrzyga.
+        if self.kind == ActivityKind::Commute.as_index() as u8 {
+            let zobowiazanie = DecisionReason::Citizen(CitizenReason::Commitment {
+                kind: CommitmentKind::Work,
+            });
+            if self.reason_tag() == zobowiazanie.discriminant() as u8 {
+                return match CommitmentKind::from_index(usize::from(self.reason_param())) {
+                    Some(CommitmentKind::Childcare) => TripPurpose::Escort,
+                    Some(CommitmentKind::School) => TripPurpose::School,
+                    _ => TripPurpose::Work,
+                };
+            }
+            return TripPurpose::Work;
+        }
+        match ActivityKind::from_index(usize::from(self.kind)) {
+            Some(ActivityKind::School) => TripPurpose::School,
+            Some(ActivityKind::Shop | ActivityKind::Errand) => TripPurpose::Shopping,
+            Some(ActivityKind::Eat | ActivityKind::Leisure | ActivityKind::Social) => {
+                TripPurpose::Leisure
+            }
+            // Sen i bezczynność to powrót do domu — wyceniany jak czas wolny,
+            // bo nikt nie wraca do domu w interesach.
+            Some(ActivityKind::Sleep | ActivityKind::Idle) => TripPurpose::Leisure,
+            _ => TripPurpose::Work,
+        }
     }
 }
 

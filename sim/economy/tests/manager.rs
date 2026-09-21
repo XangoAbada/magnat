@@ -10,7 +10,7 @@ mod common;
 use std::collections::BTreeMap;
 
 use magnat_core::{
-    BuildingId, CitizenId, DistrictId, GoodId, Money, Qty, SimMinute, SiteId, Tick, Q,
+    BuildingId, CitizenId, DistrictId, FirmReason, GoodId, Money, Qty, SimMinute, SiteId, Tick, Q,
 };
 use magnat_economy::{EconomyData, ManagerCurve, ManagerExecution, Market, PolicyTuning};
 use magnat_firms::{
@@ -389,11 +389,11 @@ fn powod_niesie_wiek_danych_i_odchylke_menedzera() {
     let polityki: Vec<_> = log
         .iter()
         .filter_map(|r| match r {
-            magnat_core::DecisionReason::PolicyApplied {
+            magnat_core::DecisionReason::Firm(FirmReason::PolicyApplied {
                 lag_days,
                 deviation_bp,
                 ..
-            } => Some((*lag_days, *deviation_bp)),
+            }) => Some((*lag_days, *deviation_bp)),
             _ => None,
         })
         .collect();
@@ -417,7 +417,10 @@ fn menedzer_doskonaly_nie_zostawia_odchylki() {
         doba(&b.market, &mut f, Some(&krzywa()), Tick(d * DOBA));
     }
     for r in b.market.reprice_log(b.sites[0]) {
-        if let magnat_core::DecisionReason::PolicyApplied { deviation_bp, .. } = r {
+        if let magnat_core::DecisionReason::Firm(FirmReason::PolicyApplied {
+            deviation_bp, ..
+        }) = r
+        {
             assert_eq!(deviation_bp, 0);
         }
     }

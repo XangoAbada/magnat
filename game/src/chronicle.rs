@@ -28,7 +28,7 @@
 //! dałaby się przetłumaczyć, a zmiana języka w trakcie gry pokazałaby historię
 //! w dwóch językach naraz.
 
-use magnat_core::{DecisionReason, DistrictId, FirmId, SimMinute, Subject};
+use magnat_core::{DecisionReason, DistrictId, FirmId, FirmReason, SimMinute, Subject};
 
 use crate::Session;
 
@@ -331,7 +331,7 @@ impl Chronicle {
         }
         for (t, powod) in nowe {
             let tytul = match powod {
-                DecisionReason::StoryPublished { outlet, .. } => {
+                DecisionReason::Firm(FirmReason::StoryPublished { outlet, .. }) => {
                     Some(Subject::Firm(magnat_supply::firm_of(outlet)))
                 }
                 _ => None,

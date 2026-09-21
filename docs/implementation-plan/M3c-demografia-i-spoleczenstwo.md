@@ -176,7 +176,7 @@ To jest dokładnie mechanika z §5.7: nowy sklep zna początkowo tylko ten, kto 
 
 ---
 
-## Korekty planu wpisane po implementacji M3c
+## Zmiany wpisane po M3c
 
 Gwiazdka = zmiana zakresu albo kryterium; reszta to doprecyzowanie.
 

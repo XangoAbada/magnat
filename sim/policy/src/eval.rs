@@ -17,7 +17,7 @@
 //! nie alokuje — wynik idzie do `SmallVec` o pojemności `MAX_RULES`, a drzewo warunku
 //! jest już zbudowane i wyłącznie czytane.
 
-use magnat_core::{DecisionReason, Money, PolicyId, PriceBasis};
+use magnat_core::{DecisionReason, FirmReason, Money, PolicyId, PriceBasis};
 use smallvec::SmallVec;
 
 use crate::ast::{
@@ -103,7 +103,7 @@ fn decyzja(policy: PolicyId, rule: u8, action: &Action) -> Decided<&Action> {
     let kind = action.kind();
     Decided::new(
         action,
-        DecisionReason::PolicyApplied {
+        DecisionReason::Firm(FirmReason::PolicyApplied {
             policy,
             rule,
             action: kind,
@@ -113,7 +113,7 @@ fn decyzja(policy: PolicyId, rule: u8, action: &Action) -> Decided<&Action> {
             // w każdym świecie bez modelu menedżera.
             lag_days: 0,
             deviation_bp: 0,
-        },
+        }),
     )
 }
 
@@ -361,13 +361,13 @@ mod tests {
         assert_eq!(d.len(), 1);
         assert_eq!(
             d[0].reason(),
-            DecisionReason::PolicyApplied {
+            DecisionReason::Firm(FirmReason::PolicyApplied {
                 policy: PolicyId(1),
                 rule: 0,
                 action: ActionKind::SetPrice,
                 lag_days: 0,
                 deviation_bp: 0,
-            }
+            })
         );
     }
 
@@ -390,13 +390,13 @@ mod tests {
         assert_eq!(d[0].action().kind(), ActionKind::Alert);
         assert_eq!(
             d[0].reason(),
-            DecisionReason::PolicyApplied {
+            DecisionReason::Firm(FirmReason::PolicyApplied {
                 policy: PolicyId(1),
                 rule: FALLBACK_RULE,
                 action: ActionKind::Alert,
                 lag_days: 0,
                 deviation_bp: 0,
-            }
+            })
         );
     }
 

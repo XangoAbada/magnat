@@ -581,6 +581,7 @@ fn wyrusz(
             to: dokad,
             depart: MinuteOfDay::new(slot.start_min),
             slot: slot_idx,
+            purpose: slot.purpose(),
         },
         &who,
         q,

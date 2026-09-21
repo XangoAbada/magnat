@@ -11,7 +11,7 @@
 
 use magnat_agents::Identity;
 use magnat_core::{
-    BuildingId, DecisionReason, Entity, Money, PlaceRef, SimMinute, SiteId, Weather,
+    BuildingId, CitizenReason, DecisionReason, Entity, Money, PlaceRef, SimMinute, SiteId, Weather,
 };
 use magnat_nav::EdgeId;
 use magnat_traffic::{
@@ -161,10 +161,10 @@ fn rejestr() -> TripLedger {
         depart: SimMinute(d + 440),
         arrive: SimMinute(d + 474),
         mode: magnat_core::TransportMode::Car as u8,
-        reason: DecisionReason::TripDelayed {
+        reason: DecisionReason::Citizen(CitizenReason::TripDelayed {
             planned_min: 28,
             actual_min: 34,
-        },
+        }),
     }
 }
 

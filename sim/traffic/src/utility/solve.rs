@@ -9,7 +9,7 @@
 //! nie domyka bilansu**. Wyspa zbilansowana nie sortuje niczego, a to jest
 //! przypadek typowy: sieć stoi w równowadze prawie każdą minutę doby.
 
-use magnat_core::{rng, DecisionReason, StreamId, Tick};
+use magnat_core::{rng, CityReason, DecisionReason, StreamId, Tick};
 
 use super::topo::NO_PARENT;
 use super::{
@@ -404,11 +404,13 @@ impl UtilityNetwork {
             // Izolacja decyzją nie jest: nie było czego dzielić, a tłumaczy ją
             // `GridTripped` na krawędzi, która wyspę odcięła.
             if ile > 0 && odciety == SupplyState::Shed {
-                raport.reasons.push(DecisionReason::LoadShed {
-                    service: self.service,
-                    priority: ostatni,
-                    shortfall_w: brak,
-                });
+                raport
+                    .reasons
+                    .push(DecisionReason::City(CityReason::LoadShed {
+                        service: self.service,
+                        priority: ostatni,
+                        shortfall_w: brak,
+                    }));
             }
             poz = koniec;
         }
@@ -458,10 +460,12 @@ impl UtilityNetwork {
             };
             self.dirty = true;
             raport.tripped_edges.push(e);
-            raport.reasons.push(DecisionReason::GridTripped {
-                service: self.service,
-                repair_minutes: u16::try_from(minuty).unwrap_or(u16::MAX),
-            });
+            raport
+                .reasons
+                .push(DecisionReason::City(CityReason::GridTripped {
+                    service: self.service,
+                    repair_minutes: u16::try_from(minuty).unwrap_or(u16::MAX),
+                }));
             ile += 1;
         }
         ile

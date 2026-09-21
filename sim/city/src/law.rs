@@ -26,8 +26,8 @@
 //! pieniądzem miasta spoza jego księgi.
 
 use magnat_core::{
-    AgencyKind, CaseId, DecisionReason, FirmId, HashState, Mass, Money, RemedyKind, SiteId,
-    StateHasher, TaxKind, Tick, AGENCY_KIND_COUNT, Q,
+    AgencyKind, CaseId, CityReason, DecisionReason, FirmId, HashState, Mass, Money, RemedyKind,
+    SiteId, StateHasher, TaxKind, Tick, AGENCY_KIND_COUNT, Q,
 };
 use magnat_economy::Market;
 use magnat_firms::Firms;
@@ -307,7 +307,10 @@ impl Enforcement {
             closed_at: None,
         });
         self.agencies[agency.as_index()].opened += 1;
-        Some(DecisionReason::CaseOpened { agency, evidence })
+        Some(DecisionReason::City(CityReason::CaseOpened {
+            agency,
+            evidence,
+        }))
     }
 }
 
@@ -571,11 +574,11 @@ fn prowadz_sprawy(
         city.enforcement.agencies[agency.as_index()].closed += 1;
         out.push((
             site,
-            DecisionReason::RemedyImposed {
+            DecisionReason::City(CityReason::RemedyImposed {
                 agency,
                 remedy: srodek.kind(),
                 amount: srodek.amount(),
-            },
+            }),
         ));
     }
     out
@@ -688,7 +691,11 @@ fn naloz_srodek(
                 share_bps: p.antitrust_share_bp,
             }
         }
-        AgencyKind::LaborInspection | AgencyKind::Environment => {
+        // Prokuratura kończy karą pieniężną, a nie zamknięciem: R2-WP31 nazywa
+        // sprawę po imieniu i **nie dokłada sankcji**, których urząd nie miał.
+        // Podstawa jest ta sama co przy inspekcji pracy — utarg zadeklarowany,
+        // bo kwoty łapówki po fakcie nikt nie odtworzy.
+        AgencyKind::LaborInspection | AgencyKind::Environment | AgencyKind::Prosecution => {
             let podstawa = market.declared_revenue_recent(site, 12);
             let kwota =
                 Money((podstawa.get().saturating_mul(i64::from(p.fine_bp)) / 10_000).max(50_000));

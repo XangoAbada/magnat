@@ -1,6 +1,7 @@
 use super::day::{usun_relacje, zwolnij_slaby};
 use super::*;
 use crate::migration::Czesci;
+use magnat_core::CitizenReason;
 
 /// Przelicza typ gospodarstwa po zmianie składu (§5.6: typ jest funkcją składu).
 pub fn przeklasyfikuj(world: &mut World, hh_idx: u32, hh: &mut Household, day: u64) {
@@ -143,10 +144,10 @@ fn dobierz_partnerow(world: &mut World, day: u64, raport: &mut MonthReport) {
         raport.partnerships += 1;
         raport.reasons.push((
             e.index(),
-            DecisionReason::PartnerChosen {
+            DecisionReason::Citizen(CitizenReason::PartnerChosen {
                 compatibility: zgodnosc,
                 candidates: rozwazonych,
-            },
+            }),
         ));
     }
 }
@@ -374,10 +375,10 @@ fn rozstania(world: &mut World, day: u64, raport: &mut MonthReport) {
         raport.separations += 1;
         raport.reasons.push((
             e.index(),
-            DecisionReason::SeparationFiled {
+            DecisionReason::Citizen(CitizenReason::SeparationFiled {
                 stress: Q::new(stres),
                 years_together: razem,
-            },
+            }),
         ));
     }
 }

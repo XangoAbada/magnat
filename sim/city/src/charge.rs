@@ -16,8 +16,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use magnat_core::{
-    AbateReason, HashState, HouseholdId, Mass, Money, SiteId, StateHasher, TaxKind, Tick,
-    TAX_KIND_COUNT,
+    AbateReason, CityReason, HashState, HouseholdId, Mass, Money, SiteId, StateHasher, TaxKind,
+    Tick, TAX_KIND_COUNT,
 };
 
 /// Uchwyt należności. Indeks w rejestrze; wartości nie są nigdy ponownie użyte.
@@ -175,11 +175,11 @@ impl TaxCharge {
     /// pierwszej korekcie kwoty.
     #[must_use]
     pub fn reason(&self) -> magnat_core::DecisionReason {
-        magnat_core::DecisionReason::TaxAssessed {
+        magnat_core::DecisionReason::City(CityReason::TaxAssessed {
             kind: self.kind,
             rate_bp: u16::try_from(self.rate_snapshot).unwrap_or(u16::MAX),
             amount: self.amount,
-        }
+        })
     }
 }
 

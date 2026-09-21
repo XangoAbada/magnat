@@ -10,8 +10,8 @@
 //! nie jest przez nikogo płacone; [`Penalty`] jest.
 
 use magnat_core::{
-    ContractId, DecisionReason, FirmId, GoodId, HashState, Mass, Money, OpenHours, SimMinute,
-    SiteId, StateHasher, Q,
+    ContractId, DecisionReason, FirmId, FirmReason, GoodId, HashState, Mass, Money, OpenHours,
+    SimMinute, SiteId, StateHasher, Q,
 };
 
 use crate::b2b::rfq::WhoTransports;
@@ -208,12 +208,12 @@ impl SupplyContract {
     #[must_use]
     pub fn reason(&self) -> DecisionReason {
         let miesiace = self.valid_to.0.saturating_sub(self.valid_from.0) / (30 * 1_440);
-        DecisionReason::ContractSigned {
+        DecisionReason::Firm(FirmReason::ContractSigned {
             good: self.good,
             seller: self.seller,
             months: miesiace.min(u64::from(u16::MAX)) as u16,
             indexed: self.pricing.is_indexed(),
-        }
+        })
     }
 }
 

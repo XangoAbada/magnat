@@ -1,6 +1,7 @@
 //! Miesiąc gospodarstwa, kredyt konsumencki i koszyk CPI (szew (f)).
 
 use super::*;
+use magnat_core::CitizenReason;
 
 impl Market {
     // ── budżety, bank i kredyt (M5d) ─────────────────────────────────────────────
@@ -251,11 +252,11 @@ impl MarketInner {
     ) {
         rep.credit_applications += 1;
         let Some(bank) = self.bank else {
-            let r = DecisionReason::CreditRejected {
+            let r = DecisionReason::Citizen(CitizenReason::CreditRejected {
                 kind: LoanKind::Consumer,
                 cause: RejectCredit::NoLender,
                 margin_bp: 0,
-            };
+            });
             row.credit = Some(r);
             self.log_budget(row.index, r);
             return;
@@ -394,10 +395,10 @@ impl MarketInner {
                     continue;
                 }
                 let cost = FixedCost::ALL[k];
-                let r = DecisionReason::BudgetShortfall {
+                let r = DecisionReason::Citizen(CitizenReason::BudgetShortfall {
                     cost,
                     gap_permille: i16::try_from(brak * 1_000 / kwota.get().max(1)).unwrap_or(1_000),
-                };
+                });
                 if row.unpaid.is_none() {
                     row.unpaid = Some(r);
                 }

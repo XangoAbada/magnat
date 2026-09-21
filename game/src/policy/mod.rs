@@ -28,7 +28,7 @@ pub mod view;
 
 pub use editor::{metryki, Edit, EditError, Note, RuleEditor};
 pub use slot::{ActionDraft, Base, Clause, Join, RuleDraft, Slot};
-pub use text::{parse, write, GoodKeys, TextError};
+pub use text::{parse, rule_lines, write, GoodKeys, TextError};
 pub use view::{EditorAction, RuleEditorView, Tab};
 // Typy języka są **częścią** publicznego wejścia edytora (`RuleEditor::policy`
 // zwraca `Policy`, `from_policy` bierze `PolicyScope`), więc mają tu adres —
@@ -51,6 +51,9 @@ pub struct DrySummary {
     pub price_moves: u32,
     /// Ile razy zmieniłaby cel zapasu.
     pub orders: u32,
+    /// Ile towarów zdjęłaby z półki (`R2-WP22`). Osobno od `orders`, bo gracz
+    /// pyta o to osobno: zamówienie zmienia liczbę, wycofanie zmienia asortyment.
+    pub withdrawals: u32,
     /// Ile alertów i pytań by wystawiła.
     pub alerts: u32,
     /// Ile razy nie umiała policzyć wyrażenia — reguła oparta na metryce, której
@@ -78,6 +81,7 @@ impl DrySummary {
                     }
                     PolicyOutcome::Margin(..) => s.price_moves += 1,
                     PolicyOutcome::Order(..) => s.orders += 1,
+                    PolicyOutcome::Withdraw(..) => s.withdrawals += 1,
                     PolicyOutcome::Alert { .. } => s.alerts += 1,
                     PolicyOutcome::Blind => s.blind += 1,
                 }

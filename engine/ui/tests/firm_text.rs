@@ -11,8 +11,8 @@
 
 use magnat_city::{ChargeState, FiscalPeriod, TaxCharge, TaxChargeId, TaxPayer};
 use magnat_core::{
-    CitizenId, DecisionReason, DistrictId, Entity, FirmStrategy, JobRoleId, Money, SimMinute,
-    SiteId, Tick, Trend,
+    CitizenId, DecisionReason, DistrictId, Entity, FirmReason, FirmStrategy, JobRoleId, Money,
+    SimMinute, SiteId, Tick, Trend,
 };
 use magnat_firms::panel::{EmployeeRow, FirmPanelSnapshot, ManagerRow, OutlookRow, SiteRow};
 use magnat_firms::{FirmKey, FirmPersonality, FirmStatus, ManagerStyle, Owner, SitePnlMonth};
@@ -73,19 +73,19 @@ fn migawka() -> FirmPanelSnapshot {
         decisions: vec![
             (
                 Tick(1_440),
-                DecisionReason::StrategySet {
+                DecisionReason::Firm(FirmReason::StrategySet {
                     strategy: FirmStrategy::Discount,
                     prev: FirmStrategy::Cautious,
-                },
+                }),
             ),
             (
                 Tick(2_880),
-                DecisionReason::SiteOpened {
+                DecisionReason::Firm(FirmReason::SiteOpened {
                     district: DistrictId(3),
                     variants: 4,
                     margin_bp: 620,
                     trend: Trend::Up,
-                },
+                }),
             ),
         ],
         campaign: None,

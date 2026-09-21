@@ -41,6 +41,16 @@ pub enum Note {
     /// cenowa bywa świadoma, a polityka, która nie pozwala jej wypowiedzieć, jest
     /// gorsza od ostrzeżenia, którego gracz nie przeczyta.
     BelowCost { rule: usize },
+    /// **Błąd:** `Alert`/`AskPlayer` niesie numer komunikatu spoza tabeli tekstów
+    /// (R2-WP28, poz. 51). Bez tego reguła wykonuje się bez zdania, a wpis
+    /// w skrzynce eskalacji przychodzi bez treści — gracz dostaje powiadomienie,
+    /// które nic nie mówi, i nie ma jak się dowiedzieć dlaczego.
+    ///
+    /// Sprawdza to edytor, a nie walidator `sim/policy`, i to jest rozstrzygnięcie:
+    /// zakres dopuszczalnych numerów jest **daną** (rozmiarem tabeli komunikatów),
+    /// a `sim/policy` katalogu tekstów nie widzi i widzieć nie ma. Ta sama granica,
+    /// co przy `BelowCost`, który potrzebuje stawki VAT.
+    UnknownMessage { msg: u16 },
 }
 
 impl Note {
@@ -49,9 +59,21 @@ impl Note {
         match self {
             Note::Language(d) => d.is_error(),
             Note::BelowCost { .. } => false,
+            Note::UnknownMessage { .. } => true,
         }
     }
 }
+
+/// Ile komunikatów ma tabela `ui.policy.msg.N` w `data/locale/`.
+///
+/// Liczba stoi tutaj, a nie jest czytana z katalogu przy każdym wywołaniu, bo
+/// `RuleEditor::notes()` woła się przy każdej klatce ekranu edytora i nie ma —
+/// ani nie powinien mieć — uchwytu do katalogu tekstów. Że jest to **mirror
+/// danych, a nie druga prawda**, pilnuje test `liczba_komunikatow_zgadza_sie_
+/// z_katalogiem`: dopisanie klucza `ui.policy.msg.3` bez podniesienia tej stałej
+/// łamie build. Klucz `ui.policy.msg.unknown` się nie liczy — to jest napis
+/// zastępczy, a nie komunikat.
+pub const KOMUNIKATOW: u16 = 3;
 
 /// Czego edytor nie przyjął.
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -338,6 +360,21 @@ impl RuleEditor {
                 out.push(Note::BelowCost { rule: i });
             }
         }
+        // Numer komunikatu spoza tabeli — po numerach rosnąco i bez powtórzeń,
+        // żeby kolejność uwag była deterministyczna, a jeden zły numer w pięciu
+        // regułach nie dał pięciu identycznych zdań.
+        let mut zle: Vec<u16> = self
+            .rules
+            .iter()
+            .flat_map(|r| r.actions.iter())
+            .chain(self.fallback.iter())
+            .filter(|a| matches!(a.kind, ActionKind::Alert | ActionKind::AskPlayer))
+            .map(|a| a.msg)
+            .filter(|m| *m >= KOMUNIKATOW)
+            .collect();
+        zle.sort_unstable();
+        zle.dedup();
+        out.extend(zle.into_iter().map(|msg| Note::UnknownMessage { msg }));
         out
     }
 

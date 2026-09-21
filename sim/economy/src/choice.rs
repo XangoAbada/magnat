@@ -185,7 +185,7 @@ fn score_input(c: &Candidate, st: &BuyerState<'_>) -> crate::kernel::ScoreInput 
     }
 }
 
-/// Który człon przeważył — ładunek `DecisionReason::ShopChosen` (PRD §14.1).
+/// Który człon przeważył — ładunek `DecisionReason::Citizen(CitizenReason::ShopChosen)` (PRD §14.1).
 ///
 /// „Przeważył" znaczy: ma największy **wkład bezwzględny** do sumy. Człon o wadze
 /// 0,4 i wartości 0 nie tłumaczy wyboru; człon o wadze 0,1 i wartości −2 tak.

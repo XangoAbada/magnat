@@ -21,7 +21,7 @@
 
 use magnat_agents::{Household, Population};
 use magnat_core::{
-    Cadence, DecisionReason, Money, NeedKind, SimCalendar, Tick, Q, STOCK_CAT_COUNT,
+    Cadence, DecisionReason, FirmReason, Money, NeedKind, SimCalendar, Tick, Q, STOCK_CAT_COUNT,
 };
 use magnat_ecs::{System, SystemCtx, SystemDesc, SystemId, World};
 
@@ -757,11 +757,11 @@ pub(crate) fn close_site(world: &mut World, market: &Market, site: magnat_core::
         }
         let memo = TxMemo::new(
             TxKind::Wage { site },
-            DecisionReason::JobLeft {
+            DecisionReason::Firm(FirmReason::JobLeft {
                 role: magnat_core::JobRoleId(0),
                 cause: magnat_core::LeaveCause::Redundancy,
                 tenure_days: 0,
-            },
+            }),
         );
         let zaplacone = world
             .get_resource_mut::<Books>()

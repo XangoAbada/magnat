@@ -6,7 +6,7 @@
 //! Druga arytmetyka tych samych liczb rozjechałaby się z pierwszą (`Y-1`).
 
 use super::CardCtx;
-use magnat_core::{CoverId, FirmId, SiteId, Subject, Tick, VehicleId};
+use magnat_core::{CoverId, FirmId, FirmReason, SiteId, Subject, Tick, VehicleId};
 use magnat_firms::{FirmKey, Firms};
 use magnat_ui::{CardTabKind, InspectionCard, Rich, ShopCard, ShopTab, ShopView, Span};
 
@@ -439,9 +439,9 @@ fn zmowa(ctx: &CardCtx<'_>, out: &mut Rich, key: FirmKey) {
     };
     let Some(firm) = firms.get(key) else { return };
     for d in firm.log.iter() {
-        let magnat_core::DecisionReason::CartelDetected {
+        let magnat_core::DecisionReason::Firm(FirmReason::CartelDetected {
             members, months, ..
-        } = d.reason
+        }) = d.reason
         else {
             continue;
         };

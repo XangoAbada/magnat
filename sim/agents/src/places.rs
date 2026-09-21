@@ -16,8 +16,8 @@ use crate::components::{Employment, Identity, Needs, Personality, Residence, Vit
 use crate::needs::NeedTable;
 use crate::store::Knowledge;
 use magnat_core::{
-    BuildingId, CitizenId, DecisionReason, Entity, HouseholdId, MinuteOfDay, Money, NeedKind,
-    PlaceKind, PlaceRef, SimMinute, SiteId, TransportMode, WorldCoord, Q,
+    BuildingId, CitizenId, CitizenReason, DecisionReason, Entity, HouseholdId, MinuteOfDay, Money,
+    NeedKind, PlaceKind, PlaceRef, SimMinute, SiteId, TransportMode, WorldCoord, Q,
 };
 use magnat_sim_snapshot::PedestrianRecord;
 use magnat_spatial::{Aabb2, CategoryGrid, GridSpec, Vec2};
@@ -491,6 +491,15 @@ pub struct TripRequest {
     pub depart: MinuteOfDay,
     /// Slot planu, którego dotyczy podróż — wraca w zdarzeniu `Arrive`.
     pub slot: u8,
+    /// Po co ta podróż — wejście wartości czasu po stronie M4c.
+    ///
+    /// Pole dołożone w R2e (`R2-WP22`). Do tej chwili zlecenie celu nie niosło,
+    /// a `TrafficOracle::start_trip` wpisywał **każdej** podróży `Work`: z siedmiu
+    /// mnożników w `data/roads/mode_choice.ron` żył jeden, a odprowadzenie dziecka
+    /// wyceniało czas tak samo jak dojazd do pracy, choć tabela mówi 1,50 wobec 1,30.
+    /// Cel zna planer doby — bo to on wie, do czego mieszkaniec wychodzi — więc
+    /// wychodzi stąd, a nie z domysłu po stronie ruchu.
+    pub purpose: magnat_core::TripPurpose,
 }
 
 /// Uchwyt do podróży w toku. Niesie trasę w formie, która nie zdradza niczego
@@ -579,7 +588,7 @@ impl TravelOracle for StraightLineTravel {
             minutes,
             cost: Money::ZERO,
             mode: TransportMode::Walk,
-            reason: DecisionReason::ModeWalkOnly { minutes },
+            reason: DecisionReason::Citizen(CitizenReason::ModeWalkOnly { minutes }),
         }
     }
 
@@ -704,10 +713,10 @@ pub fn choose_place(
     places.candidates(need, from, max_travel_min, known, who, out);
     match out.first() {
         Some(best) => Ok(*best),
-        None => Err(DecisionReason::PlaceUnknown {
+        None => Err(DecisionReason::Citizen(CitizenReason::PlaceUnknown {
             need,
             known_count: known.len().min(255) as u8,
-        }),
+        })),
     }
 }
 
@@ -770,10 +779,10 @@ impl PlaceProvider for InfinitePlaces {
                     score: -i32::from(minuty),
                     // Uzupełniane niżej: dopóki nie znamy całej listy, nie wiadomo,
                     // o ile gorsza była alternatywa.
-                    reason: DecisionReason::ChosenNearest {
+                    reason: DecisionReason::Citizen(CitizenReason::ChosenNearest {
                         travel_min: minuty,
                         runner_up_min: minuty,
-                    },
+                    }),
                 };
                 // Wstawianie z utrzymaniem porządku: lista ma 16 pozycji, więc
                 // to jest tańsze niż zebranie wszystkiego i posortowanie.
@@ -808,10 +817,10 @@ impl PlaceProvider for InfinitePlaces {
             } else {
                 c.travel_min
             };
-            c.reason = DecisionReason::ChosenNearest {
+            c.reason = DecisionReason::Citizen(CitizenReason::ChosenNearest {
                 travel_min: c.travel_min,
                 runner_up_min: runner_up,
-            };
+            });
         }
     }
 
@@ -827,10 +836,10 @@ impl PlaceProvider for InfinitePlaces {
             satisfaction: Q::new(spec.satisfaction),
             spent: Money::ZERO,
             duration_min: spec.visit_min,
-            reason: DecisionReason::NeedSatisfied {
+            reason: DecisionReason::Citizen(CitizenReason::NeedSatisfied {
                 need: req.need,
                 gain: Q::new(spec.satisfaction),
-            },
+            }),
         }
     }
 }
@@ -872,10 +881,10 @@ impl PlaceProvider for FlakyPlaces {
     fn fulfil(&mut self, req: &FulfilRequest<'_>) -> FulfilOutcome {
         self.licznik += 1;
         if self.licznik.is_multiple_of(3) {
-            return FulfilOutcome::Refused(DecisionReason::PlaceUnknown {
+            return FulfilOutcome::Refused(DecisionReason::Citizen(CitizenReason::PlaceUnknown {
                 need: req.need,
                 known_count: 0,
-            });
+            }));
         }
         self.inner.fulfil(req)
     }
@@ -929,10 +938,10 @@ impl PlaceProvider for EmptyPlaces {
     }
 
     fn fulfil(&mut self, req: &FulfilRequest<'_>) -> FulfilOutcome {
-        FulfilOutcome::Refused(DecisionReason::PlaceUnknown {
+        FulfilOutcome::Refused(DecisionReason::Citizen(CitizenReason::PlaceUnknown {
             need: req.need,
             known_count: 0,
-        })
+        }))
     }
 }
 

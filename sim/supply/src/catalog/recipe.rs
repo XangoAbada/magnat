@@ -41,6 +41,12 @@ impl RecipeSource {
 /// w chwili, w której klasa maszyny dostanie własne parametry, tablica przenosi się do
 /// `data/machines/classes.ron`, a `MachineClassId` przestaje być pochodną receptur.
 /// Do tego czasu drugi plik danych do utrzymania kosztowałby więcej, niż daje.
+///
+/// **Ścieżka wyjścia dostała adresata w R2e (`D-N16`, `R2-WP22`): M12d (modding).**
+/// Powód jest ten, dla którego katalog w ogóle miałby powstać: klasa maszyny jest
+/// dokładnie tym rodzajem rzeczy, którą modder chce dodać, a dziś nie może — nie
+/// istnieje jako plik. Skrót bez adresata przeżył M7 i M10, choć obie miały go
+/// domknąć; skrót z adresatem ma bramkę w rejestrze długu.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct MachineClassId(pub u16);
 

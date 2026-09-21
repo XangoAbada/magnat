@@ -27,7 +27,7 @@
 //! Zejście z 25% marży na 5% boli dostatecznie, żeby decyzja miała ciężar.
 
 use magnat_core::hash::{HashState, StateHasher};
-use magnat_core::{DecisionReason, GoodId, JobRoleId, ReactionKind, SiteId, Tick};
+use magnat_core::{DecisionReason, FirmReason, GoodId, JobRoleId, ReactionKind, SiteId, Tick};
 use magnat_policy::Decided;
 
 use crate::view::FirmView;
@@ -59,7 +59,7 @@ pub struct Campaign {
     /// Rola, o którą idzie gra — przy przeciąganiu ludzi.
     pub role: JobRoleId,
     /// Ile to kosztuje reagującego, w punktach bazowych. Znaczy co innego w każdym
-    /// wariancie i to jest zamierzone — patrz `DecisionReason::CompetitiveResponse`.
+    /// wariancie i to jest zamierzone — patrz `DecisionReason::Firm(FirmReason::CompetitiveResponse)`.
     pub depth_bp: u16,
     /// Do kiedy kampania obowiązuje. Po tym ticku firma wraca do swojego kursu
     /// **sama**, bez osobnej decyzji: kampania bez końca byłaby nowym stanem firmy,
@@ -141,11 +141,11 @@ pub fn decide_reaction(v: &FirmView, already: Option<Campaign>) -> Option<Decide
     let _ = spadek;
     Some(Decided::new(
         kampania,
-        DecisionReason::CompetitiveResponse {
+        DecisionReason::Firm(FirmReason::CompetitiveResponse {
             kind,
             target,
             depth_bp,
-        },
+        }),
     ))
 }
 
@@ -299,11 +299,11 @@ mod tests {
         let g = [towar(true, true)];
         let d = decide_reaction(&widok(p, &s, &g), None).expect("reakcja");
         match d.reason() {
-            DecisionReason::CompetitiveResponse {
+            DecisionReason::Firm(FirmReason::CompetitiveResponse {
                 kind,
                 target,
                 depth_bp,
-            } => {
+            }) => {
                 assert_eq!(kind, ReactionKind::PriceWar);
                 assert_eq!(target, rywal());
                 assert!(depth_bp > 0, "reakcja bez kosztu nie jest reakcją");

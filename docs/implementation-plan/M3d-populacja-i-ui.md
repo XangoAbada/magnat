@@ -221,7 +221,7 @@ Zgodnie z `K-18`. Wpisane jest **tylko to, co wiadomo na pewno** po zamknięciu 
 
 ---
 
-## Korekty planu wpisane po implementacji M3d
+## Zmiany wpisane po M3d
 
 Zgodnie z `K-18`. Gwiazdka = zmiana zakresu albo kryterium.
 

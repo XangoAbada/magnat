@@ -8,7 +8,7 @@
 //! (`Firm::SHARES_TOTAL`). Drugiej tablicy akcjonariatu nie ma i nie będzie
 //! (`GD-1`) — byłaby drugą prawdą o tej samej liczbie.
 
-use magnat_core::{DecisionReason, Money, Subject};
+use magnat_core::{DecisionReason, FirmReason, Money, Subject};
 use magnat_firms::{Firm, Owner};
 
 use super::WHOLE_BP;
@@ -157,7 +157,7 @@ pub fn split_dividend(firm: &Firm, total: Money) -> Vec<(Owner, Money)> {
 /// Powód do dziennika decyzji firmy po fixingu.
 #[must_use]
 pub fn fixing_reason(firm: magnat_core::FirmId, price: Money) -> DecisionReason {
-    DecisionReason::StockFixing { firm, price }
+    DecisionReason::Firm(FirmReason::StockFixing { firm, price })
 }
 
 #[cfg(test)]

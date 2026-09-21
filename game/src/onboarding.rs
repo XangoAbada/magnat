@@ -209,7 +209,7 @@ mod tests {
     }
 
     #[test]
-    fn przebieg_bez_sensownej_decyzji_nie_mieści_sie_w_budzecie() {
+    fn przebieg_bez_sensownej_decyzji_nie_miesci_sie_w_budzecie() {
         let mut log = dziennik();
         log.commands.push(koperta(
             0,

@@ -5,7 +5,7 @@
 //! opłaca. Sufit liczy `magnat_firms::next_bid` z widełek stanowiska, a nie z rynku,
 //! bo hamulec wywiedziony z rynku nie hamuje spirali, tylko w niej płynie (`R1`).
 
-use magnat_core::{DecisionReason, Money, SimMinute, Tick, WageCause};
+use magnat_core::{DecisionReason, FirmReason, Money, SimMinute, Tick, WageCause};
 use magnat_firms::{next_bid, Firms};
 
 use super::offer::{JobOffer, JobOfferId};
@@ -116,12 +116,12 @@ pub(super) fn expire_and_escalate(
                 firms.log(
                     o.firm,
                     Tick(now.0),
-                    DecisionReason::WageRaise {
+                    DecisionReason::Firm(FirmReason::WageRaise {
                         role: o.role,
                         delta_bp: 0,
                         days_open: dni,
                         cause: WageCause::Ceiling,
-                    },
+                    }),
                 );
                 d.frozen += 1;
             }
@@ -134,12 +134,12 @@ pub(super) fn expire_and_escalate(
         firms.log(
             firma,
             Tick(now.0),
-            DecisionReason::WageRaise {
+            DecisionReason::Firm(FirmReason::WageRaise {
                 role: rola,
                 delta_bp: bid.delta_bp,
                 days_open: dni,
                 cause: bid.cause,
-            },
+            }),
         );
         d.raises += 1;
     }

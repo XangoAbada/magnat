@@ -10,7 +10,7 @@
 //! nieruchomości pierwszego dnia miesiąca, CIT z domknięcia roku obrotowego,
 //! koncesja z początkiem roku licencyjnego, cło przy odprawie.
 
-use magnat_core::{DecisionReason, Mass, Money, SimCalendar, SiteId, TaxKind, Tick};
+use magnat_core::{CityReason, DecisionReason, Mass, Money, SimCalendar, SiteId, TaxKind, Tick};
 use magnat_economy::Market;
 
 use crate::calc::{cit_due, property_tax_month};
@@ -295,9 +295,9 @@ pub fn clo_i_akcyza(city: &mut City, market: &Market, t: Tick) -> (Money, Money)
 /// Powód naliczenia w postaci strukturalnej — to, co zobaczy karta inspekcji.
 #[must_use]
 pub fn powod(kind: TaxKind, rate_bp: u32, amount: Money) -> DecisionReason {
-    DecisionReason::TaxAssessed {
+    DecisionReason::City(CityReason::TaxAssessed {
         kind,
         rate_bp: u16::try_from(rate_bp).unwrap_or(u16::MAX),
         amount,
-    }
+    })
 }

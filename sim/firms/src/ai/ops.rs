@@ -16,7 +16,7 @@
 //! Zakład **zdelegowany** menedżerowi jest pomijany: tam cenę prowadzi polityka
 //! (M7c WP7), a dwóch sterowników na jedną półkę to dwie prawdy o tej samej cenie.
 
-use magnat_core::{DecisionReason, FirmStrategy, GoodId, SiteId};
+use magnat_core::{DecisionReason, FirmReason, FirmStrategy, GoodId, SiteId};
 use magnat_policy::Decided;
 use smallvec::SmallVec;
 
@@ -156,11 +156,11 @@ fn marza(v: &FirmView, g: &GoodFacts) -> Option<Decided<OpsAction>> {
             good: g.good,
             bp: nowy,
         },
-        DecisionReason::MarginTargetSet {
+        DecisionReason::Firm(FirmReason::MarginTargetSet {
             good: g.good,
             margin_bp: nowy,
             prev_bp: g.margin_bp,
-        },
+        }),
     ))
 }
 
@@ -186,11 +186,11 @@ fn zapas(v: &FirmView, g: &GoodFacts) -> Option<Decided<OpsAction>> {
             good: g.good,
             days,
         },
-        DecisionReason::RestockTargetSet {
+        DecisionReason::Firm(FirmReason::RestockTargetSet {
             good: g.good,
             days,
             prev: g.restock_days,
-        },
+        }),
     ))
 }
 

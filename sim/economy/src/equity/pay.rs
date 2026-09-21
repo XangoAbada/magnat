@@ -15,7 +15,7 @@
 //! zapisu, bo gospodarstwo **nie ma konta w księgach** (M5b).
 
 use magnat_agents::{Household, Identity, Population};
-use magnat_core::{CitizenId, DecisionReason, Entity, Money, Tick};
+use magnat_core::{CitizenId, DecisionReason, Entity, FirmReason, Money, Tick};
 use magnat_ecs::World;
 use magnat_firms::{firm_id, FirmKey, Owner};
 
@@ -43,10 +43,10 @@ pub fn memo(key: FirmKey, bp: u16) -> TxMemo {
             firm: firm_id(key),
             bp,
         },
-        DecisionReason::StockFixing {
+        DecisionReason::Firm(FirmReason::StockFixing {
             firm: firm_id(key),
             price: Money::ZERO,
-        },
+        }),
     )
 }
 

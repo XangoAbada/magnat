@@ -57,7 +57,6 @@
         cost_gr_per_tonne_km: 175,
         minutes_per_km: 2,
         load_fixed_minutes: 15,
-        pipeline_gr_per_tonne: 1_200,    // 12 zł/t, rurociąg szyb → rafineria (§7.2)
     ),
 
     // Rynek B2B (§5.8). Marża sprzedawcy jest tu **jedna dla wszystkich** — osobowość

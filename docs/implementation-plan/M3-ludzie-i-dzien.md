@@ -373,7 +373,7 @@ Do rozstrzygnięcia przed startem wskazanych WP. Rozstrzygnięcia lądują w `00
 
 ## Zmiany wpisane po M3a
 
-Zgodnie z `K-18`. Pełne uzasadnienie w tabeli „Korekty planu wpisane po implementacji M3a"
+Zgodnie z `K-18`. Pełne uzasadnienie w tabeli „Zmiany wpisane po M3a"
 dokumentu `M3a-fundament-agenta.md` (numeracja `D-n`) — tu tylko to, co dotyczy kontraktów
 fazy, czyli sekcji §6.
 
@@ -392,7 +392,7 @@ fazy, czyli sekcji §6.
 
 ## Zmiany wpisane po M3b
 
-Zgodnie z `K-18`. Pełne uzasadnienie w tabeli „Korekty planu wpisane po implementacji M3b"
+Zgodnie z `K-18`. Pełne uzasadnienie w tabeli „Zmiany wpisane po M3b"
 dokumentu `M3b-dzien-mieszkanca.md` (numeracja `F-n`) — tu tylko to, co dotyczy kontraktów
 fazy, czyli sekcji §6.
 
@@ -408,7 +408,7 @@ fazy, czyli sekcji §6.
 
 ## Zmiany wpisane po M3c
 
-Zgodnie z `K-18`. Pełne uzasadnienie w tabeli „Korekty planu wpisane po implementacji M3c"
+Zgodnie z `K-18`. Pełne uzasadnienie w tabeli „Zmiany wpisane po M3c"
 dokumentu `M3c-demografia-i-spoleczenstwo.md` (numeracja `G-n`) — tu tylko to, co dotyczy
 kontraktów fazy, czyli sekcji §6.
 
@@ -424,7 +424,7 @@ kontraktów fazy, czyli sekcji §6.
 
 ## Zmiany wpisane po M3d
 
-Zgodnie z `K-18`. Pełne uzasadnienie w tabeli „Korekty planu wpisane po implementacji M3d"
+Zgodnie z `K-18`. Pełne uzasadnienie w tabeli „Zmiany wpisane po M3d"
 dokumentu `M3d-populacja-i-ui.md` (numeracja `H-n`) — tu tylko to, co dotyczy kontraktów
 fazy, czyli sekcji §6.
 
