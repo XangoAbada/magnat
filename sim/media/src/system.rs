@@ -183,7 +183,9 @@ fn zapisz_ekspozycje(
         .get::<magnat_agents::Residence>(kto)
         .map(|r| usize::from(r.district))
         .filter(|d| *d < crate::campaign::METRIC_DISTRICTS);
-    if let Some(c) = world.resource_mut::<Campaigns>().get_mut(id) {
+    let rejestr = world.resource_mut::<Campaigns>();
+    let mut kanal = None;
+    if let Some(c) = rejestr.get_mut(id) {
         c.metrics.exposures_today = c.metrics.exposures_today.saturating_add(1);
         c.metrics.exposures_total = c.metrics.exposures_total.saturating_add(1);
         if pierwszy {
@@ -192,6 +194,13 @@ fn zapisz_ekspozycje(
         if let Some(d) = dzielnica {
             c.metrics.by_district[d] = c.metrics.by_district[d].saturating_add(1);
         }
+        kanal = Some(c.channel.kind());
+    }
+    // Licznik dożywotni kanału. Kampania żyje trzydzieści dób i ginie razem ze swoim
+    // pomiarem, więc histogram liczony z żywych kampanii kłamie na każdej granicy
+    // miesiąca — patrz `Campaigns::lifetime_by_channel`.
+    if let Some(k) = kanal {
+        rejestr.note_exposure(k);
     }
     raport.exposures = raport.exposures.saturating_add(1);
     if pierwszy {

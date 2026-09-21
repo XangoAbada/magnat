@@ -628,10 +628,15 @@ Podfazy — porcje wykonawcze; kryterium zamknięcia każdej jest w jej dokumenc
       **Przy okazji dwie naprawy, o które prosiły `GF-1` i `GF-2`:** koszt 2000
       kampanii spadł z **12 514 ms na dobę gry do 50 ms** (budżet 225 ms), bo
       promocja i PR przechodzą po mieście raz na dobę dla wszystkich kampanii,
-      a nie raz na kampanię; ulotka **z zakładu, którego nie ma w katalogu
-      miejsc**, przestała milczeć, bo punkt nadania ma teraz trzy próby
-      zamiast jednej — a szersza przyczyna została nazwana, nie naprawiona
-      po cichu (`GG-1`)
+      a nie raz na kampanię. **`GF-2` okazało się przy tym wadą przyrządu,
+      nie mechanizmu** (`GG-8`): histogram kanałów liczył się z żywych
+      kampanii, a te żyją trzydzieści dób i giną razem ze swoim pomiarem,
+      więc przebieg kończący się na wielokrotności trzydziestu pokazywał
+      zero na każdym kanale. Rejestr kampanii prowadzi od tej chwili licznik
+      **dożywotni** per kanał, a ten sam przebieg pokazał wtedy, że ulotki
+      dostarczyły przez trzysta dób **4 452 655 ekspozycji** — kanał nie
+      milczał ani przez dobę. Ulotka z zakładu spoza katalogu miejsc i tak
+      przestała milczeć: wada była prawdziwa, tylko nie ta (`GG-1`)
       **I jedna, o którą nikt nie prosił** (`GG-2`): próba domknięcia `GF-7`
       odsłoniła, że licytacja płacowa w makrze nie miała sufitu — `stawka × 3`
       przesuwało się razem ze stawką. Naprawa odtwarza regułę mezo (stawkę rusza

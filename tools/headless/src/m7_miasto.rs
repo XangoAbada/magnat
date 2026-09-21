@@ -414,29 +414,37 @@ fn raport(
                 o.len(),
                 o.stories().len()
             );
-            // Kanały żywych kampanii. Bez tego „0 ekspozycji przy 6 kampaniach"
+            // Histogram kanałów. Bez niego „0 ekspozycji przy sześciu kampaniach"
             // jest zagadką: kanały docierają różnymi drogami i każda może zawieść
             // osobno (ulotka potrzebuje współrzędnej zakładu z `PlaceCatalog`,
-            // prasa tytułu, billboard przejazdów w `EdgeWatch`). Histogram mówi,
-            // **który** kanał milczy, zamiast zostawiać wniosek do zgadnięcia.
+            // prasa tytułu, billboard przejazdów w `EdgeWatch`).
+            //
+            // **Liczby są dożywotnie, a nie z żywych kampanii** — i to jest poprawka
+            // przyrządu, nie kosmetyka (`GG-8`). Kampania żyje trzydzieści dób
+            // i ginie razem ze swoim pomiarem, a `ai::monthly` otwiera nowe **za**
+            // dobowym rozdaniem ekspozycji. Przebieg kończący się na wielokrotności
+            // trzydziestu widzi więc wyłącznie kampanie jednotickowe i pokazuje
+            // zero na każdym kanale. Tak powstał `GF-2` — z `--days 300`.
             {
-                let mut per_kanal: std::collections::BTreeMap<&'static str, (u32, u64)> =
-                    std::collections::BTreeMap::new();
-                for (_, c) in k.iter() {
-                    let e = per_kanal.entry(c.channel.kind().name()).or_default();
-                    e.0 += 1;
-                    e.1 += c.metrics.exposures_total;
-                }
-                let opis: Vec<String> = per_kanal
+                let zywe = k.len();
+                let doz = k.lifetime_by_channel();
+                let opis: Vec<String> = magnat_core::AdChannelKind::ALL
                     .iter()
-                    .map(|(n, (ile, eksp))| format!("{n} {ile} ({eksp} eksp.)"))
+                    .zip(doz.iter())
+                    .filter(|(_, n)| **n > 0)
+                    .map(|(kanal, n)| format!("{} {n}", kanal.name()))
                     .collect();
                 println!(
-                    "kanały żywych kampanii: {}",
+                    "ekspozycje od początku gry per kanał: {}   (żywych kampanii {zywe}{})",
                     if opis.is_empty() {
                         "brak".to_string()
                     } else {
                         opis.join(", ")
+                    },
+                    if a.days.is_multiple_of(30) {
+                        ", próbka na granicy miesiąca — one dopiero powstały"
+                    } else {
+                        ""
                     }
                 );
             }

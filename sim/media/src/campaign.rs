@@ -7,7 +7,7 @@
 
 use magnat_core::{
     AdChannelKind, BrandId, CampaignId, DistrictId, EventId, HashState, Money, SimMinute, SiteId,
-    StateHasher, Q,
+    StateHasher, AD_CHANNEL_KIND_COUNT, Q,
 };
 use magnat_nav::EdgeId;
 
@@ -228,9 +228,39 @@ impl HashState for AdCampaign {
 pub struct Campaigns {
     map: std::collections::BTreeMap<CampaignId, AdCampaign>,
     next: u32,
+    /// Ekspozycje dostarczone **od początku gry**, w rozbiciu na kanał.
+    ///
+    /// Licznik dożywotni, bo rejestr kampanii nim nie jest: kampania żyje
+    /// trzydzieści dób, a `close_finished` usuwa ją razem z jej pomiarem. Histogram
+    /// liczony z żywych kampanii pokazuje więc **zero na każdej granicy miesiąca** —
+    /// poprzednie właśnie wygasły, a nowe otwierają się już po dobowym rozdaniu
+    /// ekspozycji (`ai::monthly` stoi w `doba()` **za** pętlą kanałów). Tak powstał
+    /// fałszywy wniosek `GF-2` („kanał ulotkowy nie dociera do nikogo") z przebiegu
+    /// `--days 300`: 300 jest wielokrotnością trzydziestu.
+    ///
+    /// Wchodzi do hasha stanu jak reszta rejestru — jest sumą tego, co świat zrobił.
+    lifetime_by_channel: [u64; AD_CHANNEL_KIND_COUNT],
 }
 
 impl Campaigns {
+    /// Ekspozycje dostarczone od początku gry tym kanałem.
+    #[must_use]
+    pub fn lifetime(&self, k: AdChannelKind) -> u64 {
+        self.lifetime_by_channel[k.as_index()]
+    }
+
+    /// Cały histogram dożywotni — wejście raportu scenariusza.
+    #[must_use]
+    pub fn lifetime_by_channel(&self) -> &[u64; AD_CHANNEL_KIND_COUNT] {
+        &self.lifetime_by_channel
+    }
+
+    /// Dolicza ekspozycję do licznika dożywotniego kanału.
+    pub fn note_exposure(&mut self, k: AdChannelKind) {
+        let slot = &mut self.lifetime_by_channel[k.as_index()];
+        *slot = slot.saturating_add(1);
+    }
+
     #[must_use]
     pub fn new() -> Campaigns {
         Campaigns::default()
@@ -307,6 +337,9 @@ impl HashState for Campaigns {
         for (id, c) in &self.map {
             h.write_u32(id.0);
             c.hash_state(h);
+        }
+        for n in &self.lifetime_by_channel {
+            h.write_u64(*n);
         }
     }
 }

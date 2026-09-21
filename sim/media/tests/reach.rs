@@ -522,3 +522,64 @@ fn ulotka_dociera_z_zakladu_spoza_katalogu_miejsc() {
         "rozbicie na dzielnice nie zgadza się z sumą ekspozycji"
     );
 }
+
+/// `GG-8`: na granicy miesiąca rejestr kampanii pokazuje **zero na każdym kanale**,
+/// a licznik dożywotni pamięta, co się naprawdę wydarzyło.
+///
+/// Tak powstał fałszywy wniosek `GF-2` („kanał ulotkowy nie dociera do nikogo"):
+/// pomiar szedł z `--days 300`, a 300 jest wielokrotnością trzydziestu. Kampania
+/// żyje trzydzieści dób, `close_finished` usuwa ją razem z jej pomiarem, a nowe
+/// otwiera `ai::monthly` — stojące w `doba()` **za** pętlą kanałów. Próbka z takiej
+/// doby widzi wyłącznie kampanie jednotickowe, które nie zdążyły nic dostarczyć.
+///
+/// Test nie odtwarza całego miasta: stawia billboard z przejazdami, dostarcza nim
+/// ekspozycje, po czym zamyka kampanię wygaśnięciem okna. Rejestr ma wtedy zero
+/// kampanii, a licznik kanału — dostarczone ekspozycje.
+#[test]
+fn licznik_kanalu_przezywa_wygasniecie_kampanii() {
+    let mut w = miasto(300, 1);
+    w.insert_resource(magnat_traffic::TrafficNetwork::default());
+    // Okno krótkie: kampania ma wygasnąć w trakcie testu, tak jak wygasa na granicy
+    // miesiąca w przebiegu miasta.
+    let id = w.resource_mut::<Campaigns>().open(|id| AdCampaign {
+        id,
+        site: SiteId(Entity::new(1, std::num::NonZeroU32::MIN)),
+        brand: BrandId(5),
+        channel: AdChannel::Billboard {
+            edge: EdgeId(3),
+            notice_rate_bps: 10_000,
+        },
+        claim: Q::new(70),
+        budget: Money(10_000_000),
+        spent: Money::ZERO,
+        window: (SimMinute(0), SimMinute(300)),
+        metrics: CampaignMetrics::default(),
+    });
+    // Pierwszy przebieg ustawia podsłuch krawędzi; przejazdy podajemy po nim.
+    let _ = magnat_media::step(&mut w, Tick(60));
+    let kto: Vec<u32> = (0..200).collect();
+    przejazdy(&mut w, 3, &kto);
+    let _ = magnat_media::step(&mut w, Tick(120));
+
+    let dostarczone = w
+        .resource::<Campaigns>()
+        .get(id)
+        .expect("kampania")
+        .metrics
+        .exposures_total;
+    assert!(
+        dostarczone > 0,
+        "billboard nie dostarczył ani jednej ekspozycji"
+    );
+
+    // Doba po wygaśnięciu okna: rejestr zapomina kampanię, licznik pamięta kanał.
+    // Sprzątanie robi `close_finished` w kroku dobowym, więc tick musi w niego trafić.
+    let _ = magnat_media::step(&mut w, Tick(1_441));
+    let rejestr = w.resource::<Campaigns>();
+    assert_eq!(rejestr.len(), 0, "wygasła kampania została w rejestrze");
+    assert_eq!(
+        rejestr.lifetime(magnat_core::AdChannelKind::Billboard),
+        dostarczone,
+        "licznik dożywotni zgubił ekspozycje razem z kampanią"
+    );
+}
