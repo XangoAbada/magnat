@@ -107,11 +107,14 @@ Jeśli czerwień nie ma jeszcze punktu, zakładamy go w odpowiednim etapie („Z
     *Domyślnie:* pomiar klatki zostaje ręczny, z raportem w repozytorium; usunąć z planów
     każde zdanie, że biegnie w CI.
 
-- [ ] **N1.13** fałszywe komentarze w `ci.yml` — `M0` WP-14, `R2#9`
+- [x] **N1.13** fałszywe komentarze w `ci.yml` — `M0` WP-14, `R2#9`
   - `ci.yml:17` twierdzi, że ARM biegnie co noc — joba aarch64 nie ma.
   - `ci.yml:136-142` „szesnaście z szesnastu przechodzi" przeczy `D-R7`.
   - **Decyzja N1.13-a:** ARM. *Domyślnie:* usunąć komentarz; T-D9 na ARM zostaje
     niepotwierdzony i tak zapisany w `N8.1`.
+  - *Zrobione:* przyjęta propozycja domyślna N1.13-a. Oba komentarze poprawione; przy okazji
+    `workflow_dispatch`, żeby nocny zestaw dało się puścić ręcznie (`gh workflow run check`)
+    — balansator traktuje go jak `schedule`. Dowód: `plan_guard` (reguły 4 i 5) zielony.
 
 ## Znalezione po drodze
 

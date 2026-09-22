@@ -14,9 +14,12 @@ on:
     branches: [master]
   pull_request:
   schedule:
-    # Przebieg nocny: to w nim biegnie ARM przez QEMU (D-10). Rozjazd wykryty nocą
-    # jest tani, wykryty przed premierą — nie.
+    # Przebieg nocny. ARM (D-10) **nie biegnie** — joba aarch64 nie ma, więc T-D9
+    # na ARM jest niepotwierdzony (N1.13, zapis w N8.1).
     - cron: "0 2 * * *"
+  # Nocny zestaw na żądanie (`gh workflow run check`) — traktowany jak `schedule`
+  # wszędzie, gdzie job rozróżnia bieg nocny od bramki pull requesta.
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
@@ -147,7 +150,7 @@ jobs:
           # Dwie awarie `city_m2d`, które `D-19` i `D-22` zdiagnozowały jako **przeterminowane
           # testy, a nie zepsuty kod**, są w `R2-WP25` naprawione po stronie testu: wycena
           # porównuje się z `pass_2`, a strefa zieleni wyjmuje parcele z zakładem Etapu 7
-          # (korekta `F2` z M2e). Szesnaście z szesnastu przechodzi.
+          # (korekta `F2` z M2e). Wynik tego kroku mówi log joba, nie ten komentarz (N1.13).
           cargo test --release -p magnat-world --test city_m2d -- --include-ignored
           # `doba_przez_systemy_ecs_planuje_dowozi_i_zaspokaja` jest pominięty **imiennie**,
           # bo wywraca się na `debug_assert` kolejki zdarzeń (`des.rs`) — pozycja 73 wykazu
@@ -429,13 +432,13 @@ jobs:
       # macierz puszcza bieg nocny — lepiej mieć bramkę, która biegnie, niż
       # zgodną z planem, którą ktoś wyłączy po trzecim przekroczeniu limitu.
       - name: profil ci — scenariusz odniesienia
-        if: github.event_name != 'schedule'
+        if: ${{ !contains(fromJSON('["schedule", "workflow_dispatch"]'), github.event_name) }}
         run: |
           cargo run --release -q -p magnat-balansator -- run \
             --seeds 4 --days 120 --scenario base --out runs/ --jobs 4
           cargo run --release -q -p magnat-balansator -- gate runs/ --profile ci
       - name: profil nocny — pełna macierz i scenariusze szokowe
-        if: github.event_name == 'schedule'
+        if: contains(fromJSON('["schedule", "workflow_dispatch"]'), github.event_name)
         run: |
           for s in base supply-shock player-price-war income-shock; do
             cargo run --release -q -p magnat-balansator -- run \
@@ -451,11 +454,11 @@ jobs:
       # Same krzywe idą do artefaktu, bo „cena nie drgnęła" jest **wynikiem pomiaru**,
       # a nie awarią — i ma być widoczne, a nie ukryte za czerwonym krokiem.
       - name: export_drains — odpływ masy i cena półkowa po szoku +40 %
-        if: github.event_name == 'schedule'
+        if: contains(fromJSON('["schedule", "workflow_dispatch"]'), github.event_name)
         run: |
           cargo run --release -q -p magnat-headless -- export-drains             --seed 1 --size 4km --days 60 --citizens 3000 | tee raport-export-drains.txt
       - uses: actions/upload-artifact@v4
-        if: github.event_name == 'schedule'
+        if: contains(fromJSON('["schedule", "workflow_dispatch"]'), github.event_name)
         with:
           name: raport-balansatora
           path: |
