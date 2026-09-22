@@ -80,7 +80,7 @@ Jeśli czerwień nie ma jeszcze punktu, zakładamy go w odpowiednim etapie („Z
     Bramka: przed 3 trafienia i kod 1, po 0. Hash `dry-run --seed 7 --size 4km --years 30`
     **identyczny** przed i po (`--expect`), testy `magnat-macro` zielone.
 
-- [ ] **N1.6** bramki balansatora bez danych nie są zielone — `M5#2`, `R2` WP24
+- [x] **N1.6** bramki balansatora bez danych nie są zielone — `M5#2`, `R2` WP24
   - G1 (`tools/balansator/src/gates.rs:247-253`): `yoy_bp` wymaga 13 zamkniętych miesięcy,
     profile CI liczą 120 i 365 dób, `all()` na pustym zbiorze daje `true`. Ten sam kształt:
     „6 miesięcy deflacji" w G3 przy 120 dobach, G11 zawsze pominięta w profilu `ci`.
@@ -90,6 +90,14 @@ Jeśli czerwień nie ma jeszcze punktu, zakładamy go w odpowiednim etapie („Z
   - **Decyzja N1.6-a:** wydłużyć nocny profil do ≥ 420 dób, żeby G1 miała dane?
     *Domyślnie:* tak, nocny 8 × 450 dób — o ile czas nocnego joba zostaje poniżej limitu
     GitHub Actions; jeśli nie, 4 × 450.
+  - *Zrobione:* przyjęta propozycja domyślna N1.6-a, 8 × 450 dób — mieści się, bo scenariusze
+    poszły do osobnych jobów (`N1.16`). Trzeci stan już był (`Skipped`, „nie została
+    policzona"), brakowało dwóch rzeczy: G1 i G3 bez danych zwracają teraz `Skipped`
+    z powodem „brak danych: …" zamiast zieleni pustego zbioru, a profil `ci` przepuszcza
+    brak danych **tylko** dla bramek z listy (`Profile::dopuszcza_brak_danych`: spoza profilu
+    oraz G1, G3). `blokuje` przeszło z `Verdict` na `GateOutcome`, bo zależy od bramki.
+    Trzy testy w `meta_gate.rs` padały przed zmianą (G1 zielona przy 120 dobach, G3 zielona
+    przy 4 miesiącach, pominięta G2 nie wywracała profilu `ci`).
 
 - [x] **N1.7** `struct_guard` — dziury w bramce — `R1#3`, `R1#5`, `R1#6`, `R1#8`, `R1#9`, `R1#10`, `R2#5`
   - `SyntaxWarning` od `"\|"` w `struct_guard.py:277-278` → `r"\|"`.

@@ -228,7 +228,7 @@ fn przebieg_bez_ogona_pomija_g11_z_powodem() {
     let g11 = bramka(&werdykty, "G11");
     assert_eq!(g11.verdict, Verdict::Skipped);
     assert!(
-        g11.verdict.blokuje(Profile::Nightly),
+        g11.blokuje(Profile::Nightly),
         "`D-N17`: w biegu nocnym pominięcie jest błędem konfiguracji"
     );
 }
@@ -243,9 +243,50 @@ fn profil_ci_pomija_bramki_bez_usuwania_ich_z_raportu() {
     for id in ["G4", "G6", "G11", "G12"] {
         let g = bramka(&werdykty, id);
         assert_eq!(g.verdict, Verdict::Skipped, "{id}");
-        assert!(
-            !g.verdict.blokuje(Profile::Ci),
-            "{id} nie wywraca profilu ci"
-        );
+        assert!(!g.blokuje(Profile::Ci), "{id} nie wywraca profilu ci");
     }
+}
+
+/// **G1 bez roku historii nie jest zielona** (N1.6, `M5#2`). Przebieg 120 dób ma cztery
+/// miesiące, a G1 liczy inflację r/r od 12. — do E1 `all()` na pustym zbiorze dawało
+/// zieleń, więc bramka pull requesta nie zmierzyła G1 ani razu i świeciła na zielono.
+#[test]
+fn g1_bez_roku_historii_jest_pominieta_a_nie_zielona() {
+    let werdykty = evaluate(&[przebieg(120)], Profile::Nightly, 2_400);
+    let g1 = bramka(&werdykty, "G1");
+    assert_eq!(g1.verdict, Verdict::Skipped, "zmierzono: {}", g1.value);
+    assert!(
+        g1.blokuje(Profile::Nightly),
+        "bieg nocny musi mieć dane dla G1"
+    );
+    let werdykty = evaluate(&[przebieg(120)], Profile::Ci, 2_400);
+    assert!(
+        !bramka(&werdykty, "G1").blokuje(Profile::Ci),
+        "profil ci wymienia G1 z nazwy jako dopuszczalnie bez danych"
+    );
+}
+
+/// G3 w połowie deflacyjnej potrzebuje siedmiu miesięcy (sześć spadków z rzędu).
+/// Cztery miesiące nie mogą jej zaczerwienić, więc nie mogą też jej zazielenić.
+#[test]
+fn g3_bez_siedmiu_miesiecy_nie_udaje_pomiaru_deflacji() {
+    let werdykty = evaluate(&[przebieg(120)], Profile::Nightly, 2_400);
+    let g3 = bramka(&werdykty, "G3");
+    assert_eq!(g3.verdict, Verdict::Skipped, "zmierzono: {}", g3.value);
+    let werdykty = evaluate(&[przebieg(420)], Profile::Nightly, 2_400);
+    assert_eq!(bramka(&werdykty, "G3").verdict, Verdict::Green);
+    assert_eq!(
+        bramka(&werdykty, "G1").verdict,
+        Verdict::Green,
+        "420 dób to 14 miesięcy"
+    );
+}
+
+/// Profil `ci` dopuszcza pominięcie **tylko bramek wymienionych z nazwy** —
+/// pominięta G2 (a mierzy się zawsze) wywraca także bramkę pull requesta.
+#[test]
+fn profil_ci_nie_przepuszcza_pominiecia_spoza_listy() {
+    let mut g2 = bramka(&evaluate(&[przebieg(120)], Profile::Ci, 2_400), "G2").clone();
+    g2.verdict = Verdict::Skipped;
+    assert!(g2.blokuje(Profile::Ci));
 }

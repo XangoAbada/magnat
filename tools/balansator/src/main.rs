@@ -185,7 +185,7 @@ fn bramki(a: &GateArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
 
     // Pominięcie wywraca **bieg nocny** (`D-N17`, `R2-WP24`): w profilu `nightly`
     // bramka bez werdyktu jest błędem konfiguracji, a nie stanem świata.
-    Ok(if werdykty.iter().any(|g| g.verdict.blokuje(profil)) {
+    Ok(if werdykty.iter().any(|g| g.blokuje(profil)) {
         ExitCode::FAILURE
     } else {
         ExitCode::SUCCESS

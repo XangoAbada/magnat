@@ -98,4 +98,5 @@ Jedna linia na zamknięty punkt albo grupę: data, identyfikatory, co zrobiono, 
 | 2026-09-22 | N1.15 `[~]` | `bench_guard`: nazwy z Windows i Linuksa to jeden wpis; artefakt `criterion` z CI jako źródło linii bazowej | `2debf29` |
 | 2026-09-22 | N1.2 | 33 testy `#[ignore]` dopięte do `determinism` i `budzety`; macierz T11 czerwona → `N4.15` | `514096f` |
 | 2026-09-22 | N1.3 | `century` wywraca się przy populacji < 1000 albo > 3× startowej w dowolnej dobie; 5 ziaren w nocnym `determinism` | `561fb0f` |
-| 2026-09-22 | N1.5 | `macro-kernel` zielony: liczby osób w bp przez `kernel`; hash makro bez zmian | ten commit |
+| 2026-09-22 | N1.5 | `macro-kernel` zielony: liczby osób w bp przez `kernel`; hash makro bez zmian | `71c404a` |
+| 2026-09-22 | N1.6 | G1 i G3 bez danych → „brak danych”, nie zieleń; profil `ci` przepuszcza to tylko z listy; nocny 8 × 450 w macierzy scenariuszy | ten commit |

@@ -126,6 +126,21 @@ impl Profile {
             Profile::Ci => !matches!(gate, "G4" | "G6" | "G11" | "G12"),
         }
     }
+
+    /// Czy bramka może w tym profilu wyjść **bez danych** i nie wywrócić przebiegu.
+    ///
+    /// Lista jest z nazwy, a nie „każda pominięta" (N1.6): do E1 profil `ci`
+    /// przepuszczał pominięcie dowolnej bramki, a G1 i G3 nie były nawet pomijane,
+    /// tylko zielone na pustym zbiorze. W profilu `ci` bez danych mogą wyjść bramki,
+    /// których profil nie bierze, oraz G1 (r/r od 12. miesiąca) i G3 (sześć miesięcy
+    /// deflacji) — 120 dób to cztery miesiące. W biegu nocnym żadna (`D-N17`).
+    #[must_use]
+    pub fn dopuszcza_brak_danych(self, gate: &str) -> bool {
+        match self {
+            Profile::Nightly => false,
+            Profile::Ci => !self.includes(gate) || matches!(gate, "G1" | "G3"),
+        }
+    }
 }
 
 /// Werdykt bramki. Cztery stany, bo trzy nie wystarczały (`R2-WP24`).
@@ -152,24 +167,6 @@ pub enum Verdict {
 }
 
 impl Verdict {
-    /// Czy ten werdykt wywraca przebieg w danym profilu.
-    ///
-    /// Pominięcie wywraca **bieg nocny** i to jest wykonanie decyzji `D-N17`:
-    /// filtr, który wyklucza bramkę zawsze, jest wyłączeniem bramki napisanym
-    /// okrężnie. Bieg nocny bierze pełną macierz czterech scenariuszy po osiem
-    /// ziaren i 365 dób — jeśli przy takim wejściu bramka nie ma czego zmierzyć,
-    /// to nie zmierzy nigdy i czekanie dziesięciu nocy niczego do tej wiedzy
-    /// nie doda. W profilu `ci` pominięcie jest normalne, bo to profil sam
-    /// bramkę odkłada.
-    #[must_use]
-    pub fn blokuje(self, profil: Profile) -> bool {
-        match self {
-            Verdict::Red => true,
-            Verdict::Skipped => profil == Profile::Nightly,
-            Verdict::Green | Verdict::Advisory => false,
-        }
-    }
-
     /// Słowo do tabeli na stdout i do raportu.
     #[must_use]
     pub fn slowo(self) -> &'static str {
@@ -228,6 +225,23 @@ impl GateOutcome {
             verdict: Verdict::Skipped,
             value: powod,
             threshold,
+        }
+    }
+
+    /// Czy ta bramka wywraca przebieg w danym profilu.
+    ///
+    /// Pominięcie wywraca **bieg nocny** i to jest wykonanie decyzji `D-N17`:
+    /// filtr, który wyklucza bramkę zawsze, jest wyłączeniem bramki napisanym
+    /// okrężnie. Jeśli przy pełnej macierzy nocnej bramka nie ma czego zmierzyć,
+    /// to nie zmierzy nigdy i czekanie dziesięciu nocy niczego do tej wiedzy nie
+    /// doda. W profilu `ci` pominięcie przechodzi tylko dla bramek, które profil
+    /// wymienia z nazwy ([`Profile::dopuszcza_brak_danych`]).
+    #[must_use]
+    pub fn blokuje(&self, profil: Profile) -> bool {
+        match self.verdict {
+            Verdict::Red => true,
+            Verdict::Skipped => !profil.dopuszcza_brak_danych(self.gate),
+            Verdict::Green | Verdict::Advisory => false,
         }
     }
 
@@ -419,6 +433,11 @@ fn miesiace(run: &RunFile) -> Vec<(u32, &DayMetrics)> {
         .collect()
 }
 
+/// Ile zamkniętych miesięcy ma najdłuższy przebieg.
+fn najwiecej_miesiecy(u: &[&RunFile]) -> usize {
+    u.iter().map(|r| miesiace(r).len()).max().unwrap_or(0)
+}
+
 /// Przebiegi bez bliźniaków determinizmu: dla pary `(scenario, seed)` zostaje pierwszy.
 #[must_use]
 pub fn unikalne(runs: &[RunFile]) -> Vec<&RunFile> {
@@ -474,17 +493,41 @@ fn detal(u: &[&RunFile], min_margin_bp: i32, out: &mut Vec<GateOutcome>) {
             g1_series(&s)
         })
         .count() as u64;
-    out.push(GateOutcome {
-        gate: "G1",
-        name: "Stabilnosc cen",
-        verdict: if n > 0 && zielone * 1_000 >= n * G1_SEED_SHARE_PERMILLE {
-            Verdict::Green
-        } else {
-            Verdict::Red
-        },
-        value: format!("{zielone}/{n} ziaren"),
-        threshold: "≥ 95 % ziaren, r/r ∈ ⟨−5 %, +15 %⟩ od 12. miesiąca",
-    });
+    // Ziarno bez ani jednego miesiąca r/r od 12. nie ma czego zmierzyć, a `all()` na
+    // pustym zbiorze dawało dla niego zieleń (N1.6). Jeśli takie są wszystkie ziarna,
+    // bramka mówi „bez danych", zamiast udawać pomiar.
+    let prog_g1 = "≥ 95 % ziaren, r/r ∈ ⟨−5 %, +15 %⟩ od 12. miesiąca";
+    let zmierzone = u
+        .iter()
+        .filter(|r| {
+            miesiace(r)
+                .iter()
+                .any(|(m, d)| *m >= G1_FIRST_MONTH && d.cpi_yoy_bp.is_some())
+        })
+        .count();
+    if zmierzone == 0 {
+        out.push(GateOutcome::pominieta(
+            "G1",
+            "Stabilnosc cen",
+            format!(
+                "brak danych: najdłuższy przebieg ma {} mies., r/r liczy się od {G1_FIRST_MONTH}.",
+                najwiecej_miesiecy(u)
+            ),
+            prog_g1,
+        ));
+    } else {
+        out.push(GateOutcome {
+            gate: "G1",
+            name: "Stabilnosc cen",
+            verdict: if zielone * 1_000 >= n * G1_SEED_SHARE_PERMILLE {
+                Verdict::Green
+            } else {
+                Verdict::Red
+            },
+            value: format!("{zielone}/{n} ziaren"),
+            threshold: prog_g1,
+        });
+    }
 
     // ── G2 ──────────────────────────────────────────────────────────────────────
     let czerwone = czerwone_ziarna(u, |r| {
@@ -517,17 +560,34 @@ fn detal(u: &[&RunFile], min_margin_bp: i32, out: &mut Vec<GateOutcome>) {
         let marze: Vec<i32> = r.days_data.iter().map(|d| d.margin_median_bp).collect();
         g3_series(&cpi, &marze, min_margin_bp)
     });
-    out.push(GateOutcome {
-        gate: "G3",
-        name: "Brak spirali deflacji",
-        verdict: if czerwone.is_empty() {
-            Verdict::Green
-        } else {
-            Verdict::Red
-        },
-        value: format!("{} ziaren czerwonych {czerwone:?}", czerwone.len()),
-        threshold: "< 6 miesięcy spadku CPI; marża pod podłogą w ≤ 5 % dób",
-    });
+    // Połowa deflacyjna potrzebuje `G3_DEFLATION_MONTHS + 1` próbek miesięcznych. Przy
+    // krótszym przebiegu nie może się zaczerwienić, więc zieleń nic by nie znaczyła
+    // (N1.6). Czerwona marża zostaje czerwona — tę połowę da się zmierzyć zawsze.
+    let prog_g3 = "< 6 miesięcy spadku CPI; marża pod podłogą w ≤ 5 % dób";
+    let miesiecy = najwiecej_miesiecy(u);
+    if czerwone.is_empty() && miesiecy <= G3_DEFLATION_MONTHS {
+        out.push(GateOutcome::pominieta(
+            "G3",
+            "Brak spirali deflacji",
+            format!(
+                "brak danych o deflacji: {miesiecy} mies. < {} (marża w normie)",
+                G3_DEFLATION_MONTHS + 1
+            ),
+            prog_g3,
+        ));
+    } else {
+        out.push(GateOutcome {
+            gate: "G3",
+            name: "Brak spirali deflacji",
+            verdict: if czerwone.is_empty() {
+                Verdict::Green
+            } else {
+                Verdict::Red
+            },
+            value: format!("{} ziaren czerwonych {czerwone:?}", czerwone.len()),
+            threshold: prog_g3,
+        });
+    }
 
     // ── G4 ──────────────────────────────────────────────────────────────────────
     out.push(g4_gate(u));
@@ -1320,11 +1380,8 @@ mod tests {
             !g.pass(),
             "bramka bez pomiaru nie ma prawa świecić na zielono"
         );
-        assert!(
-            g.verdict.blokuje(Profile::Nightly),
-            "bieg nocny ma to złapać"
-        );
-        assert!(!g.verdict.blokuje(Profile::Ci));
+        assert!(g.blokuje(Profile::Nightly), "bieg nocny ma to złapać");
+        assert!(!g.blokuje(Profile::Ci), "G12 jest na liście profilu ci");
     }
 
     fn przebieg_pusty() -> RunFile {

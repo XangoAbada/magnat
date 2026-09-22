@@ -446,6 +446,7 @@ jobs:
 
   balansator:
     name: bramki balansatora (G1–G12, M5e/WP13)
+    if: ${{ !contains(fromJSON('["schedule", "workflow_dispatch"]'), github.event_name) }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -466,19 +467,57 @@ jobs:
       # ktoś to skróci, bramka pull requesta bierze krótszy przebieg, a pełną
       # macierz puszcza bieg nocny — lepiej mieć bramkę, która biegnie, niż
       # zgodną z planem, którą ktoś wyłączy po trzecim przekroczeniu limitu.
+      # Profil `ci` przepuszcza bez danych tylko bramki wymienione z nazwy (N1.6):
+      # G1 i G3 potrzebują 13 i 7 miesięcy, a 120 dób to cztery — raport mówi wtedy
+      # „brak danych", zamiast świecić zielenią pustego zbioru.
       - name: profil ci — scenariusz odniesienia
-        if: ${{ !contains(fromJSON('["schedule", "workflow_dispatch"]'), github.event_name) }}
         run: |
           cargo run --release -q -p magnat-balansator -- run \
             --seeds 4 --days 120 --scenario base --out runs/ --jobs 4
           cargo run --release -q -p magnat-balansator -- gate runs/ --profile ci
-      - name: profil nocny — pełna macierz i scenariusze szokowe
-        if: contains(fromJSON('["schedule", "workflow_dispatch"]'), github.event_name)
+
+  # Bieg nocny: każdy scenariusz w **osobnym jobie**, bo cztery scenariusze × 8 ziaren
+  # w jednym jobie to było 5 h 31 min przy limicie 6 h już przy 365 dobach (N1.16).
+  # 450 dób, bo G1 liczy inflację r/r od 12. miesiąca i potrzebuje ogona (N1.6-a);
+  # przy 365 dobach miała jeden miesiąc pomiaru.
+  balansator-nocny:
+    name: balansator nocny (${{ matrix.scenario }})
+    if: contains(fromJSON('["schedule", "workflow_dispatch"]'), github.event_name)
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario: [base, supply-shock, player-price-war, income-shock]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: przebieg 8 ziaren × 450 dób
         run: |
-          for s in base supply-shock player-price-war income-shock; do
-            cargo run --release -q -p magnat-balansator -- run \
-              --seeds 8 --days 365 --scenario "$s" --out runs/ --jobs 8
-          done
+          cargo run --release -q -p magnat-balansator -- run \
+            --seeds 8 --days 450 --scenario "${{ matrix.scenario }}" --out runs/ --jobs 8
+      - uses: actions/upload-artifact@v4
+        with:
+          name: runs-${{ matrix.scenario }}
+          path: runs/
+
+  balansator-bramka:
+    name: bramki balansatora — profil nocny
+    needs: balansator-nocny
+    if: contains(fromJSON('["schedule", "workflow_dispatch"]'), github.event_name)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: runs-*
+          merge-multiple: true
+          path: runs/
+      - name: profil nocny — pełna macierz i scenariusze szokowe
+        run: |
           cargo run --release -q -p magnat-balansator -- gate runs/ \
             --profile nightly --report raport-balansatora.md
       # Druga połowa kryterium WP9 fazy M6 (`R2-WP34`). Bieg nocny, bo 60 dób miasta
@@ -489,11 +528,11 @@ jobs:
       # Same krzywe idą do artefaktu, bo „cena nie drgnęła" jest **wynikiem pomiaru**,
       # a nie awarią — i ma być widoczne, a nie ukryte za czerwonym krokiem.
       - name: export_drains — odpływ masy i cena półkowa po szoku +40 %
-        if: contains(fromJSON('["schedule", "workflow_dispatch"]'), github.event_name)
+        if: always()
         run: |
           cargo run --release -q -p magnat-headless -- export-drains             --seed 1 --size 4km --days 60 --citizens 3000 | tee raport-export-drains.txt
       - uses: actions/upload-artifact@v4
-        if: contains(fromJSON('["schedule", "workflow_dispatch"]'), github.event_name)
+        if: always()
         with:
           name: raport-balansatora
           path: |
