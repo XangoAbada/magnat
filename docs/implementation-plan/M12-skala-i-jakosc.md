@@ -34,6 +34,7 @@ Wszystko to jest mierzone, nie deklarowane: każdy z pięciu punktów ma odpowia
 | Determinizm | `ReplayFile`, bramka CI, pipeline zgłoszeń błędów, fundament pod lockstep (bez implementacji sieci) |
 | Modding | `engine/script`: host Lua (mlua), sandbox, `ScriptHook`, `ModManifest`, menedżer modów, walidator determinizmu moda |
 | Lokalizacja | `LocaleCatalog`, pluralizacja CLDR, przypadki gramatyczne PL, rodzaj gramatyczny w kronikach, testy pokrycia kluczy |
+| Oprawa UI | Własny krój, ikony jako dane, pasek ikon paneli, menu główne na żywej scenie — **M12f**, dopisane 2026-09-22, bo ikony i krój nie miały wykonawcy (`docs/ui-design.md` §8) |
 | Jakość | Sesja 100 lat headless, detekcja wycieków i dryfu ekonomicznego, rozbudowa balansatora o analizę trendu, benchmarki `criterion` w CI |
 
 ### Nie wchodzi
@@ -42,7 +43,7 @@ Wszystko to jest mierzone, nie deklarowane: każdy z pięciu punktów ma odpowia
 |---|---|
 | Mechaniki symulacji (potrzeby, rynki, produkcja, HR, podatki) | M3–M10 — M12 je **konsumuje i optymalizuje**, nie zmienia semantyki |
 | Renderer, greedy meshing, LOD wizualne, impostory, animacje | M1 / M11 — M12 tylko **wywołuje** przełącznik degradacji w trybie 50× i narzuca budżet pamięci na chunki |
-| Panele UI, widgety, wykresy, edytor reguł | M9 / M11 — M12 dodaje wyłącznie panel pamięci (devtools), menedżer modów i warstwę i18n **pod** istniejącymi widgetami |
+| Panele UI, widgety, wykresy, edytor reguł | M9 / M11 — M12 dodaje panel pamięci (devtools), menedżer modów, warstwę i18n **pod** istniejącymi widgetami oraz oprawę (M12f: krój, ikony, nagłówki, tło menu) — **treść** paneli się nie zmienia |
 | Minimalny snapshot ECS + hash stanu | M0 — M12 **rozszerza** ten sam kod, nie pisze drugiej ścieżki serializacji |
 | Model makro, w tym **makro LOD ruchu** (agregaty per dzielnica × klasa, „historia na sucho") | M10 (`sim/macro`) — M12 **podłącza** go pod prędkość 50×, rozpisuje mu budżet czasu i dowodzi spójności z mezo. Własność makro ruchu uzgadniana z M10 — D11 |
 | Multiplayer (sieć, lockstep, NAT, rozjazd) | Poza projektem. M12 dostarcza wyłącznie fundament: determinizm + dziennik wejść |
@@ -81,7 +82,7 @@ Kolejność jest wiążąca w obrębie łańcuchów zależności; łańcuchy A, 
 Łańcuch D (reszta):   WP9, WP13 ────────────────────┘
 ```
 
-Faza jest rozbita na **5 podfaz**. Podfaza to porcja, którą da się zacząć i zamknąć
+Faza jest rozbita na **6 podfaz**. Podfaza to porcja, którą da się zacząć i zamknąć
 bez trzymania w głowie całej fazy: własny zestaw WP, własny sprawdzalny wynik i własny
 wycinek projektu technicznego. Opis pakietów i sekcje §5 mieszkają teraz w dokumentach
 podfaz — poniższa tabela mówi, gdzie co jest. Bramki 1–7 z `00-postep.md` zamykają się
@@ -94,6 +95,7 @@ dopiero po ostatniej podfazie; podfaza zamyka się własnym kryterium ze swojego
 | **M12c — Tryb 50× i skala 400 tys.** | WP9, WP10 | 5.6 | Doba gry ≤ 3 s dla miasta 150 tys.; metropolia 400 tys. ładuje się i chodzi w ≤ 6 GB. | `M12c-tryb-50x-i-skala.md` |
 | **M12d — Modding** | WP11, WP12 | 5.7 | `example-mod/` — nowy towar, typ zakładu, polityka AI, panel UI i zdarzenie — instaluje się i przechodzi walidator determinizmu. | `M12d-modding.md` |
 | **M12e — Lokalizacja i domknięcie** | WP13, WP14 | 5.8, 5.9 | Pełny artefakt fazy z §1 dokumentu fazy — wszystkie pięć punktów zmierzone testem w CI. | `M12e-lokalizacja-i-domkniecie.md` |
+| **M12f — Oprawa interfejsu** | WP15, WP16, WP17, WP18 | 5.10 | Gra wygląda jak makiety wybrane w `docs/ui-inspiracje/`: własny krój, ikony, pasek ikon paneli, menu na żywej scenie. Niezależna od M12a–e. | `M12f-oprawa-ui.md` |
 
 ---
 
@@ -113,6 +115,7 @@ odesłania w tekście („patrz §5.4") nadal wskazują tę samą sekcję — zm
 | 5.7 | Modding: `engine/script` | `M12d-modding.md` |
 | 5.8 | Lokalizacja | `M12e-lokalizacja-i-domkniecie.md` |
 | 5.9 | Systemy ECS dodawane przez M12 | `M12e-lokalizacja-i-domkniecie.md` |
+| 5.10 | Oprawa interfejsu | `M12f-oprawa-ui.md` |
 
 ---
 
@@ -339,6 +342,8 @@ Dwie pozycje czekają na fazę, z którą M12 nie rozmawiał: **D11** wymaga jes
 | **D12** | **Co ciąć, jeśli 3 s/dobę nie domknie się mimo makro?** | Budżet §5.6 domyka się z 34% marginesem, ale każda z jego liczb jest projektowana, nie zmierzona; M4 pokazał, że pomyłka rzędu 5× jest realna | Drabina z §5.6: (1) kohorty 12 → 6 klas, (2) ekonomia na ticku godzinowym w makro — razem 0,7 ms, bez widocznych konsekwencji. Dopiero potem (3) rozluźnienie celu do **≤ 4 s/dobę** lub (4) definicja celu dla 100 tys. — **oba są zmianą PRD §20.2 i decyzją projektanta, nie inżyniera.** M12 rekomenduje (3) przed (4): 4 s dla 150 tys. jest uczciwsze niż 3 s dla miasta, którego nikt nie obiecywał | WP9 |
 | **D13** | ~~Czy makro utrzyma zachowanie pieniądza i masy?~~ **ROZSTRZYGNIĘTE z M10 — TAK, to nie jest blokada** | — | Każdy przepływ w makro idzie przez `ledger_post()` (zapis dwustronny, ten sam co w mezo): pieniądz przechodzi między kontami, nie powstaje przy alokacji. Podział agregatu domyka się korektą reszty do pierwszego wg posortowanego klucza (dok. 00 §2); to samo dla `Qty`. Testy własnościowe po każdym kroku makro, tolerancja 0. Sformułowanie M10, które warto zapamiętać: *dokładność mówi, komu przypadł pieniądz; zachowanie mówi, ile go jest* | — |
 | **D14** | **Zakres obietnicy trybu 50×** | M10 wykazał, że próg 0,5% jest **fizycznie nieosiągalny** dla przychodu pojedynczej firmy (3–12%), ceny przy < 3 dostawcach (2–8%) i udziału pojedynczej marki (2–5%) — to wariancja rozkładu wielomianowego przy małym n, nie usterka | **Tryb 50× przewiduje stan dzielnicy i miasta, nie los pojedynczej firmy.** M12 musi zdjąć to założenie wszędzie, gdzie mogłoby się zakraść: „co jeśli" AI, autozapis przed decyzją, porównywanie przebiegów, komunikaty w UI. Trafia do dok. 00 §4 jako zastrzeżenie do kontraktu LOD — uzgodnienie u właściciela dok. 00; równolegle zgłoszone przez M10 jako jego D1 | WP9, WP14 |
+| **D15** | **Portret mieszkańca w karcie inspekcji** | Makieta `hud-b.png` ma portret. Prawdziwy portret to model `.mvox` wyrenderowany do tekstury — nowa ścieżka w rendererze (M11), której dziś nie ma | **Nie w M12f.** Karta dostaje ikony przy potrzebach; portret wraca, gdy renderer będzie miał render do tekstury z innego powodu (np. miniatury zapisów) | — |
+| **D16** | **Dźwięk interfejsu bez wykonawcy** | `ui-design.md` §8 przypisywał go M11 razem z ikonami; M11 zamknął się bez niego, ikony przejęła M12f | Zostaje bez wykonawcy świadomie; wraca przy pierwszej fazie, która dołoży mikser dźwięku. Nie dopisujemy go do M12f, bo nie ma czym grać | — |
 
 ---
 

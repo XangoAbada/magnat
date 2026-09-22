@@ -1,6 +1,6 @@
 # M12c — Tryb 50× i skala 400 tys.
 
-Podfaza 3 z 5 fazy **M12 — Skala i jakość** (`M12-skala-i-jakosc.md`).
+Podfaza 3 z 6 fazy **M12 — Skala i jakość** (`M12-skala-i-jakosc.md`).
 Dokument nadrzędny: `00-konwencje-i-kontrakty.md`.
 Zakres fazy (§2), kontrakty międzyfazowe (§6), ryzyka (§8) i decyzje otwarte (§9)
 zostają w dokumencie fazy — tu jest wyłącznie to, co robisz w tej porcji.

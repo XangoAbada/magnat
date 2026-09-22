@@ -107,6 +107,11 @@ widgetu.
 
 Rozmiar jest mnożony przez `ui_scale ∈ [0,75; 3,0]` (M9b §5.8) i przyciągany do pikseli fizycznych.
 
+**Krój (od M12f):** IBM Plex Sans dla tekstu, IBM Plex Mono dla liczb, IBM Plex Sans Condensed
+wyłącznie dla `text.hero`. Licencja OFL 1.1, pliki w `data/ui/fonts/`. Wybór z trzech powodów:
+pełne polskie znaki, strzałki i minus typograficzny w atlasie, jedna rodzina dla tekstu i liczb
+(ta sama wysokość x w wierszu tabeli).
+
 ### 3.3 Przestrzeń i kształt
 
 - **Siatka 4 px.** Wszystkie odstępy to `4 · n`. Zestaw: `4` (wewnątrz kontrolki), `8` (między
@@ -117,7 +122,25 @@ Rozmiar jest mnożony przez `ui_scale ∈ [0,75; 3,0]` (M9b §5.8) i przyciągan
   gdzie klikalność jest ważniejsza od gęstości.
 - Promień zaokrąglenia: **3 px**. Cienie: wyłącznie pod elementem pływającym (okno niedokowane,
   menu kontekstowe, podpowiedź). Zadokowany panel oddziela `line.strong`, nie cień.
-- Szerokość doku bocznego: 320 px domyślnie, 260–560 px w zakresie regulacji.
+- **Ścięty narożnik** (`shape.chamfer`, 8 px) mają wyłącznie okna pływające i kafelki powłoki —
+  element, który leży nad sceną, a nie w doku. Kontrolki zostają przy promieniu 3 px.
+- **Pasek akcentu** (`accent.bar`, 3 px, kolor `accent`) oznacza element aktywny: wybrany panel
+  na pasku ikon, nagłówek otwartego panelu, zaznaczoną pozycję menu. Nie jest ozdobą nagłówka.
+- Szerokość doku bocznego: 320 px domyślnie, 260–560 px w zakresie regulacji; na lewo od niego
+  pasek ikon 48 px (§5).
+
+### 3.4 Ikony
+
+Ikony są **danymi**: `data/ui/icons.ron`, siatka 16×16 pikseli pod kluczem. Styl pikselowy
+z wyboru — pasuje do świata voxelowego i nie potrzebuje dekodera obrazów. Ikona **nie ma
+własnego koloru**: rysuje się jednym tokenem (`text.primary`, `text.secondary` albo kolorem
+stanu), więc nie może powiedzieć czegoś, czego nie mówi tekst obok. Ikona nigdy nie stoi sama
+tam, gdzie niesie znaczenie — ma podpis albo podpowiedź. Przy pasku potrzeb jest **drugim
+nośnikiem** obok koloru (reguła daltonizmu z §3.1).
+
+Kierunek wizualny całego interfejsu: makiety w `docs/ui-inspiracje/` — HUD `hud-b.png`, panel
+`panel-dane-b.png`, menu `menu-glowne-b.png`, ustawienia `opcje-a.png`. Makieta jest kierunkiem;
+tam, gdzie łamie ten dokument, wygrywa dokument (`M12f-oprawa-ui.md` §5.10.5).
 
 ---
 
@@ -136,7 +159,9 @@ listy wymaga dopisania go tutaj, nie wymyślenia go lokalnie.
 | Zakładki | Rząd etykiet nad treścią; wybrana ma pełny kontrast, reszta `text.dim`. Do siedmiu zakładek w rzędzie — powyżej dziel panel, nie zwijaj etykiet. Wybór przeżywa przebudowę drzewa i zmianę zaznaczenia na encję **tego samego typu**; przy zmianie typu wraca na pierwszą. Sterowanie klawiaturą: strzałki lewo/prawo w obrębie rzędu |
 | Odnośnik | Nazwa innego podmiotu (mieszkaniec, firma, zakład, budynek, pojazd, parcela, dzielnica) jest klikalna i otwiera jego kartę. Wygląd: kolor `accent`, podkreślenie dopiero pod kursorem — tekst karty ma zostać czytelny, gdy odnośników jest kilkanaście. Odnośnik do celu, który już nie istnieje (firma upadła, mieszkaniec zmarł), pokazuje nazwę bez odnośnika i powiada, co się stało — nigdy nie prowadzi w pustkę. Nawigacja ma **wstecz** i **dalej** (myszka: przyciski boczne, klawiatura: Alt+strzałki) |
 | Wykres (`Series`) | Oś czasu w kalendarzu 12 × 30 (`K-1`); poziom mip dobrany do szerokości; maksimum 2000 odcinków niezależnie od zakresu; bez animacji przy zmianie zakresu |
-| Pasek czasu | Data, zegar, cztery prędkości (pauza / 1× / 3× / 10×). Jedyny element UI zawsze widoczny w rozgrywce |
+| Pasek czasu | Data, zegar, cztery prędkości (pauza / 1× / 3× / 10×) jako kafelki z ikoną pauzy; po prawej gotówka i liczba mieszkańców jako „chipy" z ikoną. Jedyny element UI zawsze widoczny w rozgrywce |
+| Pasek ikon | Pionowy pasek 48 px na lewej krawędzi: każdy panel w stałej kolejności, ikona + podpis `text.micro`. Aktywny — tło `bg.card` i pasek akcentu. Zastępuje wiersz „więcej paneli" |
+| Nagłówek panelu | Ikona + tytuł `text.title` + pasek akcentu. Ten sam w doku i w oknie pływającym |
 | Alert | Jedna linia: waga (`warn`/`danger`), czego dotyczy, co z tym zrobić. Kliknięcie otwiera podmiot. Alert bez możliwej akcji jest wpisem kroniki, nie alertem |
 | Nakładka (legenda) | Nazwa pola, skala z liczbami i jednostką, wartość pod kursorem. Paleta z `data/ui/overlays.ron`, ta sama w kliencie i w podglądzie `headless` |
 | Podpowiedź | Pojawia się po 400 ms, znika natychmiast; nigdy nie niesie informacji, której nie ma nigdzie indziej |
@@ -168,6 +193,10 @@ wciśnięty (`accent` 25%) → wyłączony (`text.disabled`, brak hovera) → fo
 │ ⚠ Brak mleka w „Kiosk nr 2" od 2 dni — zamów albo zmień dostawcę    [pokaż]  │  ← pas alertów (maks. 3)
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
+
+Od M12f na lewo od doku stoi pasek ikon (§4): wszystkie panele w stałej kolejności, zawsze
+widoczne. Dok niesie akordeon przypiętych paneli jak dotąd; wiersz „więcej" znika, bo pasek
+robi to samo bez rozwijania.
 
 Reguły układu:
 
@@ -212,6 +241,11 @@ Reguły układu:
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
 
+**Wygląd (od M12f, `menu-glowne-b.png`):** tło to żywa scena świata z wolno krążącą kamerą —
+z ostatniego zapisu, a bez zapisu z ustalonego świata demonstracyjnego. Od lewej krawędzi
+gradient `bg.window` pod menu; tytuł i pozycje wyrównane do lewej, pozycje jako kafelki 32 px
+ze ściętym narożnikiem. Szkic wyżej opisuje **zawartość i kolejność**, nie położenie.
+
 Wersja gry i wersja formatu zapisu są widoczne, bo od nich zaczyna się każde zgłoszenie błędu.
 Przełącznik języka jest tutaj, a nie tylko w ustawieniach — gracz, który nie zna polskiego, musi
 umieć go zmienić bez czytania polskiego menu.
@@ -245,7 +279,7 @@ Trzy rzeczy, które ten nagłówek ma robić i których wcześniej nie było:
    więc nie mogą powiedzieć dwóch różnych rzeczy.
 
 Ekran, którego ścieżka ma jeden element, przycisku nie dostaje: menu główne i ekrany domknięcia
-nie mają rodzica. Znaków strzałek w nagłówku nie ma z powodu technicznego — do czasu, aż M11
+nie mają rodzica. Znaków strzałek w nagłówku nie ma z powodu technicznego — do czasu, aż M12f
 wgra własny krój, domyślny atlas `egui` ich nie zawiera i wychodzą jako prostokąty.
 
 ### 6.1a Wybór postaci
@@ -386,6 +420,10 @@ zgłoszeń błędów), **Grafika** (rozdzielczość, tryb okna, synchronizacja p
 jakość cieni), **Dźwięk** (M11), **Sterowanie** (lista skrótów z podglądem). Język i skala UI
 działają natychmiast, bez restartu — to jest kryterium akceptacyjne, nie życzenie.
 
+Układ (od M12f, `opcje-a.png`): panel na prawej połowie ekranu, zakładki podkreślone, wiersz =
+etykieta po lewej i kontrolka po prawej. Lewa połowa pokazuje scenę (z pauzy) albo tło menu —
+zmiana skali UI albo zasięgu widzenia jest widoczna od razu, bez zamykania ustawień.
+
 ### 6.6 Pauza i ekrany domknięcia
 
 Menu pauzy to ta sama lista co menu główne minus „Nowa gra", plus „Wróć do gry". Wyjście
@@ -417,6 +455,6 @@ Wymagania są twarde, bo wszystkie dają się sprawdzić testem:
 - Treści paneli biznesowych — PRD §14.3 i M9e §5.9.
 - Gramatyki edytora reguł — M9d §5.6.
 - Wyglądu świata 3D (voxele, paleta dzielnic, oświetlenie) — PRD §15, M11.
-- Ikon i dźwięku interfejsu — M11.
+- Dźwięku interfejsu — bez wykonawcy (`D16` w M12 §9). Ikony i krój przeszły z M11 do M12f.
 - Motywu jasnego i dodatkowych języków — M12; tokeny z §3 są tak pomyślane, żeby oba były zmianą
   danych, nie kodu.
