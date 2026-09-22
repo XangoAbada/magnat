@@ -79,7 +79,7 @@ fn ciag_hashy(mut st: Standing, minut: u64, co: u64) -> Vec<StateHash> {
 /// dobowy, redakcja dobowa, negocjacje tygodniowe, a składka miesięczna.
 /// Przebieg krótszy niż doba nie uruchomiłby połowy z nich ani razu.
 #[test]
-#[ignore = "N1.2: generuje miasto"]
+#[ignore = "generuje miasto"]
 fn dwa_przebiegi_pelnego_swiata_daja_ten_sam_ciag_hashy() {
     let a = ciag_hashy(swiat(1, 0), 3 * 1_440, 480);
     let b = ciag_hashy(swiat(1, 0), 3 * 1_440, 480);
@@ -94,7 +94,7 @@ fn dwa_przebiegi_pelnego_swiata_daja_ten_sam_ciag_hashy() {
 /// redukcję składaną w kolejności **ukończenia** jobów zamiast w kolejności
 /// indeksu chunka (00 §3.3).
 #[test]
-#[ignore = "N1.2: generuje miasto"]
+#[ignore = "generuje miasto"]
 fn wiele_watkow_nie_zmienia_ciagu_hashy() {
     let a = ciag_hashy(swiat(1, 0), 2 * 1_440, 480);
     let b = ciag_hashy(swiat(4, 0), 2 * 1_440, 480);
@@ -109,7 +109,7 @@ fn wiele_watkow_nie_zmienia_ciagu_hashy() {
 /// tyle, ile obiecuje ryzyko `R9` — kronika zalana osiemdziesięcioma latami
 /// jest funkcją narracyjną martwą tak samo jak kronika pusta.
 #[test]
-#[ignore = "N1.2: generuje miasto"]
+#[ignore = "generuje miasto"]
 fn historia_na_sucho_dochodzi_do_swiata_gry() {
     let st = swiat(1, 30);
     assert!(
@@ -144,7 +144,7 @@ fn historia_na_sucho_dochodzi_do_swiata_gry() {
 /// Bez tego `dry_run_years` byłoby nastawą bez skutku: przechodziłaby każdy test
 /// i wyglądała tak samo jak działająca (`K-67`).
 #[test]
-#[ignore = "N1.2: generuje miasto"]
+#[ignore = "generuje miasto"]
 fn historia_zmienia_swiat_startowy() {
     let bez = world_state_hash(&swiat(1, 0).app.world);
     let z = world_state_hash(&swiat(1, 30).app.world);
@@ -163,7 +163,7 @@ fn historia_zmienia_swiat_startowy() {
 /// Przyrządem, bo `-- --nocapture` wypisuje zdania, których kryterium WP10.15
 /// każe przeczytać dwadzieścia i ocenić, czy są zrozumiałe dla człowieka.
 #[test]
-#[ignore = "N1.2: generuje miasto"]
+#[ignore = "generuje miasto"]
 fn wpisy_kroniki_renderuja_sie_w_obu_jezykach() {
     use magnat_game::{GenWatch as _GW, NewGameParams, ScenarioId, Session, StartVariant};
 

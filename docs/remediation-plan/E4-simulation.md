@@ -150,3 +150,14 @@ zawiesić kolejkę na zawsze. Zapytania o złoża gubią pokłady poza punktem z
     stawką albo liczbą dni (≥ 0; udziały w `bp` ≤ 10 000), w tym samym stylu co `N4.5`
     i `N4.10`.
   - *Test:* `transport.cost_gr_per_tonne_km: -1` → `Err` z nazwą pola.
+
+- [ ] **N4.15** woda surowa bez źródła w 7 ze 128 światów — `nowe` (z `N1.2`)
+  - `sim/world/tests/consistency.rs` `macierz_32_ziaren_x_4_profile` nie biegł nigdzie od M2e.
+    Dopięty do CI w `N1.2` pada: T11 („domknięcie łańcuchów") zgłasza „brak źródła dla:
+    raw_water · podaż/popyt 0,00, poza [0,85; 1,3]" dla ziaren 2, 5, 16, 25, 27 (profil
+    `university`) i 10, 12 (`agricultural`). Pozostałe 6 testów pliku przechodzi.
+  - *Do ustalenia przy naprawie:* czy te profile nie stawiają ujęcia wody, czy teren tych
+    ziaren go nie dopuszcza — i czy wtedy miasto ma dostać źródło zewnętrzne, czy test ma
+    wyłączyć T11 z uzasadnieniem.
+  - *Test:* ten sam, bez `#[ignore = "N4.15: …"]` — wraca do kroku `E1 — testy…` joba
+    `determinism`.

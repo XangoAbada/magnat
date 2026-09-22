@@ -339,7 +339,7 @@ fn doba_mediow_ms(w: &mut World, od_minuty: u64) -> u128 {
 /// `#[ignore]`, bo mierzy zegarem: na obciążonej maszynie liczba skacze, a bramka,
 /// która świeci na czerwono od cudzego kompilatora w tle, uczy ignorowania bramek.
 #[test]
-#[ignore = "N1.2: pomiar czasu"]
+#[ignore = "pomiar czasu"]
 fn dwa_tysiace_kampanii_miesci_sie_w_budzecie_ticku() {
     // Dwadzieścia tysięcy mieszkańców w ośmiu dzielnicach: tyle, żeby kanały
     // skalujące się z ludnością (ulotka, prasa) miały do kogo docierać.

@@ -283,6 +283,18 @@ jobs:
         run: |
           cargo run --release -q -p magnat-headless -- dry-run --seed 7 --size 4km             --years 30 --out dryrun.hash | tee raport-dryrun.txt
           cargo run --release -q -p magnat-headless -- dry-run --seed 7 --size 4km             --years 30 --expect dryrun.hash > /dev/null
+      - name: E1 — testy, których powód obiecywał CI, a nie wołał ich żaden krok (N1.2)
+        # Do E1 każdy z tych plików miał `#[ignore = "… CI uruchamia jawnie"]` i żaden
+        # krok go nie wołał — `consistency.rs` od M2e, kopalnia z `full_city.rs` od M6.
+        # Pilnuje tego reguła 6 `plan_guard`: `#[ignore]` bez joba albo otwartego punktu
+        # jest błędem bramki. Test czerwony po dopięciu nie wraca do cienia — ma
+        # `#[ignore = "N<e>.<n>: …"]` z punktem, który go naprawi.
+        run: |
+          # Macierz 32 ziaren × 4 profile pada na T11 (woda surowa) — `N4.15`, pominięta po nazwie.
+          cargo test --release -p magnat-world --test consistency --test lsystem_split -- --include-ignored --skip macierz_32_ziaren_x_4_profile
+          cargo test --release -p magnat-world --lib -- --include-ignored miasto_daje_poprawny_graf
+          cargo test --release -p magnat-headless --test m10_domkniecie --test full_city --test labor_city --test firms_city --test blackout -- --include-ignored
+          cargo test --release -p magnat-agents --test school -- --include-ignored
       - name: M4 — dowód spójności mikro ↔ mezo (A1–A5, M4d/WP9)
         run: cargo test --release -p magnat-world --test lod -- --include-ignored
       - name: M11 — render, dźwięk i poziom detalu nie zmieniają symulacji (§7.1)
@@ -490,6 +502,10 @@ jobs:
         # kamery mierzy się na maszynie z kartą (`magnat --bench`).
         run: |
           cargo test --release -p magnat-world --test budgets --test mesh_budget             -- --include-ignored --nocapture | tee raport-budzetow.txt
+          # Dwa budżety czasu spoza `sim/world`, które do E1 nie biegły nigdzie (N1.2):
+          # p95 zapytania CCH i dwa tysiące kampanii w jednym ticku.
+          cargo test --release -p magnat-nav --lib -- --include-ignored --nocapture pomiar_p95_zapytania_cch | tee -a raport-budzetow.txt
+          cargo test --release -p magnat-media --test reach -- --include-ignored --nocapture | tee -a raport-budzetow.txt
       - uses: actions/upload-artifact@v4
         with:
           name: raport-budzetow

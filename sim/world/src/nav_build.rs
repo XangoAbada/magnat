@@ -706,7 +706,7 @@ mod tests {
     /// w terenie, którego jeszcze nikt nie oglądał. `build_nav` zgłasza to błędem
     /// `ParcelUnreachable`, więc samo `expect` jest tu asercją.
     #[test]
-    #[ignore = "N1.2: generuje świat i miasto — CI uruchamia jawnie przez --include-ignored"]
+    #[ignore = "generuje świat i miasto — CI uruchamia jawnie przez --include-ignored"]
     fn miasto_daje_poprawny_graf_i_dostep_do_kazdej_parceli() {
         use crate::params::Region;
         for region in [

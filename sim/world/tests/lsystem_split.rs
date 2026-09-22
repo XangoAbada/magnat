@@ -82,7 +82,7 @@ fn hash(seed: u64, region: Region, profile: EconomyProfile) -> String {
 }
 
 #[test]
-#[ignore = "N1.2: 32 generacje świata — uruchamiać jawnie przez --include-ignored"]
+#[ignore = "32 generacje świata — uruchamiać jawnie przez --include-ignored"]
 fn macierz_hashy_miasta_nie_drgnela_po_podziale() {
     let mut mam: Vec<String> = Vec::new();
     for seed in 1..=8u64 {

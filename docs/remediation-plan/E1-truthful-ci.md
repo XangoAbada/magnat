@@ -35,13 +35,22 @@ Jeśli czerwień nie ma jeszcze punktu, zakładamy go w odpowiednim etapie („Z
     `reach.rs:342` i `cch.rs:1264` mają asercje budżetu czasu, więc są testami, nie
     narzędziami — idą do `N1.2`.
 
-- [ ] **N1.2** dopiąć do CI testy, które twierdzą, że w nim są — `M2#1`, `R2#1`, `M10` WP10.16, `M11` R2-WP17
+- [x] **N1.2** dopiąć do CI testy, które twierdzą, że w nim są — `M2#1`, `R2#1`, `M10` WP10.16, `M11` R2-WP17
   - `sim/world/tests/consistency.rs` (T1–T13, D1, D2, D5, budżet, WP13, WP16 — 7 testów),
   - `sim/world/tests/lsystem_split.rs` (dowód `R2-WP21`),
   - `tools/headless/tests/m10_domkniecie.rs` (dwa przebiegi = ten sam ciąg hashy),
   - `tools/headless/tests/full_city.rs:162` (kopalnia na złożu).
   - *Gdzie:* job `determinism` (nocny), tak jak pozostałe testy `sim/world` w release.
   - *Dowód:* zielony przebieg nocny albo jawne `#[ignore = "N…"]` według uwagi wyżej.
+  - *Zrobione:* 33 testy z `N1.2:` (strażnik `N1.1`) — lista szersza niż w audycie:
+    doszły `labor_city.rs` (5), `firms_city.rs` (4), `blackout.rs` (2), reszta `full_city.rs`,
+    `nav_build.rs:709`, `school.rs:356`. Nowy krok `E1 — testy…` w `determinism`; budżety
+    czasu (`cch.rs:1264`, `reach.rs:342`) w jobie `budzety`. Lokalnie w release (Windows):
+    wszystkie zielone w 7,5 min poza **jednym**: `macierz_32_ziaren_x_4_profile` — 7 ze 128
+    światów bez źródła `raw_water` (T11). Dostał `N4.15` w E4 i `--skip` po nazwie.
+    Przy okazji reguła 6 dostała drugą stronę: test z otwartym punktem N, który job i tak
+    uruchamia, jest błędem (zapomniany `--skip` = czerwone CI z powodu, który ma właściciela).
+    Zielony bieg w CI — przy pomiarze zamknięcia etapu (Actions zablokowane od 21.09).
 
 - [ ] **N1.3** `m3_century` w nocnym CI i progi, które wymusza — `M3#4`
   - Runner `tools/headless/src/century.rs:167-169,236-241` drukuje populację, ale nie

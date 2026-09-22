@@ -370,6 +370,10 @@ def wlasciciel(test, biegi, otwarte) -> str | None:
     return None
 
 
+def biegnie_mimo_punktu(kto: str | None, powod: str, otwarte: set[str]) -> bool:
+    return bool(kto) and kto.startswith("job") and any(f"N{n}" in otwarte for n in ODWOLANIE_N.findall(powod))
+
+
 def ignore_bez_wlasciciela() -> tuple[list[str], list[tuple]]:
     workflow = "\n".join(p.read_text(encoding="utf-8") for p in sorted(WORKFLOWS.glob("*.yml")))
     biegi, otwarte = uruchomienia(workflow), otwarte_punkty()
@@ -377,6 +381,11 @@ def ignore_bez_wlasciciela() -> tuple[list[str], list[tuple]]:
     for t in ignorowane(crate_y()):
         kto = wlasciciel(t, biegi, otwarte)
         wiersze.append((t[0], t[1], t[4], kto or "—"))
+        # Druga strona tej samej obietnicy: powód mówi „czerwony do czasu punktu N",
+        # a `--include-ignored` na całym pliku i tak go woła — CI świeci na czerwono
+        # z powodu, który ma już właściciela. Taki test pomija się po nazwie (`--skip`).
+        if biegnie_mimo_punktu(kto, t[5], otwarte):
+            bledy.append(f"{t[0]}:{t[1]}: `{t[4]}` czeka na otwarty punkt, a krok ci.yml i tak go uruchamia — dopisz `--skip {t[4]}`")
         if kto is None:
             bledy.append(
                 f"{t[0]}:{t[1]}: `{t[4]}` ma #[ignore], którego nie woła żaden krok ci.yml, "
@@ -586,6 +595,14 @@ def self_test() -> int:
         if (wlasciciel(test, biegi, otwarte) is not None) != chciane:
             ok = False
             print(f"self-test: właściciel {test[2]}/{test[3]}::{test[4]} ({test[5]!r}) → {not chciane}, chciane {chciane}")
+    # Test czekający na otwarty punkt, którego job nie pomija, to czerwone CI.
+    for test, chciane in [
+        (("f", 1, "a", "t1", "szybki", "N4.1: czerwony", ""), True),   # job woła mimo punktu
+        (("f", 1, "a", "t1", "wolny", "N4.1: czerwony", ""), False),   # pominięty `--skip`
+    ]:
+        if biegnie_mimo_punktu(wlasciciel(test, biegi, otwarte), test[5], otwarte) != chciane:
+            ok = False
+            print(f"self-test: biegnie_mimo_punktu({test[4]}) → {not chciane}, chciane {chciane}")
     if otwarte_punkty_z("- [x] **N1.14** a\n- [ ] **N4.1** b\n  - [~] **N4.2** c\n") != {"N4.1", "N4.2"}:
         ok = False
         print("self-test: zły rozbiór stanu punktów planu naprawczego")

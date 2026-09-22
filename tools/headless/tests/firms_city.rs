@@ -44,7 +44,7 @@ fn zbuduj() -> Miasto {
 }
 
 #[test]
-#[ignore = "N1.2: generacja świata — CI uruchamia jawnie przez --include-ignored"]
+#[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
 fn miasto_dostaje_firmy_z_trzema_slotami_decyzyjnymi() {
     let mut m = zbuduj();
     let (firms, rep) = firms::zbuduj_firmy(&m.city, &mut m.world, &m.types);
@@ -77,7 +77,7 @@ fn miasto_dostaje_firmy_z_trzema_slotami_decyzyjnymi() {
 }
 
 #[test]
-#[ignore = "N1.2: generacja świata — CI uruchamia jawnie przez --include-ignored"]
+#[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
 fn most_jest_deterministyczny() {
     // Dwa przebiegi tego samego ziarna dają ten sam rejestr — łącznie z kolejnością
     // wypłat, bo ta wychodzi z kolejności obsady, a ta z sortowania po `CitizenId`,
@@ -96,7 +96,7 @@ fn most_jest_deterministyczny() {
 }
 
 #[test]
-#[ignore = "N1.2: generacja świata — CI uruchamia jawnie przez --include-ignored"]
+#[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
 fn zaklady_maja_obsade_w_rozsadnej_relacji_do_etatow() {
     // Nie testuję tu kalibracji, tylko że most nie zgubił ludzi i nie wymyślił etatów.
     // Wakat nieobsadzony jest **poprawnym** wynikiem (M7 §7.1 pkt 4), więc dolnej
@@ -119,7 +119,7 @@ fn zaklady_maja_obsade_w_rozsadnej_relacji_do_etatow() {
 }
 
 #[test]
-#[ignore = "N1.2: generacja świata — CI uruchamia jawnie przez --include-ignored"]
+#[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
 fn doba_decyzji_obejmuje_kazda_firme_dokladnie_raz() {
     let mut m = zbuduj();
     let (mut firms, _) = firms::zbuduj_firmy(&m.city, &mut m.world, &m.types);
