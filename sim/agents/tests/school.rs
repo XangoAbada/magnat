@@ -353,7 +353,7 @@ fn tabela_wyksztalcenia_rosnie_i_domyka_pelny_cykl() {
 /// młodych dorosłych urodzonych w tej grze odpowiada pełnemu cyklowi z tabeli — przed
 /// naprawą było to zero, bo `edu_level` ustawiał wyłącznie Etap 8 generatora.
 #[test]
-#[ignore = "trzydzieści lat gry — przebieg minutowy, tylko w --release"]
+#[ignore = "N1.2: trzydzieści lat gry — przebieg minutowy, tylko w --release"]
 fn po_trzydziestu_latach_szkola_ma_uczniow() {
     let mut world = swiat(23, 150);
     let ages = world.resource::<DemographyTable>().ages();

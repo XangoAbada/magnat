@@ -285,7 +285,7 @@ fn gotowy_swiat(seed: u64) -> (App, u32) {
 }
 
 #[test]
-#[ignore = "poz. 73 wykazu R2: `debug_assert` kolejki zdarzen wywraca dobe w profilu testowym — job nocny `determinism`, `D-R7` (R1)"]
+#[ignore = "N4.1: poz. 73 wykazu R2: `debug_assert` kolejki zdarzen wywraca dobe w profilu testowym — job nocny `determinism`, `D-R7` (R1)"]
 fn doba_przez_systemy_ecs_planuje_dowozi_i_zaspokaja() {
     let (mut app, ludzi) = gotowy_swiat(4);
     for _ in 0..1440 {

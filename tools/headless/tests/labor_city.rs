@@ -35,7 +35,7 @@ fn miasto(dni: u32) -> (App, magnat_headless::firms::FirmsReport) {
 }
 
 #[test]
-#[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
+#[ignore = "N1.2: generacja świata — CI uruchamia jawnie przez --include-ignored"]
 fn zaklad_i_jego_zaloga_mowia_o_sobie_tym_samym_identyfikatorem() {
     // `AU-1`. Do M7b most stawiający firmy nadawał `Site.id` w przestrzeni generatora
     // (numer od zera), a komponent mieszkańca, sklepy M5 i zakłady M6 używały klucza
@@ -80,7 +80,7 @@ fn zaklad_i_jego_zaloga_mowia_o_sobie_tym_samym_identyfikatorem() {
 }
 
 #[test]
-#[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
+#[ignore = "N1.2: generacja świata — CI uruchamia jawnie przez --include-ignored"]
 fn rynek_pracy_obsadza_wakaty_i_podnosi_stawki() {
     let (app, _) = miasto(90);
     let handle = app
@@ -121,7 +121,7 @@ fn rynek_pracy_obsadza_wakaty_i_podnosi_stawki() {
 }
 
 #[test]
-#[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
+#[ignore = "N1.2: generacja świata — CI uruchamia jawnie przez --include-ignored"]
 fn dwa_przebiegi_daja_ten_sam_rynek() {
     let (a, _) = miasto(3);
     let (b, _) = miasto(3);
@@ -144,7 +144,7 @@ fn dwa_przebiegi_daja_ten_sam_rynek() {
 }
 
 #[test]
-#[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
+#[ignore = "N1.2: generacja świata — CI uruchamia jawnie przez --include-ignored"]
 fn rynek_pracy_wchodzi_do_hasha_stanu() {
     // Stan rynku jest stanem świata (00 §3.6): kto gdzie aplikował i ile firma
     // już podbiła, przeżywa zapis gry tak samo jak saldo konta.
@@ -158,7 +158,7 @@ fn rynek_pracy_wchodzi_do_hasha_stanu() {
 }
 
 #[test]
-#[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
+#[ignore = "N1.2: generacja świata — CI uruchamia jawnie przez --include-ignored"]
 fn zaklady_dostaja_menedzerow_i_jakosc_zarzadzania_przestaje_byc_stala() {
     // M7c WP7 w prawdziwym mieście. Do M7c `Site::mgmt` było na wartości neutralnej
     // w **każdym** zakładzie: menedżer istniał jako pole, a nie jako ktoś. Od M7c

@@ -1261,7 +1261,7 @@ mod tests {
     /// mówi reguła „nie odhaczaj testu, który blokuje pętlę zwrotną".
     /// Uruchomienie: `cargo test -p magnat-nav --release -- --ignored --nocapture pomiar_p95`.
     #[test]
-    #[ignore = "pomiar wydajności: ~5 s w release, ~55 s w debug"]
+    #[ignore = "N1.2: pomiar wydajności: ~5 s w release, ~55 s w debug"]
     fn pomiar_p95_zapytania_cch() {
         use std::time::Instant;
 

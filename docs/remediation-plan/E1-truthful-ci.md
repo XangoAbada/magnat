@@ -17,13 +17,23 @@ Jeśli czerwień nie ma jeszcze punktu, zakładamy go w odpowiednim etapie („Z
 
 ## Punkty
 
-- [ ] **N1.1** strażnik `#[ignore]` — `M2#1`, `R2#1`, wzorzec „`#[ignore]` bez joba"
+- [x] **N1.1** strażnik `#[ignore]` — `M2#1`, `R2#1`, wzorzec „`#[ignore]` bez joba"
   - *Naprawa:* dopisać do `scripts/plan_guard.py` (już parsuje `ci.yml`) sprawdzenie:
     każdy `#[ignore]` w `*/tests/*.rs` i `*/src/*.rs` jest uruchamiany przez któryś krok
     `ci.yml` (`--include-ignored` / `--ignored` na tym pliku testów albo filtr po nazwie)
     **albo** jego powód zawiera `N<e>.<n>` otwartego punktu z `docs/remediation-plan/`.
   - *Test:* self-test strażnika z trzema przypadkami: test z jobem, test z otwartym punktem,
     test bez niczego (błąd).
+  - *Zrobione:* reguła 6 `plan_guard`. Trzecia droga (decyzja właściciela z 22.09): powód
+    zaczyna się od `narzędzie:` albo `pomiar:`, a ciało testu nie ma `assert` — narzędzie
+    ręczne, które niczego nie obiecuje. Parser `ci.yml` zna `-p`, `--test`, `--lib`, `--skip`,
+    filtr po nazwie, komentarze powłoki i potoki; osiem przypadków `--self-test`.
+    `--list-ignored` wypisuje tabelę do pomiaru zamknięcia.
+    Na kodzie sprzed zmiany: **36 ze 100** `#[ignore]` bez właściciela. Rozdzielone:
+    33 → `N1.2:` (dopięcie do CI), `population.rs:288` → `N4.1:` (kolejka DES),
+    `det_math_accuracy.rs:240` → `narzędzie:`, `reach.rs:380` → `pomiar:`.
+    `reach.rs:342` i `cch.rs:1264` mają asercje budżetu czasu, więc są testami, nie
+    narzędziami — idą do `N1.2`.
 
 - [ ] **N1.2** dopiąć do CI testy, które twierdzą, że w nim są — `M2#1`, `R2#1`, `M10` WP10.16, `M11` R2-WP17
   - `sim/world/tests/consistency.rs` (T1–T13, D1, D2, D5, budżet, WP13, WP16 — 7 testów),
@@ -137,3 +147,30 @@ Jeśli czerwień nie ma jeszcze punktu, zakładamy go w odpowiednim etapie („Z
   - *Odrzucone po sprawdzeniu:* `f32::cos`/`sin` w `sim/world/src/city/build/footprint.rs:567`
     nie łamie determinizmu — to kod testu (`wyjscie_z_bryly_trafia_w_lico`), nie symulacji.
     Dostaje `#[allow]` z powodem w `N1.10`.
+
+- [ ] **N1.15** `bench-guard` porównuje dwie różne maszyny i dwa różne systemy plików — `nowe`
+  - Ostatni nocny bieg, który się wykonał (20.09, `5239480`): 37 × `BŁĄD` (od +26 % do +432 %),
+    2 × `OK`. Linia bazowa jest nagrana lokalnie (`b9a3e39`), a porównywana z runnerem
+    `ubuntu-latest` — różnica sprzętu, nie regresja.
+  - 37 × `BRAK` w parze z 42 × `NOWY` to te same benchmarki pod inną nazwą: na Windows
+    katalog `target/criterion` gubi wielkość liter i kropki na końcu nazwy („B-1…" → „b-1…",
+    „300 tys." → „300 tys"), więc klucze linii bazowej nie pasują do nazw z Linuksa.
+    Od `N1.4` oba przypadki wywracają bramkę, więc job jest czerwony z trzech powodów naraz.
+  - *Naprawa:* nazwy porównywane po normalizacji (małe litery, bez kropek na końcu) po obu
+    stronach; linia bazowa i przebieg z tej samej klasy maszyny.
+  - **Decyzja N1.15-a:** gdzie powstaje linia bazowa. *Domyślnie:* na runnerze CI — job
+    wystawia `target/criterion` jako artefakt, `--update` czyta z pobranego artefaktu,
+    a opis commita odnowienia podaje identyfikator biegu zamiast nazwy sprzętu.
+  - *Test:* przypadek `--self-test`: „B-1 x." w przebiegu i „b-1 x" w bazie to ten sam wpis.
+
+- [ ] **N1.16** nocny balansator: czerwony i na granicy limitu czasu — `nowe`
+  - Bieg z 20.09 (`5239480`): 4 scenariusze × 8 ziaren × 365 dób trwały 5 h 31 min przy
+    limicie joba 6 h. Czerwone: G2 (hiperinflacja, 28 ziaren), G5 (rynek wymiera, 24),
+    G9 (24 akcje bez powodu na 42,7 mln), G10 (populacja firm, ziarno 7), G11 (bezrobocie
+    1,0–1,9 % przy paśmie 3–12 %, 32/32).
+  - Skutek dla `N1.6-a`: 8 × 450 dób w jednym jobie nie zmieści się w 6 h (≈ 6,8 h).
+  - *Naprawa:* scenariusze jako macierz jobów (każdy w swoim limicie), bramka w osobnym
+    jobie na zebranych artefaktach. Czerwone bramki — po przebiegu na bieżącym `master`
+    — dostają punkty w etapach, których dotyczą (G2, G5, G11 → E2/E4, G9 → E4 `N4.11`),
+    a profil nocny dopuszcza czerwień tylko bramki wskazującej otwarty punkt, tak jak
+    strażnik `#[ignore]` z `N1.1`.

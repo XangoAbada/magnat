@@ -92,4 +92,5 @@ Jedna linia na zamknięty punkt albo grupę: data, identyfikatory, co zrobiono, 
 | 2026-09-22 | N1.13 | fałszywe komentarze o ARM i „16 z 16” w `ci.yml`; `workflow_dispatch` jako bieg nocny na żądanie | `54163da` |
 | 2026-09-22 | N1.4 | `bench_guard`: zniknięty benchmark ustawia kod 1 | `fdd4edb` |
 | 2026-09-22 | N1.8 | `plan_guard`: kod korekty dopasowywany jako całe słowo | `0b02d07` |
-| 2026-09-22 | N1.9 | hook strukturalny także na `PowerShell`; self-test pilnuje matchera | ten commit |
+| 2026-09-22 | N1.9 | hook strukturalny także na `PowerShell`; self-test pilnuje matchera | `e3df1c5` |
+| 2026-09-22 | N1.1 | reguła 6 `plan_guard`: każdy `#[ignore]` ma job, otwarty punkt albo jest narzędziem; 36 ze 100 dostało właściciela; nowe N1.15, N1.16 | ten commit |

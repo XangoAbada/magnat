@@ -654,7 +654,7 @@ fn sprawdz(c: &CityData) -> Vec<String> {
 
 /// Trzynaście testów na jednym mieście — szybki sygnał przed macierzą.
 #[test]
-#[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
+#[ignore = "N1.2: generacja świata — CI uruchamia jawnie przez --include-ignored"]
 fn trzynascie_testow_na_jednym_miescie() {
     let c = miasto(
         7,
@@ -675,7 +675,7 @@ fn trzynascie_testow_na_jednym_miescie() {
 /// Naruszenia są zbierane, a nie przerywane pierwszym — jedno czerwone ziarno na 128
 /// to co innego niż błąd systematyczny, a rozróżnić je można wyłącznie po pełnej liście.
 #[test]
-#[ignore = "128 generacji świata (~3 min w release) — CI uruchamia jawnie przez --ignored"]
+#[ignore = "N1.2: 128 generacji świata (~3 min w release) — CI uruchamia jawnie przez --ignored"]
 fn macierz_32_ziaren_x_4_profile() {
     // Region jest dobrany do rozmiaru, a nie losowy. Mapa czterokilometrowa w regionie
     // `coastal` jest w większości morzem: zmierzone na tej samej macierzy — 60 ze 128
@@ -730,7 +730,7 @@ fn macierz_32_ziaren_x_4_profile() {
 /// D1 i D5 (§7, determinizm): dwa przebiegi tego samego ziarna dają identyczny
 /// `world_hash_m2`, a hash obejmuje warstwę M2e — zmiana skali zakładu musi go ruszyć.
 #[test]
-#[ignore = "dwie generacje świata — CI uruchamia jawnie przez --include-ignored"]
+#[ignore = "N1.2: dwie generacje świata — CI uruchamia jawnie przez --include-ignored"]
 fn dwa_przebiegi_daja_ten_sam_hash_m2() {
     let a = miasto(
         11,
@@ -764,7 +764,7 @@ fn dwa_przebiegi_daja_ten_sam_hash_m2() {
 /// D2: jednowątkowo == wielowątkowo. Derywacja gramatyki jest jedynym zrównoleglonym
 /// krokiem fazy, a Etap 7 czyta jej wynik — więc test pilnuje obu naraz.
 #[test]
-#[ignore = "dwie generacje świata — CI uruchamia jawnie przez --include-ignored"]
+#[ignore = "N1.2: dwie generacje świata — CI uruchamia jawnie przez --include-ignored"]
 fn jeden_watek_daje_to_samo_co_osiem() {
     let a = miasto_w(
         5,
@@ -786,7 +786,7 @@ fn jeden_watek_daje_to_samo_co_osiem() {
 
 /// Budżet czasu z §7: miasto małe (40 tys.) — całość ≤ 12 s w CI.
 #[test]
-#[ignore = "generacja świata i pomiar zegarowy — CI uruchamia jawnie przez --include-ignored"]
+#[ignore = "N1.2: generacja świata i pomiar zegarowy — CI uruchamia jawnie przez --include-ignored"]
 fn miasto_male_miesci_sie_w_budzecie() {
     let start = std::time::Instant::now();
     let c = miasto(
@@ -812,7 +812,7 @@ fn miasto_male_miesci_sie_w_budzecie() {
 /// Kryterium WP13: **każda zabudowana parcela niemieszkalna ma `SiteSeed`**, a każde
 /// stanowisko w budynku z zakładem wie, czyim jest zakładem (korekta F1).
 #[test]
-#[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
+#[ignore = "N1.2: generacja świata — CI uruchamia jawnie przez --include-ignored"]
 fn kazda_zabudowana_parcela_niemieszkalna_ma_zaklad() {
     let c = miasto(
         7,
@@ -855,7 +855,7 @@ fn kazda_zabudowana_parcela_niemieszkalna_ma_zaklad() {
 /// Kryterium WP16: rozbicie wyceny na **co najmniej 8 czynników**, sumujące się
 /// do wyniku, i karta inspekcji, która je pokazuje.
 #[test]
-#[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
+#[ignore = "N1.2: generacja świata — CI uruchamia jawnie przez --include-ignored"]
 fn karta_inspekcji_pokazuje_rozbicie_wyceny() {
     let c = miasto(
         7,

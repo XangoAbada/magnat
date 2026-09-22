@@ -339,7 +339,7 @@ fn doba_mediow_ms(w: &mut World, od_minuty: u64) -> u128 {
 /// `#[ignore]`, bo mierzy zegarem: na obciążonej maszynie liczba skacze, a bramka,
 /// która świeci na czerwono od cudzego kompilatora w tle, uczy ignorowania bramek.
 #[test]
-#[ignore = "pomiar czasu"]
+#[ignore = "N1.2: pomiar czasu"]
 fn dwa_tysiace_kampanii_miesci_sie_w_budzecie_ticku() {
     // Dwadzieścia tysięcy mieszkańców w ośmiu dzielnicach: tyle, żeby kanały
     // skalujące się z ludnością (ulotka, prasa) miały do kogo docierać.
@@ -377,7 +377,7 @@ fn dwa_tysiace_kampanii_miesci_sie_w_budzecie_ticku() {
 /// w jednym miejscu. M10b nazwało kandydata (`F-27`: ulotka skalowała się
 /// z liczbą mieszkańców razy liczba kampanii) — ten pomiar to sprawdza.
 #[test]
-#[ignore = "pomiar czasu"]
+#[ignore = "pomiar: rozbicie czasu kampanii na kanały, bez asercji"]
 fn koszt_kampanii_w_rozbiciu_na_kanaly() {
     const NA_KANAL: u32 = 250;
     let nazwy = [

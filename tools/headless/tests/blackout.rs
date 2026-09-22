@@ -122,7 +122,7 @@ fn tyknij(app: &mut App, minut: u64) {
 }
 
 #[test]
-#[ignore = "pełna gospodarka — doba kosztuje sekundy; CI woła --include-ignored"]
+#[ignore = "N1.2: pełna gospodarka — doba kosztuje sekundy; CI woła --include-ignored"]
 fn blackout_zatrzymuje_produkcje_i_widac_to_w_kosztach() {
     let mut app = miasto(1_500);
     let sites = zaklady_na_pradzie(&app);
@@ -261,7 +261,7 @@ fn blackout_zatrzymuje_produkcje_i_widac_to_w_kosztach() {
 /// potem wodę. To jest jedyny powód, dla którego priorytet 0 z §5.4 istnieje,
 /// i jedyna droga, którą awaria sięga dalej niż do jednej sieci.
 #[test]
-#[ignore = "pełna gospodarka — doba kosztuje sekundy; CI woła --include-ignored"]
+#[ignore = "N1.2: pełna gospodarka — doba kosztuje sekundy; CI woła --include-ignored"]
 fn blackout_zabiera_miastu_takze_wode() {
     let mut app = miasto(1_500);
     tyknij(&mut app, 120);

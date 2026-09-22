@@ -237,7 +237,7 @@ fn odcisk_trig() -> u64 {
 /// Wypisuje bieżący odcisk — używane przy świadomej zmianie implementacji.
 /// `cargo test -p magnat-core --test det_math_accuracy -- --ignored --nocapture`
 #[test]
-#[ignore = "narzędzie, nie test: wypisuje bieżący odcisk do zatwierdzenia"]
+#[ignore = "narzędzie: wypisuje bieżący odcisk do zatwierdzenia"]
 fn wypisz_odcisk() {
     println!("odcisk det_math = 0x{:016X}", odcisk_det_math());
     println!("odcisk trig     = 0x{:016X}", odcisk_trig());

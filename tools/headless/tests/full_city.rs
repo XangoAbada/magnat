@@ -69,7 +69,7 @@ fn miasto(dni: u32, citizens: u32) -> (App, usize) {
 }
 
 #[test]
-#[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
+#[ignore = "N1.2: generacja świata — CI uruchamia jawnie przez --include-ignored"]
 fn firmy_rynek_i_makro_stoja_w_jednym_harmonogramie() {
     // To jest test, dla którego WP17 w ogóle istnieje: do M7f `Firms` i `Market`
     // nie stały razem w żadnym przebiegu, więc polityki i AI firm wykonywały się
@@ -89,7 +89,7 @@ fn firmy_rynek_i_makro_stoja_w_jednym_harmonogramie() {
 }
 
 #[test]
-#[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
+#[ignore = "N1.2: generacja świata — CI uruchamia jawnie przez --include-ignored"]
 fn kazda_akcja_ai_ma_zapisany_powod() {
     // §7.8: licznik decyzji == licznik powodów. Tutaj „>=", bo powody zapisują też
     // rynek pracy i finanse — a to jest właściwa nierówność: akcja **bez** powodu
@@ -105,7 +105,7 @@ fn kazda_akcja_ai_ma_zapisany_powod() {
 }
 
 #[test]
-#[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
+#[ignore = "N1.2: generacja świata — CI uruchamia jawnie przez --include-ignored"]
 fn ksiegi_domykaja_sie_po_przebiegu_z_firmami() {
     // Niezmiennik P1 z warstwą firm: powstawanie firm przenosi pieniądz z komponentu
     // gospodarstwa na rachunek, a wejście sieci **tworzy** go przez rejestr emisji.
@@ -120,7 +120,7 @@ fn ksiegi_domykaja_sie_po_przebiegu_z_firmami() {
 }
 
 #[test]
-#[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
+#[ignore = "N1.2: generacja świata — CI uruchamia jawnie przez --include-ignored"]
 fn kapital_sieci_zewnetrznej_jest_zarejestrowana_emisja() {
     // **Kryterium ukończenia WP15.** Sieć wnosi pieniądz spoza miasta i jest to
     // jedyny taki punkt w tej fazie. Bez zapisu w rejestrze podaży globalny test
@@ -158,7 +158,7 @@ fn kapital_sieci_zewnetrznej_jest_zarejestrowana_emisja() {
 /// doby w minucie 469 na duplikacie klucza. Usterka jest starsza od tej poprawki
 /// i ma osobny adres w wykazie `R2`.
 #[test]
-#[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
+#[ignore = "N1.2: generacja świata — CI uruchamia jawnie przez --include-ignored"]
 fn kopalnia_zuzywa_zloze() {
     let pool = JobPool::new(0);
     let city = zbuduj_miasto(1, "4km", "lowland", "1990", "industrial", &pool).expect("miasto");

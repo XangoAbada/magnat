@@ -232,6 +232,159 @@ def workflow_ma_bash() -> list[str]:
     ]
 
 
+# ── reguła 6: `#[ignore]` ma właściciela (N1.1) ───────────────────────────────────
+#
+# Wzorzec, który audyt znalazł najczęściej: test `#[ignore = "… CI uruchamia jawnie"]`,
+# którego żaden krok `ci.yml` nie woła. Powód w atrybucie jest obietnicą, a obietnicy
+# nikt nie sprawdzał — `consistency.rs` nie biegł od M2e. Test z `#[ignore]` przechodzi,
+# jeśli spełnia jedno z trzech:
+#
+#   1. uruchamia go krok `cargo test … -- --include-ignored` (albo `--ignored`) w `ci.yml`
+#      — ten plik testów albo cały crate, a nazwa nie wypada przez `--skip`;
+#   2. powód niesie `N<e>.<n>` punktu planu naprawczego, który jest otwarty (`[ ]`, `[~]`);
+#   3. powód zaczyna się od `narzędzie:` albo `pomiar:`, a ciało nie ma asercji —
+#      to narzędzie uruchamiane ręcznie, nie test, i nie obiecuje niczego, co mogłoby paść.
+
+NAPRAWCZY = Path("docs/remediation-plan")
+PUNKT = re.compile(r"^\s*- \[([ x~-])\] \*\*(N\d+\.\d+)\*\*", re.MULTILINE)
+ATRYBUT_IGNORE = re.compile(r'^\s*#\[ignore(?:\s*=\s*"((?:[^"\\]|\\.)*)")?\]\s*$')
+NAZWA_FN = re.compile(r"\bfn\s+(\w+)")
+ODWOLANIE_N = re.compile(r"\bN(\d+\.\d+)\b")
+NARZEDZIE = ("narzędzie:", "pomiar:")
+
+
+def otwarte_punkty_z(tekst: str) -> set[str]:
+    return {punkt for stan, punkt in PUNKT.findall(tekst) if stan in " ~"}
+
+
+def otwarte_punkty(katalog: Path = NAPRAWCZY) -> set[str]:
+    return set().union(*(otwarte_punkty_z(p.read_text(encoding="utf-8")) for p in katalog.glob("*.md")))
+
+
+def crate_y() -> dict[str, Path]:
+    """Nazwa pakietu → katalog, z `members` workspace'u."""
+    korzen = Path("Cargo.toml").read_text(encoding="utf-8")
+    czlonkowie = re.search(r"members\s*=\s*\[(.*?)\]", korzen, re.S)
+    wynik = {}
+    for sciezka in re.findall(r'"([^"]+)"', czlonkowie.group(1) if czlonkowie else ""):
+        manifest = Path(sciezka) / "Cargo.toml"
+        if manifest.exists():
+            m = re.search(r'^name\s*=\s*"([^"]+)"', manifest.read_text(encoding="utf-8"), re.M)
+            if m:
+                wynik[m.group(1)] = Path(sciezka)
+    return wynik
+
+
+def uruchomienia(workflow: str) -> list[tuple[str, str, list[str], list[str]]]:
+    """Wywołania `cargo test` z flagą ignorowanych: `(crate, cel, filtry, skip)`.
+
+    Cel to nazwa pliku z `--test`, `lib` dla `--lib` albo `*` dla całego crate'u.
+    Czyta surowy tekst kroków — komentarze w bloku `run: |` są komentarzami powłoki.
+    """
+    wyniki = []
+    tekst = re.sub(r"\\\n", " ", workflow)
+    for linia in tekst.split("\n"):
+        # Komentarz powłoki i to, co za potokiem albo przekierowaniem — nie są argumentami.
+        linia = re.split(r"\s(?:#|\|\|?|&&|;|>)", " " + linia, maxsplit=1)[0].strip()
+        if linia.startswith("#") or "cargo test" not in linia:
+            continue
+        przed, _, po = linia.partition(" -- ")
+        argi_testu = po.split()
+        if "--include-ignored" not in argi_testu and "--ignored" not in argi_testu:
+            continue
+        slowa = przed.split()
+        pakiety, cele = [], []
+        for i, s in enumerate(slowa):
+            if s in ("-p", "--package") and i + 1 < len(slowa):
+                pakiety.append(slowa[i + 1])
+            elif s == "--test" and i + 1 < len(slowa):
+                cele.append(slowa[i + 1])
+            elif s == "--lib":
+                cele.append("lib")
+        skip, filtry, i = [], [], 0
+        while i < len(argi_testu):
+            if argi_testu[i] == "--skip" and i + 1 < len(argi_testu):
+                skip.append(argi_testu[i + 1])
+                i += 2
+                continue
+            if not argi_testu[i].startswith("-"):
+                filtry.append(argi_testu[i])
+            i += 1
+        for p in pakiety:
+            for c in cele or ["*"]:
+                wyniki.append((p, c, filtry, skip))
+    return wyniki
+
+
+def cialo_fn(linie: list[str], od: int) -> str:
+    """Tekst funkcji od linii `od` do domknięcia pierwszej klamry — liczenie klamer."""
+    glebokosc, zaczete, wynik = 0, False, []
+    for linia in linie[od:]:
+        wynik.append(linia)
+        glebokosc += linia.count("{") - linia.count("}")
+        zaczete |= "{" in linia
+        if zaczete and glebokosc <= 0:
+            break
+    return "\n".join(wynik)
+
+
+def ignorowane(crate: dict[str, Path]) -> list[tuple[str, int, str, str, str, str]]:
+    """`(plik, linia, crate, cel, nazwa testu, powód, ciało)` każdego `#[ignore]`."""
+    wyniki = []
+    for nazwa, katalog in sorted(crate.items()):
+        for plik in sorted(katalog.rglob("*.rs")):
+            wzgl = plik.relative_to(katalog).parts
+            if wzgl[0] == "tests" and len(wzgl) == 2:
+                cel = plik.stem
+            elif wzgl[0] == "src":
+                cel = "lib"
+            else:
+                continue
+            linie = plik.read_text(encoding="utf-8").split("\n")
+            for nr, linia in enumerate(linie):
+                m = ATRYBUT_IGNORE.match(linia)
+                if not m:
+                    continue
+                fn = next((NAZWA_FN.search(l) for l in linie[nr : nr + 8] if NAZWA_FN.search(l)), None)
+                wyniki.append(
+                    (plik.as_posix(), nr + 1, nazwa, cel, fn.group(1) if fn else "?",
+                     m.group(1) or "", cialo_fn(linie, nr))
+                )
+    return wyniki
+
+
+def wlasciciel(test, biegi, otwarte) -> str | None:
+    """Kto odpowiada za test — albo `None`, gdy nikt."""
+    _, _, crate, cel, fn, powod, cialo = test
+    for p, c, filtry, skip in biegi:
+        if p != crate or c not in (cel, "*"):
+            continue
+        if any(s in fn for s in skip) or (filtry and not any(f in fn for f in filtry)):
+            continue
+        return f"job: -p {p}" + (f" --test {c}" if c not in ("*", "lib") else f" ({c})")
+    for n in ODWOLANIE_N.findall(powod):
+        if f"N{n}" in otwarte:
+            return f"punkt N{n}"
+    if powod.startswith(NARZEDZIE) and "assert" not in cialo:
+        return "narzędzie ręczne"
+    return None
+
+
+def ignore_bez_wlasciciela() -> tuple[list[str], list[tuple]]:
+    workflow = "\n".join(p.read_text(encoding="utf-8") for p in sorted(WORKFLOWS.glob("*.yml")))
+    biegi, otwarte = uruchomienia(workflow), otwarte_punkty()
+    bledy, wiersze = [], []
+    for t in ignorowane(crate_y()):
+        kto = wlasciciel(t, biegi, otwarte)
+        wiersze.append((t[0], t[1], t[4], kto or "—"))
+        if kto is None:
+            bledy.append(
+                f"{t[0]}:{t[1]}: `{t[4]}` ma #[ignore], którego nie woła żaden krok ci.yml, "
+                f"a powód nie wskazuje otwartego punktu N ani narzędzia bez asercji"
+            )
+    return bledy, wiersze
+
+
 def ostatnia_odhaczona(tekst: str) -> str | None:
     """Identyfikator ostatniej pozycji `[x]` — najniższej w pliku."""
     trafienia = ODHACZONY.findall(tekst)
@@ -280,6 +433,10 @@ def bramka() -> int:
     # Reguła 5 — domyślna powłoka `bash`.
     bledy.extend(workflow_ma_bash())
 
+    # Reguła 6 — każdy `#[ignore]` ma właściciela.
+    bledy_ignore, ignore = ignore_bez_wlasciciela()
+    bledy.extend(bledy_ignore)
+
     # Reguła 3 — obietnica z tabeli korekt ma pokrycie pod wskazanym adresem.
     obietnic = sum(len(obietnice(q.read_text(encoding="utf-8"))) for q in PLAN.glob("*.md"))
     bledy.extend(bez_pokrycia())
@@ -291,9 +448,19 @@ def bramka() -> int:
         return 1
     print(
         f"plan_guard: ok — README.md mówi {faza}, jeden nagłówek tabel korekt, "
-        f"{obietnic} obietnic z adresatem i każda ma pokrycie."
+        f"{obietnic} obietnic z adresatem i każda ma pokrycie, "
+        f"{len(ignore)} testów z #[ignore] i każdy ma właściciela."
     )
     return 0
+
+
+def lista_ignore() -> int:
+    """Tabela do pomiaru zamknięcia E1: każdy `#[ignore]` i jego właściciel."""
+    bledy, wiersze = ignore_bez_wlasciciela()
+    print("| Plik | Test | Właściciel |\n|---|---|---|")
+    for plik, nr, fn, kto in wiersze:
+        print(f"| `{plik}:{nr}` | `{fn}` | {kto} |")
+    return 1 if bledy else 0
 
 
 def self_test() -> int:
@@ -398,6 +565,31 @@ def self_test() -> int:
             ok = False
             print(f"self-test: domyślna powłoka w {tekst!r} → {not chciane}, chciane {chciane}")
 
+    # Reguła 6: pięć rozstrzygnięć, po jednym na każdą drogę do właściciela i dwie bez.
+    biegi = uruchomienia(
+        "run: |\n  cargo test --release -p a --test t1 -- --include-ignored --skip wolny | tee r\n"
+        "  # cargo test -p a --test t2 -- --include-ignored\n"
+        "  cargo test -p b --test t3\n"
+    )
+    otwarte = {"N4.1"}
+    przypadki_ignore = [
+        (("f", 1, "a", "t1", "szybki", "", ""), True),                 # job woła plik
+        (("f", 1, "a", "t1", "wolny", "", ""), False),                 # … ale `--skip`
+        (("f", 1, "a", "t2", "x", "CI uruchamia jawnie", ""), False),  # krok zakomentowany
+        (("f", 1, "b", "t3", "x", "", ""), False),                     # bez --include-ignored
+        (("f", 1, "c", "t", "x", "N4.1: kolejka DES", ""), True),      # otwarty punkt
+        (("f", 1, "c", "t", "x", "N1.14: zamknięty", ""), False),      # punkt zamknięty
+        (("f", 1, "c", "t", "x", "pomiar: czas", "fn x() { run(); }"), True),
+        (("f", 1, "c", "t", "x", "pomiar: czas", "fn x() { assert!(t < 5); }"), False),
+    ]
+    for test, chciane in przypadki_ignore:
+        if (wlasciciel(test, biegi, otwarte) is not None) != chciane:
+            ok = False
+            print(f"self-test: właściciel {test[2]}/{test[3]}::{test[4]} ({test[5]!r}) → {not chciane}, chciane {chciane}")
+    if otwarte_punkty_z("- [x] **N1.14** a\n- [ ] **N4.1** b\n  - [~] **N4.2** c\n") != {"N4.1", "N4.2"}:
+        ok = False
+        print("self-test: zły rozbiór stanu punktów planu naprawczego")
+
     print("plan_guard --self-test:", "ok" if ok else "BŁĄD")
     return 0 if ok else 1
 
@@ -409,7 +601,10 @@ def main() -> int:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--self-test", action="store_true", help="sprawdź sam wykrywacz")
+    ap.add_argument("--list-ignored", action="store_true", help="tabela #[ignore] i ich właścicieli")
     a = ap.parse_args()
+    if a.list_ignored:
+        return lista_ignore()
     return self_test() if a.self_test else bramka()
 
 
