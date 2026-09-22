@@ -25,6 +25,7 @@ Wzorem jest `scripts/bench_guard.py`: Python, zero zależności, dwa progi.
 """
 
 import argparse
+import datetime
 import io
 import json
 import pathlib
@@ -44,15 +45,21 @@ PROGI = {
 # Zwolnienie dotyczy **wyłącznie** metryki „plik": długi blok `impl` albo długa
 # funkcja w tych plikach nadal się zapala, bo kryterium akceptacji nr 5 nie ma
 # dla nich wyjątku.
+#
+# **Od N1.7 wyjątek zamraża liczbę**, tak jak `REJESTR`: do E1 zwalniał plik
+# bezwarunkowo i `graph.rs` urósł z 1064 do 1084 linii bez żadnego sygnału.
+# Plik dłuższy niż zamrożona liczba jest błędem; krótszy — martwym wpisem
+# (`--self-test`), bo następny przyrost do starej liczby przeszedłby po cichu.
 WYJATKI_PLIK = {
     # Jeden algorytm: `contract`, `customize` i `query` dzielą niezmienniki
     # struktury łuków skrótowych. Rozbicie po plikach rozerwie je bez zysku.
-    "engine/nav/src/cch.rs": "jeden algorytm (CCH); R1 §5",
+    "engine/nav/src/cch.rs": (942, "jeden algorytm (CCH); R1 §5"),
     # Słownik funkcji deterministycznych. Podzielony słownik to dwa słowniki,
     # a `K-6` wiąże plik ze złotym odciskiem, więc dotknięcie jest kosztowne.
-    "engine/core/src/det_math.rs": "słownik det_math związany złotym odciskiem (K-6); R1 §5",
+    "engine/core/src/det_math.rs": (876, "słownik det_math związany złotym odciskiem (K-6); R1 §5"),
     # Spójny: typy grafu, builder, walidacja. Odstaje tylko `synthetic_*` (`D-R5`).
-    "engine/nav/src/graph.rs": "spójny moduł grafu; R1 §5 (D-R5 dotyczy tylko `synthetic_*`)",
+    # 1064 przy R1, 1084 przy zamrożeniu w N1.7 — przyrost bez sygnału, o którym mówi audyt.
+    "engine/nav/src/graph.rs": (1084, "spójny moduł grafu; R1 §5 (D-R5 dotyczy tylko `synthetic_*`)"),
 }
 
 # Katalogi, których kontrola nie mierzy: długi plik testów nie jest długiem
@@ -221,6 +228,21 @@ REJESTR = {
     # robimy tutaj, bo `city/mod.rs` jest orkiestratorem generacji, a jego rozcięcie jest
     # przeprojektowaniem Etapu 7 — czyli `R3`.
     ("sim/world/src/city/mod.rs", "mod.rs", 603): 68,
+    # **Dziesięć pozycji z N1.7, wszystkie zastane.** Metryka `mod.rs` objęła rodzica
+    # `foo.rs` obok katalogu `foo/` — to ten sam układ w drugiej pisowni — i zapaliła się
+    # na plikach, które przekraczały próg od faz, w których powstały. Zamrożone z adresem
+    # `N8.3` i datą przeglądu; rozstrzygnięcie (podział czy świadome zostawienie) nie
+    # należy do naprawy bramki.
+    ("sim/traffic/src/oracle.rs", "mod.rs", 864): 72,
+    ("sim/economy/src/market.rs", "mod.rs", 806): 73,
+    ("sim/world/src/city/build.rs", "mod.rs", 728): 74,
+    ("game/src/policy/text.rs", "mod.rs", 705): 75,
+    ("sim/traffic/src/utility.rs", "mod.rs", 693): 76,
+    ("engine/voxel/src/anim.rs", "mod.rs", 654): 77,
+    ("engine/render/src/instancing.rs", "mod.rs", 645): 78,
+    ("sim/traffic/src/transit.rs", "mod.rs", 633): 79,
+    ("sim/traffic/src/micro.rs", "mod.rs", 627): 80,
+    ("engine/render/src/renderer.rs", "mod.rs", 614): 81,
 }
 
 # ── egzekutor rejestru długu (R2-WP26) ───────────────────────────────────────────
@@ -274,13 +296,17 @@ def wiersze_rejestru(tekst: str) -> list[tuple[str, str]]:
         # Kreska pionowa w treści jest w markdownie escapowana (`\|`) i **nie** dzieli
         # kolumny — bez tego rozbiór wiersza z `Citizen \| Firm \| City` gubi ścieżkę
         # wyjścia i bramka czyta cudzą komórkę.
-        surowa = linia.replace("\|", "\u0001")
-        kol = [c.strip().replace("\u0001", "\|") for c in surowa.strip().strip("|").split("|")]
+        surowa = linia.replace(r"\|", "\u0001")
+        kol = [c.strip().replace("\u0001", r"\|") for c in surowa.strip().strip("|").split("|")]
         if len(kol) < 5 or kol[0] in ("#", "") or set(kol[0]) <= set("-: "):
             continue
-        # **Ostatnia** kolumna, nie piąta: ścieżka wyjścia stoi na końcu wiersza,
-        # a wiersz z doklejonym sprostowaniem bywał o kolumnę dłuższy.
-        wyniki.append((kol[0], kol[-1]))
+        # Adresat ma **własną kolumnę**, ostatnią (N1.7). Do E1 bramka szukała faz
+        # w prozie ścieżki wyjścia, więc każda wzmianka otwartej fazy robiła za adresata.
+        # Wiersz bez szóstej kolumny zwraca pusty adresat — i to jest błąd, nie domysł.
+        # Pierwsza ścieżka w grawisach — wiersz 23 wymienia dwa pliki (`a` + `b`).
+        sciezka = re.search(r"`([^`]+)`", kol[1])
+        plik = sciezka.group(1) if sciezka else kol[1]
+        wyniki.append((kol[0], plik, kol[-1] if len(kol) >= 6 else ""))
     return wyniki
 
 
@@ -309,7 +335,7 @@ def dokument_fazy(faza: str, korzen: pathlib.Path) -> bool:
     return any((korzen / PLAN_DIR).glob(f"{faza}-*.md"))
 
 
-def sprawdz_rejestr(korzen: pathlib.Path) -> list[str]:
+def sprawdz_rejestr(korzen: pathlib.Path, dzis: str | None = None) -> list[str]:
     """Błędy rejestru długu. Pusta lista znaczy: każda pozycja ma żywego adresata."""
     try:
         tekst = (korzen / REJESTR_PLANU).read_text(encoding="utf-8")
@@ -318,39 +344,76 @@ def sprawdz_rejestr(korzen: pathlib.Path) -> list[str]:
         return [f"nie da się przeczytać rejestru: {e}"]
 
     odhaczone = odhaczone_fazy(postep)
+    otwarte = otwarte_punkty(korzen)
+    dzis = dzis or datetime.date.today().isoformat()
     bledy: list[str] = []
     widziane: set[str] = set()
-    for numer, wyjscie in wiersze_rejestru(tekst):
-        if ZAMKNIETA in numer:
-            continue
+    for numer, plik, adresat in wiersze_rejestru(tekst):
+        # Numer jest unikalny w **całej** tabeli, także wśród pozycji zamkniętych —
+        # do N1.7 wiersze z ✅ omijały tę kontrolę i numer 41 był użyty dwa razy.
         nr = numer.split()[0]
         if nr in widziane:
             bledy.append(f"pozycja {nr}: numer użyty drugi raz — wiersza nie da się wskazać")
         widziane.add(nr)
+        if ZAMKNIETA in numer:
+            continue
 
-        zywe = SKRESLONE.sub("", wyjscie)
-        kandydaci = FAZA.findall(zywe)
-        if not kandydaci:
-            if not DATA_PRZEGLADU.search(zywe):
+        if not (korzen / plik).exists():
+            bledy.append(f"pozycja {nr}: plik {plik} nie istnieje — pozycja opisuje coś, czego nie ma")
+        if not adresat:
+            bledy.append(f"pozycja {nr}: brak kolumny „Adresat”")
+            continue
+
+        zywe = SKRESLONE.sub("", adresat)
+        daty = DATA_PRZEGLADU.findall(zywe)
+        for data in daty:
+            if data < dzis:
+                bledy.append(f"pozycja {nr}: data przeglądu {data} minęła")
+        punkty = PUNKT_N.findall(zywe)
+        fazy = FAZA.findall(zywe)
+        if not punkty and not fazy:
+            if not daty:
+                bledy.append(f"pozycja {nr}: brak adresata i brak daty przeglądu")
+            continue
+        for p in punkty:
+            if p not in otwarte:
+                bledy.append(f"pozycja {nr}: adresat {p} nie jest otwartym punktem planu naprawczego")
+        for f in fazy:
+            if not dokument_fazy(f, korzen):
+                bledy.append(f"pozycja {nr}: adresat {f} nie ma dokumentu w {PLAN_DIR}/")
+            elif faza_minela(f, odhaczone, korzen):
+                bledy.append(f"pozycja {nr}: adresat {f} już się zamknął")
+            elif not faza_zna_plik(f, plik, korzen):
                 bledy.append(
-                    f"pozycja {nr}: brak adresata fazowego i brak daty przeglądu"
+                    f"pozycja {nr}: adresat {f} nie wymienia {plik} w żadnym swoim dokumencie "
+                    f"— faza, która nie wie o pozycji, jej nie zrobi"
                 )
-            continue
-        nieistniejace = [f for f in kandydaci if not dokument_fazy(f, korzen)]
-        zywi = [
-            f
-            for f in kandydaci
-            if dokument_fazy(f, korzen) and not faza_minela(f, odhaczone, korzen)
-        ]
-        if zywi:
-            continue
-        if nieistniejace:
-            bledy.append(f"pozycja {nr}: adresat {nieistniejace[0]} nie ma dokumentu w {PLAN_DIR}/")
-        else:
-            bledy.append(
-                f"pozycja {nr}: adresat {'/'.join(kandydaci)} już się zamknął"
-            )
     return bledy
+
+
+# Punkt planu naprawczego jako adresat: `N8.3`. Żywy, gdy ma `[ ]` albo `[~]`.
+PUNKT_N = re.compile(r"\b(N\d+\.\d+)\b")
+NAPRAWCZY = "docs/remediation-plan"
+
+
+def otwarte_punkty(korzen: pathlib.Path) -> set[str]:
+    wzor = re.compile(r"^\s*- \[([ ~])\] \*\*(N\d+\.\d+)\*\*", re.M)
+    return {
+        p
+        for plik in (korzen / NAPRAWCZY).glob("*.md")
+        for _, p in wzor.findall(plik.read_text(encoding="utf-8"))
+    }
+
+
+def faza_zna_plik(faza: str, plik: str, korzen: pathlib.Path) -> bool:
+    """Czy dokument fazy (albo jej podfazy) wymienia plik pozycji — słabe pokrycie,
+    tak samo jak reguła 3 `plan_guard`: do N1.7 dowolna wzmianka `R3` w prozie robiła
+    z R3 adresata 54 pozycji, dla których R3 nie ma pakietu (`N8.3`)."""
+    return any(
+        plik in d.read_text(encoding="utf-8")
+        for wzor in (f"{faza}-*.md", f"{faza}[a-g]-*.md")
+        for d in (korzen / PLAN_DIR).glob(wzor)
+    )
 
 
 POCZATEK_ITEMU = re.compile(
@@ -456,7 +519,12 @@ def zmierz(sciezka: pathlib.Path, tekst: str) -> list[tuple[str, str, int]]:
     produkcyjne = [nr for nr in range(1, len(wiersze) + 1) if not w_tescie(nr)]
 
     wynik: list[tuple[str, str, int]] = [("plik", "", len(produkcyjne))]
-    if sciezka.name == "mod.rs":
+    # `foo.rs` obok katalogu `foo/` jest `mod.rs` w drugiej pisowni (N1.7) — do E1
+    # metryka widziała tylko pierwszą, więc `oracle.rs` z 864 liniami własnego kodu
+    # i podmodułami w `oracle/` przechodził, a ten sam plik jako `oracle/mod.rs` nie.
+    if sciezka.name == "mod.rs" or (
+        sciezka.name not in ("lib.rs", "main.rs") and sciezka.with_suffix("").is_dir()
+    ):
         wlasne = sum(1 for nr in produkcyjne if not DEKLARACJA.match(wiersze[nr - 1]))
         wynik.append(("mod.rs", "kod poza deklaracjami", wlasne))
     for rodzaj, a, b in wszystkie:
@@ -509,6 +577,23 @@ def zmienione_wzgledem_head(korzen: pathlib.Path) -> list[pathlib.Path]:
     return [korzen / n for n in nazwy if (korzen / n).is_file()]
 
 
+def klasyfikuj(wzgledna: str, metryka: str, wartosc: int) -> tuple[str | None, str | None]:
+    """`(próg, powód)` jednego pomiaru; próg `None` znaczy „poniżej ostrzeżenia"."""
+    ostrzezenie, blad = PROGI[metryka]
+    if metryka == "plik" and wzgledna in WYJATKI_PLIK:
+        zamrozone, powod = WYJATKI_PLIK[wzgledna]
+        if wartosc > zamrozone:
+            return "błąd", f"urósł ponad zamrożone {zamrozone} linii wyjątku ({powod})"
+        if wartosc > ostrzezenie:
+            return "wyjątek", powod
+    if wartosc <= ostrzezenie:
+        return None, None
+    wpis = REJESTR.get((wzgledna, metryka, wartosc))
+    if wpis and wartosc > blad:
+        return "wyjątek", f"rejestr długu R1, pozycja {wpis}"
+    return ("błąd" if wartosc > blad else "ostrzeżenie"), None
+
+
 def raport(korzen: pathlib.Path, pliki: list[pathlib.Path], jako_json: bool) -> int:
     pozycje = []
     for plik in pliki:
@@ -518,21 +603,16 @@ def raport(korzen: pathlib.Path, pliki: list[pathlib.Path], jako_json: bool) -> 
         except (OSError, UnicodeDecodeError):
             continue
         for metryka, opis, wartosc in zmierz(plik, tekst):
-            ostrzezenie, blad = PROGI[metryka]
-            if wartosc <= ostrzezenie:
+            prog, powod = klasyfikuj(wzgledna, metryka, wartosc)
+            if prog is None:
                 continue
-            zwolniony = metryka == "plik" and wzgledna in WYJATKI_PLIK
-            powod = WYJATKI_PLIK.get(wzgledna) if zwolniony else None
-            wpis = REJESTR.get((wzgledna, metryka, wartosc))
-            if not zwolniony and wpis and wartosc > blad:
-                zwolniony, powod = True, f"rejestr długu R1, pozycja {wpis}"
             pozycje.append(
                 {
                     "plik": wzgledna,
                     "metryka": metryka,
                     "opis": opis,
                     "linie": wartosc,
-                    "prog": "wyjątek" if zwolniony else ("błąd" if wartosc > blad else "ostrzeżenie"),
+                    "prog": prog,
                     "powod": powod,
                 }
             )
@@ -587,32 +667,59 @@ def test_rejestru() -> int:
     """
     atrapa = (
         "## Rejestr długu strukturalnego\n\n"
-        "| # | Plik | Metryka | Powód | Ścieżka wyjścia |\n|---|---|---|---|---|\n"
-        "| 1 | `a.rs` | plik 900 | bo tak | **M12a** — pamięć dokłada tu pomiar |\n"
-        "| 2 | `b.rs` | plik 900 | bo tak | **M11a** — zamknięta faza |\n"
-        "| 3 | `c.rs` | plik 900 | bo tak | ~~**M12a**~~ → nikt |\n"
-        "| 4 | `d.rs` | plik 900 | bo tak | **M99z** — fazy nie ma |\n"
-        "| 5 | `e.rs` | plik 900 | bo tak | dziś nie planuje go nikt, przegląd 2026-09-22 |\n"
-        "| 1 | `f.rs` | plik 900 | bo tak | **M12a** — numer użyty drugi raz |\n"
-        "| 7 ✅ | `g.rs` | plik 900 | bo tak | **M11a** — zamknięta pozycja, adresat nieżywy |\n"
+        "| # | Plik | Metryka | Powód | Ścieżka wyjścia | Adresat |\n|---|---|---|---|---|---|\n"
+        "| 1 | `a.rs` | plik 900 | bo tak | pamięć dokłada tu pomiar | M12a |\n"
+        "| 2 | `a.rs` | plik 900 | bo tak | zamknięta faza | M11a |\n"
+        "| 3 | `a.rs` | plik 900 | bo tak | nikt | ~~M12a~~ |\n"
+        "| 4 | `a.rs` | plik 900 | bo tak | fazy nie ma | M99z |\n"
+        "| 5 | `a.rs` | plik 900 | bo tak | dziś nie planuje go nikt | przegląd 2099-01-01 |\n"
+        "| 1 | `a.rs` | plik 900 | bo tak | numer użyty drugi raz | M12a |\n"
+        "| 7 ✅ | `a.rs` | plik 900 | bo tak | zamknięta pozycja, adresat nieżywy | M11a |\n"
+        "| 8 | `a.rs` | plik 900 | bo tak | przegląd, który minął | przegląd 2000-01-01 |\n"
+        "| 7 | `a.rs` | plik 900 | bo tak | numer pozycji zamkniętej użyty drugi raz | M12a |\n"
+        "| 10 | `nie/ma.rs` | plik 900 | bo tak | ścieżka, której nie ma | M12a |\n"
+        "| 11 | `a.rs` | plik 900 | bo tak | adresat wspomniany w prozie: M12a | — |\n"
+        "| 12 | `a.rs` | plik 900 | bo tak | faza, która nie wie o pozycji | M12b |\n"
+        "| 13 | `a.rs` | plik 900 | bo tak | punkt planu naprawczego | N8.3 · przegląd 2099-01-01 |\n"
+        "| 14 | `a.rs` | plik 900 | bo tak | punkt już zamknięty | N1.14 |\n"
+        "| 15 | `a.rs` | plik 900 | bo tak | wiersz bez kolumny adresata |\n"
         "\n## Co innego\n"
     )
-    postep = "- [x] **M11a** Format i snapshot\n- [ ] **M12a** Pamięć\n"
+    postep = "- [x] **M11a** Format i snapshot\n- [ ] **M12a** Pamięć\n- [ ] **M12b** Świat\n"
     with tempfile.TemporaryDirectory() as katalog:
         korzen = pathlib.Path(katalog)
         plan = korzen / PLAN_DIR
         plan.mkdir(parents=True)
+        (korzen / NAPRAWCZY).mkdir(parents=True)
+        (korzen / "a.rs").write_text("", encoding="utf-8")
         (plan / "R1-refaktor-po-M5.md").write_text(atrapa, encoding="utf-8")
         (plan / "00-postep.md").write_text(postep, encoding="utf-8")
-        for f in ("M11a-format-i-snapshot.md", "M12a-pamiec.md"):
-            (plan / f).write_text("x", encoding="utf-8")
-        bledy = sprawdz_rejestr(korzen)
+        (plan / "M11a-format-i-snapshot.md").write_text("`a.rs`", encoding="utf-8")
+        (plan / "M12a-pamiec.md").write_text("`a.rs` dostaje pomiar", encoding="utf-8")
+        (plan / "M12b-swiat.md").write_text("o czymś innym", encoding="utf-8")
+        (korzen / NAPRAWCZY / "E1.md").write_text(
+            "- [x] **N1.14** a\n- [ ] **N8.3** b\n", encoding="utf-8"
+        )
+        bledy = sprawdz_rejestr(korzen, dzis="2026-09-22")
+        # `--all --json` sprawdza rejestr tak samo jak `--all` (N1.7).
+        wyjscie, sys.stdout, sys.stderr = (sys.stdout, sys.stderr), io.StringIO(), io.StringIO()
+        try:
+            kod_json = bramka_all(korzen, True)
+        finally:
+            sys.stdout, sys.stderr = wyjscie
 
     oczekiwane = {
         "2": "adresat zamknięty",
         "3": "adresat skreślony bez zastąpienia",
         "4": "adresat bez dokumentu",
         "1": "numer użyty drugi raz",
+        "8": "data przeglądu minęła",
+        "7": "numer pozycji zamkniętej użyty drugi raz",
+        "10": "ścieżka z kolumny Plik nie istnieje",
+        "11": "adresat tylko w prozie, nie w kolumnie",
+        "12": "faza nie wymienia pliku pozycji",
+        "14": "adresat to zamknięty punkt planu naprawczego",
+        "15": "wiersz bez kolumny adresata",
     }
     znalezione = {b.split()[1].rstrip(":") for b in bledy}
     kod = 0
@@ -620,11 +727,14 @@ def test_rejestru() -> int:
         ok = nr in znalezione
         kod |= 0 if ok else 1
         print(f"{'OK    ' if ok else 'BLAD  '} rejestr: {opis} (pozycja {nr})")
-    # Pozycja 5 ma datę przeglądu, 7 jest zamknięta — żadna nie ma prawa się zapalić.
-    for nr in ("5", "7"):
+    # 5 ma przyszłą datę przeglądu, 13 otwarty punkt N — żadna nie ma prawa się zapalić.
+    for nr in ("5", "13"):
         ok = nr not in znalezione
         kod |= 0 if ok else 1
         print(f"{'OK    ' if ok else 'BLAD  '} rejestr: pozycja {nr} bez falszywego alarmu")
+    ok = kod_json == 1
+    kod |= 0 if ok else 1
+    print(f"{'OK    ' if ok else 'BLAD  '} rejestr: --all --json nie omija rejestru")
     return kod
 
 
@@ -702,6 +812,51 @@ def test_wykrywacza() -> int:
     print(f"{'OK    ' if not martwe else 'BLAD  '} REJESTR bez martwych wpisow ({len(REJESTR)} pozycji)")
     for k in martwe:
         print(f"       martwy wpis: {k[0]} {k[1]} {k[2]} (pozycja {REJESTR[k]})")
+
+    # Wyjątek z `WYJATKI_PLIK` zamraża liczbę (N1.7): plik dłuższy o jedną linię jest
+    # błędem, a wpis, któremu plik już nie odpowiada, jest martwy.
+    sciezka, (zamrozone, _) = next(iter(WYJATKI_PLIK.items()))
+    for wartosc, chciane in ((zamrozone, "wyjątek"), (zamrozone + 1, "błąd")):
+        mam, _ = klasyfikuj(sciezka, "plik", wartosc)
+        ok = mam == chciane
+        kod |= 0 if ok else 1
+        print(f"{'OK    ' if ok else 'BLAD  '} WYJATKI_PLIK: {sciezka} przy {wartosc} liniach → {mam}")
+    martwe_wyjatki = []
+    for wzgledna, (zamrozone, _) in WYJATKI_PLIK.items():
+        plik = korzen / wzgledna
+        dlugosc = next((w for m, _, w in zmierz(plik, plik.read_text(encoding="utf-8")) if m == "plik"), None) \
+            if plik.exists() else None
+        if dlugosc != zamrozone:
+            martwe_wyjatki.append(f"{wzgledna}: zamrożone {zamrozone}, zmierzone {dlugosc}")
+    kod |= 1 if martwe_wyjatki else 0
+    print(f"{'OK    ' if not martwe_wyjatki else 'BLAD  '} WYJATKI_PLIK bez martwych wpisow")
+    for m in martwe_wyjatki:
+        print(f"       martwy wyjątek: {m}")
+
+    # `foo.rs` obok katalogu `foo/` mierzy się jak `mod.rs` (N1.7).
+    with tempfile.TemporaryDirectory() as katalog:
+        rodzic = pathlib.Path(katalog) / "foo.rs"
+        (pathlib.Path(katalog) / "foo").mkdir()
+        tresc = "fn a() {}\n" * 700
+        rodzic.write_text(tresc, encoding="utf-8")
+        wlasne = [w for m, _, w in zmierz(rodzic, tresc) if m == "mod.rs"]
+    ok = bool(wlasne) and wlasne[0] > PROGI["mod.rs"][1]
+    kod |= 0 if ok else 1
+    print(f"{'OK    ' if ok else 'BLAD  '} foo.rs obok foo/ mierzony jak mod.rs ({wlasne})")
+
+    # Skrypt kompiluje się bez ostrzeżeń (N1.7): `"\|"` dawało `SyntaxWarning`, które
+    # Python 3.12 zapowiada jako błąd składni — wtedy bramka przestałaby działać wcale.
+    import warnings  # noqa: PLC0415
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        try:
+            compile(pathlib.Path(__file__).read_text(encoding="utf-8"), __file__, "exec")
+            ok = True
+        except SyntaxError:
+            ok = False
+    kod |= 0 if ok else 1
+    print(f"{'OK    ' if ok else 'BLAD  '} skrypt kompiluje się bez ostrzeżeń składni")
 
     # Hook `PreToolUse` odpala się tylko na narzędziach z `matcher`. Agent commituje
     # z `Bash` albo z `PowerShell` — do N1.9 matcher znał tylko pierwsze, więc na
@@ -792,16 +947,20 @@ def main() -> int:
         if not pliki:
             return 0
         return min(raport(korzen, pliki, args.json), 0)  # hook informuje, nie blokuje
-    kod = raport(korzen, pliki_produkcyjne(korzen.glob("**/*.rs"), korzen), args.json)
-    if args.json:
-        return kod
+    return bramka_all(korzen, args.json)
+
+
+def bramka_all(korzen: pathlib.Path, jako_json: bool) -> int:
+    kod = raport(korzen, pliki_produkcyjne(korzen.glob("**/*.rs"), korzen), jako_json)
     # Rejestr długu jest drugą połową tej bramki (`R2-WP26`). Pozycja, której adresat
     # zamknął się bez niej, jest **błędem bramki**, nie wpisem w tabeli — to jest
     # dokładnie ta klasa, która przeżyła w tym repozytorium siedem faz.
+    # Także przy `--json` (N1.7): do E1 ten tryb wychodził przed rejestrem.
     bledy = sprawdz_rejestr(korzen)
+    wyjscie = sys.stderr if jako_json else sys.stdout
     for b in bledy:
-        print(f"BLAD   rejestr długu: {b}")
-    print(f"struct_guard: rejestr długu — pozycji bez żywego adresata: {len(bledy)}")
+        print(f"BLAD   rejestr długu: {b}", file=wyjscie)
+    print(f"struct_guard: rejestr długu — pozycji bez żywego adresata: {len(bledy)}", file=wyjscie)
     return kod | (1 if bledy else 0)
 
 

@@ -93,4 +93,5 @@ Jedna linia na zamknięty punkt albo grupę: data, identyfikatory, co zrobiono, 
 | 2026-09-22 | N1.4 | `bench_guard`: zniknięty benchmark ustawia kod 1 | `fdd4edb` |
 | 2026-09-22 | N1.8 | `plan_guard`: kod korekty dopasowywany jako całe słowo | `0b02d07` |
 | 2026-09-22 | N1.9 | hook strukturalny także na `PowerShell`; self-test pilnuje matchera | `e3df1c5` |
-| 2026-09-22 | N1.1 | reguła 6 `plan_guard`: każdy `#[ignore]` ma job, otwarty punkt albo jest narzędziem; 36 ze 100 dostało właściciela; nowe N1.15, N1.16 | ten commit |
+| 2026-09-22 | N1.1 | reguła 6 `plan_guard`: każdy `#[ignore]` ma job, otwarty punkt albo jest narzędziem; 36 ze 100 dostało właściciela; nowe N1.15, N1.16 | `189ccde` |
+| 2026-09-22 | N1.7 | `struct_guard`: osiem dziur zamkniętych; rejestr z kolumną „Adresat”, 60 pozycji → `N8.3` z przeglądem 2026-10-22, 10 nowych (72–81) | ten commit |

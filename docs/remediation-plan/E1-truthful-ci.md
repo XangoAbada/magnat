@@ -71,7 +71,7 @@ Jeśli czerwień nie ma jeszcze punktu, zakładamy go w odpowiednim etapie („Z
     *Domyślnie:* tak, nocny 8 × 450 dób — o ile czas nocnego joba zostaje poniżej limitu
     GitHub Actions; jeśli nie, 4 × 450.
 
-- [ ] **N1.7** `struct_guard` — dziury w bramce — `R1#3`, `R1#5`, `R1#6`, `R1#8`, `R1#9`, `R1#10`, `R2#5`
+- [x] **N1.7** `struct_guard` — dziury w bramce — `R1#3`, `R1#5`, `R1#6`, `R1#8`, `R1#9`, `R1#10`, `R2#5`
   - `SyntaxWarning` od `"\|"` w `struct_guard.py:277-278` → `r"\|"`.
   - `WYJATKI_PLIK` zwalnia metrykę bezwarunkowo (`:524`); ma zamrażać liczbę jak `REJESTR`
     (graph.rs urósł 1064 → 1084 bez sygnału).
@@ -88,6 +88,17 @@ Jeśli czerwień nie ma jeszcze punktu, zakładamy go w odpowiednim etapie („Z
   - *Skutek:* bramka zapali się na pozycjach, które dziś przechodzą — ich poprawienie to `N8.3`,
     nie ten punkt. Tu wystarczy, że bramka mówi prawdę; do czasu `N8.3` pozycje dostają
     datę przeglądu (dziś + 30 dni).
+  - *Zrobione:* wszystkie osiem kresek, każda z przypadkiem `--self-test` (11 przypadków
+    rejestru, 2 zamrożenia wyjątku, martwe wyjątki, `foo.rs` obok `foo/`, kompilacja bez
+    ostrzeżeń, `--all --json`). Rejestr dostał kolumnę **„Adresat”**: faza, punkt `N`
+    albo data przeglądu. Faza liczy się tylko wtedy, gdy któryś jej dokument wymienia plik
+    pozycji — inaczej „R3” w prozie znów robiłby za adresata 54 pozycji.
+    Migracja: 60 otwartych pozycji → `N8.3 · przegląd 2026-10-22`, nikt nie został przy
+    fazie (jedyny kandydat, M10 przy poz. 47, żyje tylko przez `[~]` M10a). Poz. 35 i 37
+    wskazują istniejące pliki (`lsystem/constrain.rs`, `reason/firm.rs`), zamknięta 41 →
+    71. Nowa metryka zapaliła 10 plików (`oracle.rs` 864 … `renderer.rs` 614) — poz. 72–81
+    rejestru i klucze `REJESTR`, adresat `N8.3`. `WYJATKI_PLIK` zamrożone na 942/876/1084.
+    Wynik: `--all` 577 plików, 0 błędów, 109 ostrzeżeń, 0 pozycji bez żywego adresata.
 
 - [x] **N1.8** `plan_guard`: kod korekty porównywany jako podciąg — `R2#6`
   - `plan_guard.py:145`: `D-1` pasuje do `D-10`. Porównanie po granicy słowa.
