@@ -5,9 +5,10 @@ Symulator miasta i gospodarki, własny silnik w Rust. Wymagania: `PRD_Magnat.md`
 **Aktywny jest plan naprawczy: `docs/remediation-plan/`.** Powstał z audytu z 22 września 2026
 (`master` @ `b9a3e39`) i ma pierwszeństwo przed planem implementacyjnym, dopóki jego etapy
 E1–E7 nie są zamknięte. Zasady pracy — sekcja „Plan naprawczy" niżej i `README.md` planu.
-Plan ma dziewięć etapów: E1–E7 to naprawy z audytu, E8 uzgadnia dokumenty z kodem i zamyka
-plan, a E9 (oprawa interfejsu) nie pochodzi z audytu — wymaga tylko E1, idzie równolegle
-z resztą i nie blokuje ani wznowienia planu implementacyjnego, ani zamknięcia E8.
+Plan ma dziesięć etapów: E1–E7 to naprawy z audytu, E8 uzgadnia dokumenty z kodem i zamyka
+plan, a E9 (oprawa interfejsu) i E10 (dźwięk: nagrania z ComfyUI i głośność) nie pochodzą
+z audytu — wymagają tylko E1, idą równolegle z resztą i nie blokują ani wznowienia planu
+implementacyjnego, ani zamknięcia E8.
 
 Plan implementacji: `docs/implementation-plan/` — **wstrzymany** do zamknięcia E1–E7.
 `00-konwencje-i-kontrakty.md` nadal jest kontraktem dla kodu (typy bazowe, determinizm, `K-n`)

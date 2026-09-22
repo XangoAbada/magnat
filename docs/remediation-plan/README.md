@@ -27,6 +27,7 @@ księgowe, które zachowują sumę pieniądza, więc bramka zachowania pieniądz
 | E7 | [E7-dead-mechanisms.md](E7-dead-mechanisms.md) | Mechanizmy, które żyją tylko w testach | [ ] |
 | E8 | [E8-plan-reconciliation.md](E8-plan-reconciliation.md) | Dokumenty zgodne z kodem | [ ] |
 | E9 | [E9-ui-polish.md](E9-ui-polish.md) | Oprawa interfejsu (nie z audytu) | [ ] |
+| E10 | [E10-audio.md](E10-audio.md) | Dźwięk: nagrania i głośność (nie z audytu) | [ ] |
 
 **Kolejność.** E1 najpierw i bez wyjątków — jest tani, a bez niego nie wiadomo, czy
 naprawa w E2–E7 czegokolwiek dowodzi. E2 przed E3 i E5, bo gracz i makro stoją na tej samej
@@ -37,6 +38,12 @@ E8 zamyka plan.
 (`docs/ui-inspiracje/`), i nie dotyka niczego, co naprawiają E2–E7: to krój, ikony
 i wygląd paneli oraz ekranów powłoki. Wymaga tylko E1, bo bez niego złote testy paneli
 niczego nie dowodzą. Idzie równolegle z E2–E8 i nie blokuje zamknięcia planu.
+
+**E10 stoi obok tak samo.** Nie pochodzi z audytu, tylko z prośby właściciela produktu:
+nagrania z ComfyUI zamiast syntezy i suwaki głośności w ustawieniach. Dotyka `engine/audio`,
+profilu gracza i ekranu ustawień, czyli niczego, co naprawiają E2–E7. Wymaga tylko E1,
+idzie równolegle z resztą i nie blokuje zamknięcia planu. Z E9 dzieli ekran ustawień
+(`N9.4` i `N10.2`) — kolejność opisuje nagłówek E10.
 
 **Plan implementacyjny stoi.** Dopóki E1–E7 nie są zamknięte, nie zaczynamy nowych
 podfaz z `docs/implementation-plan/` (R3, M12). Powód: M12b stoi na `generation` chunka

@@ -417,7 +417,7 @@ grę.
 
 Cztery zakładki, te same w menu i w pauzie: **Gra** (język, skala UI, autozapis, dziennik widoku do
 zgłoszeń błędów), **Grafika** (rozdzielczość, tryb okna, synchronizacja pionowa, zasięg widzenia,
-jakość cieni), **Dźwięk** (M11), **Sterowanie** (lista skrótów z podglądem). Język i skala UI
+jakość cieni), **Dźwięk** (`N10.2` w planie naprawczym), **Sterowanie** (lista skrótów z podglądem). Język i skala UI
 działają natychmiast, bez restartu — to jest kryterium akceptacyjne, nie życzenie.
 
 Układ (od E9, `opcje-a.png`): panel na prawej połowie ekranu, zakładki podkreślone, wiersz =
@@ -455,6 +455,6 @@ Wymagania są twarde, bo wszystkie dają się sprawdzić testem:
 - Treści paneli biznesowych — PRD §14.3 i M9e §5.9.
 - Gramatyki edytora reguł — M9d §5.6.
 - Wyglądu świata 3D (voxele, paleta dzielnic, oświetlenie) — PRD §15, M11.
-- Dźwięku interfejsu — bez wykonawcy (`N9.6` w planie naprawczym). Ikony i krój przeszły z M11 do E9.
+- Dźwięku interfejsu — `N10.7` w planie naprawczym. Ikony i krój przeszły z M11 do E9.
 - Motywu jasnego i dodatkowych języków — M12; tokeny z §3 są tak pomyślane, żeby oba były zmianą
   danych, nie kodu.

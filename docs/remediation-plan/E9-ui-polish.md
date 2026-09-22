@@ -83,8 +83,8 @@ w `engine/ui` i `game/src/screens` wpisana tutaj.
     `bg.window`. Tytuł `text.hero` jest w kroju Condensed. Pozycje menu to kafelki 32 px
     ze ściętym narożnikiem. Zawartość i kolejność zostają z §6.1 kontraktu.
   - **Ustawienia.** Panel zajmuje prawą połowę ekranu, a po lewej widać scenę albo tło menu.
-    Zakładki są podkreślone. Są cztery zakładki z §6.5, w tym Sterowanie, którego makieta
-    nie ma. Układ jest ten sam z menu i z pauzy.
+    Zakładki są podkreślone. Zakładki są te, które istnieją: Gra, Sterowanie (którego makieta
+    nie ma) i Dźwięk, jeśli `N10.2` już się zamknął. Grafika nie ma treści, więc jej nie ma. Układ jest ten sam z menu i z pauzy.
   - Kreator, wczytywanie i wybór postaci dostają nowy nagłówek i kafelki. Ich układ się
     nie zmienia.
   - *Test:* testy nawigacji M9b (Tab, Esc) przechodzą. Tło menu bez zapisu jest
@@ -97,9 +97,8 @@ w `engine/ui` i `game/src/screens` wpisana tutaj.
     `[-]` i wraca, gdy renderer zyska render do tekstury z innego powodu, na przykład
     do miniatur zapisów.
 
-- [ ] **N9.6** dźwięk interfejsu — `nowe`, `ui-design.md` §8
-  - **Decyzja N9.6-a:** *Domyślnie:* dźwięk interfejsu świadomie zostaje bez wykonawcy.
-    Gra nie ma miksera, więc nie ma czym grać. Punkt dostaje `[-]` z tym zdaniem i adresem:
-    pierwsza faza, która dołoży mikser.
+- [-] **N9.6** dźwięk interfejsu — `nowe`, `ui-design.md` §8
+  - Przeniesiony do `N10.7`. Założenie „gra nie ma miksera” było nieprawdziwe: mikser jest
+    od M11d (`engine/audio`, magistrala `Bus::Ui`), brakuje tylko próbek i wywołań.
 
 ## Znalezione po drodze
