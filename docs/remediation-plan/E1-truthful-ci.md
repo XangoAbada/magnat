@@ -38,9 +38,11 @@ Jeśli czerwień nie ma jeszcze punktu, zakładamy go w odpowiednim etapie („Z
     sprawdza §7.2 („nigdy < 1000", „nigdy > 3×"). Wersja testowa `wp7_…` sprawdza `min > 0`.
   - *Naprawa:* kod wyjścia ≠ 0 przy przekroczeniu progu; krok w nocnym jobie.
 
-- [ ] **N1.4** `bench_guard`: zniknięty benchmark to błąd — `R2#2`
+- [x] **N1.4** `bench_guard`: zniknięty benchmark to błąd — `R2#2`
   - `scripts/bench_guard.py:75-77`: wiersz `BRAK … zniknął` nie ustawia `kod = 1`.
   - *Test:* przypadek w `--self-test` sprawdzający **kod wyjścia**, nie tylko wiersz.
+  - *Zrobione:* `kod = 1` przy zniknięciu; przypadek „sam zniknięty benchmark wywraca bramkę"
+    padał przed poprawką (`bench_guard --self-test: BŁĄD`, kod 1).
 
 - [ ] **N1.5** `macro-kernel` zielony na `master` — `R2#3`
   - `scripts/macro_kernel_guard.py` zgłasza trzy trafienia w

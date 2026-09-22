@@ -73,7 +73,8 @@ def porownaj(biezace: dict[str, float], bazowe: dict[str, float]) -> tuple[int, 
         wiersze.append(f"{etykieta} {nazwa}: {zmiana * 100:+.1f} % ({wartosc / 1000:.1f} µs)")
 
     for nazwa in sorted(set(bazowe) - set(biezace)):
-        wiersze.append(f"BRAK   {nazwa}: benchmark zniknął z zestawu")
+        kod = 1
+        wiersze.append(f"BRAK   {nazwa}: benchmark zniknął z zestawu — przywróć go albo usuń z bazy (--update)")
     return kod, wiersze
 
 
@@ -111,6 +112,13 @@ def self_test() -> int:
     kod3, _ = porownaj({"a": 1000.0}, {"a": 1000.0})
     ok &= kod3 == 0
     print(f"{'OK    ' if kod3 == 0 else 'BŁĄD  '} komplet bez regresji przechodzi")
+
+    # Benchmark, który zniknął, bez żadnej innej usterki, też wywraca bramkę (N1.4).
+    # Do E1 dawał tylko wiersz raportu — przypadek mieszany wyżej ma kod 1 z innych
+    # powodów, więc nie mógł tego zauważyć.
+    kod4, _ = porownaj({"a": 1000.0}, {"a": 1000.0, "zniknal": 1000.0})
+    ok &= kod4 == 1
+    print(f"{'OK    ' if kod4 == 1 else 'BŁĄD  '} sam zniknięty benchmark wywraca bramkę")
     print("bench_guard --self-test:", "ok" if ok else "BŁĄD")
     return 0 if ok else 1
 
