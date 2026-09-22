@@ -304,8 +304,17 @@ jobs:
         # Jawna lista crate'ów z benchmarkami, a nie `--workspace`: cargo traktuje każdy
         # cel z `bench = true` jako benchmark, więc `--workspace` próbuje uruchomić także
         # biblioteki i binarki, które nie znają flag criteriona.
+        #
+        # **Lista była niepełna do R2f** i to widać było dopiero, gdy brak wpisu w linii
+        # bazowej stał się błędem. Trzy crate'y wypadły: `magnat-agents` miał sześć pozycji
+        # **w linii bazowej i ani jednej w przebiegu**, `magnat-render` jedną w tej samej
+        # sytuacji, a `magnat-supply` nie miał ani jednej po żadnej stronie — benchmarki
+        # są w repozytorium od M6 i nikt ich nigdy nie zmierzył. Od R2f lista pokrywa
+        # **wszystkie** crate'y z sekcją `[[bench]]`; `instancing_bench` z `magnat-render`
+        # nie dotyka przy tym karty graficznej (mierzy kompakcję instancji po stronie
+        # procesora), więc runner bez GPU liczy go bez zmian.
         run: |
-          cargo bench -p magnat-core -p magnat-ecs -p magnat-io                       -p magnat-voxel -p magnat-world -p magnat-nav -p magnat-spatial                       -p magnat-traffic -p magnat-economy -p magnat-firms -p magnat-ui                       -p magnat-macro -p magnat-game --benches                       -- --warm-up-time 1 --measurement-time 3
+          cargo bench -p magnat-core -p magnat-ecs -p magnat-io                       -p magnat-voxel -p magnat-world -p magnat-nav -p magnat-spatial                       -p magnat-traffic -p magnat-economy -p magnat-firms -p magnat-ui                       -p magnat-macro -p magnat-game -p magnat-agents -p magnat-supply -p magnat-render --benches                       -- --warm-up-time 1 --measurement-time 3
       - name: test wykrywacza
         # Bramka, która nigdy nie świeci na czerwono, nie jest bramką — ta sama
         # zasada co w `struct-guard`. Przed R2-WP33 `bench_guard` nie miał testu
