@@ -238,7 +238,8 @@ REJESTR = {
     ("sim/world/src/city/build.rs", "mod.rs", 728): 74,
     ("game/src/policy/text.rs", "mod.rs", 705): 75,
     ("sim/traffic/src/utility.rs", "mod.rs", 693): 76,
-    ("engine/voxel/src/anim.rs", "mod.rs", 654): 77,
+    # 657, nie 654: trzy linie za `#[allow]` z powodem przy `f32::sin` (N1.10).
+    ("engine/voxel/src/anim.rs", "mod.rs", 657): 77,
     ("engine/render/src/instancing.rs", "mod.rs", 645): 78,
     ("sim/traffic/src/transit.rs", "mod.rs", 633): 79,
     ("sim/traffic/src/micro.rs", "mod.rs", 627): 80,

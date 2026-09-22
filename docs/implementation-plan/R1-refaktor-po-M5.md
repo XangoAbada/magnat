@@ -816,7 +816,7 @@ Pusta na start. Wiersz wpisuje się w tym samym commicie, w którym próg zosta�
 | 74 | `sim/world/src/city/build.rs` | `mod.rs` (pisownia `build.rs` obok `build/`) — **728** linii własnego kodu (błąd od 600) | Jak poz. 72 | Jak poz. 72, w `build/` | N8.3 · przegląd 2026-10-22 |
 | 75 | `game/src/policy/text.rs` | `mod.rs` (pisownia `text.rs` obok `text/`) — **705** linii własnego kodu (błąd od 600) | Jak poz. 72 | Jak poz. 72, w `text/` | N8.3 · przegląd 2026-10-22 |
 | 76 | `sim/traffic/src/utility.rs` | `mod.rs` (pisownia `utility.rs` obok `utility/`) — **693** linie własnego kodu (błąd od 600) | Jak poz. 72 | Jak poz. 72, w `utility/` | N8.3 · przegląd 2026-10-22 |
-| 77 | `engine/voxel/src/anim.rs` | `mod.rs` (pisownia `anim.rs` obok `anim/`) — **654** linie własnego kodu (błąd od 600) | Jak poz. 72 | Jak poz. 72, w `anim/` | N8.3 · przegląd 2026-10-22 |
+| 77 | `engine/voxel/src/anim.rs` | `mod.rs` (pisownia `anim.rs` obok `anim/`) — **657** linii własnego kodu (654 przy wpisie, +3 za `allow` z `N1.10`) (błąd od 600) | Jak poz. 72 | Jak poz. 72, w `anim/` | N8.3 · przegląd 2026-10-22 |
 | 78 | `engine/render/src/instancing.rs` | `mod.rs` (pisownia `instancing.rs` obok `instancing/`) — **645** linii własnego kodu (błąd od 600) | Jak poz. 72 | Jak poz. 72, w `instancing/` | N8.3 · przegląd 2026-10-22 |
 | 79 | `sim/traffic/src/transit.rs` | `mod.rs` (pisownia `transit.rs` obok `transit/`) — **633** linie własnego kodu (błąd od 600) | Jak poz. 72 | Jak poz. 72, w `transit/` | N8.3 · przegląd 2026-10-22 |
 | 80 | `sim/traffic/src/micro.rs` | `mod.rs` (pisownia `micro.rs` obok `micro/`) — **627** linii własnego kodu (błąd od 600) | Jak poz. 72 | Jak poz. 72, w `micro/` | N8.3 · przegląd 2026-10-22 |
