@@ -135,6 +135,11 @@ def obietnice(tekst: str) -> list[tuple[str, str, list[str]]]:
     return wyniki
 
 
+def kod_w_tresci(kod: str, tresc: str) -> bool:
+    """Kod korekty jako całe słowo — do N1.8 `D-1` pasował do `D-10`."""
+    return re.search(rf"(?<![\w-]){re.escape(kod)}(?![\w])", tresc) is not None
+
+
 def bez_pokrycia() -> list[str]:
     """Obietnice, których pod wskazanym adresem nie widać."""
     bledy = []
@@ -146,7 +151,7 @@ def bez_pokrycia() -> list[str]:
                 continue
             tresc = cel.read_text(encoding="utf-8")
             m = KOD_KOREKTY.match(kod)
-            if m and m.group(1) in tresc:
+            if m and kod_w_tresci(m.group(1), tresc):
                 continue
             if any(i in tresc for i in idy):
                 continue
@@ -355,6 +360,17 @@ def self_test() -> int:
     if obietnice("## Indeks\n\n| M0 | `M0-fundament-silnika.md` | crate'y |\n"):
         ok = False
         print("self-test: tabela spoza naglowka kanonicznego uznana za obietnice")
+
+    # Reguła 3: kod korekty to całe słowo (N1.8) — `D-1` nie jest pokryciem `D-10`.
+    for kod, tresc, chciane in [
+        ("D-1", "korekta D-10 w §4", False),
+        ("D-1", "korekta D-1 w §4", True),
+        ("D-1", "(`D-1`)", True),
+        ("E2", "E20 i E21", False),
+    ]:
+        if kod_w_tresci(kod, tresc) != chciane:
+            ok = False
+            print(f"self-test: kod_w_tresci({kod!r}, {tresc!r}) → {not chciane}, chciane {chciane}")
 
     # Reguła 4: workflow, którego GitHub nie wczyta. Wzorzec sprawdzamy wprost,
     # bo ścieżka z `yaml` zależy od tego, czy moduł jest zainstalowany — a bramka

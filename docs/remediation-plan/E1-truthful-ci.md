@@ -79,8 +79,10 @@ Jeśli czerwień nie ma jeszcze punktu, zakładamy go w odpowiednim etapie („Z
     nie ten punkt. Tu wystarczy, że bramka mówi prawdę; do czasu `N8.3` pozycje dostają
     datę przeglądu (dziś + 30 dni).
 
-- [ ] **N1.8** `plan_guard`: kod korekty porównywany jako podciąg — `R2#6`
+- [x] **N1.8** `plan_guard`: kod korekty porównywany jako podciąg — `R2#6`
   - `plan_guard.py:145`: `D-1` pasuje do `D-10`. Porównanie po granicy słowa.
+  - *Zrobione:* `kod_w_tresci` — kod jako całe słowo. Przypadki `D-1`/`D-10` i `E2`/`E20`
+    padały przed poprawką. Bramka nadal zielona: żadna z 34 obietnic nie wisiała na podciągu.
 
 - [ ] **N1.9** hook strukturalny łapie tylko `Bash` — `R1#11`
   - Matcher w `.claude/settings.json` ma objąć też `PowerShell`.
