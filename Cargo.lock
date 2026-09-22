@@ -1718,6 +1718,7 @@ dependencies = [
 name = "magnat-game"
 version = "0.1.0"
 dependencies = [
+ "criterion",
  "egui",
  "magnat-agents",
  "magnat-city",

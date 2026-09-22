@@ -135,6 +135,25 @@ odpowiedzieć w jeden z trzech sposobów:
 Czego nie wolno: zostawić bez odpowiedzi i zostawić `TODO` w kodzie (`K-18` pkt 4).
 Dzieli się pliki, w których są dwa tematy, a nie pliki, które są długie.
 
+**Pozycja rejestru ma adresata i bramka to sprawdza** (`R2-WP26`). `python scripts/struct_guard.py --all`
+czyta rejestr długu z `R1-refaktor-po-M5.md` i pyta o dwie rzeczy: czy wskazana faza ma dokument
+w `docs/implementation-plan/` i czy nie jest już odhaczona w `00-postep.md`. Pozycja, której adresat
+zamknął się bez niej, jest **błędem bramki**, nie wpisem w tabeli. Pozycja świadomie bez adresata
+fazowego jest dopuszczalna **tylko z datą przeglądu**; pozycja zamknięta dostaje znacznik `✅`
+w kolumnie numeru i przestaje być sprawdzana. Przy pierwszym uruchomieniu bramka znalazła **55 pozycji
+z 68** bez żywego adresata — plan zakładał cztery.
+
+Ta sama reguła po stronie dokumentów: `python scripts/plan_guard.py` sprawdza, że wiersz tabeli
+„Zmiany wpisane po", którego **druga kolumna jest nazwą dokumentu**, ma pod tym adresem pokrycie —
+kod korekty albo identyfikator z jej treści. Obietnica zapisana w cudzym dokumencie jest jedyną
+rzeczą, która przenosi wiedzę z `K-18`; obietnica bez pokrycia znaczy, że K-18 działa na papierze.
+
+**`plan_guard` sprawdza też, czy `.github/workflows/*.yml` w ogóle daje się wczytać, i to jest
+jedyna bramka, którą trzeba puścić lokalnie.** Do R2f `ci.yml` nie był poprawnym YAML-em **od M10a**
+— jedna nazwa kroku niosła niecytowany dwukropek ze spacją, GitHub Actions nie ładował przez to
+całego pliku i nie biegł ani jeden job. Bramka w CI nie obroni pliku, od którego CI zależy, więc
+`python scripts/plan_guard.py` przed commitem jest pierwszą linią, a job `plan-guard` drugą.
+
 Powód, dla którego ta reguła w ogóle jest: przez sześć faz kryterium ukończenia pakietu brzmiało
 „test przechodzi" i to jest właściwe kryterium — ale przechodzący test nie odróżnia czterystu
 linii dopisanych do modułu od czterystu linii dopisanych do worka. Pomiar jest w `R1` §1.
@@ -159,6 +178,24 @@ widział, bo `target/` jest w `.gitignore` — brak w gicie znaczy „poza zasi�
   na `debug`; `release` obok `debug` to drugie 12 GB za nic.
 - Przy sprzątaniu warto najpierw zobaczyć, co zajmuje miejsce (`du -sh target/*` w Git Bash),
   a potem skasować punktowo: `cargo clean -p <crate>` albo `cargo clean --release`.
+
+## Reguła: linia bazowa benchmarków odnawia się przy zamknięciu fazy
+
+`D-N21` w `R2f`, wykonanie `D-R8` z R1. `D-8` z M0 mówiło „przy świadomej zmianie
+wydajności" i przez sześć faz nie zrobił tego nikt — więc trzynaście z czterdziestu jeden
+benchmarków nie miało wpisu w `benches/baseline.json`, a `bench_guard` wypisywał dla nich
+`NOWY` i **zwracał zero**.
+
+- **Odnowienie idzie osobnym commitem, bez żadnej innej zmiany** — tak samo jak `cargo fmt`
+  całego repozytorium i z tego samego powodu: zapisanie liczb razem ze zmianą, która na nie
+  wpływa, zamienia dowód w założenie.
+- Kolejność jest zawsze ta sama: `cargo bench` na liście crate'ów z `ci.yml`, potem
+  `python scripts/bench_guard.py benches/baseline.json --update`, potem commit z nazwą
+  sprzętu odniesienia w opisie.
+- **Brak wpisu jest błędem bramki**, nie informacją. Benchmark nowy w tym commicie jest
+  dopuszczalny wyłącznie razem z dopisaniem go do linii bazowej w tym samym commicie.
+- `benches/baseline.json` jest jedynym plikiem w repozytorium, którego edycja potrafi uciszyć
+  bramkę wydajności — zmiana bez wyjaśnienia w opisie commita jest sygnałem ostrzegawczym.
 
 Powód jest ten sam co przy regule o przeglądzie strukturalnym: przechodzący test nie odróżnia
 projektu od wysypiska. Miejsce na dysku jest zasobem tej samej klasy co kontekst i czas —

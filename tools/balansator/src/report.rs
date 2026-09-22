@@ -8,7 +8,7 @@
 
 use std::collections::BTreeMap;
 
-use crate::gates::{mediana, unikalne, GateOutcome};
+use crate::gates::{mediana, unikalne, GateOutcome, Verdict};
 use crate::metrics::RunFile;
 
 /// Raport: tabela bramek plus tabela metryk per scenariusz (mediana/min/maks
@@ -23,13 +23,29 @@ pub fn markdown(runs: &[RunFile], gates: &[GateOutcome], profil: &str) -> String
         unikalne(runs).len()
     ));
 
-    s.push_str("## Bramki\n\n| Bramka | Werdykt | Zmierzono | Próg |\n|---|---|---|---|\n");
+    // **Każda bramka ma wiersz, także ta, której nie policzono** (`R2-WP24`).
+    // Do R2f bramka spoza profilu znikała z raportu bez śladu, więc czytelnik
+    // nie miał jak odróżnić „zmierzone i zielone" od „nie zmierzono wcale".
+    let bez_werdyktu = gates
+        .iter()
+        .filter(|g| g.verdict == Verdict::Skipped)
+        .count();
+    s.push_str(&format!(
+        "## Bramki\n\nWierszy: {}, w tym bez werdyktu: {bez_werdyktu}.\n\n\
+         | Bramka | Werdykt | Zmierzono | Próg |\n|---|---|---|---|\n",
+        gates.len()
+    ));
     for g in gates {
         s.push_str(&format!(
             "| {} {} | {} | {} | {} |\n",
             g.gate,
             g.name,
-            if g.pass { "ZIELONE" } else { "**CZERWONE**" },
+            match g.verdict {
+                Verdict::Green => "ZIELONE",
+                Verdict::Red => "**CZERWONE**",
+                Verdict::Advisory => "DORADCZE",
+                Verdict::Skipped => "**POMINIĘTE**",
+            },
             g.value,
             g.threshold
         ));

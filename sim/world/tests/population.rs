@@ -7,11 +7,13 @@
 //! Pełną macierz (10 ziaren × 4 rozmiary) puszcza runner `headless population`; tutaj
 //! jest jedno ziarno i najmniejsza mapa, żeby CI nie czekał minuty na każdy test.
 //!
-//! Testy generujące świat są `#[ignore]` — tak samo jak `consistency.rs` z M2 i z tego
-//! samego powodu: jedna generacja to sekunda w release i kilkanaście w debug, a `cargo
-//! test` ma być narzędziem, po które sięga się co minutę.
+//! **Cztery z siedmiu jadą na 2 km i chodzą przy każdym `cargo test`** (`R2-WP25`).
+//! Trzy zostają na 4 km i mają wiersz w `D-R7` (`R1-refaktor-po-M5.md`) z nazwą joba
+//! nocnego: dwa mierzą statystykę populacji (2 km daje 5 102 mieszkańców, czyli za
+//! małą próbkę), trzeci wywraca się na `debug_assert` kolejki zdarzeń w profilu
+//! testowym — poz. 73 wykazu `R2`, i to jest jego prawdziwy powód, a nie rozmiar mapy.
 //!
-//! Uruchomienie: `cargo test --release -p magnat-world --test population -- --include-ignored`.
+//! Uruchomienie tych trzech: `cargo test --release -p magnat-world --test population -- --include-ignored`.
 
 use magnat_agents::{
     bootstrap_day, register, register_day, society, AgentSources, DayLoopSystem, DayStats,
@@ -30,11 +32,22 @@ use magnat_world::{
 };
 use std::sync::Arc;
 
+/// Rozmiar testowy 2 km (`R2-WP25`, `D-N18`) — ta sama struktura co 4 km,
+/// ułamek czasu generacji. Dzięki temu testy populacji chodzą przy każdym
+/// `cargo test`, a nie tylko wtedy, gdy ktoś poda `--include-ignored`.
+const ROZMIAR: WorldSize = WorldSize::Km2;
+
 fn miasto(seed: u64) -> CityData {
+    miasto_w(seed, ROZMIAR)
+}
+
+/// Miasto o zadanym rozmiarze — dla trzech testów, którym 2 km nie wystarcza,
+/// bo mierzą **statystykę populacji**, a nie strukturę miasta (`D-R7` w R1).
+fn miasto_w(seed: u64, size: WorldSize) -> CityData {
     let pool = JobPool::new(0);
     let params = WorldGenParams {
         seed,
-        size: WorldSize::Small4km,
+        size,
         region: Region::Lowland,
         epoch: Epoch::Y1990,
         profile: EconomyProfile::Mixed,
@@ -76,9 +89,9 @@ fn zaludnij(world: &mut World, city: &CityData) -> Populated {
 // ── §7.4: cztery dopasowania statystyczne ───────────────────────────────────────
 
 #[test]
-#[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
+#[ignore = "dopasowania statystyczne wymagaja 4 km — job nocny `determinism`, `D-R7` (R1)"]
 fn etap8_spelnia_dopasowania_statystyczne() {
-    let city = miasto(1);
+    let city = miasto_w(1, WorldSize::Small4km);
     let mut world = swiat(1);
     let r: PopulationReport = zaludnij(&mut world, &city).report;
 
@@ -145,7 +158,6 @@ fn etap8_spelnia_dopasowania_statystyczne() {
 }
 
 #[test]
-#[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
 fn etap8_jest_deterministyczny() {
     // `gen_determinism`: ten sam seed → identyczna populacja co do bajtu. Porównujemy
     // hash stanu ECS, a nie raport — raport jest podsumowaniem, hash jest stanem.
@@ -166,11 +178,11 @@ fn etap8_jest_deterministyczny() {
 }
 
 #[test]
-#[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
+#[ignore = "zasiew wiedzy mierzony na 4 km — job nocny `determinism`, `D-R7` (R1)"]
 fn etap8_daje_agentom_wszystko_czego_potrzebuja() {
     // Kontrakt z korekt E-1, E-2, E-6, E-7 i E-14: bez tych czterech rzeczy `sim/agents`
     // nie ma jak zobaczyć miasta i scenariusz `m3day` pokazuje miasto stojące w miejscu.
-    let city = miasto(3);
+    let city = miasto_w(3, WorldSize::Small4km);
     let mut world = swiat(3);
     let p = zaludnij(&mut world, &city);
 
@@ -248,7 +260,8 @@ fn etap8_daje_agentom_wszystko_czego_potrzebuja() {
 
 /// Buduje świat z miastem, populacją i harmonogramem systemów M3d.
 fn gotowy_swiat(seed: u64) -> (App, u32) {
-    let city = miasto(seed);
+    // Jedyny wołający to test doby, który zostaje na 4 km (poz. 73 wykazu R2).
+    let city = miasto_w(seed, WorldSize::Small4km);
     let mut world = swiat(seed);
     let p = zaludnij(&mut world, &city);
     let ludzi = p.report.citizens;
@@ -272,7 +285,7 @@ fn gotowy_swiat(seed: u64) -> (App, u32) {
 }
 
 #[test]
-#[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
+#[ignore = "poz. 73 wykazu R2: `debug_assert` kolejki zdarzen wywraca dobe w profilu testowym — job nocny `determinism`, `D-R7` (R1)"]
 fn doba_przez_systemy_ecs_planuje_dowozi_i_zaspokaja() {
     let (mut app, ludzi) = gotowy_swiat(4);
     for _ in 0..1440 {
@@ -328,7 +341,6 @@ fn doba_przez_systemy_ecs_planuje_dowozi_i_zaspokaja() {
 }
 
 #[test]
-#[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
 fn wynik_doby_nie_zalezy_od_liczby_watkow() {
     // 00 §3.3: równolegle biegną wyłącznie systemy o rozłącznych dostępach, więc wynik
     // jest funkcją stanu, a nie kolejności ukończenia jobów.
@@ -373,7 +385,6 @@ fn bufor_sledzenia_trzyma_najwyzej_osmiu() {
 }
 
 #[test]
-#[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
 fn mieszkaniec_ma_tozsamosc_wieku_z_piramidy() {
     // Piramida wieku jest **zużywana do zera** przy składaniu gospodarstw (§5.9 krok 2):
     // mieszkaniec zgubiony pod koniec pętli byłby dziurą, której test χ² nie odróżni

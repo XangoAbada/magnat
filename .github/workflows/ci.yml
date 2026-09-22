@@ -129,6 +129,23 @@ jobs:
           cargo test --release -p magnat-world --test city -- --include-ignored
           # M2c: kryteria WP7, WP5b, WP8, WP9.
           cargo test --release -p magnat-world --test city_m2c -- --include-ignored
+          # **M2d i M3d dołączyły w R2-WP25** i to jest naprawa `D-R7`, nie rozszerzenie
+          # zakresu: oba pliki miały testy `#[ignore]`, których `ci.yml` nie wołał **wcale**,
+          # więc cztery kryteria akceptacyjne M2d i M3d nie biegły nigdzie od nieznanej
+          # liczby faz. Dwadzieścia siedem testów z tych czterech plików chodzi od R2f
+          # przy zwykłym `cargo test` na świecie 2 km; tutaj zostaje reszta — ta, która
+          # mierzy rozkłady i budżety, czyli potrzebuje 4 albo 8 km.
+          #
+          # Dwie awarie `city_m2d`, które `D-19` i `D-22` zdiagnozowały jako **przeterminowane
+          # testy, a nie zepsuty kod**, są w `R2-WP25` naprawione po stronie testu: wycena
+          # porównuje się z `pass_2`, a strefa zieleni wyjmuje parcele z zakładem Etapu 7
+          # (korekta `F2` z M2e). Szesnaście z szesnastu przechodzi.
+          cargo test --release -p magnat-world --test city_m2d -- --include-ignored
+          # `doba_przez_systemy_ecs_planuje_dowozi_i_zaspokaja` jest pominięty **imiennie**,
+          # bo wywraca się na `debug_assert` kolejki zdarzeń (`des.rs`) — pozycja 73 wykazu
+          # `R2`, adres `R3`. Pominięcie po nazwie, a nie `|| true`: pozostałe sześć testów
+          # tego pliku ma paść, jeśli padnie.
+          cargo test --release -p magnat-world --test population -- --include-ignored             --skip doba_przez_systemy_ecs_planuje_dowozi_i_zaspokaja
       - name: M4 — kamera, wątki i prędkość nie zmieniają świata (M4d/WP12)
         # Trzy kryteria naraz, bo wszystkie sprowadzają się do jednego pytania: czy coś
         # spoza symulacji przecieka do jej wyniku. `--micro` otwiera okno LOD Mikro, więc
@@ -242,7 +259,11 @@ jobs:
         # sumy pieniądza, ta sama historia dwa razy daje ten sam świat, a krok
         # zmienny oszczędza kroki bez zmiany sumy.
         run: cargo test --release -p magnat-headless --test macro_lod -- --include-ignored
-      - name: M10a — artefakt A fazy M10: raport historii „na sucho"
+      # Nazwa w cudzysłowie, bo niesie **dwukropek ze spacją** — w YAML-u to separator
+      # klucza od wartości, więc niecytowana wywraca parsowanie **całego pliku**.
+      # Do `R2f` tak właśnie było i skutek był taki, że GitHub Actions nie wczytywał
+      # tego workflow wcale: żaden job nie biegł od M10a (pozycja 85 wykazu `R2`).
+      - name: "M10a — artefakt A fazy M10: raport historii „na sucho”"
         # Przebieg **wypisuje** bramki Etapu 10 i kronikę, a kod wyjścia pilnuje
         # jedynej rzeczy, która jest tu niepodlegająca negocjacji: sumy pieniądza.
         # Czerwone bramki są stanem świata i mają być widoczne w logu, a nie ukryte
@@ -284,8 +305,16 @@ jobs:
         # cel z `bench = true` jako benchmark, więc `--workspace` próbuje uruchomić także
         # biblioteki i binarki, które nie znają flag criteriona.
         run: |
-          cargo bench -p magnat-core -p magnat-ecs -p magnat-io                       -p magnat-voxel -p magnat-world -p magnat-nav -p magnat-spatial                       -p magnat-traffic -p magnat-economy -p magnat-firms -p magnat-ui                       -p magnat-macro --benches                       -- --warm-up-time 1 --measurement-time 3
+          cargo bench -p magnat-core -p magnat-ecs -p magnat-io                       -p magnat-voxel -p magnat-world -p magnat-nav -p magnat-spatial                       -p magnat-traffic -p magnat-economy -p magnat-firms -p magnat-ui                       -p magnat-macro -p magnat-game --benches                       -- --warm-up-time 1 --measurement-time 3
+      - name: test wykrywacza
+        # Bramka, która nigdy nie świeci na czerwono, nie jest bramką — ta sama
+        # zasada co w `struct-guard`. Przed R2-WP33 `bench_guard` nie miał testu
+        # samego siebie i przez to nie zauważył, że dla trzynastu z czterdziestu
+        # jeden pozycji nie mierzył niczego.
+        run: python3 scripts/bench_guard.py --self-test
       - name: porównanie z linią bazową (10 % ostrzeżenie, 25 % błąd — D-8)
+        # Brak wpisu w linii bazowej jest od R2-WP33 **błędem**, nie komunikatem
+        # `NOWY`: benchmark bez linii bazowej to benchmark, którego nikt nie ogląda.
         run: python3 scripts/bench_guard.py benches/baseline.json
 
   struct-guard:
@@ -303,15 +332,29 @@ jobs:
         # Bramka, która nigdy nie świeci na czerwono, nie jest bramką — ta sama
         # zasada co w `sim/economy/tests/single_entry_point.rs` (M5a).
         run: python3 scripts/struct_guard.py --self-test
-      - name: cztery metryki na całym repozytorium
+      - name: cztery metryki na całym repozytorium i rejestr długu
+        # `--all` sprawdza od R2-WP26 także **adresatów rejestru długu**: czy faza,
+        # do której pozycja jest zaadresowana, ma dokument i czy jeszcze się nie
+        # zamknęła. Pozycja, której adresat minął, jest błędem bramki — przez siedem
+        # faz nie było tego czym sprawdzić i 55 pozycji z 68 zostało bez właściciela.
         run: python3 scripts/struct_guard.py --all
 
   plan-guard:
-    name: opis zgadza się z rzeczą (R2-WP23)
+    name: opis zgadza się z rzeczą (R2-WP23, R2-WP26)
     runs-on: ubuntu-latest
     # `README.md` jest jedynym plikiem, który ktoś z zewnątrz przeczyta pierwszy,
     # a jego nagłówek stanu przeżył sześć faz bez jednej poprawki — nie dlatego,
     # że ktoś go bronił, tylko dlatego, że nie miał z czym się nie zgadzać.
+    #
+    # Od R2-WP26 ta sama bramka pilnuje **obietnic z tabel korekt**: wiersz, który
+    # wskazuje cudzy dokument, musi mieć w nim pokrycie. Bez tego `K-18` działa
+    # na papierze — sprawdzenie dwudziestu takich wierszy dało osiem bez pokrycia.
+    #
+    # Reguła 4 sprawdza **ten plik**: czy w ogóle daje się wczytać. Do R2f nie dawał
+    # się od M10a — jedna nazwa kroku z niecytowanym dwukropkiem i GitHub Actions
+    # nie ładował całego workflow, czyli nie biegł ani jeden job (poz. 85 wykazu `R2`).
+    # Ten krok jest przez to **drugą linią**, nie pierwszą: pierwszą jest to samo
+    # wywołanie przed commitem, bo bramka w CI nie może bronić pliku, od którego CI zależy.
     steps:
       - uses: actions/checkout@v4
       - name: test wykrywacza
@@ -383,11 +426,24 @@ jobs:
           done
           cargo run --release -q -p magnat-balansator -- gate runs/ \
             --profile nightly --report raport-balansatora.md
+      # Druga połowa kryterium WP9 fazy M6 (`R2-WP34`). Bieg nocny, bo 60 dób miasta
+      # 4 km to ~2 minuty, a scenariusz mierzy **opóźnienie** reakcji cen na szok —
+      # przebieg krótszy niż okno 14 dób nie ma czego zmierzyć.
+      #
+      # Kod wyjścia pilnuje jednej rzeczy: czy w mieście jest w ogóle czym handlować.
+      # Same krzywe idą do artefaktu, bo „cena nie drgnęła" jest **wynikiem pomiaru**,
+      # a nie awarią — i ma być widoczne, a nie ukryte za czerwonym krokiem.
+      - name: export_drains — odpływ masy i cena półkowa po szoku +40 %
+        if: github.event_name == 'schedule'
+        run: |
+          cargo run --release -q -p magnat-headless -- export-drains             --seed 1 --size 4km --days 60 --citizens 3000 | tee raport-export-drains.txt
       - uses: actions/upload-artifact@v4
         if: github.event_name == 'schedule'
         with:
           name: raport-balansatora
-          path: raport-balansatora.md
+          path: |
+            raport-balansatora.md
+            raport-export-drains.txt
 
   budzety:
     name: raport budżetów M1 (pamięć, czas generacji)

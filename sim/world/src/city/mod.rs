@@ -127,6 +127,9 @@ pub const fn target_pop(size: WorldSize) -> u32 {
         WorldSize::Medium8km => 120_000,
         WorldSize::Large12km => 250_000,
         WorldSize::Metropolis16km => 400_000,
+        // Ćwiartka powierzchni 4 km, więc ćwiartka celu. Rozmiar testowy (`D-N18`) —
+        // 10 tys. mieszkańców to za mało na gospodarkę, ale dość na strukturę miasta.
+        WorldSize::Km2 => 10_000,
     }
 }
 

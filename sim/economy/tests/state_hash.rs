@@ -83,7 +83,13 @@ fn kazdy_kanal_pieniadza_zmienia_hash() {
                 )
                 .map(|_| ()),
             2 => books
-                .inject_external_capital(acc, Money(1), ExternalInvestorId(1), Tick(2))
+                .inject_external_capital(
+                    acc,
+                    Money(1),
+                    ExternalInvestorId(1),
+                    DecisionReason::Unspecified,
+                    Tick(2),
+                )
                 .map(|_| ()),
             _ => books
                 .household_pay(acc, Money(1), memo, Tick(2))

@@ -166,15 +166,14 @@ fn bramki(a: &GateArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
         runs.len()
     );
     for g in &werdykty {
-        let werdykt = match (g.pass, g.advisory) {
-            (true, _) => "ZIELONE",
-            (false, false) => "CZERWONE",
-            // Bramka doradcza mierzy i mówi, ale nie wywraca przebiegu. Jedna
-            // taka jest i ma nazwisko — powód przy `GateOutcome::advisory`.
-            (false, true) => "DORADCZE",
-        };
-        println!("{:<3} {:<22} {:<9} {}", g.gate, g.name, werdykt, g.value);
-        if !g.pass {
+        println!(
+            "{:<3} {:<22} {:<10} {}",
+            g.gate,
+            g.name,
+            g.verdict.slowo(),
+            g.value
+        );
+        if !g.pass() {
             println!("    próg: {}", g.threshold);
         }
     }
@@ -184,9 +183,11 @@ fn bramki(a: &GateArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
         println!("raport → {}", p.display());
     }
 
-    Ok(if werdykty.iter().all(|g| g.pass || g.advisory) {
-        ExitCode::SUCCESS
-    } else {
+    // Pominięcie wywraca **bieg nocny** (`D-N17`, `R2-WP24`): w profilu `nightly`
+    // bramka bez werdyktu jest błędem konfiguracji, a nie stanem świata.
+    Ok(if werdykty.iter().any(|g| g.verdict.blokuje(profil)) {
         ExitCode::FAILURE
+    } else {
+        ExitCode::SUCCESS
     })
 }

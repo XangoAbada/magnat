@@ -519,7 +519,7 @@ Zastrzeżenie dla poziomu makro: tolerancja 0 obowiązuje wyłącznie na parze m
 | `shortage_mill_down_5d` | Kaskada przechodzi Buffer → Throttled → SpotSearch → Importing → Substituted → Halted w tej kolejności; ceny chleba +15…40%; **antybullwhip**: po powrocie młyna amplituda drugiego szczytu zamówień < 50% pierwszego i powrót do `Ok` w ≤ 7 dni |
 | `dc_beats_direct` | 10 sklepów + DC ma niższy koszt dostawy na tonę niż 10 sklepów zaopatrywanych bezpośrednio — bez reguły to wymuszającej |
 | `import_not_free` | Zakup 10× dobowej przepustowości węzła → kolejka i wzrost ceny, nie natychmiastowa dostawa |
-| `export_drains` | Wzrost ceny zewnętrznej o 40% → mierzalny odpływ masy i wzrost cen lokalnych, bez zaprogramowanej reguły |
+| `export_drains` | Wzrost ceny zewnętrznej o 40% → mierzalny odpływ masy i wzrost cen lokalnych, bez zaprogramowanej reguły. **Zawężone na stałe w `AS-1` (R2f)**: scenariusz istnieje i mierzy, a wywożona masa jest zerem, bo żaden zakład nie trzyma wyrobu w slocie wyjściowym |
 | `deposit_50y` | Złoże wyczerpane w 50 lat, koszt rośnie monotonicznie, zakład zamknięty, kaskada w dół łańcucha |
 | `m5_migration` | Opis w §6.3 |
 | `perf_400k` | `sim/supply` ≤ 2,0 ms/tick p99, ≤ 600 tys. partii, ≤ 64 MB |
@@ -724,3 +724,16 @@ Prefiks `AR-n`. Gwiazdka = zmiana zakresu albo kryterium.
 |---|---|---|
 | AR-1 ★ | **Scenariusz `export_drains` z §7.7 nie powstał i dostaje wykonawcę: `R2-WP34` w `R2f-pomiar-i-bramki.md`.** Nazwa występuje dziś wyłącznie w tym dokumencie i w `M6c`; nie ma jej ani w `data/scenarios/`, ani nigdzie w kodzie. Druga połowa kryterium WP9 — „eksport mierzalnie podnosi ceny lokalne" — **nie została zmierzona**, a zawężenie z `AH-12` miało być tymczasowe | `AH-12` zawęziło kryterium słusznie (ceny nie drgną, dopóki półka nie kupuje z rynku B2B), a `AI-8` przeniosło pomiar za WP11, czyli do M6e. M6e zamknęło się bez niego i nikt tego nie zauważył, bo **zawężone kryterium przechodzi**. Zawężenie z adresatem jest dobrą praktyką dokładnie tak długo, jak długo ktoś sprawdza adresata — czego do R2-WP26 nie robi nic |
 | AR-2 | **Pozycje 3 i 5 wykazu `R2` cytowały `AG-6` i `AQ-8` jako pochodzące z `M6c` i `M6e`; oba kody są w tym dokumencie.** Poprawione w `R2-naprawy-po-M11.md` i w `R2c-rozjazdy-danych-i-kodu.md` | Drobiazg, ale tego samego rodzaju co reszta: odesłanie, które prowadzi do pliku bez szukanego kodu, kosztuje kwadrans przy każdym czytaniu i uczy nie ufać odesłaniom |
+
+---
+
+## Zmiany wpisane po R2f
+
+Zgodnie z `K-18`. `R2-WP34` wykonał obietnicę `AR-1` i przy okazji zmierzył coś, czego
+żaden z trzech poprzednich wpisów o `export_drains` nie przewidywał.
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| AS-1 ★ | **Kryterium WP9 zostaje zawężone na stałe, a zawężenie ma odtąd liczbę.** Scenariusz `export-drains` istnieje (`tools/headless/src/export_drains.rs`) i jest **pierwszym wołającym `B2b::try_export` poza testami**. Zmierzone na świecie odniesienia (4 km, `industrial`, ziarno 1, 40 dób, szok +40 % w dobie 20): wywieziono **0 kg**, a powód nie jest cenowy. Pięć towarów w obrocie granicznym o największym zapasie — `raw_crude_oil` 489 t, `raw_wheat` 209 t, `chem_plastic_granule` 165 t, `raw_milk` 140 t, `mat_leather` 130 t — ma **zero kilogramów w slocie wyjściowym któregokolwiek zakładu**. Eksportuje się wyrób, czyli zawartość slotu wyjściowego; zapas leżący w slocie wejściowym cudzego zakładu albo na placu bramy granicznej nie jest niczym, co da się wywieźć | `AH-12` i `AI-8` zawęziły kryterium do samego drenażu masy, bo „ceny nie drgną, dopóki półka nie kupuje z rynku B2B". Pomiar pokazuje, że brakujące ogniwo leży **wcześniej**: nie ma czego wywieźć, więc nie ma też czym ruszyć ceny. To jest inny brak niż ten, który zapisały obie tamte korekty, i **mocniejszy**: cenę dałoby się zmierzyć, gdyby masa wyszła; masa nie wychodzi z powodu, który nie ma nic wspólnego z ceną |
+| AS-2 | **Drugi towar nie jest wyborem, tylko konsekwencją.** Kryterium pyta o dwie krzywe **tego samego** towaru. W mieście odniesienia zbiór „ma zapas" i zbiór „stoi na półce" są **rozłączne**: wyrób gotowy (`food_milk`) idzie na półkę tego samego dnia i u producenta zostaje zero, a surowiec i półprodukt mają zapas i nie mają ceny detalicznej. Scenariusz wybiera towar o największym zapasie i mówi wprost, gdy nie stoi on na półce | Pierwszy przebieg wybrał `food_milk` — 37 t w dobie zero i zero od doby pierwszej — i mierzył przez to własny filtr. Wpisane, bo to samo założenie („znajdzie się towar o wysokim udziale eksportu") stoi w §7.7 od M6 i nie jest prawdziwe w żadnym wygenerowanym mieście |
+| AS-3 | **Pola „udział eksportu" nie ma w `data/goods/` i nie było go nigdy.** Zakres `R2-WP34` mówi „towar z wysokim udziałem eksportu"; eksportowalność wynika z dwóch warunków naraz (`external_base_price` obecne i brama w `import_via`), a udziału nie mierzy nic | Wpisane, żeby następny czytelnik §7.7 nie szukał pola, którego nie ma |

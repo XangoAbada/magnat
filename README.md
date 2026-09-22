@@ -4,7 +4,7 @@ Symulator miasta i gospodarki. Własny silnik w Rust — ECS, generacja świata,
 Deterministyczny: ten sam seed daje ten sam świat i ten sam przebieg, niezależnie od liczby wątków
 i platformy.
 
-Stan: **R2e zamknięte** — ostatnia odhaczona pozycja w
+Stan: **R2 zamknięte** — ostatnia odhaczona pozycja w
 [`docs/implementation-plan/00-postep.md`](docs/implementation-plan/00-postep.md), i to ten plik
 jest źródłem prawdy o postępie. Ta linia nie powtarza listy faz z rozmysłu: powtórzona lista
 rozjeżdża się cicho, a zgodności tej jednej nazwy pilnuje `scripts/plan_guard.py` w CI.
@@ -14,7 +14,9 @@ rozjeżdża się cicho, a zgodności tej jednej nazwy pilnuje `scripts/plan_guar
 - Rust **1.96.0** — wersja jest przypięta w `rust-toolchain.toml`, `rustup` pobierze ją sam.
 - GPU z obsługą Vulkan / DX12 / Metal — tylko dla binarki `magnat`. `magnat-headless` nie
   dotyka GPU.
-- Python 3 — tylko dla `scripts/bench_guard.py` (progi regresji benchmarków).
+- Python 3 — dla bramek w `scripts/`: progi regresji benchmarków (`bench_guard.py`), kontrola
+  strukturalna i rejestr długu (`struct_guard.py`), zgodność opisu z rzeczą (`plan_guard.py`),
+  granica języka (`lang_guard.py`).
 
 ## Uruchomienie
 

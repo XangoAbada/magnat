@@ -520,13 +520,29 @@ fn jest_decyzja(kind: &magnat_economy::TxKind) -> bool {
         | K::ShareTrade { .. }
         | K::ShareIssue { .. }
         // Dywidenda też: uchwala się ją co miesiąc i wolno jej nie uchwalić.
-        | K::Dividend { .. }
-        // Opłata za dojazd jest wyborem: mieszkaniec wybrał środek transportu,
-        // a razem z nim jego cenę (`R2-WP32`). Gdyby była zobowiązaniem, bramka G9
-        // liczyłaby wybór modalny jako wykonanie umowy, której nikt nie zawarł.
-        | K::Mobility { .. } => true,
+        | K::Dividend { .. } => true,
         // Zobowiązanie: umowa, harmonogram albo warunek początkowy świata.
         K::Wage { .. }
+        // **Opłata za dojazd jest rozliczeniem, nie wyborem** — poprawka `R2-WP39`,
+        // pozycja 81 wykazu. `R2-WP32` wpisało ją po stronie wyboru („mieszkaniec
+        // wybrał środek transportu, a razem z nim jego cenę") i argument jest słuszny
+        // o wyborze, ale **nie o tej transakcji**: w księgach stoi **dobowy agregat
+        // per kanał** (`MobilityDue::channels`), a nie pojedynczy przejazd. Powodu
+        // pojedynczego przejazdu nie da się do niego przypiąć, bo jedna kwota niesie
+        // tysiąc przejazdów tysiąca ludzi — i dlatego `absorb_mobility` księguje
+        // `Unspecified`, a nie dlatego, że ktoś zapomniał.
+        //
+        // Wybór modalny **jest** zapisany i jest wyjaśnialny: `CitizenReason::ModeChosen`
+        // w dzienniku decyzji mieszkańca (00 §7). Bramka G9 pyta o powód **wpisu do
+        // ksiąg**, a nie o powód przejazdu.
+        //
+        // Zmierzone przed poprawką (4 ziarna × 120 dób, scenariusz `base`): **61 357
+        // decyzji bez powodu na 1 820 626 próbkowanych**, czyli 3,4 % — z czego
+        // praktycznie wszystko to ten jeden wariant. G9 świeciła przez to na czerwono
+        // od commita `R2b`, który dołożył ją do tej listy i do ksiąg w tym samym
+        // podejściu. Bramka wymagająca powodu, którego z konstrukcji nie ma, nie jest
+        // surowa — jest niewykonalna.
+        | K::Mobility { .. }
         // Licencja jest **zobowiązaniem**, nie wyborem, i to jest różnica wobec
         // budżetu badań: podpisana umowa każe płacić royalty co miesiąc niezależnie
         // od tego, czy firma nadal chce (M10c §5.4 pkt 3).

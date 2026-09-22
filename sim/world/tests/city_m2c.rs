@@ -1,8 +1,13 @@
 //! Kryteria zamknięcia podfazy **M2c** (WP7, WP5b, WP8, WP9) — M2 §4.
 //!
 //! Jak w `city.rs`: testy siedzą na prawdziwym terenie, bo cały sens wet i pól wpływu
-//! polega na tym, że teren mówi „nie". Każdy generuje świat, więc są `#[ignore]`
-//! i uruchamiane jawnie:
+//! polega na tym, że teren mówi „nie".
+//!
+//! **Pięć z dziewięciu jedzie na 2 km i chodzi przy każdym `cargo test`** (`R2-WP25`).
+//! Cztery zostają: dzielnice, bocznice klastrów, parcelacja i determinizm dwóch
+//! przebiegów potrzebują świata, w którym jest co dzielić — na 2 km kryterium byłoby
+//! spełnione tożsamościowo albo nie miałoby próbki. Każdy z tych czterech ma wiersz
+//! w `D-R7` (`R1-refaktor-po-M5.md`) z nazwą joba nocnego:
 //! `cargo test --release -p magnat-world --test city_m2c -- --include-ignored`
 //! (job CI `determinism`).
 
@@ -53,10 +58,9 @@ fn miasto_z_terenem(seed: u64, size: WorldSize, region: Region) -> (CityData, Te
 /// jedna ściana grafu bywa warta 10 % powierzchni (korekta C13). Próg ziarnistości
 /// jest policzony w `ZoneResult::largest_block_share` i test go honoruje.
 #[test]
-#[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
 fn udzialy_stref_trzymaja_sie_kwot() {
     for seed in [1u64, 0x00C0_FFEE, 77] {
-        let c = miasto(seed, WorldSize::Medium8km, Region::Lowland);
+        let c = miasto(seed, WorldSize::Km2, Region::Lowland);
         let z = &c.zones;
         let limit = 3.0f32.max(z.largest_block_share * 150.0);
         assert!(
@@ -85,9 +89,8 @@ fn udzialy_stref_trzymaja_sie_kwot() {
 /// w zwartym mieście nie do spełnienia przez żaden przydział — przedmieścia otaczają
 /// zakład ze wszystkich stron — i mierzyłaby gęstość miasta, nie urbanistykę.
 #[test]
-#[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
 fn przemysl_ciezki_stoi_z_podwietrznej() {
-    let (c, t) = miasto_z_terenem(0x00C0_FFEE, WorldSize::Medium8km, Region::Lowland);
+    let (c, t) = miasto_z_terenem(0x00C0_FFEE, WorldSize::Km2, Region::Lowland);
     let srodki: Vec<_> = c
         .blocks
         .blocks
@@ -150,7 +153,7 @@ fn przemysl_ciezki_stoi_z_podwietrznej() {
 /// kwartału) oraz próbkowanie punktowe przez `ParcelTree` — pierwsze łapie zdublowanie
 /// geometrii, drugie zachodzenie działek z sąsiednich kwartałów.
 #[test]
-#[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
+#[ignore = "2 km nie wystarcza — job nocny `determinism`, wiersz w `D-R7` (R1)"]
 fn parcele_nie_nakladaja_sie() {
     let c = miasto(0x00C0_FFEE, WorldSize::Small4km, Region::River);
     assert!(c.parcels.parcels.len() > 300, "za mało parcel na test");
@@ -200,11 +203,10 @@ fn parcele_nie_nakladaja_sie() {
 
 /// WP8: „100% parcel ma niezerową frontę drogową (poza `Green`/`Water`)" — test T7 fazy.
 #[test]
-#[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
 fn kazda_parcela_ma_fronte_drogowa() {
     for (size, region) in [
-        (WorldSize::Small4km, Region::River),
-        (WorldSize::Medium8km, Region::Lowland),
+        (WorldSize::Km2, Region::River),
+        (WorldSize::Km2, Region::Lowland),
     ] {
         let c = miasto(5, size, region);
         let bez = c
@@ -241,7 +243,7 @@ fn kazda_parcela_ma_fronte_drogowa() {
 /// WP9: „10–40 dzielnic, pokrycie obszaru zurbanizowanego bez dziur i nakładek;
 /// nazwy unikalne" — test T8 fazy w części sprawdzalnej bez populacji.
 #[test]
-#[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
+#[ignore = "2 km nie wystarcza — job nocny `determinism`, wiersz w `D-R7` (R1)"]
 fn dzielnice_pokrywaja_miasto_i_maja_unikalne_nazwy() {
     for (size, region) in [
         (WorldSize::Small4km, Region::River),
@@ -298,7 +300,7 @@ fn dzielnice_pokrywaja_miasto_i_maja_unikalne_nazwy() {
 /// WP5b: „każda strefa przemysłowa/logistyczna ma bocznicę ≤ 1,2 km od kwartału;
 /// brak toru o nachyleniu > 2%".
 #[test]
-#[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
+#[ignore = "2 km nie wystarcza — job nocny `determinism`, wiersz w `D-R7` (R1)"]
 fn kazdy_klaster_przemyslowy_ma_bocznice() {
     let c = miasto(0x00C0_FFEE, WorldSize::Medium8km, Region::Lowland);
     assert!(
@@ -360,7 +362,7 @@ fn kazdy_klaster_przemyslowy_ma_bocznice() {
 /// Determinizm M2c (00 §3.6): dwa przebiegi tego samego ziarna dają identyczne strefy,
 /// dzielnice i parcele — nie tylko ten sam hash.
 #[test]
-#[ignore = "dwie generacje miasta — CI uruchamia jawnie przez --include-ignored"]
+#[ignore = "dwie generacje 4 km — job nocny `determinism`, wiersz w `D-R7` (R1)"]
 fn dwa_przebiegi_daja_identyczne_miasto() {
     let pool = JobPool::new(0);
     let params = WorldGenParams {
@@ -391,9 +393,8 @@ fn dwa_przebiegi_daja_identyczne_miasto() {
 
 /// Pierścienie epok są warstwami, nie szumem: starsza zabudowa leży bliżej centrum.
 #[test]
-#[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
 fn pierscienie_epok_rosna_od_centrum() {
-    let c = miasto(3, WorldSize::Medium8km, Region::Lowland);
+    let c = miasto(3, WorldSize::Km2, Region::Lowland);
     let n = c.zones.rings.len();
     assert!(
         n >= 4,
@@ -424,9 +425,8 @@ fn pierscienie_epok_rosna_od_centrum() {
 /// Pojemność ludnościowa dzielnic musi mieścić się w rzędzie wielkości `target_pop` —
 /// M3 skaluje populację do tych liczb i nie dostawia budynków (M2 §9.1/7).
 #[test]
-#[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
 fn pojemnosc_dzielnic_jest_w_rzedzie_wielkosci_celu() {
-    let c = miasto(9, WorldSize::Medium8km, Region::Lowland);
+    let c = miasto(9, WorldSize::Km2, Region::Lowland);
     let suma: u32 = c.districts.districts.iter().map(|d| d.pop_capacity).sum();
     let cel = c.plan.target_pop;
     assert!(

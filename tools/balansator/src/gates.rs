@@ -107,6 +107,14 @@ pub enum Profile {
 
 impl Profile {
     #[must_use]
+    pub fn key(self) -> &'static str {
+        match self {
+            Profile::Ci => "ci",
+            Profile::Nightly => "nightly",
+        }
+    }
+
+    #[must_use]
     pub fn includes(self, gate: &str) -> bool {
         match self {
             Profile::Nightly => true,
@@ -120,33 +128,115 @@ impl Profile {
     }
 }
 
+/// Werdykt bramki. Cztery stany, bo trzy nie wystarczały (`R2-WP24`).
+///
+/// Do R2f bramka miała dwa pola typu `bool` — `pass` i `advisory` — i brakowało
+/// w nich miejsca na jedyny stan, który naprawdę zdarzał się co noc: **bramka
+/// nie została policzona**. Wyrażało się to wtedy jako `pass: false,
+/// advisory: true`, czyli „czerwona, ale nie wywraca przebiegu", i to była
+/// nieprawda o dwóch bramkach naraz: G11 nie była czerwona, tylko odfiltrowana,
+/// a G4 nie była odfiltrowana, tylko czerwona z nazwanym powodem.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Verdict {
+    /// Zmierzona i w widełkach.
+    Green,
+    /// Zmierzona, poza widełkami — wywraca przebieg.
+    Red,
+    /// Zmierzona, poza widełkami, **nie** wywraca przebiegu. Powód jest wtedy
+    /// zapisany przy bramce i ma nazwisko fazy, która go zdejmie.
+    Advisory,
+    /// **Nie została policzona.** Powód siedzi w `GateOutcome::value` i nigdy
+    /// nie jest domysłem: albo profil jej nie bierze, albo dane nie mają tego,
+    /// czego potrzebuje.
+    Skipped,
+}
+
+impl Verdict {
+    /// Czy ten werdykt wywraca przebieg w danym profilu.
+    ///
+    /// Pominięcie wywraca **bieg nocny** i to jest wykonanie decyzji `D-N17`:
+    /// filtr, który wyklucza bramkę zawsze, jest wyłączeniem bramki napisanym
+    /// okrężnie. Bieg nocny bierze pełną macierz czterech scenariuszy po osiem
+    /// ziaren i 365 dób — jeśli przy takim wejściu bramka nie ma czego zmierzyć,
+    /// to nie zmierzy nigdy i czekanie dziesięciu nocy niczego do tej wiedzy
+    /// nie doda. W profilu `ci` pominięcie jest normalne, bo to profil sam
+    /// bramkę odkłada.
+    #[must_use]
+    pub fn blokuje(self, profil: Profile) -> bool {
+        match self {
+            Verdict::Red => true,
+            Verdict::Skipped => profil == Profile::Nightly,
+            Verdict::Green | Verdict::Advisory => false,
+        }
+    }
+
+    /// Słowo do tabeli na stdout i do raportu.
+    #[must_use]
+    pub fn slowo(self) -> &'static str {
+        match self {
+            Verdict::Green => "ZIELONE",
+            Verdict::Red => "CZERWONE",
+            Verdict::Advisory => "DORADCZE",
+            Verdict::Skipped => "POMINIETE",
+        }
+    }
+}
+
 /// Werdykt jednej bramki: to, co idzie do tabeli na stdout i do raportu.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct GateOutcome {
     pub gate: &'static str,
     pub name: &'static str,
-    pub pass: bool,
+    pub verdict: Verdict,
     /// Zmierzona liczba, słownie — bramki mierzą różne rzeczy, więc nie ma
-    /// wspólnej jednostki.
+    /// wspólnej jednostki. Przy `Verdict::Skipped` stoi tu **powód pominięcia**,
+    /// bo bramka, która zniknęła z raportu bez słowa, jest bramką wyłączoną.
     pub value: String,
     pub threshold: &'static str,
-    /// Bramka **doradcza**: mierzy i raportuje, ale nie wywraca przebiegu.
-    ///
-    /// Jedna taka jest i ma nazwisko: **G4 do czasu M6**. Zmierzone w M5e na
-    /// scenariuszu `supply-shock` (120 dób, szok +80 % ceny hurtowej chleba):
-    /// odpowiedź w **2 dobach** (widełki 2–7, zielone), stabilizacja w **5**
-    /// wobec widełek 14–56. Dolna granica `t_settle` zakłada tarcie, którego M5
-    /// **nie modeluje i nie udaje, że modeluje**: dostawca zewnętrzny jest
-    /// zaślepką o nieskończonej podaży, bez kontraktów i bez terminów, a sklep,
-    /// któremu wzrósł koszt własny, przecenia od razu — opóźnienie 1–7 dób
-    /// dotyczy **obserwacji konkurencji**, nie własnego rachunku.
-    ///
-    /// Tarcie wnosi M6 razem z rynkiem B2B (`AC-1`), więc do tego czasu czerwona
-    /// G4 mówiłaby wyłącznie „M6 jeszcze nie ma" — a bramka świecąca na czerwono
-    /// z powodu nieistniejącej fazy uczy wyłącznie ignorowania bramek. Liczba
-    /// jest przy tym wypisywana co noc, więc doba, w której M6 wniesie kontrakty,
-    /// będzie widoczna w raporcie.
-    pub advisory: bool,
+}
+
+impl GateOutcome {
+    /// Zielona albo czerwona, zależnie od warunku — skrót dla ośmiu bramek,
+    /// które nie mają trzeciego stanu.
+    fn nowa(
+        gate: &'static str,
+        name: &'static str,
+        ok: bool,
+        value: String,
+        threshold: &'static str,
+    ) -> Self {
+        Self {
+            gate,
+            name,
+            verdict: if ok { Verdict::Green } else { Verdict::Red },
+            value,
+            threshold,
+        }
+    }
+
+    /// Bramka, której nie było czym policzyć. Powód jest argumentem, a nie
+    /// domysłem czytelnika.
+    fn pominieta(
+        gate: &'static str,
+        name: &'static str,
+        powod: String,
+        threshold: &'static str,
+    ) -> Self {
+        Self {
+            gate,
+            name,
+            verdict: Verdict::Skipped,
+            value: powod,
+            threshold,
+        }
+    }
+
+    /// Czy bramka jest zielona. Pominięta nie jest — i to jest cała różnica
+    /// wobec stanu sprzed `R2-WP24`.
+    #[must_use]
+    pub fn pass(&self) -> bool {
+        self.verdict == Verdict::Green
+    }
 }
 
 // ── warstwa 1: bramki na gołych seriach ──────────────────────────────────────────
@@ -350,11 +440,19 @@ pub fn unikalne(runs: &[RunFile]) -> Vec<&RunFile> {
 pub fn evaluate(runs: &[RunFile], profile: Profile, min_margin_bp: i32) -> Vec<GateOutcome> {
     let u = unikalne(runs);
     let mut out = Vec::new();
-    detal(&u, profile, min_margin_bp, &mut out);
+    detal(&u, min_margin_bp, &mut out);
     rzetelnosc(runs, &u, &mut out);
     firmy(&u, &mut out);
     out.push(lod(&u));
-    out.retain(|g| profile.includes(g.gate));
+    // **Bramka spoza profilu zostaje w raporcie jako pominięta.** Do R2f znikała
+    // z listy, więc profil `ci` wypisywał osiem wierszy i nikt nie wiedział, że
+    // czterech brakuje — a bramka, o której raport milczy, jest bramką wyłączoną.
+    for g in &mut out {
+        if !profile.includes(g.gate) {
+            g.verdict = Verdict::Skipped;
+            g.value = format!("profil {} nie bierze tej bramki", profile.key());
+        }
+    }
     out
 }
 
@@ -363,7 +461,7 @@ pub fn evaluate(runs: &[RunFile], profile: Profile, min_margin_bp: i32) -> Vec<G
 /// Sześć pytań o **ceny i rynek**: czy stoją, czy nie uciekają w górę, czy nie
 /// spadają spiralą, czy reagują na szok, czy rynek żyje i czy nie zrósł się
 /// w monopol.
-fn detal(u: &[&RunFile], profile: Profile, min_margin_bp: i32, out: &mut Vec<GateOutcome>) {
+fn detal(u: &[&RunFile], min_margin_bp: i32, out: &mut Vec<GateOutcome>) {
     let n = u.len() as u64;
     // ── G1 ──────────────────────────────────────────────────────────────────────
     let zielone = u
@@ -379,10 +477,13 @@ fn detal(u: &[&RunFile], profile: Profile, min_margin_bp: i32, out: &mut Vec<Gat
     out.push(GateOutcome {
         gate: "G1",
         name: "Stabilnosc cen",
-        pass: n > 0 && zielone * 1_000 >= n * G1_SEED_SHARE_PERMILLE,
+        verdict: if n > 0 && zielone * 1_000 >= n * G1_SEED_SHARE_PERMILLE {
+            Verdict::Green
+        } else {
+            Verdict::Red
+        },
         value: format!("{zielone}/{n} ziaren"),
         threshold: "≥ 95 % ziaren, r/r ∈ ⟨−5 %, +15 %⟩ od 12. miesiąca",
-        advisory: false,
     });
 
     // ── G2 ──────────────────────────────────────────────────────────────────────
@@ -398,10 +499,13 @@ fn detal(u: &[&RunFile], profile: Profile, min_margin_bp: i32, out: &mut Vec<Gat
     out.push(GateOutcome {
         gate: "G2",
         name: "Brak hiperinflacji",
-        pass: czerwone.is_empty(),
+        verdict: if czerwone.is_empty() {
+            Verdict::Green
+        } else {
+            Verdict::Red
+        },
         value: format!("{} ziaren czerwonych {czerwone:?}", czerwone.len()),
         threshold: "m/m ≤ 10 %, CPI_t / CPI_{t−90d} ≤ 1,5",
-        advisory: false,
     });
 
     // ── G3 ──────────────────────────────────────────────────────────────────────
@@ -416,16 +520,17 @@ fn detal(u: &[&RunFile], profile: Profile, min_margin_bp: i32, out: &mut Vec<Gat
     out.push(GateOutcome {
         gate: "G3",
         name: "Brak spirali deflacji",
-        pass: czerwone.is_empty(),
+        verdict: if czerwone.is_empty() {
+            Verdict::Green
+        } else {
+            Verdict::Red
+        },
         value: format!("{} ziaren czerwonych {czerwone:?}", czerwone.len()),
         threshold: "< 6 miesięcy spadku CPI; marża pod podłogą w ≤ 5 % dób",
-        advisory: false,
     });
 
     // ── G4 ──────────────────────────────────────────────────────────────────────
-    if profile.includes("G4") {
-        out.push(g4_gate(u));
-    }
+    out.push(g4_gate(u));
 
     // ── G5 ──────────────────────────────────────────────────────────────────────
     let czerwone = czerwone_ziarna(u, |r| g5_series(&r.days_data));
@@ -436,39 +541,48 @@ fn detal(u: &[&RunFile], profile: Profile, min_margin_bp: i32, out: &mut Vec<Gat
     out.push(GateOutcome {
         gate: "G5",
         name: "Rynek nie wymiera",
-        pass: n > 0 && czerwone.is_empty(),
+        verdict: if n > 0 && czerwone.is_empty() {
+            Verdict::Green
+        } else {
+            Verdict::Red
+        },
         value: format!(
             "{} ziaren czerwonych {czerwone:?}, mediana odlozen {} ‰",
             czerwone.len(),
             mediana(&odlozenia)
         ),
         threshold: "kategorie żywe w 100 % dób, odłożenia < 250 ‰, braki < 150 ‰",
-        advisory: false,
     });
 
     // ── G6 ──────────────────────────────────────────────────────────────────────
-    if profile.includes("G6") {
-        let per_seed: Vec<i32> = u
-            .iter()
-            .map(|r| {
-                let v: Vec<i32> = r
-                    .days_data
-                    .iter()
-                    .filter(|d| d.hhi_pairs > 0)
-                    .map(|d| d.hhi_median)
-                    .collect();
-                mediana(&v)
-            })
-            .collect();
+    let per_seed: Vec<i32> = u
+        .iter()
+        .map(|r| {
+            let v: Vec<i32> = r
+                .days_data
+                .iter()
+                .filter(|d| d.hhi_pairs > 0)
+                .map(|d| d.hhi_median)
+                .collect();
+            mediana(&v)
+        })
+        .collect();
+    if per_seed.is_empty() {
+        out.push(GateOutcome::pominieta(
+            "G6",
+            "Brak monopolizacji",
+            "brak przebiegu z parami do policzenia HHI".to_string(),
+            "< 6 000 (0,6)",
+        ));
+    } else {
         let m = mediana(&per_seed);
-        out.push(GateOutcome {
-            gate: "G6",
-            name: "Brak monopolizacji",
-            pass: !per_seed.is_empty() && m < G6_HHI_MAX,
-            value: format!("HHI {m}"),
-            threshold: "< 6 000 (0,6)",
-            advisory: false,
-        });
+        out.push(GateOutcome::nowa(
+            "G6",
+            "Brak monopolizacji",
+            m < G6_HHI_MAX,
+            format!("HHI {m}"),
+            "< 6 000 (0,6)",
+        ));
     }
 }
 
@@ -488,10 +602,13 @@ fn rzetelnosc(runs: &[RunFile], u: &[&RunFile], out: &mut Vec<GateOutcome>) {
     out.push(GateOutcome {
         gate: "G7",
         name: "Zachowanie pieniadza",
-        pass: n > 0 && czerwone.is_empty(),
+        verdict: if n > 0 && czerwone.is_empty() {
+            Verdict::Green
+        } else {
+            Verdict::Red
+        },
         value: format!("{} przebiegow z rozjazdem {czerwone:?}", czerwone.len()),
         threshold: "P1 zielone, 0 gr",
-        advisory: false,
     });
 
     // ── G8 ──────────────────────────────────────────────────────────────────────
@@ -510,10 +627,13 @@ fn rzetelnosc(runs: &[RunFile], u: &[&RunFile], out: &mut Vec<GateOutcome>) {
     out.push(GateOutcome {
         gate: "G8",
         name: "Determinizm",
-        pass: !blizniaki.is_empty() && zgodne,
+        verdict: if !blizniaki.is_empty() && zgodne {
+            Verdict::Green
+        } else {
+            Verdict::Red
+        },
         value: format!("{} par przebiegow, zgodne: {zgodne}", blizniaki.len()),
         threshold: "identyczny ciąg hashy",
-        advisory: false,
     });
 
     // ── G9 ──────────────────────────────────────────────────────────────────────
@@ -522,10 +642,13 @@ fn rzetelnosc(runs: &[RunFile], u: &[&RunFile], out: &mut Vec<GateOutcome>) {
     out.push(GateOutcome {
         gate: "G9",
         name: "Wyjasnialnosc",
-        pass: n > 0 && bez == 0,
+        verdict: if n > 0 && bez == 0 {
+            Verdict::Green
+        } else {
+            Verdict::Red
+        },
         value: format!("{bez} bez powodu na {probka} probkowanych"),
         threshold: "0",
-        advisory: false,
     });
 }
 
@@ -557,7 +680,11 @@ fn firmy(u: &[&RunFile], out: &mut Vec<GateOutcome>) {
     out.push(GateOutcome {
         gate: "G10",
         name: "Populacja firm w pasmie",
-        pass: czerwone.is_empty(),
+        verdict: if czerwone.is_empty() {
+            Verdict::Green
+        } else {
+            Verdict::Red
+        },
         value: format!(
             "{} ziaren czerwonych {czerwone:?}; start/koniec: {}",
             czerwone.len(),
@@ -571,77 +698,79 @@ fn firmy(u: &[&RunFile], out: &mut Vec<GateOutcome>) {
                 .join(", ")
         ),
         threshold: "liczba firm w ±40 % wartości startowej",
-        advisory: false,
     });
 
     // ── G11 ─────────────────────────────────────────────────────────────────────
     //
-    // **Mianownik decyduje, czy ta bramka w ogóle coś mierzy.** Miasto, w którym
-    // wakatów jest więcej niż ludzi w sile roboczej, nie może mieć trzyprocentowego
-    // bezrobocia — każdy zdolny do pracy ma gdzie pójść i stopa schodzi do tarcia
-    // wyszukiwania. Pomiar mówi wtedy o gęstości etatów, którą postawił generator
-    // miasta, a nie o gospodarce. Dlatego bramka jest w takim przebiegu **doradcza**,
-    // a nie czerwona: czerwień znaczyłaby „gospodarka jest zepsuta", a zepsuty jest
-    // dobór liczby mieszkańców do liczby etatów (`AT-1`, `AT-4`).
+    // **Do R2f ta bramka nie mogła zaświecić na czerwono i nikt tego nie sprawdził.**
+    // Filtr „wakatów nie więcej niż ludzi w sile roboczej" wyłączał ją w każdym
+    // przebiegu, w którym generator postawił więcej etatów niż mieszkańców — czyli
+    // w każdym (poz. 6 wykazu `R2`: bezrobocie 0,2 % przy 12 032 pustych etatach).
+    // Bramka nie zwracała wtedy „czerwone", tylko nie zwracała nic, a raport
+    // profilu `ci` gubił ją całkiem, bo profil filtrował ją drugi raz.
     //
-    // To jest ta sama droga, którą G4 jest doradcza bez przebiegu szokowego.
-    let ciasne: Vec<&&RunFile> = u
-        .iter()
-        .filter(|r| r.days >= G11_MIN_DAYS && rynek_pracy_moze_byc_ciasny(r))
-        .collect();
-    let czerwone: Vec<u64> = ciasne
-        .iter()
-        .filter(|r| !g11_seed(r))
-        .map(|r| r.seed)
-        .collect();
-    out.push(GateOutcome {
-        gate: "G11",
-        name: "Bezrobocie w pasmie",
-        pass: !ciasne.is_empty() && czerwone.is_empty(),
-        advisory: ciasne.is_empty(),
-        value: if ciasne.is_empty() {
+    // Gęstość etatów **zostaje w opisie**, bo jest prawdziwym wyjaśnieniem czerwieni
+    // i adresatem naprawy (`R2-WP18` → R3, `D-N20`). Przestaje natomiast być
+    // powodem, dla którego pomiaru nie ma: bezrobocie 0,2 % jest poza pasmem 3–12 %
+    // niezależnie od tego, czyja to wina, a bramka ma mówić, co zmierzyła, a nie
+    // kogo za to winić.
+    //
+    // Jedyne, co zostaje pominięciem, to **przebieg za krótki** (`G11_MIN_DAYS`):
+    // tam nie ma ogona, z którego liczy się medianę, więc nie ma czego zmierzyć.
+    let mierzalne: Vec<&&RunFile> = u.iter().filter(|r| r.days >= G11_MIN_DAYS).collect();
+    let wakaty = |lista: &[&&RunFile]| {
+        lista
+            .iter()
+            .map(|r| {
+                let d = r.days_data.last();
+                format!(
+                    "{}/{}",
+                    d.map_or(0, |x| x.vacancies),
+                    d.map_or(0, |x| x.labour_force)
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    if mierzalne.is_empty() {
+        out.push(GateOutcome::pominieta(
+            "G11",
+            "Bezrobocie w pasmie",
             format!(
-                "brak przebiegu, w którym rynek pracy może być ciasny (wakaty/siła robocza: {})",
+                "przebieg krótszy niż {G11_MIN_DAYS} dób — ogon {G11_TAIL_DAYS} dób nie istnieje (dlugosci: {})",
                 u.iter()
-                    .map(|r| {
-                        let d = r.days_data.last();
-                        format!(
-                            "{}/{}",
-                            d.map_or(0, |x| x.vacancies),
-                            d.map_or(0, |x| x.labour_force)
-                        )
-                    })
+                    .map(|r| r.days.to_string())
                     .collect::<Vec<_>>()
                     .join(", ")
-            )
-        } else {
+            ),
+            "mediana bezrobocia z ostatnich 30 dób ∈ ⟨3 %, 12 %⟩",
+        ));
+    } else {
+        let czerwone: Vec<u64> = mierzalne
+            .iter()
+            .filter(|r| !g11_seed(r))
+            .map(|r| r.seed)
+            .collect();
+        out.push(GateOutcome::nowa(
+            "G11",
+            "Bezrobocie w pasmie",
+            czerwone.is_empty(),
             format!(
-                "{} ziaren czerwonych {czerwone:?}; mediany: {}",
+                "{} ziaren czerwonych {czerwone:?}; mediany: {}; wakaty/siła robocza: {}",
                 czerwone.len(),
-                ciasne
+                mierzalne
                     .iter()
                     .map(|r| {
                         let m = mediana_u16(&ogon(r));
                         format!("{},{}%", m / 10, m % 10)
                     })
                     .collect::<Vec<_>>()
-                    .join(", ")
-            )
-        },
-        threshold:
-            "mediana bezrobocia z ostatnich 30 dób ∈ ⟨3 %, 12 %⟩, gdy wakatów ≤ siły roboczej",
-    });
-}
-
-/// Czy w tym przebiegu rynek pracy może się w ogóle zacisnąć.
-///
-/// Kryterium jest jedno i twarde: wakatów **nie więcej** niż ludzi w sile roboczej,
-/// mierzone na końcu przebiegu. Powyżej tego progu każdy chętny ma gdzie pójść
-/// i stopa bezrobocia mierzy tarcie wyszukiwania, a nie gospodarkę.
-fn rynek_pracy_moze_byc_ciasny(r: &RunFile) -> bool {
-    r.days_data
-        .last()
-        .is_some_and(|d| d.labour_force > 0 && d.vacancies <= d.labour_force)
+                    .join(", "),
+                wakaty(&mierzalne)
+            ),
+            "mediana bezrobocia z ostatnich 30 dób ∈ ⟨3 %, 12 %⟩",
+        ));
+    }
 }
 
 /// Bezrobocie z ogona przebiegu — patrz [`G11_TAIL_DAYS`].
@@ -711,18 +840,22 @@ fn g4_gate(u: &[&RunFile]) -> GateOutcome {
             r.seed, v.t_response, v.t_settle
         ));
     }
-    GateOutcome {
-        gate: "G4",
-        name: "Reaktywnosc szoku",
-        pass: !szokowe.is_empty() && zdane == szokowe.len() as u64,
-        value: if szokowe.is_empty() {
-            "brak przebiegow supply-shock".to_string()
-        } else {
-            format!("{zdane}/{} · {}", szokowe.len(), opis.join("; "))
-        },
-        threshold: "t_response 2–7 d, t_settle 14–56 d",
-        advisory: true,
+    if szokowe.is_empty() {
+        return GateOutcome::pominieta(
+            "G4",
+            "Reaktywnosc szoku",
+            "brak przebiegow supply-shock — nie ma szoku, którego reakcję dałoby się zmierzyć"
+                .to_string(),
+            "t_response 2–7 d, t_settle 14–56 d",
+        );
     }
+    GateOutcome::nowa(
+        "G4",
+        "Reaktywnosc szoku",
+        zdane == szokowe.len() as u64,
+        format!("{zdane}/{} · {}", szokowe.len(), opis.join("; ")),
+        "t_response 2–7 d, t_settle 14–56 d",
+    )
 }
 
 /// Towar, którego mediana ceny urosła najbardziej od doby zdarzenia. Plik metryk
@@ -847,35 +980,40 @@ fn g12_wielkosc(seria: &[i64]) -> (bool, String) {
 /// ekonomicznej do `sim/macro` zamiast zawołać jądro. To jest ryzyko `R1` fazy
 /// M10 i cała jej architektura stoi wokół niego (`WP10.2` przed `WP10.1`).
 ///
-/// Bramka jest **doradcza** w przebiegu bez próbek miesięcznych — i to jest ta
-/// sama droga, którą G11 jest doradcza bez ciasnego rynku pracy: bramka, która
-/// nie miała czego zmierzyć, nie ma prawa świecić ani na zielono, ani na czerwono.
+/// **Przestała być doradcza w `R2-WP24`.** Powód doradczości był nazwany
+/// i miał warunek wygaśnięcia: dochód gospodarstwa był egzogeniczny, bo
+/// `PayrollOutbox` nie miała konsumenta (`FF-29`), więc makro nie miało jak
+/// odtworzyć kanału, którego mezo nie przechodziło. `R2-WP30` dała jej
+/// konsumenta (`K-93`) — płaca schodzi z konta zakładu — więc warunek się
+/// spełnił i komentarz zniknął razem z `advisory: true`. Bramka bez werdyktu
+/// jest wykresem.
+///
+/// Przebieg bez próbek miesięcznych jest **pominięciem z powodem**, a nie
+/// zielenią: bramka, która nie miała czego zmierzyć, nie ma prawa świecić.
 fn lod(u: &[&RunFile]) -> GateOutcome {
     let mierzalne: Vec<&&RunFile> = u
         .iter()
         .filter(|r| probki_miesieczne(&r.lod) >= G12_MIN_MONTHS)
         .collect();
     if mierzalne.is_empty() {
-        return GateOutcome {
-            gate: "G12",
-            name: "Makro nie odjezdza od mezo",
-            pass: true,
-            advisory: true,
-            value: format!(
+        return GateOutcome::pominieta(
+            "G12",
+            "Makro nie odjezdza od mezo",
+            format!(
                 "brak przebiegu z {G12_MIN_MONTHS} probkami miesiecznymi (dlugosci: {})",
                 u.iter()
                     .map(|r| r.lod.len().to_string())
                     .collect::<Vec<_>>()
                     .join(", ")
             ),
-            threshold: "mediana ≤ 5 ‰, nachylenie ≤ 0,2 ‰/rok, autokorelacja znaku ≤ 0,30",
-        };
+            "mediana ≤ 5 ‰, nachylenie ≤ 0,2 ‰/rok, autokorelacja znaku ≤ 0,30",
+        );
     }
 
     let mut czerwone: Vec<u64> = Vec::new();
-    // Nie steruje już werdyktem (bramka jest doradcza), ale **musi** trafić
-    // do opisu: seria nieporównywalna w dobie zero znaczy, że ktoś zmienił
-    // jedną ze stron pomiaru i bramka mierzy własną definicję.
+    // Seria nieporównywalna w dobie zero znaczy, że ktoś zmienił jedną ze stron
+    // pomiaru i bramka mierzy własną definicję — to jest **osobna** informacja
+    // od czerwieni i dlatego ma własną listę w opisie.
     let mut nieporownywalne: Vec<&'static str> = Vec::new();
     let mut opisy: Vec<String> = Vec::new();
     for r in &mierzalne {
@@ -891,32 +1029,11 @@ fn lod(u: &[&RunFile]) -> GateOutcome {
     }
     czerwone.dedup();
 
-    GateOutcome {
-        gate: "G12",
-        name: "Makro nie odjezdza od mezo",
-        pass: czerwone.is_empty(),
-        // **Doradcza, dopóki dochód gospodarstwa jest egzogeniczny** — i to jest
-        // ta sama droga, którą G4 jest doradcza do czasu M6.
-        //
-        // Zmierzone (210 dób, ziarno 1): mediana odchylenia pieniądza gospodarstw
-        // **879 ‰**, przy zgodności w dobie zero co do promila. Rozjazd jest więc
-        // prawdziwy, ale jego przyczyna leży po stronie **mezo**, nie makra:
-        // `Firms::run_payroll` zwraca fakty, `PayrollOutbox` je przyjmuje i nikt
-        // jej nie opróżnia od M7b (`FF-29`), więc dochód gospodarstwa płaci
-        // pracodawca spoza miasta, a pieniądz firm osobno wycieka do ludzi
-        // (395 → 229 mln zł w księgach przez 300 dób). Makro nie ma jak tego
-        // odtworzyć, bo w nim płace idą z ksiąg firm do gospodarstw i tyle.
-        //
-        // Czerwień znaczyłaby „model makro jest zepsuty", a zepsuty jest kanał,
-        // którego jeszcze nie ma — a bramka świecąca na czerwono z powodu
-        // nieistniejącego kanału uczy wyłącznie ignorowania bramek. Liczba jest
-        // przy tym wypisywana co noc, więc doba, w której `FF-29` się domknie,
-        // będzie w raporcie widoczna.
-        //
-        // **Kiedy przestaje być doradcza:** gdy `PayrollOutbox` dostanie
-        // konsumenta. Wtedy ten komentarz znika razem z `advisory: true`.
-        advisory: true,
-        value: format!(
+    GateOutcome::nowa(
+        "G12",
+        "Makro nie odjezdza od mezo",
+        czerwone.is_empty(),
+        format!(
             "{} ziaren czerwonych {czerwone:?}{}; {}",
             czerwone.len(),
             if nieporownywalne.is_empty() {
@@ -926,9 +1043,8 @@ fn lod(u: &[&RunFile]) -> GateOutcome {
             },
             opisy.join(" | ")
         ),
-        threshold: "mediana ≤ 5 ‰, nachylenie ≤ 0,2 ‰/rok, autokorelacja znaku ≤ 0,30 \
-                    (doradcza do czasu domknięcia `PayrollOutbox`, `FF-29`)",
-    }
+        "mediana ≤ 5 ‰, nachylenie ≤ 0,2 ‰/rok, autokorelacja znaku ≤ 0,30",
+    )
 }
 
 /// Co porównujemy. Pieniądz jest wielkością **nazwaną w kontrakcie** (M10 §7.3,
@@ -1191,12 +1307,24 @@ mod tests {
     }
 
     /// Przebieg bez próbek nie ma czego zmierzyć i mówi to o sobie.
+    ///
+    /// Do `R2-WP24` mówił to jako „zielona, doradcza" — czyli tak samo jak
+    /// przebieg zmierzony i zdany. Od R2f mówi to jako `Skipped` z powodem,
+    /// a w biegu nocnym takie pominięcie wywraca przebieg (`D-N17`).
     #[test]
-    fn brak_probek_czyni_bramke_doradcza() {
+    fn brak_probek_pomija_bramke_z_powodem() {
         let r = przebieg_pusty();
         let g = lod(&[&r]);
-        assert!(g.advisory, "bramka bez pomiaru nie ma prawa świecić");
-        assert!(g.pass);
+        assert_eq!(g.verdict, Verdict::Skipped);
+        assert!(
+            !g.pass(),
+            "bramka bez pomiaru nie ma prawa świecić na zielono"
+        );
+        assert!(
+            g.verdict.blokuje(Profile::Nightly),
+            "bieg nocny ma to złapać"
+        );
+        assert!(!g.verdict.blokuje(Profile::Ci));
     }
 
     fn przebieg_pusty() -> RunFile {

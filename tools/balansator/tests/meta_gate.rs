@@ -114,3 +114,138 @@ fn usuniecie_podlogi_ceny_czerwieni_bramke_deflacji() {
     assert!(bez_podlogi[DOB - 1] < min_margin_bp);
     assert_eq!(z_podloga[DOB - 1], min_margin_bp);
 }
+
+// ── R2-WP24: bramka bezrobocia naprawdę mierzy bezrobocie ────────────────────────
+//
+// Ta sama zasada co wyżej, zastosowana do G11. Test jest **odtwarzający**: na
+// kodzie sprzed R2f syntetyczny przebieg z bezrobociem 2 ‰ nie dawał werdyktu
+// „czerwony", tylko nie dawał żadnego — filtr „wakatów nie więcej niż ludzi
+// w sile roboczej" wykluczał go z oceny, a w profilu `ci` bramka znikała
+// z raportu całkiem. Świat z bezrobociem 0,2 % przy 12 032 pustych etatach
+// (poz. 6 wykazu `R2`) przechodził więc przez bieg nocny bez jednej czerwonej
+// lampki przez całe M7.
+//
+// Liczby są wzięte z tamtego pomiaru, a nie wymyślone.
+
+use magnat_balansator::gates::{evaluate, Profile, Verdict};
+use magnat_balansator::metrics::{DayMetrics, RunFile, SCHEMA_VERSION};
+
+/// Bezrobocie zmierzone w mieście z poz. 6 wykazu: 2 promile siły roboczej.
+const BEZROBOCIE_PERMILLE: u16 = 2;
+/// Puste etaty z tego samego pomiaru — **więcej niż ludzi w sile roboczej**,
+/// i to właśnie ta nierówność wyłączała bramkę.
+const WAKATY: u32 = 12_032;
+const SILA_ROBOCZA: u32 = 9_000;
+
+fn doba(day: u32) -> DayMetrics {
+    DayMetrics {
+        day,
+        prices: Vec::new(),
+        cpi_index_bp: 10_000,
+        cpi_mom_bp: Some(0),
+        cpi_yoy_bp: Some(0),
+        base_rate_bp: 500,
+        margin_median_bp: 3_000,
+        shops: 50,
+        insolvent: 0,
+        hhi_median: 1_000,
+        hhi_pairs: 10,
+        live_categories: 8,
+        stockout_permille: 0,
+        stockout_refusal_permille: 0,
+        deferral_permille: 0,
+        purchases: 100,
+        revenue_gr: 10_000,
+        reprices: 0,
+        write_offs: 0,
+        write_off_gr: 0,
+        expired_qty: 0,
+        loans: 0,
+        credit_outstanding_gr: 0,
+        money_supply_gr: 1_000_000,
+        firms: 200,
+        firm_sites: 202,
+        unemployment_permille: BEZROBOCIE_PERMILLE,
+        labour_force: SILA_ROBOCZA,
+        vacancies: WAKATY,
+        firms_founded: 0,
+        firms_gone: 0,
+    }
+}
+
+/// Przebieg dość długi, żeby ogon G11 istniał (`G11_MIN_DAYS` = 90).
+fn przebieg(days: u16) -> RunFile {
+    RunFile {
+        schema_version: SCHEMA_VERSION,
+        scenario: "base".to_string(),
+        seed: 1,
+        days,
+        citizens: 24_800,
+        shops: 50,
+        hashes: Vec::new(),
+        days_data: (0..=u32::from(days)).map(doba).collect(),
+        shock_good: None,
+        conservation_ok: true,
+        decisions_without_reason: 0,
+        decisions_sampled: 1_000,
+        lod: Vec::new(),
+    }
+}
+
+fn bramka<'a>(
+    w: &'a [magnat_balansator::gates::GateOutcome],
+    id: &str,
+) -> &'a magnat_balansator::gates::GateOutcome {
+    w.iter()
+        .find(|g| g.gate == id)
+        .unwrap_or_else(|| panic!("bramki {id} nie ma w raporcie"))
+}
+
+#[test]
+fn bezrobocie_dwa_promile_czerwieni_bramke_g11() {
+    let werdykty = evaluate(&[przebieg(120)], Profile::Nightly, 2_400);
+    let g11 = bramka(&werdykty, "G11");
+    assert_eq!(
+        g11.verdict,
+        Verdict::Red,
+        "2 ‰ bezrobocia jest poza pasmem 3–12 % niezależnie od tego, ile jest wakatów; \
+         zmierzono: {}",
+        g11.value
+    );
+    // Gęstość etatów zostaje w opisie, bo to ona jest przyczyną i ma adresata (R3).
+    assert!(
+        g11.value.contains(&format!("{WAKATY}/{SILA_ROBOCZA}")),
+        "opis ma nieść wakaty i siłę roboczą: {}",
+        g11.value
+    );
+}
+
+/// Przebieg krótszy niż ogon nie ma czego zmierzyć — i **mówi to**, zamiast
+/// znikać z raportu.
+#[test]
+fn przebieg_bez_ogona_pomija_g11_z_powodem() {
+    let werdykty = evaluate(&[przebieg(30)], Profile::Nightly, 2_400);
+    let g11 = bramka(&werdykty, "G11");
+    assert_eq!(g11.verdict, Verdict::Skipped);
+    assert!(
+        g11.verdict.blokuje(Profile::Nightly),
+        "`D-N17`: w biegu nocnym pominięcie jest błędem konfiguracji"
+    );
+}
+
+/// Profil `ci` nadal nie liczy czterech bramek — ale one **zostają w raporcie**
+/// jako pominięte. Do R2f raport profilu `ci` miał osiem wierszy i nikt nie
+/// wiedział, że brakuje czterech.
+#[test]
+fn profil_ci_pomija_bramki_bez_usuwania_ich_z_raportu() {
+    let werdykty = evaluate(&[przebieg(120)], Profile::Ci, 2_400);
+    assert_eq!(werdykty.len(), 12, "dwanaście bramek, zawsze");
+    for id in ["G4", "G6", "G11", "G12"] {
+        let g = bramka(&werdykty, id);
+        assert_eq!(g.verdict, Verdict::Skipped, "{id}");
+        assert!(
+            !g.verdict.blokuje(Profile::Ci),
+            "{id} nie wywraca profilu ci"
+        );
+    }
+}

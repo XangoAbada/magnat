@@ -284,6 +284,7 @@ Ma własne kryteria akceptacji w §7 swojego dokumentu. Twarde: żaden hash nie 
 - [x] **R-WP11** `sim/agents/src/planner.rs` · [x] **R-WP12** `sim/economy/src/market.rs`
 - [x] **R-WP10** `transit.rs`, `micro.rs`, usunięcie rusztowań `pub use` (ostatni — po wszystkich podziałach)
 - [x] **Decyzje blokujące** — `D-R1` (progi metryk) i `D-R2` (reguła / hook / oba) przyjęte domyślnie
+- [x] **R1** Refaktor strukturalny po M5 — dwanaście pakietów, trzynaście commitów; wiersz dopisany w `R2-WP26`, bo egzekutor rejestru długu pyta dokument postępu, czy faza-adresat już się zamknęła, a R1 nie miało ani jednej pozycji `- [x] **R1**`
 
 R-WP11 i R-WP12 dopisane przy zamknięciu R-WP1 (`D-1` w tabeli zmian dokumentu R1): pierwszy
 przebieg skryptu pokazał dwa pliki powyżej progu błędu, które nie należały do żadnego pakietu.
@@ -697,7 +698,7 @@ kończy R2 bez statusu** — zamknięta z testem, przeniesiona z imiennym adresa
 z powodem albo „nie dotyczy".
 
 Powstał z jednego przeglądu repozytorium po M7f i dwóch przeglądów celowanych, a urósł w trzech
-kolejnych rzutach. **Wykaz ma 80 pozycji** (stan po R2d; liczone, nie przepisywane — do R2d nagłówek
+kolejnych rzutach. **Wykaz ma 86 pozycji** (stan po R2f; 80 po R2d — sześć dopisała sama R2f, wszystkie z uruchomienia bramek; liczone, nie przepisywane — do R2d nagłówek
 wykazu mówił 78, ten akapit 73, a pozycji było 79) — dwa wiersze wyszły z wykonania pozycji 1, 2 i 21 przed R2 (`R2-WP35`, `R2-WP36`), dwa dopisała M11b, dwa M11c (72 — pusta ulica poza szczytem, 73 — `debug_assert` kolejki zdarzeń), trzy R2b (74, 76, 77), jedną R2c (79) i jedną R2d (80 — koszt priority-flood).
 Pięć pozycji (5, 6, 12, 70, 71) przejęła **M11c** decyzją właściciela produktu z 2026-09-19.
 Cztery z nich (5, 12, 70, 71) są **zamknięte z testami**; pozycja 6 (`R2-WP18`) skończyła się
@@ -722,14 +723,17 @@ Podfazy — porcje wykonawcze; kryterium zamknięcia każdej jest w jej dokumenc
 - [x] **R2c** Rozjazdy danych i kodu — `R2c-rozjazdy-danych-i-kodu.md` (R2-WP12…R2-WP16; motoryzacja wydzielona do `R2-WP38` — poz. 13, `D-N12`)
 - [x] **R2d** Domknięcie świata — `R2d-domkniecie-swiata.md` (R2-WP17…R2-WP19; `R2-WP17` wykonane w M11c, `R2-WP18` zmierzone i przeniesione do R3 — `D-N20`, `R2-WP19` zakończeniem drugim — pomiar w `M1` §5.7a)
 - [x] **R2e** Dług strukturalny i martwy kod — `R2e-dlug-i-martwy-kod.md` (R2-WP20…R2-WP23, R2-WP27, R2-WP28, R2-WP31; poz. 35 rejestru długu zostaje z pomiarem, poz. 37 rozcięta i zarejestrowana ponownie — `E-8`, `E-10`)
-- [ ] **R2f** Pomiar i bramki — `R2f-pomiar-i-bramki.md` (R2-WP24…R2-WP26, R2-WP29, R2-WP33, R2-WP34)
+- [x] **R2f** Pomiar i bramki — `R2f-pomiar-i-bramki.md` (R2-WP24…R2-WP26, R2-WP29, R2-WP33, R2-WP34, R2-WP39; powstał dokument `R3-etap-7-i-dlug-strukturalny.md` — 49 pozycji rejestru długu i 20 pozycji wykazu bez żywego adresata)
+- [x] **R2** Naprawy po M11 — wszystkie sześć podfaz; **86 pozycji wykazu, każda ze statusem**: 63 zamknięte, 22 przeniesione do `R3` z powodem, 1 `nie dotyczy`
 
 Kryteria akceptacji (§7 dokumentu R2):
 
-- [ ] 1. Każda pozycja wykazu ma status · [ ] 2. Każdy pakiet zostawił test, który padał przed naprawą
-- [ ] 3. `master` zielony po każdym commicie · [ ] 4. Przebieg dziesięcioletni domyka cztery nowe niezmienniki
-- [ ] 5. Bramka G11 świeci czerwono przed R2-WP18 i zielono po · [ ] 6. Rejestr długu bez pozycji bez adresata
-- [ ] 7. `README.md` opisuje stan repozytorium, pilnowany testem CI
+- [x] 1. Każda pozycja wykazu ma status — 86 wierszy, 63 zamknięte, 22 przeniesione, 1 `nie dotyczy`
+- [x] 2. Każdy pakiet zostawił test, który padał przed naprawą · [x] 3. `master` zielony po każdym commicie
+- [~] 4. Przebieg dziesięcioletni domyka **trzy z czterech** niezmienników; niezmiennik pieniądza świata rozjeżdża się na granicy miesiąca (poz. 78, `R3`)
+- [~] 5. **G11 świeci czerwono i to jest jej pierwszy werdykt w historii** — zielono po `R2-WP18`, czyli po R3, bo tam poszedł Etap 7 (`D-N20`)
+- [x] 6. Rejestr długu bez pozycji bez adresata — `struct_guard --all` pyta o to od `R2-WP26`
+- [x] 7. `README.md` opisuje stan repozytorium, pilnowany bramką `plan_guard` w CI
 
 **Pięć pozycji wykazu nie może czekać do R2** (§2b dokumentu): 1, 2 i 21 blokują test T4a
 i należą do **M8d**; 7 blokuje kalibrację hazardów i należy do **M8c**; 11 blokuje warunek
@@ -747,6 +751,21 @@ dostaje placówkę i wykształcenie, zakład produkcyjny dostaje utarg. Pozycja 
 z indeksu miejsc pracy, więc `SocialIndex::coworkers` mierzy od 2026-09-18 to,
 co obiecuje, a M10e policzył na nim spójną składową bez ani jednego filtra.
 **Wszystkie pięć pozycji wyprzedzających jest wykonanych.**
+
+### R3 — Etap 7 i dług strukturalny bez właściciela
+`R3-etap-7-i-dlug-strukturalny.md` · powstał w R2f · **nie blokuje M12**
+
+Nie jest fazą, tak samo jak R1 i R2. Powstał z **pomiaru, nie z pomysłu**: egzekutor rejestru
+długu (`R2-WP26`) zapytał po raz pierwszy, czy adresat pozycji istnieje i czy jeszcze nie minął,
+i odpowiedź brzmiała — **55 pozycji z 68 nie ma żywego adresata**. Plan R2 przewidywał cztery.
+
+Dwa tematy, jedna przyczyna: przeprojektowanie Etapu 7 (zakład jako **lokal**, nie budynek —
+`D-N20`, pomiar z M11c: 199 firm na 24 800 mieszkańców wobec obiecanych 1 : 15…25) oraz
+49 pozycji rejestru i 20 pozycji wykazu R2, których adresat się zamknął.
+
+- [ ] **R3-WP1** Zakład jako lokal: Etap 7 rozstawia po `Unit` · [ ] **R3-WP2** Obsada z powierzchni lokalu
+- [ ] **R3-WP3** Rejestr długu: pozycje zamknięte pomiarem, reszta z tematem
+- [ ] **R3-WP4** `R2-WP35` — opieka nad dzieckiem · [ ] **R3-WP5** `R2-WP38` — motoryzacja idzie za dochodem
 
 ### M12 — Skala i jakość
 `M12-skala-i-jakosc.md` · wymaga: M11
@@ -773,6 +792,7 @@ Jedna linia na zamknięty pakiet roboczy lub bramkę. Najnowsze na górze.
 
 | Data | Faza | Co zamknięto | Uwagi |
 |---|---|---|---|
+| 2026-09-22 | R2 | **Podfaza R2f — pomiar i bramki (R2-WP24…R2-WP26, R2-WP29, R2-WP33, R2-WP34, R2-WP39); podfaza i dokument R2 zamknięte.** Sześć pakietów, z których każdy zaczynał się od tego samego pytania: czy ta bramka może w ogóle zaświecić na czerwono. **(1) Bramka bezrobocia** (`R2-WP24`): `GateOutcome` traci dwa pola `bool` i dostaje `Verdict` z czterema stanami, bo brakowało miejsca na jedyny stan, który zdarzał się co noc — „nie policzono". Filtr ciasnego rynku pracy znika z werdyktu G11 i zostaje w opisie; zmierzone na przebiegu 200-dobowym: **2,8 % bezrobocia przy 12 536 wakatach na 14 780 siły roboczej**, czyli czerwone, pierwszy raz w historii tej bramki. G4 i G12 przestają być doradcze — G12 miała nazwany warunek wygaśnięcia („gdy `PayrollOutbox` dostanie konsumenta"), który spełnił się w R2b i którego nie pilnowało nic. Pominięcie wywraca bieg nocny (`D-N17`), bo filtr wykluczający bramkę zawsze jest wyłączeniem bramki napisanym okrężnie. Raport ma dwanaście wierszy, nie osiem. **(2) Testy miasta** (`R2-WP25`): `WorldSize::Km2` — rozmiar **wyłącznie testowy**, bez wpisu w kreatorze i bez aliasu w CLI (`D-N18`) — wyprowadza **27 testów z `#[ignore]`**; `cargo test -p magnat-world` idzie 4 min 57 s. Reszta ma wiersz w `D-R7` z nazwą joba nocnego i powodem, a nie formułkę „generacja świata". Przy okazji wykonane `D-19` i `D-22` z R1: dwa testy M2d padały na `master` od nieznanej liczby faz i były **przeterminowane, a nie zepsute**. Macierze hashy terenu i miasta identyczne bit w bit. **(3) Egzekutor rejestru** (`R2-WP26`): `struct_guard --all` czyta rejestr długu i pyta, czy adresat istnieje i czy nie minął; `plan_guard` pyta o to samo tabele korekt. Pierwszy przebieg: **55 pozycji z 68 bez żywego adresata** (plan przewidywał cztery) i **trzy niespełnione obietnice** fazy M8 wobec M8e. Stąd `R3-etap-7-i-dlug-strukturalny.md` — dokument, którego `D-N20` zażądało w R2d i którego nie było. **(4) Budżety UI** (`R2-WP29`), **(5) linia bazowa** (`R2-WP33`: brak wpisu to teraz kod wyjścia 1, nie słowo `NOWY`) i **(6) `export_drains`** (`R2-WP34`). | Trzy rzeczy, których nie było w planie, a które znalazły bramki przy pierwszym uruchomieniu. **G9 świeciła na czerwono od R2b i nikt tego nie zobaczył**: 61 357 decyzji bez powodu na 1 820 626 — `R2-WP32` wpisało `TxKind::Mobility` po stronie „wybór" i w tym samym podejściu zaczęło księgować **dobowy agregat per kanał** bez powodu, którego do agregatu przypiąć się nie da. Po naprawie **zero** (poz. 81, `R2-WP39`). **Eksport nie ma czego wywieźć**: pięć towarów w obrocie granicznym o największym zapasie ma **zero kilogramów** w slocie wyjściowym któregokolwiek zakładu, więc druga połowa kryterium WP9 fazy M6 zamyka się pomiarem i wierszem `AS-1`, a nie ceną (poz. 83). **G4 nie umie zmierzyć szoku** (`t_response` i `t_settle` są `None`), a **G12 rozjeżdża się o 886 ‰** — obie od R2f blokują i obie są czerwone (poz. 82). To nie jest koszt naprawy bramek, tylko ich zwrot. Wykaz R2 ma **86 pozycji i każda ma status**: 63 zamknięte, 22 przeniesione do `R3` z powodem, 1 `nie dotyczy`. |
 | 2026-09-21 | R2 | **Podfaza R2e — dług strukturalny, martwy kod i dokumentacja (R2-WP20…R2-WP23, R2-WP27, R2-WP28, R2-WP31).** Siedem pakietów, dwie nowe bramki CI i jedno rozstrzygnięcie kontraktowe, które czekało od R1.
 
 **(1) `DecisionReason` rozpadł się na trzy enumy po aktorze** (`K-58`, `D-N15`): `Citizen` 39 wariantów, `Firm` 51, `City` 21, plus `Unspecified` na sumie. Gwarancja z `K-12` nie osłabła — zmienił się jej **nośnik**: wyczerpujący `match` bez ramienia `_` obowiązuje od tej chwili na każdym z trzech osobno i pilnują tego **cztery** testy `trybuild` zamiast jednego. Renderer powodów rozciął się tą samą osią: `describe` (1290 linii) → 376 · 634 · 287 w trzech plikach. Przepisanych **552 miejsca w 106 plikach**, wszystkie mechanicznie. Numery są wieczne i nie drgnęły; przeniosły się z deklaracji wariantu do `discriminant()`, bo jawna dyskryminanta wymaga `#[repr(u16)]`, a ten wyłącza optymalizację niszy — suma rosła przez to z 24 B na 32 B.

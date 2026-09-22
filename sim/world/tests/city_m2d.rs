@@ -2,7 +2,12 @@
 //!
 //! Jak `city.rs` i `city_m2c.rs`: testy stoją na prawdziwym terenie, bo cały sens
 //! niwelacji parceli i niwelety drogi polega na tym, że teren nie jest płaski.
-//! Każdy generuje świat, więc są `#[ignore]` i uruchamiane jawnie:
+//!
+//! **Dziewięć z szesnastu jedzie na 2 km i chodzi przy każdym `cargo test`** (`R2-WP25`).
+//! Siedem zostaje na 4 i 8 km: wycena, pokrycie katalogu gramatyk, powierzchnia lokali,
+//! niweleta i różnorodność zabudowy mierzą **rozkłady**, a rozkład na ćwiartce
+//! powierzchni mierzy wariancję próbki, nie generator. Każdy ma wiersz w `D-R7`
+//! (`R1-refaktor-po-M5.md`) z nazwą joba nocnego:
 //! `cargo test --release -p magnat-world --test city_m2d -- --include-ignored`
 
 use magnat_jobs::JobPool;
@@ -58,9 +63,8 @@ fn miasto_pelne(
 /// to nie jest luka, tylko kombinacja, której generator nigdy nie wyprodukuje, a test
 /// pilnujący 648 pól macierzy mierzyłby pracowitość, nie jakość miasta.
 #[test]
-#[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
 fn macierz_pokrycia_gramatyk_nie_ma_luk() {
-    let (c, _) = miasto(7, WorldSize::Medium8km, Region::River);
+    let (c, _) = miasto(7, WorldSize::Km2, Region::River);
     let mats =
         magnat_voxel::MaterialRegistry::load_dir(&magnat_world::assets::data_path("materials"))
             .expect("materiały");
@@ -123,7 +127,7 @@ fn macierz_pokrycia_gramatyk_nie_ma_luk() {
 
 /// Udział gramatyki awaryjnej i doborów po rozluźnieniu — progi z kryterium WP19.
 #[test]
-#[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
+#[ignore = "2 km nie wystarcza — job nocny `determinism`, wiersz w `D-R7` (R1)"]
 fn katalog_trafia_bez_awaryjnej_i_prawie_zawsze_bez_rozluznienia() {
     let (c, _) = miasto(7, WorldSize::Medium8km, Region::River);
     let r = &c.report.build;
@@ -166,7 +170,7 @@ fn katalog_trafia_bez_awaryjnej_i_prawie_zawsze_bez_rozluznienia() {
 /// podłogi chroniące przed regresją, a nie cele — zmiana, która je przebije, zawaliła
 /// różnorodność i ma o tym powiedzieć głośno.
 #[test]
-#[ignore = "128 generacji świata — CI uruchamia jawnie przez --include-ignored"]
+#[ignore = "128 generacji na 4 km — job nocny `determinism`, wiersz w `D-R7` (R1)"]
 fn t13_roznorodnosc_zabudowy() {
     /// Udział budynków o identycznej sygnaturze wśród sąsiadów w promieniu 60 m.
     const MAX_POWTOREK_PCT: f64 = 15.0;
@@ -275,7 +279,7 @@ fn sygnatura_pakuje_cztery_znaczniki_bez_kolizji() {
 // ── WP15a: wycena gruntu, pass_1 ─────────────────────────────────────────────────────
 
 #[test]
-#[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
+#[ignore = "2 km nie wystarcza — job nocny `determinism`, wiersz w `D-R7` (R1)"]
 fn wycena_pass1_jest_dodatnia_i_rosnie_ku_centrum() {
     let (c, _) = miasto(7, WorldSize::Medium8km, Region::River);
     for (i, p) in c.parcels.parcels.iter().enumerate() {
@@ -303,7 +307,7 @@ fn wycena_pass1_jest_dodatnia_i_rosnie_ku_centrum() {
 /// Rozbicie na czynniki — wymóg wyjaśnialności (00 §7). `pass_1` wypełnia osiem z dwunastu
 /// pozycji; cztery pozostałe (praca, handel, usługi, zanieczyszczenie) dokłada `pass_2`.
 #[test]
-#[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
+#[ignore = "2 km nie wystarcza — job nocny `determinism`, wiersz w `D-R7` (R1)"]
 fn rozbicie_wyceny_sumuje_sie_do_wyniku() {
     let (c, _) = miasto(3, WorldSize::Small4km, Region::Lowland);
     let ctx = value::ValueCtx {
@@ -313,7 +317,12 @@ fn rozbicie_wyceny_sumuje_sie_do_wyniku() {
         blocks: &c.blocks,
         districts: &c.districts,
         rings: c.zones.rings.len() as u8,
-        access: None,
+        // **`D-22` z R1, wykonane w `R2-WP25`.** `access: None` to semantyka `pass_1`,
+        // a `land_value_per_m2` jest zapisem `pass_2` — `generate_city` woła go po
+        // Etapie 7 i nadpisuje pole dla wszystkich parcel. Pierwszy assert, ten od
+        // nazwy testu, przechodził; padał drugi, bo porównywał wyliczenie jednego
+        // przebiegu z zapisem drugiego. Test pochodzi z M2d, sprzed istnienia `pass_2`.
+        access: Some(&c.access),
     };
     let mut z_wplywem = 0;
     for i in 0..c.parcels.parcels.len().min(500) {
@@ -337,10 +346,9 @@ fn rozbicie_wyceny_sumuje_sie_do_wyniku() {
 /// z jednowątkową. Sprawdzane przez hash miasta, który obejmuje budynki, lokale
 /// i stanowiska — czyli cały produkt derywacji.
 #[test]
-#[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
 fn derywacja_rownolegla_daje_ten_sam_wynik_co_jednowatkowa() {
-    let (a, _) = miasto_w(11, WorldSize::Small4km, Region::Lowland, 1);
-    let (b, _) = miasto_w(11, WorldSize::Small4km, Region::Lowland, 8);
+    let (a, _) = miasto_w(11, WorldSize::Km2, Region::Lowland, 1);
+    let (b, _) = miasto_w(11, WorldSize::Km2, Region::Lowland, 8);
     assert_eq!(
         a.report.city_hash, b.report.city_hash,
         "hash miasta zależy od liczby wątków"
@@ -362,9 +370,8 @@ fn derywacja_rownolegla_daje_ten_sam_wynik_co_jednowatkowa() {
 
 /// T6 fazy w zakresie dostępnym w M2d: obrys budynku ⊆ wielokąt parceli.
 #[test]
-#[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
 fn budynek_miesci_sie_w_swojej_parceli() {
-    let (c, _) = miasto(7, WorldSize::Medium8km, Region::River);
+    let (c, _) = miasto(7, WorldSize::Km2, Region::River);
     let geom = &c.roads.geom;
     for b in &c.buildings.buildings {
         let parcela = &c.parcels.parcels[b.parcel.0.index() as usize];
@@ -383,10 +390,9 @@ fn budynek_miesci_sie_w_swojej_parceli() {
 /// i z testu wyżej, ale sprawdzamy wprost: to jest ta klasa błędu, która w geometrii
 /// na floatach lubi się pojawić mimo poprawnych przesłanek (ryzyko R2).
 #[test]
-#[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
 fn budynki_nie_zachodza_na_siebie() {
     use magnat_spatial::Vec2;
-    let (c, _) = miasto(7, WorldSize::Medium8km, Region::River);
+    let (c, _) = miasto(7, WorldSize::Km2, Region::River);
     let geom = &c.roads.geom;
     let mut sasiedzi: Vec<magnat_core::BuildingId> = Vec::new();
     for (i, b) in c.buildings.buildings.iter().enumerate() {
@@ -420,7 +426,7 @@ fn budynki_nie_zachodza_na_siebie() {
 
 /// „Suma m² lokali ≤ powierzchni brutto budynku" — kryterium WP12.
 #[test]
-#[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
+#[ignore = "2 km nie wystarcza — job nocny `determinism`, wiersz w `D-R7` (R1)"]
 fn lokale_miesza_sie_w_powierzchni_brutto() {
     let (c, _) = miasto(7, WorldSize::Medium8km, Region::River);
     for b in &c.buildings.buildings {
@@ -445,9 +451,8 @@ fn lokale_miesza_sie_w_powierzchni_brutto() {
 
 /// Kontrakt dla M3: każde stanowisko ma widełki, a widełki są uporządkowane.
 #[test]
-#[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
 fn stanowiska_maja_sensowne_widelki_i_lokal() {
-    let (c, _) = miasto(7, WorldSize::Medium8km, Region::River);
+    let (c, _) = miasto(7, WorldSize::Km2, Region::River);
     assert!(
         c.buildings.workplaces.len() > 1000,
         "miasto ma tylko {} stanowisk",
@@ -481,10 +486,9 @@ fn stanowiska_maja_sensowne_widelki_i_lokal() {
 
 /// T4 fazy w zakresie M2d: rampa trafia na drogę **bez** `NO_HEAVY` (korekta D6/D7).
 #[test]
-#[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
 fn rampy_stoja_przy_drodze_dla_ciezkich() {
     use magnat_world::RoadFlags;
-    let (c, _) = miasto(7, WorldSize::Medium8km, Region::River);
+    let (c, _) = miasto(7, WorldSize::Km2, Region::River);
     let mut ramp = 0;
     for b in &c.buildings.buildings {
         for e in b.entrances.iter().filter(|e| e.kind == EntranceKind::Ramp) {
@@ -526,9 +530,8 @@ fn kolumna(c: &CityData, t: &Terrain, x: i32, y: i32) -> Vec<magnat_voxel::Mater
 /// z powietrzem od spodu**. Sprawdzane na kolumnie przez środek budynku: pod pierwszym
 /// napotkanym materiałem stałym nie ma dziury aż do dna badanego zakresu.
 #[test]
-#[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
 fn zaden_budynek_nie_wisi_nad_terenem() {
-    let (c, t) = miasto(7, WorldSize::Medium8km, Region::River);
+    let (c, t) = miasto(7, WorldSize::Km2, Region::River);
     let geom = &c.roads.geom;
     let krok = (c.buildings.buildings.len() / 400).max(1);
     let mut sprawdzonych = 0;
@@ -566,7 +569,7 @@ fn zaden_budynek_nie_wisi_nad_terenem() {
 /// zatopiony poza tolerancją jednego voxela". Mierzone na gotowych voxelach: w osi
 /// segmentu najwyższy materiał stały ma leżeć na rzędnej niwelety ±1 voxel.
 #[test]
-#[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
+#[ignore = "2 km nie wystarcza — job nocny `determinism`, wiersz w `D-R7` (R1)"]
 fn jezdnia_lezy_na_niwelecie() {
     use magnat_world::RoadStructure;
     let (c, t) = miasto(7, WorldSize::Medium8km, Region::River);
@@ -611,10 +614,9 @@ fn jezdnia_lezy_na_niwelecie() {
 /// Determinizm generacji z zabudową (D1 fazy): dwa przebiegi tego samego ziarna
 /// dają identyczny hash miasta i identyczny zestaw komend voxelowych.
 #[test]
-#[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
 fn dwa_przebiegi_daja_to_samo_miasto() {
-    let (a, _) = miasto(0x00C0_FFEE, WorldSize::Small4km, Region::Mountain);
-    let (b, _) = miasto(0x00C0_FFEE, WorldSize::Small4km, Region::Mountain);
+    let (a, _) = miasto(0x00C0_FFEE, WorldSize::Km2, Region::Mountain);
+    let (b, _) = miasto(0x00C0_FFEE, WorldSize::Km2, Region::Mountain);
     assert_eq!(a.report.city_hash, b.report.city_hash);
     assert_eq!(a.report.build, b.report.build);
     assert_eq!(a.buildings.buildings, b.buildings.buildings);
@@ -623,12 +625,31 @@ fn dwa_przebiegi_daja_to_samo_miasto() {
 
 /// Strefy, w których M2d świadomie nic nie stawia. Bez tego pierwszy zabudowany park
 /// wyszedłby dopiero w M11, kiedy ktoś spojrzy na miasto z bliska.
+///
+/// **Test wykonuje `D-19` z R1** (`R2-WP25`): padał na `master` od nieznanej liczby faz
+/// i diagnoza mówiła wprost, że nieaktualny jest **test, nie kod**. Korekta `F2` z M2e
+/// pozwala Etapowi 7 wskazać gramatykę imiennie — pawilon w parku, nadszybie na kopalni
+/// — a strażnik strefy w `plan_building_inner` brzmi `wymus.is_none() && …`. Test
+/// pochodzi z M2d, czyli sprzed tej korekty, i iterował po **wszystkich** budynkach
+/// łącznie z dostawionymi przez Etap 7.
+///
+/// Reguła, której broni, zostaje bez zmian i jest nadal mierzalna: zabudowa **Etapu 4**
+/// nie wchodzi do zieleni ani na wyrobisko. Parcele, na których stoi zakład, są z niej
+/// wyjęte imiennie — bo tam zabudowa jest decyzją Etapu 7, a nie przeoczeniem.
 #[test]
-#[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
+#[ignore = "8 km — job nocny `determinism`, wiersz w `D-R7` (R1)"]
 fn park_i_kopalnia_zostaja_bez_zabudowy() {
     let (c, _) = miasto(7, WorldSize::Medium8km, Region::River);
+    let z_zakladem: std::collections::BTreeSet<u32> =
+        c.sites.sites.iter().map(|s| s.parcel.0.index()).collect();
+    let mut wyjete = 0;
     for b in &c.buildings.buildings {
-        let z = c.parcels.parcels[b.parcel.0.index() as usize].zone;
+        let idx = b.parcel.0.index();
+        let z = c.parcels.parcels[idx as usize].zone;
+        if z_zakladem.contains(&idx) {
+            wyjete += 1;
+            continue;
+        }
         assert!(
             !matches!(
                 z,
@@ -638,6 +659,10 @@ fn park_i_kopalnia_zostaja_bez_zabudowy() {
             z.key()
         );
     }
+    assert!(
+        wyjete > 0,
+        "żadna parcela nie ma zakładu — test byłby spełniony tożsamościowo"
+    );
     // ... a mieszkania stoją wyłącznie tam, gdzie wolno mieszkać.
     for u in c.buildings.units.iter().filter(|u| u.kind.is_dwelling()) {
         let b = &c.buildings.buildings[u.building.0.index() as usize];

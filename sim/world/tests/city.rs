@@ -4,11 +4,16 @@
 //! ograniczeń lokalnych L-systemu polega na tym, że teren mówi „nie", a na płaskim placu
 //! nie mówi nigdy.
 //!
-//! Cena tej decyzji: każdy test generuje świat (~2 s w `debug`, ~0,3 s w `release`).
-//! Zgodnie z konwencją `budgets.rs` i `determinism.rs` są więc oznaczone `#[ignore]`
-//! i uruchamiane jawnie:
-//! `cargo test --release -p magnat-world --test city -- --include-ignored`
-//! (job CI `determinism`).
+//! **Świat ma 2 km, nie 4** (`R2-WP25`). Do R2f każdy test tego pliku stawiał miasto
+//! 4 km i był przez to `#[ignore]`, więc na generatorze miasta chodził automatycznie
+//! wyłącznie hash determinizmu — a hash mówi „tak samo jak wczoraj", nie „poprawnie".
+//! Różnicę widać dokładnie wtedy, gdy ktoś zmieni generator i przeliczy wszystkie hashe,
+//! bo tak trzeba.
+//!
+//! Nie skracamy testów — skracamy świat. Miasto 2 km ma tę samą strukturę co 4 km
+//! (bramy, arterie, pierścień, kwartały, strefy, dzielnice) i te same ograniczenia
+//! lokalne L-systemu; nie ma tylko skali. `WorldSize::Km2` jest rozmiarem **wyłącznie
+//! testowym** (`D-N18`) i nie da się go wybrać ani w kreatorze świata, ani z CLI.
 
 use magnat_jobs::JobPool;
 use magnat_voxel::MaterialRegistry;
@@ -19,6 +24,9 @@ use magnat_world::{
 };
 use std::sync::Arc;
 
+/// Rozmiar świata dla wszystkich testów tego pliku — patrz nagłówek.
+const ROZMIAR: WorldSize = WorldSize::Km2;
+
 fn teren(seed: u64, region: Region) -> Terrain {
     teren_profil(seed, region, EconomyProfile::Mixed)
 }
@@ -27,10 +35,16 @@ fn teren(seed: u64, region: Region) -> Terrain {
 /// nie tylko miasta — złoża zależą od niego, więc test o kopalniach musi podać ten sam
 /// profil w obu miejscach, inaczej sprawdza świat, którego nikt nie postawi.
 fn teren_profil(seed: u64, region: Region, profile: EconomyProfile) -> Terrain {
+    teren_w(seed, region, profile, ROZMIAR)
+}
+
+/// To samo dla rozmiaru innego niż [`ROZMIAR`] — dla dwóch testów, które 2 km nie
+/// wystarcza, i tylko dla nich (patrz `D-R7` w `R1-refaktor-po-M5.md`).
+fn teren_w(seed: u64, region: Region, profile: EconomyProfile, size: WorldSize) -> Terrain {
     let pool = JobPool::new(0);
     let params = WorldGenParams {
         seed,
-        size: WorldSize::Small4km,
+        size,
         region,
         epoch: Epoch::Y1990,
         profile,
@@ -42,21 +56,24 @@ fn teren_profil(seed: u64, region: Region, profile: EconomyProfile) -> Terrain {
 }
 
 fn plan(seed: u64, region: Region, profile: EconomyProfile) -> CityPlan {
+    plan_w(seed, region, profile, ROZMIAR)
+}
+
+fn plan_w(seed: u64, region: Region, profile: EconomyProfile, size: WorldSize) -> CityPlan {
     CityPlan {
         seed,
-        size: WorldSize::Small4km,
+        size,
         region,
         epoch: Epoch::Y1990,
         profile,
         difficulty: Difficulty::Normal,
-        target_pop: magnat_world::city::target_pop(WorldSize::Small4km),
+        target_pop: magnat_world::city::target_pop(size),
     }
 }
 
 /// WP4: „2 przebiegi tego samego seeda → identyczny bajt w bajt `RoadNetwork`",
 /// a przy okazji kryterium zamknięcia całej podfazy.
 #[test]
-#[ignore = "dwie generacje świata — CI uruchamia jawnie przez --include-ignored"]
 fn dwa_przebiegi_daja_identyczna_siec() {
     let t = teren(0x00C0_FFEE, Region::River);
     let p = plan(0x00C0_FFEE, Region::River, EconomyProfile::Mixed);
@@ -77,7 +94,6 @@ fn dwa_przebiegi_daja_identyczna_siec() {
 
 /// Ziarno jest jedynym wejściem, więc jego zmiana musi zmienić miasto.
 #[test]
-#[ignore = "dwie generacje świata — CI uruchamia jawnie przez --include-ignored"]
 fn inne_ziarno_daje_inne_miasto() {
     let (t1, t2) = (teren(1, Region::Lowland), teren(2, Region::Lowland));
     let a = generate_city(
@@ -103,8 +119,14 @@ fn inne_ziarno_daje_inne_miasto() {
 /// Region jest dobrany do profilu, a nie losowy: profil portowy wymaga bramy portowej,
 /// a ta nie ma prawa powstać w regionie bez żeglownej wody — i to nie jest wada
 /// generatora, tylko warunek zadania.
+///
+/// **Jeden z dwóch testów tego pliku, który 2 km nie wystarcza** (`R2-WP25`): na mapie
+/// 2 048 m brama portowa dla ziarna 8 nie trafia do sieci, bo linia brzegowa bywa krótsza
+/// niż odcinek arterii dochodzącej. To nie jest wada generatora — to jest ta sama granica,
+/// przez którą port nie powstaje w regionie bez wody. Test zostaje na 4 km, zostaje
+/// `#[ignore]` i ma wiersz w `D-R7` z nazwą joba nocnego.
 #[test]
-#[ignore = "100 generacji terenu (~40 s w release) — CI uruchamia jawnie przez --ignored"]
+#[ignore = "20 ziaren x 4 km — job nocny `determinism`, wiersz w `D-R7` (R1)"]
 fn bramy_wymagane_istnieja_i_leza_na_wlasciwym_terenie() {
     // Profile pogrupowane po regionie: teren zależy od (ziarno, region), więc dla pięciu
     // profili wystarczą dwie generacje na ziarno, a nie pięć.
@@ -124,10 +146,10 @@ fn bramy_wymagane_istnieja_i_leza_na_wlasciwym_terenie() {
     ];
     for seed in 1..=20u64 {
         for (region, profile) in grupy {
-            let t = teren(seed, region);
+            let t = teren_w(seed, region, EconomyProfile::Mixed, WorldSize::Small4km);
             for prof in profile.iter().copied() {
                 let c = generate_city(
-                    &plan(seed, region, prof),
+                    &plan_w(seed, region, prof, WorldSize::Small4km),
                     &t,
                     t.materials(),
                     &JobPool::new(0),
@@ -190,7 +212,6 @@ fn profil_wymaga(p: EconomyProfile) -> Vec<GateKind> {
 /// Dodatkowo spójność: sieć w kilku kawałkach spełniałaby literę kryterium i nie byłaby
 /// miastem. To jest wstęp do testu T1 z §7, który domknie się dopiero w M2e.
 #[test]
-#[ignore = "pięć generacji świata — CI uruchamia jawnie przez --include-ignored"]
 fn siec_bez_wiszacych_koncow_i_w_jednym_kawalku() {
     for (seed, region) in [
         (7u64, Region::Lowland),
@@ -226,7 +247,6 @@ fn siec_bez_wiszacych_koncow_i_w_jednym_kawalku() {
 ///
 /// Kolej towarowa jest w M2c — powód w nagłówku `lsystem.rs` i w „Korektach planu".
 #[test]
-#[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
 fn struktury_miesza_sie_w_limitach_klasy() {
     let t = teren(11, Region::Mountain);
     let c = generate_city(
@@ -285,7 +305,6 @@ fn struktury_miesza_sie_w_limitach_klasy() {
 /// zamiast tego dwie rzeczy, które naprawdę mogą się nie zgodzić: wzór Eulera dla grafu
 /// planarnego i zgodność sumy ścian z polem obrysu zewnętrznego.
 #[test]
-#[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
 fn kwartaly_domykaja_bilans_pol() {
     let t = teren(3, Region::Lowland);
     let c = generate_city(
@@ -358,7 +377,6 @@ fn kwartaly_domykaja_bilans_pol() {
 
 /// Kontrakt dla M3 (M2 §6): odcinki centrolinii bez grafu.
 #[test]
-#[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
 fn street_lines_zwraca_kazdy_segment() {
     let t = teren(5, Region::Lowland);
     let c = generate_city(
@@ -378,7 +396,6 @@ fn street_lines_zwraca_kazdy_segment() {
 
 /// Latarnie: wejście dla M11 (M2 §6). Mają istnieć i leżeć przy drodze, nie na niej.
 #[test]
-#[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
 fn latarnie_stoja_przy_jezdni() {
     let t = teren(5, Region::Lowland);
     let c = generate_city(
@@ -405,13 +422,29 @@ fn latarnie_stoja_przy_jezdni() {
 
 /// Budżet czasu z M2 §7 dla miasta małego (40 tys.) — całość ≤ 12 s w CI.
 /// Etap 3 to jego część, więc limit jest tu ostrzejszy.
+///
+/// **Trzeci test tego pliku, który zostaje na 4 km** (`R2-WP25`), i z najtwardszego
+/// powodu z całej trójki: budżet jest liczbą **dla miasta 40-tysięcznego** zmierzoną
+/// w wydaniu `release`. Przeliczony na 2 km mierzyłby ćwiartkę powierzchni wobec
+/// pełnego limitu, czyli przechodziłby tożsamościowo — a to jest dokładnie ta klasa
+/// bramki, którą R2 naprawia. Wiersz w `D-R7` z nazwą joba nocnego.
 #[test]
-#[ignore = "generacja świata i pomiar zegarowy — CI uruchamia jawnie przez --include-ignored"]
+#[ignore = "budzet czasu mierzony na 4 km w release — job nocny `determinism`, `D-R7` (R1)"]
 fn etap_3_miesci_sie_w_budzecie_czasu() {
-    let t = teren(9, Region::Lowland);
+    let t = teren_w(
+        9,
+        Region::Lowland,
+        EconomyProfile::Mixed,
+        WorldSize::Small4km,
+    );
     let start = std::time::Instant::now();
     let c = generate_city(
-        &plan(9, Region::Lowland, EconomyProfile::Mixed),
+        &plan_w(
+            9,
+            Region::Lowland,
+            EconomyProfile::Mixed,
+            WorldSize::Small4km,
+        ),
         &t,
         t.materials(),
         &JobPool::new(0),
@@ -427,7 +460,6 @@ fn etap_3_miesci_sie_w_budzecie_czasu() {
 /// Kwartały mają obrys użytkowy mniejszy od ściany grafu — inaczej pas drogowy
 /// nachodziłby na działki (przygotowanie pod T5/T6 w M2e).
 #[test]
-#[ignore = "generacja świata — CI uruchamia jawnie przez --include-ignored"]
 fn kwartal_miesci_sie_w_swojej_scianie() {
     let t = teren(4, Region::Lowland);
     let c = generate_city(
@@ -515,8 +547,13 @@ fn hierarchia_klas_jest_monotoniczna() {
 /// z każdym innym zakładem, którego wyrób da się sprowadzić.
 ///
 /// Pięć regionów, bo złoża są własnością terenu i jeden region niczego nie dowodzi.
+///
+/// **Drugi z dwóch testów, który 2 km nie wystarcza** (`R2-WP25`): na mapie 2 048 m
+/// region `Lowland` nie dostaje ani jednego zakładu wydobywczego, więc kryterium byłoby
+/// spełnione tożsamościowo — czyli dokładnie to, przed czym ten test broni. Zostaje
+/// na 4 km, zostaje `#[ignore]` i ma wiersz w `D-R7` z nazwą joba nocnego.
 #[test]
-#[ignore = "generuje świat i miasto dla pięciu regionów — CI uruchamia jawnie przez --include-ignored"]
+#[ignore = "5 regionow x 4 km — job nocny `determinism`, wiersz w `D-R7` (R1)"]
 fn kopalnia_stoi_na_zlozu() {
     for region in [
         Region::Coastal,
@@ -525,8 +562,8 @@ fn kopalnia_stoi_na_zlozu() {
         Region::River,
         Region::Desert,
     ] {
-        let t = teren_profil(1, region, EconomyProfile::Industrial);
-        let p = plan(1, region, EconomyProfile::Industrial);
+        let t = teren_w(1, region, EconomyProfile::Industrial, WorldSize::Small4km);
+        let p = plan_w(1, region, EconomyProfile::Industrial, WorldSize::Small4km);
         let city = generate_city(&p, &t, t.materials(), &JobPool::new(0)).unwrap();
         let r = &city.sites.report;
         println!(

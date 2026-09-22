@@ -11,6 +11,7 @@ mod agents;
 mod century;
 mod day;
 mod dryrun;
+mod export_drains;
 mod m3day;
 mod m5shop;
 mod m7_miasto;
@@ -123,6 +124,8 @@ enum Command {
     /// Wynik podfazy M7b: rynek pracy i pensje emergentne w mieście (M7b).
     M7labor(m7labor::M7LaborArgs),
     /// **Artefakt fazy M7**: pełne miasto — detal, produkcja, praca, firmy AI, makro.
+    /// Szok ceny zewnętrznej +40 %: odpływ masy i cena półkowa (`R2-WP34`, M6 §7.7).
+    ExportDrains(export_drains::ExportDrainsArgs),
     M7miasto(m7_miasto::M7MiastoArgs),
     /// Wynik podfazy M8a: budżet miasta, siedem danin i cykl życia należności.
     M8miasto(m8_miasto::M8MiastoArgs),
@@ -148,6 +151,7 @@ fn uruchom() -> Result<std::process::ExitCode, Box<dyn std::error::Error>> {
         Some(Command::Nav(a)) => return nav::run(a),
         Some(Command::M5shop(a)) => return m5shop::run(a),
         Some(Command::M7labor(a)) => return m7labor::run(a),
+        Some(Command::ExportDrains(a)) => return export_drains::run(a),
         Some(Command::M7miasto(a)) => return m7_miasto::run(a),
         Some(Command::M8miasto(a)) => return m8_miasto::run(a),
         Some(Command::NewGame(a)) => return m9session::run(a),

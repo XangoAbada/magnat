@@ -95,7 +95,13 @@ fn p1_milion_operacji_zachowuje_sume_co_do_grosza() {
                 b.create_credit(to, amount, LoanId(loan), DecisionReason::Unspecified, t)
             }
             975..=989 => b.destroy_credit(from, amount, LoanId(loan.max(1)), t),
-            990..=994 => b.inject_external_capital(to, amount, ExternalInvestorId(1), t),
+            990..=994 => b.inject_external_capital(
+                to,
+                amount,
+                ExternalInvestorId(1),
+                DecisionReason::Unspecified,
+                t,
+            ),
             995..=997 => b.repatriate_external_capital(from, amount, ExternalInvestorId(1), t),
             _ => b.endow(to, amount, t),
         };
@@ -151,7 +157,13 @@ fn nieudana_operacja_nie_zostawia_sladu() {
         Err(TxError::Unknown)
     );
     assert_eq!(
-        b.inject_external_capital(ids[0], Money(-5), ExternalInvestorId(1), Tick(0)),
+        b.inject_external_capital(
+            ids[0],
+            Money(-5),
+            ExternalInvestorId(1),
+            DecisionReason::Unspecified,
+            Tick(0),
+        ),
         Err(TxError::NonPositive)
     );
 
@@ -209,7 +221,13 @@ proptest! {
                 Op::Transfer(a, c, m) => b.transfer(ids[a], ids[c], Money(m), memo(), t),
                 Op::Credit(a, m) => b.create_credit(ids[a], Money(m), LoanId(1), DecisionReason::Unspecified, t),
                 Op::Repay(a, m) => b.destroy_credit(ids[a], Money(m), LoanId(1), t),
-                Op::Inject(a, m) => b.inject_external_capital(ids[a], Money(m), ExternalInvestorId(3), t),
+                Op::Inject(a, m) => b.inject_external_capital(
+                    ids[a],
+                    Money(m),
+                    ExternalInvestorId(3),
+                    DecisionReason::Unspecified,
+                    t,
+                ),
                 Op::Repatriate(a, m) => b.repatriate_external_capital(ids[a], Money(m), ExternalInvestorId(3), t),
             };
             prop_assert_eq!(b.check_conservation(), Ok(()));

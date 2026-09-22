@@ -46,5 +46,15 @@ serde = { workspace = true }
 # w przebiegu bezgłowym) nie drgnęła, a każdy ekran da się narysować w CI.
 egui = { workspace = true }
 
+[dev-dependencies]
+criterion = { workspace = true }
+
+# Budżety grafu, Gantta i przebudowy panelu z §7 dokumentu fazy M9 (`R2-WP29`).
+# Stoją tutaj, a nie w `engine/ui/benches/`, bo `PanelDesc::build` mieszka w tym
+# crate'cie — patrz nagłówek pliku.
+[[bench]]
+name = "ui_budgets"
+harness = false
+
 [lints]
 workspace = true

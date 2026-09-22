@@ -1837,3 +1837,15 @@ osoby albo zrobić w dowolnej kolejności wewnętrznej. Reszta jest rusztowaniem
 `WP-01 → WP-02 → WP-02b → WP-04 → WP-05 → WP-07 → WP-08 → WP-09 → WP-10 → WP-12 → WP-13 → WP-14`.
 Poza nią (możliwe równolegle): **WP-03** i **WP-03b** (po WP-02), **WP-06** (po WP-01), **WP-11** (po WP-09),
 **WP-15** (po WP-01).
+
+---
+
+## Zmiany wpisane po R2f
+
+Zgodnie z `K-18`. Pierwsza taka tabela w tym dokumencie — M0 zamknęło się przed
+wprowadzeniem `K-18`, tak samo jak M1 (patrz `M1-swiat-statyczny.md`).
+
+| # | Zmiana | Dlaczego |
+|---|---|---|
+| A-1 ★ | **`D-8` dostaje drugą połowę: kiedy odnawia się linię bazową.** Brzmienie „przy świadomej zmianie wydajności" zostaje jako opis **prawa**, a obok niego staje **obowiązek**: linia bazowa odnawia się **przy zamknięciu każdej fazy**, osobnym commitem bez żadnej innej zmiany, z zapisem sprzętu odniesienia (`benches/README.md`). Wykonanie `D-N21` z `R2f` §5.19 i `D-R8` z R1 | Reguła „przy świadomej zmianie wydajności" jest czystsza teoretycznie i **przegrała empirycznie**: przez sześć faz nie odnowił linii bazowej nikt, a trzynaście z czterdziestu jeden benchmarków nie miało wpisu i `bench_guard` raportował dla nich `NOWY` z kodem wyjścia zero. Reguła, której przez sześć faz nie wykonał nikt, nie jest regułą |
+| A-2 | **Brak wpisu w linii bazowej jest błędem bramki**, a nie komunikatem. Wyjątek jest jeden i wąski: benchmark **nowy w tym commicie** jest dopuszczalny wyłącznie razem z dopisaniem go do linii bazowej w tym samym commicie (`bench_guard --update`) | Benchmark bez linii bazowej to benchmark, którego nikt nie ogląda. To ta sama klasa co filtry bramki G11: raport świeci zielono, nie sprawdzając tego, co myśli, że sprawdza |

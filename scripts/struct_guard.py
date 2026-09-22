@@ -215,7 +215,143 @@ REJESTR = {
     # 269 przed R2c, 270 po niej — `R2-WP16` ubrało `envelopes.ron` o wiersz, a nie
     # dodało czytnika, więc wyzwalacz z pozycji 38 dalej nie zadziałał.
     ("sim/economy/src/data.rs", "fn", 270): 65,
+    # 600 przed R2f, 603 po — `R2-WP25` dołożyło ramię `WorldSize::Km2` do `target_pop`
+    # razem z dwuwierszowym komentarzem. Próg błędu `mod.rs` to dokładnie 600, więc trzy
+    # linie przesunęły metrykę z ostrzeżenia na błąd. Pozycja 68 rejestru; podziału nie
+    # robimy tutaj, bo `city/mod.rs` jest orkiestratorem generacji, a jego rozcięcie jest
+    # przeprojektowaniem Etapu 7 — czyli `R3`.
+    ("sim/world/src/city/mod.rs", "mod.rs", 603): 68,
 }
+
+# ── egzekutor rejestru długu (R2-WP26) ───────────────────────────────────────────
+#
+# Reguła z R1 brzmi: **pozycja rejestru ma adresata** — fazę, która ją otworzy
+# z powodu innego niż liczba linii. W trzydziestu przypadkach zadziałała, w kilku
+# nie, i każdy zawiódł inaczej: adresat skreślony bez zastąpienia, adresat, którego
+# nigdy nie było, wyzwalacz, który nie strzelił raz, i wyzwalacz, który nie strzelił
+# trzy razy. Wspólne dla wszystkich: **nic nie sprawdzało, czy adresat istnieje
+# i czy jeszcze nie minął.** Rejestr jest tabelą w markdownie, a ta bramka mierzyła
+# linie w kodzie — dwie rzeczy, które nigdy się nie spotykały.
+
+REJESTR_PLANU = "docs/implementation-plan/R1-refaktor-po-M5.md"
+NAGLOWEK_REJESTRU = "## Rejestr długu strukturalnego"
+POSTEP = "docs/implementation-plan/00-postep.md"
+PLAN_DIR = "docs/implementation-plan"
+
+# Identyfikator fazy: `M0`…`M12` z opcjonalną literą podfazy, `R1`…`R9` tak samo.
+# Negatywne spojrzenie w przód na `-WP` jest konieczne, a nie ostrożnościowe: `R2-WP26`
+# to nazwa **pakietu**, a nie adres fazy, i bez tego wyjątku wiersz opisujący własną
+# poprawkę zapalałby bramkę po zamknięciu R2. Złapane przy pierwszym odhaczeniu R2.
+FAZA = re.compile(r"\b(M(?:1[0-2]|[0-9])[a-g]?|R[1-9][a-f]?)\b(?!-WP)")
+# Wykreślenie w markdownie: `~~M8e~~`. Skreślony adresat **nie liczy się** —
+# to jest dokładnie ten przypadek, który przeżył sześć faz (pozycja 37).
+SKRESLONE = re.compile(r"~~.*?~~", re.S)
+# Data przeglądu przy pozycji świadomie bez adresata fazowego.
+DATA_PRZEGLADU = re.compile(r"\b20\d\d-\d\d-\d\d\b")
+# Pozycja zamknięta: znacznik w kolumnie numeru. Jeden znak, jedna reguła —
+# rozpoznawanie zamknięcia po prozie („zrobione", „wykonane") kończy się
+# wyłączeniem bramki po trzecim fałszywym alarmie, a bramka wyłączona nie łapie nic.
+ZAMKNIETA = "✅"
+
+
+def wiersze_rejestru(tekst: str) -> list[tuple[str, str]]:
+    """Pary `(numer, ścieżka wyjścia)` z tabeli rejestru długu.
+
+    Tabela ciągnie się od swojego nagłówka do następnego nagłówka `## `.
+    Wiersz nagłówka i separator odpadają po **kształcie**, a nie po pozycji:
+    tabela jest w tym dokumencie przerwana poziomą kreską i druga połowa nie
+    ma własnego nagłówka.
+    """
+    poczatek = tekst.find(NAGLOWEK_REJESTRU)
+    if poczatek < 0:
+        return []
+    koniec = tekst.find("\n## ", poczatek + len(NAGLOWEK_REJESTRU))
+    koniec = len(tekst) if koniec < 0 else koniec
+    wyniki = []
+    for linia in tekst[poczatek:koniec].split("\n"):
+        if not linia.startswith("|"):
+            continue
+        # Kreska pionowa w treści jest w markdownie escapowana (`\|`) i **nie** dzieli
+        # kolumny — bez tego rozbiór wiersza z `Citizen \| Firm \| City` gubi ścieżkę
+        # wyjścia i bramka czyta cudzą komórkę.
+        surowa = linia.replace("\|", "\u0001")
+        kol = [c.strip().replace("\u0001", "\|") for c in surowa.strip().strip("|").split("|")]
+        if len(kol) < 5 or kol[0] in ("#", "") or set(kol[0]) <= set("-: "):
+            continue
+        # **Ostatnia** kolumna, nie piąta: ścieżka wyjścia stoi na końcu wiersza,
+        # a wiersz z doklejonym sprostowaniem bywał o kolumnę dłuższy.
+        wyniki.append((kol[0], kol[-1]))
+    return wyniki
+
+
+def odhaczone_fazy(tekst: str) -> set[str]:
+    """Identyfikatory pozycji `- [x] **X**` w dokumencie postępu."""
+    return set(re.findall(r"^-\s*\[x\]\s*\*\*([A-Za-z0-9-]+)\*\*", tekst, re.M))
+
+
+def faza_minela(faza: str, odhaczone: set[str], korzen: pathlib.Path) -> bool:
+    """Czy adresat już się zamknął.
+
+    Podfaza minęła, gdy jest odhaczona wprost. Faza bez litery minęła, gdy
+    **wszystkie** jej podfazy są odhaczone — bo to one są porcją wykonawczą
+    (`K-17`), a wiersz „Faza ukończona" nie niesie identyfikatora.
+    """
+    if faza in odhaczone:
+        return True
+    if not faza[-1].isdigit():
+        return False
+    podfazy = {f for f in odhaczone if f.startswith(faza) and len(f) == len(faza) + 1}
+    wszystkie = {p.name.split("-")[0] for p in (korzen / PLAN_DIR).glob(f"{faza}[a-g]-*.md")}
+    return bool(wszystkie) and wszystkie <= podfazy
+
+
+def dokument_fazy(faza: str, korzen: pathlib.Path) -> bool:
+    return any((korzen / PLAN_DIR).glob(f"{faza}-*.md"))
+
+
+def sprawdz_rejestr(korzen: pathlib.Path) -> list[str]:
+    """Błędy rejestru długu. Pusta lista znaczy: każda pozycja ma żywego adresata."""
+    try:
+        tekst = (korzen / REJESTR_PLANU).read_text(encoding="utf-8")
+        postep = (korzen / POSTEP).read_text(encoding="utf-8")
+    except OSError as e:
+        return [f"nie da się przeczytać rejestru: {e}"]
+
+    odhaczone = odhaczone_fazy(postep)
+    bledy: list[str] = []
+    widziane: set[str] = set()
+    for numer, wyjscie in wiersze_rejestru(tekst):
+        if ZAMKNIETA in numer:
+            continue
+        nr = numer.split()[0]
+        if nr in widziane:
+            bledy.append(f"pozycja {nr}: numer użyty drugi raz — wiersza nie da się wskazać")
+        widziane.add(nr)
+
+        zywe = SKRESLONE.sub("", wyjscie)
+        kandydaci = FAZA.findall(zywe)
+        if not kandydaci:
+            if not DATA_PRZEGLADU.search(zywe):
+                bledy.append(
+                    f"pozycja {nr}: brak adresata fazowego i brak daty przeglądu"
+                )
+            continue
+        nieistniejace = [f for f in kandydaci if not dokument_fazy(f, korzen)]
+        zywi = [
+            f
+            for f in kandydaci
+            if dokument_fazy(f, korzen) and not faza_minela(f, odhaczone, korzen)
+        ]
+        if zywi:
+            continue
+        if nieistniejace:
+            bledy.append(f"pozycja {nr}: adresat {nieistniejace[0]} nie ma dokumentu w {PLAN_DIR}/")
+        else:
+            bledy.append(
+                f"pozycja {nr}: adresat {'/'.join(kandydaci)} już się zamknął"
+            )
+    return bledy
+
 
 POCZATEK_ITEMU = re.compile(
     r"""(?P<test>\#\[cfg\(test\)\])
@@ -442,6 +578,56 @@ ATRAPA = (
 )
 
 
+def test_rejestru() -> int:
+    """Bramka rejestru na atrapie: każdy z czterech sposobów, na które adresat zawiódł.
+
+    Cztery przypadki nie są wymyślone — każdy zdarzył się w tym repozytorium i każdy
+    przeżył co najmniej trzy fazy: adresat skreślony bez zastąpienia, adresat, którego
+    nigdy nie było, adresat, który się zamknął, i numer użyty dwa razy.
+    """
+    atrapa = (
+        "## Rejestr długu strukturalnego\n\n"
+        "| # | Plik | Metryka | Powód | Ścieżka wyjścia |\n|---|---|---|---|---|\n"
+        "| 1 | `a.rs` | plik 900 | bo tak | **M12a** — pamięć dokłada tu pomiar |\n"
+        "| 2 | `b.rs` | plik 900 | bo tak | **M11a** — zamknięta faza |\n"
+        "| 3 | `c.rs` | plik 900 | bo tak | ~~**M12a**~~ → nikt |\n"
+        "| 4 | `d.rs` | plik 900 | bo tak | **M99z** — fazy nie ma |\n"
+        "| 5 | `e.rs` | plik 900 | bo tak | dziś nie planuje go nikt, przegląd 2026-09-22 |\n"
+        "| 1 | `f.rs` | plik 900 | bo tak | **M12a** — numer użyty drugi raz |\n"
+        "| 7 ✅ | `g.rs` | plik 900 | bo tak | **M11a** — zamknięta pozycja, adresat nieżywy |\n"
+        "\n## Co innego\n"
+    )
+    postep = "- [x] **M11a** Format i snapshot\n- [ ] **M12a** Pamięć\n"
+    with tempfile.TemporaryDirectory() as katalog:
+        korzen = pathlib.Path(katalog)
+        plan = korzen / PLAN_DIR
+        plan.mkdir(parents=True)
+        (plan / "R1-refaktor-po-M5.md").write_text(atrapa, encoding="utf-8")
+        (plan / "00-postep.md").write_text(postep, encoding="utf-8")
+        for f in ("M11a-format-i-snapshot.md", "M12a-pamiec.md"):
+            (plan / f).write_text("x", encoding="utf-8")
+        bledy = sprawdz_rejestr(korzen)
+
+    oczekiwane = {
+        "2": "adresat zamknięty",
+        "3": "adresat skreślony bez zastąpienia",
+        "4": "adresat bez dokumentu",
+        "1": "numer użyty drugi raz",
+    }
+    znalezione = {b.split()[1].rstrip(":") for b in bledy}
+    kod = 0
+    for nr, opis in oczekiwane.items():
+        ok = nr in znalezione
+        kod |= 0 if ok else 1
+        print(f"{'OK    ' if ok else 'BLAD  '} rejestr: {opis} (pozycja {nr})")
+    # Pozycja 5 ma datę przeglądu, 7 jest zamknięta — żadna nie ma prawa się zapalić.
+    for nr in ("5", "7"):
+        ok = nr not in znalezione
+        kod |= 0 if ok else 1
+        print(f"{'OK    ' if ok else 'BLAD  '} rejestr: pozycja {nr} bez falszywego alarmu")
+    return kod
+
+
 def test_wykrywacza() -> int:
     """Bramka, która nigdy nie świeci na czerwono, nie jest bramką (M5a, `single_entry_point`).
 
@@ -516,7 +702,7 @@ def test_wykrywacza() -> int:
     print(f"{'OK    ' if not martwe else 'BLAD  '} REJESTR bez martwych wpisow ({len(REJESTR)} pozycji)")
     for k in martwe:
         print(f"       martwy wpis: {k[0]} {k[1]} {k[2]} (pozycja {REJESTR[k]})")
-    return kod
+    return kod | test_rejestru()
 
 
 def hook() -> int:
@@ -592,7 +778,17 @@ def main() -> int:
         if not pliki:
             return 0
         return min(raport(korzen, pliki, args.json), 0)  # hook informuje, nie blokuje
-    return raport(korzen, pliki_produkcyjne(korzen.glob("**/*.rs"), korzen), args.json)
+    kod = raport(korzen, pliki_produkcyjne(korzen.glob("**/*.rs"), korzen), args.json)
+    if args.json:
+        return kod
+    # Rejestr długu jest drugą połową tej bramki (`R2-WP26`). Pozycja, której adresat
+    # zamknął się bez niej, jest **błędem bramki**, nie wpisem w tabeli — to jest
+    # dokładnie ta klasa, która przeżyła w tym repozytorium siedem faz.
+    bledy = sprawdz_rejestr(korzen)
+    for b in bledy:
+        print(f"BLAD   rejestr długu: {b}")
+    print(f"struct_guard: rejestr długu — pozycji bez żywego adresata: {len(bledy)}")
+    return kod | (1 if bledy else 0)
 
 
 if __name__ == "__main__":

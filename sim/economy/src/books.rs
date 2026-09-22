@@ -667,11 +667,17 @@ impl Books {
 
     /// Wejście kapitału inwestora zewnętrznego. Jedyne wejście kanału M7; w M5 nie woła
     /// go żaden system i pokrywa go wyłącznie test własnościowy P1b.
+    ///
+    /// **Powód jest argumentem od `R2-WP39`** (pozycja 81 wykazu): `ExternalCapital`
+    /// stoi po stronie wyboru w bramce G9, bo wejście sieci do miasta jest decyzją
+    /// — a funkcja wpisywała twardo `DecisionReason::Unspecified` i wołający nie miał
+    /// jak tego naprawić. Bramka mierzyła więc brak, którego nie dało się usunąć.
     pub fn inject_external_capital(
         &mut self,
         to: AccountId,
         amount: Money,
         investor: ExternalInvestorId,
+        reason: DecisionReason,
         t: Tick,
     ) -> Result<TxId, TxError> {
         let memo = TxMemo::new(
@@ -679,7 +685,7 @@ impl Books {
                 investor,
                 inflow: true,
             },
-            DecisionReason::Unspecified,
+            reason,
         );
         self.emit(to, amount, memo, t, |s, m| {
             s.external_capital_in = s
@@ -1008,8 +1014,14 @@ mod tests {
     fn kanal_kapitalu_zewnetrznego_domyka_sie() {
         let mut b = Books::new();
         let a = world_account(&mut b);
-        b.inject_external_capital(a, Money(10_000), ExternalInvestorId(7), Tick(0))
-            .unwrap();
+        b.inject_external_capital(
+            a,
+            Money(10_000),
+            ExternalInvestorId(7),
+            DecisionReason::Unspecified,
+            Tick(0),
+        )
+        .unwrap();
         assert_eq!(b.check_conservation(), Ok(()));
         b.repatriate_external_capital(a, Money(4_000), ExternalInvestorId(7), Tick(1))
             .unwrap();

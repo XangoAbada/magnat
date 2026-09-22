@@ -278,8 +278,16 @@ fn wejdz(
             na_zaklad
         };
         if let Some(books) = world.get_resource_mut::<Books>() {
+            // Powód wejścia sieci — ten sam wariant, który kronika pokazuje graczowi
+            // (`FirmReason::ChainEntered`). Do `R2-WP39` stał tu `Unspecified` wpisany
+            // w środku `Books`, więc bramka G9 liczyła emisję kapitału jako decyzję
+            // bez powodu, a wołający nie miał czym tego naprawić.
+            let powod = DecisionReason::Firm(FirmReason::ChainEntered {
+                capital: kwota,
+                sites: u8::try_from(nowe.len()).unwrap_or(u8::MAX),
+            });
             if books
-                .inject_external_capital(konto, kwota, inwestor, t)
+                .inject_external_capital(konto, kwota, inwestor, powod, t)
                 .is_ok()
             {
                 d.capital_in = Money(d.capital_in.get() + kwota.get());

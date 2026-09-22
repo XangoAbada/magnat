@@ -16,6 +16,25 @@ pub enum WorldSize {
     Medium8km,
     Large12km,
     Metropolis16km,
+    /// **Rozmiar wyłącznie testowy — 2 048 m** (`R2-WP25`, decyzja `D-N18`).
+    ///
+    /// Miasto 2 km ma tę samą strukturę co 4 km — bramy, arterie, pierścień,
+    /// kwartały, strefy, dzielnice — i generuje się w ułamku czasu. Testy
+    /// strukturalne nie potrzebują metropolii; potrzebują miasta, które ma
+    /// wszystkie elementy. Dzięki temu jedenaście testów `sim/world/tests/city.rs`
+    /// wychodzi z `#[ignore]` i zaczyna chodzić przy każdym `cargo test`.
+    ///
+    /// **Nie wchodzi do gry**: nie ma go w [`WorldSize::ALL`] (czyli w kreatorze
+    /// świata M9a), nie ma aliasu w [`FromStr`] (czyli nie da się go podać w CLI)
+    /// i nie ma klucza w `data/locale/`. Miasto 2 km ma ~10 tys. mieszkańców,
+    /// czyli poniżej progu, przy którym którykolwiek mechanizm ekonomiczny ma
+    /// sens — jego obecność w kreatorze obiecywałaby rozgrywkę, której nie ma.
+    ///
+    /// Wariant stoi **na końcu** enumu, bo kolejność wariantów bywa kontraktem.
+    /// Tutaj akurat nie jest: hash parametrów generacji pisze `meters()` jako
+    /// `u32`, a nie dyskryminantę (`data.rs::hash_state`), więc macierz hashy
+    /// istniejących rozmiarów nie drgnęła ani o bit. Sprawdzone, nie założone.
+    Km2,
 }
 
 /// Bok siatki roboczej generatora w metrach (M1 §5.1). Hydrologia i erozja liczone tu,
@@ -33,6 +52,7 @@ impl WorldSize {
             WorldSize::Medium8km => 8_192,
             WorldSize::Large12km => 12_288,
             WorldSize::Metropolis16km => 16_384,
+            WorldSize::Km2 => 2_048,
         }
     }
 
@@ -52,7 +72,7 @@ impl WorldSize {
     #[must_use]
     pub const fn erosion_iterations(self) -> u32 {
         match self {
-            WorldSize::Small4km | WorldSize::Medium8km => 40,
+            WorldSize::Km2 | WorldSize::Small4km | WorldSize::Medium8km => 40,
             WorldSize::Large12km | WorldSize::Metropolis16km => 80,
         }
     }
@@ -64,9 +84,13 @@ impl WorldSize {
             WorldSize::Medium8km => "8km",
             WorldSize::Large12km => "12km",
             WorldSize::Metropolis16km => "16km",
+            WorldSize::Km2 => "2km",
         }
     }
 
+    /// Rozmiary **dostępne w grze**. `Km2` nie jest jednym z nich (`D-N18`):
+    /// ta lista zasila selektor kreatora świata (M9a), a wariant testowy nie ma
+    /// prawa się tam pokazać.
     pub const ALL: &'static [WorldSize] = &[
         WorldSize::Small4km,
         WorldSize::Medium8km,
