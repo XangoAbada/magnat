@@ -24,9 +24,53 @@ use magnat_ecs::{ArchetypeId, World};
 #[must_use]
 pub fn world_state_hash(world: &World) -> StateHash {
     let mut h = StateHasher::new();
-    let reg = world.components();
+    for (names, id) in archetypy(world) {
+        hash_archetypu(world, &names, id, &mut h);
+    }
+    for (kind, hook) in world.state_hooks().arenas() {
+        h.write_u16(kind as u16);
+        hook(world, &mut h);
+    }
+    for (name, hook) in world.state_hooks().resources() {
+        h.write(name.as_bytes());
+        h.write_u8(0);
+        hook(world, &mut h);
+    }
+    h.finish()
+}
 
-    // Archetypy w kolejności nazw komponentów.
+/// Hash stanu **w częściach**: osobno każdy archetyp (nazwany składem komponentów,
+/// np. `Pos+Wallet`), każda arena (`arena:<numer>`) i każdy zasób (`res:<nazwa>`).
+///
+/// Istnieje dla raportu rozbieżności (N1.11, `M0#8`): sam `world_state_hash` mówi
+/// „coś się rozjechało na ticku N", a części mówią **co**. Kolejność i reguła
+/// hashowania są te same co w [`world_state_hash`] — obie funkcje wołają
+/// `hash_archetypu` — więc część jest równa wtedy i tylko wtedy, gdy równy jest
+/// jej wkład do hasha całości.
+#[must_use]
+pub fn state_hash_parts(world: &World) -> Vec<(String, StateHash)> {
+    let mut czesci = Vec::new();
+    for (names, id) in archetypy(world) {
+        let mut h = StateHasher::new();
+        hash_archetypu(world, &names, id, &mut h);
+        czesci.push((names.join("+"), h.finish()));
+    }
+    for (kind, hook) in world.state_hooks().arenas() {
+        let mut h = StateHasher::new();
+        hook(world, &mut h);
+        czesci.push((format!("arena:{}", kind as u16), h.finish()));
+    }
+    for (name, hook) in world.state_hooks().resources() {
+        let mut h = StateHasher::new();
+        hook(world, &mut h);
+        czesci.push((format!("res:{name}"), h.finish()));
+    }
+    czesci
+}
+
+/// Niepuste archetypy w kolejności nazw komponentów.
+fn archetypy(world: &World) -> Vec<(Vec<&'static str>, ArchetypeId)> {
+    let reg = world.components();
     let mut archetypes: Vec<(Vec<&'static str>, ArchetypeId)> = world
         .archetypes()
         .iter()
@@ -39,9 +83,14 @@ pub fn world_state_hash(world: &World) -> StateHash {
         })
         .collect();
     archetypes.sort();
+    archetypes
+}
 
-    for (names, id) in archetypes {
-        for n in &names {
+/// Wkład jednego archetypu: nazwy komponentów, potem wiersze po indeksie encji.
+fn hash_archetypu(world: &World, names: &[&'static str], id: ArchetypeId, h: &mut StateHasher) {
+    let reg = world.components();
+    {
+        for n in names {
             h.write(n.as_bytes());
             h.write_u8(0);
         }
@@ -86,20 +135,8 @@ pub fn world_state_hash(world: &World) -> StateHash {
             h.write_u32(entity_index);
             let chunk = arch.chunk(chunk_index as usize);
             for (col, info) in &column_info {
-                info.hash_in_chunk(chunk, *col, row, &mut h);
+                info.hash_in_chunk(chunk, *col, row, h);
             }
         }
     }
-
-    for (kind, hook) in world.state_hooks().arenas() {
-        h.write_u16(kind as u16);
-        hook(world, &mut h);
-    }
-    for (name, hook) in world.state_hooks().resources() {
-        h.write(name.as_bytes());
-        h.write_u8(0);
-        hook(world, &mut h);
-    }
-
-    h.finish()
 }

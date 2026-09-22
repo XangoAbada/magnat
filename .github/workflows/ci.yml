@@ -333,9 +333,14 @@ jobs:
         run: |
           cargo build --release -p magnat-headless --features chaos
           if ./target/release/magnat-headless --seed 42 --entities 100000 --ticks 20000 \
-              --hash-every 1000 --threads 8 --expect run_1.hashes; then
+              --hash-every 1000 --threads 8 --expect run_1.hashes 2> chaos.err; then
             echo "build chaos przeszedł test determinizmu — testy nie działają" && exit 1
           fi
+          # Sam kod wyjścia nie wystarcza (N1.11, `M0#9`): M0 §7 każe raportowi wskazać
+          # **gdzie** — tick i część stanu. `run_1.hashes.parts` zapisał krok T-D1.
+          cat chaos.err
+          grep -q "ROZBIEŻNOŚĆ na ticku" chaos.err
+          grep -q "rozjechana część stanu:" chaos.err
 
   bench-guard:
     name: benchmarki (próg regresji)

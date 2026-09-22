@@ -3,7 +3,7 @@
 //! Jedno narzędzie obsługuje trzy rzeczy, których M0 musi dowieść: że ten sam seed
 //! daje ten sam ciąg hashy niezależnie od liczby wątków, że zapis i wznowienie są
 //! nieodróżnialne od przebiegu ciągłego, i że rozbieżność da się zlokalizować
-//! co do encji, a nie tylko co do ticku.
+//! co do części stanu (archetyp, arena, zasób), a nie tylko co do ticku.
 
 #![forbid(unsafe_code)]
 
@@ -27,7 +27,7 @@ use magnat_core::Tick;
 use magnat_devtools::{Console, Inspector, MetricSink};
 use magnat_ecs::{App, World};
 use magnat_headless::population;
-use magnat_io::{load_world, save_world, world_state_hash, StateHash};
+use magnat_io::{load_world, save_world, state_hash_parts, world_state_hash, StateHash};
 use std::io::{BufRead, Write};
 use std::path::PathBuf;
 
@@ -194,27 +194,37 @@ fn uruchom() -> Result<std::process::ExitCode, Box<dyn std::error::Error>> {
     };
 
     let mut hashe: Vec<(u64, StateHash)> = Vec::new();
+    // Hash w częściach (archetyp, arena, zasób) przy każdym punkcie kontrolnym —
+    // tylko przy `--out`, bo to on robi wzorzec, z którym raport rozbieżności
+    // porównuje części (N1.11).
+    let mut czesci: Vec<(u64, Vec<(String, StateHash)>)> = Vec::new();
     let start = std::time::Instant::now();
 
     // Hash stanu początkowego — bez niego rozjazd w świecie startowym wyszedłby
-    // dopiero po tysiącu ticków.
-    if args.hash_every > 0 {
-        hashe.push((app.world.tick.0, world_state_hash(&app.world)));
-    }
-
-    for _ in 0..args.ticks {
-        app.tick();
+    // dopiero po tysiącu ticków. **Porównany z `--expect` jak każdy inny** (N1.11):
+    // do E1 był liczony i zapisywany, ale nie sprawdzany.
+    for krok in 0..=args.ticks {
+        if krok > 0 {
+            app.tick();
+        }
         let tick = app.world.tick.0;
-        if args.hash_every > 0 && tick.is_multiple_of(args.hash_every) {
+        if args.hash_every > 0 && (krok == 0 || tick.is_multiple_of(args.hash_every)) {
             let hash = world_state_hash(&app.world);
             hashe.push((tick, hash));
-            if let Some(oczekiwane) = &oczekiwane {
-                if let Some((_, chciany)) = oczekiwane.iter().find(|(t, _)| *t == tick) {
-                    if *chciany != hash {
-                        return Ok(raport_rozbieznosci(&mut app, tick, *chciany, hash, &args));
-                    }
+            if args.out.is_some() {
+                czesci.push((tick, state_hash_parts(&app.world)));
+            }
+            if let Some((_, chciany)) = oczekiwane
+                .as_ref()
+                .and_then(|o| o.iter().find(|(t, _)| *t == tick))
+            {
+                if *chciany != hash {
+                    return Ok(raport_rozbieznosci(&mut app, tick, *chciany, hash, &args));
                 }
             }
+        }
+        if krok == 0 {
+            continue;
         }
         if let Some(m) = &mut metryki {
             m.record(Tick(tick), "encje", i64::from(app.world.entity_count()));
@@ -239,6 +249,12 @@ fn uruchom() -> Result<std::process::ExitCode, Box<dyn std::error::Error>> {
         let mut f = std::fs::File::create(path)?;
         for (tick, hash) in &hashe {
             writeln!(f, "{tick} {hash}")?;
+        }
+        let mut f = std::fs::File::create(plik_czesci(path))?;
+        for (tick, lista) in &czesci {
+            for (nazwa, hash) in lista {
+                writeln!(f, "{tick}\t{nazwa}\t{hash}")?;
+            }
         }
         eprintln!("zapisano {} hashy do {}", hashe.len(), path.display());
     }
@@ -299,10 +315,58 @@ fn wczytaj_hashe(path: &PathBuf) -> std::io::Result<Vec<(u64, StateHash)>> {
     Ok(out)
 }
 
-/// Raport rozbieżności: pierwszy niezgodny tick plus różnice pierwszych encji.
+/// Plik z hashem w częściach, obok pliku hashy: `run_1.hashes` → `run_1.hashes.parts`.
+fn plik_czesci(path: &std::path::Path) -> PathBuf {
+    let mut p = path.as_os_str().to_owned();
+    p.push(".parts");
+    PathBuf::from(p)
+}
+
+/// Części wzorca z ticku `tick`: `nazwa → hash`. Pusta, gdy wzorzec nie ma pliku części.
+fn wczytaj_czesci(path: &std::path::Path, tick: u64) -> Vec<(String, String)> {
+    let Ok(tresc) = std::fs::read_to_string(plik_czesci(path)) else {
+        return Vec::new();
+    };
+    tresc
+        .lines()
+        .filter_map(|l| {
+            let mut pola = l.split('\t');
+            let (t, n, h) = (pola.next()?, pola.next()?, pola.next()?);
+            (t.parse::<u64>().ok()? == tick).then(|| (n.to_string(), h.to_string()))
+        })
+        .collect()
+}
+
+/// Nazwy części, które różnią się między wzorcem a bieżącym stanem, w kolejności
+/// kanonicznej. Część obecna tylko po jednej stronie też jest różnicą.
+fn rozne_czesci(wzorzec: &[(String, String)], biezace: &[(String, StateHash)]) -> Vec<String> {
+    let mut nazwy: Vec<&str> = wzorzec
+        .iter()
+        .map(|(n, _)| n.as_str())
+        .chain(biezace.iter().map(|(n, _)| n.as_str()))
+        .collect();
+    nazwy.sort_unstable();
+    nazwy.dedup();
+    nazwy
+        .into_iter()
+        .filter(|n| {
+            let a = wzorzec.iter().find(|(m, _)| m == n).map(|(_, h)| h.clone());
+            let b = biezace
+                .iter()
+                .find(|(m, _)| m == n)
+                .map(|(_, h)| h.to_string());
+            a != b
+        })
+        .map(str::to_string)
+        .collect()
+}
+
+/// Raport rozbieżności: pierwszy niezgodny tick i **które części stanu** się rozjechały
+/// — archetyp po składzie komponentów, arena albo zasób (N1.11, `M0#8`).
 ///
-/// Sam numer ticku nie skraca szukania przyczyny — dlatego runner odtwarza świat
-/// wzorcowy z zapisu, jeśli go ma, i pokazuje różnice encja po encji.
+/// Do E1 raport wypisywał tylko listę archetypów bieżącego świata, a jego opis
+/// obiecywał „różnice encja po encji", których nie liczył. Części porównuje się
+/// z plikiem `.parts`, który `--out` zapisuje obok hashy wzorca.
 fn raport_rozbieznosci(
     app: &mut App,
     tick: u64,
@@ -319,21 +383,25 @@ fn raport_rozbieznosci(
         args.entities,
         app.thread_count()
     );
-    eprintln!("{}", Inspector::archetypes(&app.world));
-    eprintln!(
-        "Aby zobaczyć różnice encja po encji, uruchom przebieg wzorcowy z --save \
-         i porównaj: magnat-headless --load wzorzec.mgs --ticks 0 --console"
-    );
+    let wzorzec = args
+        .expect
+        .as_deref()
+        .map(|p| wczytaj_czesci(p, tick))
+        .unwrap_or_default();
+    if wzorzec.is_empty() {
+        eprintln!("  wzorzec nie ma pliku .parts — części stanu nieporównane");
+        eprintln!("{}", Inspector::archetypes(&app.world));
+    } else {
+        for nazwa in rozne_czesci(&wzorzec, &state_hash_parts(&app.world)) {
+            eprintln!("  rozjechana część stanu: {nazwa}");
+        }
+    }
     std::process::ExitCode::from(1)
 }
 
 fn konsola(world: &mut World) -> std::io::Result<()> {
+    // Bez `sim.step`: w trybie konsoli świat stoi, a komenda niczego nie robiła (N1.11).
     let mut console = Console::with_builtins();
-    console.register(
-        "sim.step",
-        "sim.step <n> — komenda dostępna po wznowieniu pętli (M0: informacyjna)",
-        |_, _| "sim.step działa w pętli App::tick — w trybie konsoli świat stoi\n".to_string(),
-    );
     println!("konsola magnat-headless; 'help' wypisze komendy, 'quit' kończy");
     let stdin = std::io::stdin();
     for linia in stdin.lock().lines() {

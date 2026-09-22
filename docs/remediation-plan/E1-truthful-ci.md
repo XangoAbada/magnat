@@ -154,11 +154,20 @@ Jeśli czerwień nie ma jeszcze punktu, zakładamy go w odpowiednim etapie („Z
     `core_bench.rs` — oba `allow` zostają z powodem `ponytail:` (punkt odniesienia libm).
     `cargo clippy --workspace --all-targets -- -D warnings` zielony.
 
-- [ ] **N1.11** runner headless: raport rozbieżności i T-D8 — `M0#8`, `M0#9`, `M0` WP-12
+- [x] **N1.11** runner headless: raport rozbieżności i T-D8 — `M0#8`, `M0#9`, `M0` WP-12
   - `tools/headless/src/main.rs:306-330`: raport bez diffu encji; hash ticku 0 liczony,
     ale nie porównywany z `--expect`. T-D8 sprawdza tylko niezerowy kod wyjścia.
   - `sim.step` w konsoli (`main.rs:334`) nic nie robi → usunąć komendę.
   - *Test:* przebieg z podmienionym `--expect` kończy się raportem wskazującym archetyp.
+  - *Zrobione:* `magnat_io::state_hash_parts` — hash osobno na archetyp (`Pos+Wallet`),
+    arenę i zasób; wspólna `hash_archetypu` z `world_state_hash`, więc hash całości się
+    nie zmienił (ciąg 6 hashy przed i po — zgodny). `--out` zapisuje obok `*.parts`,
+    raport wypisuje „rozjechana część stanu: …". Tick 0 porównywany jak każdy inny
+    (inne ziarno: dotąd przechodziło, teraz kod 1 na ticku 0). `sim.step` usunięte.
+    Test `czesci_hasha_wskazuja_archetyp_rozjazdu` (`engine/io`); krok T-D8 w CI sprawdza
+    treść raportu. Lokalnie: build `chaos` → „ROZBIEŻNOŚĆ na ticku 1000", dwa archetypy.
+    Różnic encja po encji nadal nie ma — część stanu to granica tego, co runner
+    wie bez drugiego świata w pamięci.
 
 - [ ] **N1.12** pomiar klatki bez vsync — `M11#3`, `M11#5`, `M11#6`
   - `disable_vsync()` tylko przy `--bench`, nie przy `--bench-scene`

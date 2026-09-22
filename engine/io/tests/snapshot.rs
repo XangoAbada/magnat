@@ -3,8 +3,8 @@
 use magnat_core::{HashState, Money, StateHasher};
 use magnat_ecs::{Component, ComponentRegistry, Entity, World};
 use magnat_io::{
-    load_world, read_directory, read_section, rewrite_sections, save_world, world_state_hash,
-    SectionKind,
+    load_world, read_directory, read_section, rewrite_sections, save_world, state_hash_parts,
+    world_state_hash, SectionKind,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -315,4 +315,39 @@ fn przerwany_zapis_nie_niszczy_poprzedniego_pliku() {
 
     std::fs::remove_file(&sciezka).ok();
     std::fs::remove_file(sciezka.with_extension("tmp")).ok();
+}
+
+/// Raport rozbieżności ma wskazać **archetyp**, nie tylko tick (N1.11, `M0#8`).
+/// Zmiana jednej encji zmienia hash dokładnie jednej części, a hash całości
+/// liczony obok części jest tym samym co `world_state_hash` — części go nie zastępują.
+#[test]
+fn czesci_hasha_wskazuja_archetyp_rozjazdu() {
+    let a = swiat(20);
+    let mut b = swiat(20);
+    let czesci_a = state_hash_parts(&a);
+    assert_eq!(
+        czesci_a,
+        state_hash_parts(&b),
+        "ten sam stan, te same części"
+    );
+    assert!(
+        czesci_a.iter().any(|(n, _)| n == "Pos+Wallet"),
+        "archetyp nazwany składem komponentów: {czesci_a:?}"
+    );
+
+    let encja = b
+        .query::<(Entity, &Pos), ()>()
+        .iter()
+        .find(|(_, p)| p.x == 2)
+        .expect("encja z Pos.x = 2")
+        .0;
+    b.get_mut::<Wallet>(encja).expect("encja 2 ma portfel").0 = Money(1);
+    let rozne: Vec<String> = czesci_a
+        .iter()
+        .zip(state_hash_parts(&b))
+        .filter(|((_, ha), (_, hb))| ha != hb)
+        .map(|((n, _), _)| n.clone())
+        .collect();
+    assert_eq!(rozne, vec!["Pos+Wallet".to_string()]);
+    assert_ne!(world_state_hash(&a), world_state_hash(&b));
 }

@@ -11,7 +11,7 @@
 pub mod hash;
 pub mod snapshot;
 
-pub use hash::{world_state_hash, HashState, StateHash, StateHasher};
+pub use hash::{state_hash_parts, world_state_hash, HashState, StateHash, StateHasher};
 pub use snapshot::{
     load_world, read_directory, read_section, rewrite_sections, save_world, ArchetypeEntry,
     ArenaPart, Compression, IoError, RawSnapshot, SaveReport, SchemaEntry, SectionKind,
