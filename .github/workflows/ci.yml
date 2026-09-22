@@ -61,6 +61,15 @@ jobs:
           if cargo tree -p magnat-headless | grep -q wgpu; then
             echo "wgpu przeniknął do headless" && exit 1
           fi
+      - name: rayon tylko w engine/jobs (00 §6.4, N1.10)
+        # Zakaz nie stoi w `clippy.toml`, bo ścieżka `rayon::…` nie rozwiązuje się
+        # w crate'cie bez tej zależności. Bez zależności nie ma użycia — więc pilnujemy
+        # zależności: bezpośrednio od rayon może zależeć tylko `magnat-jobs`.
+        run: |
+          obce=$(cargo tree -i rayon -e normal --depth 1 --workspace --prefix none | tail -n +2 | grep -v '^magnat-jobs ' || true)
+          if [ -n "$obce" ]; then
+            echo "rayon poza engine/jobs:" && echo "$obce" && exit 1
+          fi
       - name: dep_isolation — render, voxel i audio nie widzą symulacji (M1 §7.3, M11 §6.3)
         shell: bash
         run: |

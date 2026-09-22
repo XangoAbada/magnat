@@ -138,12 +138,21 @@ Jeśli czerwień nie ma jeszcze punktu, zakładamy go w odpowiednim etapie („Z
   - *Zrobione:* matcher `Bash|PowerShell`. `struct_guard --self-test` sprawdza, że matcher
     hooka ze `struct_guard.py` pasuje do obu narzędzi — przed poprawką `BLAD … (brak: PowerShell)`.
 
-- [ ] **N1.10** `clippy.toml` bez luk — `M0#11`
+- [x] **N1.10** `clippy.toml` bez luk — `M0#11`
   - Zakazać odpowiedników `f32` (`ln`, `exp`, `powf`, `powi`, `mul_add`, `log*`, trygonometria)
     tak jak dla `f64`; zakazać `rayon` poza `engine/jobs` (00 §6.4).
   - Usunąć `#[allow(clippy::disallowed_methods)]` z `core_bench.rs:31,52` albo dać
     powód w komentarzu `ponytail:`.
   - *Dowód:* `cargo clippy --workspace -- -D warnings` zielony.
+  - *Zrobione:* komplet 23 odpowiedników `f32` plus `sin_cos` dla obu typów. Nowy zakaz
+    zapalił 7 miejsc — wszystkie w prezentacji albo w teście (kolor rekordu snapshotu,
+    impostor, animacja, kurs pieszego w kadrze, snop reflektora, kierunki próbne w teście
+    `footprint.rs`) — każde dostało `#[allow]` z `ponytail:` albo zdaniem, dlaczego.
+    Rayon: ścieżki w `clippy.toml` nie rozwiązują się w crate'ach bez tej zależności,
+    więc zakaz jest krokiem joba `check` — bezpośrednio od rayon zależy tylko
+    `magnat-jobs` (sprawdzone: dopisanie rayon do `engine/core` zapala krok).
+    `core_bench.rs` — oba `allow` zostają z powodem `ponytail:` (punkt odniesienia libm).
+    `cargo clippy --workspace --all-targets -- -D warnings` zielony.
 
 - [ ] **N1.11** runner headless: raport rozbieżności i T-D8 — `M0#8`, `M0#9`, `M0` WP-12
   - `tools/headless/src/main.rs:306-330`: raport bez diffu encji; hash ticku 0 liczony,

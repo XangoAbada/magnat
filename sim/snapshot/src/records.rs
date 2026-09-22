@@ -355,6 +355,9 @@ impl LightRecord {
             return [0.0, 0.0, 0.0];
         }
         // 2^(e − 128 − 8): −8 bierze się z dzielenia mantysy przez 256.
+        // ponytail: `powi` w f32 jest zakazane w symulacji (N1.10); tu dekoduje kolor
+        // dla renderu i nie wraca do stanu — hash świata go nie widzi.
+        #[allow(clippy::disallowed_methods)]
         let skala = 2.0f32.powi(e - 128 - 8);
         [
             ((self.color_rgbe >> 16) & 0xFF) as f32 * skala,

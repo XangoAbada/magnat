@@ -26,8 +26,8 @@ fn b8_det_math(c: &mut Criterion) {
         b.iter(|| {
             let mut suma = 0.0;
             for x in &argumenty {
-                // Punkt odniesienia pomiaru — jedyne dozwolone użycie libm
-                // w tym repozytorium poza renderem.
+                // ponytail: libm jako punkt odniesienia pomiaru — benchmark porównuje
+                // det_math z tym, co zastępuje. Wynik trafia do `black_box`, nie do stanu.
                 #[allow(clippy::disallowed_methods)]
                 {
                     suma += x.ln();
@@ -49,6 +49,7 @@ fn b8_det_math(c: &mut Criterion) {
         b.iter(|| {
             let mut suma = 0.0;
             for x in &argumenty {
+                // ponytail: libm jako punkt odniesienia pomiaru, jak `ln` wyżej.
                 #[allow(clippy::disallowed_methods)]
                 {
                     suma += (x / 1_000.0).exp();

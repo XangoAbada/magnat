@@ -295,6 +295,9 @@ impl Channel {
                 phase,
             } => {
                 let f = t + f32::from(phase) / 256.0;
+                // ponytail: trygonometria f32 zakazana w symulacji (N1.10); poza postaci
+                // w animacji to prezentacja, stan świata jej nie widzi.
+                #[allow(clippy::disallowed_methods)]
                 let kat = radiany(amp_deg) * (f * std::f32::consts::TAU).sin();
                 base * os(axis, kat)
             }

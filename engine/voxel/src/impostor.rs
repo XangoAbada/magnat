@@ -212,6 +212,9 @@ impl ImpostorAtlas {
         // oś pionowa w górę, a **prawa strona ekranu** to `patrz × góra`. Znak ma tu treść:
         // przy odwrotnym kafel wychodzi lustrzany i postać z daleka przebiera nogami
         // w drugą stronę, niż idzie.
+        // ponytail: trygonometria f32 zakazana w symulacji (N1.10); wypiekanie kafla
+        // impostora to grafika, która do stanu świata nie wraca.
+        #[allow(clippy::disallowed_methods)]
         let (sa, ca) = azymut.sin_cos();
         let prawo = [sa, -ca, 0.0f32];
         let patrz = [ca, sa, 0.0f32];

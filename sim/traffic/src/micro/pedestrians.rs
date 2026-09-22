@@ -53,6 +53,9 @@ impl PathArena {
     }
 
     /// Punkt na łamanej w ułamku `t` jej długości plus kurs odcinka, na którym leży.
+    // ponytail: `f32::atan2` zakazane w symulacji (N1.10); kurs pieszego w kadrze jest
+    // warstwą prezentacji (`MicroLayer` nie ma `&mut`, nie wchodzi do hasha stanu).
+    #[allow(clippy::disallowed_methods)]
     pub(super) fn at(&self, path: u32, t: f32) -> ([f32; 3], f32) {
         let (offset, len, dlugosc) = self.paths[path as usize];
         let punkty = &self.points[offset as usize..(offset + len) as usize];

@@ -574,6 +574,9 @@ impl Ambience {
             let poz = mm_to_m(v.pos);
             // Snop przed maską, nie w środku bryły: `yaw` jest w 1/65536 obrotu.
             let kat = f32::from(v.yaw) / 65536.0 * std::f32::consts::TAU;
+            // ponytail: trygonometria f32 zakazana w symulacji (N1.10); snop reflektora
+            // to rekord światła dla renderu, nie stan świata.
+            #[allow(clippy::disallowed_methods)]
             let (s, c) = (kat.sin(), kat.cos());
             let rec = LightRecord::new(
                 [poz[0] + c * 3.0, poz[1] + s * 3.0, poz[2] + 0.8],

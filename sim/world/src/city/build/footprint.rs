@@ -564,6 +564,8 @@ mod tests {
         let v = hala.v();
         for stopnie in 0u16..72 {
             let a = f32::from(stopnie) * 5.0_f32.to_radians();
+            // Test, nie symulacja: kierunki próbne dookoła bryły (N1.10).
+            #[allow(clippy::disallowed_methods)]
             let kier = Vec2::new(a.cos(), a.sin());
             let p = kier * wyjscie_z_bryly(&hala, kier);
             // Punkt leży na brzegu prostopadłościanu: jedna ze współrzędnych lokalnych

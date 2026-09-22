@@ -1,6 +1,14 @@
 # Zakaz libm w kodzie symulacji (00 §K-6, M0 §2).
 # Clippy szuka clippy.toml w górę od katalogu crate'a, więc lokalny clippy.toml
 # w engine/render i engine/ui NADPISUJE ten plik (tam float wolno).
+#
+# Odpowiedniki `f32` stoją obok `f64` w komplecie (N1.10): do E1 zakazane były tylko
+# cztery z nich, więc `f32::sin` albo `f32::powi` przechodziły w każdym crate'cie
+# symulacji. `sin_cos` nie było zakazane dla żadnego typu.
+#
+# Zakaz rayon poza `engine/jobs` (00 §6.4) nie stoi tutaj: ścieżka `rayon::…` nie
+# rozwiązuje się w crate'cie bez tej zależności, więc clippy nie ma czego pilnować.
+# Pilnuje go krok „rayon tylko w engine/jobs" joba `check`: bez zależności nie ma użycia.
 disallowed-methods = [
     { path = "f64::ln", reason = "użyj magnat_core::det_math::ln (00 §K-6)" },
     { path = "f64::ln_1p", reason = "użyj det_math::ln1p" },
@@ -14,6 +22,7 @@ disallowed-methods = [
     { path = "f64::powi", reason = "niedeterministyczny między platformami; det_math::pow" },
     { path = "f64::sin", reason = "brak w det_math — dopisz z wektorem testowym (00 §K-6)" },
     { path = "f64::cos", reason = "brak w det_math — dopisz z wektorem testowym" },
+    { path = "f64::sin_cos", reason = "brak w det_math — dopisz z wektorem testowym" },
     { path = "f64::tan", reason = "brak w det_math — dopisz z wektorem testowym" },
     { path = "f64::asin", reason = "brak w det_math" },
     { path = "f64::acos", reason = "brak w det_math" },
@@ -25,10 +34,30 @@ disallowed-methods = [
     { path = "f64::cbrt", reason = "brak w det_math" },
     { path = "f64::hypot", reason = "sqrt(x*x + y*y) przez det_math::sqrt" },
     { path = "f64::mul_add", reason = "FMA vs emulacja libm: dwa wyniki tej samej linii (M0 §2)" },
-    { path = "f32::ln", reason = "symulacja nie używa f32 (00 §2)" },
-    { path = "f32::exp", reason = "symulacja nie używa f32" },
-    { path = "f32::powf", reason = "symulacja nie używa f32" },
-    { path = "f32::mul_add", reason = "symulacja nie używa f32" },
+    { path = "f32::ln", reason = "libm w f32 — ten sam problem co f64 (00 §K-6)" },
+    { path = "f32::ln_1p", reason = "libm w f32 (00 §K-6)" },
+    { path = "f32::log", reason = "libm w f32 (00 §K-6)" },
+    { path = "f32::log2", reason = "libm w f32 (00 §K-6)" },
+    { path = "f32::log10", reason = "libm w f32 (00 §K-6)" },
+    { path = "f32::exp", reason = "libm w f32 (00 §K-6)" },
+    { path = "f32::exp_m1", reason = "libm w f32 (00 §K-6)" },
+    { path = "f32::exp2", reason = "libm w f32 (00 §K-6)" },
+    { path = "f32::powf", reason = "libm w f32 (00 §K-6)" },
+    { path = "f32::powi", reason = "niedeterministyczny między platformami (00 §K-6)" },
+    { path = "f32::sin", reason = "libm w f32 (00 §K-6)" },
+    { path = "f32::cos", reason = "libm w f32 (00 §K-6)" },
+    { path = "f32::sin_cos", reason = "libm w f32 (00 §K-6)" },
+    { path = "f32::tan", reason = "libm w f32 (00 §K-6)" },
+    { path = "f32::asin", reason = "libm w f32 (00 §K-6)" },
+    { path = "f32::acos", reason = "libm w f32 (00 §K-6)" },
+    { path = "f32::atan", reason = "libm w f32 (00 §K-6)" },
+    { path = "f32::atan2", reason = "libm w f32 (00 §K-6)" },
+    { path = "f32::sinh", reason = "libm w f32 (00 §K-6)" },
+    { path = "f32::cosh", reason = "libm w f32 (00 §K-6)" },
+    { path = "f32::tanh", reason = "libm w f32 (00 §K-6)" },
+    { path = "f32::cbrt", reason = "libm w f32 (00 §K-6)" },
+    { path = "f32::hypot", reason = "libm w f32 (00 §K-6)" },
+    { path = "f32::mul_add", reason = "FMA vs emulacja libm (M0 §2)" },
 ]
 
 # Zakaz iteracji po HashMap/HashSet w kodzie symulacji (00 §3.2).
