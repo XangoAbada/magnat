@@ -1,8 +1,42 @@
 # Magnat
 
 Symulator miasta i gospodarki, własny silnik w Rust. Wymagania: `PRD_Magnat.md`.
-Plan implementacji: `docs/implementation-plan/` — `00-konwencje-i-kontrakty.md` jest dokumentem
-nadrzędnym i rozstrzyga spory międzyfazowe.
+
+**Aktywny jest plan naprawczy: `docs/remediation-plan/`.** Powstał z audytu z 22 września 2026
+(`master` @ `b9a3e39`) i ma pierwszeństwo przed planem implementacyjnym, dopóki jego etapy
+E1–E7 nie są zamknięte. Zasady pracy — sekcja „Plan naprawczy" niżej i `README.md` planu.
+
+Plan implementacji: `docs/implementation-plan/` — **wstrzymany** do zamknięcia E1–E7.
+`00-konwencje-i-kontrakty.md` nadal jest kontraktem dla kodu (typy bazowe, determinizm, `K-n`)
+i obowiązuje także przy naprawach.
+
+## Plan naprawczy
+
+Na polecenie „zacznij etap E2" / „rusz z N2.3" / „napraw dalej":
+
+1. Przeczytaj `docs/remediation-plan/README.md` — w całości. Mówi, kiedy punkt jest zamknięty
+   i w jakiej kolejności idą etapy.
+2. Przeczytaj dokument etapu (`E<n>-*.md`) — w całości. Nagłówek podaje wejście i pomiar
+   zamknięcia. Nie zaczynaj etapu, którego wejście nie jest zamknięte.
+3. Z `00-konwencje-i-kontrakty.md` czytaj to, czego naprawa dotyka (§2, §3, §4a) — kontrakt
+   nadal wiąże kod. Dokumentów faz z `docs/implementation-plan/` nie czytaj, chyba że punkt
+   wprost na nie wskazuje (E8).
+4. Punkty idą w kolejności z dokumentu etapu. Punkt z **Decyzją** — przyjmij propozycję
+   domyślną i powiedz o tym, albo zapytaj, jeśli wybór zmienia kształt rozwiązania.
+5. **Najpierw test, który pada, potem poprawka.** Audyt czytał źródła, nie uruchamiał kodu —
+   każde znalezisko sprawdź w kodzie, zanim je naprawisz. Niepotwierdzone dostaje `[-]`
+   z jednym zdaniem, dlaczego.
+6. Błąd znaleziony po drodze trafia jako nowy punkt na koniec dokumentu etapu, którego
+   dotyczy (sekcja „Znalezione po drodze"). Nigdy jako `TODO` w kodzie.
+7. Po zamkniętym punkcie: odhacz go w dokumencie etapu, dopisz linię do dziennika
+   w `docs/remediation-plan/README.md`. Po zamkniętym etapie: wpisz pomiar zamknięcia
+   liczbami i odhacz etap w tabeli `README.md`.
+
+`00-postep.md` i dokumentów faz nie odhaczamy w trakcie E1–E7 — ich zgodność z kodem
+przywraca E8. Zmiana kontraktu z `00-konwencje-i-kontrakty.md` nadal wymaga wpisu `K-n` w §4a.
+
+Sekcje „Jak zacząć fazę", „Jak zacząć podfazę", „Poprawki wędrują w przód" i „Odhaczanie
+postępu" niżej dotyczą planu implementacyjnego i wracają do użytku po zamknięciu E8.
 
 ## Jak zacząć fazę
 
@@ -70,6 +104,9 @@ Co z tego wynika:
   dla faz następnych. Krótki komunikat jest tu brakiem, nie zwięzłością.
 - **Podfaza = jeden commit**, razem z poprawkami, które wymusiła w dokumentach faz
   następnych (`K-18`). Rozdzielanie ich łamałoby tamtą regułę.
+- **Punkt planu naprawczego = jeden commit** (albo zwarta grupa punktów w tym samym miejscu
+  kodu), razem z odhaczeniem w dokumencie etapu i linią dziennika. Komunikat commita podaje
+  identyfikatory `N<e>.<n>`, odwołanie do audytu i nazwę testu, który padał przed naprawą.
 - Praca, która może nie wejść, zostaje w katalogu roboczym albo w `git stash` — nie
   w gałęzi. Jeśli eksperyment przeżyje sesję, gałąź jest dopuszczalna, ale kasuje się ją
   natychmiast po scaleniu.
@@ -168,7 +205,8 @@ widział, bo `target/` jest w `.gitignore` — brak w gicie znaczy „poza zasi�
 - **Jeden katalog artefaktów: domyślny `target/`.** Nie ustawiamy `CARGO_TARGET_DIR` ani
   `--target-dir` per faza, per podfaza, per eksperyment. Katalog nazwany od podfazy nikomu
   nie przypomni o sobie, gdy podfaza się skończy.
-- **Po zamkniętej podfazie — `cargo clean`**, w tym samym kroku co commit zamykający. Wyjątek:
+- **Po zamkniętej podfazie albo etapie planu naprawczego — `cargo clean`**, w tym samym
+  kroku co commit zamykający. Wyjątek:
   zostaje, jeśli następna podfaza rusza od razu i czekanie na pełny rebuild kosztuje więcej
   niż miejsce.
 - **Eksperyment, który chodził we własnym katalogu, kasuje się razem z eksperymentem.**
@@ -192,6 +230,8 @@ benchmarków nie miało wpisu w `benches/baseline.json`, a `bench_guard` wypisyw
 - Kolejność jest zawsze ta sama: `cargo bench` na liście crate'ów z `ci.yml`, potem
   `python scripts/bench_guard.py benches/baseline.json --update`, potem commit z nazwą
   sprzętu odniesienia w opisie.
+- Etap planu naprawczego, który zmienił benchmarkowany kod (E5, E6), też kończy się
+  odnowieniem linii bazowej — tym samym osobnym commitem.
 - **Brak wpisu jest błędem bramki**, nie informacją. Benchmark nowy w tym commicie jest
   dopuszczalny wyłącznie razem z dopisaniem go do linii bazowej w tym samym commicie.
 - `benches/baseline.json` jest jedynym plikiem w repozytorium, którego edycja potrafi uciszyć
@@ -218,8 +258,9 @@ Do subagenta idzie:
 
 Zostaje w głównej sesji:
 
-- dokument `00-konwencje-i-kontrakty.md` i dokument robionej właśnie (pod)fazy — te czyta się
-  w całości samemu, bo są kontraktem, a nie materiałem do streszczenia;
+- dokument `00-konwencje-i-kontrakty.md` i dokument robionej właśnie (pod)fazy albo etapu
+  planu naprawczego — te czyta się w całości samemu, bo są kontraktem, a nie materiałem
+  do streszczenia;
 - decyzje dotykające kontraktów, determinizmu i `K-n`;
 - kod pisany w ramach pakietu roboczego, jego testy i commit.
 
@@ -230,7 +271,8 @@ Zasady:
 - **Niezależne zlecenia idą równolegle** — kilka wywołań w jednej wiadomości.
 - Wynik subagenta jest raportem, nie prawdą. Zanim wejdzie do kodu albo do planu, sprawdzamy
   wskazane miejsce — zwłaszcza gdy dotyczy determinizmu albo księgowości.
-- Subagent nie odhacza postępu i nie commituje. `00-postep.md` i dziennik prowadzi główna sesja.
+- Subagent nie odhacza postępu i nie commituje. `00-postep.md`, dokumenty etapów planu
+  naprawczego i dzienniki prowadzi główna sesja.
 
 Powód: kontekst główny jest zasobem tej samej klasy co czas — wypełniony wynikami `grep`
 przestaje mieścić kontrakt fazy, a wtedy błędy zaczynają wyglądać jak niewiedza.
