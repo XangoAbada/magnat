@@ -107,7 +107,7 @@ pub fn phase(st: &mut MacroState, p: &MacroParams) {
                 if brakuje == 0 {
                     break;
                 }
-                let gotowi = u32::from(gotowosc_bp(minuty)) * pula[e] / 10_000;
+                let gotowi = kernel::share_of_count(pula[e], gotowosc_bp(minuty));
                 let chetni = brakuje.min(gotowi);
                 if chetni > 0 {
                     pula[e] -= chetni;
@@ -179,7 +179,7 @@ fn odejscia(st: &mut MacroState, p: &MacroParams, pula: &mut [u32]) {
         if f.employees == 0 {
             continue;
         }
-        let x = u64::from(f.employees) * u64::from(p.quit_per_10k_day) * dni;
+        let (cale, reszta) = kernel::per_10k_whole_and_rest(f.employees, p.quit_per_10k_day, dni);
         let mut r = rng(
             seed,
             StreamId::MacroStep,
@@ -187,8 +187,7 @@ fn odejscia(st: &mut MacroState, p: &MacroParams, pula: &mut [u32]) {
             tick,
         );
         // Zaokrąglenie losowe: reszta jest szansą na jeszcze jedno odejście.
-        let ilu = u32::try_from(x / 10_000).unwrap_or(0)
-            + u32::from(r.gen_range_u32(10_000) < u32::try_from(x % 10_000).unwrap_or(0));
+        let ilu = cale.saturating_add(u32::from(r.gen_range_u32(10_000) < reszta));
         let ilu = ilu.min(f.employees);
         if ilu == 0 {
             continue;
@@ -225,8 +224,10 @@ pub fn gotowosc_bp(minuty: u16) -> u16 {
     if minuty >= MAX_COMMUTE_MIN {
         return 0;
     }
-    let zostalo = u32::from(MAX_COMMUTE_MIN - minuty);
-    u16::try_from(zostalo * 10_000 / u32::from(MAX_COMMUTE_MIN)).unwrap_or(10_000)
+    kernel::ratio_bp(
+        u32::from(MAX_COMMUTE_MIN - minuty),
+        u32::from(MAX_COMMUTE_MIN),
+    )
 }
 
 /// Dojazd, przy którym nikt już nie przychodzi. Godzina w jedną stronę —

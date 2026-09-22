@@ -68,11 +68,17 @@ Jeśli czerwień nie ma jeszcze punktu, zakładamy go w odpowiednim etapie („Z
   - *Zrobione:* `kod = 1` przy zniknięciu; przypadek „sam zniknięty benchmark wywraca bramkę"
     padał przed poprawką (`bench_guard --self-test: BŁĄD`, kod 1).
 
-- [ ] **N1.5** `macro-kernel` zielony na `master` — `R2#3`
+- [x] **N1.5** `macro-kernel` zielony na `master` — `R2#3`
   - `scripts/macro_kernel_guard.py` zgłasza trzy trafienia w
     `sim/macro/src/step/labor.rs:110,190,229` (poz. 84 wykazu R2 mówi o dwóch).
   - *Naprawa:* przenieść te trzy obliczenia do wywołań `kernel`. Jeśli zmienia to wynik
     makro, to i tak jest poprawne (makro ma liczyć jak mezo) — wynik mierzy E5.
+  - *Zrobione:* trzy obliczenia liczą **ludzi**, nie pieniądz, więc `apply_bp` (grosze,
+    połówki od zera) się nie nadawał. `kernel` dostał `share_of_count`, `ratio_bp`
+    i `per_10k_whole_and_rest` — obcięcie w dół, arytmetyka w `u64`; rzut na resztę
+    zostaje w makro (jądro nie zna strumienia losowego). Test `liczby_osob_w_bp_obcinaja_w_dol`.
+    Bramka: przed 3 trafienia i kod 1, po 0. Hash `dry-run --seed 7 --size 4km --years 30`
+    **identyczny** przed i po (`--expect`), testy `magnat-macro` zielone.
 
 - [ ] **N1.6** bramki balansatora bez danych nie są zielone — `M5#2`, `R2` WP24
   - G1 (`tools/balansator/src/gates.rs:247-253`): `yoy_bp` wymaga 13 zamkniętych miesięcy,

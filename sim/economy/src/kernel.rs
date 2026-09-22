@@ -392,6 +392,46 @@ pub fn apply_bp(v: Money, bp: i32) -> Money {
     ))
 }
 
+// ── liczby osób w punktach bazowych (N1.5) ────────────────────────────────────────
+//
+// Te same działania co [`apply_bp`], tylko na **ludziach**, nie na groszach: wynik
+// obcina się w dół, bo pół osoby nie przychodzi do pracy, a zaokrąglenie połówek
+// od zera — reguła pieniądza z 00 §2 — dopisałoby miastu ludzi, których nie ma.
+// Mieszkają tutaj z tego samego powodu co `apply_bp`: skala punktu bazowego ma
+// jedno miejsce, a `scripts/macro_kernel_guard.py` odrzuca `10_000` w działaniu
+// w `sim/macro`.
+
+/// Ile z `n` osób przypada na udział `bp` — obcięte w dół.
+#[must_use]
+pub fn share_of_count(n: u32, bp: u16) -> u32 {
+    u32::try_from(u64::from(n) * u64::from(bp) / BP as u64).unwrap_or(u32::MAX)
+}
+
+/// Udział `part / whole` w punktach bazowych — obcięty w dół, najwyżej 10 000.
+/// Przy `whole == 0` zwraca pełny udział: z pustego mianownika nie ma czego ubyć.
+#[must_use]
+pub fn ratio_bp(part: u32, whole: u32) -> u16 {
+    if whole == 0 {
+        return BP as u16;
+    }
+    u16::try_from((u64::from(part) * BP as u64 / u64::from(whole)).min(BP as u64))
+        .unwrap_or(BP as u16)
+}
+
+/// Oczekiwana liczba zdarzeń dla `count` osób przy stawce `per_10k` na dobę przez
+/// `days` dób, rozłożona na **całe zdarzenia** i **resztę w bp** — resztę wołający
+/// zamienia na jeszcze jedno zdarzenie rzutem ze swojego strumienia losowego.
+/// Jądro nie losuje: nie zna świata ani strumienia (`D20`).
+#[must_use]
+pub fn per_10k_whole_and_rest(count: u32, per_10k: u16, days: u64) -> (u32, u32) {
+    let x = u64::from(count) * u64::from(per_10k) * days;
+    let skala = BP as u64;
+    (
+        u32::try_from(x / skala).unwrap_or(u32::MAX),
+        (x % skala) as u32,
+    )
+}
+
 /// Koszt własny odtworzony z ceny netto i marży: odwrotność bazy z [`next_price_full`]
 /// (`base = cost · (1 + marża)`).
 ///
@@ -512,6 +552,26 @@ mod tests {
             adj_elast_bp: 0,
             adj_spoil_bp: 0,
         }
+    }
+
+    /// Liczby osób obcinają się w dół i nie przepełniają przy dużych pulach (N1.5).
+    #[test]
+    fn liczby_osob_w_bp_obcinaja_w_dol() {
+        assert_eq!(share_of_count(3, 5_000), 1, "półtorej osoby to jedna");
+        assert_eq!(
+            share_of_count(1_000_000, 10_000),
+            1_000_000,
+            "u32 × bp nie przepełnia"
+        );
+        assert_eq!(ratio_bp(59, 60), 9_833);
+        assert_eq!(ratio_bp(1, 0), 10_000);
+        assert_eq!(ratio_bp(70, 60), 10_000, "udział nie przekracza całości");
+        assert_eq!(
+            per_10k_whole_and_rest(100, 2, 1),
+            (0, 200),
+            "0,02 odejścia na dobę"
+        );
+        assert_eq!(per_10k_whole_and_rest(30_000, 2, 30), (180, 0));
     }
 
     #[test]
