@@ -96,4 +96,5 @@ Jedna linia na zamknięty punkt albo grupę: data, identyfikatory, co zrobiono, 
 | 2026-09-22 | N1.1 | reguła 6 `plan_guard`: każdy `#[ignore]` ma job, otwarty punkt albo jest narzędziem; 36 ze 100 dostało właściciela; nowe N1.15, N1.16 | `189ccde` |
 | 2026-09-22 | N1.7 | `struct_guard`: osiem dziur zamkniętych; rejestr z kolumną „Adresat”, 60 pozycji → `N8.3` z przeglądem 2026-10-22, 10 nowych (72–81) | `e15920d` |
 | 2026-09-22 | N1.15 `[~]` | `bench_guard`: nazwy z Windows i Linuksa to jeden wpis; artefakt `criterion` z CI jako źródło linii bazowej | `2debf29` |
-| 2026-09-22 | N1.2 | 33 testy `#[ignore]` dopięte do `determinism` i `budzety`; macierz T11 czerwona → `N4.15` | ten commit |
+| 2026-09-22 | N1.2 | 33 testy `#[ignore]` dopięte do `determinism` i `budzety`; macierz T11 czerwona → `N4.15` | `514096f` |
+| 2026-09-22 | N1.3 | `century` wywraca się przy populacji < 1000 albo > 3× startowej w dowolnej dobie; 5 ziaren w nocnym `determinism` | ten commit |

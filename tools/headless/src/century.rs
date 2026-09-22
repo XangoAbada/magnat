@@ -239,7 +239,34 @@ pub fn run(a: &CenturyArgs) -> Result<std::process::ExitCode, Box<dyn std::error
         eprintln!("BŁĄD: populacja poza przedziałem [0,5×, 2,0×] — {stosunek:.2}×");
         return Ok(std::process::ExitCode::FAILURE);
     }
+    if let Some(blad) = przekroczony_prog(startowa, min_pop, max_pop) {
+        eprintln!("BŁĄD: {blad}");
+        return Ok(std::process::ExitCode::FAILURE);
+    }
     Ok(std::process::ExitCode::SUCCESS)
+}
+
+/// Najmniejsza populacja, jaką `prop_century_survival` dopuszcza w **którymkolwiek**
+/// momencie stulecia (M3 §7.2).
+const MIN_POPULACJA: usize = 1_000;
+/// Największa populacja jako wielokrotność startowej, w którymkolwiek momencie (M3 §7.2).
+const MAX_KROTNOSC: usize = 3;
+
+/// Progi §7.2 dla całego przebiegu, nie tylko dla jego końca (N1.3). Do E1 runner
+/// liczył `min_pop` i `max_pop` wyłącznie do wydruku — miasto, które w 40. roku spadło
+/// do 300 mieszkańców i odbiło do startowej, przechodziło bez słowa.
+fn przekroczony_prog(startowa: usize, min_pop: usize, max_pop: usize) -> Option<String> {
+    if min_pop < MIN_POPULACJA {
+        return Some(format!(
+            "populacja spadła do {min_pop} — §7.2: nigdy poniżej {MIN_POPULACJA}"
+        ));
+    }
+    if max_pop > startowa.saturating_mul(MAX_KROTNOSC) {
+        return Some(format!(
+            "populacja urosła do {max_pop} przy starcie {startowa} — §7.2: nigdy ponad {MAX_KROTNOSC}× startowej"
+        ));
+    }
+    None
 }
 
 /// Ocena eksperymentu szokowego (kryterium WP8).
@@ -499,6 +526,27 @@ fn klasy(world: &World) {
             "  {:<12} {n:>7}  {:>5.1} %",
             klasa.name(),
             f64::from(*n) * 100.0 / f64::from(razem.max(1))
+        );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::przekroczony_prog;
+
+    #[test]
+    fn progi_stulecia_obejmuja_caly_przebieg() {
+        assert!(
+            przekroczony_prog(3_000, 1_000, 9_000).is_none(),
+            "na granicy przechodzi"
+        );
+        assert!(
+            przekroczony_prog(3_000, 999, 3_000).is_some(),
+            "dołek poniżej 1000"
+        );
+        assert!(
+            przekroczony_prog(3_000, 2_000, 9_001).is_some(),
+            "szczyt ponad 3×"
         );
     }
 }

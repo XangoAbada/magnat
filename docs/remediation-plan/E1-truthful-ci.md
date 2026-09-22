@@ -52,10 +52,15 @@ Jeśli czerwień nie ma jeszcze punktu, zakładamy go w odpowiednim etapie („Z
     uruchamia, jest błędem (zapomniany `--skip` = czerwone CI z powodu, który ma właściciela).
     Zielony bieg w CI — przy pomiarze zamknięcia etapu (Actions zablokowane od 21.09).
 
-- [ ] **N1.3** `m3_century` w nocnym CI i progi, które wymusza — `M3#4`
+- [x] **N1.3** `m3_century` w nocnym CI i progi, które wymusza — `M3#4`
   - Runner `tools/headless/src/century.rs:167-169,236-241` drukuje populację, ale nie
     sprawdza §7.2 („nigdy < 1000", „nigdy > 3×"). Wersja testowa `wp7_…` sprawdza `min > 0`.
   - *Naprawa:* kod wyjścia ≠ 0 przy przekroczeniu progu; krok w nocnym jobie.
+  - *Zrobione:* `przekroczony_prog` + test jednostkowy `progi_stulecia_obejmuja_caly_przebieg`.
+    Dowód na runnerze: miasto 500 lokali (start 730, dołek 532) — stary kod 0, nowy kod 1.
+    Domyślne stulecie: start 6324, min 4669, max 6324, koniec 0,80× — zielone, 66 s.
+    Krok nocny w `determinism` (ubuntu, ziarna 1–5). *Sufit:* jeden rozmiar miasta z czterech
+    z §7.2 — nazwany komentarzem `ponytail:` w `ci.yml`.
 
 - [x] **N1.4** `bench_guard`: zniknięty benchmark to błąd — `R2#2`
   - `scripts/bench_guard.py:75-77`: wiersz `BRAK … zniknął` nie ustawia `kod = 1`.

@@ -295,6 +295,18 @@ jobs:
           cargo test --release -p magnat-world --lib -- --include-ignored miasto_daje_poprawny_graf
           cargo test --release -p magnat-headless --test m10_domkniecie --test full_city --test labor_city --test firms_city --test blackout -- --include-ignored
           cargo test --release -p magnat-agents --test school -- --include-ignored
+      - name: M3 — stulecie demografii i progi §7.2 (N1.3)
+        # Bieg nocny, jeden system: ~70 s na ziarno w release. Kod wyjścia pilnuje całego
+        # przebiegu — nigdy < 1000 mieszkańców, nigdy > 3× startowej, koniec w [0,5×; 2×],
+        # pieniądz i tożsamość populacji. Do E1 runner liczył minimum i maksimum tylko do
+        # wydruku i nie był wołany przez żaden krok.
+        # ponytail: pięć ziaren na jednym rozmiarze miasta; §7.2 mówi o czterech rozmiarach —
+        # dołożyć `--homes/--jobs/--seeded`, gdy bieg nocny zmieści kolejne ~6 min.
+        if: runner.os == 'Linux' && contains(fromJSON('["schedule", "workflow_dispatch"]'), github.event_name)
+        run: |
+          for s in 1 2 3 4 5; do
+            cargo run --release -q -p magnat-headless -- century --seed "$s" --report-every 50 > /dev/null
+          done
       - name: M4 — dowód spójności mikro ↔ mezo (A1–A5, M4d/WP9)
         run: cargo test --release -p magnat-world --test lod -- --include-ignored
       - name: M11 — render, dźwięk i poziom detalu nie zmieniają symulacji (§7.1)
