@@ -114,3 +114,17 @@ Jeśli czerwień nie ma jeszcze punktu, zakładamy go w odpowiednim etapie („Z
     niepotwierdzony i tak zapisany w `N8.1`.
 
 ## Znalezione po drodze
+
+- [x] **N1.14** kroki CI połykają błędy przez powłokę — `nowe`
+  - Na Windows krok bez `shell:` biegnie w pwsh, który zwraca kod **ostatniej** komendy:
+    z czterech `cargo test` kroku M1 w `determinism` (i dwóch w M9b) liczył się tylko
+    ostatni. Na Linuksie domyślny `bash -e` nie ma `pipefail`, więc
+    `cargo test … | tee raport-budzetow.txt` (`budzety`) i `export-drains | tee` były
+    zielone przy każdym wyniku.
+  - *Naprawa:* `defaults: run: shell: bash` w `ci.yml` — jawne `bash` to
+    `bash -eo pipefail` na obu systemach.
+  - *Test:* reguła 5 `plan_guard` (workflow bez domyślnej powłoki `bash` jest błędem),
+    z trzema przypadkami w `--self-test`.
+  - *Odrzucone po sprawdzeniu:* `f32::cos`/`sin` w `sim/world/src/city/build/footprint.rs:567`
+    nie łamie determinizmu — to kod testu (`wyjscie_z_bryly_trafia_w_lico`), nie symulacji.
+    Dostaje `#[allow]` z powodem w `N1.10`.

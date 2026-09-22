@@ -88,3 +88,4 @@ Jedna linia na zamknięty punkt albo grupę: data, identyfikatory, co zrobiono, 
 
 | Data | Punkty | Co | Commit |
 |---|---|---|---|
+| 2026-09-22 | N1.14 | `defaults: run: shell: bash` w `ci.yml`; reguła 5 `plan_guard` | ten commit |

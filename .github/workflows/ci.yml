@@ -22,6 +22,14 @@ env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: "-D warnings"
 
+# Jawne `bash` to `bash -eo pipefail` na obu systemach (N1.14). Bez tego krok na
+# Windows biegnie w pwsh i zwraca kod **ostatniej** komendy — cztery `cargo test`
+# kroku M1 padały po cichu — a domyślny `bash` na Linuksie nie ma `pipefail`,
+# więc `cargo test | tee raport` był zielony zawsze. Pilnuje tego `plan_guard` (reguła 5).
+defaults:
+  run:
+    shell: bash
+
 jobs:
   check:
     name: fmt + clippy + test (${{ matrix.os }})

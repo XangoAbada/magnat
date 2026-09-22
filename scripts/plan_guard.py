@@ -32,6 +32,10 @@ Cztery reguły, wszystkie mechaniczne:
      Ta reguła jest przez to jedyną, której miejscem jest przebieg **lokalny**:
      bramka w CI nie obroni pliku, od którego CI zależy.
 
+  5. **workflow ma domyślną powłokę `bash`** (`N1.14`) — bez niej krok na Windows
+     biegnie w pwsh, który liczy tylko ostatni kod wyjścia wieloliniowego `run:`,
+     a `bash` bez jawnego `shell:` nie ma `pipefail`, więc `cargo test | tee` połyka błąd.
+
 Czego ta bramka nie sprawdza i dlaczego: **czy rzecz naprawdę została opisana**
 pod wskazanym adresem. To wymagałoby czytania ze zrozumieniem i skończyłoby się
 wyłączeniem bramki po trzecim fałszywym alarmie.
@@ -202,6 +206,27 @@ def workflow_sie_wczytuje() -> list[str]:
     return bledy
 
 
+# ── reguła 5: domyślna powłoka `bash` (N1.14) ─────────────────────────────────────
+#
+# GitHub Actions woła `run:` na Windows przez pwsh, a ten zwraca kod **ostatniej**
+# komendy — cztery `cargo test` w jednym kroku M1 padały po cichu, jeśli padł któryś
+# poza ostatnim. Na Linuksie bez jawnego `shell:` jest `bash -e` bez `pipefail`,
+# więc `cargo test | tee raport` jest zielony zawsze. Jawne `shell: bash` daje
+# `bash -eo pipefail` na obu systemach — wystarczy raz, w `defaults` całego pliku.
+DOMYSLNA_POWLOKA = re.compile(r"^defaults:\s*\n\s+run:\s*\n\s+shell:\s*bash\s*$", re.MULTILINE)
+
+
+def workflow_ma_bash() -> list[str]:
+    if not WORKFLOWS.is_dir():
+        return []
+    return [
+        f"{plik.as_posix()}: brak `defaults: run: shell: bash` — pwsh na Windows połyka "
+        f"błędy wcześniejszych komend kroku, a `bash` bez `pipefail` błąd przed `| tee`"
+        for plik in sorted(WORKFLOWS.glob("*.yml")) + sorted(WORKFLOWS.glob("*.yaml"))
+        if not DOMYSLNA_POWLOKA.search(plik.read_text(encoding="utf-8"))
+    ]
+
+
 def ostatnia_odhaczona(tekst: str) -> str | None:
     """Identyfikator ostatniej pozycji `[x]` — najniższej w pliku."""
     trafienia = ODHACZONY.findall(tekst)
@@ -246,6 +271,9 @@ def bramka() -> int:
 
     # Reguła 4 — workflow CI daje się wczytać.
     bledy.extend(workflow_sie_wczytuje())
+
+    # Reguła 5 — domyślna powłoka `bash`.
+    bledy.extend(workflow_ma_bash())
 
     # Reguła 3 — obietnica z tabeli korekt ma pokrycie pod wskazanym adresem.
     obietnic = sum(len(obietnice(q.read_text(encoding="utf-8"))) for q in PLAN.glob("*.md"))
@@ -342,6 +370,17 @@ def self_test() -> int:
         if trafienie != ma_paskac:
             ok = False
             print(f"self-test: workflow {linia!r} → {trafienie}, chciane {ma_paskac}")
+
+    # Reguła 5: `defaults` na poziomie pliku, nie `shell:` w jednym kroku.
+    przypadki_bash = [
+        ("on: push\ndefaults:\n  run:\n    shell: bash\njobs: {}\n", True),
+        ("on: push\njobs:\n  a:\n    steps:\n      - run: x\n        shell: bash\n", False),
+        ("on: push\ndefaults:\n  run:\n    shell: pwsh\n", False),
+    ]
+    for tekst, chciane in przypadki_bash:
+        if (DOMYSLNA_POWLOKA.search(tekst) is not None) != chciane:
+            ok = False
+            print(f"self-test: domyślna powłoka w {tekst!r} → {not chciane}, chciane {chciane}")
 
     print("plan_guard --self-test:", "ok" if ok else "BŁĄD")
     return 0 if ok else 1
