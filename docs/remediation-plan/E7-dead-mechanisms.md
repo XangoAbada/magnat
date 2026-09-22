@@ -63,3 +63,19 @@ Kod bez konsumenta i bez wymagania się usuwa (YAGNI); da się go odzyskać z hi
     lodówką.
 
 ## Znalezione po drodze
+
+- [ ] **N7.8** poziom trudności nic nie zmienia — `nowe`
+  - Gracz wybiera `Difficulty` w kreatorze (`game/src/screens/newgame.rs:206-210`), trafia
+    ona do `WorldGenParams`, `CityPlan` i dziennika — i nikt jej nie czyta. Poza parserem
+    i kopiowaniem pól nie ma ani jednego odczytu w `sim/`, `game/` ani `engine/`.
+    `magnat-headless` nie ma nawet flagi (na sztywno `Normal`, `worldgen.rs:91`, `nav.rs:99`).
+  - PRD §4.1 (`PRD_Magnat.md:108`) wymaga wpływu na cztery rzeczy: kapitał startowy,
+    agresywność konkurentów, częstość zdarzeń, stopy procentowe. Reguła etapu: PRD wymaga
+    → wpiąć, nie usuwać.
+  - **Decyzja N7.8-a:** *Domyślnie:* jedna tabela `data/tuning/difficulty.ron` z czterema
+    mnożnikami w `bp` na poziom, czytana w czterech istniejących miejscach (kapitał wariantu
+    startu, marża docelowa AI, `trigger.base_ppm` zdarzeń, premia za ryzyko w `bank.ron`).
+    `normal` = 10 000 wszędzie, więc złote hashe dla `Normal` się nie zmieniają.
+    Flaga `--difficulty` w `magnat-headless` w tym samym commicie.
+  - *Test:* ten sam świat na `easy` i `brutal` → różny kapitał startowy gracza i różna
+    liczba zdarzeń po 90 dobach; na `normal` hash równy dzisiejszemu.

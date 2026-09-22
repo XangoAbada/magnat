@@ -23,6 +23,12 @@ zawiesić kolejkę na zawsze. Zapytania o złoża gubią pokłady poza punktem z
   - *Naprawa:* wersja planu w `payload`; zdarzenie ze starszą wersją odpada.
   - *Test:* przeplanowanie w środku doby → każda aktywność startuje raz. Potem zdjąć
     `#[ignore]`/`--skip` z testu pętli doby i dopiąć go do CI (release i debug).
+  - *Odtworzone* 22.09.2026 poza audytem: `magnat-headless m8miasto --citizens 3000` w buildzie
+    `debug` pada na `debug_assert` z `des.rs:246` („dwa zdarzenia o identycznym kluczu")
+    **pierwszej doby** — ziarno 7, region rzeczny: minuta 476; parametry domyślne: minuta 840.
+    Czyli żaden przebieg pełnego miasta w `debug` nie przeżywa doby, a w `release` każdy
+    idzie dalej z podwojonym łańcuchem. Ten przebieg jest gotowym testem regresji:
+    po naprawie `m8miasto --days 2` w `debug` kończy się kodem 0.
 
 - [ ] **N4.2** parking bez pojazdów widm — `M4#1`, `M4#5`
   - `sim/traffic/src/parking.rs:425-437` (`expire`), `oracle/offers.rs:289-292`: blokada
@@ -122,3 +128,25 @@ zawiesić kolejkę na zawsze. Zapytania o złoża gubią pokłady poza punktem z
     (`fixed.rs:48,88`); `to_int_round` (`:65`) przepełnia się blisko `MAX`.
 
 ## Znalezione po drodze
+
+- [ ] **N4.13** erozja czyta swój plik obok reszty danych — `nowe`
+  - `sim/world/src/gen/erosion.rs:116`: `ErosionParams::load(Path::new("data/geology/erosion.ron"))
+    .unwrap_or_default()`. Ścieżka względna wobec katalogu roboczego zamiast
+    `crate::data_path` (jak w `geology.rs:31-33`, `deposits.rs:114-115` i w teście tego
+    samego pliku, `erosion.rs:505`), a błąd odczytu i walidacji jest połykany.
+  - Skutki: `MAGNAT_DATA` nie dociera do erozji; uruchomienie spoza korzenia repo, literówka
+    w pliku albo wartość odrzucona przez walidację (`D·dt/dx² > 0,25`, `n ≠ 1`) dają
+    po cichu wartości domyślne. Dziś domyślne są równe plikowi, więc nic tego nie zdradza.
+  - *Naprawa:* `crate::data_path` i błąd przerywający generację (jak w przebiegach P8, P9).
+  - *Test:* katalog danych z `erosion.ron` o innym `dt_years` → inny hash terenu; plik
+    z `stream_power_n: 2.0` → generacja kończy się błędem, nie światem.
+
+- [ ] **N4.14** `tuning/supply.ron` bez kontroli zakresów — `nowe`
+  - `Tuning::load` (`sim/supply/src/tuning.rs:165-177`) sprawdza tylko składnię
+    i `schema_version`. Ujemny koszt transportu, marża B2B albo spread eksportu przechodzą
+    do symulacji. Pozostałe pliki `tuning/` i `economy/` mają walidację (`city.ron`
+    `BadWeights`, `relations.ron` `Zero`/`Weights`); ten jest wyjątkiem.
+  - *Naprawa:* `TuningError::Range { pole, wartość }` dla pól, które są kosztem, marżą,
+    stawką albo liczbą dni (≥ 0; udziały w `bp` ≤ 10 000), w tym samym stylu co `N4.5`
+    i `N4.10`.
+  - *Test:* `transport.cost_gr_per_tonne_km: -1` → `Err` z nazwą pola.

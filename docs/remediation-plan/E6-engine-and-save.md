@@ -100,3 +100,17 @@ i `m9session` po zmianach z `N6.8` zapisane jako nowe złote wartości w jednym 
     Nieosiągalne w praktyce → komentarz `ponytail:` z sufitem, bez zmiany kodu.
 
 ## Znalezione po drodze
+
+- [ ] **N6.13** zapis i dziennik znają dane, na których powstały — `nowe`
+  - `ReplayHeader` (`game/src/replay.rs:35-42`) niesie `schema_version`, `engine_build`
+    i `params` — nic o katalogu `data/`. Każda edycja pliku RON, a także podmiana katalogu
+    przez `MAGNAT_DATA`, zmienia łańcuch hashy. Stary dziennik odtwarza się wtedy w inny
+    świat, a złote pliki `--expect` / `*.hashes` rozjeżdżają się bez wskazania przyczyny.
+  - Siostra `N6.11`: tam wersja kształtu komend, tu wersja treści danych.
+  - **Decyzja N6.13-a:** *Domyślnie:* odcisk xxh3 po posortowanych ścieżkach i treści
+    wszystkich plików `data/**/*.ron` poza `locale/` (tekst nie wchodzi do symulacji).
+    Niezgodność przy odtwarzaniu → błąd wymieniający oba odciski, nie cichy rozjazd.
+    Ten sam odcisk wypisuje `--out` przy hashach. Mody z M12d dopiszą do niego swoje
+    katalogi — tego tu nie projektujemy.
+  - *Test:* nagrać dziennik, zmienić jedną liczbę w `tuning/supply.ron`, odtworzyć → `Err`
+    z odciskami; bez zmiany → odtworzenie jak dziś.
