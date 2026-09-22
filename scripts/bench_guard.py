@@ -49,6 +49,17 @@ def zbierz_mediany(katalog: pathlib.Path) -> dict[str, float]:
     return wyniki
 
 
+def klucz(nazwa: str) -> str:
+    """Nazwa benchmarku bez tego, co gubi system plików Windows (N1.15).
+
+    Nazwa pochodzi z katalogu `target/criterion`, a NTFS nie rozróżnia wielkości
+    liter i obcina kropki na końcu członu: „B-1 …" z Linuksa i „b-1 …" z Windows,
+    „300 tys." i „300 tys" to ten sam benchmark. Bez tego 37 pozycji wyglądało
+    jak zniknięte, a 42 jak nowe.
+    """
+    return "/".join(czlon.rstrip(". ").lower() for czlon in nazwa.split("/"))
+
+
 def porownaj(biezace: dict[str, float], bazowe: dict[str, float]) -> tuple[int, list[str]]:
     """Kod wyjścia i wiersze raportu.
 
@@ -58,6 +69,8 @@ def porownaj(biezace: dict[str, float], bazowe: dict[str, float]) -> tuple[int, 
     """
     kod = 0
     wiersze = []
+    biezace = {klucz(n): w for n, w in biezace.items()}
+    bazowe = {klucz(n): w for n, w in bazowe.items()}
     for nazwa, wartosc in sorted(biezace.items()):
         odniesienie = bazowe.get(nazwa)
         if odniesienie is None:
@@ -119,6 +132,11 @@ def self_test() -> int:
     kod4, _ = porownaj({"a": 1000.0}, {"a": 1000.0, "zniknal": 1000.0})
     ok &= kod4 == 1
     print(f"{'OK    ' if kod4 == 1 else 'BŁĄD  '} sam zniknięty benchmark wywraca bramkę")
+
+    # Nazwa z Linuksa i ta sama nazwa zapisana na Windows to jeden wpis (N1.15).
+    kod5, w5 = porownaj({"B-1 iteracja/300 tys./LOD1": 1000.0}, {"b-1 iteracja/300 tys/lod1": 1000.0})
+    ok &= kod5 == 0
+    print(f"{'OK    ' if kod5 == 0 else 'BŁĄD  '} nazwa z Windows i z Linuksa to ten sam benchmark {w5 if kod5 else ''}")
     print("bench_guard --self-test:", "ok" if ok else "BŁĄD")
     return 0 if ok else 1
 

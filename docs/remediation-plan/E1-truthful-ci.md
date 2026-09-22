@@ -159,7 +159,7 @@ Jeśli czerwień nie ma jeszcze punktu, zakładamy go w odpowiednim etapie („Z
     nie łamie determinizmu — to kod testu (`wyjscie_z_bryly_trafia_w_lico`), nie symulacji.
     Dostaje `#[allow]` z powodem w `N1.10`.
 
-- [ ] **N1.15** `bench-guard` porównuje dwie różne maszyny i dwa różne systemy plików — `nowe`
+- [~] **N1.15** `bench-guard` porównuje dwie różne maszyny i dwa różne systemy plików — `nowe`
   - Ostatni nocny bieg, który się wykonał (20.09, `5239480`): 37 × `BŁĄD` (od +26 % do +432 %),
     2 × `OK`. Linia bazowa jest nagrana lokalnie (`b9a3e39`), a porównywana z runnerem
     `ubuntu-latest` — różnica sprzętu, nie regresja.
@@ -173,6 +173,11 @@ Jeśli czerwień nie ma jeszcze punktu, zakładamy go w odpowiednim etapie („Z
     wystawia `target/criterion` jako artefakt, `--update` czyta z pobranego artefaktu,
     a opis commita odnowienia podaje identyfikator biegu zamiast nazwy sprzętu.
   - *Test:* przypadek `--self-test`: „B-1 x." w przebiegu i „b-1 x" w bazie to ten sam wpis.
+  - *W toku:* przyjęta propozycja domyślna N1.15-a. `klucz()` normalizuje nazwy po obu
+    stronach (przypadek self-testu padał przed zmianą), job wystawia artefakt `criterion`,
+    reguła odnowienia w `CLAUDE.md` mówi o biegu CI zamiast sprzętu. **Brakuje:** odnowienia
+    `benches/baseline.json` z artefaktu — wymaga działającego CI (od 21.09 joby nie startują
+    z powodu rozliczeń konta GitHub) — i zielonego joba po nim.
 
 - [ ] **N1.16** nocny balansator: czerwony i na granicy limitu czasu — `nowe`
   - Bieg z 20.09 (`5239480`): 4 scenariusze × 8 ziaren × 365 dób trwały 5 h 31 min przy

@@ -336,6 +336,17 @@ jobs:
         # Brak wpisu w linii bazowej jest od R2-WP33 **błędem**, nie komunikatem
         # `NOWY`: benchmark bez linii bazowej to benchmark, którego nikt nie ogląda.
         run: python3 scripts/bench_guard.py benches/baseline.json
+      # Linia bazowa powstaje **na tej klasie maszyny, na której jest porównywana**
+      # (N1.15-a). Do E1 nagrywano ją lokalnie, a porównywano z runnerem — 37 × BŁĄD
+      # od +26 % do +432 % było różnicą sprzętu, nie regresją. Odnowienie:
+      #   gh run download <id> -n criterion -D target/criterion
+      #   python scripts/bench_guard.py benches/baseline.json --update
+      # i w opisie commita identyfikator biegu zamiast nazwy sprzętu.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: criterion
+          path: target/criterion/**/new/estimates.json
 
   struct-guard:
     name: kontrola strukturalna (progi R1 §6)

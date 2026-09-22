@@ -231,9 +231,11 @@ benchmarków nie miało wpisu w `benches/baseline.json`, a `bench_guard` wypisyw
 - **Odnowienie idzie osobnym commitem, bez żadnej innej zmiany** — tak samo jak `cargo fmt`
   całego repozytorium i z tego samego powodu: zapisanie liczb razem ze zmianą, która na nie
   wpływa, zamienia dowód w założenie.
-- Kolejność jest zawsze ta sama: `cargo bench` na liście crate'ów z `ci.yml`, potem
-  `python scripts/bench_guard.py benches/baseline.json --update`, potem commit z nazwą
-  sprzętu odniesienia w opisie.
+- Kolejność jest zawsze ta sama: wyniki `cargo bench` **z runnera CI** (artefakt
+  `criterion` joba `bench-guard`: `gh run download <id> -n criterion -D target/criterion`),
+  potem `python scripts/bench_guard.py benches/baseline.json --update`, potem commit
+  z identyfikatorem biegu w opisie. Linia bazowa nagrana lokalnie porównuje dwie maszyny,
+  nie dwa stany kodu (`N1.15`).
 - Etap planu naprawczego, który zmienił benchmarkowany kod (E5, E6), też kończy się
   odnowieniem linii bazowej — tym samym osobnym commitem.
 - **Brak wpisu jest błędem bramki**, nie informacją. Benchmark nowy w tym commicie jest
