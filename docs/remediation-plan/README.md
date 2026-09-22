@@ -101,4 +101,5 @@ Jedna linia na zamknięty punkt albo grupę: data, identyfikatory, co zrobiono, 
 | 2026-09-22 | N1.5 | `macro-kernel` zielony: liczby osób w bp przez `kernel`; hash makro bez zmian | `71c404a` |
 | 2026-09-22 | N1.6 | G1 i G3 bez danych → „brak danych”, nie zieleń; profil `ci` przepuszcza to tylko z listy; nocny 8 × 450 w macierzy scenariuszy | `79d4f91`, `1d5ce9a` |
 | 2026-09-22 | N1.10 | `clippy.toml`: komplet zakazów `f32`; rayon tylko w `engine/jobs` (krok CI); 7 miejsc prezentacji z powodem | `b7680f6`, `926849a` |
-| 2026-09-22 | N1.11 | raport rozbieżności wskazuje archetyp/arenę/zasób; tick 0 porównywany; `sim.step` usunięte; T-D8 sprawdza treść | ten commit |
+| 2026-09-22 | N1.11 | raport rozbieżności wskazuje archetyp/arenę/zasób; tick 0 porównywany; `sim.step` usunięte; T-D8 sprawdza treść | `8349c46` |
+| 2026-09-22 | N1.12 `[~]` | scena pomiarowa bez vsync i z zamrożonym detalem; cel budżetu z kadru; plany bez „nocnego biegu z GPU” | ten commit |

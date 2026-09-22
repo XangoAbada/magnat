@@ -17,7 +17,8 @@ pub mod ui;
 pub mod weather;
 
 pub use budget::{
-    RenderBudget, RenderStats, LOD_SCALE_MAX, LOD_SCALE_MIN, TARGET_30_MS, TARGET_60_MS,
+    target_for_camera, RenderBudget, RenderStats, LOD_SCALE_MAX, LOD_SCALE_MIN, TARGET_30_MS,
+    TARGET_60_MS,
 };
 pub use camera::{CameraMode, CameraState};
 pub use clusters::{CLUSTER_CAPACITY, CLUSTER_COUNT, CLUSTER_X, CLUSTER_Y, CLUSTER_Z};

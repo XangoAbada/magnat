@@ -62,7 +62,8 @@ trzykrotny zapas. Warunek powrotu jest zapisany w `M12a` i jest **liczbą, nie w
 
 **Opis.** Pomiar czasu GPU przez timestamp queries, `RenderStats` z podziałem na warstwy,
 adaptacyjna skala progów LOD z histerezą. Harness benchmarków na scenach referencyjnych,
-zapis do `bench/frames/*.json`, porównanie z baseline w CI.
+zapis do `bench/frames/*.json`, porównanie z baseline przy ręcznym pomiarze
+(w CI nie ma GPU — `N1.12-a`).
 
 **Kryterium ukończenia.** Cele §20.2 osiągnięte na sprzęcie referencyjnym; regresja zatrzymuje
 build. **Wykonane** — siedem scen odniesienia, p95 czasu GPU wobec progu zaostrzonego
@@ -289,6 +290,6 @@ gorszy od jego braku, bo braku nikt nie weźmie za pomiar.
 |---|---|
 | Impostory dzielnic (`WP4b`): atlas runtime, LRU, budżet 192 MB, regeneracja ≤ 4 bloki na klatkę | **`M12a`/WP4**, z warunkiem powrotu wyrażonym liczbą (`H-10`) |
 | `terrain_revision` w `RenderSnapshot` jest polem, którego **nikt nie inkrementuje** | **`M12a`**, razem z `WP4b` — to jego pierwszy stopień inwalidacji i nie ma drugiego czytelnika |
-| Progi klatkowe nie są w CI: wspólne runnery nie mają karty graficznej | Nocny bieg na maszynie referencyjnej, tak jak stanowi §7.2. CI sprawdza poprawność (§7.1) i mikrobenchmarki procesora |
+| Progi klatkowe nie są w CI: wspólne runnery nie mają karty graficznej | Ręczny pomiar na maszynie z GPU, raport w repozytorium (`N1.12-a`: nocnego biegu z GPU nie ma). CI sprawdza poprawność (§7.1) i mikrobenchmarki procesora |
 | `bench_street` stoi kamerą pierwszoosobową **bez postaci gracza** (`--observe`) | M12, jeśli scena z postacią miałaby dać inny kadr. Koszt rysowania jest ten sam, a scena z postacią wymagałaby wyboru wariantu startu w skrypcie |
 | Koła pojazdu kręcą się ze stałą prędkością klipu, a `wheel_phase` z rekordu nie ma czytelnika | **R2** — pomiar nie dał powodu, żeby robić to w M11: pojazdów w oknie gry i tak jest zero (pozycja 71 wykazu) |

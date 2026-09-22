@@ -242,8 +242,10 @@ więc próg jest zaostrzony mnożnikiem `ZAPAS = 0,55` — jawną stałą, nie l
 
 **W CI (brak GPU):** uruchamiamy wyłącznie (a) benchmarki CPU-side z progami criterion
 (`scripts/bench_guard.py`) i (b) testy poprawności bez GPU — §7.1 w całości
-(`tools/magnat/tests/render_nie_dotyka_symulacji.rs`). Progi klatkowe weryfikuje nocny bieg
-na maszynie referencyjnej: `python scripts/frame_guard.py bench/frames`.
+(`tools/magnat/tests/render_nie_dotyka_symulacji.rs`). Progi klatkowe weryfikuje **ręczny**
+pomiar na maszynie z kartą graficzną, z raportem w repozytorium:
+`python scripts/frame_guard.py bench/frames` (`N1.12-a` planu naprawczego — runnera z GPU
+nie ma, nocnego biegu klatkowego też nie).
 **Regresja idzie po p50 z progiem 10 %, nie po p95 z progiem 8 % (`H-11`)** — p95 czasu GPU
 waha się o 10 % między przebiegami tej samej sceny, więc bramka na p95 zapalałaby się na szumie.
 Próg bezwzględny (czy scena mieści się w celu) zostaje na p95 i się nie zmienia.
@@ -308,7 +310,7 @@ Próg bezwzględny (czy scena mieści się w celu) zostaje na p95 i się nie zmi
 | R4 | **Liczba klipów animacji rośnie z liczbą zawodów** (§15.4: „animacje wg zawodu") | Przekroczenie 256 `ClipId`, koszt produkcji assetów | `JobRoleId → ClipKind::Work(...)` jest **wiele-do-jednego**: kasjer, recepcjonista i urzędnik dzielą klip „praca przy ladzie". Docelowo 18–24 klipów pracy, nie 120 |
 | R5 | **Budżet 32 głosów to mało** dla żywego miasta | Dźwięk brzmi ubogo mimo wizualnego bogactwa | Ciężar niosą `AmbientZone` (łoża), nie pojedyncze emitery. Klastrowanie 15 m. Jeśli odsłuch pokaże niedosyt — podniesienie do 48 jest zmianą jednej stałej |
 | R6 | ~~Zależność od `RenderGraph` M1~~ | — | **ZDJĘTE.** M1 potwierdził, że buduje punkt rejestracji (`RenderPass`/`PassDecl`/`GraphSlot`) u siebie w WP-R1. Mój WP2 nie dotyka cudzego modułu. W zamian nowe, drobne ryzyko R11 |
-| R7 | **Brak GPU w CI** | Regresje wydajności wykrywane późno | Rozdzielenie: CI weryfikuje poprawność (lavapipe) i benchmarki CPU-side; nocny bieg na runnerze z GPU weryfikuje progi klatkowe |
+| R7 | **Brak GPU w CI** | Regresje wydajności wykrywane późno | Rozdzielenie: CI weryfikuje poprawność (lavapipe) i benchmarki CPU-side; progi klatkowe weryfikuje ręczny pomiar na maszynie z GPU (`N1.12-a`) |
 | R8 | **`activity`/`emission` nie mają zdefiniowanej skali** — M6/M7 mogą je liczyć inaczej, niż zakłada wizualizacja | Dym z komina lub głośność zakładu nie odpowiadają rzeczywistości | Decyzja 9.4. Do czasu rozstrzygnięcia kontrakt mówi: „0 = całkowity bezruch, 255 = pełne obłożenie nominalne", walidowane testem na scenie referencyjnej |
 | R9 | **Animacja stop-motion 12 fps** może wyglądać tanio zamiast stylowo | Estetyka całej gry | Prototyp wizualny w WP3 przed wypaleniem pełnego zestawu klipów; `fps` jest polem `AnimationClip`, więc podniesienie do 24 dla wybranych klipów nie wymaga zmiany architektury (koszt: 2× `PoseAtlas`, wciąż < 1 MB) |
 | R11 | **Rozjazd konwencji współrzędnych z M1** — M1 trzyma origin kamery w `f64` i przekazuje pozycje względem kamery; gdybym rzutował na `f32` przed odjęciem originu, encje zaczęłyby drgać przy współrzędnych rzędu kilku km | Pieszy skacze o pół metra między klatkami na krawędziach mapy — objaw wygląda na błąd symulacji, a jest błędem renderu, więc szuka się go w złym miejscu | Kolejność „odejmij, potem rzutuj" zapisana w 5.3 jako wymóg. Test `no_jitter_at_map_edge` w WP2: encja stojąca w miejscu przy współrzędnej 8 km ma zerową wariancję pozycji ekranowej przez 600 klatek |

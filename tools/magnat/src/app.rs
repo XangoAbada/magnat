@@ -189,7 +189,10 @@ impl ApplicationHandler for App {
             }
         );
         let mut gpu = gpu;
-        if self.bench.is_some() && !gpu.disable_vsync() {
+        // Scena pomiarowa mierzy klatkę jak `--bench` — bez vsync (N1.12, `M11#3`).
+        // Do E1 wyłączał go tylko `--bench`, więc każdy raport `bench/frames/*.json`
+        // miał `frame_ms` p95 ≈ 27,4 ms niezależnie od sceny: to był takt monitora.
+        if (self.bench.is_some() || self.scena.is_some()) && !gpu.disable_vsync() {
             eprintln!("uwaga: sterownik nie daje trybu bez vsync — FPS będzie obcięty do odświeżania monitora");
         }
         // Modele encji i palety dzielnic są daną tak samo jak materiały; czyta je klient
@@ -854,11 +857,14 @@ impl App {
             }
         }
 
-        // Scena odniesienia ustawia cel budżetu wg tego, na co patrzy — 33,3 ms
-        // dla widoku miasta, 16,6 ms dla dzielnicy i ulicy (§5.10, PRD §20.2).
-        if let Some(p) = self.scena.as_ref() {
-            renderer.budget.target_ms = p.scena.target_ms;
-        }
+        // Cel budżetu wg tego, na co patrzy kadr — 33,3 ms dla widoku miasta, 16,6 ms
+        // dla dzielnicy i ulicy (§5.10, PRD §20.2). Scena odniesienia ma cel zapisany
+        // i **zamrożony detal**, żeby raport mierzył ten obraz, który opisuje (N1.12).
+        renderer.budget.target_ms = match self.scena.as_ref() {
+            Some(p) => p.scena.target_ms,
+            None => magnat_render::target_for_camera(&self.camera.mode),
+        };
+        renderer.budget.frozen = self.scena.is_some();
         renderer.render_with_ui(&kamera, minuta, szerokosc, ui_frame);
         self.occupancy_klatki = renderer.cluster_occupancy().max();
         self.krok_dzwieku(&kamera, dt as f32);

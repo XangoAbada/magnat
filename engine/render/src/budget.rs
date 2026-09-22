@@ -11,6 +11,7 @@
 //! czyli dokładnie tym, czemu zapobiega wydzielenie `sim-snapshot`. Cap jest stałą
 //! konfiguracji, nie zmienną runtime'u.
 
+use crate::camera::CameraMode;
 use crate::renderer::FrameStats;
 
 /// Ile klatek wchodzi do okna decyzyjnego.
@@ -37,14 +38,33 @@ pub const TARGET_60_MS: f32 = 16.6;
 /// Cel czasu klatki dla widoku miasta (30 FPS, PRD §20.2).
 pub const TARGET_30_MS: f32 = 33.3;
 
+/// Odległość orbity, od której kadr jest „widokiem miasta" z celem 30 FPS (PRD §20.2).
+/// Scena `bench_city` patrzy z 1400 m, dzielnica i ulica z 120–180 m.
+// ponytail: próg na samej odległości orbity; swobodny lot i pierwsza osoba mają cel
+// dzielnicy. Wysokość kamery nad terenem, gdy lot nad miastem zacznie się liczyć.
+pub const CITY_VIEW_FROM_M: f32 = 700.0;
+
+/// Cel budżetu dla kadru poza sceną pomiarową (N1.12). Do E1 cel ustawiała wyłącznie
+/// scena, więc w grze widok miasta był rozliczany z 16,6 ms i tracił detal bez powodu.
+#[must_use]
+pub fn target_for_camera(mode: &CameraMode) -> f32 {
+    match mode {
+        CameraMode::Orbit { dist, .. } if *dist >= CITY_VIEW_FROM_M => TARGET_30_MS,
+        _ => TARGET_60_MS,
+    }
+}
+
 /// Adaptacyjna skala progów poziomu detalu (§5.10).
 ///
 /// Wejściem jest czas **GPU**, nie czas ściany: czas ściany niesie też koszt symulacji
 /// i wsyncu, a z nich żaden nie zmieni się od zdjęcia detalu z encji na trzystu metrach.
 #[derive(Clone, Debug)]
 pub struct RenderBudget {
-    /// 16,6 albo 33,3 ms wg trybu kamery — ustawia klient, bo to on wie, na co patrzy.
+    /// 16,6 albo 33,3 ms wg trybu kamery — ustawia klient, bo to on wie, na co patrzy
+    /// ([`target_for_camera`] poza sceną pomiarową, cel sceny w niej).
     pub target_ms: f32,
+    /// Pomiar bez adaptacji: próbki się zbierają, skala detalu stoi (scena pomiarowa, N1.12).
+    pub frozen: bool,
     lod_scale: f32,
     historia: [f32; OKNO],
     probek: usize,
@@ -64,6 +84,7 @@ impl RenderBudget {
     pub fn new(target_ms: f32) -> RenderBudget {
         RenderBudget {
             target_ms,
+            frozen: false,
             lod_scale: LOD_SCALE_MAX,
             historia: [0.0; OKNO],
             probek: 0,
@@ -124,7 +145,7 @@ impl RenderBudget {
         self.zapis = (self.zapis + 1) % OKNO;
         self.probek += 1;
 
-        if self.probek() < OKNO {
+        if self.frozen || self.probek() < OKNO {
             return self.lod_scale;
         }
         // Odliczanie **przed** decyzją, nie po: karencja 30 ma blokować trzydzieści
@@ -337,6 +358,32 @@ mod tests {
         for _ in 0..klatek {
             b.observe(ms);
         }
+    }
+
+    /// Scena pomiarowa mierzy kadr z **pełnym** detalem (N1.12, `M11#6`): do E1
+    /// `bench_night_rain` zszedł w trakcie pomiaru do `lod_scale 0,9`, więc raport
+    /// porównywał inny obraz niż ten, który scena opisuje.
+    #[test]
+    fn zamrozony_budzet_nie_zmienia_detalu() {
+        let mut b = RenderBudget::new(16.6);
+        b.frozen = true;
+        nasyc(&mut b, 40.0, 200);
+        assert_eq!(b.lod_scale(), LOD_SCALE_MAX);
+        assert!(b.p95_ms() > 39.0, "pomiar nadal się zbiera");
+    }
+
+    /// Cel budżetu poza sceną pomiarową wynika z kadru (N1.12, `M11#5`): widok miasta
+    /// ma 30 FPS, dzielnica i ulica 60 (PRD §20.2). Do E1 cel ustawiała tylko scena.
+    #[test]
+    fn cel_budzetu_wynika_z_kadru() {
+        let orbita = |dist| CameraMode::Orbit {
+            target: glam::DVec3::ZERO,
+            dist,
+            yaw: 0.0,
+            pitch: 0.5,
+        };
+        assert_eq!(target_for_camera(&orbita(180.0)), TARGET_60_MS);
+        assert_eq!(target_for_camera(&orbita(1_400.0)), TARGET_30_MS);
     }
 
     #[test]

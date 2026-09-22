@@ -169,7 +169,7 @@ Jeśli czerwień nie ma jeszcze punktu, zakładamy go w odpowiednim etapie („Z
     Różnic encja po encji nadal nie ma — część stanu to granica tego, co runner
     wie bez drugiego świata w pamięci.
 
-- [ ] **N1.12** pomiar klatki bez vsync — `M11#3`, `M11#5`, `M11#6`
+- [~] **N1.12** pomiar klatki bez vsync — `M11#3`, `M11#5`, `M11#6`
   - `disable_vsync()` tylko przy `--bench`, nie przy `--bench-scene`
     (`tools/magnat/src/app.rs:192`, `args.rs:239-262`). Wszystkie raporty mają `frame_ms`
     p95 ≈ 27,4 ms, czyli poniżej 60 FPS; werdykt „z zapasem 2,5×" stoi tylko na GPU.
@@ -179,6 +179,14 @@ Jeśli czerwień nie ma jeszcze punktu, zakładamy go w odpowiednim etapie („Z
   - **Decyzja N1.12-a:** nocny bieg z GPU (`M11#4`) — runnera z GPU nie ma.
     *Domyślnie:* pomiar klatki zostaje ręczny, z raportem w repozytorium; usunąć z planów
     każde zdanie, że biegnie w CI.
+  - *W toku:* przyjęta propozycja domyślna N1.12-a; zdania o nocnym biegu z GPU poprawione
+    w `M11-prezentacja.md` (§7.2, R7), `M11e-budzet-klatki.md` (opis, tabela ryzyk)
+    i `bench/frames/README.md`. Kod: `--bench-scene` wyłącza vsync; `RenderBudget.frozen`
+    zamraża skalę detalu w scenie; poza sceną cel budżetu daje `target_for_camera`
+    (orbita od 700 m = widok miasta, 33,3 ms). Testy `zamrozony_budzet_nie_zmienia_detalu`
+    i `cel_budzetu_wynika_z_kadru` — przed zmianą nie kompilowały się (brak pola i funkcji).
+    **Brakuje:** nowych raportów `bench/frames/*.json` z karty graficznej i liczb w tym
+    dokumencie — pomiar wymaga maszyny z GPU.
 
 - [x] **N1.13** fałszywe komentarze w `ci.yml` — `M0` WP-14, `R2#9`
   - `ci.yml:17` twierdzi, że ARM biegnie co noc — joba aarch64 nie ma.

@@ -76,7 +76,11 @@ z jednej karty do linii bazowej z drugiej mierzy sprzęt, nie kod.
 
 ## Czego CI nie robi
 
-Progów klatkowych **nie sprawdza CI**: wspólne runnery nie mają karty graficznej,
-a czas GPU bez niej nie istnieje. CI weryfikuje poprawność (testy §7.1 bez GPU)
-i mikrobenchmarki procesora (`scripts/bench_guard.py`); progi klatkowe należą do
-nocnego biegu na maszynie referencyjnej — tak stanowi §7.2 dokumentu fazy.
+Progów klatkowych **nie sprawdza CI** ani żaden bieg nocny: wspólne runnery nie mają
+karty graficznej, a czas GPU bez niej nie istnieje. CI weryfikuje poprawność (testy §7.1
+bez GPU) i mikrobenchmarki procesora (`scripts/bench_guard.py`); progi klatkowe to
+**ręczny pomiar** na maszynie z kartą, z raportami w tym katalogu (`N1.12-a`).
+
+Od `N1.12` scena pomiarowa wyłącza vsync (jak `--bench`) i zamraża adaptację poziomu
+detalu — `frame_ms` mierzy rysowanie, nie takt monitora, a `lod_scale` zostaje 1,0.
+Raporty sprzed `N1.12` mają `frame_ms` p95 ≈ 27,4 ms we wszystkich scenach: to był vsync.
