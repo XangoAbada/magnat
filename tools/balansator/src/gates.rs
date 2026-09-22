@@ -482,52 +482,7 @@ pub fn evaluate(runs: &[RunFile], profile: Profile, min_margin_bp: i32) -> Vec<G
 /// w monopol.
 fn detal(u: &[&RunFile], min_margin_bp: i32, out: &mut Vec<GateOutcome>) {
     let n = u.len() as u64;
-    // ── G1 ──────────────────────────────────────────────────────────────────────
-    let zielone = u
-        .iter()
-        .filter(|r| {
-            let s: Vec<(u32, Option<i32>)> = miesiace(r)
-                .into_iter()
-                .map(|(m, d)| (m, d.cpi_yoy_bp))
-                .collect();
-            g1_series(&s)
-        })
-        .count() as u64;
-    // Ziarno bez ani jednego miesiąca r/r od 12. nie ma czego zmierzyć, a `all()` na
-    // pustym zbiorze dawało dla niego zieleń (N1.6). Jeśli takie są wszystkie ziarna,
-    // bramka mówi „bez danych", zamiast udawać pomiar.
-    let prog_g1 = "≥ 95 % ziaren, r/r ∈ ⟨−5 %, +15 %⟩ od 12. miesiąca";
-    let zmierzone = u
-        .iter()
-        .filter(|r| {
-            miesiace(r)
-                .iter()
-                .any(|(m, d)| *m >= G1_FIRST_MONTH && d.cpi_yoy_bp.is_some())
-        })
-        .count();
-    if zmierzone == 0 {
-        out.push(GateOutcome::pominieta(
-            "G1",
-            "Stabilnosc cen",
-            format!(
-                "brak danych: najdłuższy przebieg ma {} mies., r/r liczy się od {G1_FIRST_MONTH}.",
-                najwiecej_miesiecy(u)
-            ),
-            prog_g1,
-        ));
-    } else {
-        out.push(GateOutcome {
-            gate: "G1",
-            name: "Stabilnosc cen",
-            verdict: if zielone * 1_000 >= n * G1_SEED_SHARE_PERMILLE {
-                Verdict::Green
-            } else {
-                Verdict::Red
-            },
-            value: format!("{zielone}/{n} ziaren"),
-            threshold: prog_g1,
-        });
-    }
+    out.push(g1_gate(u));
 
     // ── G2 ──────────────────────────────────────────────────────────────────────
     let czerwone = czerwone_ziarna(u, |r| {
@@ -551,7 +506,63 @@ fn detal(u: &[&RunFile], min_margin_bp: i32, out: &mut Vec<GateOutcome>) {
         threshold: "m/m ≤ 10 %, CPI_t / CPI_{t−90d} ≤ 1,5",
     });
 
-    // ── G3 ──────────────────────────────────────────────────────────────────────
+    out.push(g3_gate(u, min_margin_bp));
+    // ── G4 ──────────────────────────────────────────────────────────────────────
+    out.push(g4_gate(u));
+    detal_rynek(u, n, out);
+}
+
+/// G1: inflacja r/r w widełkach od 12. miesiąca w ≥ 95 % ziaren.
+fn g1_gate(u: &[&RunFile]) -> GateOutcome {
+    let n = u.len() as u64;
+    let zielone = u
+        .iter()
+        .filter(|r| {
+            let s: Vec<(u32, Option<i32>)> = miesiace(r)
+                .into_iter()
+                .map(|(m, d)| (m, d.cpi_yoy_bp))
+                .collect();
+            g1_series(&s)
+        })
+        .count() as u64;
+    // Ziarno bez ani jednego miesiąca r/r od 12. nie ma czego zmierzyć, a `all()` na
+    // pustym zbiorze dawało dla niego zieleń (N1.6). Jeśli takie są wszystkie ziarna,
+    // bramka mówi „bez danych", zamiast udawać pomiar.
+    let prog_g1 = "≥ 95 % ziaren, r/r ∈ ⟨−5 %, +15 %⟩ od 12. miesiąca";
+    let zmierzone = u
+        .iter()
+        .filter(|r| {
+            miesiace(r)
+                .iter()
+                .any(|(m, d)| *m >= G1_FIRST_MONTH && d.cpi_yoy_bp.is_some())
+        })
+        .count();
+    if zmierzone == 0 {
+        return GateOutcome::pominieta(
+            "G1",
+            "Stabilnosc cen",
+            format!(
+                "brak danych: najdłuższy przebieg ma {} mies., r/r liczy się od {G1_FIRST_MONTH}.",
+                najwiecej_miesiecy(u)
+            ),
+            prog_g1,
+        );
+    }
+    GateOutcome {
+        gate: "G1",
+        name: "Stabilnosc cen",
+        verdict: if zielone * 1_000 >= n * G1_SEED_SHARE_PERMILLE {
+            Verdict::Green
+        } else {
+            Verdict::Red
+        },
+        value: format!("{zielone}/{n} ziaren"),
+        threshold: prog_g1,
+    }
+}
+
+/// G3: brak sześciu miesięcy deflacji z rzędu i marża nad podłogą.
+fn g3_gate(u: &[&RunFile], min_margin_bp: i32) -> GateOutcome {
     let czerwone = czerwone_ziarna(u, |r| {
         let cpi: Vec<i32> = miesiace(r)
             .into_iter()
@@ -566,7 +577,7 @@ fn detal(u: &[&RunFile], min_margin_bp: i32, out: &mut Vec<GateOutcome>) {
     let prog_g3 = "< 6 miesięcy spadku CPI; marża pod podłogą w ≤ 5 % dób";
     let miesiecy = najwiecej_miesiecy(u);
     if czerwone.is_empty() && miesiecy <= G3_DEFLATION_MONTHS {
-        out.push(GateOutcome::pominieta(
+        return GateOutcome::pominieta(
             "G3",
             "Brak spirali deflacji",
             format!(
@@ -574,24 +585,23 @@ fn detal(u: &[&RunFile], min_margin_bp: i32, out: &mut Vec<GateOutcome>) {
                 G3_DEFLATION_MONTHS + 1
             ),
             prog_g3,
-        ));
-    } else {
-        out.push(GateOutcome {
-            gate: "G3",
-            name: "Brak spirali deflacji",
-            verdict: if czerwone.is_empty() {
-                Verdict::Green
-            } else {
-                Verdict::Red
-            },
-            value: format!("{} ziaren czerwonych {czerwone:?}", czerwone.len()),
-            threshold: prog_g3,
-        });
+        );
     }
+    GateOutcome {
+        gate: "G3",
+        name: "Brak spirali deflacji",
+        verdict: if czerwone.is_empty() {
+            Verdict::Green
+        } else {
+            Verdict::Red
+        },
+        value: format!("{} ziaren czerwonych {czerwone:?}", czerwone.len()),
+        threshold: prog_g3,
+    }
+}
 
-    // ── G4 ──────────────────────────────────────────────────────────────────────
-    out.push(g4_gate(u));
-
+/// G5–G6: czy rynek żyje i czy nie zrósł się w monopol.
+fn detal_rynek(u: &[&RunFile], n: u64, out: &mut Vec<GateOutcome>) {
     // ── G5 ──────────────────────────────────────────────────────────────────────
     let czerwone = czerwone_ziarna(u, |r| g5_series(&r.days_data));
     let odlozenia: Vec<i32> = u
