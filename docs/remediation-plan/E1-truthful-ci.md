@@ -84,8 +84,10 @@ Jeśli czerwień nie ma jeszcze punktu, zakładamy go w odpowiednim etapie („Z
   - *Zrobione:* `kod_w_tresci` — kod jako całe słowo. Przypadki `D-1`/`D-10` i `E2`/`E20`
     padały przed poprawką. Bramka nadal zielona: żadna z 34 obietnic nie wisiała na podciągu.
 
-- [ ] **N1.9** hook strukturalny łapie tylko `Bash` — `R1#11`
+- [x] **N1.9** hook strukturalny łapie tylko `Bash` — `R1#11`
   - Matcher w `.claude/settings.json` ma objąć też `PowerShell`.
+  - *Zrobione:* matcher `Bash|PowerShell`. `struct_guard --self-test` sprawdza, że matcher
+    hooka ze `struct_guard.py` pasuje do obu narzędzi — przed poprawką `BLAD … (brak: PowerShell)`.
 
 - [ ] **N1.10** `clippy.toml` bez luk — `M0#11`
   - Zakazać odpowiedników `f32` (`ln`, `exp`, `powf`, `powi`, `mul_add`, `log*`, trygonometria)

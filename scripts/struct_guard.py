@@ -702,6 +702,20 @@ def test_wykrywacza() -> int:
     print(f"{'OK    ' if not martwe else 'BLAD  '} REJESTR bez martwych wpisow ({len(REJESTR)} pozycji)")
     for k in martwe:
         print(f"       martwy wpis: {k[0]} {k[1]} {k[2]} (pozycja {REJESTR[k]})")
+
+    # Hook `PreToolUse` odpala się tylko na narzędziach z `matcher`. Agent commituje
+    # z `Bash` albo z `PowerShell` — do N1.9 matcher znał tylko pierwsze, więc na
+    # Windows raport przed commitem nie pojawiał się wcale.
+    ustawienia = korzen / ".claude" / "settings.json"
+    matchery = [
+        wpis.get("matcher", "")
+        for wpis in json.loads(ustawienia.read_text(encoding="utf-8")).get("hooks", {}).get("PreToolUse", [])
+        if any("struct_guard.py" in h.get("command", "") for h in wpis.get("hooks", []))
+    ] if ustawienia.exists() else []
+    brak = [n for n in ("Bash", "PowerShell") if not any(re.fullmatch(m, n) for m in matchery)]
+    kod |= 1 if brak else 0
+    print(f"{'OK    ' if not brak else 'BLAD  '} hook przed commitem obejmuje Bash i PowerShell"
+          + (f" (brak: {', '.join(brak)})" if brak else ""))
     return kod | test_rejestru()
 
 
