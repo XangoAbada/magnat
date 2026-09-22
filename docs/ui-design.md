@@ -107,7 +107,7 @@ widgetu.
 
 Rozmiar jest mnożony przez `ui_scale ∈ [0,75; 3,0]` (M9b §5.8) i przyciągany do pikseli fizycznych.
 
-**Krój (od M12f):** IBM Plex Sans dla tekstu, IBM Plex Mono dla liczb, IBM Plex Sans Condensed
+**Krój (od E9):** IBM Plex Sans dla tekstu, IBM Plex Mono dla liczb, IBM Plex Sans Condensed
 wyłącznie dla `text.hero`. Licencja OFL 1.1, pliki w `data/ui/fonts/`. Wybór z trzech powodów:
 pełne polskie znaki, strzałki i minus typograficzny w atlasie, jedna rodzina dla tekstu i liczb
 (ta sama wysokość x w wierszu tabeli).
@@ -140,7 +140,7 @@ nośnikiem** obok koloru (reguła daltonizmu z §3.1).
 
 Kierunek wizualny całego interfejsu: makiety w `docs/ui-inspiracje/` — HUD `hud-b.png`, panel
 `panel-dane-b.png`, menu `menu-glowne-b.png`, ustawienia `opcje-a.png`. Makieta jest kierunkiem;
-tam, gdzie łamie ten dokument, wygrywa dokument (`M12f-oprawa-ui.md` §5.10.5).
+tam, gdzie łamie ten dokument, wygrywa dokument (`docs/remediation-plan/E9-ui-polish.md`, „Gdzie makieta łamie kontrakt”).
 
 ---
 
@@ -194,7 +194,7 @@ wciśnięty (`accent` 25%) → wyłączony (`text.disabled`, brak hovera) → fo
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
 
-Od M12f na lewo od doku stoi pasek ikon (§4): wszystkie panele w stałej kolejności, zawsze
+Od E9 na lewo od doku stoi pasek ikon (§4): wszystkie panele w stałej kolejności, zawsze
 widoczne. Dok niesie akordeon przypiętych paneli jak dotąd; wiersz „więcej" znika, bo pasek
 robi to samo bez rozwijania.
 
@@ -241,7 +241,7 @@ Reguły układu:
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Wygląd (od M12f, `menu-glowne-b.png`):** tło to żywa scena świata z wolno krążącą kamerą —
+**Wygląd (od E9, `menu-glowne-b.png`):** tło to żywa scena świata z wolno krążącą kamerą —
 z ostatniego zapisu, a bez zapisu z ustalonego świata demonstracyjnego. Od lewej krawędzi
 gradient `bg.window` pod menu; tytuł i pozycje wyrównane do lewej, pozycje jako kafelki 32 px
 ze ściętym narożnikiem. Szkic wyżej opisuje **zawartość i kolejność**, nie położenie.
@@ -279,7 +279,7 @@ Trzy rzeczy, które ten nagłówek ma robić i których wcześniej nie było:
    więc nie mogą powiedzieć dwóch różnych rzeczy.
 
 Ekran, którego ścieżka ma jeden element, przycisku nie dostaje: menu główne i ekrany domknięcia
-nie mają rodzica. Znaków strzałek w nagłówku nie ma z powodu technicznego — do czasu, aż M12f
+nie mają rodzica. Znaków strzałek w nagłówku nie ma z powodu technicznego — do czasu, aż E9
 wgra własny krój, domyślny atlas `egui` ich nie zawiera i wychodzą jako prostokąty.
 
 ### 6.1a Wybór postaci
@@ -420,7 +420,7 @@ zgłoszeń błędów), **Grafika** (rozdzielczość, tryb okna, synchronizacja p
 jakość cieni), **Dźwięk** (M11), **Sterowanie** (lista skrótów z podglądem). Język i skala UI
 działają natychmiast, bez restartu — to jest kryterium akceptacyjne, nie życzenie.
 
-Układ (od M12f, `opcje-a.png`): panel na prawej połowie ekranu, zakładki podkreślone, wiersz =
+Układ (od E9, `opcje-a.png`): panel na prawej połowie ekranu, zakładki podkreślone, wiersz =
 etykieta po lewej i kontrolka po prawej. Lewa połowa pokazuje scenę (z pauzy) albo tło menu —
 zmiana skali UI albo zasięgu widzenia jest widoczna od razu, bez zamykania ustawień.
 
@@ -455,6 +455,6 @@ Wymagania są twarde, bo wszystkie dają się sprawdzić testem:
 - Treści paneli biznesowych — PRD §14.3 i M9e §5.9.
 - Gramatyki edytora reguł — M9d §5.6.
 - Wyglądu świata 3D (voxele, paleta dzielnic, oświetlenie) — PRD §15, M11.
-- Dźwięku interfejsu — bez wykonawcy (`D16` w M12 §9). Ikony i krój przeszły z M11 do M12f.
+- Dźwięku interfejsu — bez wykonawcy (`N9.6` w planie naprawczym). Ikony i krój przeszły z M11 do E9.
 - Motywu jasnego i dodatkowych języków — M12; tokeny z §3 są tak pomyślane, żeby oba były zmianą
   danych, nie kodu.

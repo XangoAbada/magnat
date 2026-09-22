@@ -26,11 +26,17 @@ księgowe, które zachowują sumę pieniądza, więc bramka zachowania pieniądz
 | E6 | [E6-engine-and-save.md](E6-engine-and-save.md) | Silnik ECS, hash stanu, zapis | [ ] |
 | E7 | [E7-dead-mechanisms.md](E7-dead-mechanisms.md) | Mechanizmy, które żyją tylko w testach | [ ] |
 | E8 | [E8-plan-reconciliation.md](E8-plan-reconciliation.md) | Dokumenty zgodne z kodem | [ ] |
+| E9 | [E9-ui-polish.md](E9-ui-polish.md) | Oprawa interfejsu (nie z audytu) | [ ] |
 
 **Kolejność.** E1 najpierw i bez wyjątków — jest tani, a bez niego nie wiadomo, czy
 naprawa w E2–E7 czegokolwiek dowodzi. E2 przed E3 i E5, bo gracz i makro stoją na tej samej
 księdze. E4, E6 i E7 są od siebie niezależne i mogą iść w dowolnej kolejności po E2.
 E8 zamyka plan.
+
+**E9 stoi obok tej kolejności.** Nie pochodzi z audytu, tylko z makiet interfejsu
+(`docs/ui-inspiracje/`), i nie dotyka niczego, co naprawiają E2–E7: to krój, ikony
+i wygląd paneli oraz ekranów powłoki. Wymaga tylko E1, bo bez niego złote testy paneli
+niczego nie dowodzą. Idzie równolegle z E2–E8 i nie blokuje zamknięcia planu.
 
 **Plan implementacyjny stoi.** Dopóki E1–E7 nie są zamknięte, nie zaczynamy nowych
 podfaz z `docs/implementation-plan/` (R3, M12). Powód: M12b stoi na `generation` chunka

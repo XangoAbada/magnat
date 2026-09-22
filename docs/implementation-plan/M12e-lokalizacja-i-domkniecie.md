@@ -1,6 +1,6 @@
 # M12e — Lokalizacja i domknięcie
 
-Podfaza 5 z 6 fazy **M12 — Skala i jakość** (`M12-skala-i-jakosc.md`).
+Podfaza 5 z 5 fazy **M12 — Skala i jakość** (`M12-skala-i-jakosc.md`).
 Dokument nadrzędny: `00-konwencje-i-kontrakty.md`.
 Zakres fazy (§2), kontrakty międzyfazowe (§6), ryzyka (§8) i decyzje otwarte (§9)
 zostają w dokumencie fazy — tu jest wyłącznie to, co robisz w tej porcji.
@@ -12,7 +12,7 @@ zostają w dokumencie fazy — tu jest wyłącznie to, co robisz w tej porcji.
 | **Projekt techniczny** | §5.8, §5.9 |
 | **Wynik do pokazania** | Pełny artefakt fazy z §1 dokumentu fazy — wszystkie pięć punktów zmierzone testem w CI. |
 | **Kryterium zamknięcia** | Kryteria WP13 i WP14 oraz bramki 1–7 fazy M12 w `00-postep.md`. |
-| **Poprzednia / następna** | `M12d-modding.md` · `M12f-oprawa-ui.md` (niezależna, może iść wcześniej) |
+| **Poprzednia / następna** | `M12d-modding.md` · — (ostatnia w fazie) |
 
 `LocaleCatalog` z pluralizacją CLDR i przypadkami gramatycznymi PL, testy pokrycia kluczy oraz sesja 100-letnia, detekcja dryfu ekonomicznego i benchmarki.
 
